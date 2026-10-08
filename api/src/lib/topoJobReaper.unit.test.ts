@@ -324,6 +324,26 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     expect(processingUpdate.data.status).toBe("failed");
   });
 
+  it("deletes the input ZIP of a reaped job, only for the sweep that won the flip", async () => {
+    const dead = new Date(
+      NOW.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS - 1,
+    );
+    stageByStatus(jobFindMany, {
+      pending: [
+        { id: "won", userId: "u", name: null, updatedAt: dead },
+        { id: "lost", userId: "u", name: null, updatedAt: dead },
+      ],
+    });
+    jobUpdateMany.mockImplementation(async (a: { where: { id: string } }) => ({
+      count: a.where.id === "won" ? 1 : 0,
+    }));
+
+    await reapStuckTopoJobs(NOW);
+
+    const keys = s3Send.mock.calls.map(([cmd]) => cmd.input.Key);
+    expect(keys).toEqual(["inputs/won/upload.zip"]);
+  });
+
   it("issues StopTask only for reaped jobs that have a task ARN", async () => {
     const old = new Date(
       NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,

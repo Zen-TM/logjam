@@ -305,6 +305,37 @@ async function claimAndNotify<Row extends { id: string }>(
   return claimedRows.length;
 }
 
+/**
+ * Status-guarded flip to `failed`, plus the input ZIP: the worker that would
+ * have deleted it is the thing that died, and nothing retries from it (retry
+ * is a new job and a new upload). Only the sweep that won the flip deletes.
+ */
+async function failReapedTopoJob(
+  id: string,
+  from: "pending" | "processing",
+): Promise<{ count: number }> {
+  const claim = await prisma.topoJob.updateMany({
+    where: { id, status: from },
+    data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+  });
+  if (claim.count === 1) {
+    try {
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: getEnv().S3_BUCKET_TOPO ?? "",
+          Key: `inputs/${id}/upload.zip`,
+        }),
+      );
+    } catch (err) {
+      logger.warn(
+        { err: safeErrorForLog(err), id },
+        "topo_reaper_input_delete_failed",
+      );
+    }
+  }
+  return claim;
+}
+
 /** Same type + payload shape topo/worker.py's failure path writes. */
 function topoJobEntry(row: {
   id: string;
@@ -400,11 +431,7 @@ export async function reapStuckTopoJobs(
   });
   reaped += await claimAndNotify(
     pendingJobs,
-    (id) =>
-      prisma.topoJob.updateMany({
-        where: { id, status: "pending" },
-        data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
-      }),
+    (id) => failReapedTopoJob(id, "pending"),
     topoJobEntry,
   );
 
@@ -437,11 +464,7 @@ export async function reapStuckTopoJobs(
       overdueJobs,
       // status kept in the WHERE: a job that completed between the read and
       // this write must not be flipped back to failed.
-      (id) =>
-        prisma.topoJob.updateMany({
-          where: { id, status: "processing" },
-          data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
-        }),
+      (id) => failReapedTopoJob(id, "processing"),
       topoJobEntry,
     );
     // Best-effort even for rows another instance claimed: the task is dead
