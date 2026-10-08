@@ -34,7 +34,9 @@
 - **New storage for user data (a table or an S3 prefix) joins the
   account-delete purge** in `routes/users.ts`: S3 keys in its `Promise.all`,
   the table in its explicit `deleteMany` list, even under a cascade, which
-  never deletes S3 objects. No test drives the purge.
+  never deletes S3 objects. `src/routes/accountPurge.unit.test.ts` guards the
+  tables (each is deleted there or named as cascade-only); nothing guards the
+  S3 prefixes.
 - **A hard delete of a synced entity calls `writeTombstones`**
   (`lib/syncTombstones.ts`) in the same transaction, for every user who could
   see the row, or phones keep it forever.
