@@ -86,8 +86,9 @@ resource "aws_iam_policy" "github_actions_apply_boundary" {
           Resource = "arn:aws:iam::620853681701:policy/${local.github_actions_apply_boundary}"
         },
         # Routes out of the boundary: becoming another role, or minting
-        # long-lived credentials to use outside it. This root manages no IAM
-        # users and assumes no roles.
+        # long-lived credentials to use outside it. This root assumes no roles,
+        # and manages no login profile (iam_contributor.tf: a user, not a
+        # password).
         {
           Sid      = "DenyEscapingTheBoundary"
           Effect   = "Deny"

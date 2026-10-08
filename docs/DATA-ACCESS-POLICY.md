@@ -1,6 +1,6 @@
 # Data-Access Policy (Operator Commitment)
 
-_Last updated: 2026-06-21_
+_Last updated: 2026-10-08_
 
 Logjam is privacy-by-design **for users**. This document is about the one party
 that design does not, by itself, constrain: **the operator** — me, the person who
@@ -33,6 +33,12 @@ that means I _can_:
 - Read the production database (`psql`, the RDS console, or a restored snapshot).
 - Read objects in the S3 buckets (`logjam-media`, `logjam-topo-jobs`).
 - Change the infrastructure, including the logging described below.
+
+A contributor I have invited has read-only access to the AWS account's
+infrastructure configuration, under the same restrictions as the automated
+roles in this repository: no user data, no secret values, no logs and no user
+directory. Signing in requires multi-factor authentication, and every change
+goes through the Terraform in `infra/terraform/envs/prod/iam_contributor.tf`.
 
 There is **no admin UI inside the app** — Logjam has no "god mode" screen. All
 operator access happens at the AWS/infrastructure layer, which is exactly why the
