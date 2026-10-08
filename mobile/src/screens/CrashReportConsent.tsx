@@ -8,8 +8,8 @@
 // `initSentry()` no-ops until the question is answered, the default is OFF, and
 // an explicit "no" is never overwritten. "Not now" is a REAL answer — it stores
 // an explicit off — which is what keeps this from being a launch-time nag;
-// Settings → Privacy and security is where it changes afterwards. Installs that
-// predate the toggle are grandfathered, read as answered, and never see this.
+// Settings → Privacy and security is where it changes afterwards. No install is
+// exempt: one that already has a stored identity is asked too.
 //
 // A sheet rather than an `Alert`: DESIGN.md §4 keeps `Alert` for destructive
 // confirms, and this is a two-option question with copy that is the point.

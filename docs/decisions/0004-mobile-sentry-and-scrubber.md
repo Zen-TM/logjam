@@ -34,9 +34,15 @@ As shipped (`src/sentry/`):
   .tsx`), on the first arrival into the app — guest or signed in. Both answers
   (including "Not now", an explicit off) store a choice, which is what stops it
   nagging; `needsCrashReportChoice()` is the whole decision and is tested in
-  `sentry/crashReportPreference.test.ts`. Installs that predate the toggle are
-  grandfathered by `grandfatherCrashReports()`, and an explicit no is never
+  `sentry/crashReportPreference.test.ts`. An explicit no is never
   overwritten.
+- **Update 2026-10-08: no install is grandfathered.** An install that predates
+  the toggle, with a stored identity and no recorded choice, used to have
+  reporting switched on for it and was never asked. That was dropped: no
+  Logjam GPS install was in the field, so it protected nobody, and
+  `frontend/public/privacy.html` says reports stay off unless the user says
+  yes. Every install is now asked once by the sheet above (guard:
+  `sentry/crashReportPreference.test.ts`). Everything else above stands.
 - **Sentry sourcemap upload is OFF** (`SENTRY_DISABLE_AUTO_UPLOAD=true` in the
   build profiles). The Sentry Gradle plugin fails the build outright when it has
   no org/project/auth token, and those need operator setup.
