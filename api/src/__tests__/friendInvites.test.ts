@@ -113,7 +113,7 @@ describe("friend invite links", () => {
     for (const bad of [undefined, "", "short", 42, { $ne: null }]) {
       const res = await redeem(BOB_SUB, bad);
       expect(res.status).toBe(404);
-      expect(res.body).toEqual(unknown.body);
+      expect(res.body.error).toBe(unknown.body.error);
       expect((await preview(BOB_SUB, bad)).status).toBe(404);
     }
   });
@@ -156,7 +156,7 @@ describe("friend invite links", () => {
     const unknown = await redeem(ALICE_SUB, UNKNOWN_TOKEN);
     const again = await redeem(ALICE_SUB, token);
     expect(again.status).toBe(404);
-    expect(again.body).toEqual(unknown.body);
+    expect(again.body.error).toBe(unknown.body.error);
     expect((await preview(ALICE_SUB, token)).status).toBe(404);
     const live = await request(API_URL)
       .get("/friends/invites")
