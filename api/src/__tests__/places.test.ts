@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
+import { randomUUID } from "node:crypto";
+import prisma from "../services/prisma";
+import { ALICE_ID, BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
 
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (every request authenticates as the seeded alice user).
@@ -211,6 +213,56 @@ describe("POST /places — free-text field validation", () => {
           ...fields,
         });
       expect(res.status).toBe(400);
+    }
+  });
+});
+
+// Two deletes of the same place both read its media before either commits.
+// The loser's row delete finds nothing, so its quota decrement must too:
+// otherwise the user's storage use drops by the media's size twice.
+// Mutation that turns it red: decrementing by the bytes read before the
+// transaction instead of the bytes the transaction deleted (lib/bulkDelete.ts).
+describe("DELETE /places/:id racing itself", () => {
+  it("frees the place's media bytes once", async () => {
+    const id = await createPlace("Quota race");
+    const bytes = 1000n;
+    await prisma.media.create({
+      data: {
+        ownerId: ALICE_ID,
+        linkedType: "place",
+        linkedId: id,
+        s3KeyDisplay: `test/quota-race/${randomUUID()}.jpg`,
+        mediaType: "image",
+        filename: "race.jpg",
+        fileSizeBytes: bytes,
+      },
+    });
+    const { storageUsedBytes: before } = await prisma.user.findUniqueOrThrow({
+      where: { id: ALICE_ID },
+      select: { storageUsedBytes: true },
+    });
+    // Headroom above the media's own bytes, so a double decrement is not
+    // hidden by the clamp at zero.
+    await prisma.user.update({
+      where: { id: ALICE_ID },
+      data: { storageUsedBytes: before + 2n * bytes },
+    });
+    try {
+      const results = await Promise.all([
+        request(API_URL).delete(`/places/${id}`).set(AUTH),
+        request(API_URL).delete(`/places/${id}`).set(AUTH),
+      ]);
+      expect(results.map((r) => r.status)).toContain(204);
+      const { storageUsedBytes: after } = await prisma.user.findUniqueOrThrow({
+        where: { id: ALICE_ID },
+        select: { storageUsedBytes: true },
+      });
+      expect(after).toBe(before + bytes);
+    } finally {
+      await prisma.user.update({
+        where: { id: ALICE_ID },
+        data: { storageUsedBytes: before },
+      });
     }
   });
 });
