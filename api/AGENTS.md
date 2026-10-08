@@ -8,8 +8,8 @@
 - **Every read or write of a user-owned row checks ownership** (`ownerId: user.id`
   or a join through `shares`); never trust an id from the body alone.
 - **A place reaches anyone but its owner only through `lib/placeAccess.ts`**
-  and `serializeSharedPlace`, on REST and delta alike: no access is 404, not
-  403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
+  and `serializeSharedPlace`, on REST and delta alike: no access is 404,
+  not 403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
 - **A response about another user carries their username, never their email**
   (`src/__tests__/friends.test.ts`).
 - **Errors are `AppError(status, message)`** from `middleware/errorHandler`,
