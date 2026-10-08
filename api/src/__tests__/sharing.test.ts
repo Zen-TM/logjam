@@ -95,6 +95,29 @@ describe("sharing routes (fake auth = alice)", () => {
     }
   });
 
+  // Guard for the place_shares (place_id, shared_with_id) unique key. Mutation
+  // that turns it red: drop the key (or the P2002 -> 409 catch in the grant
+  // route) and both racing grants pass the pre-check, giving two 201s or a 500.
+  it("POST share: two concurrent grants of one pair give one 201, one 409 and one row", async () => {
+    const placeId = await createPlace("duplicate share race");
+    try {
+      const grant = () =>
+        request(API_URL)
+          .post(`/places/${placeId}/share`)
+          .set(AUTH)
+          .send({ sharedWithUserId: BOB_ID });
+      const results = await Promise.all([grant(), grant()]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+
+      const list = await request(API_URL)
+        .get(`/places/${placeId}/shares`)
+        .set(AUTH);
+      expect(list.body).toHaveLength(1);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
   it("POST share 404s for a non-existent place", async () => {
     const res = await request(API_URL)
       .post(`/places/${NONEXISTENT_ID}/share`)
