@@ -12,18 +12,13 @@ import {
   TRIP_TYPE_MAX_LENGTH,
 } from "@logjam/shared";
 import { getParam } from "../lib/getParam";
-import { getEnv } from "../lib/env";
-import { deleteS3Keys } from "../lib/s3Cleanup";
-import { decrementStorageUsed } from "../lib/storageQuota";
+import { deleteTripsCascade } from "../lib/bulkDelete";
 import { toMediaItems } from "../lib/mediaPresign";
 import { resolveUser } from "../lib/resolveUser";
-import { tripDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import {
   assertClientIdReplayable,
   parseClientSuppliedId,
 } from "../lib/clientSuppliedId";
-
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 const router = Router();
 
@@ -469,46 +464,9 @@ router.delete(
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, "Trip log not found");
 
-    const media = await prisma.media.findMany({
-      where: { linkedType: "tripLog", linkedId: id },
-      select: {
-        id: true,
-        s3KeyDisplay: true,
-        s3KeyThumbnail: true,
-        fileSizeBytes: true,
-      },
-    });
-
-    // S3-first (ARCH-004): blobs go before the rows, so an S3 failure leaves
-    // the rows (and therefore the keys) intact for a retried DELETE. The row
-    // deletes and the quota decrement then share one transaction so a crash
-    // between them can't leave the quota over-counted.
-    const s3Keys = media.flatMap((m) =>
-      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
-    );
-    const totalBytes = media.reduce(
-      (sum, m) => sum + (m.fileSizeBytes ?? 0n),
-      0n,
-    );
-    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
-
-    await prisma.$transaction(async (tx) => {
-      await tx.media.deleteMany({
-        where: { linkedType: "tripLog", linkedId: id },
-      });
-      await tx.tripLog.delete({ where: { id } });
-      await decrementStorageUsed(user.id, totalBytes, tx);
-      // Same transaction as the delete (sync tombstone rule — see
-      // lib/syncTombstones.ts).
-      await writeTombstones(
-        tx,
-        tripDeleteTombstones({
-          ownerId: user.id,
-          tripId: id,
-          mediaIds: media.map((m) => m.id),
-        }),
-      );
-    });
+    // Empty means another request deleted it since the check above.
+    const deleted = await deleteTripsCascade(user.id, [id]);
+    if (deleted.length === 0) throw new AppError(404, "Trip log not found");
 
     res.status(204).send();
   },

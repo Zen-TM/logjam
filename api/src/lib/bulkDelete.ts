@@ -1,6 +1,8 @@
-// Extracted cascade-delete logic for places and trips. Shared by
-// placesBulk POST /delete, tripLogsBulk POST /delete, and the import-undo
-// route (DELETE /imports/:batchId). No duplicated cascade logic (CH-001).
+// The one cascade for deleting places and trips. Every route that deletes
+// either goes through here: DELETE /places/:id and /trips/:id, the two bulk
+// POST /delete routes, the sync push delete ops, and import undo (DELETE
+// /imports/:batchId). A second copy drifts: the single place delete once kept
+// its own and missed the trip touch below (src/__tests__/places.test.ts).
 //
 // Ordering invariant (ARCH-004): S3 blobs are deleted BEFORE database rows so
 // an S3 failure leaves rows (and their keys) intact for a retried delete. Row
@@ -68,7 +70,7 @@ export async function deletePlacesCascade(
   });
   // Standalone files linked as a place's way survive the place (they are the
   // user's own imports and recordings); only its own attachments die with it.
-  // Same rule as the single delete — lib/mediaLink.ts owns it.
+  // lib/mediaLink.ts owns the rule.
   const { deleted: media, unlinked: unlinkedMedia } =
     partitionPlaceMedia(placeMediaRows);
 

@@ -130,6 +130,13 @@ describe("places routes (fake auth = alice)", () => {
         { id: placeBId, name: placeBName },
       ]);
       expect(survivorRes.body.displayName).toBeNull();
+      // The join row goes by DB cascade, which bumps nothing, and delta sync
+      // delivers by updatedAt: an untouched trip keeps the deleted place in
+      // its title on every phone. Red if DELETE /places/:id stops touching
+      // the trips that keep another place.
+      expect(Date.parse(survivorRes.body.updatedAt)).toBeGreaterThan(
+        Date.parse(tripRes.body.updatedAt),
+      );
     } finally {
       await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
       await request(API_URL).delete(`/places/${placeBId}`).set(AUTH);
