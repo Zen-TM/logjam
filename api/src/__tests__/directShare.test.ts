@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import prisma from "../services/prisma";
 import {
   API_URL,
   ALICE_SUB,
@@ -217,6 +218,25 @@ describe("DELETE /shares/... — revoke", () => {
 });
 
 describe("delete cascade", () => {
+  it("deleting the route leaves the recipient no item_shared notification row", async () => {
+    // Read from the table: GET /notifications hides a dead share's row anyway.
+    // Mutation that turns this red: dropping the notification purge from
+    // deleteSharesFor in lib/shareAccess.ts.
+    const routeId = await createRoute(ALICE_SUB, "direct-share-notif-purge");
+    expect((await share(ALICE_SUB, routeId, BOB_ID)).status).toBe(201);
+    const where = {
+      userId: BOB_ID,
+      type: "item_shared",
+      payload: { path: ["entityId"], equals: routeId },
+    };
+    expect(await prisma.notification.count({ where })).toBe(1);
+    expect(
+      (await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB)))
+        .status,
+    ).toBe(204);
+    expect(await prisma.notification.count({ where })).toBe(0);
+  });
+
   it("deleting the route drops its Share rows and tombstones the recipient", async () => {
     const routeId = await createRoute(ALICE_SUB, "direct-share-cascade");
     expect((await share(ALICE_SUB, routeId, BOB_ID)).status).toBe(201);

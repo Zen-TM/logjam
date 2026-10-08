@@ -147,17 +147,32 @@ describe("deleteSharesFor", () => {
   it("deletes every share row for the given entities", async () => {
     const tx = {
       share: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      notification: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
     };
     await deleteSharesFor(tx as never, "route", ["rt-1", "rt-2"]);
     expect(tx.share.deleteMany).toHaveBeenCalledWith({
       where: { entityType: "route", entityId: { in: ["rt-1", "rt-2"] } },
     });
+    expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        type: "item_shared",
+        AND: [{ payload: { path: ["entityType"], equals: "route" } }],
+        OR: [
+          { payload: { path: ["entityId"], equals: "rt-1" } },
+          { payload: { path: ["entityId"], equals: "rt-2" } },
+        ],
+      },
+    });
   });
 
   it("issues no query for an empty id list", async () => {
-    const tx = { share: { deleteMany: vi.fn() } };
+    const tx = {
+      share: { deleteMany: vi.fn() },
+      notification: { deleteMany: vi.fn() },
+    };
     await deleteSharesFor(tx as never, "route", []);
     expect(tx.share.deleteMany).not.toHaveBeenCalled();
+    expect(tx.notification.deleteMany).not.toHaveBeenCalled();
   });
 });
 
