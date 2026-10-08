@@ -114,13 +114,22 @@ run "contributor_is_read_only_and_mfa_gated" {
       aws_iam_group_policy.contributor,
       aws_iam_group_policy_attachments_exclusive.contributor,
       aws_iam_group_policies_exclusive.contributor,
+      aws_iam_user_policy_attachments_exclusive.contributor,
+      aws_iam_user_policies_exclusive.contributor,
     ]
   }
 
-  # A mocked provider cannot import the group the policies attach to.
+  # A mocked provider cannot import the group or the user the policies
+  # attach to.
   override_resource {
     target          = aws_iam_group.contributor
     values          = { name = "logjam-developers" }
+    override_during = plan
+  }
+
+  override_resource {
+    target          = aws_iam_user.contributor
+    values          = { name = "collaborator-oliver" }
     override_during = plan
   }
 
@@ -139,6 +148,17 @@ run "contributor_is_read_only_and_mfa_gated" {
       toset(aws_iam_group_policies_exclusive.contributor.policy_names) == toset([aws_iam_group_policy.contributor.name])
     )
     error_message = "The contributor group may hold only ReadOnlyAccess and its one inline policy, managed exclusively."
+  }
+
+  # Red when a policy is attached to the user directly in Terraform, or when
+  # either exclusive resource is removed: a direct grant would sit beside the
+  # group's and not be covered by the asserts in this run.
+  assert {
+    condition = (
+      length(aws_iam_user_policy_attachments_exclusive.contributor.policy_arns) == 0 &&
+      length(aws_iam_user_policies_exclusive.contributor.policy_names) == 0
+    )
+    error_message = "The contributor user may hold no policy of its own; the grant comes through the group."
   }
 
   # Mutation: dropping a statement from the shared privacy Deny, or building

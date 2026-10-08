@@ -114,6 +114,18 @@ resource "aws_iam_group_policies_exclusive" "contributor" {
   policy_names = [aws_iam_group_policy.contributor.name]
 }
 
+# The grant comes through the group only. Exclusive and empty, so nothing
+# attached to the user directly can widen it past the group's.
+resource "aws_iam_user_policy_attachments_exclusive" "contributor" {
+  user_name   = aws_iam_user.contributor.name
+  policy_arns = []
+}
+
+resource "aws_iam_user_policies_exclusive" "contributor" {
+  user_name    = aws_iam_user.contributor.name
+  policy_names = []
+}
+
 import {
   to = aws_iam_user.contributor
   id = "collaborator-oliver"
