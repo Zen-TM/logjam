@@ -4,6 +4,7 @@
 // screen off, and nothing on screen says so. patch-package refuses an install
 // whose patch no longer applies, but not one where postinstall never ran — so
 // check the installed source itself.
+// Removing the patch waits on upstream: tracked in #322.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
