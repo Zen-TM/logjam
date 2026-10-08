@@ -57,6 +57,11 @@ const SHEET_TRAVEL = Dimensions.get("window").height;
 // How long the sheet must lie still, untouched, before it springs back or
 // closes. A fling keeps reporting scroll, so it is never cut short.
 const SETTLE_MS = 80;
+// How long a close asked for by the drag has to take effect before the sheet
+// springs back instead. Longer than the owner needs to re-render; a sheet that
+// answers a close by staying open (a sub-mode going back to its form) is back
+// in place before the finger returns.
+const CLOSE_GRACE_MS = 400;
 
 /**
  * Lets a child freeze the sheet's scroll for the rest of a touch.
@@ -207,15 +212,29 @@ export function BottomSheet({
   // so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
   const outerRef = useRef<ScrollView>(null);
-  // `pulled`: how far below its open position the sheet is. `touching`: a
-  // finger is dragging it. `dragged`: a finger has, since it last settled.
-  const pull = useRef({ pulled: 0, touching: false, dragged: false });
+  // The outer scroll as last reported; the sheet is pulled down by however far
+  // that is from its end. `touching`: a finger is dragging it. `dragged`: a
+  // finger has, since it last settled. `closingUntil`: the drag has asked to
+  // close, and the owner may take a few frames to say so; springing back
+  // before this time would fight the slide out.
+  const pull = useRef({
+    content: 0,
+    viewport: 0,
+    y: 0,
+    touching: false,
+    dragged: false,
+    closingUntil: 0,
+  });
+  const pulled = () =>
+    Math.max(0, pull.current.content - pull.current.viewport - pull.current.y);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (visible) {
       // A sheet reopened while still sliding out is wherever it was dragged to.
-      pull.current = { pulled: 0, touching: false, dragged: false };
+      pull.current.touching = false;
+      pull.current.dragged = false;
+      pull.current.closingUntil = 0;
       outerRef.current?.scrollToEnd({ animated: false });
       Animated.timing(progress, {
         toValue: 1,
@@ -239,11 +258,23 @@ export function BottomSheet({
   const settleRef = useRef(() => {});
   useEffect(() => {
     settleRef.current = () => {
-      if (!visible || pull.current.touching) return;
-      const outcome = sheetRelease(pull.current);
+      if (
+        !visible ||
+        pull.current.touching ||
+        Date.now() < pull.current.closingUntil
+      )
+        return;
+      const outcome = sheetRelease({
+        pulled: pulled(),
+        dragged: pull.current.dragged,
+      });
       pull.current.dragged = false;
-      if (outcome === "close") onClose();
-      else if (outcome === "snap")
+      if (outcome === "close") {
+        pull.current.closingUntil = Date.now() + CLOSE_GRACE_MS;
+        onClose();
+        // A little past the grace, so this settle is not itself refused.
+        setTimeout(() => settleRef.current(), CLOSE_GRACE_MS + 20);
+      } else if (outcome === "snap")
         outerRef.current?.scrollToEnd({ animated: true });
     };
   });
@@ -305,26 +336,28 @@ export function BottomSheet({
         scrollEventThrottle={16}
         onLayout={(event) => {
           const { height } = event.nativeEvent.layout;
+          pull.current.viewport = height;
           if (height !== viewportHeight) setViewportHeight(height);
+          settleSoon();
         }}
         // The rest position is the END of the scroll, and that moves whenever
-        // the sheet changes height (the keyboard, a sub-mode).
-        onContentSizeChange={() => {
-          if (!pull.current.touching)
-            outerRef.current?.scrollToEnd({ animated: false });
+        // the sheet changes height (the keyboard, a sub-mode). The jump here
+        // can land before the new size has reached the native view, which left
+        // the sheet short of open; the settle that follows measures and
+        // finishes the job.
+        onContentSizeChange={(_width, height) => {
+          pull.current.content = height;
+          if (pull.current.touching) return;
+          outerRef.current?.scrollToEnd({ animated: false });
+          settleSoon();
         }}
         onScroll={(event) => {
-          const { contentOffset, contentSize, layoutMeasurement } =
-            event.nativeEvent;
-          pull.current.pulled = Math.max(
-            0,
-            contentSize.height - layoutMeasurement.height - contentOffset.y,
-          );
+          pull.current.y = event.nativeEvent.contentOffset.y;
           // A flick: the fling has carried it far enough, so go now.
           if (
             !pull.current.touching &&
             pull.current.dragged &&
-            pull.current.pulled > DISMISS_DISTANCE
+            pulled() > DISMISS_DISTANCE
           )
             settleRef.current();
           else settleSoon();
@@ -333,6 +366,7 @@ export function BottomSheet({
         // clears it, so the sheet cannot stay parked where it was left.
         onTouchStart={() => {
           pull.current.touching = false;
+          pull.current.closingUntil = 0;
           settleSoon();
         }}
         {...dragHandlers}
