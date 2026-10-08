@@ -53,6 +53,85 @@ export function isSystemPlaceTypeId(id: string): boolean {
   return SYSTEM_PLACE_TYPE_ID_SET.has(id);
 }
 
+export const PLACE_TYPE_NAME_MAX_LENGTH = 60;
+
+/**
+ * A name as a person reads it, for comparing two of them: "Cave", " cave " and
+ * "CAVE" are one name. Never stored or shown, only compared.
+ */
+export function nameKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Whether a place type may not take `name`: another type the user can see, a
+ * built-in included, already reads the same. `exceptId` is the type being
+ * renamed, which never collides with itself.
+ *
+ * Built-ins count because a second "canyon" would be a second Canyon tab, and
+ * `matchPlaceTypeByName` would file a friend's copied canyon under the
+ * built-in whichever one the user meant.
+ */
+export function placeTypeNameTaken(
+  name: string,
+  types: readonly { id: string; name: string }[],
+  exceptId?: string,
+): boolean {
+  const key = nameKey(name);
+  return types.some(
+    (type) => type.id !== exceptId && nameKey(type.name) === key,
+  );
+}
+
+/** The one sentence for a refused name, on both clients and from the API. */
+export function placeTypeNameTakenError(name: string): string {
+  return `You already have a place type called "${name.trim()}".`;
+}
+
+/**
+ * What a type form says under its Name field, or null when the name may be
+ * saved. `editing` is the type being changed: keeping its name, or only
+ * recasing it, is never a clash — so a type whose name collided before this
+ * rule existed can still be recoloured.
+ */
+export function placeTypeNameError(
+  name: string,
+  types: readonly { id: string; name: string }[],
+  editing?: { id: string; name: string } | null,
+): string | null {
+  if (!name.trim()) return "A place type needs a name.";
+  if (editing && nameKey(editing.name) === nameKey(name)) return null;
+  return placeTypeNameTaken(name, types, editing?.id)
+    ? placeTypeNameTakenError(name)
+    : null;
+}
+
+/**
+ * `name` if it is free, otherwise the first of "name (2)", "name (3)", … that
+ * is, cut to fit the length limit.
+ *
+ * For the sync push only. Two phones can each make "Cave" with no signal, and
+ * neither is wrong when it does; refusing the second one parks a create the
+ * user can only discard, and discarding a type's create discards every place
+ * made of that type. Keeping both under different names loses nothing, and
+ * the user renames or merges them when they notice.
+ */
+export function freePlaceTypeName(
+  name: string,
+  types: readonly { id: string; name: string }[],
+  exceptId?: string,
+): string {
+  const base = name.trim();
+  if (!placeTypeNameTaken(base, types, exceptId)) return base;
+  for (let n = 2; ; n += 1) {
+    const suffix = ` (${n})`;
+    const candidate =
+      base.slice(0, PLACE_TYPE_NAME_MAX_LENGTH - suffix.length).trimEnd() +
+      suffix;
+    if (!placeTypeNameTaken(candidate, types, exceptId)) return candidate;
+  }
+}
+
 export type SystemPlaceTypeKey = keyof typeof SYSTEM_PLACE_TYPE_IDS;
 
 export type SystemPlaceType = {
