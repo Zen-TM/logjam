@@ -222,15 +222,11 @@ export function AddWaySheet({
     // replaced here, and can be put on another place later. The old path
     // uploaded place-only media that existed nowhere the user could see.
     fill("file", async () => {
-      const record = await importVectorSource(
-        asset.uri,
-        asset.name,
-        imports?.length ?? 0,
-      );
+      const record = await importVectorSource(asset.uri, asset.name);
       await linkStandaloneMediaLocal(record.id, placeId);
       return "Route file linked to this place.";
     });
-  }, [placeId, fill, imports, onError]);
+  }, [placeId, fill, onError]);
 
   const drawnRoutes = (routes.data ?? [])
     // A route shared with you belongs to someone else; the API refuses the

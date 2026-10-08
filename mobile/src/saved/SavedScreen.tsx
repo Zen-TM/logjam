@@ -852,7 +852,7 @@ export function SavedScreen({
         category: "import",
         fraction: null,
       });
-      const outcome = await importVectorFileFromPicker(imports.length);
+      const outcome = await importVectorFileFromPicker();
       if (outcome.status === "imported") {
         info("File imported.");
         // Land on the tab holding what was just added, so the new row is
@@ -867,7 +867,7 @@ export function SavedScreen({
       setImportBusy(false);
       setActiveOp(null);
     }
-  }, [fail, imports.length, info, refreshFreeSpace]);
+  }, [fail, info, refreshFreeSpace]);
 
   // --- GeoPDF imports ---
   const { geoPdfImports } = useGeoPdfImports();

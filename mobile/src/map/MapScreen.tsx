@@ -2503,11 +2503,7 @@ export function MapScreen({
             fitCameraToBbox(outcome.record.bbox);
           }
         } else {
-          const record = await importVectorSource(
-            url,
-            syntheticNameFor(kind),
-            imports.length,
-          );
+          const record = await importVectorSource(url, syntheticNameFor(kind));
           fitCameraToBbox(record.bbox);
         }
       } catch (err) {
@@ -2520,7 +2516,7 @@ export function MapScreen({
         );
       }
     },
-    [imports.length, fitCameraToBbox],
+    [fitCameraToBbox],
   );
   const onIncomingUrl = useEffectEvent(handleIncomingUrl);
   useEffect(() => {
