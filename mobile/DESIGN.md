@@ -167,8 +167,10 @@ comments in `src/map/MapScreen.tsx`; these are the ones a screen designer meets.
 
 - **The backdrop fades, the sheet slides**; the scrim covers both system
   bars and the sheet runs to the physical bottom edge.
-- **The handle drags**: past ~120pt or a flick dismisses, less springs back.
-  A tap on it does nothing, because a drag is discard.
+- **The whole sheet drags, not only its handle**: past ~120pt or a flick
+  dismisses, less springs back. Content that scrolls drags the sheet once it
+  is at its top, in the same gesture; a horizontal gesture inside a sheet
+  stays its own. A tap on the handle does nothing, because a drag is discard.
 - **A titled sheet draws a × at the top right of its header.**
 - **The backdrop is the screen-reader dismiss** (`Close <sheet title>`); the
   handle is hidden from assistive tech. The title is therefore read as part of
