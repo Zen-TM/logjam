@@ -12,10 +12,15 @@
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
+import { Alert, StyleSheet, Text, View } from "react-native";
+import {
+  messageFromError,
+  TRACK_COLORS,
+  trackColorName,
+  type TrackPass,
+} from "@logjam/shared";
 
-import { assetHue, spacing, theme } from "../theme";
+import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
@@ -25,6 +30,7 @@ import { type Track } from "./tracksDb";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
+import { passedHereText } from "./passedHere";
 import { TrackStatsBody } from "./TrackStatsBody";
 import { useTrackDetail } from "./useTrackDetail";
 
@@ -33,6 +39,7 @@ export function TrackOptionsSheet({
   visible,
   onClose,
   onShowOnMap,
+  passes,
   onContinueRecording,
   onInfo,
   onError,
@@ -47,6 +54,11 @@ export function TrackOptionsSheet({
    * (DESIGN.md §5: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
+  /**
+   * When this track was at the spot tapped to open the sheet. Map-only, for
+   * the same reason: Saved opens a track without pointing at any part of it.
+   */
+  passes?: readonly TrackPass[];
   /**
    * Pick this recording back up. Owned by the MAP rather than by this sheet
    * because starting a recorder needs the location permission prompt, which
@@ -103,6 +115,8 @@ export function TrackOptionsSheet({
       allowNetwork,
     },
   );
+
+  const passedHere = passes ? passedHereText(passes) : null;
 
   const shareRowProps = useShareRowProps(online);
   const actions = track ? trackActions(track) : null;
@@ -251,6 +265,7 @@ export function TrackOptionsSheet({
         </View>
       ) : (
         <View style={styles.body}>
+          {passedHere ? <Text style={styles.note}>{passedHere}</Text> : null}
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
@@ -400,4 +415,5 @@ export function TrackOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
+  note: { color: theme.textMuted, fontSize: fontSize.sm },
 });

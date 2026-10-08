@@ -83,6 +83,7 @@ import {
   snapSegment,
   type IconIdea,
   type SnapMode,
+  type TrackPass,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -264,7 +265,10 @@ import {
   setRecordingMapFocusBoost,
   startTrackRecording,
 } from "../tracks/trackRecorder";
-import { TrackMapLayers } from "../tracks/TrackMapLayers";
+import {
+  TrackMapLayers,
+  type TrackPressHandler,
+} from "../tracks/TrackMapLayers";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
@@ -2082,8 +2086,10 @@ export function MapScreen({
    * a visibility flip made inside the sheet re-renders it.
    */
   const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
-  const handleTrackPress = useCallback(
-    (track: Track, coordinates?: { latitude: number; longitude: number }) => {
+  /** When the track in the options sheet was at the spot tapped to open it. */
+  const [optionsTrackPasses, setOptionsTrackPasses] = useState<TrackPass[]>([]);
+  const handleTrackPress = useCallback<TrackPressHandler>(
+    (track, coordinates, passes) => {
       // Same rule as a place pin: the line swallows the press before the map
       // sees it, so while a tool is collecting points it has to place the point
       // itself — otherwise tapping near a track does nothing and reads as
@@ -2094,6 +2100,7 @@ export function MapScreen({
         }
         return;
       }
+      setOptionsTrackPasses(passes ?? []);
       setOptionsTrackId(track.id);
     },
     [addToolPoint, collectingPoints],
@@ -5362,6 +5369,7 @@ export function MapScreen({
       <TrackOptionsSheet
         track={tracks.find((track) => track.id === optionsTrackId) ?? null}
         visible={optionsTrackId !== null}
+        passes={optionsTrackPasses}
         onClose={() => setOptionsTrackId(null)}
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
