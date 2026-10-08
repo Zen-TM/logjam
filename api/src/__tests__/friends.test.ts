@@ -87,5 +87,15 @@ describe("friends routes (fake auth = alice)", () => {
       expect(match.id).not.toBe(ALICE_ID);
       expect(match.email).toBeUndefined();
     }
+    // The count is of the same matches, self excluded. Mutation: drop the
+    // where from the count and it includes alice / non-matches.
+    expect(Number(res.headers["x-total-count"])).toBeGreaterThanOrEqual(
+      res.body.length,
+    );
+    const all = await request(API_URL)
+      .get("/friends/search")
+      .query({ q: "zzzzqqqq" })
+      .set(AUTH);
+    expect(all.headers["x-total-count"]).toBe("0");
   });
 });

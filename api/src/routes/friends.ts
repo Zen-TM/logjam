@@ -902,15 +902,22 @@ router.get(
       throw new AppError(400, "Search query must be at least 3 characters");
     }
 
-    const users = await prisma.user.findMany({
-      where: {
-        username: { contains: q, mode: "insensitive" },
-        id: { not: user.id },
-      },
-      select: { id: true, username: true },
-      take: 10,
-    });
+    // Same where for the page and the count, so the total reveals nothing
+    // the matching usernames would not.
+    const where = {
+      username: { contains: q, mode: "insensitive" as const },
+      id: { not: user.id },
+    };
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, username: true },
+        take: 10,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
+    res.set("X-Total-Count", String(total));
     res.json(users);
   },
 );
