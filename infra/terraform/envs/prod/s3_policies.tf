@@ -3,6 +3,27 @@
 # distribution by ARN, so they're managed here now that the distribution is a
 # Terraform resource.
 
+# Every bucket refuses plain-HTTP requests. A bucket policy is one document per
+# bucket, so each policy below (and audit's, in audit.tf) appends this statement.
+locals {
+  deny_insecure_transport = {
+    for name, arn in {
+      frontend    = module.frontend.bucket_arn
+      topo_jobs   = module.topo_jobs.bucket_arn
+      access_logs = module.access_logs.bucket_arn
+      media       = module.media.bucket_arn
+      audit       = aws_s3_bucket.audit.arn
+      } : name => {
+      Sid       = "DenyInsecureTransport"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource  = [arn, "${arn}/*"]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }
+  }
+}
+
 resource "aws_s3_bucket_policy" "frontend" {
   bucket = module.frontend.bucket_id
   policy = jsonencode({
@@ -19,7 +40,7 @@ resource "aws_s3_bucket_policy" "frontend" {
           "AWS:SourceArn" = aws_cloudfront_distribution.web.arn
         }
       }
-    }]
+    }, local.deny_insecure_transport["frontend"]]
   })
 }
 
@@ -39,7 +60,7 @@ resource "aws_s3_bucket_policy" "topo_jobs" {
           "AWS:SourceArn" = aws_cloudfront_distribution.web.arn
         }
       }
-    }]
+    }, local.deny_insecure_transport["topo_jobs"]]
   })
 }
 
@@ -71,6 +92,14 @@ resource "aws_s3_bucket_policy" "access_logs" {
           ]
         }
       }
-    }]
+    }, local.deny_insecure_transport["access_logs"]]
+  })
+}
+
+resource "aws_s3_bucket_policy" "media" {
+  bucket = module.media.bucket_id
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [local.deny_insecure_transport["media"]]
   })
 }
