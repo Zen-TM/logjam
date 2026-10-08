@@ -140,10 +140,14 @@ router.delete(
     const isSharee = targetUserId === user.id;
     if (!isSharer && !isSharee) throw new AppError(404, "Place not found");
 
-    const share = await prisma.placeShare.findFirst({
+    // Every row, not one: the duplicate check on grant is not atomic and the
+    // table has no unique key, so a raced pair can exist, and any survivor
+    // would keep the sharee's access.
+    const shares = await prisma.placeShare.findMany({
       where: { placeId, sharedWithId: targetUserId },
+      select: { id: true },
     });
-    if (!share) throw new AppError(404, "Share not found");
+    if (shares.length === 0) throw new AppError(404, "Share not found");
 
     // Revoke the share AND remove the recipient's place_shared notification
     // for this place in one transaction (PRIV-001). The read-time filter would
@@ -166,7 +170,9 @@ router.delete(
       // so the recipient never had them through this share and there is
       // nothing to revoke. (A route does, through Route.placeId — a foreign
       // key, not a link. The distinction is lib/shareAccess.ts's.)
-      await tx.placeShare.delete({ where: { id: share.id } });
+      await tx.placeShare.deleteMany({
+        where: { placeId, sharedWithId: targetUserId },
+      });
       await tx.notification.deleteMany({
         where: {
           userId: targetUserId,
@@ -179,11 +185,17 @@ router.delete(
         shareRevokeTombstones({
           placeOwnerId: place.ownerId,
           shareeId: targetUserId,
-          shareId: share.id,
+          shareId: shares[0].id,
           placeId,
           placeMediaIds: placeMedia.map((m) => m.id),
           routeId: linkedRoute?.id ?? null,
-        }),
+        }).concat(
+          shares.slice(1).map((extra) => ({
+            userId: place.ownerId,
+            entityType: "placeShare" as const,
+            entityId: extra.id,
+          })),
+        ),
       );
     });
 
