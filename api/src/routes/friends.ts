@@ -33,7 +33,7 @@ import {
   type DirectShareRevocation,
 } from "../lib/revokeDirectShares";
 
-async function wantsInAppNotification(
+export async function wantsInAppNotification(
   userId: string,
   key: "friendRequestInApp" | "shareInApp",
 ): Promise<boolean> {

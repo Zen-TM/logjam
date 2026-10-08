@@ -25,6 +25,8 @@ export const config = {
   // parallels the web TOPO_CDN_BASE_URL.
   topoCdnBaseUrl:
     process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjamnsw.com",
+  // Where Logjam Web lives: a friend invite link made here opens there.
+  webUrl: process.env.EXPO_PUBLIC_WEB_URL ?? "https://logjamnsw.com",
 } as const;
 
 // Client-version discipline (Stage 0): every API request carries this header so

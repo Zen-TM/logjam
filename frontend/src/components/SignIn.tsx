@@ -17,6 +17,8 @@ import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
+import { FRIENDS } from "@logjam/shared";
+import { pendingFriendInvite } from "../pendingFriendInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import {
@@ -366,6 +368,11 @@ function SignIn({
       <div className={classes.container}>
         <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
+          {pendingFriendInvite() && (
+            <p className={classes.successBanner} role="status">
+              {FRIENDS.copy.inviteSignIn}
+            </p>
+          )}
           <TextField
             label="Name"
             value={name}
@@ -464,6 +471,11 @@ function SignIn({
     <div className={classes.container}>
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
+        {pendingFriendInvite() && (
+          <p className={classes.successBanner} role="status">
+            {FRIENDS.copy.inviteSignIn}
+          </p>
+        )}
         {resetSuccess && (
           <p className={classes.successBanner} role="status">
             Password reset — please sign in.
