@@ -41,6 +41,7 @@ import { insertArtifact, setArtifactSize } from "./registryDb";
 import {
   classifyTileResponse,
   deadTileBudget,
+  exhaustedTileOutcome,
   regionPlanHash,
   regionTileSequence,
   tileUrlFrom,
@@ -406,13 +407,6 @@ export async function runRegionDownload(
           halt.stop = { kind: "paused", reason: "connectivity" };
           return;
         }
-        if (AppState.currentState !== "active") {
-          // Foreground-only in v1 (§5.6): OS background budgets make a tile loop
-          // flaky, and the file is a lossless checkpoint, so parking is cheap.
-          halt.stop = { kind: "paused", reason: "background" };
-          return;
-        }
-
         let attempt = 0;
         for (;;) {
           await bucket.take();
@@ -437,6 +431,10 @@ export async function runRegionDownload(
           }
           attempt += 1;
           if (attempt >= MAX_TILE_ATTEMPTS) {
+            if (exhaustedTileOutcome(AppState.currentState) === "park") {
+              halt.stop = { kind: "paused", reason: "background" };
+              return;
+            }
             dead += 1;
             if (dead > deadTileBudget(plan.totalTiles)) {
               halt.stop = { kind: "failed", code: "provider-errors" };
