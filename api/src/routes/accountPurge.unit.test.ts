@@ -5,7 +5,7 @@
 // schema's ON DELETE CASCADE. The failure mode is silence: a new table with a
 // `User` relation is wiped by the cascade, but nobody decided that, and its
 // recipients' or S3 side is forgotten. This does not cover the S3 prefixes.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -78,5 +78,47 @@ describe("account-delete purge covers every model related to User", () => {
       }
       expect(explicitlyPurged().has(model)).toBe(false);
     }
+  });
+});
+
+// A notification row is held by the recipient, so the cascade from the sender
+// never reaches it. Mutation that turns this red: creating a notification of a
+// new type anywhere in src without naming that type in the purge in
+// routes/users.ts.
+describe("account-delete purge covers every notification type", () => {
+  // Only ever sent to the job's own owner, so the purge's
+  // `notification.deleteMany({ userId })` already removes them.
+  const HELD_BY_OWNER_ONLY = [
+    "topo_failed",
+    "topo_export_complete",
+    "topo_export_skipped",
+    "geo_pdf_complete",
+  ];
+  const types = new Set<string>();
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, e.name);
+      if (e.isDirectory()) walk(path);
+      else if (/\.ts$/.test(e.name) && !/test\.ts$/.test(e.name)) {
+        for (const m of readFileSync(path, "utf8").matchAll(
+          /type: "(\w+)",\s*payload:/g,
+        ))
+          types.add(m[1]);
+      }
+    }
+  };
+  walk(join(import.meta.dirname, ".."));
+
+  it("finds the creation sites at all", () => {
+    expect(types.has("item_shared")).toBe(true);
+    expect(types.has("file_sent")).toBe(true);
+  });
+
+  it("names each type in the purge", () => {
+    const purge = purgeSource.slice(purgeSource.indexOf("$transaction(["));
+    const unnamed = [...types].filter(
+      (t) => !HELD_BY_OWNER_ONLY.includes(t) && !purge.includes(`"${t}"`),
+    );
+    expect(unnamed).toEqual([]);
   });
 });
