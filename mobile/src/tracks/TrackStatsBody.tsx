@@ -3,7 +3,7 @@
 //
 // ONE definition of the stat list, because a recorded track reached from the
 // map, the same track reached from Saved, and a GPX someone sent you are the
-// same object seen three ways (DESIGN.md §7). A stat added here appears in all
+// same object seen three ways (DESIGN.md §5). A stat added here appears in all
 // three or in none.
 //
 // What is absent is as deliberate as what is present: a series with no
@@ -15,6 +15,8 @@ import {
   formatDistanceM,
   formatDurationMs,
   formatSpeedMps,
+  PAIRED_STAT_LABELS,
+  pairedStatLayout,
   type ElevationProfile,
   type TrackDetail,
 } from "@logjam/shared";
@@ -105,21 +107,33 @@ export function TrackStatsBody({
   }
   stats.push({ label: "Distance", value: formatDistanceM(detail.distanceM) });
   if (detail.movingMs != null && detail.stoppedMs != null) {
-    stats.push({ label: "Moving", value: formatDurationMs(detail.movingMs) });
-    stats.push({ label: "Stopped", value: formatDurationMs(detail.stoppedMs) });
+    stats.push({
+      label: PAIRED_STAT_LABELS.moving,
+      value: formatDurationMs(detail.movingMs),
+    });
+    stats.push({
+      label: PAIRED_STAT_LABELS.stopped,
+      value: formatDurationMs(detail.stoppedMs),
+    });
   }
-  stats.push({ label: "Ascent", value: `↑ ${Math.round(gainM)} m` });
-  stats.push({ label: "Descent", value: `↓ ${Math.round(lossM)} m` });
+  stats.push({
+    label: PAIRED_STAT_LABELS.ascent,
+    value: `↑ ${Math.round(gainM)} m`,
+  });
+  stats.push({
+    label: PAIRED_STAT_LABELS.descent,
+    value: `↓ ${Math.round(lossM)} m`,
+  });
   if (timed) {
     // Two speeds, because they answer different questions: the first is "how
     // long did the day take", the second is "how fast do we walk". A trip with
     // a long lunch has a very different pair, and one number hides that.
     stats.push({
-      label: "Avg speed",
+      label: PAIRED_STAT_LABELS.avgSpeed,
       value: formatSpeedMps(detail.averageSpeedMps),
     });
     stats.push({
-      label: "Avg moving speed",
+      label: PAIRED_STAT_LABELS.avgMovingSpeed,
       value: formatSpeedMps(detail.movingSpeedMps),
     });
   }
@@ -129,13 +143,21 @@ export function TrackStatsBody({
   // saying the track had no altitudes. A lone reading is not a height band and
   // cannot be drawn, so it says nothing at all.
   if (elevation && maxM != null && minM != null) {
-    stats.push({ label: "High point", value: `${Math.round(maxM)} m` });
-    stats.push({ label: "Low point", value: `${Math.round(minM)} m` });
+    stats.push({
+      label: PAIRED_STAT_LABELS.highPoint,
+      value: `${Math.round(maxM)} m`,
+    });
+    stats.push({
+      label: PAIRED_STAT_LABELS.lowPoint,
+      value: `${Math.round(minM)} m`,
+    });
   }
 
   return (
     <View style={styles.body}>
-      <StatGrid stats={stats} />
+      {/* Pairs share a line and a lone stat takes the row (`STAT_PAIRS`), so a
+          missing Time or a missing pair cannot slide the rest out of step. */}
+      <StatGrid stats={pairedStatLayout(stats)} />
 
       {elevation ? (
         <View style={styles.chartBlock}>

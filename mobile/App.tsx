@@ -31,7 +31,7 @@ import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { LoadingState } from "./src/ui/ScreenStates";
 import { Button } from "./src/ui/Button";
-import { fontSize, spacing, theme } from "./src/theme";
+import { fontSize, spacing, systemBarStyle, theme } from "./src/theme";
 
 // The blocked build's only way out (MAPP-001). The rule itself — Android only,
 // from app.json's package id, https so it resolves without the Play app — is
@@ -94,7 +94,7 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
-          <SystemBars style="light" />
+          <SystemBars style={systemBarStyle} />
           <Text style={styles.blockingTitle}>Update required</Text>
           {/* The warn copy says "over mobile data, or on Wi-Fi later" and NOT
               "connect to Wi-Fi to install it", because the update is perfectly
@@ -108,7 +108,7 @@ export default function App() {
           {openStore ? (
             <Button
               label="Open the Play Store"
-              icon="external-link"
+              icon="openExternal"
               onPress={openStore}
             />
           ) : null}
@@ -126,7 +126,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SystemBars style="light" />
+      <SystemBars style={systemBarStyle} />
       {/* App lock (Stage 4): active once offline map data exists on-device. */}
       <AppLockGate>
         {auth.state === "loading" ? (
@@ -207,17 +207,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing(3),
     gap: spacing(1),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   blockingTitle: {
     fontSize: fontSize.xl,
     fontWeight: "600",
-    color: theme.textPrimary,
+    color: theme.text,
   },
   blockingLine: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
     textAlign: "center",
   },
-  authSafeArea: { flex: 1, backgroundColor: theme.primary },
+  authSafeArea: { flex: 1, backgroundColor: theme.page },
 });

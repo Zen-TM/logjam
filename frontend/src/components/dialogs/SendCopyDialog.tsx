@@ -7,14 +7,29 @@
 // sentence, word for word.
 //
 // PRIVACY: usernames only, never email (root AGENTS.md).
+import { Fragment, type ReactNode } from "react";
+import {
+  contractSectionKeys,
+  noFriendsMatch,
+  noFriendsMessage,
+  SEND_COPY,
+  sendCopyLabel,
+  type SectionKeysOn,
+} from "@logjam/shared";
 import { useState } from "react";
-import { TriangleAlert, Users } from "lucide-react";
 import { friendMatches } from "@logjam/shared";
 import classes from "./SendCopyDialog.module.css";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TFriend } from "../../placeUtils";
-import { Button, Checkbox, Dialog, EmptyState, SearchField } from "../../ui";
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  EmptyState,
+  SearchField,
+  Icon,
+  ErrorBanner,
+} from "../../ui";
 
 /** The list stays searchable only once it is long enough to need it. */
 const SEARCH_FROM = 8;
@@ -77,6 +92,45 @@ function SendCopyDialog({
     ? friends.filter((friend) => friendMatches(friend.username, query))
     : friends;
 
+  // Exhaustive by type: a section the contract names and this dialog does not
+  // draw, or the reverse, fails `tsc` (`SEND_COPY`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SEND_COPY, "web">,
+    () => ReactNode
+  > = {
+    promise: () => (
+      <p className={classes.promise}>
+        <Icon idea="warning" size={16} aria-hidden className={classes.glyph} />
+        {SEND_COPY.copy.promise}
+      </p>
+    ),
+    search: () =>
+      searchable ? (
+        <SearchField
+          label={SEND_COPY.copy.searchFriends}
+          placeholder={SEND_COPY.copy.searchFriends}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      ) : null,
+    friends: () =>
+      shown.length === 0 ? (
+        <p className={classes.note}>{noFriendsMatch(query)}</p>
+      ) : (
+        <>
+          {shown.map((friend) => (
+            <Checkbox
+              key={friend.id}
+              label={friend.username}
+              checked={picked.has(friend.id)}
+              disabled={busy}
+              onChange={(on) => toggle(friend.id, on)}
+            />
+          ))}
+        </>
+      ),
+  };
+
   return (
     <Dialog
       open={open}
@@ -94,7 +148,7 @@ function SendCopyDialog({
               onClick={() => void handleSend()}
               disabled={busy || picked.size === 0}
             >
-              {picked.size > 1 ? `Send ${picked.size} copies` : "Send a copy"}
+              {sendCopyLabel(picked.size)}
             </Button>
           )}
         </>
@@ -102,38 +156,16 @@ function SendCopyDialog({
     >
       {friends.length === 0 ? (
         <EmptyState
-          icon={Users}
-          title="No friends yet"
-          body="Copies go to friends. Add one on the Friends page, then come back."
+          icon="friends"
+          title={noFriendsMessage("copy").title}
+          body={noFriendsMessage("copy").body}
         />
       ) : (
         <div className={classes.body}>
           {error && <ErrorBanner message={error} />}
-          <p className={classes.promise}>
-            <TriangleAlert size={16} aria-hidden className={classes.glyph} />
-            They'll keep their own copy — you can't take it back.
-          </p>
-          {searchable && (
-            <SearchField
-              label="Search friends"
-              placeholder="Search friends"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          )}
-          {shown.length === 0 ? (
-            <p className={classes.note}>No friends match “{query.trim()}”.</p>
-          ) : (
-            shown.map((friend) => (
-              <Checkbox
-                key={friend.id}
-                label={friend.username}
-                checked={picked.has(friend.id)}
-                disabled={busy}
-                onChange={(on) => toggle(friend.id, on)}
-              />
-            ))
-          )}
+          {contractSectionKeys(SEND_COPY, "web").map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
         </div>
       )}
     </Dialog>

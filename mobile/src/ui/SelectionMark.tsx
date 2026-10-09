@@ -1,10 +1,10 @@
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, View } from "react-native";
 
 import { theme } from "../theme";
+import { Icon } from "./Icon";
 
 /**
- * The checkbox a row shows while a multi-select is running (DESIGN.md §7).
+ * The checkbox a row shows while a multi-select is running (DESIGN.md §5).
  *
  * It occupies EXACTLY an `IconButton`'s 40pt box, because it is what replaces
  * the row's ⋯ for the duration of the mode: a mark that sized itself would
@@ -26,8 +26,8 @@ export function SelectionMark({
   return (
     <View style={styles.box}>
       {selectable ? (
-        <Feather
-          name={selected ? "check-circle" : "circle"}
+        <Icon
+          idea={selected ? "success" : "unselected"}
           size={22}
           color={selected ? theme.accent : theme.textMuted}
         />

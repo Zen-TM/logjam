@@ -11,13 +11,13 @@
 }
 
 /* The same card a list row wears: the surface a step darker than the dialog,
-   a hairline, the large radius (§5). */
+   a hairline, the large radius (DESIGN.md §3). */
 .item {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  background: var(--theme-secondary);
+  background: var(--color-card);
   border: var(--hairline);
   border-radius: var(--radius-lg);
 }
@@ -25,7 +25,7 @@
 .incomingLabel {
   font-size: var(--font-base);
   font-weight: 600;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
@@ -44,31 +44,31 @@
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--motion-fast);
 }
 
 .option:hover {
-  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
 /* The native control in the app's own colour; the focus ring is index.css's. */
 .radio {
   flex: none;
   margin: 0;
-  accent-color: var(--theme-accent);
+  accent-color: var(--color-accent);
 }
 
 .optionLabel {
   flex: 1;
   min-width: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .optionMeta {
   flex: none;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }

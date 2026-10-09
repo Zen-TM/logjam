@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { EllipsisVertical, Merge, Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  drawsYoursHeading,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
+  placeTypeDeleteConfirm,
+  SETTINGS_LIST,
 } from "@logjam/shared";
 
 import {
@@ -15,22 +17,26 @@ import {
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { messageFromError } from "../../../errors/messageFromError";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   Dialog,
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SectionHeader,
   Select,
-  SwatchPicker,
+  ColourField,
   TextField,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
+
+const copy = SETTINGS_LIST.copy;
 
 /**
  * The place types a user keeps — Settings' first list page. The list is the
@@ -114,22 +120,25 @@ function PlaceTypeSection({
   const system = types.filter((type) => type.isSystem);
   const mergeTarget = types.find((type) => type.id === mergeTargetId) ?? null;
 
+  // The hero's button and the end of the list's are the same button.
+  const addTypeButton = (
+    <Button
+      compact
+      variant="outline"
+      icon="add"
+      onClick={() => setEditing("new")}
+    >
+      {copy.addPlaceType}
+    </Button>
+  );
+
   return (
     <div className={classes.root}>
       <Hero
         title="Place types"
         onBack={onBack}
         backLabel="Back to Settings"
-        actions={
-          <Button
-            compact
-            variant="outline"
-            icon={Plus}
-            onClick={() => setEditing("new")}
-          >
-            Add
-          </Button>
-        }
+        actions={addTypeButton}
       />
 
       {error && (
@@ -138,11 +147,11 @@ function PlaceTypeSection({
 
       <div className={classes.list}>
         {loading ? (
-          <p className={classes.state}>Loading…</p>
+          <LoadingState />
         ) : (
           <>
-            {own.length > 0 && (
-              <SectionHeader title="Yours" count={own.length} />
+            {drawsYoursHeading(own.length, system.length) && (
+              <SectionHeader title={copy.yours} count={own.length} />
             )}
             {own.map((type) => (
               <Row
@@ -173,15 +182,15 @@ function PlaceTypeSection({
                     entries={[
                       {
                         id: "edit",
-                        label: "Edit type",
-                        icon: Pencil,
+                        label: copy.editType,
+                        icon: "edit",
                         onSelect: () => setEditing(type),
                       },
                       type.placeCount > 0
                         ? {
                             id: "merge",
-                            label: "Merge into another type",
-                            icon: Merge,
+                            label: copy.mergeType,
+                            icon: "merge",
                             danger: true,
                             onSelect: () => {
                               setMergingFrom(type);
@@ -193,8 +202,8 @@ function PlaceTypeSection({
                           }
                         : {
                             id: "delete",
-                            label: "Delete type",
-                            icon: Trash2,
+                            label: copy.deleteType,
+                            icon: "delete",
                             danger: true,
                             onSelect: () => setDeleting(type),
                           },
@@ -202,7 +211,7 @@ function PlaceTypeSection({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${type.name}`}
                       />
                     )}
@@ -214,7 +223,7 @@ function PlaceTypeSection({
             {/* A built-in gets no verbs at all rather than disabled ones: it
                 belongs to no account, and a greyed button invites the question
                 "why not". */}
-            <SectionHeader title="Built in" count={system.length} />
+            <SectionHeader title={copy.builtIn} count={system.length} />
             {system.map((type) => (
               <Row
                 key={type.id}
@@ -228,6 +237,7 @@ function PlaceTypeSection({
                 subtitle={placeCountLabel(type.placeCount)}
               />
             ))}
+            <ListEnd>{addTypeButton}</ListEnd>
           </>
         )}
       </div>
@@ -260,9 +270,9 @@ function PlaceTypeSection({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={`Delete "${deleting?.name ?? ""}"?`}
-        message="Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none."
-        confirmLabel="Delete"
+        title={placeTypeDeleteConfirm(deleting?.name ?? "").confirmTitle}
+        message={placeTypeDeleteConfirm(deleting?.name ?? "").confirmBody}
+        confirmLabel={copy.deleteType}
         confirmColor="error"
         busy={saving}
         onConfirm={async () => {
@@ -414,9 +424,9 @@ function PlaceTypeDialog({
           })}
         </div>
 
-        <SwatchPicker
+        <ColourField
           label="Colour"
-          colors={PLACE_TYPE_COLORS}
+          palette={PLACE_TYPE_COLORS}
           value={color}
           onChange={setColor}
           nameOf={placeTypeColorName}

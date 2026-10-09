@@ -7,7 +7,7 @@
   top: 16px;
   left: calc(var(--map-inset-left, 0px) + 16px);
   width: min(380px, calc(100% - var(--map-inset-left, 0px) - 92px));
-  transition: left var(--transition-med) ease-out;
+  transition: left var(--motion-med) ease-out;
 }
 
 .notices {
@@ -72,8 +72,8 @@
   padding: 0 16px 0 14px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-sm);
   font-weight: 600;
@@ -83,15 +83,11 @@
 }
 
 .trayItem:hover {
-  background: color-mix(
-    in srgb,
-    var(--theme-text-primary) 14%,
-    var(--theme-primary)
-  );
+  background: color-mix(in srgb, var(--color-text) 14%, var(--color-page));
 }
 
 .trayGlyph {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 /* Beneath MapLibre's control corners (z-index 2), like the scale bar beside it:
@@ -102,20 +98,13 @@
   z-index: 1;
   left: calc(var(--map-inset-left, 0px) + 16px);
   bottom: 16px;
-  transition: left var(--transition-med) ease-out;
+  transition: left var(--motion-med) ease-out;
 }
 
 /* The needle is drawn pointing up; counter-rotate by the map's bearing so it
    keeps pointing at north. */
 .compass svg {
   transform: rotate(calc(-1 * var(--bearing, 0deg)));
-}
-
-/* The north half, filled. Warning is the scheme's red, measured on the map
-   button's `primary` as text (scripts/wcag-contrast.mjs). */
-.needleNorth {
-  fill: var(--theme-warning);
-  stroke: var(--theme-warning);
 }
 
 @media (prefers-reduced-motion: reduce) {

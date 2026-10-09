@@ -1,8 +1,8 @@
 // What the Maps page says about each map, out of the component so it is checked
-// (DESIGN.md §9).
+// (DESIGN.md §6).
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (DESIGN.md §1). The second half of that question is `beingMade`: every job the
+// (docs/ux-principles.md §2). The second half of that question is `beingMade`: every job the
 // user is still waiting on — a GeoPDF, a topo, an export of a topo — as one kind
 // of row, newest first, with the words for where it has got to. It used to be a
 // stack of coloured ribbons over the page with a "TOPO"/"EXPORT · GPKG" chip on
@@ -16,18 +16,12 @@ import {
   type GeoPdfJobView,
   type TopoExportJobView,
 } from "@logjam/shared";
-import {
-  FileDown,
-  FileText,
-  LayoutTemplate,
-  Mountain,
-  type LucideIcon,
-} from "lucide-react";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import type { TopoJob } from "../../dialogs/TopoDialog";
+import { type Glyph } from "../../../ui";
 
 /**
- * A kind's glyph and hue (DESIGN.md §3), from Logjam GPS's Saved tab: a GeoPDF
+ * A kind's glyph and hue (docs/ux-principles.md §8), from Logjam GPS's Saved tab: a GeoPDF
  * is a page of paper, a LiDAR topo is terrain in the eucalypt `overlay` hue.
  * What is made FROM a thing wears that thing's hue with its own glyph — an
  * export is a file out of a topo, a template is the settings a map is made
@@ -36,25 +30,25 @@ import type { TopoJob } from "../../dialogs/TopoDialog";
 export const MAP_IDENTITY: Record<
   "geoPdf" | "topo" | "export" | "geoPdfTemplate" | "topoTemplate",
   {
-    icon: LucideIcon;
+    icon: Glyph;
     hue: string;
     label: string;
   }
 > = {
-  geoPdf: { icon: FileText, hue: "var(--hue-geoPdf)", label: "GeoPDF" },
-  topo: { icon: Mountain, hue: "var(--hue-overlay)", label: "LiDAR topo" },
+  geoPdf: { icon: "geoPdf", hue: "var(--hue-geo-pdf)", label: "GeoPDF" },
+  topo: { icon: "lidar", hue: "var(--hue-overlay)", label: "LiDAR topo" },
   export: {
-    icon: FileDown,
+    icon: "export",
     hue: "var(--hue-overlay)",
     label: "Export of a LiDAR topo",
   },
   geoPdfTemplate: {
-    icon: LayoutTemplate,
-    hue: "var(--hue-geoPdf)",
+    icon: "template",
+    hue: "var(--hue-geo-pdf)",
     label: "GeoPDF template",
   },
   topoTemplate: {
-    icon: LayoutTemplate,
+    icon: "template",
     hue: "var(--hue-overlay)",
     label: "LiDAR topo template",
   },

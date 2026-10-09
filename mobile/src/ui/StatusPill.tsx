@@ -1,23 +1,16 @@
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { Icon, type Glyph } from "./Icon";
+import { PILL_HEIGHT } from "./pill";
 
-// Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
-// neutral bordered (Shared / Online), `warning` = attention (Update / error),
-// `muted` = de-emphasised state that is not a problem (Queued / Paused).
-// The palette has no dedicated success green, so "saved offline" reads as the
-// filled accent — the strongest on-palette affirmative.
-//
-// Pills are fully rounded and never wider than their text; an optional `icon`
-// carries state for glance-reading (check = ready, alert = needs attention).
+// A status pill is READ, not pressed, so it draws no fill and no edge (UX §4:
+// filled is interactive). The tone is carried by a dot or a glyph beside words
+// in the text colour: `accent` = active / saved-for-offline, `warning` =
+// attention (Update / error), `outline` and `muted` = quiet state (Shared /
+// Queued / Paused), muted words with no dot. An optional `icon` carries state for
+// glance-reading (check = ready, alert = needs attention) in place of the dot.
+// Guard: `pressableFill.test.ts`.
 type PillTone = "accent" | "outline" | "warning" | "muted";
 
 export function StatusPill({
@@ -28,40 +21,55 @@ export function StatusPill({
 }: {
   label: string;
   tone?: PillTone;
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   /**
-   * Identity colour override — outlines and letters the pill in `hue` instead
-   * of the tone's colour. For a pill that says *what a thing is* (a trip type)
-   * rather than how it is going; the four tones stay the vocabulary for state.
+   * Identity colour: a dot of `hue` says *what a thing is* (a trip type) rather
+   * than how it is going; the four tones stay the vocabulary for state. A hue is
+   * a fill, never letters on a surface, so it is only ever the dot.
    */
   hue?: string;
 }) {
-  const color = hue ?? TONE_TEXT[tone];
+  const dot = hue ?? TONE_DOT[tone];
   return (
-    <View
-      style={[
-        styles.base,
-        styles[`${tone}Box`],
-        hue != null && {
-          borderWidth: 1,
-          borderColor: withAlpha(hue, 0.6),
-          backgroundColor: "transparent",
-        },
-      ]}
-    >
-      {icon ? <Feather name={icon} size={12} color={color} /> : null}
-      <Text style={[styles.label, { color }]} numberOfLines={1}>
+    <View style={styles.base}>
+      {icon ? <Icon idea={icon} size={12} color={TONE_GLYPH[tone]} /> : null}
+      {!icon || hue != null ? (
+        dot != null ? (
+          <View style={[styles.dot, { backgroundColor: dot }]} />
+        ) : null
+      ) : null}
+      <Text
+        style={[styles.label, { color: TONE_TEXT[tone] }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>
   );
 }
 
+// Words are `text` or `textMuted`, never an intent colour (as on Logjam Web):
+// the dot or the glyph says the tone.
 const TONE_TEXT: Record<PillTone, string> = {
-  accent: theme.primary,
-  outline: theme.bonus1,
+  accent: theme.text,
+  outline: theme.textMuted,
+  warning: theme.text,
+  muted: theme.textMuted,
+};
+
+const TONE_GLYPH: Record<PillTone, string> = {
+  accent: theme.accent,
+  outline: theme.textMuted,
   warning: theme.warning,
   muted: theme.textMuted,
+};
+
+// The tones with something to say get a dot; the quiet ones do not.
+const TONE_DOT: Record<PillTone, string | undefined> = {
+  accent: theme.accent,
+  outline: undefined,
+  warning: theme.warning,
+  muted: undefined,
 };
 
 const styles = StyleSheet.create({
@@ -69,18 +77,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(0.5),
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing(1),
-    paddingVertical: spacing(0.375),
     alignSelf: "flex-start",
+    minHeight: PILL_HEIGHT,
+    minWidth: PILL_HEIGHT,
+    justifyContent: "center",
   },
+  dot: { width: 8, height: 8, borderRadius: radius.pill },
   label: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-  accentBox: { backgroundColor: theme.accent },
-  outlineBox: { borderWidth: 1, borderColor: theme.bonus1 },
-  warningBox: { borderWidth: 1, borderColor: theme.warning },
-  mutedBox: {
-    borderWidth: 1,
-    borderColor: theme.bonus2,
-    backgroundColor: theme.bonus2,
-  },
 });

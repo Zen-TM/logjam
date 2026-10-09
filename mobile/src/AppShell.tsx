@@ -10,9 +10,9 @@
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   DarkTheme,
+  DefaultTheme,
   NavigationContainer,
   type NavigationContainerRef,
 } from "@react-navigation/native";
@@ -21,7 +21,7 @@ import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
+import { isThemeSchemeId, needsReconsent, type IconIdea } from "@logjam/shared";
 
 import {
   fetchCurrentUser,
@@ -38,6 +38,7 @@ import {
   persistThemeSchemeId,
   spacing,
   theme,
+  themeMode,
   withAlpha,
 } from "./theme";
 import { MapScreen } from "./map/MapScreen";
@@ -74,6 +75,7 @@ import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
 import { LoadingState } from "./ui/ScreenStates";
+import { Icon } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -86,15 +88,16 @@ function alertFinishRouteFirst(): void {
   );
 }
 
+const baseNavigationTheme = themeMode === "dark" ? DarkTheme : DefaultTheme;
 const navigationTheme = {
-  ...DarkTheme,
+  ...baseNavigationTheme,
   colors: {
-    ...DarkTheme.colors,
+    ...baseNavigationTheme.colors,
     primary: theme.accent,
-    background: theme.primary,
-    card: theme.secondary,
-    text: theme.textPrimary,
-    border: theme.secondary,
+    background: theme.page,
+    card: theme.card,
+    text: theme.text,
+    border: theme.line,
     notification: theme.accent,
   },
 };
@@ -194,7 +197,13 @@ type SavedStackParams = {
   // Saved" knows which item its notification was about, and a filter alone does
   // not answer "which of these forty".
   SavedHome:
-    | { filter?: SavedCategory; nonce?: number; highlightKey?: string }
+    | {
+        filter?: SavedCategory;
+        nonce?: number;
+        highlightKey?: string;
+        /** Open the file picker on arrival: the map's "Import a file" row. */
+        startImport?: boolean;
+      }
     | undefined;
   /**
    * The point picker for the "place from coordinates" form — the same screen
@@ -271,9 +280,9 @@ function placeFocus(place: { latitude: number; longitude: number }) {
 }
 
 const stackScreenOptions = {
-  headerStyle: { backgroundColor: theme.secondary },
-  headerTintColor: theme.textPrimary,
-  contentStyle: { backgroundColor: theme.primary },
+  headerStyle: { backgroundColor: theme.card },
+  headerTintColor: theme.text,
+  contentStyle: { backgroundColor: theme.page },
 } as const;
 
 function MapStackNav() {
@@ -289,6 +298,16 @@ function MapStackNav() {
               navigation.getParent()?.navigate("Saved", {
                 screen: "SavedHome",
                 params: { filter: category, nonce: Date.now() },
+              })
+            }
+            onImportFile={() =>
+              navigation.getParent()?.navigate("Saved", {
+                screen: "SavedHome",
+                params: {
+                  filter: "import",
+                  nonce: Date.now(),
+                  startImport: true,
+                },
               })
             }
             onSaveMapsOffline={(context) =>
@@ -360,7 +379,7 @@ function MapStackNav() {
           />
         )}
       </MapStack.Screen>
-      {/* Place and trip detail both carry their own HeroHeader, which owns the
+      {/* Place and trip detail both carry their own Hero, which owns the
           back affordance (DESIGN.md §2). */}
       <MapStack.Screen name="MapPlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
@@ -419,7 +438,7 @@ function MapStackNav() {
 function SavedStackNav() {
   return (
     <SavedStack.Navigator screenOptions={stackScreenOptions}>
-      {/* No native header: SavedScreen leads with its own HeroHeader. */}
+      {/* No native header: SavedScreen leads with its own Hero. */}
       <SavedStack.Screen name="SavedHome" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <SavedScreen
@@ -430,6 +449,9 @@ function SavedStackNav() {
                     nonce: route.params.nonce ?? 0,
                   }
                 : undefined
+            }
+            initialImport={
+              route.params?.startImport ? (route.params.nonce ?? 0) : undefined
             }
             initialHighlight={
               route.params?.highlightKey
@@ -535,7 +557,7 @@ function PlacesStackNav() {
   return (
     <PlacesStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header on any of these: each screen leads with its own
-          HeroHeader (DESIGN.md §2). */}
+          Hero (DESIGN.md §2). */}
       <PlacesStack.Screen name="PlaceList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <PlacesScreen
@@ -656,7 +678,7 @@ function PlacesStackNav() {
 function TripsStackNav() {
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
-      {/* Logs and trip detail both carry their own HeroHeader, so the native
+      {/* Logs and trip detail both carry their own Hero, so the native
           header is off and the hero owns the back affordance (DESIGN.md §2). */}
       <TripsStack.Screen name="TripList" options={{ headerShown: false }}>
         {({ navigation }) => (
@@ -739,14 +761,8 @@ function TripsStackNav() {
   );
 }
 
-function TabIcon({
-  name,
-  color,
-}: {
-  name: React.ComponentProps<typeof Feather>["name"];
-  color: string;
-}) {
-  return <Feather name={name} size={22} color={color} />;
+function TabIcon({ idea, color }: { idea: IconIdea; color: string }) {
+  return <Icon idea={idea} size={22} color={color} />;
 }
 
 // Foreground pushes show as banners; the inbox badge is refreshed on focus.
@@ -958,8 +974,8 @@ export function AppShell({
             screenOptions={{
               headerShown: false,
               tabBarStyle: {
-                backgroundColor: theme.secondary,
-                borderTopColor: withAlpha(theme.textPrimary, 0.25),
+                backgroundColor: theme.card,
+                borderTopColor: withAlpha(theme.text, 0.25),
                 borderTopWidth: 1,
                 // Breathing room between the border and the icons. The library's
                 // bar is iOS-sized (49pt plus the bottom inset) and sits the icons
@@ -977,7 +993,7 @@ export function AppShell({
             <Tabs.Screen
               name="Map"
               options={{
-                tabBarIcon: ({ color }) => <TabIcon name="map" color={color} />,
+                tabBarIcon: ({ color }) => <TabIcon idea="map" color={color} />,
               }}
             >
               {() => <MapStackNav />}
@@ -986,7 +1002,7 @@ export function AppShell({
               name="Places"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="map-pin" color={color} />
+                  <TabIcon idea="place" color={color} />
                 ),
               }}
             >
@@ -996,7 +1012,7 @@ export function AppShell({
               name="Logs"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="book-open" color={color} />
+                  <TabIcon idea="trip" color={color} />
                 ),
               }}
             >
@@ -1006,7 +1022,7 @@ export function AppShell({
               name="Saved"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="download" color={color} />
+                  <TabIcon idea="saved" color={color} />
                 ),
               }}
             >
@@ -1015,8 +1031,12 @@ export function AppShell({
             <Tabs.Screen
               name="More"
               options={{
+                // Leaving More and coming back shows its ROOT, not the page last
+                // open inside it: the hub is where a visit starts. React
+                // Navigation pops the tab's stack when the tab loses focus.
+                popToTopOnBlur: true,
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="more-horizontal" color={color} />
+                  <TabIcon idea="moreTab" color={color} />
                 ),
                 ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
               }}
@@ -1024,7 +1044,7 @@ export function AppShell({
               {() => (
                 <MoreStack.Navigator screenOptions={stackScreenOptions}>
                   {/* Every screen here except Settings leads with its own
-                  HeroHeader, which owns the back affordance (DESIGN.md §2).
+                  Hero, which owns the back affordance (DESIGN.md §2).
                   Settings is a plain settings list, so it keeps the native
                   header — the rule that a bare-label hero is the pattern being
                   replaced cuts both ways. */}

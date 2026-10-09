@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
+  attributeFilterShape,
+  formatRange,
   formatThreshold,
+  isFullRange,
   THRESHOLD_OPERATOR_LABELS as OPERATOR_LABEL,
   THRESHOLD_OPERATORS as OPERATORS,
+  type AttributeFilterShape,
   type CustomFieldFilter,
   type NumberRange,
   type PlaceThresholdFilter,
@@ -12,8 +16,113 @@ import {
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { Chip } from "./Chip";
+import { DateRangeFilter } from "./DateRangeFilter";
 import { RangePills } from "./RangePills";
 import { TextField } from "./TextField";
+
+type Props = {
+  def: ScopedCustomFieldDef;
+  value: CustomFieldFilter | null;
+  onChange: (next: CustomFieldFilter | null) => void;
+  /**
+   * Open the owning sheet's date picker on one bound of this attribute. A
+   * sheet that passes none draws no row for a date attribute.
+   */
+  onPickDate?: (bound: 0 | 1) => void;
+};
+
+/**
+ * One control per shape (`attributeFilterShape` in `@logjam/shared`, the rule
+ * Logjam Web's `AttributeFilter` follows too). Exhaustive by type, so a shape
+ * the rule adds cannot go undrawn here.
+ */
+const SHAPES: Record<AttributeFilterShape, (props: Props) => ReactNode> = {
+  pills: ({ def, value, onChange }) => (
+    <RangePills
+      label={def.label}
+      bounds={[def.min as number, def.max as number]}
+      value={value?.kind === "numberRange" ? value.range : null}
+      onChange={(next) =>
+        onChange(next == null ? null : { kind: "numberRange", range: next })
+      }
+    />
+  ),
+
+  minMax: ({ def, value, onChange }) => (
+    <MinMaxFilter
+      label={def.label}
+      bounds={[def.min as number, def.max as number]}
+      value={value?.kind === "numberRange" ? value.range : null}
+      onChange={onChange}
+    />
+  ),
+
+  threshold: ({ def, value, onChange }) => (
+    <ThresholdFilter
+      label={def.label}
+      value={value?.kind === "number" ? [value.op, value.value] : null}
+      onChange={(next) =>
+        onChange(
+          next == null || next[0] === "Any"
+            ? null
+            : { kind: "number", op: next[0], value: next[1] },
+        )
+      }
+    />
+  ),
+
+  boolean: ({ def, value, onChange }) => {
+    const current = value?.kind === "boolean" ? value.value : null;
+    return (
+      <View style={styles.block}>
+        <Header
+          label={def.label}
+          summary={current == null ? "Any" : current ? "Yes" : "No"}
+          active={current != null}
+        />
+        <View style={styles.chipRow}>
+          {[true, false].map((option) => (
+            <Chip
+              key={String(option)}
+              label={option ? "Yes" : "No"}
+              active={current === option}
+              // Tapping the active chip clears it: "either" is the third state
+              // and it needs to be reachable without a Reset.
+              onPress={() =>
+                onChange(
+                  current === option
+                    ? null
+                    : { kind: "boolean", value: option },
+                )
+              }
+            />
+          ))}
+        </View>
+      </View>
+    );
+  },
+
+  text: ({ def, value, onChange }) => (
+    <TextField
+      label={def.label}
+      value={value?.kind === "text" ? value.value : ""}
+      onChangeText={(next) =>
+        onChange(next.trim() === "" ? null : { kind: "text", value: next })
+      }
+      autoCapitalize="none"
+    />
+  ),
+
+  date: ({ def, value, onChange, onPickDate }) =>
+    onPickDate ? (
+      <DateRangeFilter
+        label={def.label}
+        value={value?.kind === "date" ? value.range : null}
+        onPick={onPickDate}
+        onClear={() => onChange(null)}
+      />
+    ) : null,
+};
 
 /**
  * One attribute with the control its definition's SHAPE deserves — the phone's
@@ -22,213 +131,172 @@ import { TextField } from "./TextField";
  * It is in the kit, not in a screen, because the Places sheet and the Logs
  * sheet ask the same question of the same definitions: a place's attributes and
  * a trip's are the same kind of thing, filtered by the same shared predicate
- * (`passesCustomFieldFilters`). It was module-private inside
- * `places/PlaceFilterSheet.tsx` until Logs needed it (operator, 2026-09-17).
+ * (`passesCustomFieldFilters`).
  *
  * Nothing here may key off a field's NAME. A canyon's grades are ordinary
  * attributes, so a bespoke control for one type is exactly what this replaces.
  */
-export function AttributeFilter({
-  def,
-  value,
-  onChange,
-}: {
-  def: ScopedCustomFieldDef;
-  value: CustomFieldFilter | null;
-  onChange: (next: CustomFieldFilter | null) => void;
-}) {
-  if (def.type === "integer" || def.type === "float") {
-    const range =
-      value?.kind === "numberRange" ? (value.range as NumberRange) : null;
-    return def.min != null && def.max != null ? (
-      <RangePills
-        label={def.label}
-        bounds={[def.min, def.max]}
-        value={range}
-        onChange={(next) =>
-          onChange(next == null ? null : { kind: "numberRange", range: next })
-        }
-      />
-    ) : (
-      <ThresholdFilter
-        label={def.label}
-        unit=""
-        // NO PRESETS. The built-in thresholds have them because someone chose
-        // the numbers that matter for abseils and hours; a field the user
-        // invented has no such numbers, and deriving them from the bounds gave
-        // "Under 0 / Over 0 / Exactly 0" on a min-0 field — three taps that all
-        // mean nothing. Custom is the whole control here.
-        presets={[]}
-        value={value?.kind === "number" ? [value.op, value.value] : null}
-        onChange={(next) =>
-          onChange(
-            next == null || next[0] === "Any"
-              ? null
-              : { kind: "number", op: next[0], value: next[1] },
-          )
-        }
-      />
-    );
-  }
-
-  if (def.type === "boolean") {
-    const current = value?.kind === "boolean" ? value.value : null;
-    return (
-      <View style={styles.chipRow}>
-        <Text style={styles.blockLabel}>{def.label}</Text>
-        {[true, false].map((option) => (
-          <Chip
-            key={String(option)}
-            label={option ? "Yes" : "No"}
-            active={current === option}
-            // Tapping the active chip clears it: "either" is the third state
-            // and it needs to be reachable without a Reset.
-            onPress={() =>
-              onChange(
-                current === option ? null : { kind: "boolean", value: option },
-              )
-            }
-          />
-        ))}
-      </View>
-    );
-  }
-
-  if (def.type === "string") {
-    return (
-      <TextField
-        label={def.label}
-        value={value?.kind === "text" ? value.value : ""}
-        onChangeText={(next) =>
-          onChange(next.trim() === "" ? null : { kind: "text", value: next })
-        }
-        autoCapitalize="none"
-      />
-    );
-  }
-
-  // ponytail: a DATE definition gets no row on the phone. The date picker is a
-  // MODE of the sheet keyed to the built-in date fields, and a date attribute
-  // is rare enough to leave to Logjam Web, which draws it as two bounds. Adding
-  // one means widening the owning sheet's `Mode` to carry a custom key — the
-  // web predicate already handles the filter, so this is UI only.
-  return null;
+export function AttributeFilter(props: Props) {
+  return SHAPES[attributeFilterShape(props.def)](props);
 }
 
-/**
- * One "how many / how long / how far" axis: preset pills for the common answers,
- * plus a Custom pill that reveals the full operator + number control.
- *
- * The presets are what makes this usable one-handed at a trailhead; Custom is
- * what keeps it from being a downgrade from the desktop panel. Exported because
- * the Places sheet drives its built-in threshold axes through the same control
- * WITH presets, while an attribute passes none.
- */
-export function ThresholdFilter({
+function Header({
   label,
-  unit,
-  presets,
+  summary,
+  active,
+}: {
+  label: string;
+  summary: string;
+  active: boolean;
+}) {
+  return (
+    <View style={styles.blockHeader}>
+      <Text style={styles.blockLabel}>{label}</Text>
+      <Text style={[styles.blockValue, active && styles.blockValueActive]}>
+        {summary}
+      </Text>
+    </View>
+  );
+}
+
+/** A bounded number too wide or too fine for pills: two boxes, committed only
+ *  once the pair is a real range inside the bounds. */
+function MinMaxFilter({
+  label,
+  bounds,
   value,
   onChange,
 }: {
   label: string;
-  unit: string;
-  presets: PlaceThresholdFilter[];
-  value: PlaceThresholdFilter | null;
-  onChange: (next: PlaceThresholdFilter | null) => void;
+  bounds: [number, number];
+  value: NumberRange | null;
+  onChange: (next: CustomFieldFilter | null) => void;
 }) {
-  const matchedPreset = presets.find(
-    (preset) =>
-      value != null && preset[0] === value[0] && preset[1] === value[1],
-  );
-  const [customOpen, setCustomOpen] = useState(false);
-  // Operator and number are held as a DRAFT while the custom control is open,
-  // and only committed once there is a number. Committing on open would apply
-  // "under 0" the instant the user taps Custom — which empties the list and
-  // reads as the filter being broken.
-  const [draftOperator, setDraftOperator] =
-    useState<PlaceThresholdFilter[0]>("Less than");
-  const [draftText, setDraftText] = useState("");
-  const custom = customOpen || (value != null && !matchedPreset);
+  const [low, setLow] = useState(value ? String(value[0]) : "");
+  const [high, setHigh] = useState(value ? String(value[1]) : "");
+  // Reset empties the filter from outside; empty the boxes with it, or they go
+  // on showing a filter that is no longer applied.
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (value == null) {
+      setLow("");
+      setHigh("");
+    }
+  }
 
-  const commit = (operator: PlaceThresholdFilter[0], text: string) => {
-    const parsed = Number(text.trim());
-    onChange(
-      text.trim() === "" || !Number.isFinite(parsed)
-        ? null
-        : [operator, parsed],
-    );
-  };
-
-  const openCustom = () => {
-    setDraftOperator(value?.[0] ?? "Less than");
-    setDraftText(value == null ? "" : String(value[1]));
-    setCustomOpen(true);
-  };
-
-  const closeCustom = () => {
-    setCustomOpen(false);
-    setDraftText("");
-    onChange(null);
+  const commit = (nextLow: string, nextHigh: string) => {
+    if (nextLow.trim() === "" && nextHigh.trim() === "") return onChange(null);
+    const from = nextLow.trim() === "" ? bounds[0] : Number(nextLow);
+    const to = nextHigh.trim() === "" ? bounds[1] : Number(nextHigh);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return;
+    onChange({
+      kind: "numberRange",
+      range: [Math.max(bounds[0], from), Math.min(bounds[1], to)],
+    });
   };
 
   return (
     <View style={styles.block}>
-      <View style={styles.blockHeader}>
-        <Text style={styles.blockLabel}>{label}</Text>
-        <Text
-          style={[styles.blockValue, value != null && styles.blockValueActive]}
-        >
-          {value == null ? "Any" : formatThreshold(value, unit)}
-        </Text>
+      <Header
+        label={label}
+        summary={formatRange(value, bounds)}
+        active={!isFullRange(value, bounds)}
+      />
+      <View style={styles.pair}>
+        <View style={styles.pairField}>
+          <TextField
+            label="From"
+            placeholder={String(bounds[0])}
+            value={low}
+            keyboardType="numeric"
+            onChangeText={(text) => {
+              setLow(text);
+              commit(text, high);
+            }}
+          />
+        </View>
+        <View style={styles.pairField}>
+          <TextField
+            label="To"
+            placeholder={String(bounds[1])}
+            value={high}
+            keyboardType="numeric"
+            onChangeText={(text) => {
+              setHigh(text);
+              commit(low, text);
+            }}
+          />
+        </View>
       </View>
+    </View>
+  );
+}
+
+/**
+ * An unbounded "how many / how long / how far": an operator and a number. The
+ * operator is a DRAFT until there is a number: committing it alone would apply
+ * "under 0", which empties the list and reads as the filter being broken.
+ */
+function ThresholdFilter({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: PlaceThresholdFilter | null;
+  onChange: (next: PlaceThresholdFilter | null) => void;
+}) {
+  const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
+    value?.[0] ?? "Less than",
+  );
+  const [text, setText] = useState(value ? String(value[1]) : "");
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (value == null) setText("");
+  }
+
+  const commit = (nextOperator: PlaceThresholdFilter[0], nextText: string) => {
+    const parsed = Number(nextText.trim());
+    onChange(
+      nextText.trim() === "" || !Number.isFinite(parsed)
+        ? null
+        : [nextOperator, parsed],
+    );
+  };
+
+  return (
+    <View style={styles.block}>
+      <Header
+        label={label}
+        summary={value == null ? "Any" : formatThreshold(value, "")}
+        active={value != null}
+      />
       <View style={styles.chipRow}>
-        {presets.map((preset) => (
+        {OPERATORS.map((candidate) => (
           <Chip
-            key={`${preset[0]}-${preset[1]}`}
-            label={formatThreshold(preset, unit)}
-            active={!custom && matchedPreset === preset}
+            key={candidate}
+            label={OPERATOR_LABEL[candidate]}
+            active={operator === candidate}
             onPress={() => {
-              setCustomOpen(false);
-              onChange(matchedPreset === preset ? null : preset);
+              setOperator(candidate);
+              commit(candidate, text);
             }}
           />
         ))}
-        <Chip
-          // With no presets beside it, "Custom" is custom relative to nothing.
-          label={presets.length === 0 ? "Set a value" : "Custom"}
-          active={custom}
-          onPress={() => (custom ? closeCustom() : openCustom())}
+      </View>
+      <View style={styles.pairField}>
+        <TextField
+          label="Value"
+          value={text}
+          keyboardType="numeric"
+          onChangeText={(next) => {
+            setText(next);
+            commit(operator, next);
+          }}
         />
       </View>
-      {custom ? (
-        <View style={styles.customRow}>
-          <View style={styles.chipRow}>
-            {OPERATORS.map((operator) => (
-              <Chip
-                key={operator}
-                label={OPERATOR_LABEL[operator]}
-                active={draftOperator === operator}
-                onPress={() => {
-                  setDraftOperator(operator);
-                  commit(operator, draftText);
-                }}
-              />
-            ))}
-          </View>
-          <View style={styles.customField}>
-            <TextField
-              label={unit ? `Value (${unit})` : "Value"}
-              value={draftText}
-              keyboardType="numeric"
-              onChangeText={(text) => {
-                setDraftText(text);
-                commit(draftOperator, text);
-              }}
-            />
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -241,13 +309,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   blockLabel: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
   blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
-  blockValueActive: { color: theme.accent, fontWeight: fontWeight.medium },
+  // Words are text-coloured; the weight says it is set.
+  blockValueActive: { color: theme.text, fontWeight: fontWeight.medium },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
-  customRow: { gap: spacing(0.75) },
-  customField: { maxWidth: 200 },
+  pair: { flexDirection: "row", gap: spacing(1) },
+  pairField: { flex: 1, maxWidth: 200 },
 });

@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   track: {
     height: BAR_HEIGHT,
     justifyContent: "flex-end",
-    backgroundColor: withAlpha(theme.textPrimary, 0.08),
+    backgroundColor: withAlpha(theme.text, 0.08),
     borderRadius: radius.sm,
     overflow: "hidden",
   },
@@ -86,6 +86,6 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     fontSize: fontSize.xs,
   },
-  labelCurrent: { color: theme.textPrimary, fontWeight: fontWeight.medium },
+  labelCurrent: { color: theme.text, fontWeight: fontWeight.medium },
   caption: { color: theme.textMuted, fontSize: fontSize.xs },
 });

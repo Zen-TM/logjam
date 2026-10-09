@@ -67,7 +67,7 @@
 .note {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .emptyArea {
@@ -83,7 +83,7 @@
   margin: 0;
   text-align: center;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Topo style is a TABLE: what the line is, its colour, its width, and — for an
@@ -109,7 +109,7 @@
 
 .head {
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   text-align: center;
   white-space: nowrap;
 }
@@ -123,7 +123,7 @@
 
 .rowName {
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 /* An OSM tag query is as long as it is (roads name six values) and it is a
@@ -132,7 +132,7 @@
    description, so nothing is lost to a reader. */
 .rowHint {
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   overflow-wrap: anywhere;
   overflow: hidden;
   display: -webkit-box;

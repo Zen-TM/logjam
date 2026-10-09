@@ -272,7 +272,7 @@ describe("the share / send-a-copy verb matrix", () => {
 
   // A place's route slot takes TRACK media and nothing else, so this verb has
   // a narrower gate than Send a copy over the very same file — the row that can
-  // only fail is absent, not offered (DESIGN.md §7).
+  // only fail is absent, not offered (DESIGN.md §5).
   it("gives EVERY import Attach to a place — attaching links the row", () => {
     for (const sourcePath of [
       "/imports/i1-source.gpx",

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -7,29 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ArrowRight,
-  Bell,
-  CheckCheck,
-  ChevronDown,
-  ChevronUp,
-  CircleAlert,
-  Download,
-  EllipsisVertical,
-  Eye,
-  EyeOff,
-  FilePlus,
-  FileText,
-  Layers,
-  LocateFixed,
-  Search,
-  Share2,
-  Trash2,
-  TriangleAlert,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
 import {
   batchKeyFromRowId,
   batchKeyOf,
@@ -40,16 +18,24 @@ import {
   countBatchRows,
   expandBatchSelection,
   findNotificationBatches,
+  CLEAR_READ_CONFIRM,
+  contractSectionKeys,
   groupNotificationsByDay,
+  INBOX,
+  inboxVerb,
+  inboxTruncatedNote,
   isResolvedElsewhereError,
   newestNotificationsFirst,
   notificationActions,
+  notificationDeleteConfirm,
   notificationHaystack,
   notificationKind,
   notificationLabel,
   notificationPlaceId,
   notificationsTruncated,
+  notificationVerb,
   selectionCountLabel,
+  type SectionKeysOn,
   tallyNotifications,
   type NotificationActions,
   type NotificationBatch,
@@ -89,33 +75,35 @@ import {
   SelectionBar,
   TileCheckbox,
   type MenuEntry,
+  type Glyph,
+  LoadingState,
 } from "../../../ui";
 import { idRange } from "./placesModel";
 import { inboxDestination, type InboxDestination } from "./inboxModel";
 import classes from "./NotificationsPanel.module.css";
 
 // Glyphs match Logjam GPS's Feather set, drawn in lucide.
-const KIND_GLYPH: Record<NotificationKind, LucideIcon> = {
-  share: Share2,
-  file: FilePlus,
-  people: Users,
-  topo: Layers,
-  export: Download,
-  geoPdf: FileText,
-  problem: TriangleAlert,
+const KIND_GLYPH: Record<NotificationKind, Glyph> = {
+  share: "shareFriend",
+  file: "importedFile",
+  people: "friends",
+  topo: "lidar",
+  export: "export",
+  geoPdf: "geoPdf",
+  problem: "warning",
 };
 
-// Borrowed, not invented (DESIGN.md §3): each kind wears the hue of the thing it
+// Borrowed, not invented (docs/ux-principles.md §8): each kind wears the hue of the thing it
 // is about, where that thing lives. A file you accept becomes an import, so it
 // wears the import blue; a failure takes the one hue that means "look".
 const KIND_HUE: Record<NotificationKind, string> = {
   share: "var(--hue-shared)",
   file: "var(--hue-import)",
-  people: "var(--theme-accent)",
+  people: "var(--color-accent)",
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
-  geoPdf: "var(--hue-geoPdf)",
-  problem: "var(--theme-warning)",
+  geoPdf: "var(--hue-geo-pdf)",
+  problem: "var(--color-warning)",
 };
 
 type Bucket = "all" | "unread" | "read";
@@ -420,14 +408,8 @@ function NotificationsPanel({
 
   const confirmDelete = (ids: string[]) =>
     setPendingConfirm({
-      title:
-        ids.length === 1
-          ? "Delete this notification?"
-          : `Delete ${ids.length} notifications?`,
-      message:
-        ids.length === 1
-          ? "It goes from every device on your account. This can't be undone."
-          : "They go from every device on your account. This can't be undone.",
+      title: notificationDeleteConfirm(ids.length).confirmTitle,
+      message: notificationDeleteConfirm(ids.length).confirmBody,
       confirmLabel: "Delete",
       run: async () => {
         await deleteNotifications(ids);
@@ -460,19 +442,16 @@ function NotificationsPanel({
 
   const confirmClearRead = () =>
     setPendingConfirm({
-      title: "Clear read notifications?",
-      message:
-        "Every notification you've read goes, from every device on your account. Unread ones stay.",
-      confirmLabel: "Clear",
+      title: CLEAR_READ_CONFIRM.confirmTitle,
+      message: CLEAR_READ_CONFIRM.confirmBody,
+      confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
       run: async () => {
         try {
           await clearReadNotifications();
           clearSelection();
         } catch (err) {
           console.error(err);
-          toast.error(
-            messageFromError(err, "Couldn't clear read notifications."),
-          );
+          toast.error(messageFromError(err, CLEAR_READ_CONFIRM.failed));
         } finally {
           onRefetchNotifications();
         }
@@ -567,6 +546,7 @@ function NotificationsPanel({
   };
 
   // ── Render ───────────────────────────────────────────────────────────
+  const copy = INBOX.copy;
   const rowEntries = (n: TNotification): MenuEntry[] => {
     const destination = inboxDestination(n);
     const entries: MenuEntry[] = [];
@@ -575,7 +555,7 @@ function NotificationsPanel({
         {
           id: "go",
           label: destination.label,
-          icon: ArrowRight,
+          icon: "forward",
           onSelect: () => goTo(n, destination),
         },
         { id: "sep-go", separator: true },
@@ -586,20 +566,20 @@ function NotificationsPanel({
         ? {
             id: "unread",
             label: "Mark as unread",
-            icon: EyeOff,
+            icon: "hide",
             onSelect: () => void setRead([n.id], false),
           }
         : {
             id: "read",
             label: "Mark as read",
-            icon: Eye,
+            icon: "show",
             onSelect: () => void setRead([n.id], true),
           },
       { id: "sep-delete", separator: true },
       {
         id: "delete",
-        label: "Delete",
-        icon: Trash2,
+        label: notificationVerb("delete").label,
+        icon: "delete",
         danger: true,
         onSelect: () => confirmDelete([n.id]),
       },
@@ -632,7 +612,7 @@ function NotificationsPanel({
         <Button
           compact
           variant="outline"
-          icon={LocateFixed}
+          icon="map"
           disabled={selecting}
           onClick={() => zoomToMap(n, footprint)}
         >
@@ -650,7 +630,7 @@ function NotificationsPanel({
         <Button
           compact
           variant="outline"
-          icon={Download}
+          icon="download"
           disabled={selecting}
           onClick={() =>
             void downloadJobFile(
@@ -674,7 +654,7 @@ function NotificationsPanel({
         <Button
           compact
           variant="outline"
-          icon={Download}
+          icon="download"
           disabled={selecting}
           onClick={() =>
             void downloadJobFile(
@@ -734,7 +714,7 @@ function NotificationsPanel({
         className={member ? classes.member : undefined}
         title={title}
         subtitle={subtitle || undefined}
-        description={unread ? "Unread" : undefined}
+        description={unread ? copy.unreadMark : undefined}
         accentEdge={unread}
         selected={isSelected}
         onOpen={() => (batch ? toggleBatch(batch) : openNotification(row))}
@@ -752,8 +732,8 @@ function NotificationsPanel({
             // No ⋯ on a batch: its verbs act on one notification, and the
             // selection bar already acts on all of them through the header.
             <IconButton
-              icon={expanded ? ChevronUp : ChevronDown}
-              label={expanded ? "Collapse this group" : "Show each one"}
+              icon={expanded ? "collapse" : "expand"}
+              label={expanded ? copy.collapseGroup : copy.expandGroup}
               aria-expanded={expanded}
               onClick={() => toggleBatch(batch)}
             />
@@ -766,7 +746,7 @@ function NotificationsPanel({
               trigger={(props) => (
                 <IconButton
                   {...props}
-                  icon={EllipsisVertical}
+                  icon="overflow"
                   label={`Actions for ${title}`}
                 />
               )}
@@ -785,23 +765,19 @@ function NotificationsPanel({
 
   const hero = (
     <Hero
-      title={
-        !notificationsLoaded
-          ? "Inbox"
-          : tally.unread > 0
-            ? `${tally.unread} unread`
-            : tally.total > 0
-              ? "All caught up"
-              : "Nothing yet"
-      }
+      title={INBOX.title}
       actions={
         searchOpen ? (
-          <IconButton icon={X} label="Close search" onClick={closeSearch} />
+          <IconButton
+            icon="close"
+            label={copy.closeSearch}
+            onClick={closeSearch}
+          />
         ) : (
           <>
             <IconButton
-              icon={Search}
-              label="Search notifications"
+              icon="search"
+              label={copy.searchField}
               tone={query ? "filled" : "default"}
               aria-expanded={false}
               onClick={() => setSearchOpen(true)}
@@ -812,26 +788,22 @@ function NotificationsPanel({
               entries={[
                 {
                   id: "read-all",
-                  label: "Mark all as read",
-                  icon: CheckCheck,
+                  label: inboxVerb("markAllRead").label,
+                  icon: "selectAll",
                   disabled: tally.unread === 0,
                   onSelect: () => void markAllRead(),
                 },
                 {
                   id: "clear-read",
-                  label: "Clear read notifications…",
-                  icon: Trash2,
+                  label: inboxVerb("clearRead").label,
+                  icon: "delete",
                   danger: true,
                   disabled: readCount === 0,
                   onSelect: confirmClearRead,
                 },
               ]}
               trigger={(props) => (
-                <IconButton
-                  {...props}
-                  icon={EllipsisVertical}
-                  label="Inbox actions"
-                />
+                <IconButton {...props} icon="overflow" label="Inbox actions" />
               )}
             />
           </>
@@ -841,7 +813,7 @@ function NotificationsPanel({
       {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
       {searchOpen && (
         <SearchField
-          label="Search notifications"
+          label={copy.searchField}
           value={query}
           autoFocus
           onChange={(event) => setQuery(event.target.value)}
@@ -860,19 +832,19 @@ function NotificationsPanel({
   );
   const showEverything = (
     <Button compact variant="outline" onClick={() => changeBucket("all")}>
-      Show everything
+      {copy.showEverything}
     </Button>
   );
 
   const list = !notificationsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your inbox…</p>
+      <LoadingState label={copy.loading} />
     </div>
   ) : notificationsError && live.length === 0 ? (
     emptyArea(
       <EmptyState
-        icon={CircleAlert}
-        title="Couldn't load your inbox"
+        icon="warning"
+        title={copy.loadFailed}
         body={notificationsError}
         actions={
           <Button compact variant="outline" onClick={onRefetchNotifications}>
@@ -884,34 +856,34 @@ function NotificationsPanel({
   ) : live.length === 0 ? (
     emptyArea(
       <EmptyState
-        icon={Bell}
-        title="Nothing yet"
-        body="Shares, friend requests and finished maps appear here."
+        icon="notifications"
+        title={copy.firstRunTitle}
+        body={copy.firstRunBody}
       />,
     )
   ) : rows.length === 0 ? (
     emptyArea(
       needle ? (
         <EmptyState
-          icon={Search}
-          title="Nothing matches"
-          body="The search runs over what a row says — a name, a place, a filename."
+          icon="search"
+          title={copy.noMatchTitle}
+          body={copy.noMatchBody}
           actions={
             <Button compact variant="outline" onClick={() => setQuery("")}>
-              Clear search
+              {copy.clearSearch}
             </Button>
           }
         />
       ) : bucket === "unread" ? (
         <EmptyState
-          icon={CheckCheck}
-          title="Nothing unread"
+          icon="selectAll"
+          title={copy.noUnreadTitle}
           actions={showEverything}
         />
       ) : (
         <EmptyState
-          icon={Bell}
-          title="Nothing read yet"
+          icon="notifications"
+          title={copy.noReadTitle}
           actions={showEverything}
         />
       ),
@@ -941,13 +913,15 @@ function NotificationsPanel({
     </div>
   );
 
-  return (
-    <div ref={rootRef} className={classes.root}>
-      {hero}
-      {live.length > 0 && (
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
+  const page: Record<SectionKeysOn<typeof INBOX, "web">, () => ReactNode> = {
+    hero: () => hero,
+    buckets: () =>
+      live.length > 0 ? (
         <>
           {/* The selection bar takes the rail's slot at the rail's height, so
-              the list does not move when a selection starts (DESIGN.md §7). */}
+                the list does not move when a selection starts (DESIGN.md §5). */}
           <div className={classes.rails}>
             {selecting ? (
               <SelectionBar
@@ -955,17 +929,17 @@ function NotificationsPanel({
                 onClear={clearSelection}
               >
                 {/* ONE read/unread button: which way it goes follows the
-                    selection, and the count line says the unread tally that
-                    decides it. */}
+                      selection, and the count line says the unread tally that
+                      decides it. */}
                 {readAction && (
                   <IconButton
-                    icon={readAction.icon === "eye" ? Eye : EyeOff}
+                    icon={readAction.icon}
                     label={readAction.label}
                     onClick={() => void applyReadAction()}
                   />
                 )}
                 <IconButton
-                  icon={Trash2}
+                  icon="delete"
                   label="Delete"
                   tone="danger"
                   onClick={() => confirmDelete(selected.map((n) => n.id))}
@@ -975,17 +949,21 @@ function NotificationsPanel({
               <ChipRail
                 label="Show"
                 options={[
-                  { value: "all", label: "All", count: bucketCounts.all },
+                  {
+                    value: "all",
+                    label: copy.bucketAll,
+                    count: bucketCounts.all,
+                  },
                   // A bucket the search has emptied stays in place, disabled.
                   {
                     value: "unread",
-                    label: "Unread",
+                    label: copy.bucketUnread,
                     count: bucketCounts.unread,
                     disabled: bucketCounts.unread === 0 && bucket !== "unread",
                   },
                   {
                     value: "read",
-                    label: "Read",
+                    label: copy.bucketRead,
                     count: bucketCounts.read,
                     disabled: bucketCounts.read === 0 && bucket !== "read",
                   },
@@ -996,16 +974,21 @@ function NotificationsPanel({
             )}
           </div>
         </>
-      )}
-      {/* The server caps the list; say so rather than let the oldest go missing
-          without a word (UX-002). */}
-      {notificationsTruncated(notificationsTotal) && (
+      ) : null,
+    truncated: () =>
+      notificationsTruncated(notificationsTotal) ? (
         <p className={classes.note}>
-          Showing the {notifications.length} most recent of {notificationsTotal}
-          . Older ones aren&rsquo;t listed.
+          {inboxTruncatedNote(notifications.length, notificationsTotal ?? 0)}
         </p>
-      )}
-      {list}
+      ) : null,
+    list: () => list,
+  };
+
+  return (
+    <div ref={rootRef} className={classes.root}>
+      {contractSectionKeys(INBOX, "web").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       <ConfirmDialog
         open={pendingConfirm != null}

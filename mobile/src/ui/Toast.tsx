@@ -1,15 +1,8 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { Icon } from "./Icon";
 
 export type ToastMessage = {
   text: string;
@@ -89,10 +82,10 @@ export function Toast({
           { opacity, transform: [{ translateY: lift }] },
         ]}
       >
-        <Feather
-          name={error ? "alert-circle" : "check-circle"}
+        <Icon
+          idea={error ? "warning" : "success"}
           size={16}
-          color={error ? theme.warning : theme.accent}
+          color={theme.onInverse}
         />
         <Text style={styles.text}>{message.text}</Text>
       </Animated.View>
@@ -118,14 +111,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     maxWidth: "100%",
   },
-  toastInfo: {
-    backgroundColor: theme.bonus2,
-    borderColor: withAlpha(theme.accent, 0.45),
-  },
-  toastError: { backgroundColor: theme.bonus2, borderColor: theme.warning },
+  // The inverted surface, as on Logjam Web: the glyph's SHAPE says error or
+  // not, because an intent colour on the inverse fails 3:1 in a dark scheme.
+  toastInfo: { backgroundColor: theme.inverse, borderColor: theme.inverse },
+  toastError: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   text: {
     flexShrink: 1,
-    color: theme.textPrimary,
+    color: theme.onInverse,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },

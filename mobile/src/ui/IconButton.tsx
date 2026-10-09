@@ -1,10 +1,15 @@
-import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet } from "react-native";
 
-import { hitSlop, radius, theme, withAlpha } from "../theme";
+import { hitSlop, opacity, radius, theme, withAlpha } from "../theme";
+import { Icon, type Glyph } from "./Icon";
+
+// An intent colour as a glyph on a wash of itself falls under 3:1 on
+// Daylight's paper, so a filled button draws its glyph in the text colour and
+// the wash alone carries the intent, as on Logjam Web.
+const INTENTS = new Set([theme.accent, theme.warning, theme.success]);
 
 // Single-glyph tappable — row overflow menus, sheet dismiss, inline delete.
-// 40pt square (comfortably over the 44pt target with `hitSlop`), with an
+// 40pt square (56pt with `hitSlop`, over the 48pt target), with an
 // optional tinted disc so a destructive or primary glyph doesn't float
 // unanchored in a row. `accessibilityLabel` is required: a glyph alone is not
 // a label to a screen reader.
@@ -17,7 +22,7 @@ export function IconButton({
   filled = false,
   size = 20,
 }: {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   onPress: () => void;
   accessibilityLabel: string;
   color?: string;
@@ -40,10 +45,16 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Feather
-        name={icon}
+      <Icon
+        idea={icon}
         size={size}
-        color={disabled ? theme.textMuted : color}
+        color={
+          disabled
+            ? theme.textMuted
+            : filled && INTENTS.has(color)
+              ? theme.text
+              : color
+        }
       />
     </Pressable>
   );
@@ -58,5 +69,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pressed: { opacity: 0.6 },
-  disabled: { opacity: 0.4 },
+  disabled: { opacity: opacity.disabled },
 });

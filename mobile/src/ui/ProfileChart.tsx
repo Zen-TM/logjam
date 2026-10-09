@@ -300,7 +300,7 @@ export function ProfileChart({
         {/* Over the columns, not under: it fades their feet into the surface so
             the silhouette reads as one shape rather than a row of bars. */}
         <LinearGradient
-          colors={[withAlpha(theme.primary, 0), withAlpha(theme.primary, 0.55)]}
+          colors={[withAlpha(theme.page, 0), withAlpha(theme.page, 0.55)]}
           style={styles.fade}
           pointerEvents="none"
         />
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   wrap: { gap: spacing(0.5) },
   readoutRow: { height: 18, justifyContent: "center" },
   readout: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 2,
     marginLeft: -1,
-    backgroundColor: theme.textPrimary,
+    backgroundColor: theme.text,
   },
   fade: { ...StyleSheet.absoluteFill, top: "55%" },
 });

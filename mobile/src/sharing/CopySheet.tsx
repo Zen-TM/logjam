@@ -36,7 +36,7 @@ import type { TUser } from "../api/types";
 import { formatBytes } from "../format";
 import { listMediaForLinked } from "../sync/mirrorStore";
 import { fontSize, lineHeight, spacing, theme } from "../theme";
-import { BottomSheet, Button, Row, Toggle } from "../ui";
+import { BottomSheet, Button, SwitchRow } from "../ui";
 import type { CopyAndRemoveTarget } from "./copyAndRemove";
 
 /** What the sheet found attached to the places being copied. */
@@ -96,7 +96,7 @@ export type CopyPanelArgs = {
  * sheet cannot open a second sheet over itself, so a verb whose panel needs
  * room is rendered as a sub-mode of the sheet that offers the verb. The footer
  * is separate because a sheet's primary action belongs in `BottomSheet`'s
- * pinned `footer` slot (DESIGN.md §6).
+ * pinned `footer` slot (DESIGN.md §4).
  */
 export function useCopyPanel({
   active,
@@ -198,22 +198,17 @@ export function useCopyPanel({
         <Text style={styles.body}>{confirm.body}</Text>
 
         {media.count > 0 ? (
-          <Row
-            icon="image"
+          <SwitchRow
+            icon="photo"
             title={
               media.count === 1
                 ? "Also copy 1 photo or file"
                 : `Also copy ${media.count} photos and files`
             }
-            subtitle={`${formatBytes(media.bytes)} of your storage.`}
-            right={
-              <Toggle
-                value={withMedia}
-                onValueChange={toggleMedia}
-                disabled={busy}
-                accessibilityLabel="Also copy photos and files"
-              />
-            }
+            description={`${formatBytes(media.bytes)} of your storage.`}
+            checked={withMedia}
+            onChange={toggleMedia}
+            disabled={busy}
           />
         ) : null}
 

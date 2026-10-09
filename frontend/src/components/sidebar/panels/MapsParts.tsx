@@ -1,7 +1,6 @@
 // The rows the Maps page's two views share for what is still being made. Two
 // views of one page must not draw the same row two ways.
 import { useState } from "react";
-import { X } from "lucide-react";
 import {
   Button,
   IconButton,
@@ -101,7 +100,7 @@ function MakingRow({
           <>
             <StatusPill label="Failed" tone="warning" />
             <IconButton
-              icon={X}
+              icon="close"
               label={`Dismiss ${item.title}`}
               onClick={() => onDismiss(item)}
             />

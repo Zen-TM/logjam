@@ -73,12 +73,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing(3),
     gap: spacing(2),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   title: {
     fontSize: fontSize.xl,
     fontWeight: "600",
-    color: theme.textPrimary,
+    color: theme.text,
     textAlign: "center",
   },
   message: {

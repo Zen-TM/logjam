@@ -1,4 +1,6 @@
 import type { Feather } from "@expo/vector-icons";
+
+import type { Glyph } from "../ui";
 import FEATHER_GLYPHS from "@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Feather.json";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -18,4 +20,9 @@ export function placeTypeFeatherIcon(iconKey: string): FeatherName {
   return iconKey in (FEATHER_GLYPHS as Record<string, number>)
     ? (iconKey as FeatherName)
     : "map-pin";
+}
+
+/** The same, as a kit `Glyph`: `<Row icon={placeTypeGlyph(type.iconKey)} />`. */
+export function placeTypeGlyph(iconKey: string): Glyph {
+  return { picked: placeTypeFeatherIcon(iconKey) };
 }

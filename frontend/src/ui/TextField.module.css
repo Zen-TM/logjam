@@ -1,44 +1,44 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-0-5);
 }
 
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .input {
   min-height: var(--control-lg);
   box-sizing: border-box;
-  padding: 0 10px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-md);
-  border: 1px solid var(--theme-text-muted);
-  background: var(--surface-field);
-  color: var(--theme-text-primary);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-field);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-base);
 }
 
 .input::placeholder {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .input:focus-visible {
   outline: none;
-  border-color: var(--theme-accent);
-  box-shadow: 0 0 0 1px var(--theme-accent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .input[aria-invalid="true"] {
-  border-color: var(--theme-warning);
+  border-color: var(--color-warning);
 }
 
 .input:disabled {
-  opacity: 0.45;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 
@@ -46,7 +46,7 @@
    without it the box stays at `rows` and the user drags it. */
 .textarea {
   --line: 1.4em;
-  padding: 8px 10px;
+  padding: var(--space-1) var(--space-1);
   line-height: 1.4;
   resize: vertical;
   field-sizing: content;
@@ -57,7 +57,7 @@
 .hint {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .selectBox {
@@ -71,16 +71,16 @@
   flex: 1;
   min-width: 0;
   appearance: none;
-  padding-right: 32px;
+  padding-right: var(--space-4);
   cursor: pointer;
 }
 
 .selectGlyph {
   position: absolute;
   top: 50%;
-  right: 10px;
+  right: var(--space-1);
   translate: 0 -50%;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   pointer-events: none;
 }
 
@@ -89,19 +89,19 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-0-5);
   min-height: var(--control-md);
   box-sizing: border-box;
-  padding: 0 6px 0 12px;
+  padding: 0 var(--space-0-5) 0 var(--space-1-5);
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
-  background: var(--surface-field);
-  color: var(--theme-text-muted);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: var(--color-field);
+  color: var(--color-text-muted);
 }
 
 .search:focus-within {
-  border-color: var(--theme-accent);
-  box-shadow: 0 0 0 1px var(--theme-accent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .searchGlyph {
@@ -113,13 +113,13 @@
   min-width: 0;
   border: none;
   background: transparent;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-sm);
 }
 
 .searchInput::placeholder {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The pill draws the focus state. */
@@ -132,13 +132,13 @@
 .rangeField {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-0-5);
 }
 
 .rangeHead {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-1);
 }
 
 .rangeHead > .label {
@@ -150,13 +150,13 @@
   flex: none;
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .range {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
   min-height: var(--control-md);
 }
 
@@ -164,7 +164,7 @@
   flex: none;
   font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The track and thumb are drawn here rather than left to `accent-color`, which
@@ -185,8 +185,8 @@
   border-radius: var(--radius-pill);
   background: linear-gradient(
     to right,
-    var(--theme-accent) var(--fill),
-    var(--surface-field) var(--fill)
+    var(--color-accent) var(--fill),
+    var(--color-field) var(--fill)
   );
 }
 
@@ -195,8 +195,8 @@
   border-radius: var(--radius-pill);
   background: linear-gradient(
     to right,
-    var(--theme-accent) var(--fill),
-    var(--surface-field) var(--fill)
+    var(--color-accent) var(--fill),
+    var(--color-field) var(--fill)
   );
 }
 
@@ -209,7 +209,7 @@
   margin-top: calc((4px - var(--control-sm)) / 2);
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--theme-accent);
+  background: var(--color-accent);
 }
 
 .rangeInput::-moz-range-thumb {
@@ -217,11 +217,11 @@
   height: var(--control-sm);
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--theme-accent);
+  background: var(--color-accent);
 }
 
 .rangeInput:focus-visible {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 2px;
   border-radius: var(--radius-pill);
 }

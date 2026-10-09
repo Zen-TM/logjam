@@ -1,4 +1,4 @@
-/* Who gets a copy. Layout only — every control is the kit's (DESIGN.md §6). */
+/* Who gets a copy. Layout only — every control is the kit's (DESIGN.md §4). */
 
 .body {
   display: flex;
@@ -15,7 +15,7 @@
   gap: 8px;
   margin: 0 0 4px;
   padding: 8px 10px;
-  border: 1px solid var(--theme-warning);
+  border: 1px solid var(--color-warning);
   border-left-width: 3px;
   border-radius: var(--radius-sm);
   font-size: var(--font-sm);
@@ -25,12 +25,12 @@
 .glyph {
   flex: none;
   margin-top: 2px;
-  color: var(--theme-warning);
+  color: var(--color-warning);
 }
 
 /* Nobody matching the search. */
 .note {
   margin: 2px 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

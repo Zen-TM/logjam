@@ -5,7 +5,7 @@
   justify-content: center;
   padding: var(--gutter);
   box-sizing: border-box;
-  background-color: var(--theme-primary);
+  background-color: var(--color-page);
 }
 
 .card {
@@ -16,11 +16,11 @@
   max-width: 100%;
   padding: var(--gutter);
   box-sizing: border-box;
-  background-color: var(--theme-secondary);
+  background-color: var(--color-card);
   border: var(--hairline);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-modal);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .brandMark {
@@ -28,7 +28,7 @@
   width: 40px;
   height: 40px;
   margin: 0 auto 4px;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .title {
@@ -40,19 +40,19 @@
   margin: 0;
   font-size: var(--font-sm);
   line-height: 1.5;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .legal {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
-/* `textPrimary` and underlined, not accent: accent fails 4.5:1 on a card in
+/* `text` and underlined, not accent: accent fails 4.5:1 on a card in
  * every scheme. Same rule and same numbers as SignIn's legal line. */
 .legal a {
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   text-decoration: underline;
 }
 

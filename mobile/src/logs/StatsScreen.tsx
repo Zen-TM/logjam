@@ -1,6 +1,6 @@
 // Logbook stats — the retrospective half of the Logs tab.
 //
-// THE ONE QUESTION (DESIGN.md §1): "am I getting out, and is it going
+// THE ONE QUESTION (docs/ux-principles.md §2): "am I getting out, and is it going
 // anywhere?" Logs itself already answers "what have I done?" with a count, a
 // spark and the list, so this screen must not lead with a trip count — it leads
 // with DAYS OUT, which is the number the list cannot give you, and the sections
@@ -22,27 +22,40 @@
 // already shows. Nothing is logged, and there is deliberately NO share or
 // export affordance: a stats card is exactly the kind of thing that would
 // broaden visibility by default.
-import { useCallback, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
   computeLogbookStats,
+  contractSectionKeys,
   fieldStatDisplay,
   formatDistanceM,
   formatDurationMs,
   logbookActivityLabel,
   logbookRanges,
   pluralCount,
+  STATS,
   statsCadence,
+  statsEmptyActivityBody,
   statsHeadline,
+  statsHeroTitle,
+  statsMostReturnedLine,
+  statsPlaceAttributesTitle,
   statsSpark,
+  statsUnderActivitiesNote,
   tripYear,
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LogbookRange,
   type LogbookStats,
+  type SectionKeysOn,
 } from "@logjam/shared";
 
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -56,16 +69,18 @@ import { useTracks } from "../tracks/useTracks";
 import { fontSize, fontWeight, spacing, theme, withAlpha } from "../theme";
 import {
   ActivitySpark,
-  Card,
   Chip,
   EmptyState,
-  HeroHeader,
+  Hero,
   Row,
   ScreenScroll,
   SectionHeader,
   StatGrid,
+  Icon,
 } from "../ui";
 import { tripTypeMeta } from "./tripTypeMeta";
+
+const copy = STATS.copy;
 
 const RANGE_PREF_KEY = "logbookStatsRange";
 
@@ -157,19 +172,25 @@ export function StatsScreen({
 
   const title = activity
     ? logbookActivityLabel(activity)
-    : `${pluralCount(stats.days, "day")} out`;
+    : statsHeroTitle(stats.days);
 
-  return (
-    <View style={styles.screen}>
-      <HeroHeader
+  const showing = stats.trips > 0;
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`STATS`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof STATS, "gps">,
+    () => ReactNode
+  > = {
+    hero: () => (
+      <Hero
         eyebrow={activity ? "Logbook stats" : "Logbook"}
         title={title}
         titleNumberOfLines={2}
         onBack={onBack}
       >
         {/* The rail is part of the hero rather than the scroll: it is the frame
-            every number below is read in, and a window control that scrolls
-            away leaves the reader unsure what they are looking at. */}
+              every number below is read in, and a window control that scrolls
+              away leaves the reader unsure what they are looking at. */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -184,40 +205,49 @@ export function StatsScreen({
             />
           ))}
         </ScrollView>
-      </HeroHeader>
+      </Hero>
+    ),
+    spark: () => <Spark stats={stats} range={range} activity={activity} />,
+    headline: () => (
+      <Headline
+        stats={stats}
+        activity={activity}
+        bounded={range.from != null || range.to != null}
+      />
+    ),
+    activities: () =>
+      activity ? null : (
+        <Activities stats={stats} onOpenActivity={onOpenActivity} />
+      ),
+    placesVisited: () => (activity ? null : <PlacesVisited stats={stats} />),
+    onFoot: () => (activity ? null : <OnFoot tracks={tracks} range={range} />),
+    attributes: () => <AttributeSections stats={stats} tripOnly={!activity} />,
+  };
+  const keys = contractSectionKeys(STATS, "gps");
 
-      {stats.trips === 0 ? (
+  return (
+    <View style={styles.screen}>
+      {sections.hero()}
+
+      {showing ? (
+        <ScreenScroll>
+          {keys
+            .filter((key) => key !== "hero")
+            .map((key) => (
+              <Fragment key={key}>{sections[key]()}</Fragment>
+            ))}
+        </ScreenScroll>
+      ) : (
         <EmptyState
-          title={
-            reading ? "Reading your logbook…" : "Nothing logged in here yet"
-          }
+          title={reading ? copy.loading : copy.emptyTitle}
           hint={
             reading
               ? undefined
               : activity
-                ? `No ${logbookActivityLabel(activity).toLowerCase()} trips in this window. Try a wider one.`
-                : "Log a few trips and this fills in — days out, how often you get away, and how far you've got through your places."
+                ? statsEmptyActivityBody(logbookActivityLabel(activity))
+                : copy.emptyBody
           }
         />
-      ) : (
-        <ScreenScroll>
-          <Spark stats={stats} range={range} activity={activity} />
-          <Headline
-            stats={stats}
-            activity={activity}
-            bounded={range.from != null || range.to != null}
-          />
-          {activity ? (
-            <AttributeSections stats={stats} />
-          ) : (
-            <>
-              <Activities stats={stats} onOpenActivity={onOpenActivity} />
-              <PlacesVisited stats={stats} />
-              <OnFoot tracks={tracks} range={range} />
-              <AttributeSections stats={stats} tripOnly />
-            </>
-          )}
-        </ScreenScroll>
       )}
     </View>
   );
@@ -283,7 +313,7 @@ function Activities({
   const multiTagged = activityTalliesOverlap(stats);
   return (
     <View style={styles.section}>
-      <SectionHeader label="By activity" />
+      <SectionHeader title={copy.byActivity} />
       {stats.activityTallies.map((tally) => {
         const meta = tripTypeMeta(
           tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
@@ -295,9 +325,7 @@ function Activities({
             hue={meta.hue}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => onOpenActivity(tally.type)}
           />
         );
@@ -306,9 +334,7 @@ function Activities({
           tags, so without this the rows visibly out-sum the trip tile above and
           read as a bug. */}
       {multiTagged ? (
-        <Text style={styles.caption}>
-          a trip with two tags counts under both
-        </Text>
+        <Text style={styles.caption}>{copy.multiTagged}</Text>
       ) : null}
     </View>
   );
@@ -323,8 +349,8 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
   if (stats.completion.length === 0) return null;
   return (
     <View style={styles.section}>
-      <SectionHeader label="Places visited" />
-      <Card>
+      <SectionHeader title={copy.placesVisited} />
+      <View style={styles.completion}>
         {stats.completion.map((entry) => (
           <View key={entry.typeId} style={styles.meterRow}>
             <View style={styles.meterLabels}>
@@ -355,11 +381,13 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
         ))}
         {stats.mostReturned ? (
           <Text style={styles.cadence}>
-            most returned to · {stats.mostReturned.name} ×
-            {stats.mostReturned.trips}
+            {statsMostReturnedLine(
+              stats.mostReturned.name,
+              stats.mostReturned.trips,
+            )}
           </Text>
         ) : null}
-      </Card>
+      </View>
     </View>
   );
 }
@@ -410,7 +438,7 @@ function OnFoot({
 
   return (
     <View style={styles.section}>
-      <SectionHeader label="On foot" />
+      <SectionHeader title={copy.onFoot} />
       <StatGrid
         stats={[
           { label: "Distance", value: formatDistanceM(distanceM) },
@@ -458,7 +486,7 @@ function AttributeSections({
     <View style={styles.section}>
       {groups.map((group) => (
         <View key={group.typeId} style={styles.section}>
-          <SectionHeader label={`${group.name} attributes`} />
+          <SectionHeader title={statsPlaceAttributesTitle(group.name)} />
           {group.stats.map((entry) => (
             <AttributeStat key={`${group.typeId}:${entry.key}`} stat={entry} />
           ))}
@@ -466,7 +494,7 @@ function AttributeSections({
       ))}
       {stats.tripFieldStats.length > 0 || underActivities > 0 ? (
         <View style={styles.section}>
-          <SectionHeader label="Trip attributes" />
+          <SectionHeader title={copy.tripAttributes} />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
@@ -475,9 +503,7 @@ function AttributeSections({
               without this it reads as having vanished from the logbook. */}
           {underActivities > 0 ? (
             <Text style={styles.caption}>
-              {underActivities === 1
-                ? "1 more attribute belongs to a single activity — open that activity above to see it"
-                : `${underActivities} more attributes belong to single activities — open an activity above to see them`}
+              {statsUnderActivitiesNote(underActivities)}
             </Text>
           ) : null}
         </View>
@@ -540,7 +566,7 @@ function RowMetric({ value, suffix }: { value: string; suffix: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   // `ScreenScroll` gaps its own direct children; a section wrapping several
   // rows has to repeat that or its rows sit flush against each other.
   section: { gap: spacing(1) },
@@ -559,10 +585,12 @@ const styles = StyleSheet.create({
     marginTop: spacing(0.25),
   },
   rowValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
+  // Read-only, so it sits on the page: a card fill would say "press me".
+  completion: { gap: spacing(1) },
   meterRow: { marginBottom: spacing(1) },
   meterLabels: {
     flexDirection: "row",
@@ -570,14 +598,14 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     marginBottom: spacing(0.5),
   },
-  meterName: { color: theme.textPrimary, fontSize: fontSize.sm },
+  meterName: { color: theme.text, fontSize: fontSize.sm },
   meterValue: { color: theme.textMuted, fontSize: fontSize.xs },
   meterTrack: {
     flexDirection: "row",
     height: 8,
     borderRadius: 4,
     overflow: "hidden",
-    backgroundColor: withAlpha(theme.textPrimary, 0.08),
+    backgroundColor: withAlpha(theme.text, 0.08),
   },
   meterFill: { borderRadius: 4 },
 });
