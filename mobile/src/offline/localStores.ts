@@ -81,10 +81,9 @@ export const PLACE_REGISTRY_DIR = `${FileSystem.documentDirectory}place-registry
 
 /**
  * Raw sensor logs from the developer-only research logger
- * (modules/logjam-sensors). WIPED: the samples
- * describe how one person moved through a place for a day, which is location
- * history by another name even though no coordinate is written — so it leaves
- * with the account like everything else.
+ * (modules/logjam-sensors). WIPED: each file holds a recording's raw GPS fixes
+ * beside how its owner moved, which is location history, so it leaves with the
+ * account like everything else.
  */
 export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 

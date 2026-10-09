@@ -50,6 +50,9 @@ declare class LogjamSensorsModule extends NativeModule {
   /** Stop, flush, close. Returns the final status. Safe to call when idle. */
   stopLogging(): SensorLogStatus;
 
+  /** Write a `mark` row numbered `n`. False when no log is running. */
+  mark(n: number): boolean;
+
   /** Flushes before reading, so `bytes` is meaningful mid-run. */
   logStatus(): SensorLogStatus;
 }

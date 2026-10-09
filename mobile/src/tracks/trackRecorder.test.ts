@@ -52,7 +52,9 @@ vi.mock("../imports/vectorImports", () => ({ randomId: () => "track-1" }));
 // cannot affect it.
 const startSensorLog = vi.fn(async () => false);
 const stopSensorLog = vi.fn(() => null);
+const deleteSensorLog = vi.fn(async () => {});
 vi.mock("./sensorLog", () => ({
+  deleteSensorLog: (...args: unknown[]) => deleteSensorLog(...(args as [])),
   startSensorLog: (...args: unknown[]) => startSensorLog(...(args as [])),
   stopSensorLog: () => stopSensorLog(),
 }));
@@ -117,6 +119,7 @@ const {
   applyRecordingOptionsToActiveTrack,
   continueTrackRecording,
   finishTrackRecording,
+  discardTrackRecording,
   pauseTrackRecording,
   reconcileTrackRecording,
   resumeTrackRecording,
@@ -628,5 +631,30 @@ describe("a finished track's climb and descent", () => {
 
     expect(savedStats().elevationGainM).toBe(400);
     expect(savedStats().elevationSource).toBeUndefined();
+  });
+});
+
+describe("the research log ends with its recording", () => {
+  it("a discarded recording takes its log file with it", async () => {
+    // Mutation: drop `deleteSensorLog` from `discardTrackRecording`. The log
+    // of a discarded recording was left behind for a track that no longer
+    // exists.
+    await discardTrackRecording("track-1");
+    expect(stopSensorLog).toHaveBeenCalled();
+    expect(deleteTrack).toHaveBeenCalledWith("track-1");
+    expect(deleteSensorLog).toHaveBeenCalledWith("track-1");
+  });
+
+  it("reconcile stops the log of a recorder that died", async () => {
+    // Mutation: mark the row paused in `reconcileTrackRecording` without
+    // going through `stopLocationUpdatesIfRunning`.
+    activeTrack = {
+      id: "track-1",
+      state: "recording",
+      startedAt: "2026-01-01",
+    };
+    hasStartedLocationUpdatesAsync.mockResolvedValue(false);
+    await reconcileTrackRecording();
+    expect(stopSensorLog).toHaveBeenCalled();
   });
 });
