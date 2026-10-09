@@ -4,10 +4,14 @@
   justify-content: center;
   gap: var(--space-0-5);
   min-height: var(--control-lg);
+  /* A pill is never narrower than it is tall: a one-glyph label is a circle. */
+  min-width: var(--control-lg);
   padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
-  border: 1px solid transparent;
-  background: transparent;
+  border: 1px solid var(--color-line);
+  /* A button wears the pressable fill (UX §4), whichever it is; the one
+     primary of a surface overrides it with the accent. */
+  background: var(--color-card);
   color: var(--color-text);
   font: inherit;
   font-size: var(--font-base);
@@ -17,8 +21,13 @@
   transition: background-color var(--motion-fast);
 }
 
+.button:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--color-card-pressed);
+}
+
 .compact {
   min-height: var(--control-md);
+  min-width: var(--control-md);
   padding: 0 var(--space-1-5);
   font-size: var(--font-sm);
 }
@@ -26,47 +35,45 @@
 /* The label on a fill is `onFill`, never the page colour (root CLAUDE.md:
    text ON a colour fill). */
 .filled {
+  border-color: var(--color-accent);
   background: var(--color-accent);
   color: var(--color-on-fill);
 }
 
-.filled:hover:not(:disabled) {
+.filled:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
 }
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
    only on the page colour, and an outline button also sits on cards (a row's
-   Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md §4). */
+   Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md §1). */
 .outline {
   border-color: var(--color-accent);
   color: var(--color-text);
 }
 
+/* The warning is the EDGE; the label is text, as an outline button's is. */
 .danger {
   border-color: var(--color-warning);
-  color: var(--color-warning);
+  color: var(--color-text);
 }
 
 /* The verb of a destructive confirm: a warning fill with the ink label. A
    destructive TRIGGER (a row's Delete) stays `danger`, so the fill is only ever
    the last step. */
 .destructive {
+  border-color: var(--color-warning);
   background: var(--color-warning);
   color: var(--color-on-fill);
 }
 
-.destructive:hover:not(:disabled) {
+.destructive:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-warning) 85%, var(--color-text));
 }
 
-.plain:hover:not(:disabled),
-.outline:hover:not(:disabled),
-.danger:hover:not(:disabled) {
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-
-.button:disabled {
-  opacity: 0.45;
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 
@@ -114,13 +121,13 @@
 }
 
 .iconButton:disabled {
-  opacity: 0.4;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 
 /* An icon button that is "on" takes a tint rather than a fill, so it cannot
    outshout the page's primary action. Its glyph is the text colour: an accent
-   glyph on a wash of itself fell to 2.7:1 on Daylight's paper. */
+   glyph on a wash of itself fell to 2.7:1 on Ghost Gum's paper. */
 .iconButton.tinted {
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
   color: var(--color-text);

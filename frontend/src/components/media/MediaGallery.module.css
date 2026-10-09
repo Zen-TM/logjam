@@ -79,7 +79,7 @@
   align-items: center;
   justify-content: center;
   /* A token, never a literal: under a mouse this is 24px and on a touch
-     screen `index.css` grows it to 32 (DESIGN.md §4). */
+     screen `index.css` grows it to 32 (DESIGN.md §1). */
   min-width: var(--control-sm);
   min-height: var(--control-sm);
   padding: 3px;

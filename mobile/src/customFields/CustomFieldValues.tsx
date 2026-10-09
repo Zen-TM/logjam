@@ -9,9 +9,8 @@
 //
 // A date field opens the sheet's own date picker rather than asking the user to
 // type an ISO string, which is why `onPickDate` is a callback: the picker is a
-// MODE of the host sheet (DESIGN.md §6 — never a second modal), and only the
+// MODE of the host sheet (DESIGN.md §4 — never a second modal), and only the
 // host knows how to enter it.
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import {
   customFieldDisplayLabel,
@@ -26,10 +25,12 @@ import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   IconButton,
   Row,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  type SegmentOption,
+  type ChipOption,
+  Icon,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -41,7 +42,7 @@ import {
  * it. The same row of stops a bounded integer draws, for the same reason: unset
  * has to stay reachable.
  */
-const BOOLEAN_OPTIONS: SegmentOption<string>[] = [
+const BOOLEAN_OPTIONS: ChipOption<string>[] = [
   { value: "", label: "—" },
   { value: "true", label: "Yes" },
   { value: "false", label: "No" },
@@ -76,7 +77,7 @@ export function CustomFieldValueInputs({
           trailing={
             onRemove ? (
               <IconButton
-                icon="x"
+                icon="close"
                 accessibilityLabel={`Remove ${def.label}`}
                 onPress={() => onRemove(def.key)}
               />
@@ -133,14 +134,14 @@ function CustomFieldValueInput({
   // know" into a wrong answer, which is why the first stop is "—".
   const stops = railStops(def);
   if (stops) {
-    const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
+    const options: ChipOption<string>[] = [{ value: "", label: "—" }];
     for (const stop of stops)
       options.push({ value: String(stop), label: String(stop) });
     return (
       <View style={styles.field}>
         <Text style={styles.railLabel}>{def.label}</Text>
         <Beside trailing={trailing}>
-          <SegmentedControl
+          <ChipRail
             scroll
             options={options}
             value={value}
@@ -155,7 +156,7 @@ function CustomFieldValueInput({
       <View style={styles.field}>
         <Text style={styles.railLabel}>{label}</Text>
         <Beside trailing={trailing}>
-          <SegmentedControl
+          <ChipRail
             options={BOOLEAN_OPTIONS}
             value={value}
             onChange={onChange}
@@ -168,12 +169,10 @@ function CustomFieldValueInput({
     return (
       <Beside trailing={trailing}>
         <Row
-          icon="calendar"
+          icon="date"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           onPress={onPickDate}
         />
       </Beside>
@@ -219,15 +218,9 @@ function Beside({
 const styles = StyleSheet.create({
   field: { gap: spacing(0.5) },
   // Matches `TextField`'s own label exactly. A rail and a number box sit in one
-  // list under one heading now, so a sentence-case label beside an uppercase
-  // one reads as two different kinds of control.
-  railLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
+  // list under one heading now, so a label beside a different one reads as two
+  // different kinds of control.
+  railLabel: fieldLabel,
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.

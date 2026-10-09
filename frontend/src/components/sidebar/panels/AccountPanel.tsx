@@ -1,6 +1,10 @@
-import { useId, useState } from "react";
-import { Download, LogOut, Mail, Pencil, Trash2 } from "lucide-react";
-import { formatCredits } from "@logjam/shared";
+import { Fragment, useId, useState, type ReactNode } from "react";
+import {
+  ACCOUNT,
+  contractSectionKeys,
+  formatCredits,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import {
   updateUsername,
@@ -12,7 +16,6 @@ import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   Dialog,
@@ -23,6 +26,8 @@ import {
   Row,
   SectionHeader,
   TextField,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import Footer from "../../Footer";
 import classes from "./AccountPanel.module.css";
@@ -42,7 +47,7 @@ function percentUsed(used: number, quota: number): number {
 }
 
 /**
- * Account — "who am I here, and what am I using of it?" (DESIGN.md §1).
+ * Account — "who am I here, and what am I using of it?" (docs/ux-principles.md §2).
  *
  * The two quota meters ARE the question, so they lead. Everything else is the
  * sign-in identity and the two irreversible things: signing out and deleting
@@ -52,6 +57,8 @@ function percentUsed(used: number, quota: number): number {
  * PRIVACY: username, email and byte counts. The email appears here and nowhere
  * else — friend search and lists are username-only (root CLAUDE.md).
  */
+const copy = ACCOUNT.copy;
+
 function AccountPanel({
   currentUser,
   error,
@@ -114,114 +121,139 @@ function AccountPanel({
       })
     : null;
 
-  return (
-    <div className={classes.root}>
-      {/* The title is who you are — the page's own answer (DESIGN.md §1) —
-          and it waits for the record rather than announcing a name the account
-          may not have. */}
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`ACCOUNT`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof ACCOUNT, "web">,
+    () => ReactNode
+  > = {
+    hero: () => (
       <Hero
         title={username ?? "Account"}
         actions={
           username !== null && (
             <IconButton
-              icon={Pencil}
-              label="Change username"
+              icon="edit"
+              label={copy.changeUsername}
               onClick={() => setRenameOpen(true)}
             />
           )
         }
       />
+    ),
+    storage: () =>
+      currentUser ? (
+        <>
+          <SectionHeader title={copy.storage} />
+          <ProgressBar
+            label="Storage used"
+            value={percentUsed(
+              currentUser.storageUsedBytes,
+              currentUser.storageQuotaBytes,
+            )}
+          />
+          <p className={classes.meterLabel}>
+            {formatBytes(currentUser.storageUsedBytes)} of{" "}
+            {formatBytes(currentUser.storageQuotaBytes)}
+            <span className={classes.meterHint}> · {copy.storageHint}</span>
+          </p>
+        </>
+      ) : null,
+    credits: () =>
+      currentUser ? (
+        <>
+          <SectionHeader title={copy.credits} />
+          <ProgressBar
+            label="Processing credits used"
+            value={percentUsed(
+              currentUser.monthlyComputeUsage,
+              currentUser.monthlyComputeCredits,
+            )}
+          />
+          <p className={classes.meterLabel}>
+            {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
+            {formatCredits(currentUser.monthlyComputeCredits)}
+            {creditsResetLabel && (
+              <span className={classes.meterHint}>
+                {" "}
+                · resets {creditsResetLabel}
+              </span>
+            )}
+            <span className={classes.meterHint}> · {copy.creditsHint}</span>
+          </p>
+        </>
+      ) : null,
+    signIn: () =>
+      currentUser ? (
+        <>
+          <SectionHeader title={copy.signIn} />
+          {/* The pencil, not the card: a whole row that opens something is
+                      how this page moves BETWEEN places, and this one edits a value
+                      in place. The same verb, the same glyph and the same position
+                      as the username's, two rows above it. */}
+          <Row
+            leading={<IconTile icon="email" hue="var(--color-accent)" />}
+            title={copy.email}
+            subtitle={email ?? undefined}
+            trailing={
+              <IconButton
+                icon="edit"
+                label={copy.changeEmail}
+                onClick={() => setChangeEmailOpen(true)}
+              />
+            }
+          />
+        </>
+      ) : null,
+    yourData: () =>
+      currentUser ? (
+        <>
+          <SectionHeader title={copy.yourData} />
+          <Button
+            variant="outline"
+            icon="export"
+            busy={exporting}
+            onClick={handleExport}
+          >
+            Download my data
+          </Button>
+        </>
+      ) : null,
+    leaving: () =>
+      currentUser ? (
+        <>
+          <SectionHeader title={copy.leaving} />
+          <Button variant="outline" icon="signOut" onClick={signOut}>
+            {copy.signOut}
+          </Button>
+          <Row
+            leading={<IconTile icon="delete" hue="var(--color-warning)" />}
+            title={copy.deleteAccount}
+            onOpen={() => setDeleteAccountOpen(true)}
+          />
+        </>
+      ) : null,
+    footer: () => <Footer />,
+  };
+  const keys = contractSectionKeys(ACCOUNT, "web");
+
+  return (
+    <div className={classes.root}>
+      {sections.hero()}
 
       <div className={classes.body}>
         {!currentUser ? (
           error ? (
             <ErrorBanner message={error} onRetry={onRetry} />
           ) : (
-            <p className={classes.state}>Loading…</p>
+            <LoadingState />
           )
-        ) : (
-          <>
-            <SectionHeader title="Storage" />
-            <ProgressBar
-              label="Storage used"
-              value={percentUsed(
-                currentUser.storageUsedBytes,
-                currentUser.storageQuotaBytes,
-              )}
-            />
-            <p className={classes.meterLabel}>
-              {formatBytes(currentUser.storageUsedBytes)} of{" "}
-              {formatBytes(currentUser.storageQuotaBytes)}
-              <span className={classes.meterHint}>
-                {" "}
-                · photos, videos and topos
-              </span>
-            </p>
-
-            <SectionHeader title="Processing credits this month" />
-            <ProgressBar
-              label="Processing credits used"
-              value={percentUsed(
-                currentUser.monthlyComputeUsage,
-                currentUser.monthlyComputeCredits,
-              )}
-            />
-            <p className={classes.meterLabel}>
-              {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
-              {formatCredits(currentUser.monthlyComputeCredits)}
-              {creditsResetLabel && (
-                <span className={classes.meterHint}>
-                  {" "}
-                  · resets {creditsResetLabel}
-                </span>
-              )}
-              <span className={classes.meterHint}>
-                {" "}
-                · topos, exports and GeoPDFs
-              </span>
-            </p>
-
-            <SectionHeader title="Sign-in" />
-            {/* The pencil, not the card: a whole row that opens something is
-                how this page moves BETWEEN places, and this one edits a value
-                in place. The same verb, the same glyph and the same position
-                as the username's, two rows above it. */}
-            <Row
-              leading={<IconTile icon={Mail} hue="var(--color-accent)" />}
-              title="Email"
-              subtitle={email ?? undefined}
-              trailing={
-                <IconButton
-                  icon={Pencil}
-                  label="Change email address"
-                  onClick={() => setChangeEmailOpen(true)}
-                />
-              }
-            />
-
-            <SectionHeader title="Your data" />
-            <Button
-              variant="outline"
-              icon={Download}
-              busy={exporting}
-              onClick={handleExport}
-            >
-              Download my data
-            </Button>
-
-            <SectionHeader title="Leaving" />
-            <Button variant="outline" icon={LogOut} onClick={signOut}>
-              Sign out
-            </Button>
-            <Row
-              leading={<IconTile icon={Trash2} hue="var(--color-warning)" />}
-              title="Delete account"
-              onOpen={() => setDeleteAccountOpen(true)}
-            />
-          </>
-        )}
-
-        <Footer />
+        ) : null}
+        {keys
+          .filter((key) => key !== "hero")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
       </div>
 
       {username !== null && (
@@ -288,7 +320,7 @@ function UsernameForm({
 
   async function save() {
     const trimmed = value.trim();
-    // Empty is a requirement, reported on submit (DESIGN.md §8); unchanged is
+    // Empty is a requirement, reported on submit (docs/ux-principles.md §11); unchanged is
     // not an error at all, just nothing to do.
     if (!trimmed) {
       setError("Enter a username.");

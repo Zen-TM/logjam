@@ -136,7 +136,7 @@ function SignInPanel({
         onSubmitEditing={submit}
       />
       {/* Directly above the submit it belongs to, not at the top of the
-          screen — never at the top of the form (§8). */}
+          screen — never at the top of the form (docs/ux-principles.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Sign in" onPress={submit} loading={submitting} />
       <TextLink label="Forgot password?" onPress={auth.goToForgotPassword} />
@@ -187,7 +187,7 @@ function GuestExplainer({
         Downloaded topos work without one.
       </Text>
       {/* "Continue anyway" is this panel's submit — a failure to store the
-          choice belongs directly above it (§8). */}
+          choice belongs directly above it (docs/ux-principles.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <View style={styles.secondary}>
         <Button

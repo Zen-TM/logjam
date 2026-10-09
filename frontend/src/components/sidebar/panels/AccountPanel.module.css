@@ -17,7 +17,7 @@
 }
 
 /* What a meter's bar means, in words — the bar is for the eye, this is the
-   content (§1). */
+   content (docs/ux-principles.md §2). */
 .meterLabel {
   margin: 0;
   font-size: var(--font-sm);

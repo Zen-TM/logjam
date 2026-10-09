@@ -1,18 +1,17 @@
 // The two shapes every settings sub-page is made of, and the one place their
 // copy rules live. Not in `src/ui`: the kit is a vocabulary of visuals, and
-// these are compositions of `Row`, `Toggle` and `SegmentedControl` that only
-// mean anything on a preferences page (DESIGN.md §9 — add a kit file for a new
+// these are compositions of `Row`, `Toggle` and `ChipRail` that only
+// mean anything on a preferences page (DESIGN.md §7 — add a kit file for a new
 // SHAPE, not for a recurring arrangement of existing ones).
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text } from "react-native";
 
 import { fontSize, spacing, theme } from "../../theme";
 import {
-  Row,
   SectionHeader,
-  SegmentedControl,
-  Toggle,
-  type SegmentOption,
+  ChipRail,
+  type ChipOption,
+  type Glyph,
+  SwitchRow,
 } from "../../ui";
 
 /**
@@ -34,7 +33,7 @@ export function PreferenceRow({
    * GeoPDF is ready" is not an object — takes no glyph, because one there is
    * decoration.
    */
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   title: string;
   subtitle?: string;
   subtitleNumberOfLines?: number;
@@ -43,20 +42,14 @@ export function PreferenceRow({
   onToggle: () => void;
 }) {
   return (
-    <Row
+    <SwitchRow
       icon={icon}
       title={title}
-      subtitle={subtitle}
-      subtitleNumberOfLines={subtitleNumberOfLines}
+      description={subtitle}
+      descriptionNumberOfLines={subtitleNumberOfLines}
       disabled={!ready}
-      right={
-        <Toggle
-          value={value}
-          onValueChange={onToggle}
-          disabled={!ready}
-          accessibilityLabel={title}
-        />
-      }
+      checked={value}
+      onChange={onToggle}
     />
   );
 }
@@ -80,22 +73,22 @@ export function ChoiceGroup<T extends string>({
   onChange,
 }: {
   label: string;
-  options: SegmentOption<T>[];
+  options: ChipOption<T>[];
   value: T;
   hint?: string;
   /**
    * Why the whole choice can't be made right now. Greys every chip and replaces
    * the hint — a picker that governs a switched-off feature governs nothing, and
    * one left live is a setting the user changes and sees no effect from
-   * (DESIGN.md §10: disabled, with the reason, never hidden).
+   * (DESIGN.md §8: disabled, with the reason, never hidden).
    */
   disabledReason?: string;
   onChange: (next: T) => void;
 }) {
   return (
     <>
-      <SectionHeader label={label} />
-      <SegmentedControl
+      <SectionHeader title={label} />
+      <ChipRail
         options={
           disabledReason
             ? options.map((option) => ({ ...option, disabled: true }))

@@ -13,7 +13,7 @@
 // `buildShareCards` in @logjam/shared, the same call Logjam GPS makes.
 //
 // SELECTION, LIKE EVERY OTHER LIST THAT ACTS IN BULK. The tile is the checkbox
-// and the bar takes the rail's place at the same height (DESIGN.md §7), as on
+// and the bar takes the rail's place at the same height (DESIGN.md §5), as on
 // Places, Logs and the Inbox — and as on Logjam GPS's own FriendSharesScreen,
 // which is the screen this one mirrors. It shipped instead with a per-row verb
 // and one "Unshare all", which is the shape to notice: an all-or-nothing bulk
@@ -31,20 +31,26 @@
 //
 // PRIVACY: usernames and item names only — the payload carries no coordinates
 // and no notes. Nothing here is logged.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  EyeOff,
-  FileText,
-  ListChecks,
-  MapPin,
-  Mountain,
-  PenLine,
-  UserMinus,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   buildShareCards,
+  bulkRemoveLabel,
+  bulkUnshareLabel,
+  contractSectionKeys,
+  FRIEND_SHARES,
+  friendSharesEmptyTitle,
+  friendSharesNote,
+  friendShareVerb,
+  unsharedMessage,
+  type SectionKeysOn,
   removeAllConfirm,
   removeOutcomeMessage,
   SHARE_KIND_LABEL,
@@ -59,7 +65,6 @@ import {
 import classes from "./FriendSharingSection.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import RemoveSharedButton from "../../common/RemoveSharedButton";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -73,6 +78,9 @@ import {
   SelectionBar,
   TileCheckbox,
   type ChipOption,
+  type Glyph,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import { idRange } from "./placesModel";
 import type { TFriend, TFriendShares } from "../../../placeUtils";
@@ -88,12 +96,12 @@ import {
  *  client's set and not the other's (root CLAUDE.md). */
 const KIND_IDENTITY: Record<
   FriendShareRow["entityType"],
-  { icon: LucideIcon; hue: string }
+  { icon: Glyph; hue: string }
 > = {
-  place: { icon: MapPin, hue: "var(--hue-shared)" },
-  route: { icon: PenLine, hue: "var(--hue-route)" },
-  topoJob: { icon: Mountain, hue: "var(--hue-overlay)" },
-  geoPdfJob: { icon: FileText, hue: "var(--hue-geo-pdf)" },
+  place: { icon: "place", hue: "var(--hue-shared)" },
+  route: { icon: "route", hue: "var(--hue-route)" },
+  topoJob: { icon: "lidar", hue: "var(--hue-overlay)" },
+  geoPdfJob: { icon: "geoPdf", hue: "var(--hue-geo-pdf)" },
 };
 
 /* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why the
@@ -109,6 +117,8 @@ const KIND_IDENTITY: Record<
 
 /** Which bulk verb is waiting on an answer. */
 type PendingBulk = "unshare" | "remove" | null;
+
+const copy = FRIEND_SHARES.copy;
 
 function FriendSharingSection({
   friend,
@@ -143,9 +153,7 @@ function FriendSharingSection({
       .then(setShares)
       .catch((err) => {
         console.error(err);
-        setError(
-          messageFromError(err, "Couldn't load sharing for this friend."),
-        );
+        setError(messageFromError(err, copy.loadFailed));
       });
   }, [friend.friendshipId]);
 
@@ -282,7 +290,7 @@ function FriendSharingSection({
       toast.success(
         unshareOutcomeMessage({ revokedCount, friendName: friend.username }),
       );
-    }, "Couldn't unshare those. Please try again.");
+    }, copy.unshareFailed);
   }
 
   /** The received bulk: no endpoint takes a list, so these go one at a time and
@@ -313,23 +321,29 @@ function FriendSharingSection({
   }
 
   const directions: ChipOption<FriendShareDirection>[] = [
-    { value: "theySee", label: "You share", count: theirs.length },
+    { value: "theySee", label: copy.youShare, count: theirs.length },
     {
       value: "youSee",
-      label: "They share",
+      label: copy.theyShare,
       count: mine.length,
       hue: "var(--hue-shared)",
     },
   ];
 
-  return (
-    <div className={classes.root} ref={rootRef}>
+  // Exhaustive by type: a section the contract names and this page does not
+  // draw, or the reverse, fails `tsc` (`FRIEND_SHARES`, shared/src/contracts).
+  const page: Record<
+    SectionKeysOn<typeof FRIEND_SHARES, "web">,
+    () => ReactNode
+  > = {
+    hero: () => (
       <Hero
         title={friend.username}
         onBack={onBack}
         backLabel="Back to friends"
       />
-
+    ),
+    directions: () => (
       <div className={classes.rails}>
         {selecting ? (
           <SelectionBar
@@ -338,25 +352,27 @@ function FriendSharingSection({
           >
             {selected.length < selectableKeys.length && (
               <IconButton
-                icon={ListChecks}
+                icon="multiSelect"
                 label={`Select all ${selectableKeys.length}`}
                 onClick={() => setSelectedKeys(selectableKeys)}
               />
             )}
             {/* Neither verb is a bin: both end a grant, and the record outlives
-                them. `user-minus` for "they stop seeing it", `eye-off` for "I
-                stop seeing it" — the same two glyphs Logjam GPS uses here. */}
+                  them. `user-minus` for "they stop seeing it", `eye-off` for "I
+                  stop seeing it" — the same two glyphs Logjam GPS uses here. */}
             {direction === "theySee" ? (
               <IconButton
-                icon={UserMinus}
-                label={`Unshare ${selected.length} from ${friend.username}`}
+                icon="unshare"
+                label={bulkUnshareLabel(selected.length, friend.username)}
                 disabled={busy}
                 onClick={() => setPendingBulk("unshare")}
               />
             ) : (
               <IconButton
-                icon={EyeOff}
-                label={`Remove ${selected.filter((card) => card.removable).length} from your account`}
+                icon="hide"
+                label={bulkRemoveLabel(
+                  selected.filter((card) => card.removable).length,
+                )}
                 disabled={busy}
                 onClick={() => setPendingBulk("remove")}
               />
@@ -370,107 +386,108 @@ function FriendSharingSection({
             onChange={changeDirection}
           />
         )}
-        {/* The two lists look alike at a glance, and the chips alone read as a
-            filter rather than as a direction. */}
-        <p className={classes.note}>
-          {selecting
-            ? "Shift-click to select a range · Ctrl+A selects all"
-            : direction === "theySee"
-              ? `Things you have shared with ${friend.username}.`
-              : `Things ${friend.username} has shared with you.`}
-        </p>
       </div>
+    ),
+    note: () => (
+      <p className={classes.noteRow}>
+        {selecting
+          ? "Shift-click to select a range · Ctrl+A selects all"
+          : friendSharesNote(direction, friend.username)}
+      </p>
+    ),
+    list: () => (
+      <>
+        {error && (
+          <div className={classes.banner}>
+            <ErrorBanner message={error} onRetry={load} />
+          </div>
+        )}
 
-      {error && (
-        <div className={classes.banner}>
-          <ErrorBanner message={error} onRetry={load} />
-        </div>
-      )}
+        {!shares && !error ? (
+          <LoadingState label={copy.loading} />
+        ) : cards.length === 0 ? (
+          <div className={classes.emptyArea}>
+            <EmptyState
+              icon="friends"
+              title={friendSharesEmptyTitle(direction, friend.username)}
+              body={direction === "theySee" ? copy.emptyHint : undefined}
+            />
+          </div>
+        ) : (
+          <div className={classes.list}>
+            {cards.map((card) => {
+              const identity = KIND_IDENTITY[card.row.entityType];
+              const tile = <IconTile icon={identity.icon} hue={identity.hue} />;
+              const isSelected = selectedKeys.includes(card.key);
+              const selectable = selectableKeys.includes(card.key);
+              return (
+                <Row
+                  key={card.key}
+                  leading={
+                    selectable ? (
+                      <TileCheckbox
+                        tile={tile}
+                        label={`Select ${card.title}`}
+                        checked={isSelected}
+                        selecting={selecting}
+                        onToggle={(extendRange) =>
+                          toggleSelected(card.key, extendRange)
+                        }
+                      />
+                    ) : (
+                      tile
+                    )
+                  }
+                  title={card.title}
+                  subtitle={card.blockedReason ?? card.subtitle}
+                  selected={isSelected}
+                  // A row no group verb can act on is inert for the duration,
+                  // rather than a checkbox that refuses.
+                  disabled={busy || (selecting && !selectable)}
+                  trailing={
+                    selecting ? undefined : direction === "theySee" ? (
+                      <Button
+                        compact
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(
+                            () => revoke(card, friend.id),
+                            copy.unshareFailed,
+                            unsharedMessage(card.title, friend.username),
+                          )
+                        }
+                      >
+                        {friendShareVerb("unshare").label}
+                      </Button>
+                    ) : card.removable ? (
+                      <RemoveSharedButton
+                        kindLabel={SHARE_KIND_LABEL[card.row.entityType]}
+                        itemName={card.title}
+                        ownerName={friend.username}
+                        disabled={busy}
+                        remove={() => revoke(card, "me")}
+                        onRemoved={() => {
+                          load();
+                          onSharesChanged();
+                        }}
+                      />
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
+      </>
+    ),
+  };
 
-      {!shares && !error ? (
-        <p className={classes.loading}>Loading sharing…</p>
-      ) : cards.length === 0 ? (
-        <div className={classes.emptyArea}>
-          <EmptyState
-            icon={Users}
-            title={
-              direction === "theySee"
-                ? `You haven't shared anything with ${friend.username}`
-                : `${friend.username} hasn't shared anything with you`
-            }
-            body={
-              direction === "theySee"
-                ? "Share a place, a route or a map from its own Share button."
-                : undefined
-            }
-          />
-        </div>
-      ) : (
-        <div className={classes.list}>
-          {cards.map((card) => {
-            const identity = KIND_IDENTITY[card.row.entityType];
-            const tile = <IconTile icon={identity.icon} hue={identity.hue} />;
-            const isSelected = selectedKeys.includes(card.key);
-            const selectable = selectableKeys.includes(card.key);
-            return (
-              <Row
-                key={card.key}
-                leading={
-                  selectable ? (
-                    <TileCheckbox
-                      tile={tile}
-                      label={`Select ${card.title}`}
-                      checked={isSelected}
-                      selecting={selecting}
-                      onToggle={(extendRange) =>
-                        toggleSelected(card.key, extendRange)
-                      }
-                    />
-                  ) : (
-                    tile
-                  )
-                }
-                title={card.title}
-                subtitle={card.blockedReason ?? card.subtitle}
-                selected={isSelected}
-                // A row no group verb can act on is inert for the duration,
-                // rather than a checkbox that refuses.
-                disabled={busy || (selecting && !selectable)}
-                trailing={
-                  selecting ? undefined : direction === "theySee" ? (
-                    <Button
-                      compact
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          () => revoke(card, friend.id),
-                          "Couldn't remove share. Please try again.",
-                          `${card.title} is no longer shared with ${friend.username}.`,
-                        )
-                      }
-                    >
-                      Unshare
-                    </Button>
-                  ) : card.removable ? (
-                    <RemoveSharedButton
-                      kindLabel={SHARE_KIND_LABEL[card.row.entityType]}
-                      itemName={card.title}
-                      ownerName={friend.username}
-                      disabled={busy}
-                      remove={() => revoke(card, "me")}
-                      onRemoved={() => {
-                        load();
-                        onSharesChanged();
-                      }}
-                    />
-                  ) : undefined
-                }
-              />
-            );
-          })}
-        </div>
-      )}
+  return (
+    <div className={classes.root} ref={rootRef}>
+      {contractSectionKeys(FRIEND_SHARES, "web").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       {/* Impact-aware confirmations, from the one place that words them. */}
       <ConfirmDialog
