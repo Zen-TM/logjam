@@ -11,7 +11,7 @@
 // Settings → Privacy and security is where it changes afterwards. Installs that
 // predate the toggle are grandfathered, read as answered, and never see this.
 //
-// A sheet rather than an `Alert`: DESIGN.md §6 keeps `Alert` for destructive
+// A sheet rather than an `Alert`: DESIGN.md §4 keeps `Alert` for destructive
 // confirms, and this is a two-option question with copy that is the point.
 // Dismissing it (backdrop, handle, back gesture) is "no consent" and stores the
 // off, because a consent request that is walked away from has been declined.

@@ -7,7 +7,6 @@ import {
   useCallback,
 } from "react";
 import { useIsMobile } from "../../useIsMobile";
-import { Check, ChevronRight, MapPin, Upload } from "lucide-react";
 import {
   Button,
   ChipRail,
@@ -18,6 +17,8 @@ import {
   Select,
   SwitchRow,
   TextField,
+  Icon,
+  ErrorBanner,
 } from "../../ui";
 import {
   matchPlace,
@@ -85,7 +86,6 @@ import {
   describeDroppedTripRow,
 } from "../../csvImport/rowSkip";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
@@ -445,11 +445,11 @@ function UnifiedImportDialog({
 
   const [step, setStep] = useState<Step>("map");
   // Merge settings are a SUB-VIEW of the confirm step, not a block that grows
-  // inside it (§6): they are a long errand done once, and the accordion they
+  // inside it (DESIGN.md §4): they are a long errand done once, and the accordion they
   // replace opened closed, which is how the confirm step came to talk about
   // settings before it said what it was about to import.
   const [showingMergeSettings, setShowingMergeSettings] = useState(false);
-  // Undo destroys what the import just made, and nothing brings it back (§7).
+  // Undo destroys what the import just made, and nothing brings it back (DESIGN.md §5).
   const [confirmingUndo, setConfirmingUndo] = useState(false);
   const [importing, setImporting] = useState(false);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
@@ -1598,7 +1598,7 @@ function UnifiedImportDialog({
 
   /** The file, and which kind the importer is treating it as. The kind is a
    *  two-option rail rather than a pair of toggle buttons: it is one value
-   *  chosen from a closed set, which is what a chip rail is for (§4). */
+   *  chosen from a closed set, which is what a chip rail is for (DESIGN.md §1). */
   function renderFileChip(loaded: LoadedFile, which: "place" | "triplog") {
     return (
       <div className={classes.fileChip}>
@@ -1652,7 +1652,12 @@ function UnifiedImportDialog({
           className={classes.dropZone}
           data-dragging={dragging || undefined}
         >
-          <Upload size={28} aria-hidden className={classes.dropGlyph} />
+          <Icon
+            idea="upload"
+            size={28}
+            aria-hidden
+            className={classes.dropGlyph}
+          />
           <span>
             Drop a CSV here, or click to browse. You can add a place list and a
             logbook together.
@@ -1953,7 +1958,7 @@ function UnifiedImportDialog({
           <Button
             variant="outline"
             compact
-            icon={MapPin}
+            icon="place"
             className={classes.pickButton}
             onClick={() => handlePickCoordsFor(key)}
           >
@@ -2109,7 +2114,12 @@ function UnifiedImportDialog({
             }
             onOpen={() => setShowingMergeSettings(true)}
             trailing={
-              <ChevronRight size={18} aria-hidden className={classes.chevron} />
+              <Icon
+                idea="disclosure"
+                size={18}
+                aria-hidden
+                className={classes.chevron}
+              />
             }
           />
         )}
@@ -2141,7 +2151,7 @@ function UnifiedImportDialog({
           <p className={classes.lede} role="status">
             Importing…
           </p>
-          {/* No total to count against — a sweep, not a value (§4). */}
+          {/* No total to count against — a sweep, not a value (DESIGN.md §1). */}
           <ProgressBar label="Importing" />
         </div>
       );
@@ -2158,7 +2168,7 @@ function UnifiedImportDialog({
       return (
         <Button
           variant="filled"
-          icon={Check}
+          icon="done"
           onClick={() => setShowingMergeSettings(false)}
         >
           Done

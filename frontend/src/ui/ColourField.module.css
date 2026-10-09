@@ -9,7 +9,7 @@
 }
 
 /* A square of the colour over a checkerboard, so a translucent value looks
-   translucent. The row's full height, like `SwatchPicker`'s. */
+   translucent. The row's full height, like `ColourField`'s. */
 .trigger {
   flex: none;
   align-self: stretch;
@@ -28,7 +28,7 @@
 }
 
 .trigger:disabled {
-  opacity: 0.45;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 

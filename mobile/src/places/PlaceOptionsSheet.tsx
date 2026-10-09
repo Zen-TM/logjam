@@ -2,14 +2,13 @@
 // three-dots AND the sheet the map opens when a place pin is tapped.
 //
 // ONE component for both, on the model of TrackOptionsSheet and for the same
-// reason (DESIGN.md §7): a place reached by tapping its pin must not be a
-// lesser object than one reached from the list. Tapping a pin used to go
-// straight to the detail screen, which meant the map offered exactly one of
-// this list's six verbs; "Open place" is now the first row, because it is what
-// the tap used to do.
+// reason (DESIGN.md §5): a place reached by tapping its pin must not be a
+// lesser object than one reached from the list.
 //
-// `onShowOnMap` is the ONE row that is list-only: on the map you are already
-// looking at the pin you tapped.
+// WHICH verbs, in what order and under what words is `PLACE_VERBS` in
+// `@logjam/shared`, the declaration Logjam Web's menus render from too. This
+// sheet only says how each one runs here. "Show on map" is the one row the
+// list has and the pin does not: on the map you are already looking at it.
 //
 // Share is a SUB-MODE of this sheet rather than a second sheet (§6 — swap the
 // content, never stack), so no caller can be the surface that forgot it. The
@@ -20,11 +19,14 @@
 // single gate here — a place shared WITH this user shows the read-only hint
 // and no Edit, Share or Delete, on BOTH surfaces, because the gate lives in
 // this component rather than in its callers.
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
 import {
+  placeDeleteConfirm,
+  placeVerbs,
   removeShareConfirm,
+  type PlaceVerbIdOn,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
 } from "@logjam/shared";
@@ -44,12 +46,23 @@ import { useConnectivity } from "../map/connectivity";
 import { useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { deletePlaceLocal } from "../sync/outbox";
-import { placeDeleteConfirm } from "./placeDeleteConfirm";
+
+type GpsPlaceVerbId = PlaceVerbIdOn<"gps">;
+
+/** The verbs that reach the server, so they dim with the reason offline. */
+const NEEDS_CONNECTION: ReadonlySet<GpsPlaceVerbId> = new Set([
+  "share",
+  "copy",
+  "copyAndRemove",
+  "remove",
+]);
 
 export function PlaceOptionsSheet({
   place,
+  surface,
   visible,
   onClose,
+  onGone,
   onOpenPlace,
   onShowOnMap,
   onLogTrip,
@@ -58,20 +71,22 @@ export function PlaceOptionsSheet({
   onError,
 }: {
   place: MirrorPlace | null;
+  /** Where the sheet was opened from: a row in the list, a pin on the map, or
+   *  the place's own page. */
+  surface: "row" | "pin" | "page";
   visible: boolean;
   onClose: () => void;
+  /** The place is no longer this account's (deleted, or removed from the
+   *  share): the page showing it must leave. */
+  onGone?: () => void;
   /** Its detail page — the first row, because it is what tapping a pin did. */
   onOpenPlace: (place: MirrorPlace) => void;
-  /**
-   * Fly the map to this place. List-only — the map surface omits it, because
-   * the user got here by tapping the pin (DESIGN.md §7: "Show on map" is the
-   * one row the two surfaces may differ by).
-   */
+  /** Fly the map to this place. The list's; the pin's verbs leave it out. */
   onShowOnMap?: (place: MirrorPlace) => void;
   /**
    * Open the trip form with this place already linked. The caller's, not this
    * sheet's: a form is a sheet of its own and nothing may open a second sheet
-   * over an open one (§6), so the caller closes this and opens that.
+   * over an open one (DESIGN.md §4), so the caller closes this and opens that.
    */
   onLogTrip: (place: MirrorPlace) => void;
   /** Open the place form. The caller's, for the same reason as `onLogTrip`. */
@@ -157,6 +172,7 @@ export function PlaceOptionsSheet({
           const outcome = await runCopyAndRemove([target], options);
           const report = copyAndRemoveOutcomeMessage(outcome);
           (report.tone === "error" ? onError : onInfo)(report.text);
+          if (outcome.done.length > 0) onGone?.();
         } else {
           try {
             const media = await copyShared(target, options);
@@ -206,7 +222,10 @@ export function PlaceOptionsSheet({
         text: "Remove",
         onPress: () => {
           removeSharedPlace(place.id)
-            .then(() => onInfo("Removed."))
+            .then(() => {
+              onInfo("Removed.");
+              onGone?.();
+            })
             .catch((err: unknown) => {
               // Our own copy, never the error's: it may carry the name.
               console.error(err);
@@ -219,13 +238,13 @@ export function PlaceOptionsSheet({
 
   const confirmDelete = () => {
     // The sentence is per-instance — it counts the trips that lose their link —
-    // and it is written once, in placeDeleteConfirm (DESIGN.md §7). The count
+    // and it is written once, in placeDeleteConfirm (DESIGN.md §5). The count
     // is derived HERE from the mirrored trips rather than passed in, so neither
     // surface can hand this dialog a number of its own.
     const linkedTrips = (trips.data ?? []).filter((trip) =>
       trip.places.some((link) => link.id === place.id),
     ).length;
-    const confirm = placeDeleteConfirm(place.name, linkedTrips);
+    const confirm = placeDeleteConfirm({ name: place.name }, linkedTrips);
     close();
     Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
       { text: "Cancel", style: "cancel" },
@@ -234,7 +253,10 @@ export function PlaceOptionsSheet({
         style: "destructive",
         onPress: () => {
           deletePlaceLocal(place.id)
-            .then(() => onInfo("Place deleted."))
+            .then(() => {
+              onInfo("Place deleted.");
+              onGone?.();
+            })
             .catch((err: unknown) => {
               // Our own copy, never the error's: it may carry the name.
               console.error(err);
@@ -243,6 +265,25 @@ export function PlaceOptionsSheet({
         },
       },
     ]);
+  };
+
+  // Exhaustive by type: every verb the contract gives Logjam GPS runs here.
+  // The two that need a FORM are the caller's: a form is a sheet of its own,
+  // so this one closes and the caller opens that one.
+  const leaveFor = (go: (place: MirrorPlace) => void) => () => {
+    close();
+    go(place);
+  };
+  const run: Record<GpsPlaceVerbId, () => void> = {
+    open: leaveFor(onOpenPlace),
+    show: leaveFor((target) => onShowOnMap?.(target)),
+    logTrip: leaveFor(onLogTrip),
+    edit: leaveFor(onEdit),
+    share: () => setSharing(true),
+    copy: () => setCopyMode("copy"),
+    copyAndRemove: () => setCopyMode("copyAndRemove"),
+    remove: confirmRemoveShare,
+    delete: confirmDelete,
   };
 
   return (
@@ -273,90 +314,24 @@ export function PlaceOptionsSheet({
         copy.body
       ) : (
         <View style={styles.body}>
-          <Row
-            icon="book-open"
-            title="Open place"
-            onPress={() => {
-              close();
-              onOpenPlace(place);
-            }}
-          />
-          {/* The one row the two surfaces differ by. */}
-          {onShowOnMap ? (
-            <Row
-              icon="map"
-              title="Show on map"
-              onPress={() => {
-                close();
-                onShowOnMap(place);
-              }}
-            />
-          ) : null}
-          <Row
-            icon="edit-3"
-            title="Log a trip here"
-            onPress={() => {
-              close();
-              onLogTrip(place);
-            }}
-          />
-          {isOwner ? (
-            <>
+          {placeVerbs("gps", surface, isOwner).map((verb, index, all) => (
+            <Fragment key={verb.id}>
+              {/* A rule above the verbs that end the user's relationship with
+                  the place, so parting is never next to an ordinary verb. */}
+              {verb.separated && index > 0 && !all[index - 1].separated ? (
+                <View style={styles.rule} />
+              ) : null}
               <Row
-                icon="edit-2"
-                title="Edit place"
-                onPress={() => {
-                  close();
-                  onEdit(place);
-                }}
+                icon={verb.icon}
+                // Only Delete wears the warning: removing a share destroys
+                // nothing.
+                hue={verb.danger ? theme.warning : undefined}
+                title={verb.label}
+                {...(NEEDS_CONNECTION.has(verb.id) ? shareRowProps : {})}
+                onPress={run[verb.id]}
               />
-              <Row
-                icon="share-2"
-                title="Share"
-                {...shareRowProps}
-                onPress={() => setSharing(true)}
-              />
-              <Row
-                icon="trash-2"
-                hue={theme.warning}
-                title="Delete place"
-                onPress={confirmDelete}
-              />
-            </>
-          ) : (
-            // The recipient's own verbs, in the slot the owner's Edit / Share /
-            // Delete take. This sheet IS the place's options button, so a
-            // shared place has to be keepable and removable from here and not
-            // only from its detail screen — the sheet used to explain the
-            // missing owner verbs with a sentence instead of offering the ones
-            // that are the sharee's.
-            //
-            // Copy sits ABOVE Remove deliberately: the bundled verb between
-            // them is the recoverable path through the destructive one, and a
-            // user who reads the list top to bottom meets it before the tap
-            // that cannot be undone.
-            <>
-              <Row
-                icon="copy"
-                title="Save a copy"
-                {...shareRowProps}
-                onPress={() => setCopyMode("copy")}
-              />
-              <Row
-                icon="archive"
-                title="Save a copy and remove"
-                {...shareRowProps}
-                onPress={() => setCopyMode("copyAndRemove")}
-              />
-              <Row
-                icon="x-circle"
-                hue={theme.warning}
-                title="Remove from my account"
-                {...shareRowProps}
-                onPress={confirmRemoveShare}
-              />
-            </>
-          )}
+            </Fragment>
+          ))}
         </View>
       )}
     </BottomSheet>
@@ -365,4 +340,5 @@ export function PlaceOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
 });

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -15,14 +16,14 @@ import classes from "./ColourField.module.css";
  * Any colour, opacity included (`#RRGGBBAA`) — how a topo draws its contours,
  * slope bands and map features.
  *
- * NOT the picker for anything with an identity hue. A route's colour and a
- * place type's colour come from closed palettes (`SwatchPicker`), because a
+ * NOT free for anything with an identity hue. A route's colour and a
+ * place type's colour come from a closed `palette`, because a
  * closed set is what the contrast guard can measure; a free picker would delete
  * that check rather than fail it (root CLAUDE.md). A topo's styles are map
  * cartography, drawn over terrain rather than read as UI, and their users tune
  * them to the shade — so here the colour is free.
  *
- * The same LINE as `SwatchPicker`: the label at the left, the colour as a square
+ * The same LINE in both modes: the label at the left, the colour as a square
  * at the right, and only the square presses. The square sits on a checkerboard,
  * which is the only way a translucent colour can show that it is translucent.
  * `hideLabel` keeps the label as the name and draws only the square, for a row
@@ -31,9 +32,9 @@ import classes from "./ColourField.module.css";
  * Inside: a saturation/brightness plane, a hue strip and an opacity strip, each a
  * `role="slider"` the arrow keys move (Shift for bigger steps), and the value as
  * text for pasting one in. Changes apply as they are made — this is for styling
- * something live on the map — and a press outside closes it (DESIGN.md §6).
+ * something live on the map — and a press outside closes it (DESIGN.md §4).
  */
-export function ColourField({
+function FreeColourField({
   label,
   hideLabel = false,
   value,
@@ -149,6 +150,155 @@ export function ColourField({
         </div>
       </Popover>
     </div>
+  );
+}
+
+/**
+ * A colour from a closed list (a route's colour): `ColourField` with a `palette`.
+ *
+ * THE FIELD IS NOT THE BUTTON. It reads as a line — its label at the left and
+ * the colour itself as a square filling the line's full height at the right. Only that square is the control: a card where the
+ * whole surface was clickable gave a 380px panel a large target whose job was
+ * to show one small colour, and the colour is the part anyone aims at
+ * (operator, 2026-09-17).
+ *
+ * The colour's NAME is the trigger's accessible name ("Colour: Teal") and not
+ * text beside the swatch: the swatch already shows the colour, and a reader who
+ * cannot see it hears the name (DESIGN.md §6).
+ *
+ * The palette keeps its native radios, so the group is one tab stop and the
+ * arrow keys move the choice; the popover only changes where they are. It is
+ * laid out three to a row — taller than it is wide — because a single flat row
+ * of ten spent the width of the panel showing nine colours nobody picked.
+ */
+function PaletteField({
+  label,
+  colors,
+  value,
+  onChange,
+  nameOf,
+  disabled = false,
+}: {
+  label: string;
+  colors: readonly string[];
+  value: string | undefined;
+  onChange: (next: string) => void;
+  /** What to CALL each colour, as its accessible name and its tooltip. Without
+   *  one a swatch answers to its hex, which is a name but not a helpful one —
+   *  unreadable aloud, and ten of them in a row. `trackColorName` is the one
+   *  for the route palette. */
+  nameOf?: (color: string) => string;
+  disabled?: boolean;
+}) {
+  const name = useId();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
+
+  return (
+    <div className={choice.swatchField}>
+      <span className={choice.swatchLabel}>{label}</span>
+      {/* The swatch IS the control, and it is the whole of it. No caret, no
+          card behind the row, and no colour NAME: the swatch shows the colour,
+          so spelling it out beside it says the same thing twice (operator,
+          2026-09-17). The name is still the control's accessible name, where it
+          is the only thing a reader who cannot see the swatch has. */}
+      <button
+        ref={triggerRef}
+        type="button"
+        className={choice.swatchTrigger}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${label}: ${chosen}`}
+        title={chosen}
+        disabled={disabled}
+        style={{ "--swatch": value } as CSSProperties}
+        onClick={() => setOpen((current) => !current)}
+      />
+
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={triggerRef}
+        label={label}
+        placement="bottom-end"
+        className={choice.swatchPopover}
+        // This popover IS the field's value being chosen, so looking away
+        // settles it — like every other control that picks a value.
+        dismissOnOutsidePress
+      >
+        <fieldset className={choice.swatches}>
+          <legend className={choice.legend}>{label}</legend>
+          <div className={choice.swatchGrid}>
+            {colors.map((color) => (
+              <input
+                key={color}
+                type="radio"
+                name={name}
+                value={color}
+                checked={color === value}
+                onChange={() => {
+                  onChange(color);
+                  // Picking IS the answer to the question the popover asked.
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                aria-label={nameOf?.(color) ?? color}
+                title={nameOf?.(color) ?? color}
+                className={choice.swatch}
+                style={{ "--swatch": color } as CSSProperties}
+              />
+            ))}
+          </div>
+        </fieldset>
+      </Popover>
+    </div>
+  );
+}
+
+/**
+ * THE ONE COLOUR PICKER. Its square sits at the end of a line and opens a
+ * floating palette, never a row of swatches inline (UX §10). With a `palette`
+ * the choice is one of a closed list; without one it is any colour.
+ */
+export function ColourField(
+  props:
+    | {
+        label: string;
+        hideLabel?: boolean;
+        value: string;
+        onChange: (next: string) => void;
+        disabled?: boolean;
+        palette?: undefined;
+      }
+    | {
+        label: string;
+        value: string | undefined;
+        onChange: (next: string) => void;
+        disabled?: boolean;
+        /** The closed list to choose from. */
+        palette: readonly string[];
+        /** What to CALL each colour, as its accessible name and tooltip. */
+        nameOf?: (color: string) => string;
+      },
+) {
+  return props.palette ? (
+    <PaletteField
+      label={props.label}
+      colors={props.palette}
+      value={props.value}
+      onChange={props.onChange}
+      nameOf={"nameOf" in props ? props.nameOf : undefined}
+      disabled={props.disabled}
+    />
+  ) : (
+    <FreeColourField
+      label={props.label}
+      hideLabel={"hideLabel" in props ? props.hideLabel : undefined}
+      value={props.value as string}
+      onChange={props.onChange}
+      disabled={props.disabled}
+    />
   );
 }
 

@@ -15,7 +15,7 @@
 // a GeoPDF the moment it is ready, but only on Wi-Fi, has nothing to pick.
 //
 // The storage row is a POINTER, not a duplicate. Saved is the inventory screen
-// and owns the per-item actions (DESIGN.md §7 — the three verbs follow the asset
+// and owns the per-item actions (DESIGN.md §5 — the three verbs follow the asset
 // wherever it is listed); re-listing downloads here would be a second place for
 // them to go stale.
 //
@@ -69,7 +69,7 @@ import { spacing } from "../../theme";
 /**
  * `needs` names the auto-download switch a row is meaningless without: a data
  * allowance for work that isn't happening governs nothing, so those rows go
- * dead with the reason in place of their subtitle (DESIGN.md §10). Sync has no
+ * dead with the reason in place of their subtitle (DESIGN.md §8). Sync has no
  * such switch — it always runs — so it has none.
  */
 const METERED_ROWS: {
@@ -185,9 +185,9 @@ export function OfflineSettingsScreen({
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Fetch automatically" />
+        <SectionHeader title="Fetch automatically" />
         <PreferenceRow
-          icon="download"
+          icon="geoPdf"
           title="Finished GeoPDFs"
           subtitle="GeoPDFs generated on Logjam Web download here automatically."
           value={autoDownload}
@@ -199,7 +199,7 @@ export function OfflineSettingsScreen({
           }}
         />
         <PreferenceRow
-          icon="layers"
+          icon="lidar"
           title="Finished LiDAR topos"
           subtitle="LiDAR topos generated on Logjam Web download here automatically."
           value={topoAutoDownload}
@@ -211,7 +211,7 @@ export function OfflineSettingsScreen({
           }}
         />
 
-        <SectionHeader label="Allow on mobile data" />
+        <SectionHeader title="Allow on mobile data" />
         {METERED_ROWS.map((row) => {
           const off =
             (row.needs === "geoPdf" && !autoDownload) ||
@@ -232,12 +232,12 @@ export function OfflineSettingsScreen({
           );
         })}
 
-        <SectionHeader label="When you save a copy" />
+        <SectionHeader title="When you save a copy" />
         {/* The default for the switch that appears on the copy sheet itself,
             which is where it is usually changed. Here so it can be found and
             so Logjam Web — which has no switch of its own — follows it too. */}
         <PreferenceRow
-          icon="image"
+          icon="photo"
           title="Photos with copied places"
           subtitle={
             copyMediaBlocked ??
@@ -249,9 +249,9 @@ export function OfflineSettingsScreen({
           onToggle={toggleCopyMedia}
         />
 
-        <SectionHeader label="On this phone" />
+        <SectionHeader title="On this phone" />
         <Row
-          icon="hard-drive"
+          icon="device"
           title="Maps, imports and tracks"
           subtitle="Managed on the Saved tab"
           onPress={onOpenSaved}

@@ -9,12 +9,14 @@
   flex-direction: column;
 }
 
-.rails {
+.typeRail,
+.statusRail {
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--gutter) 8px;
+  padding: var(--space-1) var(--gutter) 0;
+}
+
+.statusRail {
+  padding-bottom: var(--space-1);
 }
 
 /* Selection keeps the type rail mounted but out of reach, so the list below
@@ -34,7 +36,8 @@
   /* The end pad centres the round clear button in the pill's end cap. */
   padding: 0 calc((var(--control-md) - var(--control-sm)) / 2) 0 12px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-page));
+  /* A strip is read, not pressed (its clear button aside): a hairline, no fill. */
+  border: 1px solid var(--color-line);
   font-size: var(--font-sm);
 }
 

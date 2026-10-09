@@ -11,7 +11,7 @@
 // test beside them.
 //
 // PRIVACY: `unionBbox` computes an extent used only to move the camera. It is
-// never rendered and never logged (DESIGN.md §11).
+// never rendered and never logged (docs/ux-principles.md §13).
 import type { MapArtifact } from "../map/sourceResolver";
 
 export type Bbox = [west: number, south: number, east: number, north: number];

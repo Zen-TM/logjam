@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,7 +36,7 @@ import { savesCapturesToGallery } from "./galleryPreference";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
 import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
-import { BottomSheet, Row, SectionHeader } from "../ui";
+import { BottomSheet, Row, SectionHeader, Icon, type Glyph } from "../ui";
 import { MediaViewer } from "./MediaViewer";
 
 /**
@@ -405,8 +404,8 @@ export function MediaStrip({
                 pressed && styles.addTilePressed,
               ]}
             >
-              <Feather
-                name={atLimit ? "repeat" : "plus"}
+              <Icon
+                idea={atLimit ? "replace" : "add"}
                 size={20}
                 color={theme.accent}
               />
@@ -491,7 +490,7 @@ export function MediaStrip({
                   }
                 />
                 <Row
-                  icon="image"
+                  icon="photo"
                   title="Choose from library"
                   onPress={() =>
                     runAfterSheet(() => captureFrom("library", "photo"))
@@ -507,7 +506,7 @@ export function MediaStrip({
                   onPress={() => runAfterSheet(pickRouteFile)}
                 />
                 <Row
-                  icon="activity"
+                  icon="track"
                   title="Attach a recorded track"
                   subtitle="A track you recorded in Logjam"
                   onPress={() => setSourceMode("tracks")}
@@ -529,11 +528,11 @@ export function MediaStrip({
               </Text>
             ) : (
               <>
-                <SectionHeader label={`${tracks.length} finished`} />
+                <SectionHeader title={`${tracks.length} finished`} />
                 {tracks.map((track) => (
                   <Row
                     key={track.id}
-                    icon="activity"
+                    icon="track"
                     hue={track.color}
                     title={track.name}
                     subtitle={trackSummary(track)}
@@ -598,7 +597,7 @@ function AttachmentTile({
             },
           ]}
         >
-          <Feather name={glyphFor(category)} size={22} color={tint} />
+          <Icon idea={glyphFor(category)} size={22} color={tint} />
           <Text style={styles.glyphLabel} numberOfLines={2}>
             {item.filename ?? "Attachment"}
           </Text>
@@ -606,7 +605,7 @@ function AttachmentTile({
       )}
       {category === "video" ? (
         <View style={styles.playBadge}>
-          <Feather name="play" size={12} color={theme.text} />
+          <Icon idea="play" size={12} color={theme.text} />
         </View>
       ) : null}
       {item.syncState === "pendingUpload" ? (
@@ -620,12 +619,10 @@ function AttachmentTile({
   );
 }
 
-function glyphFor(
-  category: MediaCategory | null,
-): React.ComponentProps<typeof Feather>["name"] {
-  if (category === "track") return "map";
+function glyphFor(category: MediaCategory | null): Glyph {
+  if (category === "track") return "route";
   if (category === "video") return "video";
-  return "image";
+  return "photo";
 }
 
 function trackSummary(track: Track): string {

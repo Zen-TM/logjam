@@ -9,20 +9,20 @@ import { IconButton } from "./IconButton";
  * with a headline metric or state (`headerShown: false` on the route).
  *
  * Anatomy, top to bottom: eyebrow (uppercase kicker) · title + optional
- * trailing `action` node on the same baseline · optional `value`/`valueSuffix`
+ * trailing `actions` node on the same baseline · optional `value`/`valueSuffix`
  * display metric · optional `children` (meter, readiness pill, chips).
  *
  * It carries its own top safe-area inset and a hairline bottom edge, so the
  * screen body below it is plain padded content.
  */
-export function HeroHeader({
+export function Hero({
   eyebrow,
   title,
   titleNumberOfLines = 1,
   value,
   secondaryValue,
   valueSuffix,
-  action,
+  actions,
   onBack,
   children,
 }: {
@@ -38,7 +38,7 @@ export function HeroHeader({
    */
   secondaryValue?: string;
   valueSuffix?: string;
-  action?: React.ReactNode;
+  actions?: React.ReactNode;
   /**
    * Back affordance for a hero on a PUSHED screen. A hero replaces the native
    * header, which means it also has to replace the back button it removed —
@@ -53,7 +53,7 @@ export function HeroHeader({
       {onBack ? (
         <View style={styles.backRow}>
           <IconButton
-            icon="chevron-left"
+            icon="back"
             accessibilityLabel="Back"
             color={theme.text}
             onPress={onBack}
@@ -67,7 +67,7 @@ export function HeroHeader({
         <Text style={styles.title} numberOfLines={titleNumberOfLines}>
           {title}
         </Text>
-        {action}
+        {actions}
       </View>
       {value ? (
         <Text style={styles.value} numberOfLines={1}>

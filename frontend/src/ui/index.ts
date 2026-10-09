@@ -2,12 +2,14 @@
 // something the kit does not have adds it HERE rather than styling its own.
 // Native elements and CSS modules only — no MUI (frontend/DESIGN.md).
 export { Button, IconButton } from "./Button";
+export { Icon, type Glyph } from "./Icon";
+export { NorthNeedle } from "./webIcons";
 export { Chip, ChipPicker, ChipRail, type ChipOption } from "./Chip";
 export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
-export { Avatar, IconTile, Row, TileCheckbox } from "./Row";
+export { Avatar, IconTile, ListEnd, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
-export { Checkbox, SwatchPicker } from "./Choice";
+export { Checkbox } from "./Choice";
 export {
   LiveNumberField,
   NumberField,
@@ -26,8 +28,12 @@ export { Tooltip } from "./Tooltip";
 export { SectionHeader, SheetSection, SideSheet } from "./SideSheet";
 export { InfoTip, SettingsRow } from "./SettingsRow";
 export { Dialog } from "./Dialog";
+export { ErrorBanner } from "./ErrorBanner";
+export { FieldError } from "./FieldError";
 export {
   EmptyState,
+  ErrorState,
+  LoadingState,
   ProgressBar,
   SelectionBar,
   StatusPill,

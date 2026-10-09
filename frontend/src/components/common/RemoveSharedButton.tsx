@@ -12,12 +12,11 @@
 // route seen through a shared place has no share row of its own to drop, and
 // the surfaces point at the place instead.
 import { useState, type ReactNode } from "react";
-import { X } from "lucide-react";
 
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import { Button } from "../../ui";
+import { Button, Icon } from "../../ui";
 import { removeShareConfirm } from "@logjam/shared";
 
 export default function RemoveSharedButton({
@@ -85,7 +84,7 @@ export default function RemoveSharedButton({
         >
           {children ?? (
             <>
-              <X size={14} /> Remove
+              <Icon idea="unshare" size={14} /> Remove
             </>
           )}
         </button>
@@ -93,7 +92,7 @@ export default function RemoveSharedButton({
         <Button
           compact
           variant="outline"
-          icon={X}
+          icon="unshare"
           title={label}
           disabled={disabled || busy}
           onClick={() => setConfirming(true)}

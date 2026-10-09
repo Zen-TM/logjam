@@ -150,7 +150,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
           </Button>
         </div>
         {/* A table: one heading over the numbers, not the range repeated on
-            twelve rows (DESIGN.md §9). */}
+            twelve rows (DESIGN.md §6). */}
         <div className={styles.formationTable}>
           <span />
           <span className={styles.head}>0–5</span>

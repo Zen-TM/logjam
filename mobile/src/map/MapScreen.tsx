@@ -50,7 +50,6 @@ import {
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
 } from "@maplibre/maplibre-react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -75,11 +74,14 @@ import {
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
+  MAP_OVERLAY_REFINEMENTS,
+  MAP_OVERLAYS,
   messageFromError,
   pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
   nearestSegment,
   snapSegment,
+  type IconIdea,
   type SnapMode,
 } from "@logjam/shared";
 
@@ -105,16 +107,7 @@ import {
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
-import {
-  assetHue,
-  fontSize,
-  fontWeight,
-  radius,
-  scrim,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
   PlacePinsLayer,
@@ -220,12 +213,17 @@ import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
-import { BottomSheet } from "../ui/BottomSheet";
-import { Button } from "../ui/Button";
-import { TextField } from "../ui/TextField";
-import { IconButton } from "../ui/IconButton";
-import { Row } from "../ui/Row";
-import { Toast, type ToastMessage } from "../ui/Toast";
+import {
+  BottomSheet,
+  Button,
+  Icon,
+  IconButton,
+  Notice,
+  Row,
+  TextField,
+  Toast,
+  type ToastMessage,
+} from "../ui";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
@@ -478,12 +476,11 @@ const GPS_TOAST_MIN_GAP_MS = 300_000;
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
 
-const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> =
-  {
-    off: "navigation",
-    follow: "crosshair",
-    "course-up": "compass",
-  };
+const LOCATE_ICON: Record<FollowMode, IconIdea> = {
+  off: "locate",
+  follow: "following",
+  "course-up": "compass",
+};
 
 const LOCATE_LABEL: Record<FollowMode, string> = {
   off: "Show where I am",
@@ -753,6 +750,7 @@ const LiveCompassStrip = memo(function LiveCompassStrip({
 export function MapScreen({
   onOpenPlace,
   onOpenSaved,
+  onImportFile,
   onSaveMapsOffline,
   onPickPoint,
   focus,
@@ -774,6 +772,8 @@ export function MapScreen({
   }) => void;
   // Opens the Saved tab on one category, from the layer sheet's regions row.
   onOpenSaved?: (category: "region") => void;
+  /** The layers sheet's "Import a file": Saved, with the file picker open. */
+  onImportFile?: () => void;
   /**
    * Open the full-screen point picker for the place form, starting on
    * `from` when the form already holds a coordinate. The answer comes back
@@ -855,7 +855,7 @@ export function MapScreen({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
-  // sheet has actually closed (never two sheets at once — DESIGN.md §6).
+  // sheet has actually closed (never two sheets at once — DESIGN.md §4).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
@@ -865,7 +865,7 @@ export function MapScreen({
   const toastNonce = useRef(0);
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
-  // route draw confirms and saves) and the ink (DESIGN.md §8).
+  // route draw confirms and saves) and the ink (docs/ux-principles.md §11).
   const measureDraft = useRouteDraft();
   const routeDraft = useRouteDraft();
   const measuring = measureDraft.active;
@@ -938,7 +938,7 @@ export function MapScreen({
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
-  // the stats a sub-mode one row in (DESIGN.md §7: the same object offers the
+  // the stats a sub-mode one row in (DESIGN.md §5: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
@@ -1898,7 +1898,7 @@ export function MapScreen({
       // whichever tool won the race.
       if (tool === "measure") {
         // Leaving measure bins its points without asking — a measurement is a
-        // question you asked once, not an asset (DESIGN.md §8).
+        // question you asked once, not an asset (docs/ux-principles.md §11).
         if (measureDraft.active) {
           measureDraft.close();
           return;
@@ -2056,7 +2056,7 @@ export function MapScreen({
       const props = event.nativeEvent.features[0]?.properties;
       // The OPTIONS sheet, not the detail screen: the same six verbs the
       // Places list offers, with "Open place" first because that is what this
-      // tap used to do (DESIGN.md §7). Held as an id so an edit made from
+      // tap used to do (DESIGN.md §5). Held as an id so an edit made from
       // inside the sheet re-renders it rather than showing a stale copy.
       if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
@@ -2066,11 +2066,11 @@ export function MapScreen({
   const optionsPlace =
     (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
-   *  options sheet closes before one opens (DESIGN.md §6). */
+   *  options sheet closes before one opens (DESIGN.md §4). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
 
-  /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
+  /** A recorded line's own verbs, from the map (DESIGN.md §5: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
    *  sub-mode one row in. Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
@@ -2428,7 +2428,7 @@ export function MapScreen({
 
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
-  // and a subtitle (DESIGN.md §6).
+  // and a subtitle (DESIGN.md §4).
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
@@ -3848,7 +3848,7 @@ export function MapScreen({
   /**
    * Start measuring from a spot. Same shape as `startRouteDrawAt` — and the
    * same seeding reason — differing only in which of the two point tools opens,
-   * because they are one implementation (DESIGN.md §2).
+   * because they are one implementation (DESIGN.md §3).
    */
   const startMeasureAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
@@ -3906,7 +3906,7 @@ export function MapScreen({
         case "place":
           // Straight to the form: with no sheet open there is no Modal to
           // collide with, so this is the one branch that skips the park-and-
-          // reopen dance the sheet needs (DESIGN.md §6).
+          // reopen dance the sheet needs (DESIGN.md §4).
           setAddPlaceAt(point);
           return;
         default:
@@ -4081,7 +4081,7 @@ export function MapScreen({
     () => [
       ...ownedPlaces.map((place) => ({
         key: `place:${place.id}`,
-        icon: "map-pin" as const,
+        icon: "place" as const,
         hue: OWNED_PLACE_COLOR,
         title: place.name,
         kindLabel: "Place",
@@ -4091,7 +4091,7 @@ export function MapScreen({
       })),
       ...sharedPlaces.map((place) => ({
         key: `place:${place.id}`,
-        icon: "share-2" as const,
+        icon: "friends" as const,
         hue: SHARED_PLACE_COLOR,
         title: place.name,
         kindLabel: "Shared place",
@@ -4101,7 +4101,7 @@ export function MapScreen({
       })),
       ...savedTracks.map((track) => ({
         key: `track:${track.id}`,
-        icon: "activity" as const,
+        icon: "track" as const,
         hue: assetHue.track,
         title: track.name,
         kindLabel: "Track",
@@ -4109,7 +4109,7 @@ export function MapScreen({
       })),
       ...(routes.data ?? []).map((route) => ({
         key: `route:${route.id}`,
-        icon: "edit-3" as const,
+        icon: "route" as const,
         hue: assetHue.route,
         title: route.name,
         kindLabel: "Route",
@@ -4117,7 +4117,7 @@ export function MapScreen({
       })),
       ...imports.map((imported) => ({
         key: `import:${imported.id}`,
-        icon: "file-plus" as const,
+        icon: "importedFile" as const,
         hue: assetHue.import,
         title: imported.name,
         kindLabel: "Imported file",
@@ -4139,7 +4139,7 @@ export function MapScreen({
   const layerToggles: LayerToggleEntry[] = [
     {
       key: "places",
-      icon: "map-pin",
+      icon: "place",
       hue: OWNED_PLACE_COLOR,
       // "PLACES", not "My places", and the count is every place on the phone:
       // the children under it are TYPES, and a type governs a shared campsite
@@ -4147,7 +4147,7 @@ export function MapScreen({
       // campsites). Hanging them under an ownership row said the opposite of
       // what the code does, and its count disagreed with the children's by the
       // number of shared places.
-      title: "Places",
+      title: MAP_OVERLAYS.copy.places,
       count: ownedPlaces.length + sharedPlaces.length,
       value: showPlaces,
       onChange: setShowPlaces,
@@ -4155,90 +4155,111 @@ export function MapScreen({
       // campsites". A type with no places is left out — the list has to stay
       // short enough to read at a trailhead, and a switch for nothing is a
       // switch that does nothing.
-      children: (placeTypes.data ?? [])
-        .map((type) => ({
-          type,
-          count: placesByType[type.id] ?? 0,
-        }))
-        .filter(({ count }) => count > 0)
-        .map(({ type, count }) => ({
-          key: `place-type:${type.id}`,
-          title: type.name,
-          hue: type.color,
-          count,
-          value: !hiddenPlaceTypeIds.has(type.id),
-          onChange: (next: boolean) =>
-            setHiddenPlaceTypeIds((current) => {
-              const hidden = new Set(current);
-              if (next) hidden.delete(type.id);
-              else hidden.add(type.id);
-              return hidden;
-            }),
-        })),
+      children: [
+        ...(placeTypes.data ?? [])
+          .map((type) => ({
+            type,
+            count: placesByType[type.id] ?? 0,
+          }))
+          .filter(({ count }) => count > 0)
+          .map(({ type, count }) => ({
+            key: `place-type:${type.id}`,
+            title: type.name,
+            hue: type.color,
+            count,
+            value: !hiddenPlaceTypeIds.has(type.id),
+            onChange: (next: boolean) =>
+              setHiddenPlaceTypeIds((current) => {
+                const hidden = new Set(current);
+                if (next) hidden.delete(type.id);
+                else hidden.add(type.id);
+                return hidden;
+              }),
+          })),
+        // The one axis that crosses every type: whose, not what kind.
+        ...(sharedPlaces.length > 0
+          ? [
+              {
+                key: "shared-places",
+                title: MAP_OVERLAY_REFINEMENTS.places.sharedWithMe,
+                hue: SHARED_PLACE_COLOR,
+                count: sharedPlaces.length,
+                value: showSharedPlaces && showPlaces,
+                onChange: setShowSharedPlaces,
+              },
+            ]
+          : []),
+      ],
     },
     {
-      // The OTHER axis: whose, not what kind. It stays a row of its own rather
-      // than a child, because it crosses every type.
-      key: "shared-places",
-      icon: "share-2",
-      hue: SHARED_PLACE_COLOR,
-      title: "Shared with me",
-      count: sharedPlaces.length,
-      value: showSharedPlaces,
-      onChange: setShowSharedPlaces,
-      // Places off means places off: a switch that flips real state while the
-      // map draws nothing is the same lie as a dead button.
-      inert: !showPlaces,
-    },
-    {
-      key: "routes",
-      icon: "edit-3",
+      // ONE row for every line there is, as on Logjam Web. Logjam GPS refines it
+      // by what the line IS (`MAP_OVERLAY_REFINEMENTS.ways`): the lines this
+      // phone holds are the ones a hiker wants to hide one kind of.
+      key: "ways",
+      icon: "route",
       hue: assetHue.route,
-      title: "My routes",
-      count: standaloneRoutes.length,
-      value: showRoutes,
-      onChange: setShowRoutes,
-    },
-    {
-      key: "place-routes",
-      icon: "git-commit",
-      hue: OWNED_PLACE_COLOR,
-      title: "Place routes",
-      count: placeRouteCount + placeLinkedRoutes.length,
-      // The layer's own report of what it could not draw. Present only while
-      // it is on AND something is missing — a map drawing less than it says
-      // has to say so (DESIGN.md §8), and the rest of the time there is
-      // nothing to report.
+      title: MAP_OVERLAYS.copy.ways,
+      count:
+        standaloneRoutes.length +
+        placeRouteCount +
+        placeLinkedRoutes.length +
+        imports.length +
+        savedTracks.length,
+      value: showRoutes || showPlaceRoutes || showVectorImports || showTracks,
+      // All the kinds together: on draws every kind, off hides every kind.
+      onChange: (next: boolean) => {
+        setShowRoutes(next);
+        setShowPlaceRoutes(next);
+        setShowVectorImports(next);
+        setShowTracks(next);
+      },
+      children: [
+        {
+          key: "routes",
+          title: MAP_OVERLAY_REFINEMENTS.ways.routes,
+          hue: assetHue.route,
+          count: standaloneRoutes.length,
+          value: showRoutes,
+          onChange: setShowRoutes,
+        },
+        {
+          key: "place-routes",
+          title: MAP_OVERLAY_REFINEMENTS.ways.placeRoutes,
+          hue: OWNED_PLACE_COLOR,
+          count: placeRouteCount + placeLinkedRoutes.length,
+          value: showPlaceRoutes,
+          onChange: setShowPlaceRoutes,
+        },
+        {
+          key: "vector-imports",
+          title: MAP_OVERLAY_REFINEMENTS.ways.importedWays,
+          hue: assetHue.import,
+          count: imports.length,
+          value: showVectorImports,
+          onChange: setShowVectorImports,
+        },
+        {
+          key: "tracks",
+          title: MAP_OVERLAY_REFINEMENTS.ways.tracks,
+          hue: assetHue.track,
+          count: savedTracks.length,
+          value: showTracks,
+          onChange: setShowTracks,
+        },
+      ],
+      // The layer's own report of what it could not draw. Present only while it
+      // is on AND something is missing: a map drawing less than it says has to
+      // say so (docs/ux-principles.md §11).
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
           ? `${routesStatus.unavailable} not downloaded yet`
           : undefined,
-      value: showPlaceRoutes,
-      onChange: setShowPlaceRoutes,
     },
     {
-      key: "vector-imports",
-      icon: "file-plus",
-      hue: assetHue.import,
-      title: "Imported ways",
-      count: imports.length,
-      value: showVectorImports,
-      onChange: setShowVectorImports,
-    },
-    {
-      key: "tracks",
-      icon: "activity",
-      hue: assetHue.track,
-      title: "Tracks",
-      count: savedTracks.length,
-      value: showTracks,
-      onChange: setShowTracks,
-    },
-    {
-      key: "geopdfs",
-      icon: "file-text",
+      key: "geoPdfs",
+      icon: "geoPdf",
       hue: assetHue.geoPdf,
-      title: "GeoPDF maps",
+      title: MAP_OVERLAYS.copy.geoPdfs,
       count: readyGeoPdfs.length,
       value: showGeoPdfs,
       onChange: setShowGeoPdfs,
@@ -4787,7 +4808,7 @@ export function MapScreen({
                 accessibilityLabel="Remove this point"
                 style={styles.anchorDelete}
               >
-                <Feather name="trash-2" size={20} color={theme.onFill} />
+                <Icon idea="delete" size={20} color={theme.onFill} />
               </View>
             </Marker>
           ) : null}
@@ -4883,12 +4904,10 @@ export function MapScreen({
             without being asked (MLIFE-001). Everything else about a running
             recording is a tap away; this is the exception. */}
         {activeTrack && recordingWriteFailing ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Points aren&apos;t being saved — finish the recording and check
-              free space.
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Points aren&apos;t being saved — finish the recording and check free
+            space.
+          </Notice>
         ) : null}
 
         {/* Measure HUD — the same panel as route draw, minus Save. */}
@@ -4957,18 +4976,10 @@ export function MapScreen({
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
         {offlineOnly ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Offline mode — using only saved maps
-            </Text>
-          </View>
+          <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
 
-        {noticeText ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{noticeText}</Text>
-          </View>
-        ) : null}
+        {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
 
         {/* The compass is confidently wrong and nothing else on screen would
             say so — every app on the phone reads the same miscalibrated
@@ -4977,44 +4988,39 @@ export function MapScreen({
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
         {headingWanted && magneticInterference(fieldWindow) ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Magnetic interference — move the phone away from metal
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Magnetic interference — move the phone away from metal
+          </Notice>
         ) : headingWanted && compassCalibration.warning ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Compass needs calibrating — wave the phone in a figure 8
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Compass needs calibrating — wave the phone in a figure 8
+          </Notice>
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
         {places.error ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{places.error}</Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            {places.error}
+          </Notice>
         ) : null}
 
         {/* A map that quietly hides pins is a map you can't trust. Says how many
             are missing, and the dismiss IS the way out — clearing it turns the
             Places screen's "show only these" option back off. */}
         {withholdingPlaces ? (
-          <View style={styles.filterBadge}>
-            <Feather name="filter" size={14} color={theme.accent} />
-            {/* Two lines: this sentence grows with the user's text size, and a
-                badge that says "Showing 5 of 2…" is a warning nobody can act on. */}
-            <Text style={styles.filterBadgeText} numberOfLines={2}>
-              {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
-            </Text>
-            <IconButton
-              icon="x"
-              size={16}
-              accessibilityLabel="Show all places again"
-              onPress={() => setPlaceMapFilterEnabled(false)}
-            />
-          </View>
+          <Notice
+            icon="filter"
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel="Show all places again"
+                onPress={() => setPlaceMapFilterEnabled(false)}
+              />
+            }
+          >
+            {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+          </Notice>
         ) : null}
 
         {/* A download keeps running while the user walks around the map, so it
@@ -5027,9 +5033,7 @@ export function MapScreen({
             map notices; it used to be an accent-outlined pill that matched
             nothing else on the screen. */}
         {downloadProgress ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{downloadProgress}</Text>
-          </View>
+          <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
       </View>
 
@@ -5059,7 +5063,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Feather name="layers" size={FAB_ICON} color={theme.text} />
+          <Icon idea="layers" size={FAB_ICON} color={theme.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -5070,17 +5074,14 @@ export function MapScreen({
           ]}
           onPress={handleLocateMe}
         >
-          {/* Three states, three glyphs: an arrow you are not following, a
+          {/* Three states, three glyphs: a crosshair you are not following, a
               crosshair locked on you, a compass rose when the map itself turns
               to face where you are looking. Colour alone said "active" but
               never said WHICH active. */}
-          <Feather
-            name={LOCATE_ICON[followMode]}
+          <Icon
+            idea={LOCATE_ICON[followMode]}
             size={FAB_ICON}
             color={theme.text}
-            // The arrow glyph's ink sits up-and-right of its box centre, so a
-            // geometrically centred icon reads off-centre — nudge it back.
-            style={followMode === "off" ? styles.locateIcon : undefined}
           />
         </Pressable>
         <Pressable
@@ -5089,7 +5090,7 @@ export function MapScreen({
           style={styles.miniButton}
           onPress={() => setAttributionOpen(true)}
         >
-          <Feather name="info" size={MINI_FAB_ICON} color={theme.text} />
+          <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
         </Pressable>
       </View>
 
@@ -5122,25 +5123,31 @@ export function MapScreen({
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
       {navTarget ? (
-        <View style={[styles.navChip, { top: noticeTop }]}>
+        <View
+          style={[styles.navDock, { top: noticeTop }]}
+          pointerEvents="box-none"
+        >
           {/* The distance and bearing live at the end of this line, so a
               one-line cap cuts off the half that changes. */}
-          <Text style={styles.noticeText} numberOfLines={2}>
-            {navTarget.name}
-            {navDistanceM != null && navBearingDeg != null
-              ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
-                  navBearingDeg,
-                )} ${Math.round(navBearingDeg)}°`
-              : " · waiting for GPS…"}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Stop navigating"
-            onPress={() => setNavTarget(null)}
-            hitSlop={8}
+          <Notice
+            icon="navigateTo"
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel="Stop navigating"
+                onPress={() => setNavTarget(null)}
+              />
+            }
           >
-            <Text style={styles.deleteText}>✕</Text>
-          </Pressable>
+            {`${navTarget.name}${
+              navDistanceM != null && navBearingDeg != null
+                ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
+                    navBearingDeg,
+                  )} ${Math.round(navBearingDeg)}°`
+                : " · waiting for GPS…"
+            }`}
+          </Notice>
         </View>
       ) : null}
 
@@ -5229,7 +5236,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="navigation"
+            icon="navigateTo"
             title="Navigate here"
             onPress={() => {
               const point = longPressPoint;
@@ -5238,7 +5245,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="pen-tool"
+            icon="draw"
             title="Draw a route from here"
             onPress={() => {
               const point = longPressPoint;
@@ -5246,10 +5253,8 @@ export function MapScreen({
               if (point) startRouteDrawAt(point);
             }}
           />
-          {/* MaterialCommunityIcons, as everywhere else measure appears: Feather
-              has no ruler, and the near misses read as "resize" (DESIGN.md §2). */}
           <Row
-            leading={<MeasureGlyph />}
+            icon="measure"
             title="Measure from here"
             onPress={() => {
               const point = longPressPoint;
@@ -5258,7 +5263,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="plus-circle"
+            icon="addPlace"
             title="Add a place"
             subtitle="With this position filled in"
             onPress={() => {
@@ -5269,7 +5274,7 @@ export function MapScreen({
         </View>
       </BottomSheet>
 
-      {/* ONE form for both modes (DESIGN.md §7): a long-press drops a new
+      {/* ONE form for both modes (DESIGN.md §5): a long-press drops a new
           place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
@@ -5288,6 +5293,7 @@ export function MapScreen({
           Places list opens, minus its "Show on map" row. */}
       <PlaceOptionsSheet
         place={optionsPlace}
+        surface="pin"
         visible={optionsPlace !== null}
         onClose={() => setOptionsPlaceId(null)}
         onOpenPlace={(place) => onOpenPlace(place.id, place.name)}
@@ -5320,7 +5326,7 @@ export function MapScreen({
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
-          in (DESIGN.md §7). No "Show on map" row here — the user is looking at
+          in (DESIGN.md §5). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
       <RouteOptionsSheet
         route={optionsRoute}
@@ -5405,6 +5411,10 @@ export function MapScreen({
           setPickerOpen(false);
           onOpenSaved?.(category);
         }}
+        onImportFile={() => {
+          setPickerOpen(false);
+          onImportFile?.();
+        }}
       />
     </View>
   );
@@ -5426,7 +5436,7 @@ function RouteNameForm({
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState(initialName);
-  // Empty-name requirement shows on SUBMIT, not while typing (DESIGN.md §8);
+  // Empty-name requirement shows on SUBMIT, not while typing (docs/ux-principles.md §11);
   // clears as soon as the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -5486,24 +5496,10 @@ function RouteNameForm({
       />
       <Button
         label={saving ? "Saving…" : "Save"}
-        icon="check"
+        icon="done"
         disabled={saving}
         onPress={commit}
       />
-    </View>
-  );
-}
-
-/**
- * The measure tool's icon in a `Row`'s identity tile. Hand-built rather than
- * passed as `Row.icon` because that prop takes a Feather name, and measure is
- * the one glyph Feather doesn't have (DESIGN.md §2 — a second family is allowed
- * only for a glyph it lacks). Mirrors `Row`'s own tile exactly.
- */
-function MeasureGlyph() {
-  return (
-    <View style={styles.measureTile}>
-      <MaterialCommunityIcons name="ruler" size={20} color={theme.accent} />
     </View>
   );
 }
@@ -5533,33 +5529,7 @@ const styles = StyleSheet.create({
     right: spacing(2),
     gap: spacing(1),
   },
-  notice: {
-    alignSelf: "center",
-    backgroundColor: scrim.heavy,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
-  // Centred, because the banner is centre-anchored (`alignSelf`) and grows
-  // around its own midline — left-aligned text in a box that moves under it
-  // reads as drifting, and these wrap to two lines at large text sizes.
-  noticeText: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
-  // Takes the slack so the dismiss sits at the pill's right edge rather than
-  // floating next to the text.
-  filterBadgeText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
   sheetBody: { gap: spacing(1) },
-  measureTile: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withAlpha(theme.accent, 0.16),
-  },
   controls: {
     position: "absolute",
     right: CHROME_GAP,
@@ -5588,19 +5558,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
-  locateIcon: { marginTop: 3, marginLeft: -3 },
-  // Pill shape for "something is being done to this map" notices.
-  filterBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-    paddingLeft: spacing(1.5),
-    paddingRight: spacing(0.5),
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.5),
-    backgroundColor: withAlpha(theme.page, 0.92),
-  },
   instruments: {
     position: "absolute",
     left: CHROME_GAP,
@@ -5608,25 +5565,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: INSTRUMENT_GAP,
   },
-  navChip: {
-    position: "absolute",
-    alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1.5),
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
+  // Where the navigation readout sits: a Notice, centred, in the notice stack's
+  // column.
+  navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
   attributionText: {
     color: theme.textMuted,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
-  },
-  deleteText: {
-    color: theme.warning,
-    fontSize: fontSize.sm,
-    fontWeight: "600",
   },
 });
