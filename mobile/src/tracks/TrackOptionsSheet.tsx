@@ -116,7 +116,13 @@ export function TrackOptionsSheet({
     },
   );
 
-  const passedHere = passes ? passedHereText(passes) : null;
+  const passedHere =
+    passes && track
+      ? passedHereText(passes, {
+          startMs: Date.parse(track.startedAt),
+          endMs: Date.parse(track.endedAt ?? track.updatedAt),
+        })
+      : null;
 
   const shareRowProps = useShareRowProps(online);
   const actions = track ? trackActions(track) : null;

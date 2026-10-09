@@ -11,28 +11,29 @@ const MAX_LISTED = 4;
 
 export function passedHereText(
   passes: readonly TrackPass[],
+  /** The whole track, so a visit on an overnight track says which day. */
+  span: { startMs: number; endMs: number },
   formatterFor: typeof timeOfDayFormatter = timeOfDayFormatter,
 ): string | null {
   if (passes.length === 0) return null;
-  const format = formatterFor(
-    passes[0]!.fromMs,
-    passes[passes.length - 1]!.toMs,
+  const format = formatterFor(span.startMs, span.endMs);
+  const listed = passes.slice(0, MAX_LISTED);
+  const isStop = (pass: TrackPass) => pass.toMs - pass.fromMs >= STOP_MS;
+  // "at 9:12 am and 3:40 pm" while every visit is a walk past; once one is a
+  // stop each says its own word, or it reads "at 12:10 pm to 1:05 pm".
+  const mixed = listed.some(isStop);
+  const times = listed.map((pass) =>
+    isStop(pass)
+      ? `from ${format(pass.fromMs)} to ${format(pass.toMs)}`
+      : `${mixed ? "at " : ""}${format(pass.atMs)}`,
   );
-  const times = passes
-    .slice(0, MAX_LISTED)
-    .map((pass) =>
-      pass.toMs - pass.fromMs >= STOP_MS
-        ? `${format(pass.fromMs)} to ${format(pass.toMs)}`
-        : format(pass.atMs),
-    );
-  const more = passes.length - times.length;
+  const more = passes.length - listed.length;
   if (more > 0) times.push(`${more} more ${more === 1 ? "time" : "times"}`);
   const list =
     times.length === 1
       ? times[0]!
       : `${times.slice(0, -1).join(", ")} and ${times[times.length - 1]!}`;
-  // "from … to …" for a lone stop reads better than "at … to …".
-  return passes.length === 1 && times[0]!.includes(" to ")
-    ? `The track was at this point from ${list}.`
-    : `This point was passed at ${list}.`;
+  if (passes.length === 1 && mixed)
+    return `The track was at this point ${list}.`;
+  return `This point was passed ${mixed ? "" : "at "}${list}.`;
 }
