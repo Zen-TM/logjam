@@ -41,6 +41,7 @@ import {
   type MediaLinkedType,
   type MediaOrigin,
   pickNextTrackColor,
+  parseRouteColor,
   MEDIA_SIZE_CAPS,
   MEDIA_DISPLAY_NAME_MAX,
   readMediaMetadata,
@@ -400,9 +401,12 @@ router.post(
             },
             select: { color: true },
           });
-          assignedColor = pickNextTrackColor(
-            existingTracks.map((t) => t.color),
-          );
+          // The phone's own pick wins when it is a palette colour: the line
+          // is already drawn in it, and recolouring at upload is the flicker
+          // this avoids. Anything else falls back to the next unused colour.
+          assignedColor =
+            parseRouteColor(body.color) ??
+            pickNextTrackColor(existingTracks.map((t) => t.color));
         }
 
         return tx.media.create({
@@ -586,12 +590,13 @@ router.get(
   },
 );
 
-// PATCH /media/:id — rename a standalone file.
+// PATCH /media/:id — rename or recolour a standalone file.
 //
-// The label has to sync or it diverges per device, which is the inconsistency
-// this whole change exists to remove. Only `displayName` is editable: the
-// filename is what the download is called and what pins the track format, and
-// nothing about the bytes can change once they are confirmed.
+// The label and the colour have to sync or they diverge per device, which is
+// the inconsistency this whole change exists to remove. Only `displayName` and
+// `color` are editable: the filename is what the download is called and what
+// pins the track format, and nothing about the bytes can change once they are
+// confirmed. `color` is limited to the shared palette (parseRouteColor).
 router.patch(
   "/:id",
   requireAuth,
@@ -599,10 +604,19 @@ router.patch(
     const user = await getUser(req.user!.sub);
     const id = getParam(req.params.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    if (!("displayName" in body)) {
-      throw new AppError(400, "displayName is required");
+    if (!("displayName" in body) && !("color" in body)) {
+      throw new AppError(400, "displayName or color is required");
     }
-    const displayName = parseMediaDisplayName(body.displayName);
+    const data: { displayName?: string | null; color?: string } = {};
+    if ("displayName" in body) {
+      data.displayName = parseMediaDisplayName(body.displayName);
+    }
+    if ("color" in body) {
+      const color = parseRouteColor(body.color);
+      if (color === null)
+        throw new AppError(400, "color must be a palette colour");
+      data.color = color;
+    }
 
     // Owner-scoped; a foreign id gets the same 404 a missing one gets (the
     // anti-oracle this file's other handlers argue).
@@ -613,13 +627,13 @@ router.patch(
     if (media.origin === null) {
       throw new AppError(
         400,
-        "Only an import or a recorded track can be renamed",
+        "Only an import or a recorded track can be edited",
       );
     }
 
     const updated = await prisma.media.update({
       where: { id },
-      data: { displayName },
+      data,
     });
     res.json(await toMediaItem(updated));
   },

@@ -16,10 +16,10 @@
 // looking at the file you tapped.
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
 import { assetHue, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row } from "../ui";
+import { BottomSheet, ColourField, RenameForm, Row } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -228,6 +228,20 @@ export function ImportOptionsSheet({
         </View>
       ) : (
         <View style={styles.body}>
+          {actions.setColor ? (
+            <ColourField
+              label="Colour"
+              palette={TRACK_COLORS}
+              value={imported.color}
+              nameOf={trackColorName}
+              onChange={(swatch) => {
+                actions.setColor?.(swatch).catch((err: unknown) => {
+                  console.error(err);
+                  onError(messageFromError(err, "Couldn't update the colour."));
+                });
+              }}
+            />
+          ) : null}
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row

@@ -43,6 +43,7 @@ import { deleteVectorImport } from "../imports/vectorImports";
 import {
   deleteMediaLocal,
   linkStandaloneMediaLocal,
+  recolourStandaloneMediaLocal,
   renameStandaloneMediaLocal,
 } from "../sync/mediaUpload";
 import {
@@ -335,6 +336,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     // Renaming an import is a change to the FILE, not to this phone's view of
     // it, so it goes through the media row and reaches every device.
     rename: (name) => renameStandaloneMediaLocal(imported.id, name),
+    setColor: (color) => recolourStandaloneMediaLocal(imported.id, color),
     exports: [
       ...originalRow,
       // A GeoJSON source ships its own bytes; anything else ships the derived
