@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { mediaCategory } from "@logjam/shared";
+import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
 
 import {
   fontSize,
@@ -22,12 +21,16 @@ import {
   radius,
   scrim,
   spacing,
-  theme,
   withAlpha,
 } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { IconButton } from "../ui";
+import { IconButton, Icon } from "../ui";
+
+// A photo is judged against black (`scrim.photo`), so the viewer's chrome
+// always wears a DARK scheme's colours, whatever the app is painted in: a
+// light scheme's ink would vanish into the backdrop.
+const photoChrome = THEME_SCHEMES.sandstone.tokens;
 
 /**
  * Full-screen viewer for a trip's or place's attachments.
@@ -109,9 +112,9 @@ export function MediaViewer({
             {items.length > 1 ? `${index + 1} / ${items.length}` : ""}
           </Text>
           <IconButton
-            icon="x"
+            icon="close"
             accessibilityLabel="Close"
-            color={theme.textPrimary}
+            color={photoChrome.text}
             onPress={onClose}
           />
         </View>
@@ -125,9 +128,9 @@ export function MediaViewer({
             <View style={styles.arrowSlot}>
               {index > 0 ? (
                 <IconButton
-                  icon="chevron-left"
+                  icon="back"
                   accessibilityLabel="Previous attachment"
-                  color={theme.textPrimary}
+                  color={photoChrome.text}
                   filled
                   onPress={() => go(-1)}
                 />
@@ -136,9 +139,9 @@ export function MediaViewer({
             <View style={styles.arrowSlot}>
               {index < items.length - 1 ? (
                 <IconButton
-                  icon="chevron-right"
+                  icon="forward"
                   accessibilityLabel="Next attachment"
-                  color={theme.textPrimary}
+                  color={photoChrome.text}
                   filled
                   onPress={() => go(1)}
                 />
@@ -202,7 +205,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (state === "loading") {
     return (
       <View style={styles.page}>
-        <ActivityIndicator color={theme.accent} size="large" />
+        <ActivityIndicator color={photoChrome.accent} size="large" />
       </View>
     );
   }
@@ -210,7 +213,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (state === "missing" || uri === null) {
     return (
       <View style={styles.page}>
-        <Feather name="cloud-off" size={28} color={theme.textMuted} />
+        <Icon idea="offline" size={28} color={photoChrome.textMuted} />
         <Text style={styles.notice}>
           Not downloaded to this phone yet. It will appear once you have signal.
         </Text>
@@ -223,7 +226,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (category === "track") {
     return (
       <View style={styles.page}>
-        <Feather name="map" size={28} color={theme.textMuted} />
+        <Icon idea="map" size={28} color={photoChrome.textMuted} />
         <Text style={styles.notice}>{item.filename ?? "Route file"}</Text>
         <Text style={styles.noticeMuted}>Routes open on the map.</Text>
       </View>
@@ -270,12 +273,12 @@ const styles = StyleSheet.create({
   },
   image: { flex: 1, width: "100%" },
   notice: {
-    color: theme.textPrimary,
+    color: photoChrome.text,
     fontSize: fontSize.base,
     textAlign: "center",
   },
   noticeMuted: {
-    color: theme.textMuted,
+    color: photoChrome.textMuted,
     fontSize: fontSize.sm,
     textAlign: "center",
   },
@@ -290,10 +293,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1),
   },
   counter: {
-    color: theme.textPrimary,
+    color: photoChrome.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
-    backgroundColor: withAlpha(theme.primary, 0.6),
+    backgroundColor: withAlpha(photoChrome.page, 0.6),
     borderRadius: radius.pill,
     paddingHorizontal: spacing(1.25),
     paddingVertical: spacing(0.25),
@@ -324,7 +327,7 @@ const styles = StyleSheet.create({
   caption: {
     flex: 1,
     textAlign: "center",
-    color: theme.textMuted,
+    color: photoChrome.textMuted,
     fontSize: fontSize.sm,
   },
 });

@@ -1,15 +1,15 @@
+import { ACCOUNT } from "@logjam/shared";
 import { useId, useState } from "react";
 import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { isValidEmailFormat } from "../../emailValidation";
-import { Button, Dialog, TextField } from "../../ui";
+import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
 import classes from "./ChangeEmailDialog.module.css";
 
 type Stage = "input" | "verify" | "done";
 
 const TITLES: Record<Stage, string> = {
-  input: "Change email",
+  input: ACCOUNT.copy.changeEmail,
   verify: "Verify new email",
   done: "Email updated",
 };
@@ -56,7 +56,7 @@ function ChangeEmailForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The address is this one field's problem, so it is reported under it
-  // (DESIGN.md §8) — before Cognito is called at all.
+  // (docs/ux-principles.md §11) — before Cognito is called at all.
   const [emailError, setEmailError] = useState<string | null>(null);
   // Captured when the code is sent, so the verify step can name the address it
   // went to even while the field is being retyped.
@@ -168,7 +168,9 @@ function ChangeEmailForm({
               busy={busy}
               disabled={stage === "input" ? !newEmail.trim() : !code.trim()}
             >
-              {stage === "input" ? "Send code" : "Confirm"}
+              {stage === "input"
+                ? ACCOUNT.copy.sendCode
+                : ACCOUNT.copy.confirmEmail}
             </Button>
           </>
         )
@@ -190,7 +192,7 @@ function ChangeEmailForm({
               sign in with it from then on.
             </p>
             <TextField
-              label="New email"
+              label={ACCOUNT.copy.newEmail}
               type="email"
               value={newEmail}
               onChange={(event) => {
@@ -211,7 +213,7 @@ function ChangeEmailForm({
               Check the spam folder if it hasn't arrived.
             </p>
             <TextField
-              label="Verification code"
+              label={ACCOUNT.copy.verificationCode}
               value={code}
               onChange={(event) => setCode(event.target.value)}
               maxLength={10}

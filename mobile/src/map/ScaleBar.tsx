@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   root: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
-    backgroundColor: `${theme.primary}CC`,
+    backgroundColor: `${theme.page}CC`,
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.75),
     paddingTop: spacing(0.25),
@@ -84,14 +84,14 @@ const styles = StyleSheet.create({
     gap: spacing(0.25),
   },
   label: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
   },
   // Capped rule: bottom edge plus down-turned ends.
   rule: {
     height: 6,
-    borderColor: theme.textPrimary,
+    borderColor: theme.text,
     borderLeftWidth: 2,
     borderRightWidth: 2,
     borderBottomWidth: 2,

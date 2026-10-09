@@ -9,13 +9,13 @@ import {
   withAlpha,
 } from "../theme";
 
-export type CapacitySegment = {
+export type MeterSegment = {
   /** Legend text. */
   label: string;
   /** Any additive quantity — bytes, counts, minutes. Zero-value segments are dropped. */
   value: number;
-  /** Segment + legend-dot colour (an `assetHue`). */
-  color: string;
+  /** Segment + legend-dot hue (an `assetHue`). */
+  hue: string;
   /** Pre-formatted value for the legend (e.g. "1.2 GB"). Falls back to the raw number. */
   display?: string;
 };
@@ -30,12 +30,12 @@ export type CapacitySegment = {
  * bar. Segments thinner than 2% are floored to a visible sliver so a small
  * asset class never disappears from its own breakdown.
  */
-export function CapacityBar({
+export function Meter({
   segments,
   total,
   legend = true,
 }: {
-  segments: CapacitySegment[];
+  segments: MeterSegment[];
   total?: number;
   legend?: boolean;
 }) {
@@ -52,7 +52,7 @@ export function CapacityBar({
             key={segment.label}
             style={{
               flexGrow: Math.max(segment.value / basis, 0.02),
-              backgroundColor: segment.color,
+              backgroundColor: segment.hue,
             }}
           />
         ))}
@@ -64,7 +64,7 @@ export function CapacityBar({
         <View style={styles.legend}>
           {present.map((segment) => (
             <View key={segment.label} style={styles.legendItem}>
-              <View style={[styles.dot, { backgroundColor: segment.color }]} />
+              <View style={[styles.dot, { backgroundColor: segment.hue }]} />
               <Text style={styles.legendLabel}>{segment.label}</Text>
               <Text style={styles.legendValue}>
                 {segment.display ?? String(segment.value)}
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
-    backgroundColor: withAlpha(theme.textPrimary, 0.1),
+    backgroundColor: withAlpha(theme.text, 0.1),
     gap: 2,
   },
   legend: {
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   legendLabel: { color: theme.textMuted, fontSize: fontSize.xs },
   legendValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
   },

@@ -6,10 +6,18 @@ import { Button } from "./Button";
 // Full-screen data states (MOBILE_DESIGN_BRIEF §8: loading / empty / error are
 // mandatory on every data surface).
 
-export function LoadingState() {
+// `label` says what is loading ("Loading your places…"), as on Logjam Web: a
+// load that names itself is a load a screen reader can announce.
+export function LoadingState({ label }: { label?: string }) {
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label ?? "Loading"}
+      accessibilityState={{ busy: true }}
+    >
       <ActivityIndicator size="large" color={theme.accent} />
+      {label ? <Text style={styles.hint}>{label}</Text> : null}
     </View>
   );
 }
@@ -47,11 +55,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing(3),
     gap: spacing(2),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   title: {
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
     textAlign: "center",
   },
   hint: { fontSize: fontSize.sm, color: theme.textMuted, textAlign: "center" },

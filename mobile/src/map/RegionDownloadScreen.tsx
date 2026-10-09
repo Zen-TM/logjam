@@ -49,24 +49,17 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  surface,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
   Chip,
-  HeroHeader,
-  SectionHeader,
-  SegmentedControl,
+  Hero,
+  Notice,
+  ChipRail,
   TextField,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 import {
   enqueueRegionDownloads,
   setRegionGroupLabel,
@@ -78,7 +71,6 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
-import { BASEMAP_META } from "./basemapMeta";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { nextRegionName } from "./regionName";
@@ -406,7 +398,7 @@ export function RegionDownloadScreen({
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
   const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
 
-  // ONE warning, over the map (DESIGN.md §7). The three cap reasons
+  // ONE warning, over the map (DESIGN.md §5). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
   // user and all have the same ways out, so they are one chip — three
   // sentences in a hero band cost more map than they ever bought.
@@ -535,7 +527,7 @@ export function RegionDownloadScreen({
   }, [naming]);
 
   // Focused on the next frame, not with `autoFocus` — the field mounts inside
-  // an animating Modal, whose window is not focusable yet (DESIGN.md §6).
+  // an animating Modal, whose window is not focusable yet (DESIGN.md §4).
   const isNaming = naming != null;
   useEffect(() => {
     if (!isNaming) return;
@@ -548,7 +540,7 @@ export function RegionDownloadScreen({
       {/* Wrapped only to lift it above the map, which now slides up under its
           rounded bottom corners. */}
       <View style={styles.hero}>
-        <HeroHeader
+        <Hero
           onBack={onBack}
           eyebrow="Offline maps"
           title="Save maps offline"
@@ -634,15 +626,13 @@ export function RegionDownloadScreen({
             cap reasons it carried were one message wearing three hats. */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
-            <Text style={styles.mapWarningText}>
+            <Notice icon="warning" tone="warning">
               Too large — reduce the area or detail, or pick fewer maps.
-            </Text>
+            </Notice>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
-          <Text style={styles.mapHintText}>
-            Move the map · drag edges to resize
-          </Text>
+          <Notice>Move the map · drag edges to resize</Notice>
         </View>
       </View>
 
@@ -659,7 +649,7 @@ export function RegionDownloadScreen({
               <Chip
                 key={id}
                 label={DOWNLOAD_CHIP_LABEL[id]}
-                icon={BASEMAP_META[id as BasemapId].icon}
+                icon="map"
                 active={active}
                 onPress={() => {
                   setSelected((current) =>
@@ -686,7 +676,7 @@ export function RegionDownloadScreen({
         <View style={styles.panelBody}>
           <View style={styles.detailBlock}>
             <View style={styles.detailHeader}>
-              <SectionHeader label="Detail" />
+              <Text style={fieldLabel}>Detail</Text>
               <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
@@ -697,7 +687,7 @@ export function RegionDownloadScreen({
                   : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
               </Text>
             </View>
-            <SegmentedControl
+            <ChipRail
               scroll
               options={DETAIL_ZOOMS.map((zoom) => ({
                 value: String(zoom),
@@ -717,7 +707,7 @@ export function RegionDownloadScreen({
                 ? `Save ${selected.length} maps`
                 : "Save this area"
             }
-            icon="download"
+            icon="saveOffline"
             onPress={handleSave}
             disabled={!canDownload || busy}
           />
@@ -736,7 +726,7 @@ export function RegionDownloadScreen({
           onStarted();
         }}
         title="Name this area"
-        footer={<Button label="Done" icon="check" onPress={closeNaming} />}
+        footer={<Button label="Done" icon="done" onPress={closeNaming} />}
       >
         <View style={styles.namingBody}>
           <TextField
@@ -764,7 +754,7 @@ export function RegionDownloadScreen({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
   hero: { zIndex: 1 },
   mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
@@ -774,15 +764,6 @@ const styles = StyleSheet.create({
     right: spacing(2),
     bottom: spacing(1),
     alignItems: "center",
-  },
-  mapHintText: {
-    color: theme.textPrimary,
-    fontSize: fontSize.xs,
-    backgroundColor: withAlpha(theme.primary, 0.85),
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
-    overflow: "hidden",
   },
   // The one warning, at the TOP of the map — same overlay treatment as the
   // hint along the bottom, in the warning colour. Over the map rather than in
@@ -799,32 +780,16 @@ const styles = StyleSheet.create({
     top: HERO_OVERLAP + spacing(1),
     alignItems: "center",
   },
-  // Outlined in the warning colour over a wash of it, rather than the page
-  // colour: over a map, a pill painted in the page's own brown reads as a gap
-  // in the map. The border is what holds it together at two lines.
-  mapWarningText: {
-    color: theme.warning,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textAlign: "center",
-    backgroundColor: withAlpha(theme.warning, 0.16),
-    borderWidth: 1,
-    borderColor: theme.warning,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-    overflow: "hidden",
-  },
   namingBody: { gap: spacing(1.5) },
   namingNote: { color: theme.textMuted, fontSize: fontSize.sm },
   panel: {
     height: PANEL_HEIGHT,
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
     paddingTop: spacing(1.25),
     paddingBottom: spacing(1.5),
     gap: spacing(1),
     borderTopWidth: 1,
-    borderTopColor: surface.border,
+    borderTopColor: theme.line,
   },
   panelGuest: { height: PANEL_HEIGHT_GUEST },
   panelBody: {

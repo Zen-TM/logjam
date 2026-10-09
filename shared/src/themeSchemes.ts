@@ -1,36 +1,68 @@
+import { INK } from "./designTokens.js";
 import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
 
-export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
+export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ghostGum";
 
+/**
+ * A scheme's colours, named for the ROLE each plays — never its rank — and
+ * identical on both clients (Logjam Web reads them as `--color-<kebab-role>`).
+ * Every scheme declares every role explicitly, with no colour arithmetic at
+ * runtime, so `scripts/wcag-contrast.mjs` measures the values that render.
+ *
+ * Intent colours (`accent`, `warning`, `success`) are fills, edges and glyphs,
+ * never the colour of words; words are `text` or `textMuted`. Anything drawn
+ * on a fill is `onFill`.
+ */
 export type ThemeTokens = {
-  primary: string;
-  secondary: string;
-  accent: string;
-  textPrimary: string;
+  /** The page, and every surface laid on it: panels, sheets, popovers, menus. */
+  page: string;
+  /** A surface you can press: an openable row, a pressable tile. */
+  card: string;
+  /** A card under a finger or a pointer. */
+  cardPressed: string;
+  /** A text input's well. */
+  field: string;
+  /** A decorative hairline: separates, need not be seen to be used. */
+  line: string;
+  /** An edge that must be SEEN (a field, an outline control): ≥3:1 on page, card and field. */
+  lineStrong: string;
+  /** Body text and glyphs. */
+  text: string;
+  /** Secondary text. */
   textMuted: string;
+  /** The scheme's one colour: a fill, an edge, a glyph. */
+  accent: string;
+  /** Something needs the user, or is destructive. */
   warning: string;
   /**
-   * Something is in a good state — the counterpart to `warning`, and the only
-   * green in the palette that means "fine" rather than "this kind of thing".
+   * An ordinary good state — the counterpart to `warning`, and the only green
+   * in the palette that means "fine" rather than "this kind of thing".
    *
    * Deliberately muted in every scheme: it marks the ORDINARY case (a file that
    * is backed up, which is most of them), so it has to be readable at a glance
-   * and invisible when scanned past. A saturated green would pull the eye to
-   * every row that is working.
+   * and invisible when scanned past.
    */
   success: string;
-  bonus1: string;
-  bonus2: string;
-  bonus3: string;
+  /** The hue of a thing with no kind: an untyped trip, an "Add" tile. */
+  neutral: string;
+  /** The one inverted surface: a toast, a tooltip. */
+  inverse: string;
+  /** Text and glyphs on `inverse`. */
+  onInverse: string;
+  /** Text and glyphs on any fill: the accent, an intent colour, an identity hue. */
+  onFill: string;
 };
 
 export type ThemeScheme = {
   id: ThemeSchemeId;
   name: string;
   description?: string;
+  /** Whether the page is dark or light: decides the platform chrome (status
+   *  bar, form controls, scrollbars) and the scheme's contrast floor. */
+  mode: "dark" | "light";
   tokens: ThemeTokens;
 };
 
@@ -130,73 +162,108 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
+// The three dark schemes keep the values they had under the old rank names:
+// `field` is the old web `color-mix(in srgb, black 12%, page)` worked out to a
+// hex, `lineStrong` the muted text colour. `cardPressed` is the card a step
+// darker in Sandstone and Ironbark, where the old `bonus2` it replaced was
+// lighter than the card and muted text failed on it.
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   sandstone: {
     id: "sandstone",
     name: "Sandstone",
     description: "Warm weathered sandstone with iron-rich accents.",
+    mode: "dark",
     tokens: {
-      primary: "#4E4944",
-      secondary: "#61553F",
-      accent: "#DEB188",
-      textPrimary: "#F7F3EC",
+      page: "#4E4944",
+      card: "#61553F",
+      cardPressed: "#524836",
+      field: "#45403C",
+      line: "#6B5F4B",
+      lineStrong: "#D8CCB9",
+      text: "#F7F3EC",
       textMuted: "#D8CCB9",
+      accent: "#DEB188",
       warning: "#F5A693",
       success: "#93B183",
-      bonus1: "#D9CBB8",
-      bonus2: "#6B5F4B",
-      bonus3: "#9C5A2E",
+      neutral: "#D9CBB8",
+      inverse: "#F7F3EC",
+      onInverse: INK,
+      onFill: INK,
     },
   },
   basalt: {
     id: "basalt",
     name: "Basalt",
     description: "Cool plunge-water blues against dark gorge rock.",
+    mode: "dark",
     tokens: {
-      primary: "#2B3F52",
-      secondary: "#5F432F",
-      accent: "#4BB4D9",
-      textPrimary: "#EAF1F6",
+      page: "#2B3F52",
+      card: "#5F432F",
+      cardPressed: "#16232D",
+      field: "#263748",
+      line: "#16232D",
+      lineStrong: "#A7BBC9",
+      text: "#EAF1F6",
       textMuted: "#A7BBC9",
+      accent: "#4BB4D9",
       warning: "#EB8D99",
       success: "#74C295",
-      bonus1: "#97AAB8",
-      bonus2: "#16232D",
-      bonus3: "#E4AA61",
+      neutral: "#97AAB8",
+      inverse: "#EAF1F6",
+      onInverse: INK,
+      onFill: INK,
     },
   },
   scribblyGum: {
     id: "scribblyGum",
     name: "Scribbly Gum",
-    description: "Bushland greens and fog-softened neutrals.",
+    description:
+      "Bushland greys with a hint of green, and fog-softened neutrals.",
+    mode: "dark",
     tokens: {
-      primary: "#2F4F3E",
-      secondary: "#3F5547",
-      accent: "#DAB084",
-      textPrimary: "#EAF2EC",
+      page: "#2D3E38",
+      card: "#3A4D45",
+      cardPressed: "#2A3A34",
+      field: "#27362F",
+      line: "#212E29",
+      lineStrong: "#B4C8BC",
+      text: "#EAF2EC",
       textMuted: "#B4C8BC",
+      accent: "#DAB084",
       warning: "#E6AAA3",
       success: "#8FBE86",
-      bonus1: "#A8C4A1",
-      bonus2: "#22372B",
-      bonus3: "#DCE7DA",
+      neutral: "#A8C4A1",
+      inverse: "#EAF2EC",
+      onInverse: INK,
+      onFill: INK,
     },
   },
-  ironbark: {
-    id: "ironbark",
-    name: "Ironbark",
-    description: "Topographic ink tones with native vegetation highlights.",
+  // The one light scheme, for reading in full sun: its text pairs clear AAA
+  // (7:1), not AA, and only its surfaces and fills are soft. Pale smooth bark
+  // and grey-green leaves. Its intent colours sit in the narrow luminance band
+  // where they clear 4.5:1 under the dark `onFill` AND 3:1 on the pale page.
+  ghostGum: {
+    id: "ghostGum",
+    name: "Ghost Gum",
+    description:
+      "Pale smooth bark and grey-green leaves, for reading in full sun.",
+    mode: "light",
     tokens: {
-      primary: "#2B3A3F",
-      secondary: "#364B45",
-      accent: "#CD9482",
-      textPrimary: "#ECF2EF",
-      textMuted: "#A7B8B2",
-      warning: "#F18B77",
-      success: "#8CB79A",
-      bonus1: "#CAD7CF",
-      bonus2: "#7FA48F",
-      bonus3: "#B9C99D",
+      page: "#ECEEE8",
+      card: "#F9FAF6",
+      cardPressed: "#E0E4DB",
+      field: "#F9FAF6",
+      line: "#D5DAD0",
+      lineStrong: "#7A857C",
+      text: "#252A26",
+      textMuted: "#4C554D",
+      accent: "#6A9072",
+      warning: "#C2735A",
+      success: "#7E8E3E",
+      neutral: "#B3BBAE",
+      inverse: "#2B312C",
+      onInverse: "#ECEEE8",
+      onFill: INK,
     },
   },
 };
@@ -205,7 +272,7 @@ export const THEME_SCHEME_ORDER: ThemeSchemeId[] = [
   "sandstone",
   "basalt",
   "scribblyGum",
-  "ironbark",
+  "ghostGum",
 ];
 
 export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
@@ -213,6 +280,28 @@ export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
     typeof value === "string" &&
     Object.prototype.hasOwnProperty.call(THEME_SCHEMES, value)
   );
+}
+
+/**
+ * Ids that were schemes once and are not now, with the scheme a stored one
+ * becomes. Ironbark shipped (prod accounts may hold it) and its cool grey is
+ * Scribbly Gum's now; Daylight was never released, but is mapped anyway so a
+ * dev database cannot hold a scheme that does not exist.
+ */
+export const RETIRED_THEME_SCHEME_IDS: Readonly<Record<string, ThemeSchemeId>> =
+  {
+    ironbark: "scribblyGum",
+    daylight: "ghostGum",
+  };
+
+/** A stored or received id as a scheme that exists, or null when it is neither
+ *  one nor a retired one. Read every stored `themeSchemeId` through this. */
+export function normalizeThemeSchemeId(value: unknown): ThemeSchemeId | null {
+  if (isThemeSchemeId(value)) return value;
+  return typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(RETIRED_THEME_SCHEME_IDS, value)
+    ? RETIRED_THEME_SCHEME_IDS[value]
+    : null;
 }
 
 // Legacy alias: an early seed/data shape stored free-text fields as type "text",
@@ -273,9 +362,8 @@ export function normalizeImportMergePolicy(
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
     const prefs = value as Record<string, unknown>;
-    const themeSchemeId = isThemeSchemeId(prefs.themeSchemeId)
-      ? prefs.themeSchemeId
-      : DEFAULT_THEME_SCHEME_ID;
+    const themeSchemeId =
+      normalizeThemeSchemeId(prefs.themeSchemeId) ?? DEFAULT_THEME_SCHEME_ID;
     const tripLogCustomFields = normalizeCustomFieldDefs(
       prefs.tripLogCustomFields,
     );

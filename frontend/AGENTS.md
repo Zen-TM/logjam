@@ -2,29 +2,10 @@
 
 ## UI
 
-- **Read `DESIGN.md` before building or reshaping a screen,** and compose the
-  `src/ui` kit; a screen that needs something the kit lacks adds it to the kit.
-  `components/sidebar/panels/PlacesPanel.tsx` is the reference page.
-- **Every colour, size, radius, transition and text size is a custom property
-  in `src/index.css`,** never a hex or px literal. CSS Modules only; no inline
-  `style` except to set a custom property the kit reads.
-- **A new foreground/background colour pair joins `scripts/wcag-contrast.mjs`**
-  in the same change, measured on the surface it renders on; `KNOWN_FAILURES`
-  only shrinks.
-- **A page owns its layout:** hero and rails pinned, only its list scrolls;
-  never nest a second scroll container.
-- **One breakpoint, `max-width: 768px`:** `useIsMobile()` and every `@media`
-  agree; CSS for layout, the hook only for behaviour. A narrow-screen branch
-  changes the furniture, never what the thing is (`e2e/a11y.spec.ts`).
+- **UI work loads the `design-system` skill**: a page, panel, sheet, dialog,
+  kit component, icon, colour or user-facing string.
 - **No router:** navigation is `activePanel` (`components/sidebar/panels.ts`);
   a panel never imports from `Map.tsx`, it gets callbacks from `App.tsx`.
-
-## Errors
-
-Never render a raw `err.message`. Pass a caught error through
-`messageFromError(err, "Couldn't save place.")` (`src/errors/messageFromError.ts`)
-and show it in one place: `ErrorBanner` for a failed dialog or form submit,
-`FieldError` under a field, `useToast().error` for a background failure.
 
 ## Data
 

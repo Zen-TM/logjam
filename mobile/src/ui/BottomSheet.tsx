@@ -20,15 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  scrim,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
@@ -71,7 +63,7 @@ export const SheetScrollLock = createContext<{
 
 /**
  * How a `FieldError` that has just appeared asks the sheet to bring it into
- * view (DESIGN.md §8, "Form errors"). Null outside a sheet.
+ * view (docs/ux-principles.md §11, "Form errors"). Null outside a sheet.
  */
 export const SheetErrorReveal = createContext<((target: View) => void) | null>(
   null,
@@ -319,22 +311,30 @@ export function BottomSheet({
           >
             <View style={styles.handle} />
           </View>
-          {/* Back sits on the TITLE line, not in `header`: a sub-mode's title
-              IS what you are going back from, and a header slot may be empty
-              (the tag picker has no explainer), which left the arrow floating
-              on its own row looking like a stray control. */}
-          {onBack ? (
-            <View style={styles.titleRow}>
+          {/* A way out you can SEE, top right, every time (UX §3): the drag, the
+              backdrop and the system back are gestures, and a gesture is not a
+              way out. Back, when there is one, sits on the same line at the
+              left: a sub-mode's title IS what you are going back from, and a
+              header slot may be empty, which left the arrow floating on its own
+              row looking like a stray control. */}
+          <View style={styles.titleRow}>
+            {onBack ? (
               <IconButton
-                icon="arrow-left"
+                icon="back"
                 accessibilityLabel="Back"
                 onPress={onBack}
               />
-              <Text style={[styles.title, styles.titleInRow]}>{title}</Text>
-            </View>
-          ) : (
-            <Text style={styles.title}>{title}</Text>
-          )}
+            ) : null}
+            <Text style={styles.title} accessibilityRole="header">
+              {title}
+            </Text>
+            <IconButton
+              icon="close"
+              accessibilityLabel="Close"
+              color={theme.text}
+              onPress={onClose}
+            />
+          </View>
           {header != null ? <View style={styles.header}>{header}</View> : null}
           {/* flexShrink so the scroll area yields to the pinned footer under
               the sheet's maxHeight cap. Without it this wrapper claims the
@@ -391,12 +391,12 @@ const styles = StyleSheet.create({
   header: { paddingBottom: spacing(1) },
   scrollArea: { flexShrink: 1 },
   // Opaque, so the list it covers doesn't ghost through.
-  overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.primary },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.page },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: scrim.light },
   backdropPress: { flex: 1 },
   dock: { flex: 1, justifyContent: "flex-end" },
   sheet: {
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing(2),
@@ -406,18 +406,23 @@ const styles = StyleSheet.create({
     width: 44,
     height: 5,
     borderRadius: radius.pill,
-    backgroundColor: theme.bonus1,
+    backgroundColor: theme.lineStrong,
     opacity: 0.5,
   },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  // The row owns the bottom gap when there is one, so the arrow and the words
-  // stay on a single baseline.
-  titleInRow: { marginBottom: 0, flexShrink: 1 },
+  // The row owns the bottom gap, so the arrow, the words and the × stay on a
+  // single baseline. The × hangs into the sheet's padding to meet its corner.
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    marginBottom: spacing(1),
+    marginRight: -spacing(1),
+  },
   title: {
+    flex: 1,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
-    marginBottom: spacing(1),
+    color: theme.text,
   },
   scrollContent: { paddingBottom: spacing(2) },
   // Hairline above the pinned action, so it reads as attached to the sheet
@@ -425,6 +430,6 @@ const styles = StyleSheet.create({
   footer: {
     paddingTop: spacing(1.5),
     borderTopWidth: 1,
-    borderTopColor: withAlpha(theme.bonus1, 0.2),
+    borderTopColor: theme.line,
   },
 });

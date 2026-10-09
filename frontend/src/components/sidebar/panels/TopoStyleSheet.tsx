@@ -171,7 +171,7 @@ function StyleForm({
                 name={label}
                 hint={OSM_FEATURE_TAG_HINTS[key]}
                 // Present while off, not removed: the style is kept for when
-                // the feature comes back on (DESIGN.md §7).
+                // the feature comes back on (DESIGN.md §5).
                 enabled={style.enabled}
                 onEnabledChange={(enabled) => setFeature(key, { enabled })}
               >

@@ -1,11 +1,9 @@
-import { Check } from "lucide-react";
 import { useThemePreferences } from "../../../themePreferences";
-import { SectionHeader } from "../../../ui";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
+import { SectionHeader, Icon, ErrorBanner, LoadingState } from "../../../ui";
 import classes from "./ThemeChooser.module.css";
 
 /**
- * The four schemes, as a radio group of swatch cards — the same shape as Logjam
+ * The schemes, as a radio group of swatch cards — the same shape as Logjam
  * GPS's Display screen, and local to this page on both clients rather than in
  * the kit: a card that shows three of a scheme's tokens means nothing anywhere
  * else.
@@ -27,7 +25,7 @@ function ThemeChooser() {
       <SectionHeader title="Theme" />
       {error && <ErrorBanner message={error} />}
       {isHydrating ? (
-        <p className={classes.state}>Loading your saved theme…</p>
+        <LoadingState label="Loading your saved theme…" />
       ) : (
         <div className={classes.group} role="radiogroup" aria-label="Theme">
           {schemes.map((scheme) => {
@@ -49,8 +47,8 @@ function ThemeChooser() {
                 />
                 <span className={classes.swatches} aria-hidden>
                   {[
-                    scheme.tokens.primary,
-                    scheme.tokens.secondary,
+                    scheme.tokens.page,
+                    scheme.tokens.card,
                     scheme.tokens.accent,
                   ].map((colour) => (
                     <span
@@ -62,7 +60,12 @@ function ThemeChooser() {
                 </span>
                 <span className={classes.name}>{scheme.name}</span>
                 {selected && (
-                  <Check size={16} className={classes.tick} aria-hidden />
+                  <Icon
+                    idea="done"
+                    size={16}
+                    className={classes.tick}
+                    aria-hidden
+                  />
                 )}
               </label>
             );

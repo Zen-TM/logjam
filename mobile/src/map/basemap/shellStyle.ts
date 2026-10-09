@@ -37,7 +37,7 @@ export function buildShellStyle(
       {
         id: "background",
         type: "background",
-        paint: { "background-color": theme.primary },
+        paint: { "background-color": theme.page },
       },
     ],
     glyphs: `${base}/fonts/{fontstack}/{range}.pbf`,

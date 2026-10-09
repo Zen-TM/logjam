@@ -24,7 +24,7 @@
 
 .note {
   margin: 0;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   font-size: var(--font-sm);
 }
 
@@ -33,16 +33,16 @@
   margin: 0;
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 /* Required credit, so it stays — but it is provenance, not a figure the user
    reads. Recessive by SIZE and style only, never by opacity: fading
-   `--theme-text-muted` put it under 4.5:1, which axe caught the moment Ways
-   joined e2e/a11y.spec.ts (DESIGN.md §10). */
+   `--color-text-muted` put it under 4.5:1, which axe caught the moment Ways
+   joined e2e/a11y.spec.ts (DESIGN.md §7). */
 .attribution {
   margin: 0;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   font-size: var(--font-xs);
   font-style: italic;
   line-height: 1.3;

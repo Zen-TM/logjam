@@ -2,13 +2,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 20px var(--gutter);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--gutter);
   text-align: center;
 }
 
 .emptyGlyph {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 .emptyTitle {
@@ -21,14 +21,54 @@
   margin: 0;
   max-width: 300px;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .emptyActions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-1);
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.spinner {
+  flex: none;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.errorGlyph {
+  flex: none;
+  color: var(--color-warning);
 }
 
 /* The same height as the chip rail whose slot it takes: chips and icon buttons
@@ -43,26 +83,26 @@
 .selectionCount {
   flex: 1;
   min-width: 0;
-  padding-left: 4px;
+  padding-left: var(--space-0-5);
   font-size: var(--font-sm);
   font-weight: 600;
   white-space: nowrap;
 }
 
-/* Light fill, ink text — the inverted surface, like the tooltip. It floats over
-   the map, so it keeps the map's larger size. */
+/* The inverted surface, like the tooltip. It floats over the map, so it keeps
+   the map's larger size. */
 .toast {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-1);
   width: 360px;
   max-width: 100%;
   min-height: 42px;
   box-sizing: border-box;
-  padding: 0 calc((42px - var(--control-sm)) / 2) 0 14px;
+  padding: 0 calc((42px - var(--control-sm)) / 2) 0 var(--space-1-5);
   border-radius: var(--radius-pill);
-  background: var(--theme-text-primary);
-  color: var(--ink);
+  background: var(--color-inverse);
+  color: var(--color-on-inverse);
   font-size: var(--font-sm);
   font-weight: 600;
   box-shadow: var(--shadow-float);
@@ -75,50 +115,60 @@
 .toastText {
   flex: 1;
   min-width: 0;
-  padding-block: 8px;
+  padding-block: var(--space-1);
 }
 
-/* Text-shaped, so a pill. Its label is the muted text colour on whatever card
-   or page it sits on; each tone's pair is in scripts/wcag-contrast.mjs. */
+/* A status is READ, not pressed, so it has no fill and no edge: text, and a dot
+   or glyph for the tones that mean something. A fill or an outline made it
+   look like the button beside it (UX §4: filled is interactive). The label is
+   the muted text colour on whatever card or page it sits on; each tone's pair
+   is in scripts/wcag-contrast.mjs. */
 .pill {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
-  border: 1px solid var(--theme-text-muted);
-  border-radius: var(--radius-pill);
+  gap: var(--space-0-5);
   font-size: var(--font-xs);
   font-weight: 600;
   line-height: 1.5;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
-.pill[data-tone="accent"] {
-  border-color: var(--theme-accent);
-  background: var(--theme-accent);
-  color: var(--ink);
+/* A dot for the tones with something to say; a tone with its own glyph draws
+   that instead. The hue is a fill, never the colour of the words. */
+.pill[data-tone="accent"]:not([data-glyph])::before,
+.pill[data-tone="warning"]:not([data-glyph])::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
 }
 
-/* Warning is the EDGE and the glyph, the label in the text colour: warning as
-   text on a card measured 3.8:1 under Basalt and Ironbark. */
+.pill[data-tone="accent"] {
+  color: var(--color-text);
+}
+
+.pill[data-tone="accent"] svg {
+  color: var(--color-accent);
+}
+
 .pill[data-tone="warning"] {
-  border-color: var(--theme-warning);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
+}
+
+.pill[data-tone="warning"]:not([data-glyph])::before {
+  background: var(--color-warning);
 }
 
 .pill[data-tone="warning"] svg {
-  color: var(--theme-warning);
+  color: var(--color-warning);
 }
 
-/* Quiet is the absence of the outline. A wash behind the muted label took it
-   under 4.5:1 in three schemes. */
-.pill[data-tone="muted"] {
-  border-color: transparent;
-}
-
-/* The track is a wash of the text colour; the fill is measured against it. */
+/* The track is the field well; the fill is measured against it. A wash of the
+   text colour darkened Ghost Gum's track until the fill fell to 2.5:1. */
 .progress {
   position: relative;
   /* Fills its line in a flex row too (a row's footer), where a block's
@@ -127,7 +177,7 @@
   height: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  background: var(--color-field);
 }
 
 .progressFill {
@@ -137,12 +187,12 @@
   left: 0;
   width: var(--progress, 0%);
   border-radius: inherit;
-  background: var(--theme-accent);
-  transition: width var(--transition-med);
+  background: var(--color-accent);
+  transition: width var(--motion-med);
 }
 
 .progress[data-tone="warning"] .progressFill {
-  background: var(--theme-warning);
+  background: var(--color-warning);
 }
 
 .progress[data-indeterminate="true"] .progressFill {

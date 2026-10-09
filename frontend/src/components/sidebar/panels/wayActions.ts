@@ -15,7 +15,7 @@
 //
 // A verb is ABSENT when it cannot exist for this way (a file has no direction
 // to reverse), never present-and-refused — the API answers 403 or 404 for the
-// ones the user may not have, so offering them would be a lie (DESIGN.md §7).
+// ones the user may not have, so offering them would be a lie (DESIGN.md §5).
 //
 // A verb that ENDS the user's relationship with the way sits below a rule
 // (`separated`), whether or not it destroys anything. There are three, and only
@@ -34,7 +34,7 @@
 //   * VISIBILITY was a per-file switch on a detail page, which is a control the
 //     user had to open a page to find. The Layers overlays draw these files
 //     now, so the switch has nowhere left to be and nothing left to do.
-import { WAY_SHARE_VERB } from "@logjam/shared";
+import { WAY_SHARE_VERB, WAY_VERBS, wayVerbLabel } from "@logjam/shared";
 import type { WayItem, WayKind } from "./waysModel";
 
 export type WayVerbId =
@@ -72,32 +72,12 @@ export type WayVerb = {
 /** Which surface is asking. The two differ by one verb, and only one. */
 export type WaySurface = "row" | "detail";
 
+// The words are the contract's (`WAY_VERBS`); Delete is the one verb whose
+// noun depends on the way, so it is said here.
 const LABELS: Record<WayVerbId, string> = {
-  open: "Open",
-  openPlace: "Open its place",
-  edit: "Edit points",
-  // Not "Copy": the promise is that it becomes YOURS — editable, permanent, and
-  // unaffected by the owner later unsharing it. Logjam GPS draws the same
-  // distinction between a live share and a copy you keep.
-  copy: "Save to my Ways",
-  // The two halves said in the order they happen. Someone who has decided they
-  // want to keep a friend's route and stop carrying the share should not have
-  // to do it as two steps and guess whether the first survives the second.
-  copyAndRemove: "Save to my Ways and remove",
-  share: "Share…",
-  // Logjam GPS's words for the other verb, and never Share's: the friend keeps
-  // the file and it cannot be taken back (shared/src/sharing.ts).
-  sendCopy: "Send a copy…",
-  exportGpx: "Export as GPX",
-  exportKml: "Export as KML",
-  // Not "Export": this hands back the FILE the user brought or recorded, byte
-  // for byte, where Export writes a new one out of geometry held in the page.
-  download: "Download",
-  rename: "Rename…",
-  // "Remove", not "Remove share" or "Delete": it drops the caller's own share
-  // (`DELETE .../me`) and the owner keeps their row. The wording is the one
-  // `removeShareConfirm` in shared/src/sharing.ts promises.
-  removeShare: "Remove",
+  ...(Object.fromEntries(
+    WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
+  ) as Record<Exclude<WayVerbId, "delete">, string>),
   delete: "Delete",
 };
 

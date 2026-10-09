@@ -1,6 +1,6 @@
 /* A printable map: paper, the area it covers, and what is drawn on it. Layout
    only — every control is the kit's and every size and colour is a token
-   (DESIGN.md §4, §9). */
+   (DESIGN.md §1, §9). */
 
 .form {
   display: flex;
@@ -27,7 +27,7 @@
     display: block;
     margin: 0;
     font-size: var(--font-xs);
-    color: var(--theme-text-muted);
+    color: var(--color-text-muted);
   }
 }
 
@@ -54,7 +54,7 @@
 .groupLabel {
   margin: 4px 0 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .checkList {
@@ -78,7 +78,7 @@
 
 .elementSuffix {
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
@@ -182,7 +182,7 @@
   align-items: center;
   gap: 2px;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Nine points in the shape of the sheet they anchor. */
@@ -197,22 +197,21 @@
   width: var(--control-sm);
   height: var(--control-sm);
   padding: 0;
-  border: 2px solid
-    color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  border: 2px solid color-mix(in srgb, var(--color-text) 30%, transparent);
   border-radius: var(--radius-full);
   background: none;
   cursor: pointer;
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--motion-fast);
 }
 
 .pivotButton:hover {
-  border-color: color-mix(in srgb, var(--theme-text-primary) 60%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 .pivotButtonActive {
   composes: pivotButton;
-  border-color: var(--theme-accent);
-  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 /* "1 :" and the number after it read as one value, so they sit on one line and
@@ -225,7 +224,7 @@
 
 .scalePrefix {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
