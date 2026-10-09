@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Icon, type Glyph } from "./Icon";
 import classes from "./MapControl.module.css";
 
 /**
@@ -9,7 +9,7 @@ import classes from "./MapControl.module.css";
  * place the kit casts a shadow.
  */
 export function MapButton({
-  icon: Icon,
+  icon,
   label,
   pressed,
   expanded,
@@ -21,7 +21,7 @@ export function MapButton({
   ButtonHTMLAttributes<HTMLButtonElement>,
   "children" | "aria-label" | "aria-pressed" | "aria-expanded"
 > & {
-  icon: LucideIcon;
+  icon: Glyph;
   label: string;
   pressed?: boolean;
   expanded?: boolean;
@@ -38,7 +38,7 @@ export function MapButton({
       className={[classes.mapButton, className].filter(Boolean).join(" ")}
       {...rest}
     >
-      <Icon size={20} aria-hidden />
+      <Icon idea={icon} size={20} />
     </button>
   );
 }
@@ -61,22 +61,28 @@ export function MapButtonGroup({
 /**
  * A notice pinned over the map: something true about what the map is showing
  * right now (filtered, generating, selected). An optional trailing action.
+ * The same component as Logjam GPS's `Notice`: its words are `text`, centred IN
+ * the notice; the intent is the glyph, and `tone="warning"` adds the edge.
  */
 export function Notice({
-  icon: Icon,
+  icon,
   children,
   action,
+  tone = "info",
 }: {
-  icon: LucideIcon;
+  icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
+  tone?: "info" | "warning";
 }) {
   return (
     <div
       className={[classes.notice, action ? classes.withAction : ""].join(" ")}
+      data-tone={tone}
+      role={tone === "warning" ? "alert" : undefined}
     >
-      <Icon size={16} aria-hidden className={classes.noticeGlyph} />
-      <span>{children}</span>
+      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
+      <span className={classes.noticeText}>{children}</span>
       {action}
     </div>
   );

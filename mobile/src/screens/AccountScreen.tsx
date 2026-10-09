@@ -1,7 +1,7 @@
 // Account — "who am I on this service, and what am I using of it?"
 //
 // The two quota meters ARE the question this screen exists for, so unlike the
-// Saved tab (where storage is context) they get real weight here (DESIGN.md §1,
+// Saved tab (where storage is context) they get real weight here (docs/ux-principles.md §2,
 // §4). Everything else is the sign-in identity and the two irreversible things:
 // signing out (which drops unsynced work — the confirmation lives in App.tsx)
 // and deleting the account.
@@ -12,11 +12,25 @@
 // PRIVACY: username, email, byte counts and tile counts. The email appears here
 // and nowhere else in the app — friend search and lists are username-only, per
 // the root CLAUDE.md convention.
-import { useCallback, useEffect, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
-import { formatCredits, messageFromError } from "@logjam/shared";
+import {
+  ACCOUNT,
+  ACCOUNT_DELETE_BODY,
+  contractSectionKeys,
+  deleteAccountPhraseLabel,
+  deleteAccountPhraseMatches,
+  formatCredits,
+  messageFromError,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -29,21 +43,14 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import {
-  assetHue,
-  fontSize,
-  fontWeight,
-  lineHeight,
-  spacing,
-  theme,
-} from "../theme";
+import { assetHue, fontSize, lineHeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
-  CapacityBar,
+  Meter,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
@@ -52,7 +59,10 @@ import {
   TextField,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../ui";
+
+const copy = ACCOUNT.copy;
 
 /**
  * The Account screen for a guest: what's on this phone, what an account would
@@ -98,36 +108,36 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={styles.root}>
-      <HeroHeader eyebrow="Account" title="No account" onBack={onBack}>
+      <Hero eyebrow="Account" title="No account" onBack={onBack}>
         <Text style={styles.email}>
           {summary
             ? `${summary} on this phone`
             : "Everything you record stays on this phone"}
         </Text>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.body}>
-        <SectionHeader label="With an account" />
+        <SectionHeader title="With an account" />
         <Row
-          icon="upload-cloud"
+          icon="sync"
           title="Backed up"
           subtitle="Your places and trips survive a lost phone"
         />
         <Row
-          icon="users"
+          icon="friends"
           title="Sharing"
           subtitle="Share individual places with friends"
         />
         <Row
-          icon="layers"
+          icon="lidar"
           title="LiDAR maps"
           subtitle="Import topos from Logjam Web"
         />
 
-        <SectionHeader label="Get an account" />
+        <SectionHeader title="Get an account" />
         <Button
           label="Sign in or create an account"
-          icon="user-plus"
+          icon="addFriend"
           onPress={startLinking}
         />
         <Text style={styles.guestNote}>
@@ -148,9 +158,9 @@ function updateUsername(username: string): Promise<TUser> {
 type SheetMode = "closed" | "username" | "email" | "delete";
 
 const SHEET_TITLE: Record<Exclude<SheetMode, "closed">, string> = {
-  username: "Change username",
-  email: "Change email",
-  delete: "Delete account",
+  username: copy.changeUsername,
+  email: copy.changeEmail,
+  delete: copy.deleteAccount,
 };
 
 export function AccountScreen({
@@ -214,16 +224,21 @@ function LinkedAccountScreen({
       })
     : null;
 
-  return (
-    <View style={styles.root}>
-      <HeroHeader
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`ACCOUNT`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof ACCOUNT, "gps">,
+    () => ReactNode
+  > = {
+    hero: () => (
+      <Hero
         eyebrow="Account"
         title={user.username}
         onBack={onBack}
-        action={
+        actions={
           <IconButton
-            icon="edit-2"
-            accessibilityLabel="Change username"
+            icon="edit"
+            accessibilityLabel={copy.changeUsername}
             color={theme.accent}
             filled
             onPress={() => setSheet("username")}
@@ -231,18 +246,19 @@ function LinkedAccountScreen({
         }
       >
         <Text style={styles.email}>{user.email}</Text>
-      </HeroHeader>
-
-      <ScreenScroll padded={false} contentStyle={styles.body}>
+      </Hero>
+    ),
+    storage: () => (
+      <>
         {/* Two quotas, same shape. `total` on a one-segment bar is exactly the
-            "used vs capacity" case CapacityBar's remainder track is for. */}
-        <SectionHeader label="Storage" />
-        <CapacityBar
+            "used vs capacity" case Meter's remainder track is for. */}
+        <SectionHeader title={copy.storage} />
+        <Meter
           segments={[
             {
               label: "Used",
               value: user.storageUsedBytes,
-              color: theme.accent,
+              hue: theme.accent,
               display: formatBytes(user.storageUsedBytes),
             },
           ]}
@@ -252,19 +268,19 @@ function LinkedAccountScreen({
         <Text style={styles.meterLabel}>
           {formatBytes(user.storageUsedBytes)} of{" "}
           {formatBytes(user.storageQuotaBytes)}
-          <Text style={styles.meterHint}>
-            {" "}
-            · photos, videos and topo outputs
-          </Text>
+          <Text style={styles.meterHint}> · {copy.storageHint}</Text>
         </Text>
-
-        <SectionHeader label="Processing credits this month" />
-        <CapacityBar
+      </>
+    ),
+    credits: () => (
+      <>
+        <SectionHeader title={copy.credits} />
+        <Meter
           segments={[
             {
               label: "Used",
               value: user.monthlyComputeUsage,
-              color: assetHue.overlay,
+              hue: assetHue.overlay,
               display: formatCredits(user.monthlyComputeUsage),
             },
           ]}
@@ -277,46 +293,62 @@ function LinkedAccountScreen({
           {creditsResetLabel ? (
             <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
           ) : null}
-          <Text style={styles.meterHint}> · topo, exports and GeoPDFs</Text>
+          <Text style={styles.meterHint}> · {copy.creditsHint}</Text>
         </Text>
-
-        <SectionHeader label="Sign-in" />
+      </>
+    ),
+    signIn: () => (
+      <>
+        <SectionHeader title={copy.signIn} />
         <Row
-          icon="mail"
-          title="Email"
+          icon="email"
+          title={copy.email}
           subtitle={online ? user.email : undefined}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("email")}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
         <Row
-          icon="users"
+          icon="friends"
           title="Friends"
           {...capabilityRowProps("friends", "linked", online)}
           onPress={onOpenFriends}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
-
-        <SectionHeader label="Leaving" />
+      </>
+    ),
+    leaving: () => (
+      <>
+        <SectionHeader title={copy.leaving} />
         <Button
-          label="Sign out"
+          label={copy.signOut}
           variant="outlineAccent"
-          icon="log-out"
+          icon="signOut"
           onPress={onSignOut}
         />
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
-          title="Delete account"
+          title={copy.deleteAccount}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}
         />
+      </>
+    ),
+    footer: () => <Text style={styles.version}>{CLIENT_VERSION}</Text>,
+  };
+  const keys = contractSectionKeys(ACCOUNT, "gps");
 
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+  return (
+    <View style={styles.root}>
+      {sections.hero()}
+
+      <ScreenScroll padded={false} contentStyle={styles.body}>
+        {keys
+          .filter((key) => key !== "hero")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
       </ScreenScroll>
 
       <BottomSheet
@@ -367,7 +399,7 @@ function UsernameForm({
 
   const save = useCallback(async () => {
     const trimmed = value.trim();
-    // Empty is a requirement, shown on submit (DESIGN.md §8); unchanged is not
+    // Empty is a requirement, shown on submit (docs/ux-principles.md §11); unchanged is not
     // an error at all, just nothing to do.
     if (!trimmed) {
       setError("Enter a username.");
@@ -383,7 +415,7 @@ function UsernameForm({
       console.error(err);
       // The server's own 409 text ("Username already taken") is worth showing,
       // which is what messageFromError prefers when the API supplies one —
-      // and it's this one field's problem, so it renders under it (§8).
+      // and it's this one field's problem, so it renders under it (docs/ux-principles.md §11).
       setError(messageFromError(err, "Couldn't save that username."));
     } finally {
       setSaving(false);
@@ -407,7 +439,7 @@ function UsernameForm({
       </Text>
       <Button
         label="Save username"
-        icon="check"
+        icon="done"
         loading={saving}
         onPress={() => void save()}
       />
@@ -483,7 +515,7 @@ function EmailForm({
           We sent a code to {email.trim()}. Enter it to finish the change.
         </Text>
         <TextField
-          label="Confirmation code"
+          label={copy.verificationCode}
           value={code}
           onChangeText={(text) => {
             setCode(text);
@@ -493,8 +525,8 @@ function EmailForm({
           error={error}
         />
         <Button
-          label="Confirm email"
-          icon="check"
+          label={copy.confirmEmail}
+          icon="done"
           loading={busy}
           onPress={() => void confirm()}
         />
@@ -506,7 +538,7 @@ function EmailForm({
     <View style={styles.form}>
       <Text style={styles.formHint}>Signed in with {current}.</Text>
       <TextField
-        label="New email"
+        label={copy.newEmail}
         value={email}
         onChangeText={(text) => {
           setEmail(text);
@@ -517,8 +549,8 @@ function EmailForm({
         error={error}
       />
       <Button
-        label="Send code"
-        icon="mail"
+        label={copy.sendCode}
+        icon="email"
         loading={busy}
         onPress={() => void request()}
       />
@@ -543,7 +575,7 @@ function DeleteAccountForm({
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const matches = typed.trim() === username;
+  const matches = deleteAccountPhraseMatches(typed, username);
 
   const run = useCallback(async () => {
     if (!matches) return;
@@ -562,14 +594,9 @@ function DeleteAccountForm({
 
   return (
     <View style={styles.form}>
-      <Text style={styles.danger}>This can&apos;t be undone.</Text>
-      <Text style={styles.formHint}>
-        Your sign-in, places, trips, notes, photos and shares are deleted from
-        the server and from this phone. Places other people copied from you stay
-        theirs.
-      </Text>
+      <Text style={styles.formHint}>{ACCOUNT_DELETE_BODY}</Text>
       <TextField
-        label={`Type ${username} to confirm`}
+        label={deleteAccountPhraseLabel(username)}
         value={typed}
         onChangeText={setTyped}
         autoCapitalize="none"
@@ -577,7 +604,7 @@ function DeleteAccountForm({
       {error ? <ErrorBanner message={error} /> : null}
       <Button
         label="Delete my account"
-        icon="trash-2"
+        icon="delete"
         variant="outlineAccent"
         loading={busy}
         disabled={!matches}
@@ -588,18 +615,13 @@ function DeleteAccountForm({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   email: { color: theme.textMuted, fontSize: fontSize.sm },
   body: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
-  meterLabel: { color: theme.textPrimary, fontSize: fontSize.sm },
+  meterLabel: { color: theme.text, fontSize: fontSize.sm },
   meterHint: { color: theme.textMuted },
   form: { gap: spacing(1.5) },
   formHint: { color: theme.textMuted, fontSize: fontSize.sm },
-  danger: {
-    color: theme.warning,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
   version: {
     color: theme.textMuted,
     fontSize: fontSize.xs,

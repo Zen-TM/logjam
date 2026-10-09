@@ -21,11 +21,11 @@
 // `fillRouteSlot.ts` is the runner that acts on them.
 //
 // PRIVACY: the place name and the attachment's filename appear only in a
-// confirm the user opened for that place (DESIGN.md §11) — never in a log or
+// confirm the user opened for that place (docs/ux-principles.md §13) — never in a log or
 // an error string.
 import { mediaCategory, mediaDisplayName } from "@logjam/shared";
 
-import type { DeleteConfirmCopy } from "./placeDeleteConfirm";
+import type { DeleteConfirmCopy } from "@logjam/shared";
 import type { MirrorMedia } from "../sync/mirrorStore";
 
 /** Where a new way comes from. The panel that offers all five is AddWaySheet. */

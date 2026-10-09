@@ -7,7 +7,7 @@
 // row itself: per-row actions live behind the sheet there precisely so a mis-tap
 // cannot revoke anything).
 //
-// LAYOUT (DESIGN.md §1, §2, §7): hero counts what this friend can see; the rail
+// LAYOUT (docs/ux-principles.md §2, §2, §7): hero counts what this friend can see; the rail
 // is a two-chip partition — the two directions are genuinely different sets,
 // not a filter over one — and the multi-select bar swaps into that rail at the
 // same height, so the list cannot jump. Rows carry a ⋯ that becomes the
@@ -29,7 +29,14 @@
 //
 // PRIVACY: usernames and item names only — the payload carries no coordinates
 // and no notes. Nothing here is logged.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
   FlatList,
@@ -41,6 +48,9 @@ import {
 
 import {
   buildShareCards,
+  bulkRemoveLabel,
+  bulkUnshareLabel,
+  contractSectionKeys,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
   removeAllConfirm,
@@ -49,6 +59,10 @@ import {
   shareSelectionCountLabel,
   unshareAllConfirm,
   unshareOutcomeMessage,
+  FRIEND_SHARES,
+  friendSharesEmptyTitle,
+  friendSharesNote,
+  friendShareVerb,
   messageFromError,
   removeRowSubtitle,
   SHARE_KIND_LABEL,
@@ -56,6 +70,8 @@ import {
   type FriendShareDirection,
   type FriendShareRow,
   type FriendShares,
+  type IconIdea,
+  type SectionKeysOn,
 } from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
@@ -69,16 +85,16 @@ import {
   EmptyState,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SelectionMark,
   Toast,
   useBulkSelection,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 import { BulkShareButton, BulkShareSheet } from "./BulkShareSheet";
@@ -90,20 +106,18 @@ import {
 } from "./copyAndRemove";
 import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 
+const copy = FRIEND_SHARES.copy;
+
 /**
- * The glyph per kind. Feather names, spelled as literals rather than imported
- * from `@expo/vector-icons` — and per client rather than shared, because an
- * icon key resolves in one client's set and not the other's (root CLAUDE.md;
- * Logjam Web draws the same four kinds in lucide). The same four glyphs the
- * rest of this app already uses: `map-pin` a place, `edit-3` a route, `layers`
- * a LiDAR topo, `file-text` a GeoPDF.
+ * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four
+ * the rest of the app draws for them.
  */
 const SHARE_KIND_ICON = {
-  place: "map-pin",
-  route: "edit-3",
-  topoJob: "layers",
-  geoPdfJob: "file-text",
-} as const satisfies Record<FriendShareRow["entityType"], string>;
+  place: "place",
+  route: "route",
+  topoJob: "lidar",
+  geoPdfJob: "geoPdf",
+} as const satisfies Record<FriendShareRow["entityType"], IconIdea>;
 
 const cardKey = (card: FriendShareCard) => card.key;
 
@@ -165,12 +179,7 @@ export function FriendSharesScreen({
       .catch((err: unknown) => {
         console.error(err);
         // Our own copy, never the error's: it may carry an item name.
-        setLoadError(
-          messageFromError(
-            err,
-            "Couldn't load what's shared with this friend.",
-          ),
-        );
+        setLoadError(messageFromError(err, copy.loadFailed));
       });
   }, [friendshipId, guestBlock]);
 
@@ -198,7 +207,7 @@ export function FriendSharesScreen({
   // A row a group verb can act on. Forward: all of them (unshare and re-share
   // apply to every row). Received: anything that can be copied or removed —
   // which, for a row visible through a shared place, is neither, so it answers
-  // a long press with its reason rather than a checkbox (§7).
+  // a long press with its reason rather than a checkbox (DESIGN.md §5).
   const isSelectable = useCallback(
     (card: FriendShareCard) =>
       direction === "theySee" || card.copyable || card.removable,
@@ -272,10 +281,7 @@ export function FriendSharesScreen({
               })
               .catch((err: unknown) => {
                 console.error(err);
-                notify(
-                  "Couldn't unshare those. Try again in a moment.",
-                  "error",
-                );
+                notify(copy.unshareFailed, "error");
               })
               .finally(() => setBusy(false));
           },
@@ -438,7 +444,7 @@ export function FriendSharesScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Sharing" title={username} onBack={onBack} />
+        <Hero eyebrow="Sharing" title={username} onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -446,23 +452,28 @@ export function FriendSharesScreen({
   if (shares === null && loadError) {
     return <ErrorState message={loadError} onRetry={() => void load()} />;
   }
-  if (shares === null) return <LoadingState />;
+  if (shares === null) return <LoadingState label={copy.loading} />;
 
   const theirCount = shares.sharedWithThem.length;
   const yourCount = shares.sharedWithYou.length;
-  const directions: SegmentOption<FriendShareDirection>[] = [
-    { value: "theySee", label: "You share", count: theirCount },
+  const directions: ChipOption<FriendShareDirection>[] = [
+    { value: "theySee", label: copy.youShare, count: theirCount },
     {
       value: "youSee",
-      label: "They share",
+      label: copy.theyShare,
       count: yourCount,
       hue: placeHue.shared,
     },
   ];
 
-  return (
-    <View style={styles.root}>
-      <HeroHeader
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`FRIEND_SHARES`, shared/src/contracts).
+  const page: Record<
+    SectionKeysOn<typeof FRIEND_SHARES, "gps">,
+    () => ReactNode
+  > = {
+    hero: () => (
+      <Hero
         eyebrow="Sharing"
         title={username}
         onBack={onBack}
@@ -471,7 +482,8 @@ export function FriendSharesScreen({
           theirCount === 1 ? "item they can see" : "items they can see"
         }
       />
-
+    ),
+    directions: () => (
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
@@ -503,11 +515,11 @@ export function FriendSharesScreen({
             // The bar's destructive slot, renamed per direction: these end a
             // GRANT, not a record, and a trash can here would promise to
             // destroy the place.
-            deleteIcon={direction === "theySee" ? "user-minus" : "eye-off"}
+            deleteIcon={direction === "theySee" ? "unshare" : "hide"}
             deleteLabel={
               direction === "theySee"
-                ? `Unshare ${selectedItems.length} selected items from ${username}`
-                : `Remove ${removable.length} selected items from your account`
+                ? bulkUnshareLabel(selectedItems.length, username)
+                : bulkRemoveLabel(removable.length)
             }
             onDelete={() => {
               if (!online) {
@@ -529,61 +541,65 @@ export function FriendSharesScreen({
             }}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             options={directions}
             value={direction}
             onChange={changeDirection}
           />
         )}
       </View>
-
-      {/* What this tab holds, in the plainest words available — the two lists
-          are near-identical at a glance and the chips alone ("You share" /
-          "They share") are read as a filter rather than as a direction. */}
-      <View style={styles.note}>
-        <Text style={styles.noteText} numberOfLines={2}>
-          {direction === "theySee"
-            ? `Items you have shared with ${username}.`
-            : `Items ${username} has shared with you.`}
-        </Text>
-      </View>
-
-      {loadError ? (
-        <View style={styles.banner}>
-          <ErrorBanner message={loadError} onRetry={() => void load()} />
+    ),
+    note: () => (
+      <>
+        {/* What this tab holds, in the plainest words available — the two lists
+            are near-identical at a glance and the chips alone ("You share" /
+            "They share") are read as a filter rather than as a direction. */}
+        <View style={styles.note}>
+          <Text style={styles.noteText} numberOfLines={2}>
+            {friendSharesNote(direction, username)}
+          </Text>
         </View>
-      ) : null}
+      </>
+    ),
+    list: () => (
+      <>
+        {loadError ? (
+          <View style={styles.banner}>
+            <ErrorBanner message={loadError} onRetry={() => void load()} />
+          </View>
+        ) : null}
 
-      <FlatList
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        data={cards}
-        keyExtractor={cardKey}
-        renderItem={renderItem}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.accent}
-          />
-        }
-        ListEmptyComponent={
-          <EmptyState
-            title={
-              direction === "theySee"
-                ? `You haven't shared anything with ${username}`
-                : `${username} hasn't shared anything with you`
-            }
-            hint={
-              direction === "theySee"
-                ? "Share a place, waypoint, route or map from its own options."
-                : undefined
-            }
-          />
-        }
-      />
+        <FlatList
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          data={cards}
+          keyExtractor={cardKey}
+          renderItem={renderItem}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.accent}
+            />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              title={friendSharesEmptyTitle(direction, username)}
+              hint={direction === "theySee" ? copy.emptyHint : undefined}
+            />
+          }
+        />
+      </>
+    ),
+  };
 
-      {/* Per-row verbs, titled with the item (§7). */}
+  return (
+    <View style={styles.root}>
+      {contractSectionKeys(FRIEND_SHARES, "gps").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
+
+      {/* Per-row verbs, titled with the item (DESIGN.md §5). */}
       <BottomSheet
         visible={sheetCard !== null}
         onClose={() => setSheetCard(null)}
@@ -697,7 +713,7 @@ function ShareCardRow({
           <SelectionMark selected={selected} selectable={selectable} />
         ) : (
           <IconButton
-            icon="more-horizontal"
+            icon="overflow"
             accessibilityLabel="What can I do with this?"
             onPress={() => onOpen(card)}
           />
@@ -733,24 +749,24 @@ function ShareCardMenu({
   const kind = SHARE_KIND_LABEL[card.row.entityType];
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking
-  // for and not find (DESIGN.md §10, `useShareRowProps`'s rule).
+  // for and not find (DESIGN.md §8, `useShareRowProps`'s rule).
   const offline = { disabled: true, subtitle: "Needs a connection" } as const;
   const live = { disabled: busy };
   return (
     <View style={styles.menuBody}>
       {card.row.entityType === "place" ? (
         <Row
-          icon="map-pin"
-          title="Open place"
+          icon={friendShareVerb("open").icon}
+          title={friendShareVerb("open").label}
           onPress={() => onOpenPlace(card.row.entityId)}
         />
       ) : null}
 
       {direction === "theySee" ? (
         <Row
-          icon="user-minus"
+          icon={friendShareVerb("unshare").icon}
           hue={theme.warning}
-          title={`Unshare from ${username}`}
+          title={friendShareVerb("unshare").label}
           subtitle={
             online ? `${username} stops seeing this ${kind}.` : undefined
           }
@@ -761,8 +777,8 @@ function ShareCardMenu({
 
       {card.copyable ? (
         <Row
-          icon="copy"
-          title="Save a copy"
+          icon={friendShareVerb("copy").icon}
+          title={friendShareVerb("copy").label}
           subtitle={
             online
               ? card.row.entityType === "place"
@@ -790,8 +806,8 @@ function ShareCardMenu({
           promise: keep it in your own things, take it off the active list. */}
       {card.copyable && card.removable ? (
         <Row
-          icon="archive"
-          title="Save a copy and remove"
+          icon={friendShareVerb("copyAndRemove").icon}
+          title={friendShareVerb("copyAndRemove").label}
           subtitle={
             online
               ? `Keeps a copy of your own, then stops ${username} sharing this one with you.`
@@ -805,9 +821,9 @@ function ShareCardMenu({
 
       {direction === "youSee" && card.removable ? (
         <Row
-          icon="eye-off"
+          icon={friendShareVerb("remove").icon}
           hue={theme.warning}
-          title="Remove"
+          title={friendShareVerb("remove").label}
           subtitle={
             online
               ? removeRowSubtitle({ kindLabel: kind, friendName: username })
@@ -830,9 +846,9 @@ function ShareCardMenu({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
-  // Both children are SEGMENTED_CONTROL_HEIGHT tall by construction, which is
-  // what keeps the list still when the bar swaps in (DESIGN.md §7).
+  root: { flex: 1, backgroundColor: theme.page },
+  // Both children are CHIP_RAIL_HEIGHT tall by construction, which is
+  // what keeps the list still when the bar swaps in (DESIGN.md §5).
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),

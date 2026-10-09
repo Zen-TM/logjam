@@ -1,23 +1,19 @@
 import { useState } from "react";
 import {
-  EllipsisVertical,
-  Lock,
-  Pencil,
-  Plus,
-  Tag,
-  Trash2,
-} from "lucide-react";
-import {
   ATTRIBUTE_NOUN,
+  attributesEmptyHint,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
+  drawsYoursHeading,
   isSystemFieldDef,
+  SETTINGS_LIST,
   tripTypeLabel,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
+
 import {
   createCustomField,
   updateCustomField,
@@ -37,8 +33,11 @@ import {
   Menu,
   Row,
   SectionHeader,
+  LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
+
+const listCopy = SETTINGS_LIST.copy;
 
 function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
   return (
@@ -109,37 +108,34 @@ function CustomFieldSection({
           <Button
             compact
             variant="outline"
-            icon={Plus}
+            icon="add"
             onClick={() => setEditing("new")}
           >
-            Add
+            {listCopy.addAttribute}
           </Button>
         }
       />
 
       <div className={classes.list}>
         {loading ? (
-          <p className={classes.state}>Loading…</p>
+          <LoadingState />
         ) : (
           <>
             {own.length === 0 && (
-              <p className={classes.note}>
-                Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} —
-                water level, say, or party size.
-              </p>
+              <p className={classes.note}>{attributesEmptyHint(rowNoun)}</p>
             )}
             {/* "Yours" only earns a line when there is a "Built in" opposite
                 it. Every system definition is place-scoped, so a trip's list
                 is nothing but the user's own, and a heading dividing a list
                 from nothing states a contrast that is not there. */}
-            {own.length > 0 && system.length > 0 && (
-              <SectionHeader title="Yours" count={own.length} />
+            {drawsYoursHeading(own.length, system.length) && (
+              <SectionHeader title={listCopy.yours} count={own.length} />
             )}
 
             {own.map((def) => (
               <Row
                 key={def.key}
-                leading={<IconTile icon={Tag} hue="var(--theme-accent)" />}
+                leading={<IconTile icon="tag" hue="var(--color-accent)" />}
                 title={customFieldDisplayLabel(def)}
                 subtitle={rowSubtitle(def, placeTypes)}
                 description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
@@ -158,14 +154,14 @@ function CustomFieldSection({
                          you learn to avoid. */
                       {
                         id: "edit",
-                        label: `Edit ${ATTRIBUTE_NOUN.one}`,
-                        icon: Pencil,
+                        label: listCopy.editAttribute,
+                        icon: "edit",
                         onSelect: () => setEditing(def),
                       },
                       {
                         id: "delete",
-                        label: `Delete ${ATTRIBUTE_NOUN.one}`,
-                        icon: Trash2,
+                        label: listCopy.deleteAttribute,
+                        icon: "delete",
                         danger: true,
                         onSelect: () => setDeletingDef(def),
                       },
@@ -173,7 +169,7 @@ function CustomFieldSection({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${def.label}`}
                       />
                     )}
@@ -184,12 +180,12 @@ function CustomFieldSection({
 
             {system.length > 0 && (
               <>
-                <SectionHeader title="Built in" count={system.length} />
+                <SectionHeader title={listCopy.builtIn} count={system.length} />
                 {system.map((def) => (
                   <Row
                     key={def.key}
                     leading={
-                      <IconTile icon={Lock} hue="var(--theme-bonus-2)" />
+                      <IconTile icon="private" hue="var(--color-neutral)" />
                     }
                     title={customFieldDisplayLabel(def)}
                     subtitle={rowSubtitle(def, placeTypes)}

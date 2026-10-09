@@ -5,18 +5,18 @@
 // ONE component for both, same shape and same reason as RouteOptionsSheet: the
 // actions have one definition in saved/assetActions.ts, and a track reached
 // from the map must not be a lesser object than one reached from Saved
-// (DESIGN.md §7). Rename, Send a copy and the stats are sub-modes of THIS
+// (DESIGN.md §5). Rename, Send a copy and the stats are sub-modes of THIS
 // sheet rather than second sheets (§6: never open a second sheet — swap the
 // content), so no caller can be the surface that forgot one.
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
-import { assetHue, radius, spacing, theme, withAlpha } from "../theme";
-import { BottomSheet, RenameForm, Row } from "../ui";
+import { assetHue, spacing, theme } from "../theme";
+import { BottomSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -44,13 +44,13 @@ export function TrackOptionsSheet({
   /**
    * Fly the map to this track. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md §7: "View on map" is the one row the two surfaces differ by).
+   * (DESIGN.md §5: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
   /**
    * Pick this recording back up. Owned by the MAP rather than by this sheet
    * because starting a recorder needs the location permission prompt, which
-   * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made
+   * cannot be raised from an open sheet (DESIGN.md §5 — the bug that made
    * "Take photo" look dead), and because the map is what has to enter
    * recording mode afterwards.
    */
@@ -64,7 +64,6 @@ export function TrackOptionsSheet({
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [attaching, setAttaching] = useState(false);
-  const [pickingColor, setPickingColor] = useState(false);
   // Rendered in this sheet rather than handed to the caller: this component is
   // the map's track options as well as Saved's, and a callback would have
   // given the verb only to whichever surface remembered to pass it.
@@ -87,7 +86,6 @@ export function TrackOptionsSheet({
       setSending(false);
       setShowingStats(false);
       setAttaching(false);
-      setPickingColor(false);
     }
   }
 
@@ -177,7 +175,7 @@ export function TrackOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §6 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md §4 — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = renaming
     ? () => setRenaming(false)
     : sending
@@ -191,7 +189,7 @@ export function TrackOptionsSheet({
   return (
     <BottomSheet
       visible={visible}
-      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §6).
+      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §4).
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the track's own name: it is the same subject,
       // seen as numbers.
@@ -257,7 +255,7 @@ export function TrackOptionsSheet({
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.track}
               disabled={busy}
               onPress={() => {
@@ -271,64 +269,24 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          <Row
-            title="Colour"
-            icon="droplet"
-            hue={assetHue.track}
-            right={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Choose track colour"
-                accessibilityState={{ expanded: pickingColor }}
-                onPress={() => setPickingColor((open) => !open)}
-                style={styles.swatchButton}
-              >
-                <View
-                  style={[
-                    styles.currentSwatch,
-                    { backgroundColor: track.color },
-                  ]}
-                />
-              </Pressable>
-            }
-            onPress={() => setPickingColor((open) => !open)}
+          <ColourField
+            label="Colour"
+            palette={TRACK_COLORS}
+            value={track.color}
+            nameOf={trackColorName}
+            onChange={(swatch) => {
+              actions.setColor?.(swatch).catch((err: unknown) => {
+                console.error(err);
+                onError(messageFromError(err, "Couldn't update track colour."));
+              });
+            }}
           />
-          {pickingColor ? (
-            <View style={styles.palette}>
-              {TRACK_COLORS.map((swatch) => (
-                <Pressable
-                  key={swatch}
-                  accessibilityRole="button"
-                  accessibilityLabel={trackColorName(swatch)}
-                  accessibilityState={{ selected: swatch === track.color }}
-                  onPress={() => {
-                    setPickingColor(false);
-                    actions.setColor?.(swatch).catch((err: unknown) => {
-                      console.error(err);
-                      onError(
-                        messageFromError(err, "Couldn't update track colour."),
-                      );
-                    });
-                  }}
-                  style={[
-                    styles.swatch,
-                    { backgroundColor: swatch },
-                    swatch === track.color ? styles.swatchSelected : null,
-                  ]}
-                >
-                  {swatch === track.color ? (
-                    <Text style={styles.swatchTick}>✓</Text>
-                  ) : null}
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
           {/* What this track IS, one tap in — a tapped line opens the verbs
-              now, and the numbers are behind this row (DESIGN.md §7). */}
+              now, and the numbers are behind this row (DESIGN.md §5). */}
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.track}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -337,7 +295,7 @@ export function TrackOptionsSheet({
               what it is showing. */}
           <Row
             title="Continue recording"
-            icon="play-circle"
+            icon="play"
             hue={assetHue.track}
             disabled={busy}
             onPress={() => {
@@ -348,7 +306,7 @@ export function TrackOptionsSheet({
           {actions.createRouteFrom ? (
             <Row
               title="Create route from this"
-              icon="pen-tool"
+              icon="draw"
               hue={assetHue.route}
               disabled={busy}
               onPress={() => {
@@ -385,8 +343,8 @@ export function TrackOptionsSheet({
             <Row
               key={option.title}
               title={option.title}
-              icon="download"
-              hue={theme.bonus1}
+              icon="export"
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => save(option)}
             />
@@ -398,7 +356,7 @@ export function TrackOptionsSheet({
             <Row
               title="Send a copy"
               icon="send"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSending((open) => !open)}
@@ -406,14 +364,14 @@ export function TrackOptionsSheet({
           ) : null}
           <Row
             title="Rename"
-            icon="edit-2"
-            hue={theme.bonus1}
+            icon="edit"
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => setRenaming(true)}
           />
           <Row
             title="Delete track"
-            icon="trash-2"
+            icon="delete"
             hue={theme.warning}
             disabled={busy}
             onPress={() => {
@@ -442,39 +400,4 @@ export function TrackOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
-  swatchButton: {
-    padding: spacing(0.5),
-    borderRadius: radius.sm,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  currentSwatch: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.35),
-  },
-  palette: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing(1),
-    paddingHorizontal: spacing(1),
-    paddingVertical: spacing(0.5),
-  },
-  swatch: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  swatchSelected: {
-    borderWidth: 2,
-    borderColor: theme.textPrimary,
-  },
-  swatchTick: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
 });

@@ -1,5 +1,13 @@
-/* Settings has no hero (DESIGN.md §1), so the page IS the scroller: the list of
+/* Settings answers no question (docs/ux-principles.md §2), so its title row is
+   only a title and its ×, pinned; the list under it is the scroller: the
    preferences and the three lists the user keeps. */
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .root {
   flex: 1;
   min-height: 0;
@@ -14,5 +22,5 @@
 .state {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

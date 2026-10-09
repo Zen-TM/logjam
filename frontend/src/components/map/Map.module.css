@@ -2,7 +2,7 @@
    a thing that moves every frame must not touch the canvas: `setData` on a
    GeoJSON source invalidates it and MapLibre repaints the whole map, measured
    at 72ms per pointer move against 16ms for the same drag without it — the
-   cost of dragging over dead panel (DESIGN.md §9).
+   cost of dragging over dead panel (DESIGN.md §6).
 
    The line's OWN colour inside a white ring: on this map colour is what says
    which line you are looking at, so a dot in the accent would be the one colour
@@ -14,7 +14,7 @@
   box-sizing: border-box;
   border: 2px solid #ffffff;
   border-radius: var(--radius-pill);
-  background: var(--dot, var(--theme-accent));
+  background: var(--dot, var(--color-accent));
   /* It marks a place; it is not something to press, and it must never take a
      click meant for the route underneath it. */
   pointer-events: none;
@@ -52,7 +52,7 @@
 :global(#map .maplibregl-ctrl-bottom-left) {
   left: calc(var(--map-inset-left) + 16px + 42px + 10px);
   bottom: 26px;
-  transition: left var(--transition-med) ease-out;
+  transition: left var(--motion-med) ease-out;
 }
 
 :global(#map .maplibregl-ctrl-bottom-left .maplibregl-ctrl),
@@ -64,11 +64,11 @@
   box-sizing: border-box;
   min-height: 22px;
   padding: 2px 6px 0;
-  border: 2px solid var(--theme-text-primary);
+  border: 2px solid var(--color-text);
   border-top: none;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   font-size: var(--font-xs);
   box-shadow: var(--shadow-float);
 }
@@ -79,13 +79,13 @@
 }
 
 :global(#map .maplibregl-ctrl-attrib) {
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   box-shadow: var(--shadow-float);
 }
 
 :global(#map .maplibregl-ctrl-attrib a) {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 :global(#map .maplibregl-ctrl-attrib.maplibregl-compact) {
@@ -100,7 +100,7 @@
 /* MapLibre's blue focus glow → the app's one focus ring. */
 :global(#map .maplibregl-ctrl button:focus-visible) {
   box-shadow: none;
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 2px;
 }
 
@@ -154,8 +154,8 @@
   z-index: 2;
   padding: 8px 16px;
   border-radius: var(--radius-pill);
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   font-size: var(--font-sm);
   box-shadow: var(--shadow-float);
   pointer-events: none;
@@ -169,7 +169,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   width: 70vmin;
-  border: 3px dashed var(--theme-accent);
+  border: 3px dashed var(--color-accent);
   background: transparent;
   pointer-events: none;
   z-index: 5;
@@ -192,8 +192,8 @@
   padding: 0 20px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--theme-accent);
-  color: var(--ink);
+  background: var(--color-accent);
+  color: var(--color-on-fill);
   font: inherit;
   font-size: var(--font-sm);
   font-weight: 600;
@@ -202,11 +202,7 @@
 }
 
 .geoPdfButton:hover {
-  background: color-mix(
-    in srgb,
-    var(--theme-accent) 85%,
-    var(--theme-text-primary)
-  );
+  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
 }
 
 /* Draggable vertex handle for the route draw/edit tool. Larger than the

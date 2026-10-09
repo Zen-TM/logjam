@@ -2,17 +2,17 @@
   display: inline-flex;
 }
 
-/* Light fill, ink text: the one surface that inverts, so it reads as not-page. */
+/* The one surface that inverts, so it reads as not-page. */
 .tip {
   position: fixed;
   inset: auto;
   margin: 0;
   max-width: 240px;
-  padding: 7px 10px;
+  padding: var(--space-1) var(--space-1);
   border: none;
   border-radius: var(--radius-md);
-  background: var(--theme-text-primary);
-  color: var(--ink);
+  background: var(--color-inverse);
+  color: var(--color-on-inverse);
   font-size: var(--font-xs);
   font-weight: 400;
   line-height: 1.35;

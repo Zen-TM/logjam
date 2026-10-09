@@ -27,7 +27,7 @@
 // The converse rule holds too — where a row below the prose does the thing, the
 // prose telling the user to go and do it is deleted.
 //
-// LAYOUT (DESIGN.md §1, §2, §7): hero states the count; the rail holds the
+// LAYOUT (docs/ux-principles.md §2, §2, §7): hero states the count; the rail holds the
 // one-line hint and becomes the multi-select bar in place, at the same height,
 // so the list cannot jump; rows carry a ⋯ that becomes the selection checkbox,
 // in the same 40pt box, so nothing resizes there either.
@@ -48,10 +48,10 @@ import { useConnectivity } from "../map/connectivity";
 import { fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
-  HeroHeader,
+  Hero,
   IconButton,
   Row,
-  SEGMENTED_CONTROL_HEIGHT,
+  CHIP_RAIL_HEIGHT,
   SelectionBar,
   SelectionMark,
   StatusPill,
@@ -127,7 +127,7 @@ export function SyncIssuesScreen({
   // stays pure and every reload refreshes it.
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const [menuIssue, setMenuIssue] = useState<Issue | null>(null);
-  // ONE toast channel for every outcome (DESIGN.md §6). A row leaving the list
+  // ONE toast channel for every outcome (DESIGN.md §4). A row leaving the list
   // is the only feedback most of these actions have, and "it vanished" is not
   // the same message as "it worked" — especially for Try again, where the row
   // disappearing means the change finally landed.
@@ -213,10 +213,18 @@ export function SyncIssuesScreen({
   const items = useMemo<Issue[]>(
     () => [
       ...parked.map(
-        (op): Issue => ({ kind: "stuck", key: `stuck:${op.seq}`, op }),
+        (op): Issue => ({
+          kind: "stuck",
+          key: `stuck:${op.seq}`,
+          op,
+        }),
       ),
       ...shelf.map(
-        (entry): Issue => ({ kind: "lost", key: `lost:${entry.id}`, entry }),
+        (entry): Issue => ({
+          kind: "lost",
+          key: `lost:${entry.id}`,
+          entry,
+        }),
       ),
     ],
     [parked, shelf],
@@ -260,7 +268,7 @@ export function SyncIssuesScreen({
 
   const runRetry = useCallback(() => {
     // Not destructive, so the selection stays: the rows are all still there and
-    // the obvious next move is another verb on the same set (§7).
+    // the obvious next move is another verb on the same set (DESIGN.md §5).
     void Promise.all(retryable.map((op) => retryParkedOp(op.seq)))
       .then(() => {
         notify(
@@ -497,7 +505,7 @@ export function SyncIssuesScreen({
   );
 
   // Stable identities so the memoised rows don't all re-render on an unrelated
-  // state change (DESIGN.md §9).
+  // state change (DESIGN.md §7).
   const openMenu = useCallback((item: Issue) => setMenuIssue(item), []);
   const renderItem = useCallback(
     ({ item }: { item: Issue }) => (
@@ -517,7 +525,7 @@ export function SyncIssuesScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Account sync issues"
         title={total > 0 ? "Some changes need you" : "Everything's synced"}
         onBack={onBack}
@@ -541,7 +549,7 @@ export function SyncIssuesScreen({
                 <>
                   {retryable.length > 0 ? (
                     <IconButton
-                      icon="refresh-cw"
+                      icon="refresh"
                       accessibilityLabel={
                         online
                           ? `Try ${retryable.length} selected changes again`
@@ -553,7 +561,7 @@ export function SyncIssuesScreen({
                   ) : null}
                   {restorable.length > 0 ? (
                     <IconButton
-                      icon="corner-up-left"
+                      icon="undo"
                       accessibilityLabel={`Restore ${restorable.length} selected values`}
                       color={theme.accent}
                       onPress={confirmBulkRestore}
@@ -579,7 +587,7 @@ export function SyncIssuesScreen({
       {applyFailedAt ? (
         <View style={styles.rail}>
           <Row
-            icon="alert-octagon"
+            icon="warning"
             hue={theme.warning}
             title="This phone couldn't apply an update"
             subtitle="Nothing new is arriving. Download a fresh copy to fix it."
@@ -599,7 +607,7 @@ export function SyncIssuesScreen({
         ListEmptyComponent={<EmptyPanel />}
       />
 
-      {/* Per-entry actions, titled with the entry (§7). */}
+      {/* Per-entry actions, titled with the entry (DESIGN.md §5). */}
       <BottomSheet
         visible={menuIssue !== null}
         onClose={() => setMenuIssue(null)}
@@ -699,7 +707,7 @@ function StuckMenu({
           "recreated" while deleting the change is the worst row on the page. */}
       {canRecreate(op) ? (
         <Row
-          icon="rotate-ccw"
+          icon="retry"
           title={op.entity === "place" ? "Recreate place" : "Recreate waypoint"}
           subtitle={
             op.entity === "place"
@@ -728,7 +736,7 @@ function StuckMenu({
           field, and this is the screen the user has to fix it on. */}
       {target && !advice.canRetry && op.state !== "deadRemote" ? (
         <Row
-          icon="external-link"
+          icon="openExternal"
           title={
             target.kind === "place"
               ? "Open the place and fix it"
@@ -741,14 +749,14 @@ function StuckMenu({
       {/* Absent, not dimmed, when a retry could only fail the same way. */}
       {advice.canRetry ? (
         <Row
-          icon="refresh-cw"
+          icon="refresh"
           title={online ? "Try again" : "Queue it again"}
           subtitle={online ? undefined : "It goes up when you have signal."}
           onPress={() => onRetry(op)}
         />
       ) : null}
       <Row
-        icon="trash-2"
+        icon="delete"
         hue={theme.warning}
         title="Discard this change"
         onPress={() => onDiscard(op)}
@@ -801,7 +809,7 @@ function LostMenu({
           nothing, so it goes above the one that does. */}
       {entry.canKeepBoth ? (
         <Row
-          icon="git-merge"
+          icon="merge"
           title="Keep both"
           subtitle="Appends the discarded text to what's there now."
           onPress={() => onKeepBoth(entry)}
@@ -809,7 +817,7 @@ function LostMenu({
       ) : null}
       {entry.restoreBlock === null ? (
         <Row
-          icon="corner-up-left"
+          icon="undo"
           title="Restore the discarded value"
           subtitle={restoreSubtitle(entry)}
           onPress={() => onRestore(entry)}
@@ -818,7 +826,7 @@ function LostMenu({
         <Text style={styles.menuCause}>{restoreBlockReason(entry)}</Text>
       )}
       <Row
-        icon="trash-2"
+        icon="delete"
         hue={theme.warning}
         title="Discard this value"
         onPress={() => onForget(entry)}
@@ -858,12 +866,12 @@ const IssueRow = memo(function IssueRow({
 }) {
   const openOrToggle = () => (selecting ? onToggle(item) : onMenu(item));
   // The ⋯ and the checkbox share one 40pt box, so entering the mode cannot
-  // resize a row and shift the list under the finger that started it (§7).
+  // resize a row and shift the list under the finger that started it (DESIGN.md §5).
   const trailing = selecting ? (
     <SelectionMark selected={selected} />
   ) : (
     <IconButton
-      icon="more-horizontal"
+      icon="overflow"
       accessibilityLabel="What can I do about this?"
       onPress={() => onMenu(item)}
     />
@@ -872,7 +880,7 @@ const IssueRow = memo(function IssueRow({
     const advice = opAdvice(item.op);
     return (
       <Row
-        icon="alert-triangle"
+        icon="warning"
         hue={theme.warning}
         title={opTitle(item.op)}
         subtitle={`${advice.line} · ${relativeTime(item.op.createdAt, now)}`}
@@ -886,7 +894,7 @@ const IssueRow = memo(function IssueRow({
   }
   return (
     <Row
-      icon="alert-triangle"
+      icon="warning"
       hue={theme.warning}
       title={shelfTitle(item.entry)}
       subtitle={shelfSubtitle(item.entry, now)}
@@ -911,14 +919,14 @@ function EmptyPanel() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1.5),
   },
   // Matches the SelectionBar it swaps with, so the list below cannot move.
-  railHint: { height: SEGMENTED_CONTROL_HEIGHT, justifyContent: "center" },
+  railHint: { height: CHIP_RAIL_HEIGHT, justifyContent: "center" },
   railHintText: {
     color: theme.textMuted,
     fontSize: fontSize.sm,
@@ -934,12 +942,12 @@ const styles = StyleSheet.create({
   menuCause: { color: theme.textMuted, fontSize: fontSize.sm },
   valueBlock: { gap: spacing(0.25) },
   menuLabel: { color: theme.textMuted, fontSize: fontSize.xs },
-  menuValue: { color: theme.textPrimary, fontSize: fontSize.base },
+  menuValue: { color: theme.text, fontSize: fontSize.base },
   // The line the rejection is about, so two changes over one complaint stop
   // being a guessing game.
   menuValueRejected: { color: theme.warning },
   empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyTitle: { color: theme.text, fontSize: fontSize.base },
   emptyHint: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

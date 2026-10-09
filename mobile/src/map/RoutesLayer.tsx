@@ -7,6 +7,7 @@
 //
 // ONE GeoJSONSource for the same reason as PlaceRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
+import { MAP_INK } from "@logjam/shared";
 import { memo, useMemo } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
@@ -111,7 +112,7 @@ export const RoutesLayer = memo(function RoutesLayer({
         minzoom={SAVED_ROUTE_MIN_ZOOM}
         filter={ROUTE_LAYER_FILTER}
         style={{
-          lineColor: theme.primary,
+          lineColor: MAP_INK.casing,
           lineWidth: 6,
           lineCap: "round",
           lineJoin: "round",
@@ -141,7 +142,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           circleRadius: 4,
           circleColor: ["get", "routeColor"],
           circleStrokeWidth: 1.5,
-          circleStrokeColor: theme.primary,
+          circleStrokeColor: MAP_INK.casing,
         }}
       />
       {/* Spaced wider than the draft's: several routes on screen at once is a

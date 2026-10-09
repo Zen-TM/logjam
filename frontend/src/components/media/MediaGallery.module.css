@@ -7,7 +7,7 @@
 .empty {
   font-size: var(--font-sm);
   font-style: italic;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .grid {
@@ -21,13 +21,8 @@
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background-color: color-mix(
-    in srgb,
-    var(--theme-text-primary) 4%,
-    transparent
-  );
-  border: 1px solid
-    color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
 }
 
 .tileButton {
@@ -57,7 +52,7 @@
   height: 100%;
   padding: 0.25rem;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   word-break: break-word;
   text-align: center;
 }
@@ -84,7 +79,7 @@
   align-items: center;
   justify-content: center;
   /* A token, never a literal: under a mouse this is 24px and on a touch
-     screen `index.css` grows it to 32 (DESIGN.md §4). */
+     screen `index.css` grows it to 32 (DESIGN.md §1). */
   min-width: var(--control-sm);
   min-height: var(--control-sm);
   padding: 3px;
@@ -96,7 +91,7 @@
   color: #fff;
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition-fast);
+  transition: opacity var(--motion-fast);
 }
 
 .tile:hover .deleteBtn,
@@ -105,7 +100,7 @@
 }
 
 .deleteBtn:hover {
-  background-color: var(--theme-warning);
+  background-color: var(--color-warning);
 }
 
 .deleteBtn:disabled {
@@ -143,25 +138,16 @@
   min-width: 0;
   padding: 0.4rem 0.5rem;
   border-radius: var(--radius-sm);
-  background-color: color-mix(
-    in srgb,
-    var(--theme-text-primary) 4%,
-    transparent
-  );
-  border: 1px solid
-    color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
-  color: var(--theme-text-primary);
+  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  color: var(--color-text);
   text-decoration: none;
   font-size: var(--font-sm);
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--motion-fast);
 }
 
 .trackLink:hover {
-  background-color: color-mix(
-    in srgb,
-    var(--theme-text-primary) 8%,
-    transparent
-  );
+  background-color: color-mix(in srgb, var(--color-text) 8%, transparent);
 }
 
 .trackName {
@@ -175,19 +161,19 @@
   align-items: center;
   justify-content: center;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: var(--hairline);
   border-radius: var(--radius-sm);
   background: none;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   transition:
-    color var(--transition-fast),
-    border-color var(--transition-fast);
+    color var(--motion-fast),
+    border-color var(--motion-fast);
 }
 
 .deleteBtnInline:hover {
-  color: var(--theme-warning);
-  border-color: var(--theme-warning);
+  color: var(--color-warning);
+  border-color: var(--color-warning);
 }
 
 .deleteBtnInline:disabled {
