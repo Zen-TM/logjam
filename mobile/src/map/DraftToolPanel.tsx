@@ -2,7 +2,7 @@
 //
 // ONE panel, because the two tools are one interaction: the same anchors, the
 // same drag/delete handles, the same snapping. They differ at the EXIT and in
-// the ink (DESIGN.md §8) — measure has no Save and draws dotted — and a second
+// the ink (docs/ux-principles.md §11) — measure has no Save and draws dotted — and a second
 // component would have been a second place for the shared 90 % to rot.
 //
 // A TOOLBAR, not a card. While a tool is armed it takes the SEARCH PILL'S SLOT
@@ -32,8 +32,7 @@
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   formatDistanceM,
   routeLengthM,
@@ -46,13 +45,12 @@ import {
 import {
   fontSize,
   fontWeight,
-  hitSlop,
   radius,
   spacing,
   theme,
   withAlpha,
 } from "../theme";
-import { Button, IconButton } from "../ui";
+import { Button, IconButton, ColourField } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
@@ -107,7 +105,6 @@ export function DraftToolPanel({
 }) {
   const { profile, loading } = useElevationProfile([points], { allowNetwork });
   const hasLine = points.length >= 2;
-  const [pickingColor, setPickingColor] = useState(false);
 
   return (
     <View style={styles.bar}>
@@ -153,7 +150,7 @@ export function DraftToolPanel({
       <View style={styles.actions}>
         <View style={styles.group}>
           <IconButton
-            icon="corner-up-left"
+            icon="undo"
             accessibilityLabel="Undo the last change"
             disabled={!canUndo || saving}
             onPress={onUndo}
@@ -169,7 +166,7 @@ export function DraftToolPanel({
         <View style={styles.group}>
           {onReverse ? (
             <IconButton
-              icon="repeat"
+              icon="reverse"
               accessibilityLabel="Reverse the direction of this route"
               disabled={!hasLine || saving}
               onPress={onReverse}
@@ -182,29 +179,18 @@ export function DraftToolPanel({
               It keeps an IconButton's 40pt box so it lines up with the buttons
               either side of it and stays a real tap target. */}
           {onColorChange ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Choose the colour of this route"
-              accessibilityState={{ expanded: pickingColor, disabled: saving }}
+            <ColourField
+              label="Route colour"
+              hideLabel
+              palette={TRACK_COLORS}
+              value={color ?? theme.accent}
+              nameOf={trackColorName}
               disabled={saving}
-              onPress={() => setPickingColor((open) => !open)}
-              hitSlop={hitSlop}
-              style={({ pressed }) => [
-                styles.colorButton,
-                pressed && styles.colorButtonPressed,
-                saving && styles.colorButtonDisabled,
-              ]}
-            >
-              <View
-                style={[
-                  styles.currentSwatch,
-                  { backgroundColor: color ?? theme.accent },
-                ]}
-              />
-            </Pressable>
+              onChange={onColorChange}
+            />
           ) : null}
           <IconButton
-            icon="trash-2"
+            icon="delete"
             color={theme.warning}
             accessibilityLabel={
               tool === "measure"
@@ -217,7 +203,7 @@ export function DraftToolPanel({
           {onSave ? (
             <Button
               label={saving ? "Saving…" : "Save"}
-              icon="check"
+              icon="done"
               compact
               disabled={!hasLine || saving}
               onPress={onSave}
@@ -225,33 +211,6 @@ export function DraftToolPanel({
           ) : null}
         </View>
       </View>
-
-      {onColorChange && pickingColor ? (
-        <View style={styles.palette}>
-          {TRACK_COLORS.map((swatch) => (
-            <Pressable
-              key={swatch}
-              accessibilityRole="button"
-              accessibilityLabel={trackColorName(swatch)}
-              accessibilityState={{ selected: swatch === color }}
-              disabled={saving}
-              onPress={() => {
-                setPickingColor(false);
-                onColorChange(swatch);
-              }}
-              style={[
-                styles.swatch,
-                { backgroundColor: swatch },
-                swatch === color ? styles.swatchSelected : null,
-              ]}
-            >
-              {swatch === color ? (
-                <Text style={styles.swatchTick}>✓</Text>
-              ) : null}
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -285,38 +244,4 @@ const styles = StyleSheet.create({
   },
   group: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   spacer: { flex: 1 },
-  palette: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing(1),
-    paddingBottom: spacing(0.25),
-  },
-  swatch: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  swatchSelected: { borderWidth: 2, borderColor: theme.text },
-  // An IconButton's box, so the swatch sits on the same baseline as the
-  // buttons beside it and keeps a full-size tap target around a small square.
-  colorButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  colorButtonPressed: { opacity: 0.6 },
-  colorButtonDisabled: { opacity: 0.4 },
-  // The current colour, shown rather than symbolised.
-  currentSwatch: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.35),
-  },
-  swatchTick: { color: theme.onFill, fontWeight: "700" },
 });

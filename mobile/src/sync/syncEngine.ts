@@ -117,7 +117,7 @@ let followUpRequested = false;
 
 async function runCycleOnce(): Promise<void> {
   const userId = await resolveCurrentUserId();
-  // Cycle order (§2): push then pull, so the pull's rebase sees post-flush
+  // Cycle order (DESIGN.md §2): push then pull, so the pull's rebase sees post-flush
   // server state and just-created rows come back confirmed.
   //
   // The pull runs even when the push failed. One unsendable op — a media file
@@ -278,7 +278,7 @@ function scheduleBackoffRetry(): void {
   }, delay);
 }
 
-// ── debounced local-mutation trigger (§2) ────────────────────────────────────
+// ── debounced local-mutation trigger (DESIGN.md §2) ────────────────────────────────────
 
 const MUTATION_SYNC_DEBOUNCE_MS = 10_000;
 let mutationTimer: ReturnType<typeof setTimeout> | null = null;

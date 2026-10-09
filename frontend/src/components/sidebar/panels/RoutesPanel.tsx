@@ -1,7 +1,7 @@
 // Ways: every line the user has — routes they drew, tracks they recorded, files
 // they imported, and the tracks on places friends shared with them.
 //
-// The page answers "what lines have I got?" (DESIGN.md §1). One pinned rail
+// The page answers "what lines have I got?" (docs/ux-principles.md §2). One pinned rail
 // narrows it by kind, using Logjam GPS's own vocabulary (`CATEGORY_META` in
 // mobile/src/saved/savedKeys.ts); what each kind IS is `waysModel.ts`.
 //
@@ -11,27 +11,6 @@
 // page with that verb armed, so the two surfaces can never offer different
 // things. Nothing here renames or deletes in place any more.
 import { useMemo, useState } from "react";
-import {
-  Activity,
-  ChevronDown,
-  CopyPlus,
-  Download,
-  EllipsisVertical,
-  FilePlus,
-  Filter,
-  MapPin,
-  PenLine,
-  Pencil,
-  Plus,
-  Route as RouteGlyph,
-  Search,
-  Send,
-  Share2,
-  Trash2,
-  Upload,
-  X,
-  type LucideIcon,
-} from "lucide-react";
 import {
   exportFilename,
   formatDistanceM,
@@ -44,7 +23,6 @@ import {
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
 import { ownerUsername } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   ChipRail,
@@ -52,11 +30,15 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SearchField,
   StatusPill,
   type MenuEntry,
+  type Glyph,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
@@ -73,32 +55,29 @@ import classes from "./RoutesPanel.module.css";
 const ANY_KIND = "any";
 
 /** A kind's glyph and hue, from `ASSET_HUES` — the same identity Logjam GPS
- *  gives it on its Saved tab (DESIGN.md §3). */
-const KIND_IDENTITY: Record<WayKind, { icon: LucideIcon; hue: string }> = {
-  route: { icon: PenLine, hue: "var(--hue-route)" },
-  track: { icon: Activity, hue: "var(--hue-track)" },
-  import: { icon: FilePlus, hue: "var(--hue-import)" },
+ *  gives it on its Saved tab (docs/ux-principles.md §8). */
+const KIND_IDENTITY: Record<WayKind, { icon: Glyph; hue: string }> = {
+  route: { icon: "route", hue: "var(--hue-route)" },
+  track: { icon: "track", hue: "var(--hue-track)" },
+  import: { icon: "importedFile", hue: "var(--hue-import)" },
 };
 
-const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
-  open: RouteGlyph,
-  openPlace: MapPin,
-  edit: Pencil,
-  copy: CopyPlus,
-  copyAndRemove: CopyPlus,
-  share: Share2,
-  sendCopy: Send,
-  exportGpx: Download,
-  exportKml: Download,
-  download: Download,
-  rename: Pencil,
+const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
+  open: "route",
+  openPlace: "place",
+  edit: "edit",
+  copy: "copy",
+  copyAndRemove: "moveCopy",
+  share: "shareFriend",
+  sendCopy: "send",
+  exportGpx: "export",
+  exportKml: "export",
+  download: "download",
+  rename: "edit",
   // Not a bin: this drops the caller's own share and the owner keeps their row.
-  removeShare: X,
-  delete: Trash2,
+  removeShare: "close",
+  delete: "delete",
 };
-
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Export never touches the server — a route's geometry is already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {
@@ -203,7 +182,7 @@ export default function RoutesPanel({
     [searched, kind],
   );
   // Counts apply every axis but the rail's own, so a chip answers "how many
-  // would I get if I pressed this" (DESIGN.md §3).
+  // would I get if I pressed this" (docs/ux-principles.md §8).
   const counts = useMemo(() => wayKindCounts(searched), [searched]);
 
   const closeSearch = () => {
@@ -281,20 +260,14 @@ export default function RoutesPanel({
 
   const hero = (
     <Hero
-      title={
-        !waysLoaded
-          ? "Ways"
-          : ways.length === 0
-            ? "No lines yet"
-            : plural(ways.length, "line")
-      }
+      title="Ways"
       actions={
         searchOpen ? (
-          <IconButton icon={X} label="Close search" onClick={closeSearch} />
+          <IconButton icon="close" label="Close search" onClick={closeSearch} />
         ) : (
           <>
             <IconButton
-              icon={Search}
+              icon="search"
               label="Search ways"
               tone={query ? "filled" : "default"}
               aria-expanded={false}
@@ -307,13 +280,13 @@ export default function RoutesPanel({
                 {
                   id: "draw",
                   label: "Draw a route",
-                  icon: PenLine,
+                  icon: "draw",
                   onSelect: onStartDrawingRoute,
                 },
                 {
                   id: "import",
                   label: "Import from file",
-                  icon: Upload,
+                  icon: "upload",
                   onSelect: onOpenUnifiedImport,
                 },
               ]}
@@ -322,8 +295,8 @@ export default function RoutesPanel({
                   {...props}
                   compact
                   variant="filled"
-                  icon={Plus}
-                  trailingIcon={ChevronDown}
+                  icon="add"
+                  trailingIcon="expand"
                 >
                   Add
                 </Button>
@@ -370,42 +343,45 @@ export default function RoutesPanel({
     </div>
   );
 
+  // The same buttons are the empty state's and the end of the list's.
+  const addWayButtons = (
+    <>
+      <Button
+        compact
+        variant="filled"
+        icon="draw"
+        onClick={onStartDrawingRoute}
+      >
+        Draw a route
+      </Button>
+      <Button
+        compact
+        variant="outline"
+        icon="upload"
+        onClick={onOpenUnifiedImport}
+      >
+        Import
+      </Button>
+    </>
+  );
+
   const list = !waysLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your ways…</p>
+      <LoadingState label="Loading your ways…" />
     </div>
   ) : ways.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={RouteGlyph}
+        icon="route"
         title="No lines yet"
         body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
-        actions={
-          <>
-            <Button
-              compact
-              variant="filled"
-              icon={PenLine}
-              onClick={onStartDrawingRoute}
-            >
-              Draw a route
-            </Button>
-            <Button
-              compact
-              variant="outline"
-              icon={Upload}
-              onClick={onOpenUnifiedImport}
-            >
-              Import
-            </Button>
-          </>
-        }
+        actions={addWayButtons}
       />
     </div>
   ) : visible.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={Filter}
+        icon="filter"
         title="No ways match"
         body="Nothing matches your search and the kind you picked."
         actions={
@@ -463,7 +439,7 @@ export default function RoutesPanel({
                   trigger={(props) => (
                     <IconButton
                       {...props}
-                      icon={EllipsisVertical}
+                      icon="overflow"
                       label={`Actions for ${way.title}`}
                     />
                   )}
@@ -473,6 +449,7 @@ export default function RoutesPanel({
           />
         );
       })}
+      <ListEnd>{addWayButtons}</ListEnd>
     </div>
   );
 

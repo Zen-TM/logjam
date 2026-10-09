@@ -1,5 +1,5 @@
 // The offline / "N waiting to sync" pill pair, carried in the hero of every
-// list screen (DESIGN.md §10).
+// list screen (DESIGN.md §8).
 //
 // One component because it was three identical copies — Places, Logs and
 // Saved — and guest mode gave the duplication teeth: **"3 waiting to sync" is a
@@ -31,13 +31,13 @@ export function SyncStatusPills({
   return (
     <View style={styles.row}>
       {online ? null : (
-        <StatusPill label="Offline" tone="muted" icon="cloud-off" />
+        <StatusPill label="Offline" tone="muted" icon="offline" />
       )}
       {showPending ? (
         <StatusPill
           label={`${pendingCount} waiting to sync`}
           tone="outline"
-          icon="upload-cloud"
+          icon="uploading"
         />
       ) : null}
     </View>

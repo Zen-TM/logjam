@@ -231,7 +231,7 @@ describe("who owns a rejection", () => {
   });
 
   it("still parks an edit whose row was deleted, however the code classifies", async () => {
-    // 404 on an update is delete-wins (§6), not a flaky server.
+    // 404 on an update is delete-wins (DESIGN.md §4), not a flaky server.
     rows = [pushRow(1)];
     rejections.set("op-1", { code: 404, message: "not found" });
 

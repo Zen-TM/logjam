@@ -10,12 +10,11 @@
 //    label.** A link inside a `<label>` toggles the control it labels, so
 //    reading the terms used to tick (or untick) the box that says you agree
 //    with them.
-//  - **The error goes directly above the button it belongs to** (§8), never at
+//  - **The error goes directly above the button it belongs to** (docs/ux-principles.md §11), never at
 //    the top of the form, and a field's own complaint goes under the field.
 import { useState, useEffect } from "react";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
-import { ErrorBanner } from "./feedback/ErrorBanner";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
 import BrandMark from "./brand/BrandMark";
@@ -24,7 +23,7 @@ import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
 } from "../consent";
-import { Button, Checkbox, TextField } from "../ui";
+import { Button, Checkbox, TextField, ErrorBanner } from "../ui";
 
 const PASSWORD_HINT =
   "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";

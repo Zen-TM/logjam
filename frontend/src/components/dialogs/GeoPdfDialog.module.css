@@ -1,6 +1,6 @@
 /* A printable map: paper, the area it covers, and what is drawn on it. Layout
    only — every control is the kit's and every size and colour is a token
-   (DESIGN.md §4, §9). */
+   (DESIGN.md §1, §9). */
 
 .form {
   display: flex;

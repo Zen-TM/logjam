@@ -1,5 +1,5 @@
 // The verb list for ONE notification — the sheet the inbox's ⋯ opens
-// (DESIGN.md §7: per-item actions live in an overflow sheet, titled with the
+// (DESIGN.md §5: per-item actions live in an overflow sheet, titled with the
 // item, so rows stay clean and a mis-tap can't destroy anything).
 //
 // Four verbs, and no more. "Open" is the row's own tap, repeated here because
@@ -18,7 +18,7 @@
 // (`notificationActions.ts` stays the single source of those).
 //
 // PRIVACY: the sheet's title is the row's own label, which may carry a place
-// name or a filename — user text, rendered and never logged (DESIGN.md §11).
+// name or a filename — user text, rendered and never logged (docs/ux-principles.md §13).
 import { Alert, StyleSheet, View } from "react-native";
 
 import type { TNotification } from "../api/types";
@@ -28,7 +28,12 @@ import {
 } from "./notificationDestination";
 import { theme, spacing } from "../theme";
 import { BottomSheet, Row } from "../ui";
-import { notificationPlaceId, notificationLabel } from "@logjam/shared";
+import {
+  notificationDeleteConfirm,
+  notificationLabel,
+  notificationPlaceId,
+  notificationVerb,
+} from "@logjam/shared";
 
 export function NotificationOptionsSheet({
   notification,
@@ -67,10 +72,10 @@ export function NotificationOptionsSheet({
     act(() =>
       // One notification, so the sentence is short — but it is still a dialog,
       // because a delete is not undoable and there is no trash to fish it out
-      // of (DESIGN.md §7).
+      // of (DESIGN.md §5).
       Alert.alert(
-        "Delete this notification?",
-        "It goes from every device on your account. This can't be undone.",
+        notificationDeleteConfirm(1).confirmTitle,
+        notificationDeleteConfirm(1).confirmBody,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -87,28 +92,32 @@ export function NotificationOptionsSheet({
       <View style={styles.body}>
         {openable ? (
           <Row
-            icon="external-link"
-            title="Open"
+            icon={notificationVerb("open").icon}
+            title={notificationVerb("open").label}
             onPress={() => act(() => onOpen(notification))}
           />
         ) : null}
         {destination ? (
           <Row
-            // The tab's own glyph, so the row looks like where it goes.
-            icon={destination.tab === "friends" ? "users" : "download"}
+            icon={notificationVerb("view").icon}
             title={destination.label}
             onPress={() => act(() => onView(notification, destination))}
           />
         ) : null}
         <Row
-          icon={notification.read ? "eye-off" : "eye"}
-          title={notification.read ? "Mark as unread" : "Mark as read"}
+          icon={
+            notificationVerb(notification.read ? "markUnread" : "markRead").icon
+          }
+          title={
+            notificationVerb(notification.read ? "markUnread" : "markRead")
+              .label
+          }
           onPress={() => act(() => onSetRead(notification, !notification.read))}
         />
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
-          title="Delete notification"
+          title={notificationVerb("delete").label}
           onPress={confirmDelete}
         />
       </View>

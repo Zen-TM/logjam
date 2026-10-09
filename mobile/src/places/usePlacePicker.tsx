@@ -7,7 +7,7 @@
 // near-copies of a place picker is how one of them ends up with a different
 // filter or a different warning. It returns `{ header, body }` — the shape
 // `useSharePanel` established — so the sheet that owns the verb renders it as a
-// SUB-MODE and never stacks a second sheet (DESIGN.md §6).
+// SUB-MODE and never stacks a second sheet (DESIGN.md §4).
 //
 // Reads places from the MIRROR, so it works with no signal: the link is an
 // outbox op like any other edit. Only places the user OWNS are offered — the
@@ -148,7 +148,7 @@ export function usePlacePicker({
         {linkedPlace && onUnlink ? (
           <Row
             title={`Unlink from ${linkedPlace.name}`}
-            icon="link-2"
+            icon="link"
             hue={theme.warning}
             disabled={busy}
             onPress={() =>
@@ -188,7 +188,7 @@ export function usePlacePicker({
                       ? "Has a route already"
                       : undefined
                 }
-                icon={here ? "check" : "map-pin"}
+                icon={here ? "done" : "place"}
                 hue={here ? theme.accent : assetHue.route}
                 disabled={busy || here}
                 onPress={() => pick(place.id, place.name)}

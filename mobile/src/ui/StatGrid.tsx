@@ -1,24 +1,27 @@
-import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { Icon } from "./Icon";
 
 export type Stat = {
   label: string;
   value: string;
   /** Full-width cell instead of half. For a value that wraps badly at half
    *  width — a coordinate pair is the case this exists for. */
-  wide?: boolean;
+  span?: boolean;
   /** Makes the cell copy its value on tap, and draws a copy glyph beside the
    *  value so the tap can be found: a tile that only reveals it is a button
    *  when pressed is one nobody presses. */
   onCopy?: () => void;
 };
 
-// Two-column grid of labelled stat cards — the Place-detail Overview
-// (Grade / Length / Abseils / Longest drop / Water / Rating). Each cell is a
-// warm card with an uppercase eyebrow label above the value. Odd counts leave
-// the last cell half-width, which reads fine.
+// Two-column grid of labelled stats — the Place-detail Overview (Grade /
+// Length / Abseils / Longest drop / Water / Rating): an uppercase eyebrow label
+// above the value. Odd counts leave the last cell half-width, which reads fine.
+//
+// A cell is on the card colour only when it does something (`onCopy`): the
+// fill means "press me" (UX §4). A read-only cell sits on the page with the
+// same box, so a grid of both lines up.
 export function StatGrid({ stats }: { stats: Stat[] }) {
   return (
     <View style={styles.grid}>
@@ -32,8 +35,8 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
             <View style={styles.valueRow}>
               <Text style={styles.value}>{stat.value}</Text>
               {stat.onCopy ? (
-                <Feather
-                  name="copy"
+                <Icon
+                  idea="copy"
                   size={14}
                   color={theme.textMuted}
                   style={styles.copyGlyph}
@@ -51,7 +54,7 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
             onPress={stat.onCopy}
             style={({ pressed }) => [
               styles.cell,
-              stat.wide && styles.wide,
+              stat.span && styles.span,
               pressed && styles.pressed,
             ]}
           >
@@ -60,7 +63,7 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
         ) : (
           <View
             key={stat.label}
-            style={[styles.cell, stat.wide && styles.wide]}
+            style={[styles.cell, styles.readOnly, stat.span && styles.span]}
           >
             {content}
           </View>
@@ -82,7 +85,8 @@ const styles = StyleSheet.create({
     padding: spacing(1.5),
     gap: spacing(0.25),
   },
-  wide: { flexBasis: "100%" },
+  readOnly: { backgroundColor: "transparent", borderColor: "transparent" },
+  span: { flexBasis: "100%" },
   pressed: { backgroundColor: theme.cardPressed },
   label: {
     color: theme.textMuted,

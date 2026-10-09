@@ -27,7 +27,7 @@
 // three of the five have not chosen a file yet at that point, and confirming a
 // deletion the user can still back out of is how a file goes missing.
 //
-// Each list is a SUB-MODE of this sheet, never a second sheet (DESIGN.md §6),
+// Each list is a SUB-MODE of this sheet, never a second sheet (DESIGN.md §4),
 // and every sub-mode resets on the sheet's OPEN edge, because the place screen
 // closes it from outside.
 //
@@ -92,7 +92,7 @@ export function AddWaySheet({
   /**
    * Work deferred until this sheet has fully closed. A system picker launched
    * from inside an open Modal can never attach its own window, and its promise
-   * simply never settles — the button looks dead (DESIGN.md §7).
+   * simply never settles — the button looks dead (DESIGN.md §5).
    */
   const [pending, setPending] = useState<null | (() => Promise<void>)>(null);
 
@@ -241,7 +241,7 @@ export function AddWaySheet({
       return !needle || route.name.toLowerCase().includes(needle);
     });
 
-  // A verb that can only refuse is absent (DESIGN.md §7): an import with no
+  // A verb that can only refuse is absent (DESIGN.md §5): an import with no
   // .gpx/.kml original, and a recording too short to make a route from, both
   // withhold their descriptor, so neither reaches this list.
   const attachableImports = (imports ?? []).filter(
@@ -303,7 +303,7 @@ export function AddWaySheet({
               already in Saved, the other opens the system picker — so they
               have to stay plainly distinct. */}
           <Row
-            icon="edit-3"
+            icon="route"
             hue={assetHue.route}
             title="Choose a route you drew"
             subtitle="One of your saved routes"
@@ -312,7 +312,7 @@ export function AddWaySheet({
           />
           {onDrawRoute ? (
             <Row
-              icon="pen-tool"
+              icon="draw"
               hue={assetHue.route}
               title="Draw a route on the map"
               subtitle="Opens the map to draw a route"
@@ -324,7 +324,7 @@ export function AddWaySheet({
             />
           ) : null}
           <Row
-            icon="activity"
+            icon="track"
             hue={assetHue.track}
             title="Use a recorded track"
             subtitle="A track you recorded in Logjam"
@@ -332,7 +332,7 @@ export function AddWaySheet({
             onPress={() => setMode("tracks")}
           />
           <Row
-            icon="file-plus"
+            icon="importedFile"
             hue={assetHue.import}
             title="Use an imported file"
             subtitle="A GPX or KML already in Saved"
@@ -340,7 +340,7 @@ export function AddWaySheet({
             onPress={() => setMode("imports")}
           />
           <Row
-            icon="file-plus"
+            icon="importedFile"
             hue={assetHue.import}
             title="Import a new file"
             subtitle="A .gpx or .kml from this phone"
@@ -371,7 +371,7 @@ export function AddWaySheet({
                       ? "Already this place's route"
                       : formatDistanceM(routeLengthM(route.points))
                   }
-                  icon={here ? "check" : "edit-3"}
+                  icon={here ? "done" : "route"}
                   hue={here ? theme.accent : assetHue.route}
                   disabled={busy || here}
                   onPress={() =>
@@ -401,7 +401,7 @@ export function AddWaySheet({
             attachableImports.map((row) => (
               <Row
                 key={row.id}
-                icon="file-plus"
+                icon="importedFile"
                 hue={row.color}
                 title={row.name}
                 disabled={busy}
@@ -429,11 +429,11 @@ export function AddWaySheet({
             </Text>
           ) : (
             <>
-              <SectionHeader label={`${convertibleTracks.length} finished`} />
+              <SectionHeader title={`${convertibleTracks.length} finished`} />
               {convertibleTracks.map((track) => (
                 <Row
                   key={track.id}
-                  icon="activity"
+                  icon="track"
                   hue={track.color}
                   title={track.name}
                   subtitle={trackSummary(track)}

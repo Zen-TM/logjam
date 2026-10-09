@@ -70,6 +70,24 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("PATCH /users/me stores a retired scheme id as the scheme it became, and restores", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.themeSchemeId;
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ themeSchemeId: "ironbark" });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.themeSchemeId).toBe("scribblyGum");
+    } finally {
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ themeSchemeId: original });
+    }
+  });
+
   it("PATCH /users/me updates the email notification preferences and restores them", async () => {
     const keys = ["topoEmail", "exportEmail", "geoPdfEmail"] as const;
     const before = await request(API_URL).get("/users/me").set(AUTH);

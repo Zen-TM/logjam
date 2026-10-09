@@ -204,7 +204,7 @@ async function applyOpResult(
       await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
 
       if (result.status === "appliedWithConflict" && result.conflicts?.length) {
-        // Server over-reports by contract (§6) — drop receipts whose
+        // Server over-reports by contract (DESIGN.md §4) — drop receipts whose
         // serverValue matches the base this edit was made against.
         const base = row.base_fields_json
           ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
