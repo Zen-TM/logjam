@@ -57,7 +57,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "connectivity":
           return "Paused — waiting for Wi-Fi";
         case "background":
-          return "Paused — Logjam has to stay open to download";
+          return "Paused — the maps stopped loading";
         case "provider-backoff":
           return "Paused — the map service is busy";
         default:

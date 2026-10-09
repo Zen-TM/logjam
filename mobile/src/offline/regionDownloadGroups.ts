@@ -99,3 +99,59 @@ export function regionGroupToastText(group: RegionDownloadGroup): string {
   // (no elevation profiles out there), and it is not fixed by re-picking maps.
   return group.demUnfinished ? `${withMaps} · no elevation data` : withMaps;
 }
+
+/**
+ * How many times a download may restart itself on a returning connection while
+ * Logjam GPS is behind another app, and how long it waits for one. Spotty
+ * signal at a trailhead flaps for hours, and each flap would otherwise wake the
+ * radio for another go. Past either limit the download waits for the user.
+ * [0013](../../../docs/decisions/0013-background-work-battery-rules.md)
+ */
+export const MAX_BACKGROUND_RESUMES = 3;
+export const BACKGROUND_WAIT_MS = 5 * 60_000;
+
+/**
+ * What the download notification says, or null when the foreground service
+ * has nothing to stay up for.
+ *
+ * Up for work in hand (queued or downloading) and, while it still has restarts
+ * left, for a job waiting on a connection. A job paused for any other reason
+ * moves only when the user comes back, so holding the process alive for it
+ * would be battery spent on nothing.
+ *
+ * No area name in the text: Android shows it on the lock screen.
+ */
+export function downloadNotice(
+  jobs: RegionJob[],
+  backgroundResumesLeft: number,
+): { text: string; percent: number; waiting: boolean } | null {
+  const working = jobs.some(
+    (job) => job.state.kind === "queued" || job.state.kind === "downloading",
+  );
+  const waiting =
+    backgroundResumesLeft > 0 &&
+    jobs.some(
+      (job) =>
+        job.state.kind === "paused" && job.state.reason === "connectivity",
+    );
+  if (!working && !waiting) return null;
+  const percent = Math.round(
+    (jobs.reduce((sum, job) => sum + jobFraction(job), 0) / jobs.length) * 100,
+  );
+  return {
+    text: working ? `${percent}% saved` : "Waiting for a connection",
+    percent,
+    waiting: !working,
+  };
+}
+
+/**
+ * May a download paused for want of a connection restart now that one is back?
+ * Always in the foreground; behind another app only while restarts are left.
+ */
+export function mayResumeOnReconnect(
+  appState: string,
+  backgroundResumesLeft: number,
+): boolean {
+  return appState === "active" || backgroundResumesLeft > 0;
+}
