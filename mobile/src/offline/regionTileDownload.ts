@@ -196,7 +196,11 @@ class TokenBucket {
 export async function connectionAllows(
   allowCellular: boolean,
 ): Promise<boolean> {
-  const state = await NetInfo.fetch();
+  // refresh(), not fetch(): fetch() answers from the last state NetInfo was
+  // sent, and the one sent while Android had the app's network blocked behind
+  // another app calls Wi-Fi metered. Back in front that left a download
+  // "waiting for Wi-Fi" on Wi-Fi for good (seen on the Android 15 emulator).
+  const state = await NetInfo.refresh();
   if (state.isConnected !== true) return false;
   return connectionAllowsMetered(state, allowCellular);
 }
