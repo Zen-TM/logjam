@@ -16,3 +16,8 @@ android {
     abortOnError false
   }
 }
+
+dependencies {
+  // HeadlessJsTaskContext; the app supplies React Native itself.
+  compileOnly "com.facebook.react:react-android"
+}
