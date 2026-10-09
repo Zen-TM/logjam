@@ -5,11 +5,10 @@ import type {
   RopeWikiCandidatePayload,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
 import MatchReview from "./MatchReview";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
-import { Button, Dialog } from "../../ui";
+import { Button, Dialog, ErrorBanner } from "../../ui";
 import classes from "./RopeWikiReviewDialog.module.css";
 
 // ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────

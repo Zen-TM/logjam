@@ -107,13 +107,6 @@
   transform: rotate(calc(-1 * var(--bearing, 0deg)));
 }
 
-/* The north half, filled. Warning is the scheme's red, measured on the map
-   button's `primary` as text (scripts/wcag-contrast.mjs). */
-.needleNorth {
-  fill: var(--color-warning);
-  stroke: var(--color-warning);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .topLeft,
   .instruments {

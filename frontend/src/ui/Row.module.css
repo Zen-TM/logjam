@@ -22,18 +22,38 @@
     calc(var(--space-1) - 1px) var(--space-1);
   box-sizing: border-box;
   border-radius: var(--radius-lg);
-  border: var(--hairline);
-  background: var(--color-card);
+  /* Read-only: no fill and no visible edge, but the border keeps its width, so
+     the tile and the title line up with the pressable rows around it. */
+  border: 1px solid transparent;
+  background: transparent;
   box-shadow: var(--edge), var(--outline);
 }
 
-/* Only a row that DOES something answers the pointer: one that opens (`onOpen`
-   lays the stretched button over the card) or one that can be picked. A Stats
-   row is a read-out, and lighting its edge on hover promised a press that does
-   nothing (operator, 2026-09-16). */
+/* THE CARD FILL MEANS "YOU CAN ACT ON THIS" (UX §4). A row wears it when it
+   opens (`onOpen` or `href` lays the stretched button over the card), can be
+   picked, or holds controls of its own (a ⋯, Accept / Decline, a switch): a
+   request row with two buttons and no card looked broken (operator,
+   2026-10-06). Only a READ-OUT has none, and it does not answer the pointer:
+   lighting its edge on hover promised a press that does nothing (operator,
+   2026-09-16). A row of controls alone gets the fill but not the hover edge,
+   because the card itself is not what presses. */
+.row:has(.open),
+.row:has(.pick),
+.row:has(
+  :is(.trailing, .footer)
+    :is(button, a, input, select, textarea, [role="switch"])
+) {
+  border-color: var(--color-line);
+  background: var(--color-card);
+}
+
 .row:has(.open):hover,
 .row:has(.pick):hover {
   border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
+}
+
+.row:has(.open:active) {
+  background: var(--color-card-pressed);
 }
 
 .row[data-selected="true"] {
@@ -62,8 +82,12 @@
   padding-left: calc(32px + var(--space-1));
 }
 
+.row[data-disabled="true"]:has(.open):hover {
+  border-color: var(--color-line);
+}
+
 .row[data-disabled="true"] {
-  opacity: 0.45;
+  opacity: var(--opacity-disabled);
 }
 
 /* The focus ring belongs to the card the stretched button covers. */
@@ -218,4 +242,15 @@
 .pick:focus-visible .pickMark,
 .pick[data-selecting="true"] .pickMark {
   display: flex;
+}
+
+/* The add button that ends a list. It never shrinks (a list is a flex column
+   its panel scrolls) and keeps its own width, centred. */
+.listEnd {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
 }

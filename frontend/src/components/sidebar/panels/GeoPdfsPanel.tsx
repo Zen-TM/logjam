@@ -2,7 +2,7 @@
 // made, and the templates they are made from.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (DESIGN.md §1). Its hero counts the finished GeoPDFs; a TAB each for the maps
+// (docs/ux-principles.md §2). Its hero counts the finished GeoPDFs; a TAB each for the maps
 // and the templates they are made from; and what is still being made pinned
 // under both. It was two buttons, a stack of job ribbons and two accordions
 // that opened closed — so the page's own answer was behind a click — and then
@@ -11,19 +11,8 @@
 //
 // A GeoPDF's body DOWNLOADS it. A PDF has nowhere in this app to open to — the
 // list view carries no extent to centre the map on — and in a browser opening a
-// PDF is fetching it. Its ⋯ holds every verb, Download first (DESIGN.md §5).
+// PDF is fetching it. Its ⋯ holds every verb, Download first (DESIGN.md §3).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  Download,
-  EllipsisVertical,
-  FileText,
-  Pencil,
-  Plus,
-  Share2,
-  Trash2,
-  X,
-} from "lucide-react";
 import { removeShareConfirm } from "@logjam/shared";
 import {
   apiFetch,
@@ -45,10 +34,12 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   StatusPill,
   type MenuEntry,
+  LoadingState,
 } from "../../../ui";
 import {
   MAP_IDENTITY,
@@ -75,7 +66,7 @@ export default function GeoPdfsPanel({
   geoPdfJobsRefetch,
   friends,
 }: {
-  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (§2). */
+  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md §2). */
   views: React.ReactNode;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -153,28 +144,28 @@ export default function GeoPdfsPanel({
           {
             id: "download",
             label: "Download",
-            icon: Download,
+            icon: "download",
             onSelect: () => downloadFile(job.downloadUrl!),
           },
         ]
       : [];
     // Owner-only: a GeoPDF shared with you is yours to read and download, not
     // to share on or delete, and the API answers both with 403 — so they are
-    // absent rather than offered and refused (DESIGN.md §7).
+    // absent rather than offered and refused (DESIGN.md §5).
     if (job.syncRole === "owner") {
       return [
         ...download,
         {
           id: "share",
           label: "Share…",
-          icon: Share2,
+          icon: "shareFriend",
           onSelect: () => setShareJob({ id: job.id, label }),
         },
         { id: "delete-sep", separator: true },
         {
           id: "delete",
           label: "Delete",
-          icon: Trash2,
+          icon: "delete",
           danger: true,
           onSelect: () =>
             ask({
@@ -200,7 +191,7 @@ export default function GeoPdfsPanel({
       {
         id: "removeShare",
         label: "Remove",
-        icon: X,
+        icon: "close",
         onSelect: () =>
           ask({
             title: confirm.title,
@@ -228,20 +219,20 @@ export default function GeoPdfsPanel({
     {
       id: "make",
       label: "Make a GeoPDF with this",
-      icon: FileText,
+      icon: "geoPdf",
       onSelect: () => onOpenGeoPdfWithTemplate(template.id),
     },
     {
       id: "edit",
       label: "Edit…",
-      icon: Pencil,
+      icon: "edit",
       onSelect: () => onEditGeoPdfTemplate(template),
     },
     { id: "delete-sep", separator: true },
     {
       id: "delete",
       label: "Delete",
-      icon: Trash2,
+      icon: "delete",
       danger: true,
       onSelect: () =>
         ask({
@@ -288,13 +279,13 @@ export default function GeoPdfsPanel({
             {
               id: "make",
               label: "Make a GeoPDF",
-              icon: FileText,
+              icon: "geoPdf",
               onSelect: onOpenGeoPdf,
             },
             {
               id: "template",
               label: "New template…",
-              icon: Plus,
+              icon: "add",
               onSelect: onCreateGeoPdfTemplate,
             },
           ]}
@@ -303,8 +294,8 @@ export default function GeoPdfsPanel({
               {...props}
               compact
               variant="filled"
-              icon={Plus}
-              trailingIcon={ChevronDown}
+              icon="add"
+              trailingIcon="expand"
             >
               Make
             </Button>
@@ -320,26 +311,24 @@ export default function GeoPdfsPanel({
     jobs.length === 0 &&
     templates.length === 0;
 
+  // The same button is the empty state's and the end of the list's.
+  const makeGeoPdfButton = (
+    <Button compact variant="filled" icon="geoPdf" onClick={onOpenGeoPdf}>
+      Make a GeoPDF
+    </Button>
+  );
+
   const list = !jobsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your GeoPDFs…</p>
+      <LoadingState label="Loading your GeoPDFs…" />
     </div>
   ) : nothingYet ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={FileText}
+        icon="geoPdf"
         title="No GeoPDFs yet"
         body="Frame an area on the map, and Logjam Web makes a map of it to print, or to load into Logjam GPS for the field."
-        actions={
-          <Button
-            compact
-            variant="filled"
-            icon={FileText}
-            onClick={onOpenGeoPdf}
-          >
-            Make a GeoPDF
-          </Button>
-        }
+        actions={makeGeoPdfButton}
       />
     </div>
   ) : (
@@ -372,7 +361,7 @@ export default function GeoPdfsPanel({
                 description={MAP_IDENTITY.geoPdf.label}
                 leading={
                   <IconTile
-                    icon={FileText}
+                    icon="geoPdf"
                     hue={MAP_IDENTITY.geoPdf.hue}
                     label={MAP_IDENTITY.geoPdf.label}
                   />
@@ -395,7 +384,7 @@ export default function GeoPdfsPanel({
                       trigger={(props) => (
                         <IconButton
                           {...props}
-                          icon={EllipsisVertical}
+                          icon="overflow"
                           label={`Actions for ${label}`}
                         />
                       )}
@@ -406,7 +395,7 @@ export default function GeoPdfsPanel({
             );
           })}
           {/* The server caps the list; say so rather than letting older GeoPDFs
-            quietly not exist (DESIGN.md §8). */}
+            quietly not exist (docs/ux-principles.md §11). */}
           {jobsTotal != null && jobsTotal > jobs.length && (
             <p className={classes.note}>
               Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}.
@@ -453,7 +442,7 @@ export default function GeoPdfsPanel({
                   trigger={(props) => (
                     <IconButton
                       {...props}
-                      icon={EllipsisVertical}
+                      icon="overflow"
                       label={`Actions for ${template.name}`}
                     />
                   )}
@@ -463,6 +452,7 @@ export default function GeoPdfsPanel({
           ))}
         </section>
       )}
+      <ListEnd>{makeGeoPdfButton}</ListEnd>
     </div>
   );
 
@@ -498,12 +488,7 @@ export default function GeoPdfsPanel({
       {shareJob && (
         <ShareDialog
           title={`Share ${shareJob.label}`}
-          blurb={
-            <>
-              Recipients can view and download this GeoPDF. They cannot delete
-              it, and you can unshare at any time.
-            </>
-          }
+          kind="geoPdfJob"
           friends={friends}
           open
           onClose={() => setShareJob(null)}

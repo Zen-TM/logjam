@@ -59,7 +59,7 @@ const NOW = Date.parse("2026-08-31T00:00:00.000Z");
 describe("previewValue", () => {
   it("never renders a coordinate", () => {
     // A parked place create carries lat/lng. This screen is the one most likely
-    // to be screenshotted into a bug report (DESIGN.md §11).
+    // to be screenshotted into a bug report (docs/ux-principles.md §13).
     expect(previewValue("latitude", -33.7)).toBe("(hidden)");
     expect(previewValue("longitude", 150.3)).toBe("(hidden)");
   });
@@ -307,7 +307,7 @@ describe("opChanges", () => {
 
   it("never renders a coordinate, whatever the op carries", () => {
     // A create carries lat/lng, and this screen is the one that ends up in a
-    // screenshot (DESIGN.md §11). Hidden entirely rather than "(hidden)": a row
+    // screenshot (docs/ux-principles.md §13). Hidden entirely rather than "(hidden)": a row
     // reading "position: (hidden)" is noise, not caution.
     const changes = opChanges(
       parked({

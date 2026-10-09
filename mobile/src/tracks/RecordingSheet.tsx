@@ -11,7 +11,7 @@
 // The controls sit in the sheet's `footer` rather than in the scroll: with two
 // profile charts the body can outgrow the 80% cap, and a Finish button that
 // scrolls away leaves the drag handle as the only exit — which means DISCARD
-// (DESIGN.md §6).
+// (DESIGN.md §4).
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 
@@ -196,10 +196,10 @@ export function RecordingSheet({
             compact
             onPress={handlePauseResume}
           />
-          <Button label="Finish" icon="check" compact onPress={handleFinish} />
+          <Button label="Finish" icon="done" compact onPress={handleFinish} />
           <View style={styles.spacer} />
           <IconButton
-            icon="trash-2"
+            icon="delete"
             color={theme.warning}
             accessibilityLabel="Discard this recording"
             onPress={handleDiscard}

@@ -87,7 +87,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
 
   return (
     <Row
-      icon={state.kind === "ready" ? "check-circle" : "download"}
+      icon={state.kind === "ready" ? "success" : "saveOffline"}
       hue={state.kind === "failed" ? theme.warning : assetHue.region}
       title={spec.label}
       subtitle={subtitle}

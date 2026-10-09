@@ -1,14 +1,4 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import {
-  Check,
-  ChevronRight,
-  CircleHelp,
-  MapPin,
-  MapPinPlus,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   buildCustomFieldDef,
@@ -33,8 +23,6 @@ import {
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import type { TPlace, TTripLog } from "../../placeUtils";
@@ -69,6 +57,9 @@ import {
   SectionHeader,
   TextArea,
   TextField,
+  Icon,
+  ErrorBanner,
+  FieldError,
 } from "../../ui";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
@@ -1014,7 +1005,7 @@ function TripLogDialog({
         onClose={mode === "places" ? backToForm : guard.requestClose}
         footer={
           mode === "places" ? (
-            <Button variant="filled" icon={Check} onClick={backToForm}>
+            <Button variant="filled" icon="done" onClick={backToForm}>
               Done
             </Button>
           ) : (
@@ -1073,9 +1064,7 @@ function TripLogDialog({
                     title={place.name}
                     subtitle={`${index + 1} of ${selectedCount}`}
                     description="On this trip. Press to take it off."
-                    leading={
-                      <IconTile icon={Check} hue="var(--color-accent)" />
-                    }
+                    leading={<IconTile icon="done" hue="var(--color-accent)" />}
                     onOpen={() => togglePlace(place.id)}
                   />
                 ))}
@@ -1086,7 +1075,7 @@ function TripLogDialog({
                     subtitle={`${selectedCount} of ${selectedCount} · made when the trip is saved`}
                     description="A new place. Press to take it off."
                     leading={
-                      <IconTile icon={MapPinPlus} hue="var(--color-accent)" />
+                      <IconTile icon="addPlace" hue="var(--color-accent)" />
                     }
                     onOpen={() => setCreating(null)}
                   />
@@ -1104,7 +1093,7 @@ function TripLogDialog({
                   title={`Create “${placeSearch.trim()}”`}
                   subtitle="A new canyon, made when the trip is saved"
                   leading={
-                    <IconTile icon={MapPinPlus} hue="var(--color-neutral)" />
+                    <IconTile icon="addPlace" hue="var(--color-neutral)" />
                   }
                   onOpen={() => startCreate(placeSearch.trim())}
                 />
@@ -1122,9 +1111,7 @@ function TripLogDialog({
                     className={classes.row}
                     title={place.name}
                     description="Press to add it to this trip."
-                    leading={
-                      <IconTile icon={Plus} hue="var(--color-neutral)" />
-                    }
+                    leading={<IconTile icon="add" hue="var(--color-neutral)" />}
                     onOpen={() => togglePlace(place.id)}
                   />
                 ))
@@ -1192,9 +1179,10 @@ function TripLogDialog({
                 selectedCount === 1 ? "1 place" : `${selectedCount} places`
               }
               description="Places on this trip. Press to choose."
-              leading={<IconTile icon={MapPin} hue="var(--color-accent)" />}
+              leading={<IconTile icon="place" hue="var(--color-accent)" />}
               trailing={
-                <ChevronRight
+                <Icon
+                  idea="disclosure"
                   size={18}
                   aria-hidden
                   className={classes.chevron}
@@ -1240,7 +1228,7 @@ function TripLogDialog({
                   {onPickCoords && (
                     <Button
                       variant="outline"
-                      icon={MapPinPlus}
+                      icon="addPlace"
                       onClick={handlePickCoords}
                     >
                       Pick on map
@@ -1300,7 +1288,7 @@ function TripLogDialog({
                   />
                 </div>
                 <IconButton
-                  icon={Trash2}
+                  icon="delete"
                   label={`Delete the attribute ${def.label}`}
                   tone="danger"
                   onClick={() => setFieldToDelete(def)}
@@ -1336,7 +1324,7 @@ function TripLogDialog({
             ) : (
               <Button
                 compact
-                icon={Plus}
+                icon="add"
                 className={classes.addAttribute}
                 onClick={() => setShowAddField(true)}
               >
@@ -1362,9 +1350,7 @@ function TripLogDialog({
               {leftoverFieldDefs.map((def) => (
                 <Row
                   key={def.key}
-                  leading={
-                    <IconTile icon={CircleHelp} hue="var(--color-accent)" />
-                  }
+                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
                   title={def.label}
                   subtitle={formatFieldValue(
                     coerceFieldValue(getFieldValue(def.key), def.type),
@@ -1372,7 +1358,7 @@ function TripLogDialog({
                   )}
                   trailing={
                     <IconButton
-                      icon={X}
+                      icon="close"
                       label={`Remove ${def.label} from this trip`}
                       onClick={() => removeLeftoverField(def.key)}
                     />

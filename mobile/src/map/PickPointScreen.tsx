@@ -69,6 +69,7 @@ import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import { RoutesLayer } from "./RoutesLayer";
+import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import {
   resolveMapSource,
   type BasemapId,
@@ -308,6 +309,8 @@ export function PickPointScreen({
         ))}
       </View>
 
+      <MapBackButton top={insets.top + spacing(2)} onPress={onCancel} />
+
       <View
         style={[styles.hint, { top: insets.top + spacing(2) }]}
         pointerEvents="none"
@@ -330,10 +333,10 @@ export function PickPointScreen({
         <View style={styles.action}>
           <Button
             label="Use this point"
-            icon="check"
+            icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
-            // disabled one saying why (DESIGN.md §7), which is what the hint
+            // disabled one saying why (DESIGN.md §5), which is what the hint
             // above is for.
             disabled={picked == null}
             onPress={() => picked && onConfirm(picked)}
@@ -366,9 +369,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   thumbActive: { borderColor: theme.accent },
+  // After the back button, which owns the top left.
   hint: {
     position: "absolute",
-    left: spacing(2),
+    left: MAP_BACK_SPACE,
     backgroundColor: scrim.heavy,
     borderRadius: radius.md,
     paddingHorizontal: spacing(2),

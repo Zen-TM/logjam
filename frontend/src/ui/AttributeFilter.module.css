@@ -1,4 +1,4 @@
-/* Layout only — the controls inside carry their own look (DESIGN.md §9). */
+/* Layout only — the controls inside carry their own look (DESIGN.md §6). */
 .chips {
   display: flex;
   flex-wrap: wrap;
