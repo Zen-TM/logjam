@@ -16,9 +16,10 @@
 // (see regionFrame.ts).
 //
 // PRIVACY: the framed bbox exists in component state and goes to the provider as
-// tile coordinates only. Nothing about the area reaches the Logjam API — the
-// tile-pyramid path never calls it (mobile/CLAUDE.md: region-of-interest bboxes
-// stay off the server).
+// tile coordinates only. The one place it reaches the Logjam API is the body of
+// the vector clip request, which every signed-in save now makes
+// (offline/regionDownloads.ts; the API redacts it from logs and keeps the clip
+// 120 s). A guest's save makes no Logjam request at all.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -67,6 +68,7 @@ import {
 } from "../offline/regionDownloadQueue";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
+import { vectorClipFor } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -91,21 +93,15 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * The three NSW SIX rasters are here because their CC licence permits
  * redistribution (operator-verified); the OSM-family sources are NOT, and are
  * absent rather than disabled — an affordance that exists only to refuse is
- * worse than no affordance. `protomaps` is our own self-hosted vector basemap and
- * arrives as one clip file rather than a tile pyramid (see the queue's two task
- * kinds), which is why it is priced differently below.
+ * worse than no affordance.
+ *
+ * `protomaps`, our own vector basemap, is not a choice here: it comes with
+ * every area a signed-in user saves (`vectorClipFor`). It is a few megabytes
+ * against tens for one raster, and the route and measure tools snap to it, so
+ * leaving it optional meant a tool that quietly stopped working in the field.
  */
-type SelectableId = OfflineBasemapId | "protomaps";
-const DOWNLOADABLE: SelectableId[] = [
-  "six-topo",
-  "six-base",
-  "six-imagery",
-  "protomaps",
-];
-
-function isRasterPyramid(id: SelectableId): id is OfflineBasemapId {
-  return id !== "protomaps";
-}
+type SelectableId = OfflineBasemapId;
+const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
 
 /**
  * Chip labels, not the catalog's picker names: "SIX Maps Base Map" on a chip
@@ -116,7 +112,6 @@ const DOWNLOAD_CHIP_LABEL: Record<SelectableId, string> = {
   "six-topo": "Topo",
   "six-base": "Base Map",
   "six-imagery": "Imagery",
-  protomaps: "Vector",
 };
 
 /**
@@ -169,16 +164,14 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  * the map-layer chips, the detail rail, the Save button — is always the same
  * shape, so the panel does not scroll.
  *
- * A guest gets one extra line explaining why there is no vector chip. That is
- * decided before the screen mounts and cannot change while it is open, so it is
- * a second constant rather than a reason to make the panel elastic.
+ * That includes the one line under the chips saying whether the detailed map
+ * comes with the area: it is always one line, whatever it says.
  *
  * ponytail: fixed pixels, so a very large OS font setting will clip the last
- * row rather than scroll it. Measure and raise these two numbers if that turns
+ * row rather than scroll it. Measure and raise this number if that turns
  * up in the field; making the panel scrollable again just hides the Save button.
  */
-const PANEL_HEIGHT = 208;
-const PANEL_HEIGHT_GUEST = 250;
+const PANEL_HEIGHT = 250;
 
 /** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
 const PROTOMAPS_FLAVOR = "light" as const;
@@ -228,19 +221,19 @@ export function RegionDownloadScreen({
   // the provider with no Logjam request at all (regionTileDownload.ts) and work
   // exactly as they do for anyone else.
   //
-  // Dropped from the list rather than shown disabled, following this screen's
-  // existing rule for the unlicensed OSM sources: a chip that exists only to
-  // refuse is worse than no chip. The note under the rail says why, and where
-  // to change it — which a greyed chip could not.
+  // Everyone else gets it with every area, unasked (`vectorClipFor`); the
+  // note under the chips says which of the two this is.
   const isGuest = useAccountState().accountState === "guest";
-  const downloadable = isGuest
-    ? DOWNLOADABLE.filter((id) => id !== "protomaps")
-    : DOWNLOADABLE;
+  const downloadable = DOWNLOADABLE;
 
   const [selected, setSelected] = useState<SelectableId[]>(() =>
     downloadable.includes(startBasemapId as SelectableId)
       ? [startBasemapId as SelectableId]
-      : ["six-topo"],
+      : // Arriving from the Vector map, signed in: that map is coming anyway,
+        // so nothing else is picked for them.
+        startBasemapId === "protomaps" && !isGuest
+        ? []
+        : ["six-topo"],
   );
   const [detailZoom, setDetailZoom] = useState(DEFAULT_DETAIL_ZOOM);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -280,13 +273,13 @@ export function RegionDownloadScreen({
   // The default is the vector basemap: it is the detailed one, and it is what
   // the map screen draws. A guest cannot have it (the clip is an authed API
   // call), so their default is the topo raster.
-  const defaultPreview: SelectableId = isGuest ? "six-topo" : "protomaps";
-  const [preview, setPreview] = useState<SelectableId>(() =>
+  const defaultPreview: BasemapId = isGuest ? "six-topo" : "protomaps";
+  const [preview, setPreview] = useState<BasemapId>(() =>
     downloadable.includes(startBasemapId as SelectableId)
-      ? (startBasemapId as SelectableId)
+      ? startBasemapId
       : defaultPreview,
   );
-  const previewBasemap: BasemapId = selected.includes(preview)
+  const previewBasemap: BasemapId = (selected as BasemapId[]).includes(preview)
     ? preview
     : defaultPreview;
   const previewResolved = useMemo(
@@ -370,19 +363,18 @@ export function RegionDownloadScreen({
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
-  const pyramidIds = selected.filter(isRasterPyramid);
-  const includesVector = selected.includes("protomaps");
+  const pyramidIds = selected;
+  const vectorClip = bbox ? vectorClipFor(isGuest, bbox) : "none";
+  const includesVector = vectorClip === "include";
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
     ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
     : null;
-  const caps =
-    bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
-  const canDownload =
-    selected.length > 0 &&
-    bbox != null &&
-    caps?.ok === true &&
-    (job == null || job.totalTiles > 0 || includesVector);
+  const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
+  // The vector map alone is a download worth making, so no raster need be
+  // picked; with nothing picked and no vector map there is nothing to save.
+  const mapCount = selected.length + (includesVector ? 1 : 0);
+  const canDownload = mapCount > 0 && bbox != null && caps?.ok === true;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
@@ -396,7 +388,7 @@ export function RegionDownloadScreen({
       .map((source) => source.zMax) ?? [];
   const deepestZoom =
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
-  const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
+  const vectorOnly = pyramidIds.length === 0;
 
   // ONE warning, over the map (DESIGN.md §5). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
@@ -430,14 +422,17 @@ export function RegionDownloadScreen({
                 groupId,
                 groupLabel,
                 bbox,
-                zMax: Math.min(detailZoom, catalogMaxZoom("protomaps")),
+                // Always the archive's full detail, whatever the rail says:
+                // the rail prices rasters, and a full-detail clip is a few
+                // megabytes (measured: 1–7 MB for 5–40 km of bush).
+                zMax: catalogMaxZoom("protomaps"),
                 allowCellular,
               },
             ]
           : []),
       ]);
     },
-    [bbox, detailZoom, includesVector, job],
+    [bbox, includesVector, job],
   );
 
   const handleSave = useCallback(() => {
@@ -557,11 +552,6 @@ export function RegionDownloadScreen({
           secondaryValue={
             job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"
           }
-          valueSuffix={
-            job && job.totalTiles === 0 && includesVector
-              ? "size shown once download starts"
-              : undefined
-          }
         />
       </View>
 
@@ -636,7 +626,7 @@ export function RegionDownloadScreen({
         </View>
       </View>
 
-      <View style={[styles.panel, isGuest && styles.panelGuest]}>
+      <View style={styles.panel}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -667,11 +657,13 @@ export function RegionDownloadScreen({
           })}
         </ScrollView>
 
-        {isGuest ? (
-          <Text style={styles.guestSourceNote}>
-            The detailed map needs an account. These download without one.
-          </Text>
-        ) : null}
+        <Text style={styles.sourceNote}>
+          {isGuest
+            ? "The detailed map needs an account. These download without one."
+            : vectorClip === "too-large"
+              ? "This area is too big for the detailed map. Shrink it to include it."
+              : "The detailed map is saved with every area."}
+        </Text>
 
         <View style={styles.panelBody}>
           <View style={styles.detailBlock}>
@@ -683,7 +675,7 @@ export function RegionDownloadScreen({
                   at any zoom, and the detail level only caps how much of the
                   archive comes with you. */}
                 {vectorOnly
-                  ? `z${deepestZoom} · sharp at any zoom`
+                  ? "Detailed map only · sharp at any zoom"
                   : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
               </Text>
             </View>
@@ -702,11 +694,7 @@ export function RegionDownloadScreen({
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
           <Button
-            label={
-              selected.length > 1
-                ? `Save ${selected.length} maps`
-                : "Save this area"
-            }
+            label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
             icon="saveOffline"
             onPress={handleSave}
             disabled={!canDownload || busy}
@@ -791,7 +779,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.line,
   },
-  panelGuest: { height: PANEL_HEIGHT_GUEST },
   panelBody: {
     flex: 1,
     paddingHorizontal: spacing(2),
@@ -803,7 +790,7 @@ const styles = StyleSheet.create({
   // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
-  guestSourceNote: {
+  sourceNote: {
     color: theme.textMuted,
     fontSize: fontSize.sm,
     paddingHorizontal: spacing(2),

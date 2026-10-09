@@ -7,6 +7,7 @@ import {
   regionPlanHash,
   regionTileSequence,
   tileUrlFrom,
+  vectorClipFor,
 } from "./regionTilePlanning";
 
 const BBOX = { west: 150.26, south: -33.745, east: 150.368, north: -33.655 };
@@ -102,5 +103,20 @@ describe("deadTileBudget", () => {
   it("tolerates a handful on any size, and 1% on a large region", () => {
     expect(deadTileBudget(50)).toBe(10);
     expect(deadTileBudget(4000)).toBe(40);
+  });
+});
+
+// Mutation: return "include" for a guest and the first line goes red; the
+// download screen then enqueues an authed clip request a guest cannot make.
+describe("vectorClipFor", () => {
+  it("rides along for a signed-in user, never for a guest", () => {
+    expect(vectorClipFor(false, BBOX)).toBe("include");
+    expect(vectorClipFor(true, BBOX)).toBe("none");
+  });
+
+  it("is left out of an area the clip endpoint would refuse", () => {
+    // ~46 km x ~44 km: inside the 50 km edge cap, over the 1600 km² clip cap.
+    const wide = { west: 150, south: -34, east: 150.5, north: -33.6 };
+    expect(vectorClipFor(false, wide)).toBe("too-large");
   });
 });
