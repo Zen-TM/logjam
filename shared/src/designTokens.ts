@@ -1,20 +1,40 @@
 // Scheme-INDEPENDENT design tokens, shared by Logjam GPS and Logjam Web.
 //
-// The four theme schemes (`themeSchemes.ts`) own the surfaces and text; the
-// values here encode WHAT A THING IS, which does not change with the user's
-// theme — and they must read the same on both clients, or a GeoPDF is clay on
-// the phone and blue in the browser. Every foreground/background pair built
-// from these is measured under all four schemes by `scripts/wcag-contrast.mjs`.
+// The theme schemes (`themeSchemes.ts`) own the surfaces and text; the hues
+// here encode WHAT A THING IS, which does not change with the user's theme —
+// and they must read the same on both clients, or a GeoPDF is clay on the
+// phone and blue in the browser. Every foreground/background pair built from
+// these is measured under every scheme by `scripts/wcag-contrast.mjs`.
+//
+// The scales below (space, type, control sizes, motion, opacity) are declared
+// once for both clients under the same names. Where a value differs it is
+// because the MEDIUM differs (a mouse on a desktop vs a finger on a phone),
+// and the declaration is split by medium to say so. Logjam Web reads all of
+// it from the generated `frontend/src/tokens.generated.css` (`webTokens.ts`).
 import { SHARED_PLACE_COLOR } from "./placeTypes.js";
 
 /**
  * The label and glyph colour for anything drawn ON a colour fill — an active
- * chip, a filled button, a hue tile. Fixed, not the scheme's `primary`:
- * `primary` clears 4.5:1 on the accent and the light place-type palette, which
- * is why it looked like the rule, but on the shared heath it is 3.7:1
- * (Sandstone) and on the GeoPDF hue 2.7:1. One dark ink clears every fill.
+ * chip, a filled button, a hue tile. Every scheme's `onFill` is this ink, not
+ * its page colour: the old dark page clears 4.5:1 on the accent and the light
+ * place-type palette, which is why it looked like the rule, but on the shared
+ * heath it is 3.7:1 (Sandstone) and on the GeoPDF hue 2.7:1. One dark ink
+ * clears every fill, in the light scheme too.
  */
 export const INK = "#1E1B18";
+
+/**
+ * What is drawn ON THE MAP in a dark of its own — a place's name label, the
+ * halo behind it, the casing under a line — is drawn on the BASEMAP, not on
+ * the page, so it never follows the scheme: a light scheme's dark text on a
+ * light halo would vanish into a satellite image. Sandstone's values, fixed.
+ */
+export const MAP_INK = {
+  /** A label drawn on the map. */
+  label: "#F7F3EC",
+  /** The halo behind a map label, and the casing that sets a line off any basemap. */
+  casing: "#4E4944",
+} as const;
 
 /**
  * Per-kind identity hues for map material and the things you draw on it.
@@ -69,3 +89,54 @@ export const PLACE_STATUS_HUES = {
 
 /** Corner radii. `pill` is the fully rounded end (chips, meters, badges). */
 export const RADIUS = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
+
+/**
+ * Spacing steps (8 × n), named by n. The one scale both clients lay out with:
+ * Logjam GPS's `spacing(n)`, Logjam Web's `--space-<n>` (`--space-1-5` is 12).
+ * A value off these steps is a decision to leave the system, and needs saying.
+ */
+export const SPACE_UNIT = 8;
+export const SPACE = {
+  "0.5": 4,
+  "1": 8,
+  "1.5": 12,
+  "2": 16,
+  "3": 24,
+  "4": 32,
+  "6": 48,
+} as const;
+
+/**
+ * Type sizes in px, by medium. Logjam GPS is read at arm's length on a phone;
+ * Logjam Web is a desktop density, a step smaller, emitted in rem so a browser
+ * text-size setting reaches every label. 12 is the floor on both. `display`
+ * (a screen's one hero metric) is Logjam GPS only: no web page has one.
+ */
+export const FONT = {
+  gps: { xs: 12, sm: 14, base: 16, lg: 20, xl: 24, display: 34 },
+  web: { xs: 12, sm: 13, base: 14, lg: 18, xl: 20 },
+} as const;
+
+/** Type weights, the same on both media. */
+export const FONT_WEIGHT = { regular: 400, medium: 600, bold: 700 } as const;
+
+/**
+ * Control heights in px, by pointer: `lg` buttons and text fields, `md`
+ * compact buttons, chips and icon buttons, `sm` the round icon button at a
+ * pill's end. A mouse keeps the desktop density (still clear of WCAG 2.5.8's
+ * 24px); a finger gets the touch set, on Logjam GPS and on a coarse-pointer
+ * browser alike.
+ */
+export const CONTROL = {
+  web: { lg: 36, md: 32, sm: 24 },
+  touch: { lg: 48, md: 40, sm: 32 },
+} as const;
+
+/** Every pressable's hit area on a touch screen, visual size plus slop. */
+export const TOUCH_TARGET_MIN = 48;
+
+/** Transition durations in ms. */
+export const MOTION = { fast: 150, med: 200 } as const;
+
+/** Opacity of a control that exists but cannot be used right now. */
+export const OPACITY = { disabled: 0.5 } as const;

@@ -1,35 +1,11 @@
-// Per-basemap identity for the layer picker and the download screen.
+// The basemap picker's list and default.
 //
-// ONE hue for all of them, and glyphs to tell them apart (DESIGN.md §3, the
-// "a hub menu is not a category vocabulary" rule read across): these are not
-// kinds of thing, they are seven renderings of the same thing, so seven hues
-// would be decoration. The identity that matters here is "basemap", which wears
-// the region hue — the class of asset a downloaded basemap becomes.
-//
-// There is no blurb any more: the layer sheet leads each basemap with a real
-// sample tile, which says what the map looks like better than a sentence could,
-// and six sentences on six rows was a paragraph between the user and a choice
-// they make by eye.
-//
-// The glyph is now the FALLBACK identity: the layer sheet leads each basemap
-// with a real sample tile (`BasemapThumb`), which says more than any icon can,
-// and drops back to this glyph for the vector source and when offline.
-import type { Feather } from "@expo/vector-icons";
+// A basemap has no glyph of its own: they are not kinds of thing but renderings
+// of the same thing, and the layer sheet leads each with a real sample tile
+// (`BasemapThumb`), which says more than any icon can. Where there is no tile
+// (the vector source, offline) the fallback is the `map` idea.
 
 import type { BasemapId } from "./sourceResolver";
-
-export type BasemapMeta = {
-  icon: React.ComponentProps<typeof Feather>["name"];
-};
-
-export const BASEMAP_META: Record<BasemapId, BasemapMeta> = {
-  "six-topo": { icon: "map" },
-  "six-base": { icon: "git-branch" },
-  "six-imagery": { icon: "image" },
-  protomaps: { icon: "layers" },
-  "osm-topo": { icon: "trending-up" },
-  "osm-cycle": { icon: "navigation-2" },
-};
 
 /**
  * The picker's order, and the whole of what mobile offers — NOT derived from

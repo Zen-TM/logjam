@@ -72,16 +72,6 @@ import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import {
-  FileText,
-  Filter,
-  Layers,
-  MapPinPlus,
-  Mountain,
-  PenTool,
-  SquareDashed,
-  X,
-} from "lucide-react";
-import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
   consentGate,
@@ -153,9 +143,11 @@ function App() {
     () => setOpenFiltersRequested(false),
     [],
   );
-  const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
+  const [selectedPlaceID, setSelectedPlaceIDRaw] = useState<string | null>(
+    null,
+  );
   // The trip whose page is open. A trip is READ on a page like a place and a
-  // way (DESIGN.md §6), so it needs the same one piece of state.
+  // way (DESIGN.md §4), so it needs the same one piece of state.
   const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
     null,
   );
@@ -227,7 +219,7 @@ function App() {
   // A verb a ROW asked for, run once the way's page mounts — how a row offers
   // Share, Rename and Delete without hosting a second copy of each form.
   const [pendingWayVerb, setPendingWayVerb] = useState<WayVerbId | null>(null);
-  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md §9).
+  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md §6).
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
   const [flyToBounds, setFlyToBounds] = useState<
@@ -236,7 +228,7 @@ function App() {
   // Where along a line the elevation-profile cursor sits, so the chart and the
   // map point at the same place. NOT state: it changes many times a second, and
   // as state every move re-rendered App, the map and the panel before the dot
-  // could move (DESIGN.md §9 — `map/routeHover.ts` carries the full reasoning).
+  // could move (DESIGN.md §6 — `map/routeHover.ts` carries the full reasoning).
   const routeHover = useMemo(() => createRouteHoverChannel(), []);
 
   // Coordinate picking mode for PlaceDialog
@@ -278,7 +270,7 @@ function App() {
     CompletedTopoJob[]
   >([]);
   // True once the first fetch settles, either way: an empty list before then is
-  // not "no topos yet" (DESIGN.md §8).
+  // not "no topos yet" (docs/ux-principles.md §11).
   const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
@@ -347,6 +339,19 @@ function App() {
     lat: number;
     lng: number;
   } | null>(null);
+
+  // OPENING A PLACE SHOWS IT ON THE MAP (UX §3). Every way to open a place's
+  // page ends in this setter (a row, a pin, a search hit, an inbox item, a
+  // linked place), so the fly-to lives here once rather than beside each
+  // caller. It runs on a repeat open of the same place too, which an effect
+  // keyed on the id would miss after the user had panned away. Closing (null)
+  // leaves the camera alone.
+  const allPlacesRef = useRef<TPlace[]>([]);
+  const setSelectedPlaceID = useCallback((id: string | null) => {
+    setSelectedPlaceIDRaw(id);
+    const target = id && allPlacesRef.current.find((p) => p.id === id);
+    if (target) setFlyToPlace({ lat: target.latitude, lng: target.longitude });
+  }, []);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
   const [lidarEnabled, setLidarEnabled] = useStoredState(
@@ -636,7 +641,7 @@ function App() {
 
   // Ways is built from three fetches, so it has nothing to say until all three
   // have settled — one still in flight would show a short list as if it were
-  // the whole list (DESIGN.md §8).
+  // the whole list (docs/ux-principles.md §11).
   const waysLoaded = routesLoaded && standaloneFilesLoaded && placeTracksLoaded;
 
   /** The places shared WITH the user. What tells a route shared on its own from
@@ -1154,6 +1159,9 @@ function App() {
 
   // Derived values
   const allPlaces = [...places, ...sharedPlaces];
+  useEffect(() => {
+    allPlacesRef.current = allPlaces;
+  });
   const filteredPlaces = useMemo(
     () => [
       ...places.filter((c) => passesFilters(c, filters, true)),
@@ -1350,10 +1358,10 @@ function App() {
   const notices =
     filtersActive && !dimUI ? (
       <Notice
-        icon={Filter}
+        icon="filter"
         action={
           <IconButton
-            icon={X}
+            icon="close"
             label="Clear filters"
             size={14}
             round
@@ -1390,24 +1398,24 @@ function App() {
     {
       id: "route",
       label: "Draw a route",
-      icon: PenTool,
+      icon: "draw",
       onSelect: startDrawingRoute,
     },
     {
       id: "place",
       label: "Add a place",
-      icon: MapPinPlus,
+      icon: "addPlace",
       onSelect: () => setShowAdd(true),
     },
     {
       id: "make-map",
       label: "Make a map of an area",
-      icon: SquareDashed,
+      icon: "pickArea",
       menu: [
         {
           id: "topo",
           label: "LiDAR topo",
-          icon: Mountain,
+          icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
             setSelectingTopoBbox(true);
@@ -1416,7 +1424,7 @@ function App() {
         {
           id: "geopdf",
           label: "GeoPDF",
-          icon: FileText,
+          icon: "geoPdf",
           onSelect: () => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1540,7 +1548,6 @@ function App() {
                   setSelectedWay(null);
                   setActivePanel("ways");
                 }}
-                onClose={() => setActivePanel(null)}
                 onEdit={startEditingRoute}
                 onCopied={showCopiedRoute}
                 onChanged={() => {
@@ -1608,7 +1615,6 @@ function App() {
           }}
           openFiltersRequested={openFiltersRequested}
           onOpenFiltersConsumed={consumeOpenFilters}
-          onFlyToPlace={(lat, lng) => setFlyToPlace({ lat, lng })}
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1781,7 +1787,7 @@ function App() {
           layersButton={
             <MapButton
               ref={layersButtonRef}
-              icon={Layers}
+              icon="layers"
               label="Layers"
               expanded={layersOpen}
               onClick={() => setLayersOpen((open) => !open)}
@@ -1796,6 +1802,7 @@ function App() {
       </main>
 
       <LayersPopover
+        onImportFile={() => setShowUnifiedImport(true)}
         open={layersOpen}
         onClose={() => setLayersOpen(false)}
         anchorRef={layersButtonRef}

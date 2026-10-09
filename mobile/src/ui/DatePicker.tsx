@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -28,6 +27,7 @@ import {
   yearBlockStart,
   type YearMonth,
 } from "./monthGrid";
+import { Icon } from "./Icon";
 
 /**
  * Month-grid date picker, rendered inline (inside a sheet) rather than as an
@@ -424,7 +424,7 @@ function Header({
         onPress={onPrev}
         style={({ pressed }) => [styles.nav, pressed && styles.pressed]}
       >
-        <Feather name="chevron-left" size={20} color={theme.textPrimary} />
+        <Icon idea="back" size={20} color={theme.text} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -435,8 +435,8 @@ function Header({
         style={({ pressed }) => [styles.labelButton, pressed && styles.pressed]}
       >
         <Text style={styles.label}>{label}</Text>
-        <Feather
-          name={expanded ? "chevron-up" : "chevron-down"}
+        <Icon
+          idea={expanded ? "collapse" : "expand"}
           size={14}
           color={theme.textMuted}
         />
@@ -454,7 +454,7 @@ function Header({
           nextDisabled && styles.disabledNav,
         ]}
       >
-        <Feather name="chevron-right" size={20} color={theme.textPrimary} />
+        <Icon idea="forward" size={20} color={theme.text} />
       </Pressable>
     </View>
   );
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   label: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
@@ -536,8 +536,8 @@ const styles = StyleSheet.create({
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
-  dayText: { color: theme.textPrimary, fontSize: fontSize.sm },
-  selectedText: { color: theme.primary, fontWeight: fontWeight.bold },
+  dayText: { color: theme.text, fontSize: fontSize.sm },
+  selectedText: { color: theme.onFill, fontWeight: fontWeight.bold },
   disabledText: { color: withAlpha(theme.textMuted, 0.45) },
   // Four rows of four, sized to match the six day rows so switching grids
   // barely moves the sheet's height.
@@ -561,5 +561,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  yearText: { color: theme.textPrimary, fontSize: fontSize.sm },
+  yearText: { color: theme.text, fontSize: fontSize.sm },
 });

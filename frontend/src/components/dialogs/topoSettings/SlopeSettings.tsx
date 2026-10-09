@@ -1,5 +1,4 @@
 import { Fragment, type CSSProperties } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import {
   applySlopeGradient,
   rgbaCssFromHex,
@@ -14,8 +13,9 @@ import {
   IconButton,
   InfoTip,
   LiveNumberField,
+  Icon,
+  FieldError,
 } from "../../../ui";
-import { FieldError } from "../../feedback/FieldError";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
@@ -119,7 +119,7 @@ function computeInsert(
 
 /**
  * Terrain coloured by steepness: a table of bands, its columns headed once
- * (DESIGN.md §9). Every editable number is a unique BOUNDARY owned by exactly
+ * (DESIGN.md §6). Every editable number is a unique BOUNDARY owned by exactly
  * one box — the transparency threshold and each band's upper angle — so gaps
  * and overlaps are structurally impossible and a band's lower angle is simply
  * the one below it, shown rather than asked for.
@@ -195,7 +195,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
         disabled={!room}
         onClick={() => insertAt(position)}
       >
-        <Plus size={14} aria-hidden />
+        <Icon idea="add" size={14} aria-hidden />
       </button>
     );
   };
@@ -302,7 +302,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
             </span>
             {bands.length > 1 ? (
               <IconButton
-                icon={Trash2}
+                icon="delete"
                 label={`Remove band ${idx + 1}`}
                 onClick={() => removeBand(idx)}
               />

@@ -50,9 +50,7 @@ describe("notificationMeta", () => {
     expect(notificationMeta(notification("topo_export_skipped")).kind).toBe(
       "problem",
     );
-    expect(notificationMeta(notification("topo_failed")).icon).toBe(
-      "alert-triangle",
-    );
+    expect(notificationMeta(notification("topo_failed")).icon).toBe("warning");
   });
 
   it("keeps a completion with a warning as a completion", () => {

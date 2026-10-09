@@ -3,7 +3,7 @@
 //
 // Split out of the old standalone RouteStatsSheet for the same reason
 // `tracks/TrackStatsBody.tsx` was: the stats are a SUB-MODE of the route's
-// options sheet now (DESIGN.md §7), not a sheet of their own, so the body has
+// options sheet now (DESIGN.md §5), not a sheet of their own, so the body has
 // to be mountable inside someone else's `BottomSheet`.
 //
 // It owns its own elevation hook rather than taking a profile prop — unlike a
@@ -15,10 +15,15 @@
 // useElevationProfile) — the distance is always right, which is the number
 // being looked for most of the time.
 import { StyleSheet, Text, View } from "react-native";
-import { formatDistanceM, routeLengthM } from "@logjam/shared";
+import {
+  formatDistanceM,
+  PAIRED_STAT_LABELS,
+  pairedStatLayout,
+  routeLengthM,
+} from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { ProfileChart, elevationSeries } from "../ui";
+import { ProfileChart, StatGrid, elevationSeries } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
 
@@ -39,20 +44,24 @@ export function RouteStatsBody({
 
   return (
     <View style={styles.body}>
-      <View style={styles.statRow}>
-        <Stat
-          label="Distance"
-          value={formatDistanceM(routeLengthM(route.points))}
-        />
-        <Stat
-          label="Climb"
-          value={profile ? `↑ ${Math.round(profile.gainM)} m` : "—"}
-        />
-        <Stat
-          label="Descent"
-          value={profile ? `↓ ${Math.round(profile.lossM)} m` : "—"}
-        />
-      </View>
+      {/* Ascent and descent are one fact said twice, so they share a line and
+          the distance, which has no partner, takes its own (`STAT_PAIRS`). */}
+      <StatGrid
+        stats={pairedStatLayout([
+          {
+            label: "Distance",
+            value: formatDistanceM(routeLengthM(route.points)),
+          },
+          {
+            label: PAIRED_STAT_LABELS.ascent,
+            value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
+          },
+          {
+            label: PAIRED_STAT_LABELS.descent,
+            value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
+          },
+        ])}
+      />
 
       {profile?.minM != null && profile.maxM != null ? (
         <Text style={styles.band}>
@@ -86,15 +95,6 @@ export function RouteStatsBody({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   chartLabel: {
     color: theme.textMuted,
@@ -104,20 +104,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   body: { gap: spacing(1.5) },
-  statRow: { flexDirection: "row", gap: spacing(2) },
-  stat: { gap: spacing(0.25) },
-  statValue: {
-    color: theme.textPrimary,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-    fontVariant: ["tabular-nums"],
-  },
-  statLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
   band: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

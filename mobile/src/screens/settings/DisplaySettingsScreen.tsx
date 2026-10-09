@@ -4,7 +4,7 @@
 // module constants snapshotted by ~45 `StyleSheet.create` calls at import time,
 // so repainting a running app means a provider plus a style factory in every one
 // of those files — a large diff across every screen already built, for a
-// preference people set once (DESIGN.md §12).
+// preference people set once (DESIGN.md §1).
 //
 // The theme is the one preference here with an account copy: it is a single
 // scalar with no merge hazard, and a scheme picked in a browser is what this
@@ -14,7 +14,6 @@
 // PRIVACY: nothing here touches user data.
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
@@ -35,7 +34,6 @@ import {
   persistThemeSchemeId,
   radius,
   spacing,
-  surface,
   theme,
   withAlpha,
   type TextScale,
@@ -46,6 +44,7 @@ import {
   SectionHeader,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../../ui";
 import { ChoiceGroup, Hint } from "./settingsKit";
 
@@ -133,7 +132,7 @@ export function DisplaySettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Theme" />
+        <SectionHeader title="Theme" />
         <View style={styles.schemes}>
           {THEME_SCHEME_ORDER.map((id) => (
             <SchemeCard
@@ -200,23 +199,19 @@ function SchemeCard({
       ]}
     >
       <View style={styles.swatches}>
-        {[
-          scheme.tokens.primary,
-          scheme.tokens.secondary,
-          scheme.tokens.accent,
-        ].map((color) => (
-          <View
-            key={color}
-            style={[styles.swatch, { backgroundColor: color }]}
-          />
-        ))}
+        {[scheme.tokens.page, scheme.tokens.card, scheme.tokens.accent].map(
+          (color) => (
+            <View
+              key={color}
+              style={[styles.swatch, { backgroundColor: color }]}
+            />
+          ),
+        )}
       </View>
       <Text style={styles.schemeName} numberOfLines={1}>
         {scheme.name}
       </Text>
-      {selected ? (
-        <Feather name="check" size={16} color={theme.accent} />
-      ) : null}
+      {selected ? <Icon idea="done" size={16} color={theme.accent} /> : null}
     </Pressable>
   );
 }
@@ -227,9 +222,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(1.5),
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     borderRadius: radius.lg,
     padding: spacing(1.5),
     minHeight: 56,
@@ -238,21 +233,21 @@ const styles = StyleSheet.create({
     borderColor: theme.accent,
     backgroundColor: withAlpha(theme.accent, 0.1),
   },
-  schemePressed: { backgroundColor: surface.cardPressed },
+  schemePressed: { backgroundColor: theme.cardPressed },
   swatches: { flexDirection: "row", gap: 3 },
-  // The hairline is load-bearing, not decoration: Sandstone's `secondary` IS the
-  // card colour these sit on, so without an edge that swatch simply vanishes and
+  // The hairline is load-bearing, not decoration: a scheme's `card` IS the
+  // card colour these sit on when it is the scheme in force, so without an edge that swatch simply vanishes and
   // the scheme looks like it has two colours.
   swatch: {
     width: 18,
     height: 32,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.2),
+    borderColor: withAlpha(theme.text, 0.2),
   },
   schemeName: {
     flex: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },

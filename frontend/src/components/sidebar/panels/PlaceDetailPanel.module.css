@@ -29,18 +29,34 @@
   gap: 6px;
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .typeGlyph {
-  color: var(--tile-hue, var(--theme-accent));
+  color: var(--tile-hue, var(--color-accent));
   flex-shrink: 0;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* The page's two primary verbs, side by side. */
+.verbs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.verbs > * {
+  flex: 1;
 }
 
 .meta {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A list of FACTS: label left, answer right, a hairline between. Transparent
@@ -69,7 +85,7 @@
 .tableRow dt {
   flex-shrink: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .tableRow dd {
@@ -77,7 +93,7 @@
   min-width: 0;
   text-align: right;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
@@ -92,7 +108,7 @@
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--theme-accent);
+  color: var(--color-accent);
   cursor: pointer;
   text-decoration: underline;
 }
@@ -117,7 +133,7 @@
 .muted {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The parked value's dialog: the value, then its verbs as rows. */

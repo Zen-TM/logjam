@@ -2,7 +2,7 @@ import { ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 
 import { spacing, theme } from "../theme";
 
-// Layout primitives so screens stop re-deriving `flex:1 + theme.primary +
+// Layout primitives so screens stop re-deriving `flex:1 + theme.page +
 // padding + gap` scaffolding. `Screen` is a non-scrolling container; most list
 // screens want `ScreenScroll`.
 
@@ -47,7 +47,7 @@ export function ScreenScroll({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   padded: { padding: spacing(2) },
   scrollContent: { gap: spacing(1), paddingBottom: spacing(4) },
 });

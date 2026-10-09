@@ -23,7 +23,7 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 /**
  * A surface is measured once it has finished ARRIVING.
  *
- * `Dialog` fades itself in (`@starting-style`, DESIGN.md §6), and axe computes
+ * `Dialog` fades itself in (`@starting-style`, DESIGN.md §4), and axe computes
  * contrast from what is PAINTED — so a check running while the dialog is
  * half-way there measures its colours composited against the page behind it
  * and reports both a shade light. That is not hypothetical: it failed
@@ -170,7 +170,7 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await aside.getByRole("button", { name: "Add a place type" }).click();
     const typeDialog = page.locator("dialog[open]");
     await expect(
       typeDialog.getByRole("radiogroup", { name: "Icon" }),
@@ -304,7 +304,7 @@ test.describe("desktop", () => {
       timeout: 15_000,
     });
 
-    // The tile IS the checkbox (DESIGN.md §7), and the bar replaces the rail.
+    // The tile IS the checkbox (DESIGN.md §5), and the bar replaces the rail.
     await list.getByRole("checkbox").first().click();
     await list.getByRole("button", { name: "Share or export" }).click();
 
@@ -357,7 +357,7 @@ test.describe("desktop", () => {
       .first();
     await expect(rowMenu).toBeVisible({ timeout: 15_000 });
     await rowMenu.click();
-    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page.getByRole("menuitem", { name: "Delete notification" }).click();
 
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toBeVisible();
@@ -408,7 +408,7 @@ test.describe("desktop", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md §6).
+    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md §4).
     const rowMenu = aside
       .getByRole("button", { name: /^Actions for / })
       .first();
@@ -700,7 +700,7 @@ test.describe("desktop", () => {
 
     // Every row here is new, so the REVIEW step is skipped rather than shown
     // empty: a page with no decisions on it is a click asking the user to agree
-    // that there was nothing to do (DESIGN.md §1).
+    // that there was nothing to do (docs/ux-principles.md §2).
     await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await expect(
       dialog.getByRole("heading", { name: "Confirm import" }),
@@ -709,7 +709,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
 
     // The merge policy is a row that opens a SUB-VIEW, never an accordion
-    // (DESIGN.md §6); its eight switches are named by the field each decides.
+    // (DESIGN.md §4); its eight switches are named by the field each decides.
     await dialog.getByRole("button", { name: /^Merge settings/ }).click();
     await expect(
       dialog.getByRole("heading", { name: "Merge settings" }),
@@ -738,6 +738,65 @@ test.describe("desktop", () => {
     await expect(
       page.getByRole("button", { name: "Layers", exact: true }),
     ).toBeFocused();
+  });
+});
+
+/**
+ * Ghost Gum, the one light scheme, on the surfaces most used outdoors. It is
+ * reached the way a user's choice is: `/users/me` says so (rewriting only the
+ * field the decision reads), and the generated `[data-scheme]` block repaints.
+ * Its text pairs are held to 7:1 by `scripts/wcag-contrast.mjs`; this is what
+ * catches a surface drawing a pair that script never heard of.
+ */
+test.describe("ghost gum", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/users/me", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const user = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...user,
+          uiPreferences: { ...user.uiPreferences, themeSchemeId: "ghostGum" },
+        },
+      });
+    });
+  });
+
+  test("Places, a place, Settings and the Inbox", async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-scheme",
+      "ghostGum",
+    );
+    const aside = page.locator("aside");
+
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
+
+    await aside
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "Claustral Canyon" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const theme = aside.getByRole("radiogroup", { name: "Theme" });
+    await expect(theme.getByRole("radio")).toHaveCount(4);
+    await expect(theme.getByRole("radio", { name: "Ghost Gum" })).toBeChecked();
+    await expectNoViolations(page, "aside");
+
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    await expect(aside.getByRole("checkbox").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
   });
 });
 

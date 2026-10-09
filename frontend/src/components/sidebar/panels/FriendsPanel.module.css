@@ -44,5 +44,5 @@
 .note {
   margin: 2px 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

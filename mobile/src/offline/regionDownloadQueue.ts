@@ -339,7 +339,7 @@ async function runProtomapsClip(
     // 4xx is the endpoint rejecting THIS AREA (outside the archive extract, or
     // over the clip cap — see validateRegionClipRequest). Its own message is
     // static and coordinate-free, but the copy the user reads is still ours
-    // (DESIGN.md §11), and what it has to say is "reframe", not "retry".
+    // (docs/ux-principles.md §13), and what it has to say is "reframe", not "retry".
     if (err instanceof ApiError && err.status >= 400) {
       // Two rejections share one 400 — outside the NSW extract, or over the
       // 40 km clip cap. The endpoint's message says which (regionClip.ts),

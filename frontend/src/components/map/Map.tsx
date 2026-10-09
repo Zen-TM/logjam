@@ -9,7 +9,13 @@ import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 // chunk it imports under a content-hashed path and exposes its URL here.
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
-import type { RegionBbox } from "@logjam/shared";
+import {
+  INK,
+  MAP_INK,
+  PLACE_TYPE_COLORS,
+  SHARED_PLACE_COLOR,
+  type RegionBbox,
+} from "@logjam/shared";
 import { useBoxDraw } from "./useBoxDraw";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
@@ -128,7 +134,6 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // kilometres of route says anything about where it goes.
 const ROUTE_MIN_ZOOM = 10;
 
-const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 
@@ -140,12 +145,15 @@ function readCssVar(name: string, fallback: string): string {
 }
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
-  const fallback = readCssVar("--owned-place-color", "#e4c5aa");
-  const shared = readCssVar("--shared-place-color", "#b79ec0");
-  const ink = readCssVar("--ink", "#1e1b18");
-  const accent = readCssVar("--theme-accent", "#deb188");
-  const label = readCssVar("--theme-text-primary", "#ffffff");
-  const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
+  // A place whose type has not loaded wears the palette's first colour.
+  const fallback = PLACE_TYPE_COLORS[0];
+  const shared = SHARED_PLACE_COLOR;
+  const ink = INK;
+  // The accent is the scheme's own colour and follows it onto the map; a
+  // label and its halo are drawn on the basemap, so they do not (MAP_INK).
+  const accent = readCssVar("--color-accent", "#deb188");
+  const label = MAP_INK.label;
+  const halo = MAP_INK.casing;
 
   // FILL is the place's type; the RING says someone shared it with you — the
   // same two axes Logjam GPS draws (mobile/src/map/PlacePinsLayer.tsx).
@@ -721,7 +729,7 @@ function Map({
   /**
    * Fit the map to a way's extent: opening one centres it, and so does arming
    * the draw tool on it. A CONSUMED request, not a counter — a counter above
-   * zero fires again on every remount (DESIGN.md §9).
+   * zero fires again on every remount (DESIGN.md §6).
    */
   flyToBounds?: [number, number, number, number] | null;
   onFlyToBoundsConsumed?: () => void;
@@ -1092,7 +1100,7 @@ function Map({
           "line-color": [
             "coalesce",
             ["get", "color"],
-            readCssVar("--theme-accent", "#3b82f6"),
+            readCssVar("--color-accent", "#3b82f6"),
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
           "line-opacity": 0.9,
@@ -1118,7 +1126,7 @@ function Map({
           "line-color": [
             "coalesce",
             ["get", "color"],
-            readCssVar("--theme-accent", "#3b82f6"),
+            readCssVar("--color-accent", "#3b82f6"),
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
           "line-opacity": 0.9,
@@ -1218,7 +1226,7 @@ function Map({
       // The route being drawn or edited. Dashed, so an unsaved line never
       // reads as a saved one, and unpinned above the saved routes.
       const initialDraftColor =
-        drawColor || readCssVar("--theme-accent", "#3b82f6");
+        drawColor || readCssVar("--color-accent", "#3b82f6");
       map.addSource("route-draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1310,9 +1318,9 @@ function Map({
               14,
               18,
             ],
-            "circle-color": readCssVar("--theme-accent", "#deb188"),
+            "circle-color": readCssVar("--color-accent", "#deb188"),
             "circle-opacity": 0.35,
-            "circle-stroke-color": readCssVar("--theme-accent", "#deb188"),
+            "circle-stroke-color": readCssVar("--color-accent", "#deb188"),
             "circle-stroke-width": 2,
           },
         });
@@ -1325,7 +1333,7 @@ function Map({
         source: "places",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
-          "circle-color": readCssVar("--theme-bonus-3", "#f97316"),
+          "circle-color": PLACE_TYPE_COLORS[0],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -1350,7 +1358,7 @@ function Map({
             13.5,
           ],
           "circle-opacity": 0,
-          "circle-stroke-color": readCssVar("--shared-place-color", "#b79ec0"),
+          "circle-stroke-color": SHARED_PLACE_COLOR,
           "circle-stroke-width": 1.5,
         },
       });
@@ -1362,7 +1370,7 @@ function Map({
         source: "shared-places",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
-          "circle-color": readCssVar("--theme-accent", "#3b82f6"),
+          "circle-color": readCssVar("--color-accent", "#3b82f6"),
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -1382,8 +1390,8 @@ function Map({
           "text-anchor": "top",
         },
         paint: {
-          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
-          "text-halo-color": readCssVar("--theme-bonus-2", "#1a1a1a"),
+          "text-color": MAP_INK.label,
+          "text-halo-color": MAP_INK.casing,
           "text-halo-width": 1.5,
         },
       });
@@ -1402,8 +1410,8 @@ function Map({
           "text-anchor": "top",
         },
         paint: {
-          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
-          "text-halo-color": readCssVar("--theme-bonus-2", "#1a1a1a"),
+          "text-color": MAP_INK.label,
+          "text-halo-color": MAP_INK.casing,
           "text-halo-width": 1.5,
         },
       });
@@ -1417,15 +1425,7 @@ function Map({
         const feature = e.features[0];
         const id = feature.properties?.id as string;
         if (feature.geometry.type !== "Point") return;
-        const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectPlaceRef.current(id);
-        // Guard flyTo against an out-of-range legacy marker (PLACE-1) so a
-        // click still selects it instead of throwing "Invalid LngLat".
-        if (isValidLatitude(lat) && isValidLongitude(lng)) {
-          setTimeout(() => {
-            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-          }, SIDEBAR_TRANSITION_MS);
-        }
       });
 
       // One registration over both layers, so a press on the pin (which is
@@ -1436,14 +1436,7 @@ function Map({
         const feature = e.features[0];
         const id = feature.properties?.id as string;
         if (feature.geometry.type !== "Point") return;
-        const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectPlaceRef.current(id);
-        // Guard flyTo against an out-of-range legacy marker (PLACE-1).
-        if (isValidLatitude(lat) && isValidLongitude(lng)) {
-          setTimeout(() => {
-            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-          }, SIDEBAR_TRANSITION_MS);
-        }
       });
 
       map.on("mouseenter", "place-circles", () => {
@@ -1887,7 +1880,7 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    const effectiveColor = drawColor || readCssVar("--theme-accent", "#3b82f6");
+    const effectiveColor = drawColor || readCssVar("--color-accent", "#3b82f6");
     if (map.getLayer("route-draft-line")) {
       map.setPaintProperty("route-draft-line", "line-color", effectiveColor);
     }
@@ -2164,7 +2157,7 @@ function Map({
   // measured at 72ms per pointer move, against 16ms for the same drag with the
   // write removed — the same cost as dragging over dead panel. A Marker is a
   // DOM node the library moves with a CSS transform; the canvas is untouched.
-  // (DESIGN.md §9, which also records the three wrong guesses that preceded
+  // (DESIGN.md §6, which also records the three wrong guesses that preceded
   // this one.)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2183,7 +2176,7 @@ function Map({
       }
       element.style.setProperty(
         "--dot",
-        hover.color ?? readCssVar("--theme-accent", "#3b82f6"),
+        hover.color ?? readCssVar("--color-accent", "#3b82f6"),
       );
       marker.setLngLat(hover.position);
       if (!attached) {
@@ -3075,18 +3068,6 @@ function Map({
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
               selectPlaceRef.current(place.id);
-              if (
-                isValidLatitude(place.latitude) &&
-                isValidLongitude(place.longitude)
-              ) {
-                setTimeout(() => {
-                  mapRef.current?.flyTo({
-                    center: [place.longitude, place.latitude],
-                    zoom: 15,
-                    duration: 1200,
-                  });
-                }, SIDEBAR_TRANSITION_MS);
-              }
             }}
             onSelectLocation={(lat, lon) =>
               mapRef.current?.flyTo({

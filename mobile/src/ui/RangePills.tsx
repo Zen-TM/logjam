@@ -48,7 +48,7 @@ export function RangePills({
           </Text>
           {active ? (
             <IconButton
-              icon="x"
+              icon="close"
               size={14}
               accessibilityLabel={`Clear the ${label} filter`}
               onPress={() => onChange(null)}
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   label: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
@@ -88,6 +88,8 @@ const styles = StyleSheet.create({
     gap: spacing(0.25),
   },
   value: { color: theme.textMuted, fontSize: fontSize.sm },
-  valueActive: { color: theme.accent, fontWeight: fontWeight.medium },
+  // Active is said by weight and by the clear button beside it, never by an
+  // intent colour: words are `text`.
+  valueActive: { color: theme.text, fontWeight: fontWeight.medium },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
 });

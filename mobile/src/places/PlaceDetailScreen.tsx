@@ -1,4 +1,4 @@
-// Place detail — "what am I walking into?" (DESIGN.md §1). The grade, the
+// Place detail — "what am I walking into?" (docs/ux-principles.md §2). The grade, the
 // numbers that decide the day, and the notes come first; sharing and admin sit
 // below them, because you read this screen at a trailhead and manage it at home.
 //
@@ -9,9 +9,9 @@
 //
 // PRIVACY: this is the one screen that does show a coordinate, because it is the
 // answer to its own question and the user asked for this place by name. It
-// stays here — never on a list row (DESIGN.md §11). Sharing is owner-only and
+// stays here — never on a list row (docs/ux-principles.md §13). Sharing is owner-only and
 // username-only; recipients never see this section at all.
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState, type ReactNode } from "react";
 import {
   Alert,
   Clipboard,
@@ -22,10 +22,18 @@ import {
   Text,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
+  contractSectionsFor,
   isReservedFieldKey,
+  PLACE_PAGE,
+  PLACE_PAGE_PRIMARY_VERBS,
+  placeAttributesTitle,
+  placeSources,
+  placeStatusLabel,
+  placeVerbs,
+  type PlaceVerbIdOn,
+  type SectionKeysOn,
   userFieldValues,
   distinctTripTypes,
   formatCanyonGrade,
@@ -33,7 +41,6 @@ import {
   formatTripDate,
   mediaCategory,
   messageFromError,
-  removeShareConfirm,
   routeLengthM,
   placeStatus,
   attributeRows,
@@ -45,8 +52,7 @@ import {
   shareRowSubtitle,
   SharingError,
 } from "../sharing/useSharing";
-import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
-import { removeSharedPlace } from "../sharing/removeShare";
+import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
@@ -59,14 +65,12 @@ import {
   fontWeight,
   lineHeight,
   spacing,
-  surface,
   theme,
 } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createPlaceLinkLocal,
   deletePlaceLinkLocal,
-  deletePlaceLocal,
   updateRouteLocal,
 } from "../sync/outbox";
 import {
@@ -88,22 +92,21 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
   SectionHeader,
-  StatGrid,
   StatusPill,
   TextField,
   Toast,
-  type Stat,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
-import { placeDeleteConfirm } from "./placeDeleteConfirm";
 import { PLACE_STATUS_META } from "./placeMeta";
+import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
 
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before
@@ -164,9 +167,6 @@ export function PlaceDetailScreen({
   const placeTypes = useMirrorPlaceTypes();
   const placesQuery = useMirrorPlaces();
   const online = useConnectivity() === "online";
-  // The same capability gating every Share row spreads — removing a share is
-  // the same online-and-signed-in action, seen from the other end.
-  const shareRowProps = useShareRowProps(online);
   // Definitions give each stored value its real label; a guest's come off the
   // device, an account's off the user record. Without them (offline with an
   // account, or a field deleted since) the key renders un-slugged.
@@ -174,7 +174,7 @@ export function PlaceDetailScreen({
 
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback((text: string, tone: "info" | "error") => {
@@ -238,9 +238,6 @@ export function PlaceDetailScreen({
   const linkedPlaces = (placesQuery.data ?? [])
     .filter((row) => linkedPlaceIds.has(row.id))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const routeCount = attachments.filter(
-    (item) => mediaCategory(item.mediaType) === "track",
-  ).length;
   /** Values that arrived on a COPY, keyed by definitions this account does not
    *  have (§2.6). Owner-private — the server never sends them on a shared row,
    *  so a sharee's place has none and this section does not render. */
@@ -270,7 +267,7 @@ export function PlaceDetailScreen({
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = attributeRows(labellingDefs, storedFields);
 
-  // OVERVIEW IS WHAT EVERY PLACE HAS, and that is only its position.
+  // POSITION IS WHAT EVERY PLACE HAS, and that is only its position.
   //
   // It used to promote four canyon scalars — Rating, Abseils, Longest drop,
   // Hours — into stat tiles by reading their reserved keys directly. Three
@@ -282,20 +279,13 @@ export function PlaceDetailScreen({
   // "Quality", so the same field had two names on one screen. Everything a type
   // records now renders in one place, under the type's own heading, by the one
   // rule.
-  const stats: Stat[] = [];
   const position = `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
   const copyPosition = () => {
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no
     // native module — the same copy the waypoint and tapped-point sheets use.
     Clipboard.setString(position);
-    notify("Coordinates copied.", "info");
+    notify(PLACE_PAGE.copy.copyPosition, "info");
   };
-  stats.push({
-    label: "Position",
-    value: position,
-    wide: true,
-    onCopy: copyPosition,
-  });
 
   /**
    * One of the three actions on a parked value. The place is re-read from the
@@ -340,194 +330,161 @@ export function PlaceDetailScreen({
     });
   };
 
-  const confirmRemoveShare = () => {
-    const confirm = removeShareConfirm({
-      kindLabel: "place",
-      itemName: place.name,
-    });
-    Alert.alert(confirm.title, confirm.body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        // Not `destructive`: the owner keeps the place, its notes and its
-        // photos. Only this account's view of them goes.
-        text: "Remove",
-        onPress: () => {
-          setRemoving(true);
-          removeSharedPlace(place.id)
-            // Same exit as a delete: the screen is showing a place this
-            // account can no longer see.
-            .then(onDeleted)
-            .catch((err: unknown) => {
-              console.error(err);
-              notify(
-                messageFromError(err, "Couldn't remove this shared place."),
-                "error",
-              );
-              setRemoving(false);
-            });
-        },
-      },
-    ]);
+  const copy = PLACE_PAGE.copy;
+  const sources = placeSources(place.fieldValues);
+  const primaryVerbs = placeVerbs("gps", "page", isOwner).filter((verb) =>
+    (PLACE_PAGE_PRIMARY_VERBS as readonly string[]).includes(verb.id),
+  );
+  const runPrimaryVerb: Partial<Record<PlaceVerbIdOn<"gps">, () => void>> = {
+    show: () => onShowOnMap(place),
+    logTrip: () => setLogging(true),
   };
 
-  const confirmDelete = () => {
-    const confirm = placeDeleteConfirm(place.name, linkedTrips.length);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          deletePlaceLocal(place.id)
-            .then(onDeleted)
-            .catch((err: unknown) => {
-              console.error(err);
-              notify("Couldn't delete this place.", "error");
-            });
-        },
-      },
-    ]);
-  };
-
-  return (
-    <View style={styles.screen}>
-      <HeroHeader
-        eyebrow="Place"
-        title={place.name}
-        titleNumberOfLines={2}
-        onBack={onBack}
-        action={
-          isOwner ? (
-            <IconButton
-              icon="edit-2"
-              accessibilityLabel="Edit place"
-              color={theme.accent}
-              filled
-              onPress={() => setEditing(true)}
-            />
-          ) : undefined
-        }
-      >
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`PLACE_PAGE`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof PLACE_PAGE, "gps">,
+    () => ReactNode
+  > = {
+    // The Hero's own content, pinned above the scroll.
+    hero: () => (
+      <>
         <View style={styles.pillRow}>
           {/* The grade rides as a pill rather than as the eyebrow: the eyebrow
               style is uppercase, and a place grade is written with a lowercase
               v/a ("v4a4 III") — upcasing it renders a grade nobody writes. */}
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           <StatusPill
-            label={
-              status === "done"
-                ? tickLabel(linkedTrips.length)
-                : statusMeta.label
-            }
+            label={placeStatusLabel(status, linkedTrips.length)}
             icon={statusMeta.icon}
             hue={statusMeta.hue}
           />
-          {place.altNames.length > 0 ? (
-            <StatusPill
-              label={`A.K.A. ${place.altNames.join(", ")}`}
-              tone="outline"
-            />
-          ) : null}
         </View>
-      </HeroHeader>
+        {place.altNames.length > 0 ? (
+          <Text style={styles.muted}>
+            {copy.alsoKnownAs} {place.altNames.join(", ")}
+          </Text>
+        ) : null}
+      </>
+    ),
 
-      <ScrollView contentContainerStyle={styles.body}>
-        {/* The two things you do standing at a trailhead. Both work offline. */}
+    // The two things you do standing at a trailhead. Both work offline.
+    verbs: () =>
+      primaryVerbs.length > 0 ? (
         <View style={styles.actionRow}>
-          <View style={styles.action}>
-            <Button
-              label="Show on map"
-              icon="map"
-              variant="outlineAccent"
-              onPress={() => onShowOnMap(place)}
-            />
-          </View>
-          <View style={styles.action}>
-            <Button
-              label="Log a trip"
-              icon="edit-3"
-              onPress={() => setLogging(true)}
-            />
-          </View>
-        </View>
-
-        <SectionHeader label="Overview" />
-        <StatGrid stats={stats} />
-        <Row
-          icon="navigation"
-          title="Open in a maps app"
-          subtitle="Opens your navigation app to this location."
-          onPress={openInMapsApp}
-        />
-
-        {customFields.length > 0 ? (
-          <>
-            {/* Named for the TYPE, like the form and the filter sheet: on a
-                campsite these are Capacity and Is-a-cave, which are the app's,
-                not the user's. */}
-            <SectionHeader label={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
-            <AttributeTable rows={customFields} />
-          </>
-        ) : null}
-
-        {isOwner && foreignFields.length > 0 ? (
-          <>
-            <SectionHeader
-              label={`Doesn\u2019t fit this type · ${foreignFields.length}`}
-            />
-            {/* Named for the CONDITION, not the cause, because there are two of
-                them: a type change strands what the new type has no definition
-                for, and a copy carries values keyed by the sender's. "Came with
-                this place" was only ever true of the second. The sentence below
-                names whichever one applies. */}
-            <Text style={styles.muted}>
-              {isCopied
-                ? `These came across when you copied this place. Tap one to decide what to do with it.`
-                : `These are left over from when you changed this place\u2019s type. Tap one to decide what to do with it.`}
-            </Text>
-            {/* A CARD PER ROW, not the hairline table above it. The two
-                sections look different because they ARE different: the one
-                above is a list of facts, and every row here is a decision the
-                user has to make. The table style that stopped the facts
-                inviting a tap took the invitation off these too, where it is
-                the whole point — so these use the same `Row` as every other
-                tappable thing in the app, chevron and all. */}
-            {foreignFields.map((item) => (
-              <Row
-                key={item.key}
-                icon="help-circle"
-                title={item.label}
-                subtitle={foreignValueText(item.value)}
-                right={
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={theme.textMuted}
-                  />
+          {primaryVerbs.map((verb, index) => (
+            <View key={verb.id} style={styles.action}>
+              <Button
+                label={verb.label}
+                icon={verb.icon}
+                variant={
+                  index === primaryVerbs.length - 1
+                    ? undefined
+                    : "outlineAccent"
                 }
-                onPress={() => setForeignKey(item.key)}
+                onPress={() => runPrimaryVerb[verb.id]?.()}
               />
-            ))}
-          </>
-        ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null,
 
+    position: () => (
+      <>
+        <SectionHeader title={copy.position} />
+        <Row
+          icon="place"
+          title={position}
+          right={<Icon idea="copy" size={20} color={theme.textMuted} />}
+          accessibilityLabel={`Copy the coordinates of ${place.name}`}
+          onPress={copyPosition}
+        />
+      </>
+    ),
+
+    navigate: () => (
+      <Row icon="navigateTo" title={copy.openInMaps} onPress={openInMapsApp} />
+    ),
+
+    // Named for the TYPE, like the form and the filter sheet: on a campsite
+    // these are Capacity and Is-a-cave, which are the app's, not the user's.
+    attributes: () =>
+      customFields.length > 0 ? (
+        <>
+          <SectionHeader title={placeAttributesTitle(placeTypeName)} />
+          <AttributeTable rows={customFields} />
+        </>
+      ) : null,
+
+    // Named for the CONDITION, not the cause, because there are two of them:
+    // a type change strands what the new type has no definition for, and a
+    // copy carries values keyed by the sender's. Owner-private.
+    doesntFit: () =>
+      foreignFields.length > 0 ? (
+        <>
+          <SectionHeader title={copy.doesntFit} count={foreignFields.length} />
+          <Text style={styles.muted}>
+            {isCopied ? copy.doesntFitCopied : copy.doesntFitTypeChange}
+          </Text>
+          {/* A CARD PER ROW, not the hairline table of attributes: those are
+              facts, and every row here is a decision the user has to make. */}
+          {foreignFields.map((item) => (
+            <Row
+              key={item.key}
+              icon="help"
+              title={item.label}
+              subtitle={foreignValueText(item.value)}
+              right={
+                <Icon idea="disclosure" size={20} color={theme.textMuted} />
+              }
+              onPress={() => setForeignKey(item.key)}
+            />
+          ))}
+        </>
+      ) : null,
+
+    notes: () => (
+      <>
         <SectionHeader
-          label={
-            place.notes ? "Notes · visible to anyone you share with" : "Notes"
-          }
+          title={place.notes && isOwner ? copy.notesVisible : copy.notes}
         />
         {place.notes ? (
           <Text style={styles.notes}>{place.notes}</Text>
         ) : (
-          <Text style={styles.muted}>Nothing written down.</Text>
+          <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
+      </>
+    ),
 
+    sources: () =>
+      sources.length > 0 ? (
+        <>
+          <SectionHeader title={copy.sources} count={sources.length} />
+          {sources.map((source, index) => (
+            <Row
+              key={index}
+              icon={source.linkable ? "openExternal" : "link"}
+              title={source.label}
+              subtitle={source.linkable ? source.host : undefined}
+              onPress={
+                source.linkable
+                  ? () => {
+                      Linking.openURL(source.url).catch(() =>
+                        notify("Couldn’t open that link.", "error"),
+                      );
+                    }
+                  : undefined
+              }
+            />
+          ))}
+        </>
+      ) : null,
+
+    photos: () => (
+      <>
         <SectionHeader
-          label={
-            photoCount === 0
-              ? "Photos & videos"
-              : `Photos & videos · ${photoCount}`
-          }
+          title={copy.photos}
+          count={photoCount > 0 ? photoCount : undefined}
         />
         <MediaStrip
           kind="media"
@@ -535,13 +492,15 @@ export function PlaceDetailScreen({
           linkedType="place"
           linkedId={placeId}
           media={attachments}
-          emptyHint="No photos yet."
+          emptyHint={copy.photosEmpty}
           onFailed={(text) => notify(text, "error")}
         />
+      </>
+    ),
 
-        <SectionHeader
-          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
-        />
+    route: () => (
+      <>
+        <SectionHeader title={copy.route} />
         {/* One route per place — the API enforces it, so the UI has to as well
             (see `limit` in MediaStrip).
 
@@ -560,13 +519,13 @@ export function PlaceDetailScreen({
             <Row
               title={linkedRoute.name}
               subtitle={`Drawn route · ${formatDistanceM(routeLengthM(linkedRoute.points))}`}
-              icon="edit-3"
+              icon="route"
               hue={assetHue.route}
               onPress={() => onFocusOnMap(routeBbox(linkedRoute.points))}
               right={
                 isOwner ? (
                   <IconButton
-                    icon="more-horizontal"
+                    icon="overflow"
                     accessibilityLabel="Route options"
                     onPress={() => setRouteSlotMenu(true)}
                   />
@@ -583,10 +542,7 @@ export function PlaceDetailScreen({
             linkedType="place"
             linkedId={placeId}
             media={attachments}
-            // Not "Attach a .gpx or .kml" any more: the slot takes a drawn
-            // route, an import or a recording as readily as a file, and naming
-            // only the file promised the least of the five (see AddWaySheet).
-            emptyHint="Add a route, a file or a recording."
+            emptyHint={copy.routeEmpty}
             onFailed={(text) => notify(text, "error")}
             onShowRoute={(item) => {
               resolveRouteAttachmentBbox({
@@ -611,81 +567,65 @@ export function PlaceDetailScreen({
             onAddWay={isOwner ? () => setAddingWay(true) : undefined}
           />
         )}
+      </>
+    ),
 
-        {/* Places linked to this one — the carpark, the campsite, the exit.
-            Editable from the phone: linking is an outbox op like everything
-            else, so it works standing at the carpark with no signal, which is
-            where you find out the two belong together.
-
-
-            NAVIGATIONAL ONLY: a link grants no visibility, so this section is
-            the owner's own filing and a recipient sees nothing here (the
-            server sends them no links at all). Coordinates stay off the rows —
-            this is a list. */}
-        {isOwner ? (
-          <>
-            <SectionHeader
-              label={
-                linkedPlaces.length === 0
-                  ? "Linked places"
-                  : `Linked places · ${linkedPlaces.length}`
+    // Editable from the phone: linking is an outbox op like everything else,
+    // so it works standing at the carpark with no signal, which is where you
+    // find out the two belong together. NAVIGATIONAL ONLY: a link grants no
+    // visibility, and a recipient is sent no links at all.
+    linkedPlaces: () => (
+      <>
+        <SectionHeader
+          title={copy.linkedPlaces}
+          count={linkedPlaces.length > 0 ? linkedPlaces.length : undefined}
+        />
+        {linkedPlaces.length === 0 ? (
+          <Text style={styles.muted}>{copy.linkedPlacesEmpty}</Text>
+        ) : (
+          linkedPlaces.map((linked) => (
+            <Row
+              key={linked.id}
+              icon="place"
+              title={linked.name}
+              onPress={() => onShowPlaceOnMap?.(linked)}
+              // The row's own action is "show me where that is"; the verb that
+              // CHANGES something sits behind its own control, so a thumb
+              // reaching for the map cannot unlink instead.
+              right={
+                <IconButton
+                  icon="overflow"
+                  accessibilityLabel={`Options for ${linked.name}`}
+                  onPress={() => setLinkMenuId(linked.id)}
+                />
               }
             />
-            {linkedPlaces.length === 0
-              ? null
-              : linkedPlaces.map((linked) => (
-                  <Row
-                    key={linked.id}
-                    icon="map-pin"
-                    title={linked.name}
-                    onPress={() => onShowPlaceOnMap?.(linked)}
-                    // The row's own action is "show me where that is"; the verb
-                    // that CHANGES something sits behind its own control, so a
-                    // thumb reaching for the map cannot unlink instead.
-                    right={
-                      <IconButton
-                        icon="more-vertical"
-                        accessibilityLabel={`Options for ${linked.name}`}
-                        onPress={() => setLinkMenuId(linked.id)}
-                      />
-                    }
-                  />
-                ))}
-            <Row
-              icon="link"
-              title="Link a place"
-              subtitle="A carpark, a campsite, the exit."
-              onPress={() => {
-                setLinkQuery("");
-                setLinking(true);
-              }}
-            />
-          </>
-        ) : null}
+          ))
+        )}
+        <Row
+          icon="link"
+          title={copy.linkAPlace}
+          subtitle={copy.linkAPlaceHint}
+          onPress={() => {
+            setLinkQuery("");
+            setLinking(true);
+          }}
+        />
+      </>
+    ),
 
-        {/* VALUES THAT ARRIVED ON A COPY, in their own read-only section (§2.6).
-            They are not in this account's form and not on its other places:
-            copying one campsite must not change the form on all forty. The
-            three actions below ARE the schema decision, made by the user with
-            the value in front of them.
-
-            Owner-private: a place shared WITH someone carries none of this, so
-            the labels and values of whoever they came from stop here. */}
-        {/* Your own history here — the half a "done" badge can't tell you. Only
-            ever your own trips: another person's visits to a place they shared
-            with you are theirs, and never reach this device. */}
+    // Your own history here — the half a "visited" badge can't tell you. Only
+    // ever your own trips: another person's visits to a place they shared with
+    // you are theirs, and never reach this device.
+    trips: () => (
+      <>
         <SectionHeader
-          label={
-            linkedTrips.length === 0
-              ? "Your trips"
-              : `Your trips · ${linkedTrips.length}`
-          }
+          title={copy.trips}
+          count={linkedTrips.length > 0 ? linkedTrips.length : undefined}
         />
         {linkedTrips.length === 0 ? (
           <Text style={styles.muted}>
-            {isOwner
-              ? "No trips logged here yet."
-              : "Log a trip to this place and it will appear here."}
+            {isOwner ? copy.tripsEmpty : copy.tripsShared}
           </Text>
         ) : (
           linkedTrips
@@ -694,57 +634,74 @@ export function PlaceDetailScreen({
             .map((trip) => (
               <Row
                 key={trip.id}
-                icon="book-open"
+                icon="trip"
                 hue={theme.accent}
                 title={tripTitle(trip)}
                 subtitle={formatTripDate(trip.date)}
                 right={
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={theme.textMuted}
-                  />
+                  <Icon idea="disclosure" size={20} color={theme.textMuted} />
                 }
                 onPress={() => onOpenTrip(trip)}
               />
             ))
         )}
+      </>
+    ),
 
-        {isOwner ? (
-          <>
-            <PlaceSharingSection
-              placeId={placeId}
-              placeName={place.name}
-              online={online}
-              openRequest={shareOpenRequest}
-              onShareRequested={() => setShareOpenRequest((n) => n + 1)}
-            />
-            <SectionHeader label="Danger zone" />
-            <Row
-              icon="trash-2"
-              hue={theme.warning}
-              title="Delete place"
-              onPress={confirmDelete}
-            />
-          </>
-        ) : (
-          <>
-            {/* The recipient's half. A place share is always DIRECT — there is
-                nothing above a place for it to be inherited from — so this row
-                is offered on every shared place. Online-only, like every other
-                share action, and dimmed with the reason rather than hidden. */}
-            <SectionHeader label="Shared with you" />
-            <Row
-              icon="x-circle"
-              hue={theme.warning}
-              title="Remove from my account"
-              {...shareRowProps}
-              disabled={removing || shareRowProps.disabled}
-              onPress={confirmRemoveShare}
-            />
-          </>
-        )}
+    sharedWith: () => (
+      <PlaceSharingSection
+        placeId={placeId}
+        placeName={place.name}
+        online={online}
+        openRequest={shareOpenRequest}
+        onShareRequested={() => setShareOpenRequest((n) => n + 1)}
+      />
+    ),
+  };
+
+  return (
+    <View style={styles.screen}>
+      <Hero
+        eyebrow="Place"
+        title={place.name}
+        titleNumberOfLines={2}
+        onBack={onBack}
+        actions={
+          <IconButton
+            icon="overflow"
+            accessibilityLabel={`Actions for ${place.name}`}
+            color={theme.accent}
+            filled
+            onPress={() => setMenuOpen(true)}
+          />
+        }
+      >
+        {sections.hero()}
+      </Hero>
+
+      <ScrollView contentContainerStyle={styles.body}>
+        {contractSectionsFor(PLACE_PAGE, "gps", isOwner)
+          .filter((key) => key !== "hero")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
       </ScrollView>
+
+      {/* THE PAGE'S VERBS: the same sheet a row and a pin open, so a place
+          reached from its page is not a lesser object than one in the list. */}
+      <PlaceOptionsSheet
+        place={place}
+        surface="page"
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onOpenPlace={() => {}}
+        onShowOnMap={onShowOnMap}
+        onLogTrip={() => setLogging(true)}
+        onEdit={() => setEditing(true)}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+        onGone={onDeleted}
+      />
 
       <PlaceEditSheet
         visible={editing}
@@ -806,7 +763,7 @@ export function PlaceDetailScreen({
                 {visible.map((row) => (
                   <Row
                     key={row.id}
-                    icon="map-pin"
+                    icon="place"
                     title={row.name}
                     onPress={() => {
                       setLinking(false);
@@ -839,7 +796,7 @@ export function PlaceDetailScreen({
       >
         <View style={styles.sheetBody}>
           <Row
-            icon="link-2"
+            icon="link"
             hue={theme.warning}
             title="Unlink from this place"
             subtitle="Both places are kept."
@@ -893,7 +850,7 @@ export function PlaceDetailScreen({
               that is not on screen, is the panel apologising for itself. */}
           {foreignIsBuiltIn ? null : (
             <Row
-              icon="plus-circle"
+              icon="add"
               title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
               // No explanation line: the three titles say what they do, and a
               // sentence under each turned a three-item menu into a wall. The
@@ -905,14 +862,14 @@ export function PlaceDetailScreen({
             />
           )}
           <Row
-            icon="file-text"
+            icon="notes"
             title="Add to notes as text"
             subtitle={online ? undefined : "Needs a connection"}
             disabled={!online || resolvingForeign}
             onPress={() => runForeignAction("notes")}
           />
           <Row
-            icon="trash-2"
+            icon="delete"
             hue={theme.warning}
             title="Discard"
             subtitle={online ? undefined : "Needs a connection"}
@@ -951,7 +908,7 @@ export function PlaceDetailScreen({
               route on the way in is a slot with two different rules. */}
           <Row
             title="Replace with another way"
-            icon="repeat"
+            icon="replace"
             hue={assetHue.route}
             onPress={() => {
               setRouteSlotMenu(false);
@@ -961,7 +918,7 @@ export function PlaceDetailScreen({
           <Row
             title="Unlink from this place"
             subtitle="The route is kept."
-            icon="link-2"
+            icon="link"
             hue={theme.warning}
             onPress={() => {
               const target = linkedRoute;
@@ -1051,21 +1008,25 @@ function PlaceSharingSection({
   return (
     <>
       <SectionHeader
-        label={
+        title={PLACE_PAGE.copy.sharedWith}
+        count={
           sharing.recipients && sharing.recipients.length > 0
-            ? `Shared with · ${sharing.recipients.length}`
-            : "Shared with"
+            ? sharing.recipients.length
+            : undefined
         }
       />
       <SharingError sharing={sharing} />
       <RecipientRows sharing={sharing} />
+      {sharing.recipients?.length === 0 ? (
+        <Text style={styles.muted}>{PLACE_PAGE.copy.sharedWithEmpty}</Text>
+      ) : null}
 
       {/* Offline this door is closed WITH THE REASON in place of its subtitle
-          (DESIGN.md §10) rather than hidden, so the feature doesn't appear to
+          (DESIGN.md §8) rather than hidden, so the feature doesn't appear to
           come and go. */}
       <Row
-        icon="share-2"
-        title="Share with a friend"
+        icon="shareFriend"
+        title={PLACE_PAGE.copy.shareWithFriend}
         subtitle={shareRowSubtitle(sharing)}
         disabled={!sharing.canShare || sharing.loadFailed}
         onPress={onShareRequested}
@@ -1082,14 +1043,8 @@ function PlaceSharingSection({
   );
 }
 
-function tickLabel(trips: number): string {
-  // "Visited", like the Places rail and the filter sheet. This chip was the one
-  // place "Done" survived the rename, directly under a list that said Visited.
-  return trips === 1 ? "Visited · 1 trip" : `Visited · ${trips} trips`;
-}
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   body: {
     paddingHorizontal: spacing(2),
@@ -1104,7 +1059,7 @@ const styles = StyleSheet.create({
   action: { flex: 1 },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
   notes: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
   },
@@ -1123,12 +1078,12 @@ const styles = StyleSheet.create({
     gap: spacing(2),
     paddingVertical: spacing(0.875),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: surface.border,
+    borderBottomColor: theme.line,
   },
   fieldRowLast: { borderBottomWidth: 0 },
   fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   fieldValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     textAlign: "right",

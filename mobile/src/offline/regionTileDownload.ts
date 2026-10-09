@@ -16,7 +16,7 @@
 //     A provider request must be a plain HTTP client, in both senses.
 //   - a 403 or 429 stops the whole job immediately rather than retrying into it
 //
-// The ToS gate (§2) was cleared by the operator for the three NSW SIX rasters,
+// The ToS gate (DESIGN.md §2) was cleared by the operator for the three NSW SIX rasters,
 // whose CC licence permits redistribution; `offlineCapable` in the shared basemap
 // catalog stays the single source of which sources may be downloaded at all.
 import { AppState } from "react-native";
@@ -481,7 +481,7 @@ export async function runRegionDownload(
 
     // The real cost on disk, not this session's byte counter — a resumed job
     // only counted the tiles IT fetched, and Saved reports storage from this
-    // number (DESIGN.md §8: report the true cost of a thing).
+    // number (docs/ux-principles.md §11: report the true cost of a thing).
     //
     // Read TWICE, because right now the file is still in WAL and almost all of
     // its bytes are in the `-wal` sidecar: this first stat is a placeholder so

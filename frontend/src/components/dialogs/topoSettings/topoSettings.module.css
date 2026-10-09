@@ -1,6 +1,6 @@
 /* How a LiDAR topo's rasters are drawn, four tabs of settings inside the Make
    and Template dialogs. Layout only: every control is the kit's, and every size
-   and colour is a token (DESIGN.md §4, §9). */
+   and colour is a token (DESIGN.md §1, §9). */
 .tabPanel {
   display: flex;
   flex-direction: column;
@@ -23,7 +23,7 @@
 .helpText {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A group that another setting switches on and off wholesale. */
@@ -32,7 +32,7 @@
   pointer-events: none;
 }
 
-/* The slope bands: a row per band, columns headed once (DESIGN.md §9). Tight
+/* The slope bands: a row per band, columns headed once (DESIGN.md §6). Tight
    rows, because the table is mostly two-digit numbers and a swatch — the
    full-height control rows it started with spent a screen on eight bands
    (operator, 2026-09-18). */
@@ -49,13 +49,13 @@
   align-items: center;
   gap: 4px;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .fixedCell {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A band's colour is read from the scale, so it is shown, not pressed: a
@@ -70,17 +70,17 @@
   border: var(--hairline);
   overflow: hidden;
   background-image:
-    linear-gradient(45deg, var(--surface-field) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--surface-field) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--surface-field) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--surface-field) 75%);
+    linear-gradient(45deg, var(--color-field) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-field) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-field) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-field) 75%);
   background-size: 8px 8px;
   background-position:
     0 0,
     0 4px,
     4px -4px,
     -4px 0;
-  background-color: var(--theme-primary);
+  background-color: var(--color-page);
 }
 
 .bandSwatchFill {
@@ -101,19 +101,19 @@
   border: none;
   border-radius: var(--radius-sm);
   background: none;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   opacity: 0.4;
   cursor: pointer;
   transition:
-    opacity var(--transition-fast),
-    background-color var(--transition-fast);
+    opacity var(--motion-fast),
+    background-color var(--motion-fast);
 }
 
 .insertRow:hover:not(:disabled),
 .insertRow:focus-visible {
   opacity: 1;
-  color: var(--theme-accent);
-  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .insertRow:disabled {
@@ -134,11 +134,11 @@
   align-items: center;
   gap: 6px;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .scaleArrow {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .scaleReset {
@@ -157,7 +157,7 @@
 
 .formationName {
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 /* The layers a format can carry. */
@@ -171,7 +171,7 @@
 .exportNote {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A group's header and its sentence, with the control that resets the group

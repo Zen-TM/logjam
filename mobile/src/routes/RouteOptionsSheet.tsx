@@ -2,7 +2,7 @@
 // sheet the map opens when a route line is tapped.
 //
 // ONE component for both on purpose. The two surfaces offering different verbs
-// for the same object is exactly the drift DESIGN.md §7 is about, and the
+// for the same object is exactly the drift DESIGN.md §5 is about, and the
 // actions themselves already have a single source in saved/assetActions.ts.
 // This is that descriptor rendered.
 //
@@ -26,6 +26,7 @@ import {
   messageFromError,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
+  wayVerbLabel,
 } from "@logjam/shared";
 
 import { assetHue, placeHue, theme } from "../theme";
@@ -70,7 +71,7 @@ export function RouteOptionsSheet({
   /**
    * Fly the map to this route. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md §7: "View on map" is the one row the two surfaces differ by).
+   * (DESIGN.md §5: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: () => void;
   /** Arm the map's draw tool on this route. Editing is a map gesture, so both
@@ -87,7 +88,7 @@ export function RouteOptionsSheet({
   // one component is both Saved's three-dots sheet and the map's route sheet,
   // and a callback would have given the verb to whichever surface remembered
   // to pass it. That asymmetry is the bug this sheet exists to prevent
-  // (DESIGN.md §7).
+  // (DESIGN.md §5).
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
@@ -203,7 +204,7 @@ export function RouteOptionsSheet({
   });
 
   // THE place picker, as a sub-mode of this sheet rather than a second sheet
-  // the caller had to remember to mount (DESIGN.md §6). Same panel a track's
+  // the caller had to remember to mount (DESIGN.md §4). Same panel a track's
   // and an import's options render.
   const placePicker = usePlacePicker({
     source: "route",
@@ -296,7 +297,7 @@ export function RouteOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §6 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md §4 — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = sharing
     ? () => setSharing(false)
     : renaming
@@ -370,7 +371,7 @@ export function RouteOptionsSheet({
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.route}
               disabled={busy}
               onPress={onShowOnMap}
@@ -378,7 +379,7 @@ export function RouteOptionsSheet({
           ) : null}
           <Row
             title="View stats"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.route}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -388,8 +389,8 @@ export function RouteOptionsSheet({
               // ONE verb for every way of editing this route. It opens the draw
               // tool on the map, where the points, the direction and the colour
               // are all in reach of the line they change.
-              title="Edit"
-              icon="edit-3"
+              title={wayVerbLabel("edit", "gps")}
+              icon="edit"
               hue={assetHue.route}
               disabled={busy}
               onPress={onEdit}
@@ -407,16 +408,16 @@ export function RouteOptionsSheet({
             />
           ) : null}
           <Row
-            title="Save as GPX"
-            icon="download"
-            hue={theme.bonus1}
+            title={wayVerbLabel("exportGpx", "gps")}
+            icon="export"
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => save("gpx")}
           />
           <Row
-            title="Save as KML"
-            icon="download"
-            hue={theme.bonus1}
+            title={wayVerbLabel("exportKml", "gps")}
+            icon="export"
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => save("kml")}
           />
@@ -426,9 +427,9 @@ export function RouteOptionsSheet({
             can be the one that lacks it. */}
           {actions.rename ? (
             <Row
-              title="Rename"
-              icon="edit-2"
-              hue={theme.bonus1}
+              title={wayVerbLabel("rename", "gps")}
+              icon="edit"
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => setRenaming(true)}
             />
@@ -438,9 +439,9 @@ export function RouteOptionsSheet({
             with a 403. The panel behind it is a sub-mode of THIS sheet. */}
           {actions.share ? (
             <Row
-              title="Share"
-              icon="share-2"
-              hue={theme.bonus1}
+              title={wayVerbLabel("share", "gps")}
+              icon="shareFriend"
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSharing((open) => !open)}
@@ -454,7 +455,7 @@ export function RouteOptionsSheet({
           {actions.delete ? (
             <Row
               title="Delete route"
-              icon="trash-2"
+              icon="delete"
               hue={theme.warning}
               disabled={busy}
               onPress={confirmDelete}
@@ -465,7 +466,7 @@ export function RouteOptionsSheet({
             "someone else owns this" and not on there being a share row. */}
           {actions.sharedWithYou ? (
             <Row
-              title="Save a copy"
+              title={wayVerbLabel("copy", "gps")}
               icon="copy"
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
@@ -478,8 +479,8 @@ export function RouteOptionsSheet({
             two different promises. */}
           {actions.sharedWithYou && actions.removeShare ? (
             <Row
-              title="Save a copy and remove"
-              icon="archive"
+              title={wayVerbLabel("copyAndRemove", "gps")}
+              icon="moveCopy"
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setCopyMode("copyAndRemove")}
@@ -490,8 +491,8 @@ export function RouteOptionsSheet({
             offline with the reason in place of its subtitle, never hidden. */}
           {actions.removeShare ? (
             <Row
-              title="Remove from my account"
-              icon="x-circle"
+              title={wayVerbLabel("removeShare", "gps")}
+              icon="unshare"
               hue={theme.warning}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
@@ -506,7 +507,7 @@ export function RouteOptionsSheet({
                   key={place.id}
                   title={`Open ${place.name}`}
                   subtitle="This route came with that shared place — remove it there."
-                  icon="map-pin"
+                  icon="place"
                   hue={placeHue.shared}
                   disabled={busy}
                   onPress={() => {

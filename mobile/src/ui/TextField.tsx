@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,14 +7,15 @@ import {
   type TextInputProps,
 } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, opacity, radius, spacing, theme } from "../theme";
 import { FieldError } from "./FieldError";
+import { fieldLabel } from "./fieldLabel";
 
 type TextFieldProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
-  /** This field's validation message (DESIGN.md §8, "Form errors"): drawn
+  /** This field's validation message (docs/ux-principles.md §11, "Form errors"): drawn
    *  under the input, which takes a warning border. Null renders nothing. */
   error?: string | null;
   /**
@@ -59,12 +61,17 @@ export function TextField({
   // (dim, don't hide). Undeclared `editable` (the common case) stays full
   // opacity.
   const disabled = inputProps.editable === false;
+  // The edge is `lineStrong` at rest and the accent while the field has the
+  // keyboard, as on Logjam Web: the field's own well (`field`) is what says
+  // "type here".
+  const [focused, setFocused] = useState(false);
   const input = (
     <TextInput
       ref={inputRef}
       style={[
         styles.input,
         multiline && styles.multiline,
+        focused && styles.inputFocused,
         error ? styles.inputError : null,
         accessory != null && styles.grow,
       ]}
@@ -72,8 +79,11 @@ export function TextField({
       onChangeText={onChangeText}
       placeholderTextColor={theme.textMuted}
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       multiline={multiline}
       {...inputProps}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
     />
   );
   return (
@@ -94,27 +104,23 @@ export function TextField({
 
 const styles = StyleSheet.create({
   container: { gap: spacing(0.5) },
-  // Matches `Row`'s/`Button`'s disabled dim (0.45) — see the note above.
-  disabled: { opacity: 0.45 },
-  label: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
+  // The kit's one disabled dim — see the note above.
+  disabled: { opacity: opacity.disabled },
+  label: fieldLabel,
   input: {
     borderWidth: 1,
-    borderColor: theme.accent,
+    borderColor: theme.lineStrong,
+    backgroundColor: theme.field,
     borderRadius: radius.md,
     paddingVertical: spacing(1.25),
     paddingHorizontal: spacing(1.5),
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
   multiline: { minHeight: 96, textAlignVertical: "top" },
+  inputFocused: { borderColor: theme.accent },
   // Findable while scrolling a long form, not only once the line under it is read.
   inputError: { borderColor: theme.warning },
 });

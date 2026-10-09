@@ -33,7 +33,7 @@ export function RenameForm({
 }) {
   const [name, setName] = useState(initialName);
   const [notes, setNotes] = useState(initialNotes ?? "");
-  // Requirement shows on SUBMIT, not while typing (DESIGN.md §8); clears the
+  // Requirement shows on SUBMIT, not while typing (docs/ux-principles.md §11); clears the
   // moment the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -49,7 +49,7 @@ export function RenameForm({
   const commit = useCallback(() => {
     const trimmedName = name.trim();
     // Every entity here requires a name — an emptied field is the Name
-    // field's own error (DESIGN.md §8), not a silent no-op that closes the
+    // field's own error (docs/ux-principles.md §11), not a silent no-op that closes the
     // sheet as if nothing had happened.
     if (!trimmedName) {
       setShowEmptyError(true);
@@ -88,7 +88,7 @@ export function RenameForm({
           multiline
         />
       ) : null}
-      <Button label="Save" icon="check" onPress={commit} />
+      <Button label="Save" icon="done" onPress={commit} />
     </>
   );
 }

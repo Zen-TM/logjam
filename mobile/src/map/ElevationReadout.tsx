@@ -24,7 +24,7 @@ export function ElevationReadout({
     <View style={styles.row}>
       <Text
         style={styles.value}
-        accessibilityLabel={`Climb ${Math.round(profile.gainM)} metres`}
+        accessibilityLabel={`Ascent ${Math.round(profile.gainM)} metres`}
       >
         ↑ {Math.round(profile.gainM)} m
       </Text>
@@ -46,7 +46,7 @@ export function ElevationReadout({
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "baseline", gap: spacing(1.25) },
   value: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],

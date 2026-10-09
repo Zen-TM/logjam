@@ -1,17 +1,10 @@
 import { useRef, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 
-import { fontSize, radius, spacing, surface, theme } from "../theme";
-import { Chip } from "./Chip";
+import { fontSize, radius, spacing, theme } from "../theme";
+import { Chip, type ChipOption } from "./Chip";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
-
-export type ChipOption = {
-  value: string;
-  label: string;
-  hue?: string;
-  icon?: React.ComponentProps<typeof Chip>["icon"];
-};
 
 /**
  * Multi-select over a vocabulary that the user can extend — trip types are a
@@ -49,7 +42,7 @@ export function ChipPicker({
    *  first type picks its glyph and hue. Starred rather than moved to the
    *  front, since chips keep their positions. */
   primaryValue?: string;
-  /** The problem with this choice (DESIGN.md §8, "Form errors"). */
+  /** The problem with this choice (docs/ux-principles.md §11, "Form errors"). */
   error?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
@@ -67,7 +60,7 @@ export function ChipPicker({
 
   return (
     <View style={styles.wrap}>
-      <SectionHeader label={label} />
+      <SectionHeader title={label} />
       <View style={styles.chips}>
         {options.map((option) => (
           <Chip
@@ -84,7 +77,7 @@ export function ChipPicker({
         {onAdd && !adding ? (
           <Chip
             label={addPlaceholder}
-            icon="plus"
+            icon="add"
             onPress={() => {
               setAdding(true);
               // Focus on the next frame: the input does not exist yet on this one.
@@ -122,10 +115,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.accent,
-    backgroundColor: surface.card,
+    backgroundColor: theme.field,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
   },
 });

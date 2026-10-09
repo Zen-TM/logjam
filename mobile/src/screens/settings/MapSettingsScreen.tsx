@@ -16,8 +16,6 @@
 //
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
 import {
   isCompassEnabled,
@@ -73,10 +71,10 @@ import {
   writeSensorLoggingEnabled,
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
-import { radius, spacing, surface, theme, withAlpha } from "../../theme";
 import {
   ScreenScroll,
   SectionHeader,
+  ColourField,
   Toast,
   type ToastMessage,
 } from "../../ui";
@@ -269,23 +267,26 @@ export function MapSettingsScreen() {
           hint="The compass and scale bar move to the other side."
         />
 
-        <SectionHeader label="Your location marker" />
-        <View style={styles.swatches}>
-          {MARKER_COLOR_ORDER.map((id) => (
-            <ColorSwatch
-              key={id}
-              colorId={id}
-              selected={id === markerColorId}
-              onPress={() => {
-                if (!stored(writeMarkerColorId(id))) return;
-                setMarkerColorId(id);
-              }}
-            />
-          ))}
-        </View>
+        <SectionHeader title="Your location marker" />
+        <ColourField
+          label="Colour"
+          palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
+          value={MARKER_COLORS[markerColorId]}
+          nameOf={(color) =>
+            MARKER_COLOR_ORDER.find((id) => MARKER_COLORS[id] === color) ??
+            color
+          }
+          onChange={(color) => {
+            const id = MARKER_COLOR_ORDER.find(
+              (candidate) => MARKER_COLORS[candidate] === color,
+            );
+            if (!id || !stored(writeMarkerColorId(id))) return;
+            setMarkerColorId(id);
+          }}
+        />
 
         <PreferenceRow
-          icon="navigation"
+          icon="northUp"
           title="Keep the map north-up"
           value={northUp}
           ready
@@ -296,7 +297,7 @@ export function MapSettingsScreen() {
           }}
         />
         <PreferenceRow
-          icon="minus"
+          icon="scaleBar"
           title="Scale bar"
           value={scaleBar}
           ready
@@ -321,7 +322,7 @@ export function MapSettingsScreen() {
 
         {/* Beneath the two instruments it joins in the same stack. */}
         <PreferenceRow
-          icon="trending-up"
+          icon="elevation"
           title="Speed and elevation"
           subtitle="Uses more battery while on the map."
           value={speedElevation}
@@ -433,7 +434,7 @@ export function MapSettingsScreen() {
             setting they cannot find is a trip's data lost. */}
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow
-            icon="activity"
+            icon="sensors"
             title="Log raw sensors while recording"
             subtitle={sensorLoggingSubtitle(sensorCaps, sensorLogging)}
             subtitleNumberOfLines={4}
@@ -468,61 +469,6 @@ export function MapSettingsScreen() {
     </>
   );
 }
-
-/**
- * One marker colour. A filled circle of the colour itself, because the choice is
- * entirely visual — the same reasoning as the theme swatches, and the same
- * hairline for the same reason (white on a light card would otherwise vanish).
- */
-function ColorSwatch({
-  colorId,
-  selected,
-  onPress,
-}: {
-  colorId: MarkerColorId;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const color = MARKER_COLORS[colorId];
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={colorId}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.swatchTarget,
-        selected && styles.swatchSelected,
-        pressed && styles.swatchPressed,
-      ]}
-    >
-      <View style={[styles.swatch, { backgroundColor: color }]}>
-        {selected ? <Feather name="check" size={18} color="#1A1A1A" /> : null}
-      </View>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  swatches: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
-  swatchTarget: {
-    padding: spacing(0.5),
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  swatchSelected: { borderColor: theme.accent },
-  swatchPressed: { backgroundColor: surface.cardPressed },
-  swatch: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.2),
-  },
-});
 
 /**
  * What the toggle actually costs and what it produces, in the two sentences a
