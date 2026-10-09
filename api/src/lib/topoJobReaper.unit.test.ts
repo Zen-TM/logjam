@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 vi.mock("../services/prisma", () => ({
   default: {
-    topoJob: { updateMany: vi.fn(), findMany: vi.fn() },
+    topoJob: { updateMany: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
     topoExportJob: { updateMany: vi.fn(), findMany: vi.fn() },
     geoPdfJob: { updateMany: vi.fn(), findMany: vi.fn() },
     notification: { create: vi.fn(), createMany: vi.fn() },
@@ -32,6 +32,7 @@ import prisma from "../services/prisma";
 import { ecs, s3 } from "../services/awsClients";
 import {
   reapStuckTopoJobs,
+  sweepAbandonedTopoUploads,
   expireCompletedExports,
   expireCompletedGeoPdfJobs,
   progressStallDeadline,
@@ -1198,5 +1199,36 @@ describe("queueAutoExports", () => {
     expect(count).toBe(0);
     expect(launchExport).not.toHaveBeenCalled();
     expect(notificationCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("sweepAbandonedTopoUploads", () => {
+  const deleteMany = (prisma as unknown as { topoJob: { deleteMany: Mock } })
+    .topoJob.deleteMany;
+
+  it("deletes the ZIP then the uploading row, guarded on status, for rows older than a day", async () => {
+    jobFindMany.mockResolvedValue([{ id: "stale" }]);
+    deleteMany.mockReset().mockResolvedValue({ count: 1 });
+
+    expect(await sweepAbandonedTopoUploads(NOW)).toBe(1);
+
+    const where = jobFindMany.mock.calls[0][0].where;
+    expect(where.status).toBe("uploading");
+    expect(where.createdAt.lt).toEqual(
+      new Date(NOW.getTime() - 24 * 60 * 60 * 1000),
+    );
+    expect(s3Send.mock.calls[0][0].input.Key).toBe("inputs/stale/upload.zip");
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: "stale", status: "uploading" },
+    });
+  });
+
+  it("keeps the row when the S3 delete fails", async () => {
+    jobFindMany.mockResolvedValue([{ id: "stale" }]);
+    deleteMany.mockReset();
+    s3Send.mockRejectedValue(new Error("s3 down"));
+
+    expect(await sweepAbandonedTopoUploads(NOW)).toBe(0);
+    expect(deleteMany).not.toHaveBeenCalled();
   });
 });

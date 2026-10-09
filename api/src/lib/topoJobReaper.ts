@@ -336,6 +336,52 @@ async function failReapedTopoJob(
   return claim;
 }
 
+// A browser PUT of even the 25 GB cap finishes well inside a day; an
+// `uploading` row older than this was abandoned (tab closed, network lost).
+const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Abandoned-upload sweep: the user never called /start, so no worker or
+ * reaper will ever touch the row, and its ZIP (not counted in quota) would
+ * stay forever. S3 first, then the status-guarded row delete, so a failure
+ * leaves the row for the next sweep. No notification: the user left on
+ * their own.
+ */
+export async function sweepAbandonedTopoUploads(
+  now: Date = new Date(),
+): Promise<number> {
+  const bucket = getEnv().S3_BUCKET_TOPO ?? "";
+  const rows = await prisma.topoJob.findMany({
+    where: {
+      status: "uploading",
+      createdAt: { lt: new Date(now.getTime() - ABANDONED_UPLOAD_MS) },
+    },
+    select: { id: true },
+  });
+  let swept = 0;
+  for (const { id } of rows) {
+    try {
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: `inputs/${id}/upload.zip`,
+        }),
+      );
+      // Guarded: a /start that landed since the read keeps its row.
+      const gone = await prisma.topoJob.deleteMany({
+        where: { id, status: "uploading" },
+      });
+      swept += gone.count;
+    } catch (err) {
+      logger.error(
+        { err: safeErrorForLog(err), id },
+        "topo_abandoned_upload_sweep_failed",
+      );
+    }
+  }
+  return swept;
+}
+
 /** Same type + payload shape topo/worker.py's failure path writes. */
 function topoJobEntry(row: {
   id: string;
@@ -874,6 +920,12 @@ export function startTopoJobReaper(): () => void {
         // next interval.
         logger.error({ err: safeErrorForLog(err) }, "topo_job_reaper_failed");
       });
+    sweepAbandonedTopoUploads().catch((err) => {
+      logger.error(
+        { err: safeErrorForLog(err) },
+        "topo_abandoned_upload_sweep_failed",
+      );
+    });
     queueAutoExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_auto_exports_queued");
