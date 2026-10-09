@@ -407,7 +407,7 @@ export function usePlaceTracks(enabled: boolean) {
   const [tracks, setTracks] = useState<PlaceTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
   // True once the first fetch settles. An empty list before then is not "no
-  // tracks" (DESIGN.md §8), and Ways says so rather than flashing its
+  // tracks" (docs/ux-principles.md §11), and Ways says so rather than flashing its
   // first-run screen at every user.
   const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);

@@ -1,4 +1,4 @@
-// "Is my work safe?" — the one question DESIGN.md §10 says an offline-first app
+// "Is my work safe?" — the one question DESIGN.md §8 says an offline-first app
 // owes the user, answered in one sentence for the More hub's hero.
 //
 // Pure so the copy rules are testable: every branch here is a claim about the

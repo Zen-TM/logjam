@@ -19,7 +19,6 @@
 // stats describe what the last one produced — a control below the readout it
 // governs reads as a footnote to it (operator, 2026-09-17).
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Redo2, Trash2, Undo2, X } from "lucide-react";
 import {
   densifyLine,
   formatDistanceM,
@@ -27,6 +26,8 @@ import {
   trackColorName,
   MAX_ROUTE_POINTS,
   TRACK_COLORS,
+  PAIRED_STAT_LABELS,
+  pairedStatLayout,
 } from "@logjam/shared";
 import type { SnapMode } from "../map/Map";
 import { useElevationProfile } from "../../placeUtils";
@@ -37,7 +38,7 @@ import {
   SectionHeader,
   Select,
   StatGrid,
-  SwatchPicker,
+  ColourField,
   type Stat,
 } from "../../ui";
 import ElevationProfile from "./ElevationProfile";
@@ -157,11 +158,11 @@ export function RouteDrawPanel({
       span: true,
     },
     {
-      label: "Climb",
+      label: PAIRED_STAT_LABELS.ascent,
       value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
     },
     {
-      label: "Descent",
+      label: PAIRED_STAT_LABELS.descent,
       value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
     },
   ];
@@ -170,14 +171,8 @@ export function RouteDrawPanel({
     <div className={classes.root}>
       <Hero
         title={editingName ? `Editing ${editingName}` : "New route"}
-        actions={
-          <IconButton
-            icon={X}
-            label="Cancel drawing"
-            onClick={onCancel}
-            disabled={saving}
-          />
-        }
+        onClose={onCancel}
+        closeDisabled={saving}
       />
 
       <div className={classes.body}>
@@ -199,7 +194,7 @@ export function RouteDrawPanel({
             what the next click does are in the footer, with Undo and Clear —
             which is also why they no longer need to sit above the figures they
             do not describe. */}
-        <StatGrid stats={stats} />
+        <StatGrid stats={pairedStatLayout(stats)} />
 
         {atCap && (
           <p className={classes.warning} role="status">
@@ -253,9 +248,9 @@ export function RouteDrawPanel({
               drawing rather than in the save dialog: the line is on the map in
               this colour as it is built, so it is a property of the draft, not
               a question asked at the end. */}
-          <SwatchPicker
+          <ColourField
             label="Colour"
-            colors={TRACK_COLORS}
+            palette={TRACK_COLORS}
             value={color ?? undefined}
             nameOf={trackColorName}
             disabled={saving}
@@ -285,19 +280,19 @@ export function RouteDrawPanel({
 
         <div className={classes.buttons}>
           <IconButton
-            icon={Undo2}
+            icon="undo"
             label="Undo"
             onClick={onUndo}
             disabled={!canUndo || saving}
           />
           <IconButton
-            icon={ArrowLeftRight}
+            icon="reverse"
             label="Reverse direction"
             onClick={onReverse}
             disabled={!hasLine || saving}
           />
           <IconButton
-            icon={Trash2}
+            icon="delete"
             label="Clear all points"
             onClick={onClear}
             disabled={points.length === 0 || saving}
@@ -309,7 +304,7 @@ export function RouteDrawPanel({
           <Button
             compact
             variant="filled"
-            icon={Redo2}
+            icon="done"
             onClick={onSave}
             disabled={!canSave}
             busy={saving}

@@ -1,12 +1,14 @@
 import { useContext, useEffect, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, theme } from "../theme";
+import { fontSize, spacing, theme } from "../theme";
 import { SheetErrorReveal } from "./BottomSheet";
+import { Icon } from "./Icon";
 
 /**
- * The one inline validation line (DESIGN.md §8, "Form errors"): directly under
- * the control it is about, in the warning tone. `TextField` and `ChipPicker`
+ * The one inline validation line (docs/ux-principles.md §11, "Form errors"): directly under
+ * the control it is about: the words in `text` and a warning glyph before them,
+ * because words are never an intent colour (UX §7). `TextField` and `ChipPicker`
  * render it from their `error` prop; any other control puts one under itself.
  * Null or empty renders nothing.
  *
@@ -27,7 +29,8 @@ export function FieldError({ message }: { message?: string | null }) {
   return (
     // Not collapsable: Android flattens a style-less View away, and a flattened
     // view cannot be measured against the sheet's content.
-    <View ref={ref} collapsable={false}>
+    <View ref={ref} collapsable={false} style={styles.line}>
+      <Icon idea="warning" size={14} color={theme.warning} />
       {/* Announced when it appears: a validation message that only exists on
           screen is a message a screen-reader user has to go hunting for. */}
       <Text style={styles.error} accessibilityLiveRegion="polite">
@@ -38,5 +41,7 @@ export function FieldError({ message }: { message?: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  error: { fontSize: fontSize.sm, color: theme.warning },
+  line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.75) },
+  // The glyph sits on the first line of the text, whatever the text size.
+  error: { flex: 1, fontSize: fontSize.sm, color: theme.text },
 });

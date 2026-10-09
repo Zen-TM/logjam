@@ -38,7 +38,7 @@
 }
 
 /* The destructive verb sits at the far left of the footer, away from Close
-   (DESIGN.md §6). */
+   (DESIGN.md §4). */
 .deleteVerb {
   margin-right: auto;
 }

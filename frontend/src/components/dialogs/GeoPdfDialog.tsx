@@ -4,7 +4,7 @@
 // Nothing here is live — the paper is drawn on the map while you pick an area
 // (App's frame), and everything else only matters once the worker renders it —
 // so the whole dialog is one form with a Make it at the end, unlike the topo
-// settings beside it (DESIGN.md §6).
+// settings beside it (DESIGN.md §4).
 import {
   useCallback,
   useEffect,
@@ -14,7 +14,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { SquareDashed } from "lucide-react";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
@@ -22,8 +21,6 @@ import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
@@ -70,6 +67,8 @@ import {
   SettingsRow,
   TextField,
   type ChipOption,
+  ErrorBanner,
+  FieldError,
 } from "../../ui";
 import classes from "./GeoPdfDialog.module.css";
 
@@ -92,7 +91,7 @@ export type GeoPdfTemplate = {
 const PAPER_SIZES: PaperSize[] = ["A2", "A3", "A4", "A5", "custom"];
 // The pivot's nine points, in reading order, with the name a reader hears:
 // the grid SHOWS which corner is anchored, so the words are the control's
-// accessible name rather than a caption under it (DESIGN.md §9).
+// accessible name rather than a caption under it (DESIGN.md §6).
 const PIVOT_POINTS: { value: PivotPoint; label: string }[] = [
   { value: "tl", label: "Top left" },
   { value: "tc", label: "Top centre" },
@@ -835,7 +834,7 @@ function GeoPdfDialog({
         onClose={guard.requestClose}
         // Pinned: which template this form came from, and the button that turns
         // the whole form into one, both act on everything below rather than on
-        // the section on screen (DESIGN.md §6). In template mode the NAME is
+        // the section on screen (DESIGN.md §4). In template mode the NAME is
         // what the dialog is about, so it sits here for the same reason.
         toolbar={
           templateMode ? (
@@ -1219,7 +1218,7 @@ function GeoPdfDialog({
             {!templateMode && (
               <div className={classes.errandLine}>
                 <Button
-                  icon={SquareDashed}
+                  icon="pickArea"
                   compact
                   variant="outline"
                   onClick={handleSelectOnMap}

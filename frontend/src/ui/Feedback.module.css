@@ -31,6 +31,46 @@
   gap: var(--space-1);
 }
 
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.spinner {
+  flex: none;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.errorGlyph {
+  flex: none;
+  color: var(--color-warning);
+}
+
 /* The same height as the chip rail whose slot it takes: chips and icon buttons
    are both `--control-md`, so the list below does not move. */
 .selectionBar {
@@ -78,16 +118,16 @@
   padding-block: var(--space-1);
 }
 
-/* Text-shaped, so a pill. Its label is the muted text colour on whatever card
-   or page it sits on; each tone's pair is in scripts/wcag-contrast.mjs. */
+/* A status is READ, not pressed, so it has no fill and no edge: text, and a dot
+   or glyph for the tones that mean something. A fill or an outline made it
+   look like the button beside it (UX §4: filled is interactive). The label is
+   the muted text colour on whatever card or page it sits on; each tone's pair
+   is in scripts/wcag-contrast.mjs. */
 .pill {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-5);
-  padding: 1px var(--space-1);
-  border: 1px solid var(--color-text-muted);
-  border-radius: var(--radius-pill);
   font-size: var(--font-xs);
   font-weight: 600;
   line-height: 1.5;
@@ -95,31 +135,40 @@
   white-space: nowrap;
 }
 
-.pill[data-tone="accent"] {
-  border-color: var(--color-accent);
+/* A dot for the tones with something to say; a tone with its own glyph draws
+   that instead. The hue is a fill, never the colour of the words. */
+.pill[data-tone="accent"]:not([data-glyph])::before,
+.pill[data-tone="warning"]:not([data-glyph])::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
-  color: var(--color-on-fill);
 }
 
-/* Warning is the EDGE and the glyph, the label in the text colour: warning as
-   text on a card measured 3.8:1 under Basalt and Ironbark. */
-.pill[data-tone="warning"] {
-  border-color: var(--color-warning);
+.pill[data-tone="accent"] {
   color: var(--color-text);
+}
+
+.pill[data-tone="accent"] svg {
+  color: var(--color-accent);
+}
+
+.pill[data-tone="warning"] {
+  color: var(--color-text);
+}
+
+.pill[data-tone="warning"]:not([data-glyph])::before {
+  background: var(--color-warning);
 }
 
 .pill[data-tone="warning"] svg {
   color: var(--color-warning);
 }
 
-/* Quiet is the absence of the outline. A wash behind the muted label took it
-   under 4.5:1 in three schemes. */
-.pill[data-tone="muted"] {
-  border-color: transparent;
-}
-
 /* The track is the field well; the fill is measured against it. A wash of the
-   text colour darkened Daylight's track until the fill fell to 2.5:1. */
+   text colour darkened Ghost Gum's track until the fill fell to 2.5:1. */
 .progress {
   position: relative;
   /* Fills its line in a flex row too (a row's footer), where a block's

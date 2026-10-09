@@ -1,4 +1,4 @@
-/* Layout only; the kit does the look (DESIGN.md §9). The values here match
+/* Layout only; the kit does the look (DESIGN.md §6). The values here match
    TripLogDialog's — the two forms are the same shape and were drifting apart
    is what the shared sub-components exist to prevent. */
 .form {

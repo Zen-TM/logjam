@@ -7,7 +7,7 @@
 // actually wants off a map — where it is, how high it is, and how far and which
 // way it is from them — plus the two things they might do about it.
 //
-// PRIVACY (DESIGN.md §11): a coordinate and a distance-from-me belong on a
+// PRIVACY (docs/ux-principles.md §13): a coordinate and a distance-from-me belong on a
 // DETAIL surface, which is what this is — the user asked about this exact spot.
 // The list rule is unaffected, and nothing here is logged or persisted: the
 // point lives in the map screen's state until the sheet is dismissed.
@@ -128,7 +128,7 @@ function PointDetail({
     onInfo("Coordinates copied.");
   };
   const stats: Stat[] = [
-    { label: "Position", value: position, wide: true, onCopy: copyPosition },
+    { label: "Position", value: position, span: true, onCopy: copyPosition },
     {
       label: "Elevation",
       value:
@@ -162,7 +162,7 @@ function PointDetail({
         </Text>
       ) : null}
       <Row
-        icon="navigation"
+        icon="navigateTo"
         title="Navigate to this point"
         subtitle="Live distance and bearing — nothing saved"
         onPress={() => {

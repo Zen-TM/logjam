@@ -1,7 +1,7 @@
 // "Which of my places is this row talking about?" — one card per name the
 // importer could not resolve on its own.
 //
-// A card that ASKS A QUESTION is answered inside itself (§5), so the options
+// A card that ASKS A QUESTION is answered inside itself (DESIGN.md §3), so the options
 // live in the card rather than in a dialog raised from it. They are native
 // radios in a real `radiogroup` named by the incoming name: a set of exclusive
 // choices is what a radio group is, and the platform's arrow keys, Space and

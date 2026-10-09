@@ -3,7 +3,7 @@
 //
 // A hub is a menu, and a menu is not very interesting. What makes this screen
 // worth opening is the ONE question it can answer that no other screen owns:
-// "is my work safe?" (DESIGN.md §10). Every other tab is about places, trips or
+// "is my work safe?" (DESIGN.md §8). Every other tab is about places, trips or
 // maps; this is the only place that can be about the app itself, so the hero is
 // the sync answer in a sentence and the menu sits under it.
 //
@@ -19,7 +19,7 @@
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
-import { Feather } from "@expo/vector-icons";
+import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -32,21 +32,28 @@ import {
   useSyncIssueCount,
   useSyncStatus,
 } from "../sync/useSyncQueries";
-import { requestSync } from "../sync/syncEngine";
+import { getSyncStatus, requestSync } from "../sync/syncEngine";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { Button, HeroHeader, Row, ScreenScroll, StatusPill } from "../ui";
+import {
+  Button,
+  Hero,
+  Row,
+  ScreenScroll,
+  StatusPill,
+  Icon,
+  Toast,
+  type Glyph,
+  type ToastMessage,
+} from "../ui";
 import { syncHealth, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
 // third state hue, because waiting is not a problem.
-const TONE_STYLE: Record<
-  SyncTone,
-  { icon: React.ComponentProps<typeof Feather>["name"]; color: string }
-> = {
-  ok: { icon: "check-circle", color: theme.accent },
-  pending: { icon: "clock", color: theme.textMuted },
-  problem: { icon: "alert-triangle", color: theme.warning },
+const TONE_STYLE: Record<SyncTone, { icon: Glyph; color: string }> = {
+  ok: { icon: "success", color: theme.accent },
+  pending: { icon: "pending", color: theme.textMuted },
+  problem: { icon: "warning", color: theme.warning },
 };
 
 export function MoreScreen({
@@ -89,23 +96,32 @@ export function MoreScreen({
     accountState,
   });
   const tone = TONE_STYLE[health.tone];
+
+  // The hero's "Sync now" says how it went. A failure already has its words (the
+  // health line and its detail), so only a clean cycle is announced here.
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const syncNow = useCallback(async () => {
+    await requestSync();
+    if (getSyncStatus().state !== "error")
+      setToast({ text: "Synced.", tone: "info", nonce: Date.now() });
+  }, []);
   const user = userQuery.data;
 
   return (
-    // Hero pinned, menu scrolls (§2) — the menu is short today, but the rule is
+    // Hero pinned, menu scrolls (DESIGN.md §2) — the menu is short today, but the rule is
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow={isGuest ? "Logjam" : user ? "Signed in as" : "Logjam"}
         title={isGuest ? "No account" : (user?.username ?? "Your account")}
-        action={
+        actions={
           // "Sync now" is meaningless without an account, so the hero's one
           // action becomes the way to get one — the same affordance slot, the
           // offer instead of the operation.
           isGuest ? (
             <Button
               label="Create account"
-              icon="user-plus"
+              icon="addFriend"
               variant="outlineAccent"
               compact
               onPress={linkAccount}
@@ -113,7 +129,7 @@ export function MoreScreen({
           ) : (
             <Button
               label="Sync now"
-              icon="refresh-cw"
+              icon="refresh"
               variant="outlineAccent"
               compact
               loading={syncStatus.state === "syncing"}
@@ -121,13 +137,13 @@ export function MoreScreen({
                 capabilityStatus("syncNow", accountState, online).status !==
                 "available"
               }
-              onPress={() => void requestSync()}
+              onPress={() => void syncNow()}
             />
           )
         }
       >
         <View style={styles.health}>
-          <Feather name={tone.icon} size={18} color={tone.color} />
+          <Icon idea={tone.icon} size={18} color={tone.color} />
           <View style={styles.healthText}>
             <Text style={[styles.headline, { color: tone.color }]}>
               {health.headline}
@@ -135,14 +151,14 @@ export function MoreScreen({
             <Text style={styles.detail}>{health.detail}</Text>
           </View>
         </View>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.menu}>
         {/* The ONE "something is waiting on you" signal. Files a friend sent
             used to have a row of their own here; they are answered inline in
             the inbox now, so their waiting count is part of this one. */}
         <Row
-          icon="inbox"
+          icon="notifications"
           title="Inbox"
           subtitle={unreadCount ? `${unreadCount} unread` : "Nothing new"}
           onPress={onOpenInbox}
@@ -158,11 +174,11 @@ export function MoreScreen({
           }
         />
         <Row
-          icon="users"
+          icon="friends"
           title="Friends"
           // Managing friendships needs an account and a connection; say which
           // in place of a subtitle rather than letting the screen fail after
-          // the tap (§10).
+          // the tap (DESIGN.md §8).
           onPress={onOpenFriends}
           {...capabilityRowProps("friends", accountState, online)}
           right={<Trailing />}
@@ -170,7 +186,7 @@ export function MoreScreen({
         {/* Sync issues can only exist once something has tried to sync. */}
         {isGuest ? null : (
           <Row
-            icon="alert-triangle"
+            icon="warning"
             hue={issueCount > 0 ? theme.warning : undefined}
             title="Account sync issues"
             subtitle={
@@ -199,7 +215,7 @@ export function MoreScreen({
           right={<Trailing />}
         />
         <Row
-          icon="user"
+          icon="account"
           // The Account row stays live for a guest: it is the way IN to an
           // account, so disabling it with "Needs an account" would be a joke at
           // the user's expense.
@@ -215,6 +231,7 @@ export function MoreScreen({
           right={<Trailing />}
         />
       </ScreenScroll>
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }
@@ -224,7 +241,7 @@ function Trailing({ badge }: { badge?: React.ReactNode }) {
   return (
     <View style={styles.trailing}>
       {badge}
-      <Feather name="chevron-right" size={20} color={theme.textMuted} />
+      <Icon idea="disclosure" size={20} color={theme.textMuted} />
     </View>
   );
 }

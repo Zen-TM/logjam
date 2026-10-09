@@ -22,7 +22,7 @@
 //
 // It is a HOOK returning `{ title, body, footer }` rather than a plain
 // component because a sheet's primary action belongs in `BottomSheet`'s pinned
-// `footer` (DESIGN.md §6) — a Send button that scrolls away behind a long
+// `footer` (DESIGN.md §4) — a Send button that scrolls away behind a long
 // friend list leaves the drag handle as the only exit, and the handle means
 // discard. Callers spread the three pieces onto the sheet they already own;
 // nothing opens a second sheet.
@@ -30,7 +30,14 @@
 // PRIVACY: usernames only, never email — the friends endpoints are
 // username-only server-side and this must not become the surface that wants
 // more. Error copy is OURS, never the server's message.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,11 +47,18 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
 import {
+  contractSectionKeys,
   friendMatches,
   messageFromError,
+  noFriendsMatch,
+  noFriendsMessage,
+  SEND_COPY,
+  sendCopyLabel,
+  SHARE_SHEET,
+  sharePromise,
+  type SectionKeysOn,
   type SharableEntityType,
 } from "@logjam/shared";
 
@@ -66,7 +80,7 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Button, ErrorBanner, SectionHeader, Row } from "../ui";
+import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
 import {
   fontSize,
   lineHeight,
@@ -75,7 +89,6 @@ import {
   theme,
   withAlpha,
 } from "../theme";
-import { FriendAvatar } from "./FriendAvatar";
 import { friendListLoadKey } from "./friendListLoad";
 
 import {
@@ -97,6 +110,12 @@ import {
   type SharingCalls,
 } from "./useSharing";
 
+/** The picker's one-line empty state: the title and the way out. */
+const noFriendsText = (purpose: "share" | "copy") => {
+  const { title, body } = noFriendsMessage(purpose);
+  return `${title}. ${body}`;
+};
+
 /**
  * What this panel is acting on. The three cases are the three API shapes:
  * places keep their own endpoints (the hybrid share model lives behind them),
@@ -117,35 +136,13 @@ export type SharePanelTarget =
   | { kind: "bulk"; plan: BulkSharePlan<BulkShareCandidate> };
 
 /**
- * THE PROMISE, per kind, and the only place either sentence is written.
- *
- * Not a prop: two call sites wording the same grant differently is the drift
- * this panel exists to end, and a place is now shared from two screens (its
- * detail page and the Places list's options sheet). A place sharee sees
- * notes and photos — a bigger promise than a line on a map — so it says so,
- * and says what stays private.
- */
-const SHARE_BLURB =
-  "Friends you pick can view and export it, but can't change it. You can stop sharing anytime.";
-/**
- * The same promise, about a selection. Not `SHARE_BLURB` with an "s" bolted on
- * by the caller: the two sentences are read in different places and either one
- * changing alone is the drift this file exists to stop, so both are written
- * here, in full, once.
- */
-const BULK_SHARE_BLURB =
-  "Friends you pick can view and export these, but can't change them. You can stop sharing anytime.";
-const PLACE_SHARE_BLURB =
-  "Friends you pick can see this place and its notes and photos. Your trip logs stay private. You can stop sharing at anytime.";
-
-/**
  * Row props for a Share / Send a copy verb: `disabled` plus the REASON as a
  * subtitle when the verb cannot run right now.
  *
  * Both verbs need the network — a grant is not an outbox operation and a send
  * is an upload — so offline the row is dimmed and says "Needs a connection"
  * rather than disappearing or opening a panel that can only apologise
- * (DESIGN.md §10). Sharing is also the FIRST thing on most saved items that
+ * (DESIGN.md §8). Sharing is also the FIRST thing on most saved items that
  * needs a connection at all, which is why the row has to say so itself.
  *
  * One helper rather than six call sites reaching for `capabilityRowProps`,
@@ -416,10 +413,9 @@ export function useSharePanel({
               single thing this whole feature could get wrong: a user who
               believes every one of the 23 can be taken back was misled here. */}
           {plan.shares.length > 0 ? (
-            // The PLURAL promise. `SHARE_BLURB` says "view and export it",
-            // which is right above one item and wrong above twenty — the panel
-            // read "…can view and export it" over a list of 23.
-            <PromiseBanner tone="share" text={BULK_SHARE_BLURB} />
+            // The PLURAL promise: "view and export it" is right above one item
+            // and wrong above twenty.
+            <PromiseBanner tone="share" text={sharePromise("selection")} />
           ) : null}
           {plan.copies.length > 0 ? (
             <PromiseBanner
@@ -428,7 +424,6 @@ export function useSharePanel({
             />
           ) : null}
           {search}
-          <SectionHeader label="Send to" />
           <FriendRows
             friends={friends.list}
             shown={shown}
@@ -437,13 +432,13 @@ export function useSharePanel({
             selectedIds={selected}
             disabled={sending}
             onPress={(friend) => toggle(friend.id)}
-            emptyText="No friends yet — add friends from the More tab."
+            emptyText={noFriendsText("share")}
           />
         </View>
       ),
       footer: (
         // The send failure reports directly above the button it failed under
-        // (DESIGN.md §8) — the form is still open, so this is not a toast.
+        // (docs/ux-principles.md §11) — the form is still open, so this is not a toast.
         <View style={styles.footerStack}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
           {/* No `loading`: `Button` replaces the label with a spinner, and the
@@ -453,7 +448,7 @@ export function useSharePanel({
               still dims it and refuses taps. */}
           <Button
             label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
-            icon="share-2"
+            icon="shareFriend"
             onPress={confirmBulk}
             disabled={
               selected.size === 0 || sending || plan.actionableCount === 0
@@ -466,7 +461,7 @@ export function useSharePanel({
 
   if (target.kind === "copy") {
     // The closed door names itself rather than the panel vanishing
-    // (DESIGN.md §10) — a feature that comes and goes is worse than one that
+    // (DESIGN.md §8) — a feature that comes and goes is worse than one that
     // says why. Sharing's capability covers this: a guest has no friends and
     // no endpoint that would answer, and offline it cannot work at all.
     if (friends.status.status === "unavailable") {
@@ -482,6 +477,31 @@ export function useSharePanel({
     const shown = (friends.list ?? []).filter((friend) =>
       friendMatches(friend.username, query),
     );
+    // Exhaustive by type: a section the contract names and this panel does not
+    // draw, or the reverse, fails `tsc` (`SEND_COPY`, shared/src/contracts).
+    const sections: Record<
+      SectionKeysOn<typeof SEND_COPY, "gps">,
+      () => ReactNode
+    > = {
+      promise: () => (
+        // The promise, stated plainly and in the warning hue, because it
+        // cannot be undone: this is where a user learns Send is not Share.
+        <PromiseBanner tone="copy" text={SEND_COPY.copy.promise} />
+      ),
+      search: () => search,
+      friends: () => (
+        <FriendRows
+          friends={friends.list}
+          shown={shown}
+          query={query}
+          mode="select"
+          selectedIds={selected}
+          disabled={sending}
+          onPress={(friend) => toggle(friend.id)}
+          emptyText={noFriendsText("copy")}
+        />
+      ),
+    };
     return {
       title: `Send a copy of ${itemLabel}`,
       sharing,
@@ -490,24 +510,9 @@ export function useSharePanel({
           {friends.error ? (
             <ErrorBanner message={friends.error} onRetry={friends.retry} />
           ) : null}
-          {/* The promise, stated plainly and in the warning hue, because it
-              cannot be undone: this is where a user learns Send is not Share. */}
-          <PromiseBanner
-            tone="copy"
-            text={`They'll keep their own copy — you can't take it back.`}
-          />
-          {search}
-          <SectionHeader label="Send to" />
-          <FriendRows
-            friends={friends.list}
-            shown={shown}
-            query={query}
-            mode="select"
-            selectedIds={selected}
-            disabled={sending}
-            onPress={(friend) => toggle(friend.id)}
-            emptyText="No friends yet — add friends from the More tab."
-          />
+          {contractSectionKeys(SEND_COPY, "gps").map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
         </View>
       ),
       footer: (
@@ -516,11 +521,7 @@ export function useSharePanel({
         <View style={styles.footerStack}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
           <Button
-            label={
-              selected.size === 0
-                ? "Send a copy"
-                : `Send a copy to ${selected.size}`
-            }
+            label={sendCopyLabel(selected.size)}
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
@@ -556,28 +557,32 @@ export function useSharePanel({
     friendMatches(friend.username, query),
   );
 
-  return {
-    title: `Share ${itemLabel}`,
-    sharing,
-    footer: null,
-    body: (
-      <View style={styles.body}>
-        <SharingError sharing={sharing} />
-        {friends.error ? (
-          <ErrorBanner message={friends.error} onRetry={friends.retry} />
-        ) : null}
-        <PromiseBanner
-          tone="share"
-          text={placeId ? PLACE_SHARE_BLURB : SHARE_BLURB}
-        />
-        {search}
-        {recipients.length > 0 ? (
-          <>
-            <SectionHeader label={`Shared with · ${recipients.length}`} />
-            <RecipientRows sharing={sharing} recipients={recipients} />
-          </>
-        ) : null}
-        <SectionHeader label="Share with" />
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`SHARE_SHEET`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SHARE_SHEET, "gps">,
+    () => ReactNode
+  > = {
+    promise: () => (
+      <PromiseBanner
+        tone="share"
+        text={sharePromise(placeId ? "place" : (entityType ?? "route"))}
+      />
+    ),
+    search: () => search,
+    sharedWith: () =>
+      recipients.length > 0 ? (
+        <>
+          <SectionHeader
+            title={SHARE_SHEET.copy.sharedWith}
+            count={recipients.length}
+          />
+          <RecipientRows sharing={sharing} recipients={recipients} />
+        </>
+      ) : null,
+    candidates: () => (
+      <>
+        <SectionHeader title={SHARE_SHEET.copy.shareWith} />
         <FriendRows
           friends={friends.list && shareable}
           shown={shown}
@@ -589,10 +594,27 @@ export function useSharePanel({
           }}
           emptyText={
             (friends.list?.length ?? 0) === 0
-              ? "No friends yet — add friends from the More tab."
-              : "All your friends already have access."
+              ? noFriendsText("share")
+              : SHARE_SHEET.copy.allHaveAccess
           }
         />
+      </>
+    ),
+  };
+
+  return {
+    title: `Share ${itemLabel}`,
+    sharing,
+    footer: null,
+    body: (
+      <View style={styles.body}>
+        <SharingError sharing={sharing} />
+        {friends.error ? (
+          <ErrorBanner message={friends.error} onRetry={friends.retry} />
+        ) : null}
+        {contractSectionKeys(SHARE_SHEET, "gps").map((key) => (
+          <Fragment key={key}>{sections[key]()}</Fragment>
+        ))}
       </View>
     ),
   };
@@ -699,7 +721,7 @@ function FriendRows({
   if (shown.length === 0) {
     // Distinct from `emptyText`: "nobody matches what you typed" is a dead end
     // you can back out of, "you have no friends" is not.
-    return <Text style={styles.muted}>No friends match “{query.trim()}”.</Text>;
+    return <Text style={styles.muted}>{noFriendsMatch(query)}</Text>;
   }
   return (
     <>
@@ -709,9 +731,7 @@ function FriendRows({
         return (
           <Row
             key={friend.id}
-            leading={
-              <FriendAvatar username={friend.username} selected={selected} />
-            }
+            leading={<Avatar username={friend.username} selected={selected} />}
             title={friend.username}
             selected={selected}
             accessibilityLabel={
@@ -731,13 +751,13 @@ function FriendRows({
                 // In select mode the tick IS the state of the row; in grant
                 // mode a tap is the whole interaction, and a checkbox there
                 // would imply a pending one.
-                <Feather
-                  name={
+                <Icon
+                  idea={
                     mode === "select"
                       ? selected
-                        ? "check-circle"
-                        : "circle"
-                      : "plus-circle"
+                        ? "success"
+                        : "unselected"
+                      : "add"
                   }
                   size={20}
                   color={selected ? theme.accent : theme.textMuted}
@@ -774,8 +794,8 @@ function PromiseBanner({
         },
       ]}
     >
-      <Feather
-        name={tone === "copy" ? "alert-triangle" : "eye"}
+      <Icon
+        idea={tone === "copy" ? "warning" : "show"}
         size={18}
         color={hue}
         style={styles.promiseIcon}
@@ -785,7 +805,7 @@ function PromiseBanner({
   );
 }
 
-/** The reason, in place of the panel. DESIGN.md §10 — never a blank space. */
+/** The reason, in place of the panel. DESIGN.md §8 — never a blank space. */
 function ClosedDoor({ text }: { text: string }) {
   return <Text style={styles.muted}>{text}</Text>;
 }
@@ -801,7 +821,7 @@ function SearchField({
 }) {
   return (
     <View style={styles.search}>
-      <Feather name="search" size={18} color={theme.textMuted} />
+      <Icon idea="search" size={18} color={theme.textMuted} />
       <TextInput
         style={styles.searchInput}
         value={value}
@@ -820,7 +840,7 @@ function SearchField({
           accessibilityLabel="Clear search"
           onPress={() => onChangeText("")}
         >
-          <Feather name="x" size={18} color={theme.textMuted} />
+          <Icon idea="close" size={18} color={theme.textMuted} />
         </Pressable>
       ) : null}
     </View>

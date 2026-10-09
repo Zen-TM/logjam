@@ -4,12 +4,12 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { Circle, CircleCheck, type LucideIcon } from "lucide-react";
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
+import { Icon, type Glyph } from "./Icon";
 
 /**
- * A row's tile that is also its checkbox (DESIGN.md §7): the tile at rest, a
+ * A row's tile that is also its checkbox (DESIGN.md §5): the tile at rest, a
  * circle to tick under the pointer, on focus and throughout a selection. The
  * circle takes the tile's own box, so ticking moves nothing. `onToggle` is told
  * whether Shift was held, for a range.
@@ -41,7 +41,11 @@ export function TileCheckbox({
     >
       <span className={classes.pickTile}>{tile}</span>
       <span className={classes.pickMark} aria-hidden>
-        {checked ? <CircleCheck size={20} /> : <Circle size={20} />}
+        {checked ? (
+          <Icon idea="success" size={20} />
+        ) : (
+          <Icon idea="unselected" size={20} />
+        )}
       </span>
     </button>
   );
@@ -54,11 +58,11 @@ export function TileCheckbox({
  * status); omit it when the row's text already says the same thing.
  */
 export function IconTile({
-  icon: Icon,
+  icon,
   hue,
   label,
 }: {
-  icon: LucideIcon;
+  icon: Glyph;
   hue: string;
   label?: string;
 }) {
@@ -70,7 +74,7 @@ export function IconTile({
       aria-label={label}
       title={label}
     >
-      <Icon size={16} aria-hidden />
+      <Icon idea={icon} size={16} />
     </span>
   );
 }
@@ -79,7 +83,7 @@ export function IconTile({
  * A PERSON's tile: the same box as `IconTile`, filled with the hue their name
  * hashes to and marked with their initials. Both come from `@logjam/shared`, so
  * a friend is the same two letters in the same colour here and on Logjam GPS
- * (DESIGN.md §3). There is no avatar image anywhere in Logjam and this is not
+ * (docs/ux-principles.md §8). There is no avatar image anywhere in Logjam and this is not
  * the place to introduce one.
  *
  * Hidden from assistive tech: every row that carries one has the username as
@@ -95,6 +99,15 @@ export function Avatar({ username }: { username: string }) {
       {avatarInitials(username)}
     </span>
   );
+}
+
+/**
+ * The last thing in a list: the same button its empty state offers ("Add a
+ * place type", "Make a GeoPDF"), so adding is where the eye ends up after
+ * scrolling to the bottom, not only when there is nothing to scroll.
+ */
+export function ListEnd({ children }: { children: ReactNode }) {
+  return <div className={classes.listEnd}>{children}</div>;
 }
 
 /**

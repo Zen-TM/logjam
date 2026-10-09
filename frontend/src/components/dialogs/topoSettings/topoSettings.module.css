@@ -1,6 +1,6 @@
 /* How a LiDAR topo's rasters are drawn, four tabs of settings inside the Make
    and Template dialogs. Layout only: every control is the kit's, and every size
-   and colour is a token (DESIGN.md §4, §9). */
+   and colour is a token (DESIGN.md §1, §9). */
 .tabPanel {
   display: flex;
   flex-direction: column;
@@ -32,7 +32,7 @@
   pointer-events: none;
 }
 
-/* The slope bands: a row per band, columns headed once (DESIGN.md §9). Tight
+/* The slope bands: a row per band, columns headed once (DESIGN.md §6). Tight
    rows, because the table is mostly two-digit numbers and a swatch — the
    full-height control rows it started with spent a screen on eight bands
    (operator, 2026-09-18). */
