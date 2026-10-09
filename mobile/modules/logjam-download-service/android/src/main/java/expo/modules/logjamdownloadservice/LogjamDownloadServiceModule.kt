@@ -39,17 +39,18 @@ class LogjamDownloadServiceModule : Module() {
     }
 
     Function("stop") {
-      val context = appContext.reactContext ?: return@Function
-      if (!started) return@Function
-      started = false
-      // Through onStartCommand rather than stopService(): a stop that beats the
-      // start to the service would otherwise skip startForeground() and crash.
-      try {
-        context.startService(
-          Intent(context, DownloadService::class.java).setAction(DownloadService.ACTION_STOP),
-        )
-      } catch (e: Exception) {
-        context.stopService(Intent(context, DownloadService::class.java))
+      val context = appContext.reactContext
+      if (context != null && started) {
+        started = false
+        // Through onStartCommand rather than stopService(): a stop that beats the
+        // start to the service would otherwise skip startForeground() and crash.
+        try {
+          context.startService(
+            Intent(context, DownloadService::class.java).setAction(DownloadService.ACTION_STOP),
+          )
+        } catch (e: Exception) {
+          context.stopService(Intent(context, DownloadService::class.java))
+        }
       }
     }
   }
