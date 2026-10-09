@@ -33,6 +33,6 @@ export function passedHereText(
       : `${times.slice(0, -1).join(", ")} and ${times[times.length - 1]!}`;
   // "from … to …" for a lone stop reads better than "at … to …".
   return passes.length === 1 && times[0]!.includes(" to ")
-    ? `This track was here from ${list}.`
-    : `This track passed here at ${list}.`;
+    ? `The track was at this point from ${list}.`
+    : `This point was passed at ${list}.`;
 }

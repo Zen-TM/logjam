@@ -17,22 +17,22 @@ describe("passedHereText", () => {
 
   it("gives a walk past one time and a stop its span", () => {
     expect(passedHereText([pass(10, 9, 11)], minutes)).toBe(
-      "This track passed here at t10.",
+      "This point was passed at t10.",
     );
     expect(passedHereText([pass(20, 10, 55)], minutes)).toBe(
-      "This track was here from t10 to t55.",
+      "The track was at this point from t10 to t55.",
     );
   });
 
   it("lists every leg of an out and back, and counts the rest of a lap track", () => {
     expect(passedHereText([pass(10), pass(90)], minutes)).toBe(
-      "This track passed here at t10 and t90.",
+      "This point was passed at t10 and t90.",
     );
     expect(
       passedHereText(
         [10, 20, 30, 40, 50, 60].map((at) => pass(at)),
         minutes,
       ),
-    ).toBe("This track passed here at t10, t20, t30, t40 and 2 more times.");
+    ).toBe("This point was passed at t10, t20, t30, t40 and 2 more times.");
   });
 });
