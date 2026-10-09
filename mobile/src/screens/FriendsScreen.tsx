@@ -1,11 +1,11 @@
 // Friends — "who can I share a place with, and who is waiting on me?"
 //
-// LAYOUT (DESIGN.md §1, §2): hero answers with a count and owns the one
+// LAYOUT (docs/ux-principles.md §2, §2): hero answers with a count and owns the one
 // acquisition action (Add, which opens the username search in a sheet); a pinned
 // rail partitions into Friends / Requests — a true partition, because a pending
 // request is not yet a friendship; one flat list under it. Per-row actions live
 // in an overflow sheet titled with the username, so a mis-tap can't revoke
-// anything (§7).
+// anything (DESIGN.md §5).
 //
 // Online-only, deliberately: managing friendships is never a field use case, and
 // the mirror handles the offline propagation of the resulting shares and
@@ -20,7 +20,15 @@
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (root CLAUDE.md convention) and nothing
 // here would have somewhere to put one.
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -30,7 +38,19 @@ import {
   Text,
   View,
 } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import {
+  contractSectionKeys,
+  friendAcceptedMessage,
+  friendRemovedMessage,
+  friendRemoveConfirm,
+  friendsEmptyKind,
+  friendsHeroTitle,
+  FRIENDS,
+  friendVerb,
+  messageFromError,
+  type FriendsBucket,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import {
   acceptFriendRequest,
@@ -53,26 +73,29 @@ import {
   EmptyState,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
+  ListEnd,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   StatusPill,
   TextField,
   Toast,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 
 const SEARCH_MIN_CHARS = 3;
 
-type Bucket = "all" | "friends" | "requests";
+type Bucket = FriendsBucket;
+
+const copy = FRIENDS.copy;
 
 /**
  * One row shape for both populations, so a single renderer covers the list.
  * A request wears the heath hue a shared place wears — it is someone else
- * reaching into your account, which is the same idea (§3).
+ * reaching into your account, which is the same idea (docs/ux-principles.md §8).
  */
 type FriendItem =
   | { kind: "friend"; key: string; username: string; friendshipId: string }
@@ -87,7 +110,7 @@ export function FriendsScreen({
    * Open the per-friend sharing audit — "what does this person see?". Pushed by
    * the caller so Back returns to this list. Reached by tapping the friend's row
    * body, and also from the row's overflow sheet: the body OPENS and the ⋯ ACTS
-   * (§7), so a mis-tap lands on a read-only screen rather than near a revoke.
+   * (DESIGN.md §5), so a mis-tap lands on a read-only screen rather than near a revoke.
    */
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
@@ -124,7 +147,7 @@ export function FriendsScreen({
         console.error(err);
         // Only surface a full-screen error when nothing has loaded yet; a later
         // refresh failure keeps the last-good lists on screen.
-        setLoadError(messageFromError(err, "Couldn't load friends."));
+        setLoadError(messageFromError(err, copy.loadFailed));
       });
   }, [guestBlock]);
 
@@ -164,31 +187,28 @@ export function FriendsScreen({
     (item: Extract<FriendItem, { kind: "friend" }>) => {
       setMenuItem(null);
       // A dialog, because the consequence is the point and it is bigger than the
-      // verb suggests (§7).
-      Alert.alert(
-        `Remove ${item.username}?`,
-        "This also revokes every place you've shared with them.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Remove",
-            style: "destructive",
-            onPress: () =>
-              void runAction(
-                item.friendshipId,
-                () => removeFriend(item.friendshipId),
-                "Couldn't remove that friend.",
-                `${item.username} removed.`,
-              ),
-          },
-        ],
-      );
+      // verb suggests (DESIGN.md §5).
+      const { confirmTitle, confirmBody } = friendRemoveConfirm(item.username);
+      Alert.alert(confirmTitle, confirmBody, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () =>
+            void runAction(
+              item.friendshipId,
+              () => removeFriend(item.friendshipId),
+              copy.removeFailed,
+              friendRemovedMessage(item.username),
+            ),
+        },
+      ]);
     },
     [runAction],
   );
 
   // Stable identities so the memoised rows only re-render for a change that is
-  // actually theirs (DESIGN.md §9).
+  // actually theirs (DESIGN.md §7).
   const openFriend = useCallback(
     (item: FriendItem) => {
       if (item.kind !== "friend") return;
@@ -241,7 +261,7 @@ export function FriendsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Friends" title="Friends" onBack={onBack} />
+        <Hero eyebrow={FRIENDS.title} title={FRIENDS.title} onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -251,81 +271,117 @@ export function FriendsScreen({
   }
   if (friends === null) return <LoadingState />;
 
-  const buckets: SegmentOption<Bucket>[] = [
-    { value: "all", label: "All", count: friends.length + requests.length },
+  const buckets: ChipOption<Bucket>[] = [
+    {
+      value: "all",
+      label: copy.bucketAll,
+      count: friends.length + requests.length,
+    },
     {
       value: "friends",
-      label: "Friends",
+      label: copy.bucketFriends,
       count: friends.length,
       disabled: friends.length === 0,
     },
     {
       value: "requests",
-      label: "Requests",
+      label: copy.bucketRequests,
       count: requests.length,
       hue: placeHue.shared,
       disabled: requests.length === 0,
     },
   ];
 
-  return (
-    <View style={styles.root}>
-      <HeroHeader
-        eyebrow="Friends"
-        title={requests.length > 0 ? "Someone's waiting" : "Your people"}
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
+  const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
+    hero: () => (
+      <Hero
+        eyebrow={FRIENDS.title}
+        title={friendsHeroTitle(requests.length, friends.length)}
         onBack={onBack}
-        value={String(friends.length)}
-        valueSuffix={friends.length === 1 ? "friend" : "friends"}
-        action={
+        actions={
           <Button
-            label="Add"
-            icon="user-plus"
+            label={copy.add}
+            icon="addFriend"
             variant="outlineAccent"
             compact
             onPress={() => setAddOpen(true)}
           />
         }
       />
-
+    ),
+    buckets: () => (
       <View style={styles.rail}>
-        <SegmentedControl
+        <ChipRail
           options={buckets}
           value={bucket}
           onChange={setBucket}
           scroll
         />
       </View>
+    ),
+    list: () => (
+      <>
+        {/* Stays inline with a retry, because a stale list IS the problem and it
+            persists until the fetch works (DESIGN.md §4). */}
+        {loadError ? (
+          <View style={styles.banner}>
+            <ErrorBanner message={loadError} onRetry={() => void load()} />
+          </View>
+        ) : null}
 
-      {/* Stays inline with a retry, because a stale list IS the problem and it
-          persists until the fetch works (§6). */}
-      {loadError ? (
-        <View style={styles.banner}>
-          <ErrorBanner message={loadError} onRetry={() => void load()} />
-        </View>
-      ) : null}
+        <FlatList
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          data={items}
+          keyExtractor={keyExtractor}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.accent}
+            />
+          }
+          renderItem={renderItem}
+          ListFooterComponent={
+            // The list ends with the button its empty state offers.
+            items.length > 0 ? (
+              <ListEnd>
+                <Button
+                  label={copy.addTitle}
+                  icon="addFriend"
+                  variant="outlineAccent"
+                  onPress={() => setAddOpen(true)}
+                />
+              </ListEnd>
+            ) : null
+          }
+          ListEmptyComponent={
+            <EmptyPanel
+              kind={friendsEmptyKind({
+                friends: friends.length,
+                requests: requests.length,
+                bucket,
+              })}
+              onAdd={() => setAddOpen(true)}
+            />
+          }
+        />
+      </>
+    ),
+  };
 
-      <FlatList
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        data={items}
-        keyExtractor={keyExtractor}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.accent}
-          />
-        }
-        renderItem={renderItem}
-        ListEmptyComponent={
-          <EmptyPanel bucket={bucket} onAdd={() => setAddOpen(true)} />
-        }
-      />
+  return (
+    <View style={styles.root}>
+      {contractSectionKeys(FRIENDS, "gps").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       <BottomSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
-        title="Add a friend"
+        title={copy.addTitle}
       >
         <AddFriendBody
           existingIds={friends.map((friend) => friend.id)}
@@ -333,7 +389,7 @@ export function FriendsScreen({
         />
       </BottomSheet>
 
-      {/* Per-row actions, titled with the username (§7). */}
+      {/* Per-row actions, titled with the username (DESIGN.md §5). */}
       <BottomSheet
         visible={menuItem !== null}
         onClose={() => setMenuItem(null)}
@@ -342,9 +398,8 @@ export function FriendsScreen({
         {menuItem?.kind === "friend" ? (
           <View style={styles.menuBody}>
             <Row
-              icon="share-2"
-              title="Shared items"
-              subtitle="What they can see, and what they share with you"
+              icon={friendVerb("shares").icon}
+              title={friendVerb("shares").label}
               onPress={() => {
                 const friend = menuItem;
                 setMenuItem(null);
@@ -355,9 +410,9 @@ export function FriendsScreen({
               }}
             />
             <Row
-              icon="user-minus"
+              icon={friendVerb("remove").icon}
               hue={theme.warning}
-              title="Remove friend"
+              title={friendVerb("remove").label}
               onPress={() => confirmRemove(menuItem)}
             />
           </View>
@@ -365,31 +420,30 @@ export function FriendsScreen({
         {menuItem?.kind === "request" ? (
           <View style={styles.menuBody}>
             <Row
-              icon="user-check"
-              title="Accept"
+              icon={friendVerb("accept").icon}
+              title={friendVerb("accept").label}
               onPress={() => {
                 const request = menuItem;
                 setMenuItem(null);
                 void runAction(
                   request.requestId,
                   () => acceptFriendRequest(request.requestId),
-                  "Couldn't accept that request.",
-                  `${request.username} is now a friend.`,
+                  copy.acceptFailed,
+                  friendAcceptedMessage(request.username),
                 );
               }}
             />
             <Row
-              icon="user-x"
-              hue={theme.warning}
-              title="Decline"
+              icon={friendVerb("decline").icon}
+              title={friendVerb("decline").label}
               onPress={() => {
                 const request = menuItem;
                 setMenuItem(null);
                 void runAction(
                   request.requestId,
                   () => declineFriendRequest(request.requestId),
-                  "Couldn't decline that request.",
-                  "Request declined.",
+                  copy.declineFailed,
+                  copy.declined,
                 );
               }}
             />
@@ -403,7 +457,7 @@ export function FriendsScreen({
 }
 
 /**
- * The card every list in this app uses (§7): the row's body opens the thing, the
+ * The card every list in this app uses (DESIGN.md §5): the row's body opens the thing, the
  * ⋯ opens its actions. A friend opens to their sharing screen — read-only, so
  * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
  * request has nowhere to open to, so both its body and its ⋯ reach the same
@@ -426,17 +480,17 @@ const FriendRow = memo(function FriendRow({
   const request = item.kind === "request";
   return (
     <Row
-      icon={request ? "user-plus" : "user"}
+      icon={request ? "addFriend" : "account"}
       hue={request ? placeHue.shared : undefined}
       title={item.username}
-      subtitle={request ? "Wants to be friends" : undefined}
+      subtitle={request ? copy.requestSubtitle : undefined}
       onPress={() => (request ? onMenu(item) : onOpen(item))}
       right={
         busy ? (
           <ActivityIndicator color={theme.accent} />
         ) : (
           <IconButton
-            icon="more-vertical"
+            icon="overflow"
             accessibilityLabel={`Actions for ${item.username}`}
             onPress={() => onMenu(item)}
           />
@@ -491,7 +545,7 @@ function AddFriendBody({
         .catch((err: unknown) => {
           console.error(err);
           if (!cancelled)
-            setSearchError(messageFromError(err, "Search failed."));
+            setSearchError(messageFromError(err, copy.searchFailed));
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -512,7 +566,7 @@ function AddFriendBody({
         onSent();
       } catch (err) {
         console.error(err);
-        setSendError(messageFromError(err, "Couldn't send that request."));
+        setSendError(messageFromError(err, copy.sendFailed));
       }
     },
     [onSent],
@@ -522,7 +576,7 @@ function AddFriendBody({
   return (
     <View style={styles.addBody}>
       <TextField
-        label="Search by username"
+        label={copy.searchField}
         value={query}
         onChangeText={changeQuery}
         autoCapitalize="none"
@@ -534,12 +588,10 @@ function AddFriendBody({
       {!searching &&
       trimmed.length >= SEARCH_MIN_CHARS &&
       results.length === 0 ? (
-        <Text style={styles.hint}>No one by that name.</Text>
+        <Text style={styles.hint}>{copy.searchEmpty}</Text>
       ) : null}
       {trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS ? (
-        <Text style={styles.hint}>
-          Keep typing — at least {SEARCH_MIN_CHARS} characters.
-        </Text>
+        <Text style={styles.hint}>{copy.searchHint}</Text>
       ) : null}
       {results.map((user) => {
         const alreadyFriend = existingIds.includes(user.id);
@@ -547,16 +599,16 @@ function AddFriendBody({
         return (
           <Row
             key={user.id}
-            icon="user"
+            icon="account"
             title={user.username}
             right={
               alreadyFriend ? (
-                <StatusPill label="Friend" tone="muted" />
+                <StatusPill label={copy.pillFriend} tone="muted" />
               ) : sent ? (
-                <StatusPill label="Requested" tone="outline" />
+                <StatusPill label={copy.pillRequested} tone="outline" />
               ) : (
                 <Button
-                  label="Add"
+                  label={copy.add}
                   variant="outlineAccent"
                   compact
                   onPress={() => void send(user)}
@@ -571,22 +623,26 @@ function AddFriendBody({
   );
 }
 
-/** Per-bucket and actionable (§8). */
-function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
-  if (bucket === "requests") {
+/** Per-bucket and actionable (docs/ux-principles.md §11). */
+function EmptyPanel({
+  kind,
+  onAdd,
+}: {
+  kind: "firstRun" | "noRequests" | null;
+  onAdd: () => void;
+}) {
+  if (kind === "noRequests") {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>No pending requests</Text>
+        <Text style={styles.emptyTitle}>{copy.noRequestsTitle}</Text>
       </View>
     );
   }
   return (
     <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>No friends yet</Text>
-      <Text style={styles.emptyHint}>
-        You need to be friends to share a place.
-      </Text>
-      <Button label="Add a friend" icon="user-plus" onPress={onAdd} />
+      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
+      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
+      <Button label={copy.addTitle} icon="addFriend" onPress={onAdd} />
     </View>
   );
 }

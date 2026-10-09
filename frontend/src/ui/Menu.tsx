@@ -9,7 +9,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { LucideIcon } from "lucide-react";
+import { IconButton } from "./Button";
+import { Icon, type Glyph } from "./Icon";
 import { useAnchoredPosition, type Placement } from "./floating";
 import { nextEnabledIndex } from "./rovingFocus";
 import { useEscape } from "./useEscape";
@@ -18,7 +19,7 @@ import classes from "./Menu.module.css";
 export type MenuItem = {
   id: string;
   label: string;
-  icon?: LucideIcon;
+  icon?: Glyph;
   onSelect: () => void;
   danger?: boolean;
   /** A keyboard shortcut, shown right-aligned. */
@@ -179,7 +180,6 @@ export function Menu({
               />
             );
           const index = items.indexOf(entry);
-          const Icon = entry.icon;
           return (
             <button
               key={entry.id}
@@ -199,7 +199,9 @@ export function Menu({
                 entry.onSelect();
               }}
             >
-              {Icon && <Icon size={16} aria-hidden className={classes.glyph} />}
+              {entry.icon && (
+                <Icon idea={entry.icon} size={16} className={classes.glyph} />
+              )}
               <span className={classes.label}>{entry.label}</span>
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
               {entry.badge != null && entry.badge > 0 && (
@@ -217,7 +219,7 @@ export function Menu({
 
 /**
  * A non-modal panel floating beside a control — the map's Layers. Escape or its
- * own close button dismisses it and focus returns to the control.
+ * close button (top right) dismisses it and focus returns to the control.
  *
  * Whether a press OUTSIDE it dismisses depends on what it is for, so the caller
  * says. Layers must NOT: the whole point of it is to stay open while the user
@@ -234,6 +236,7 @@ export function Popover({
   placement = "bottom-end",
   className,
   dismissOnOutsidePress = false,
+  closeButton = true,
   children,
 }: {
   open: boolean;
@@ -244,6 +247,9 @@ export function Popover({
   className?: string;
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
+  /** The × at the top right (UX §3: every surface carries its way out). Off
+   *  only for a popover whose own header already ends in one. */
+  closeButton?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -270,6 +276,18 @@ export function Popover({
       tabIndex={-1}
       className={[classes.popover, className].filter(Boolean).join(" ")}
     >
+      {open && closeButton && (
+        <div className={classes.bar}>
+          <IconButton
+            icon="close"
+            label="Close"
+            onClick={() => {
+              onClose();
+              anchorRef.current?.focus();
+            }}
+          />
+        </div>
+      )}
       {open && children}
     </section>
   );

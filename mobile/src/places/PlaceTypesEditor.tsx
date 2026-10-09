@@ -35,10 +35,13 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
+  drawsYoursHeading,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
+  placeTypeColorName,
+  placeTypeDeleteConfirm,
+  SETTINGS_LIST,
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
@@ -50,8 +53,19 @@ import {
   deletePlaceTypeLocal,
   updatePlaceTypeLocal,
 } from "../sync/outbox";
-import { Button, ErrorBanner, Row, SectionHeader, TextField } from "../ui";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import {
+  Button,
+  ErrorBanner,
+  Row,
+  SectionHeader,
+  TextField,
+  Icon,
+  ColourField,
+} from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
+import { placeTypeGlyph } from "./placeTypeIcon";
+
+const copy = SETTINGS_LIST.copy;
 
 /** A type nobody owns is a built-in: not renameable, not deletable. Same rule
  *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
@@ -72,34 +86,31 @@ export function PlaceTypeList({
   // Places tab's rail and `GET /place-types` still put the system types first,
   // because there the leftmost tab and the default type for a new place are
   // decided by that order.
-  const ordered = [
-    ...types.filter((type) => !isSystemPlaceType(type)),
-    ...types.filter(isSystemPlaceType),
-  ];
+  const own = types.filter((type) => !isSystemPlaceType(type));
+  const builtIn = types.filter(isSystemPlaceType);
   return (
     <View style={styles.body}>
-      <SectionHeader
-        label={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
-      />
-      {ordered.map((type) =>
-        isSystemPlaceType(type) ? (
-          <Row
-            key={type.id}
-            icon={placeTypeFeatherIcon(type.iconKey)}
-            hue={type.color}
-            title={type.name}
-            subtitle="Built in"
-          />
-        ) : (
-          <Row
-            key={type.id}
-            icon={placeTypeFeatherIcon(type.iconKey)}
-            hue={type.color}
-            title={type.name}
-            onPress={() => onEdit(type)}
-          />
-        ),
-      )}
+      {drawsYoursHeading(own.length, builtIn.length) ? (
+        <SectionHeader title={copy.yours} count={own.length} />
+      ) : null}
+      {own.map((type) => (
+        <Row
+          key={type.id}
+          icon={placeTypeGlyph(type.iconKey)}
+          hue={type.color}
+          title={type.name}
+          onPress={() => onEdit(type)}
+        />
+      ))}
+      <SectionHeader title={copy.builtIn} count={builtIn.length} />
+      {builtIn.map((type) => (
+        <Row
+          key={type.id}
+          icon={placeTypeGlyph(type.iconKey)}
+          hue={type.color}
+          title={type.name}
+        />
+      ))}
     </View>
   );
 }
@@ -169,7 +180,7 @@ export function usePlaceTypeForm({
     } catch (err) {
       console.error(err);
       // The sheet is still open here (onDone only runs on success) — a toast
-      // would render under it and never be seen (DESIGN.md §8), so this is the
+      // would render under it and never be seen (docs/ux-principles.md §11), so this is the
       // footer's banner, not a toast. A local write, so this is a broken
       // database rather than a missing connection — do not offer a network
       // explanation for something reconnecting cannot fix.
@@ -198,10 +209,13 @@ export function usePlaceTypeForm({
           );
           return;
         }
-        Alert.alert(`Delete “${editing.name}”?`, "This can't be undone.", [
+        const { confirmTitle, confirmBody } = placeTypeDeleteConfirm(
+          editing.name,
+        );
+        Alert.alert(confirmTitle, confirmBody, [
           { text: "Cancel", style: "cancel" },
           {
-            text: "Delete",
+            text: copy.deleteType,
             style: "destructive",
             onPress: () => {
               deletePlaceTypeLocal(editing.id)
@@ -232,7 +246,7 @@ export function usePlaceTypeForm({
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
-          // The empty-name requirement is checked on Save (DESIGN.md §8); once
+          // The empty-name requirement is checked on Save (docs/ux-principles.md §11); once
           // shown it clears the moment the field it's about is edited.
           if (error) setError(null);
         }}
@@ -244,7 +258,7 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <SectionHeader label="Icon" />
+      <Text style={fieldLabel}>Icon</Text>
       <View style={styles.grid} onLayout={onGridLayout}>
         {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
@@ -263,8 +277,8 @@ export function usePlaceTypeForm({
                   draft.iconKey === iconKey ? styles.cellChosen : null,
                 ]}
               >
-                <Feather
-                  name={placeTypeFeatherIcon(iconKey)}
+                <Icon
+                  idea={placeTypeGlyph(iconKey)}
                   size={20}
                   color={draft.iconKey === iconKey ? theme.accent : theme.text}
                 />
@@ -272,33 +286,13 @@ export function usePlaceTypeForm({
             ))}
       </View>
 
-      <SectionHeader label="Colour" />
-      <View style={styles.grid} onLayout={onGridLayout}>
-        {cellSize == null
-          ? null
-          : PLACE_TYPE_COLORS.map((color) => (
-              <Pressable
-                key={color}
-                accessibilityRole="button"
-                accessibilityLabel={color}
-                accessibilityState={{ selected: draft.color === color }}
-                onPress={() => setDraft((current) => ({ ...current, color }))}
-                style={[
-                  styles.cell,
-                  styles.swatch,
-                  cellSize,
-                  { backgroundColor: color },
-                  draft.color === color ? styles.cellChosen : null,
-                ]}
-              >
-                {draft.color === color ? (
-                  // Dark ink on a light swatch: the palette is light precisely so a
-                  // mark on top of it stays legible.
-                  <Feather name="check" size={16} color={theme.onFill} />
-                ) : null}
-              </Pressable>
-            ))}
-      </View>
+      <ColourField
+        label="Colour"
+        palette={PLACE_TYPE_COLORS}
+        value={draft.color}
+        nameOf={placeTypeColorName}
+        onChange={(color) => setDraft((current) => ({ ...current, color }))}
+      />
 
       <Text style={styles.hint}>
         A ring around a pin means the place was shared with you by a friend.
@@ -306,9 +300,9 @@ export function usePlaceTypeForm({
 
       {editing ? (
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
-          title="Delete type"
+          title={copy.deleteType}
           onPress={confirmDelete}
         />
       ) : null}
@@ -319,7 +313,7 @@ export function usePlaceTypeForm({
     <View style={styles.footer}>
       {/* Not attributable to one control (a local write failing, or the
           places-in-use check itself failing) — the banner sits directly above
-          Save, same as every other form (DESIGN.md §8). */}
+          Save, same as every other form (docs/ux-principles.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
       <View style={styles.actions}>
         <View style={styles.action}>
@@ -328,7 +322,7 @@ export function usePlaceTypeForm({
         <View style={styles.action}>
           <Button
             label={editing ? "Save" : "Add type"}
-            icon="check"
+            icon="done"
             loading={saving}
             onPress={() => void save()}
           />
@@ -404,7 +398,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  swatch: { borderColor: "transparent" },
   cellChosen: { borderWidth: 2, borderColor: theme.accent },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
 });

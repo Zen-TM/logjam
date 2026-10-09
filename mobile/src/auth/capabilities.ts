@@ -115,7 +115,7 @@ export function capabilityStatus(
 
 /**
  * The canonical user-facing strings, so "Needs an account" is spelled one way
- * across every screen (mobile/DESIGN.md §10 reason-in-subtitle).
+ * across every screen (mobile/DESIGN.md §8 reason-in-subtitle).
  */
 export function unavailableReasonText(reason: UnavailableReason): string {
   switch (reason) {

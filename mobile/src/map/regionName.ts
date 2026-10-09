@@ -3,7 +3,7 @@
 // PRIVACY: it has to say nothing about WHERE the area is. Reverse geocoding
 // needs the network and would put a place name (and the round trip that
 // derives it) against a region of interest; a coordinate in the label breaks
-// DESIGN.md §11 outright. So the name is a plain counter — the user renames it
+// docs/ux-principles.md §13 outright. So the name is a plain counter — the user renames it
 // in the prompt that opens as the download starts, and their own name is the
 // one that means anything anyway.
 //

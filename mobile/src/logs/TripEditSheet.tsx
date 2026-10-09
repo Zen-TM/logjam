@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
@@ -33,6 +32,7 @@ import {
   toDateKey,
   todayDateKey,
   type ChipOption,
+  Icon,
 } from "../ui";
 import {
   CustomFieldList,
@@ -54,7 +54,7 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * a second form would drift.
  *
  * The date picker and the place picker are MODES of this sheet, not sheets of
- * their own (DESIGN.md §6: never open a second sheet from the first). The
+ * their own (DESIGN.md §4: never open a second sheet from the first). The
  * header title changes with the mode, so the user always knows which step they
  * are on, and there is exactly one animation per tap.
  *
@@ -462,11 +462,11 @@ export function TripEditSheet({
         mode === "form" ? (
           <View style={styles.footerStack}>
             {/* Server refusal / failure while the sheet is still open — the
-                banner sits directly above Save, never a toast (DESIGN.md §8). */}
+                banner sits directly above Save, never a toast (docs/ux-principles.md §11). */}
             {saveError ? <ErrorBanner message={saveError} /> : null}
             <Button
               label={editing ? "Save changes" : "Log trip"}
-              icon="check"
+              icon="done"
               loading={saving}
               onPress={() => void save()}
             />
@@ -479,14 +479,14 @@ export function TripEditSheet({
           // in the list.
           <Button
             label={ATTRIBUTE_NOUN.add}
-            icon="plus"
+            icon="add"
             onPress={() => {
               setEditingField(null);
               setMode("fieldForm");
             }}
           />
         ) : (
-          <Button label="Done" icon="check" onPress={() => setMode("form")} />
+          <Button label="Done" icon="done" onPress={() => setMode("form")} />
         )
       }
     >
@@ -512,7 +512,7 @@ export function TripEditSheet({
           {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
             <Button
               label="Clear date"
-              icon="x"
+              icon="close"
               variant="ghost"
               onPress={() => {
                 setFieldValue(dateTarget.key, "");
@@ -552,24 +552,20 @@ export function TripEditSheet({
       {mode === "form" ? (
         <View style={styles.form}>
           <Row
-            icon="calendar"
+            icon="date"
             title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
             subtitle="Date"
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("date")}
           />
           <Row
-            icon="map-pin"
+            icon="place"
             title={derivedTitle ?? "No places linked"}
             subtitle={
               selected.length === 1 ? "1 place" : `${selected.length} places`
             }
             titleNumberOfLines={2}
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("places")}
           />
 
@@ -633,7 +629,7 @@ export function TripEditSheet({
           {keptOnlyFieldDefs.length > 0 ? (
             <>
               <SectionHeader
-                label={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
+                title={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
               />
               <Text style={styles.hint}>
                 These {ATTRIBUTE_NOUN.many} are left over from when this trip
@@ -652,16 +648,14 @@ export function TripEditSheet({
           {/* Definitions are local rows written through the outbox, so this
               door is open with no account and no signal, for everyone. */}
           <Row
-            icon="sliders"
+            icon="tag"
             title={`Your trip ${ATTRIBUTE_NOUN.many}`}
             subtitle={
               customFieldDefs.length === 0
                 ? "Add your own — water level, party size, anything"
                 : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
             }
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />
         </View>
@@ -706,7 +700,7 @@ function PlacePicker({
   return (
     <View style={styles.pickerBody}>
       <View style={styles.searchWrap}>
-        <Feather name="search" size={16} color={theme.textMuted} />
+        <Icon idea="search" size={16} color={theme.textMuted} />
         <TextInput
           style={styles.searchInput}
           value={search}
@@ -720,11 +714,11 @@ function PlacePicker({
 
       {pinned.length > 0 ? (
         <>
-          <SectionHeader label={`On this trip · ${pinned.length}`} />
+          <SectionHeader title={`On this trip · ${pinned.length}`} />
           {pinned.map((place, index) => (
             <Row
               key={place.id}
-              icon="check"
+              icon="done"
               hue={theme.accent}
               title={place.name}
               subtitle={`${index + 1} of ${pinned.length}`}
@@ -735,7 +729,7 @@ function PlacePicker({
         </>
       ) : null}
 
-      <SectionHeader label={query ? "Matches" : "Your places"} />
+      <SectionHeader title={query ? "Matches" : "Your places"} />
       {matches.length === 0 ? (
         <Text style={styles.hint}>
           {places.length === 0
@@ -746,7 +740,7 @@ function PlacePicker({
         matches.map((place) => (
           <Row
             key={place.id}
-            icon="plus"
+            icon="add"
             hue={theme.neutral}
             title={place.name}
             onPress={() => onToggle(place)}

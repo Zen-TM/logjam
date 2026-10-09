@@ -4,9 +4,13 @@ import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
+  attributeDeleteConfirm,
+  attributesEmptyHint,
   CUSTOM_FIELD_TYPES,
   distinctTripTypes,
+  drawsYoursHeading,
   isSystemFieldDef,
+  SETTINGS_LIST,
   TRIP_TYPE_SUGGESTIONS,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldType,
@@ -27,10 +31,13 @@ import {
   ErrorBanner,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  Toggle,
+  SwitchRow,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
+
+const listCopy = SETTINGS_LIST.copy;
 
 /**
  * Manage the user's own custom field definitions — the mobile counterpart of the
@@ -88,52 +95,46 @@ export function CustomFieldList({
   // reads first — and the built-ins, which carry no verbs at all, stop
   // interrupting it. `position` (the order they arranged) still decides within
   // each half, which is why this is a stable partition and not a sort key.
-  const ordered = [
-    ...defs.filter((def) => !isSystemFieldDef(def)),
-    ...defs.filter(isSystemFieldDef),
-  ];
+  const own = defs.filter((def) => !isSystemFieldDef(def));
+  const builtIn = defs.filter(isSystemFieldDef);
   return (
     <View style={styles.body}>
-      {ordered.length === 0 ? (
-        <Text style={styles.hint}>
-          Add your own {ATTRIBUTE_NOUN.one} to record on every {noun.one} — e.g.
-          water level or party size.
-        </Text>
-      ) : (
-        <>
-          <SectionHeader
-            label={`${ordered.length} ${ordered.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`}
-          />
-          {ordered.map((def) =>
-            // A BUILT-IN gets no verbs, the same way a system place type does:
-            // it belongs to no account, the server refuses a rename and a
-            // delete, and the phone's half of a delete (strip the value off
-            // every place carrying the key) would run first and for real.
-            // A row with no action reads as a fact; a row that fails reads as
-            // a bug.
-            isSystemFieldDef(def) ? (
-              <Row
-                key={defRowKey(def)}
-                icon="lock"
-                // The BARE label, not `customFieldDisplayLabel`: that appends
-                // the range, and the subtitle one line down already says
-                // "Integer · 1–7". Printing the bounds twice on one row made
-                // the list read as a form rather than an inventory.
-                title={def.label}
-                subtitle={`Built in · ${fieldSummary(def)}`}
-              />
-            ) : (
-              <Row
-                key={defRowKey(def)}
-                icon="tag"
-                title={def.label}
-                subtitle={fieldSummary(def)}
-                onPress={() => onEdit(def)}
-              />
-            ),
-          )}
-        </>
-      )}
+      {own.length === 0 ? (
+        <Text style={styles.hint}>{attributesEmptyHint(noun.one)}</Text>
+      ) : null}
+      {drawsYoursHeading(own.length, builtIn.length) ? (
+        <SectionHeader title={listCopy.yours} count={own.length} />
+      ) : null}
+      {own.map((def) => (
+        <Row
+          key={defRowKey(def)}
+          icon="tag"
+          title={def.label}
+          subtitle={fieldSummary(def)}
+          onPress={() => onEdit(def)}
+        />
+      ))}
+      {builtIn.length > 0 ? (
+        <SectionHeader title={listCopy.builtIn} count={builtIn.length} />
+      ) : null}
+      {builtIn.map((def) => (
+        // A BUILT-IN gets no verbs, the same way a system place type does:
+        // it belongs to no account, the server refuses a rename and a
+        // delete, and the phone's half of a delete (strip the value off
+        // every place carrying the key) would run first and for real.
+        // A row with no action reads as a fact; a row that fails reads as
+        // a bug.
+        <Row
+          key={defRowKey(def)}
+          icon="private"
+          // The BARE label, not `customFieldDisplayLabel`: that appends
+          // the range, and the subtitle one line down already says
+          // "Integer · 1–7". Printing the bounds twice on one row made
+          // the list read as a form rather than an inventory.
+          title={def.label}
+          subtitle={fieldSummary(def)}
+        />
+      ))}
     </View>
   );
 }
@@ -224,7 +225,7 @@ export function useCustomFieldForm({
   const [scopeError, setScopeError] = useState<string | null>(null);
   // A save the local write refused, or a failed delete — this form stays open
   // either way, so it reports in its own banner above the footer's buttons
-  // rather than a toast (DESIGN.md §8).
+  // rather than a toast (docs/ux-principles.md §11).
   const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
@@ -324,35 +325,34 @@ export function useCustomFieldForm({
     // from 12 trips" is the part of the consequence the user can't see.
     countFieldValues(entity, key)
       .then((affected) => {
-        Alert.alert(
-          `Delete “${editing.label}”?`,
-          affected === 0
-            ? `No ${noun.many} use this ${ATTRIBUTE_NOUN.one} yet. This can't be undone.`
-            : `This clears the value from ${affected} ${affected === 1 ? noun.one : noun.many}. This can't be undone.`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Delete",
-              style: "destructive",
-              onPress: () => {
-                removeFieldDef(entity, key)
-                  .then((removed) => {
-                    onSaved(
-                      defs.filter((def) => def.key !== key),
-                      removed === 0
-                        ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
-                        : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
-                    );
-                    onDone();
-                  })
-                  .catch((err: unknown) => {
-                    console.error(err);
-                    setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
-                  });
-              },
-            },
-          ],
+        const { confirmTitle, confirmBody } = attributeDeleteConfirm(
+          editing.label,
+          affected,
+          noun,
         );
+        Alert.alert(confirmTitle, confirmBody, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: listCopy.deleteAttribute,
+            style: "destructive",
+            onPress: () => {
+              removeFieldDef(entity, key)
+                .then((removed) => {
+                  onSaved(
+                    defs.filter((def) => def.key !== key),
+                    removed === 0
+                      ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
+                      : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
+                  );
+                  onDone();
+                })
+                .catch((err: unknown) => {
+                  console.error(err);
+                  setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
+                });
+            },
+          },
+        ]);
       })
       .catch((err: unknown) => {
         console.error(err);
@@ -380,8 +380,8 @@ export function useCustomFieldForm({
           under a heading of their own put them next to the place-type picker,
           which is the other thing on this screen called a "type". */}
       <View style={styles.typeBlock}>
-        <SectionHeader label={`What it holds`} />
-        <SegmentedControl
+        <Text style={fieldLabel}>What it holds</Text>
+        <ChipRail
           options={CUSTOM_FIELD_TYPES.map((entry) => ({
             value: entry.value,
             label: entry.label,
@@ -397,21 +397,16 @@ export function useCustomFieldForm({
             and the phone's stop rail. */}
         {numeric ? (
           <>
-            <Row
-              icon="sliders"
+            <SwitchRow
+              icon="filter"
               title="Limit to a range"
-              subtitle={
+              description={
                 bounded
                   ? "Values must be between the min and max you set"
                   : "Any number"
               }
-              right={
-                <Toggle
-                  value={bounded}
-                  onValueChange={(next) => patch({ bounded: next })}
-                  accessibilityLabel="Limit to a range"
-                />
-              }
+              checked={bounded}
+              onChange={(next) => patch({ bounded: next })}
             />
             {bounded ? (
               <View style={styles.boundsRow}>
@@ -502,9 +497,9 @@ export function useCustomFieldForm({
 
       {editing ? (
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
-          title={`Delete ${ATTRIBUTE_NOUN.one}`}
+          title={listCopy.deleteAttribute}
           onPress={confirmDelete}
         />
       ) : null}
@@ -513,7 +508,7 @@ export function useCustomFieldForm({
 
   // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
   // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (DESIGN.md §8).
+  // above that row, never at the top of the form (docs/ux-principles.md §11).
   const footer = (
     <View style={styles.footerStack}>
       {formError ? <ErrorBanner message={formError} /> : null}
@@ -524,7 +519,7 @@ export function useCustomFieldForm({
         <View style={styles.action}>
           <Button
             label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
-            icon="check"
+            icon="done"
             loading={saving}
             onPress={() => void save()}
           />

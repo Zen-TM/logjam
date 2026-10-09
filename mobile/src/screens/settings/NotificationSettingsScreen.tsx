@@ -20,6 +20,8 @@ import * as Notifications from "expo-notifications";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   messageFromError,
+  notificationGroupLead,
+  NOTIFICATION_PREFERENCES,
   type NotificationPreferences,
 } from "@logjam/shared";
 
@@ -43,25 +45,9 @@ import {
 } from "../../ui";
 import { PreferenceRow } from "./settingsKit";
 
-// One row per switch, so the list is data and a new preference is one entry.
-// Copy is deliberately first-person and about the OUTCOME ("Email me when…"),
-// matching the web's wording so a user who set these in a browser recognises
-// them here.
-const NOTIFICATION_ROWS: {
-  key: keyof NotificationPreferences;
-  title: string;
-  group: "email" | "inApp";
-}[] = [
-  { key: "topoEmail", title: "A LiDAR map finishes or fails", group: "email" },
-  {
-    key: "exportEmail",
-    title: "A topo export finishes or fails",
-    group: "email",
-  },
-  { key: "geoPdfEmail", title: "A GeoPDF finishes or fails", group: "email" },
-  { key: "friendRequestInApp", title: "Friend requests", group: "inApp" },
-  { key: "shareInApp", title: "A place is shared with me", group: "inApp" },
-];
+// One row per switch, so the list is data and a new preference is one entry:
+// `NOTIFICATION_PREFERENCES`, which Logjam Web reads too.
+const sentence = (what: string) => what.charAt(0).toUpperCase() + what.slice(1);
 
 export function NotificationSettingsScreen() {
   const { accountState } = useAccountState();
@@ -161,41 +147,45 @@ export function NotificationSettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Email me when" />
+        <SectionHeader title={notificationGroupLead("email", "Logjam GPS")} />
         {/* Reported here rather than as a screen-level error: the OS row below
             works regardless, and this is the part that needs the fetch. */}
         {online && userQuery.error ? (
           <ErrorBanner message={userQuery.error} onRetry={userQuery.refetch} />
         ) : null}
-        {NOTIFICATION_ROWS.filter((row) => row.group === "email").map((row) => (
-          <PreferenceRow
-            key={row.key}
-            title={row.title}
-            subtitle={blocked}
-            value={notifications?.[row.key] ?? false}
-            ready={ready}
-            onToggle={() => toggleNotification(row.key)}
-          />
-        ))}
+        {NOTIFICATION_PREFERENCES.filter((row) => row.group === "email").map(
+          (row) => (
+            <PreferenceRow
+              key={row.key}
+              title={sentence(row.what)}
+              subtitle={blocked}
+              value={notifications?.[row.key] ?? false}
+              ready={ready}
+              onToggle={() => toggleNotification(row.key)}
+            />
+          ),
+        )}
 
-        <SectionHeader label="Notify me in Logjam GPS about" />
-        {NOTIFICATION_ROWS.filter((row) => row.group === "inApp").map((row) => (
-          <PreferenceRow
-            key={row.key}
-            title={row.title}
-            subtitle={blocked}
-            value={notifications?.[row.key] ?? false}
-            ready={ready}
-            onToggle={() => toggleNotification(row.key)}
-          />
-        ))}
+        <SectionHeader title={notificationGroupLead("inApp", "Logjam GPS")} />
+        {NOTIFICATION_PREFERENCES.filter((row) => row.group === "inApp").map(
+          (row) => (
+            <PreferenceRow
+              key={row.key}
+              title={sentence(row.what)}
+              subtitle={blocked}
+              value={notifications?.[row.key] ?? false}
+              ready={ready}
+              onToggle={() => toggleNotification(row.key)}
+            />
+          ),
+        )}
 
-        <SectionHeader label="This phone" />
+        <SectionHeader title="This phone" />
         {/* Not a switch: Android owns this one, so the row reports it and
             either asks (the one place in the app that does) or opens the place
             it can be changed. A toggle here would be a lie. */}
         <Row
-          icon="smartphone"
+          icon="phone"
           title="Notifications from Logjam"
           subtitle={
             pushAllowed === null

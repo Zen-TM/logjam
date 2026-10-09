@@ -2,7 +2,7 @@
 //
 // The point of this file is that an imported GPX and a recording made on this
 // phone are the same object: both are a line someone walked, and both deserve
-// the same panel (DESIGN.md §7). What differs is what the file carried —
+// the same panel (DESIGN.md §5). What differs is what the file carried —
 // a `<time>` on every trkpt buys moving time and pace, its absence leaves
 // distance and climb, and `computeTrackDetail` already draws that line.
 //
