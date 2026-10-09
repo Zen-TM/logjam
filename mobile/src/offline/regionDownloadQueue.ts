@@ -18,7 +18,7 @@ import {
   type RegionBbox,
 } from "@logjam/shared";
 
-import { subscribeReconnect } from "../map/connectivity";
+import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui/Toast";
 import LogjamDownloadService from "../../modules/logjam-download-service/src/LogjamDownloadServiceModule";
 import {
@@ -30,6 +30,7 @@ import {
   regionGroupToastText,
 } from "./regionDownloadGroups";
 import { failureDetail } from "./failureDetail";
+import { connectionWorthResuming } from "./networkPolicy";
 import {
   connectionAllows,
   runRegionDownload,
@@ -219,10 +220,12 @@ export function useRegionDownloads(): RegionJob[] {
  */
 function resumeJobsPausedBy(
   reason: Extract<PausedReason, "background" | "connectivity">,
+  only: (job: RegionJob) => boolean = () => true,
 ): boolean {
   let changed = false;
   jobs = jobs.map((job) => {
     if (job.state.kind !== "paused" || job.state.reason !== reason) return job;
+    if (!only(job)) return job;
     changed = true;
     return { ...job, state: { kind: "queued" } as RegionJobState };
   });
@@ -251,13 +254,16 @@ function installAutoResumeWatchers(): void {
     // they were waiting for has already come and gone.
     resumeJobsPausedBy("connectivity");
   });
-  // Edge-triggered (offline → online), same shape as the sync engine's.
-  subscribeReconnect(() => {
+  // Every connectivity change, not just offline → online: Wi-Fi arriving
+  // while cellular is already up is what a Wi-Fi-only job is waiting for.
+  NetInfo.addEventListener((state) => {
     if (!mayResumeOnReconnect(AppState.currentState, backgroundResumesLeft)) {
       return;
     }
     if (
-      resumeJobsPausedBy("connectivity") &&
+      resumeJobsPausedBy("connectivity", (job) =>
+        connectionWorthResuming(state, job.spec.allowCellular),
+      ) &&
       AppState.currentState !== "active"
     ) {
       backgroundResumesLeft -= 1;

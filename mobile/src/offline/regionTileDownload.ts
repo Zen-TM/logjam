@@ -431,8 +431,15 @@ export async function runRegionDownload(
           }
           attempt += 1;
           if (attempt >= MAX_TILE_ATTEMPTS) {
-            if (exhaustedTileOutcome(AppState.currentState) === "park") {
-              halt.stop = { kind: "paused", reason: "background" };
+            const outcome = exhaustedTileOutcome(
+              AppState.currentState,
+              await connectionAllows(spec.allowCellular),
+            );
+            if (outcome !== "dead") {
+              halt.stop = {
+                kind: "paused",
+                reason: outcome === "park" ? "background" : "connectivity",
+              };
               return;
             }
             dead += 1;

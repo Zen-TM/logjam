@@ -99,8 +99,14 @@ export function deadTileBudget(totalTiles: number): number {
  * the OS withholding the network from a process that is still alive, and that
  * is not the provider failing: the job parks (the queue re-queues it on the
  * next foreground edge) instead of spending its dead-tile budget on it.
+ * With no connection at all it is neither: the job waits for the connection,
+ * which the queue bounds behind another app (`mayResumeOnReconnect`).
  * Guard: `regionTilePlanning.test.ts` ("exhaustedTileOutcome").
  */
-export function exhaustedTileOutcome(appState: string): "dead" | "park" {
+export function exhaustedTileOutcome(
+  appState: string,
+  online: boolean,
+): "dead" | "park" | "offline" {
+  if (!online) return "offline";
   return appState === "active" ? "dead" : "park";
 }
