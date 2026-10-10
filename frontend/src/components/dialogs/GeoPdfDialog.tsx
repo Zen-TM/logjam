@@ -15,7 +15,7 @@ import {
   useState,
 } from "react";
 import type { TBbox } from "../map/Map";
-import { BASE_LAYERS } from "../map/Map";
+import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
@@ -124,29 +124,6 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "enNorthing", label: "E/N" },
 ];
 
-// Raster only — the renderer fetches XYZ tiles, which a vector PMTiles archive
-// cannot provide.
-const BASE_LAYER_OPTIONS: ChipOption<string>[] = BASE_LAYERS.filter(
-  (layer) =>
-    layer.kind === "raster" &&
-    !layer.id.startsWith("osm") &&
-    layer.id !== "six-base",
-).map((layer) => ({ value: layer.id, label: layer.name }));
-
-const FALLBACK_BASE_LAYER = "six-topo";
-
-/**
- * The base layer to open with, given whatever the map is showing. The map's own
- * layer is kept when this form can honour it, and otherwise the fallback is —
- * asking the LIST rather than testing the id's prefix, which is what makes this
- * hold for a basemap added later.
- */
-function seedBaseLayer(activeLayerId: string): string {
-  return BASE_LAYER_OPTIONS.some((option) => option.value === activeLayerId)
-    ? activeLayerId
-    : FALLBACK_BASE_LAYER;
-}
-
 const LOCK_TOOLTIP =
   "Whichever one you lock stays as it is while you change the other.";
 const COORD_TOOLTIP =
@@ -195,6 +172,9 @@ function GeoPdfDialog({
     paperDimensions: { w: number; h: number },
     initialExtent?: TBbox,
     initialScale?: number,
+    /** The base layer chosen here, for the map to show while the area is
+     *  framed. */
+    baseLayerId?: string,
   ) => void;
   pendingExtent: TBbox | null;
   pendingScale: number | null;
@@ -561,8 +541,9 @@ function GeoPdfDialog({
           }
         : undefined,
       extentState.scale,
+      selectedBaseLayer,
     );
-  }, [extentState, onSelectOnMap]);
+  }, [extentState, onSelectOnMap, selectedBaseLayer]);
 
   const handleTemplateSelect = useCallback(
     (id: string) => {

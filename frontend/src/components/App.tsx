@@ -82,6 +82,8 @@ import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
 import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
+import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
+import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import {
   buildWays,
   wayFromRoute,
@@ -295,6 +297,19 @@ function App() {
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
   const [selectingGeoPdfExtent, setSelectingGeoPdfExtent] = useState(false);
+  // The base layer the GeoPDF will be printed from, handed over when the area is
+  // framed: the map shows it for as long as the framing lasts, and the user's
+  // own stored layer (`activeLayerId`) is never written (`mapLayerFor`).
+  const [geoPdfFramingLayer, setGeoPdfFramingLayer] = useState<string | null>(
+    null,
+  );
+  // What the map actually draws: the user's layer, except while a GeoPDF's area
+  // is framed on the base layer it will be printed from.
+  const mapLayerId = mapLayerFor(activeLayerId, {
+    active: selectingGeoPdfExtent,
+    layerId: geoPdfFramingLayer,
+  });
+
   const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
   const [geoPdfPaperDimensions, setGeoPdfPaperDimensions] = useState<{
     w: number;
@@ -1401,6 +1416,9 @@ function App() {
     setGeoPdfPaperDimensions({ w: 210, h: 297 });
     setGeoPdfInitialExtent(bounds);
     setGeoPdfInitialScale(undefined);
+    // No dialog has chosen yet: it will open on the layer it seeds from the
+    // map's, so that is the one the frame is drawn on.
+    setGeoPdfFramingLayer(seedBaseLayer(activeLayerId));
     setActivePanel(null);
     setSelectingGeoPdfExtent(true);
   };
@@ -1491,7 +1509,9 @@ function App() {
           setEditingGeoPdfTemplate(undefined);
           setInitialGeoPdfTemplateId(null);
         }}
-        onSelectOnMap={(aspect, paperDims, extent, scale) => {
+        onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
+          // The latest pick, every visit: the map follows the dialog.
+          setGeoPdfFramingLayer(baseLayerId ?? null);
           setGeoPdfPaperAspect(aspect);
           setGeoPdfPaperDimensions(paperDims);
           setGeoPdfInitialExtent(extent);
@@ -1788,7 +1808,7 @@ function App() {
           }}
           topoLayers={combinedTopoLayers}
           vectorStyle={vectorStyle}
-          activeLayerId={activeLayerId}
+          activeLayerId={mapLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
           geoPdfPaperAspect={geoPdfPaperAspect}
           geoPdfPaperDimensions={geoPdfPaperDimensions}
