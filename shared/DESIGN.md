@@ -294,8 +294,10 @@ renumber.
 ## 14. Keeping the system
 
 - **A feature on one client exists on the other, with the same verbs and
-  words**, unless the medium rules it out; then the contract says why. "Not
-  built yet" is a gap to log, not a reason.
+  words**, unless the contract records why not: the medium cannot do it, or
+  the job it serves only happens on the other client (a GeoPDF is made to be
+  printed, so it is made on Logjam Web). "Not built yet" is a gap to log, not
+  a reason.
 - **One look, one component.** Extend a kit component with a prop before
   adding a file; the kit does looks, a screen does layout.
 - **The kit is presentation only.** A component that owns permissions, file
