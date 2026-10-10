@@ -9,10 +9,14 @@ docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md
 
     build_nsw_dem.py fetch SRC [Sheet ...]     # no sheet named = all 343
     build_nsw_dem.py tile  SRC WORK [--jobs N]
-    build_nsw_dem.py pack  WORK OUT.pmtiles
+    build_nsw_dem.py pack  WORK OUT.pmtiles --extracted "October 2026"
 
 `fetch` and `tile` skip what is already done, so a killed run restarts where
-it stopped. `pack` needs the `pmtiles` binary (go-pmtiles) on PATH.
+it stopped. Run `tile` only once every sheet is fetched: a finished block is
+not rebuilt when a neighbouring sheet arrives later. `pack` needs the
+`pmtiles` binary (go-pmtiles) on PATH, and stamps the archive with the month
+the sheets were downloaded, which the data's licence asks derived products to
+show (docs/decisions/0030-nsw-heights-come-from-the-spatial-services-5m-dem.md).
 
 The work unit is one zoom-10 tile (a "block", about 33 km across here), NOT
 one sheet: sheets are in three MGA zones and a tile on a sheet edge needs
@@ -298,7 +302,7 @@ def coarse_tiles(work: Path):
         level = parents
 
 
-def pack(work: Path, out: Path) -> None:
+def pack(work: Path, out: Path, extracted: str) -> None:
     if not shutil.which("pmtiles"):
         sys.exit("pack needs the `pmtiles` binary (go-pmtiles) on PATH")
     mbtiles = out.with_suffix(".mbtiles")
@@ -337,7 +341,11 @@ def pack(work: Path, out: Path) -> None:
         "encoding": "terrarium",
         "minzoom": str(ZMIN),
         "maxzoom": str(ZMAX),
-        "attribution": "© State of New South Wales (Spatial Services)",
+        "attribution": (
+            "Derived from the NSW 5 m Digital Elevation Model, © State of New"
+            f" South Wales (Spatial Services), extracted {extracted}."
+            " CC BY 3.0 AU."
+        ),
     }
     db.executemany("insert into metadata values (?,?)", metadata.items())
     db.commit()
@@ -359,13 +367,18 @@ def main() -> None:
     p = sub.add_parser("pack")
     p.add_argument("work", type=Path)
     p.add_argument("out", type=Path)
+    p.add_argument(
+        "--extracted",
+        required=True,
+        help='when the sheets were downloaded, e.g. "October 2026"',
+    )
     args = parser.parse_args()
     if args.command == "fetch":
         fetch(args.src, args.sheets)
     elif args.command == "tile":
         tile(args.src, args.work, args.jobs)
     else:
-        pack(args.work, args.out)
+        pack(args.work, args.out, args.extracted)
 
 
 if __name__ == "__main__":
