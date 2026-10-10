@@ -205,7 +205,7 @@ describe("opAdvice", () => {
 
   it("says how many attempts the app already spent, so Retry isn't a chore", () => {
     // The engine retries transient rejections itself (flush.ts), so anything
-    // temporary that reaches this screen has already been tried five times —
+    // temporary that reaches this screen has already been tried repeatedly —
     // and the copy has to say so, or the button reads as work the app skipped.
     const advice = opAdvice(
       parked({ error: { code: 503, message: "x" }, attempts: 5 }),

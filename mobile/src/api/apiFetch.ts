@@ -13,6 +13,7 @@ import { ApiError } from "@logjam/shared";
 import { config, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "../config";
 import { fetchAuthSessionWithTimeout } from "../auth/authSession";
 import { classifySessionError } from "../auth/sessionErrors";
+import { markNoResponse } from "./noResponse";
 
 // useAuth registers a handler so the UI can drop to the sign-in screen (with
 // an explanatory banner) when the refresh token is actively rejected —
@@ -144,14 +145,22 @@ export async function apiFetch<T>(
   ) {
     return currentUser.value as T;
   }
-  const token = await getIdToken();
-  const res = await fetchWithTimeout(`${config.apiUrl}${path}`, {
-    method,
-    headers: {
-      ...baseHeaders(token),
-      ...(options?.body != null && { "Content-Type": "application/json" }),
-    },
-    ...(options?.body != null && { body: JSON.stringify(options.body) }),
+  // Everything that can fail here fails WITHOUT an answer from the API: no
+  // token because Cognito was unreachable, a refused or reset connection, the
+  // 15 s abort. Marked so the sync engine can tell the link's failures from an
+  // op's (noResponse.ts).
+  const res = await (async () => {
+    const token = await getIdToken();
+    return fetchWithTimeout(`${config.apiUrl}${path}`, {
+      method,
+      headers: {
+        ...baseHeaders(token),
+        ...(options?.body != null && { "Content-Type": "application/json" }),
+      },
+      ...(options?.body != null && { body: JSON.stringify(options.body) }),
+    });
+  })().catch((err: unknown) => {
+    throw markNoResponse(err);
   });
   if (!res.ok) {
     // Unlike web: a 401 does NOT flip the session. A stale-but-refreshable
@@ -163,7 +172,11 @@ export async function apiFetch<T>(
     if (cacheable) invalidateCurrentUser();
     return undefined as T;
   }
-  const value = (await res.json()) as T;
+  // A connection cut after the status line leaves a body that will not parse:
+  // the server may have applied the write, and the reply is lost all the same.
+  const value = (await res.json().catch((err: unknown) => {
+    throw markNoResponse(err);
+  })) as T;
   if (cacheable) {
     // A PATCH answers with the updated record, so the write refreshes the cache
     // instead of merely dropping it. Anything else (a DELETE with a body, a
