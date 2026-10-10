@@ -96,7 +96,7 @@ import {
   shelfSubtitle,
   shelfTitle,
 } from "./syncIssueDisplay";
-import { relativeTime } from "./syncHealth";
+import { relativeTime, syncIssuesTitle } from "./syncHealth";
 
 type Issue =
   | { kind: "stuck"; key: string; op: ParkedOp }
@@ -527,7 +527,7 @@ export function SyncIssuesScreen({
     <View style={styles.root}>
       <Hero
         eyebrow="Account sync issues"
-        title={total > 0 ? "Some changes need you" : "Everything's synced"}
+        title={syncIssuesTitle(total)}
         onBack={onBack}
         value={total === 1 ? "1 change" : `${total} changes`}
       />
