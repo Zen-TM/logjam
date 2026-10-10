@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
   DISMISS_DISTANCE,
+  sheetHolds,
   sheetPulled,
   sheetRelease,
   sheetReseats,
@@ -90,4 +91,35 @@ it("the sheet's content hands its overscroll to the sheet", () => {
     "utf8",
   );
   expect(sheet).toMatch(/\bnestedScrollEnabled\b/);
+});
+
+// An owner empties its sheet in the render that closes it (no title, no rows,
+// the keyboard on its way down), so a sheet that drew what it was handed slid
+// out as an empty shell of another height.
+describe("sheetHolds", () => {
+  it("draws what its owner hands it while open", () => {
+    expect(sheetHolds({ visible: true })).toBe(false);
+  });
+
+  // Red when `sheetHolds` returns false: a form dragged closed with the
+  // keyboard up loses the keyboard's height on the way out.
+  it("keeps what it last drew while it closes", () => {
+    expect(sheetHolds({ visible: false })).toBe(true);
+  });
+});
+
+// A component that returns null unmounts its BottomSheet, and a sheet that is
+// gone cannot slide out. Red when an owner goes back to
+// `if (!place) return null;` in place of `return closedSheet;`.
+it("no sheet owner unmounts its sheet when its subject is cleared", () => {
+  const src = new URL("../", import.meta.url);
+  const offenders = readdirSync(src, { recursive: true, encoding: "utf8" })
+    // The kit's own sheet returns null once it has slid out.
+    .filter((file) => file.endsWith("Sheet.tsx") && !file.startsWith("ui/"))
+    .filter((file) =>
+      /^\s*if \(!\w+(?: \|\| !\w+)*\) return null;$/m.test(
+        readFileSync(new URL(file, src), "utf8"),
+      ),
+    );
+  expect(offenders).toEqual([]);
 });

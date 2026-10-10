@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -23,6 +24,7 @@ import { radius, scrim, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
 import {
   DISMISS_DISTANCE,
+  sheetHolds,
   sheetPulled,
   sheetRelease,
   sheetReseats,
@@ -98,6 +100,21 @@ export const SheetScrollLock = createContext<{
  */
 export const SheetErrorReveal = createContext<((target: View) => void) | null>(
   null,
+);
+
+/**
+ * The sheet as it was last drawn open. An owner empties its sheet in the
+ * render that closes it (no title, no rows) and the keyboard starts down, so
+ * a sheet that drew what it was handed slid out as an empty shell of another
+ * height. A sheet that shrinks also shortens the scroll it is dragged by: the
+ * offset the drag left is then past the new end, Android clamps it, and the
+ * shell jumped back up in the middle of the slide out.
+ */
+const Held = memo(
+  function Held({ children }: { visible: boolean; children: React.ReactNode }) {
+    return children;
+  },
+  (_last, next) => sheetHolds(next),
 );
 
 export function BottomSheet({
@@ -223,12 +240,6 @@ export function BottomSheet({
   // The modal's own height: the spacer above the sheet is exactly this tall,
   // so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
-  // The sheet's own height as last laid out, to hold it at while it closes.
-  // An owner empties its sheet as it closes (no title, no rows). A sheet that
-  // shrinks shortens the scroll it is dragged by, the offset the drag left is
-  // then past the new end, Android clamps it, and the pull is gone: the empty
-  // shell jumped back up in the middle of the slide out.
-  const [sheetHeight, setSheetHeight] = useState(0);
   const outerRef = useRef<ScrollView>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
   // that is from its end. `touching`: a finger is dragging it. `dragged`: a
@@ -503,122 +514,123 @@ export function BottomSheet({
             keyboard, or the field it exists to expose is the one thing hidden.
             The bottom inset is dropped while the keyboard is up — the keyboard
             already covers the nav bar, so keeping it leaves a dead band. */}
-        <Animated.View
-          onLayout={(event) => {
-            const { height } = event.nativeEvent.layout;
-            if (visible && height !== sheetHeight) setSheetHeight(height);
-          }}
-          style={[
-            styles.sheet,
-            {
-              minHeight: visible ? undefined : sheetHeight,
-              marginBottom: keyboardHeight,
-              // Lifting a tall sheet by the keyboard height would push its TOP
-              // off the screen, taking whatever field is up there with it — the
-              // exact field the user just tapped. Cap the height to what is left
-              // above the keyboard instead, and let the inner ScrollView pan.
-              maxHeight: keyboardUp
-                ? viewportHeight - keyboardHeight - insets.top - spacing(2)
-                : viewportHeight * 0.8,
-              paddingBottom: spacing(3) + (keyboardUp ? 0 : insets.bottom),
-              transform: [{ translateY }],
-            },
-          ]}
-        >
-          {/* Hidden from assistive tech rather than labelled: it used to
+        <Held visible={visible}>
+          <Animated.View
+            style={[
+              styles.sheet,
+              {
+                marginBottom: keyboardHeight,
+                // Lifting a tall sheet by the keyboard height would push its TOP
+                // off the screen, taking whatever field is up there with it — the
+                // exact field the user just tapped. Cap the height to what is left
+                // above the keyboard instead, and let the inner ScrollView pan.
+                maxHeight: keyboardUp
+                  ? viewportHeight - keyboardHeight - insets.top - spacing(2)
+                  : viewportHeight * 0.8,
+                paddingBottom: spacing(3) + (keyboardUp ? 0 : insets.bottom),
+                transform: [{ translateY }],
+              },
+            ]}
+          >
+            {/* Hidden from assistive tech rather than labelled: it used to
               announce "Drag down to close", which is an instruction a screen
               reader cannot carry out — the one-finger drag never reaches the
               sheet. Announcing an action that cannot be performed is worse than
               announcing nothing; the backdrop above carries the real one. */}
-          <View
-            style={styles.handleHit}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <View style={styles.handle} />
-          </View>
-          {/* A way out you can SEE, top right, every time (UX §3): the drag, the
+            <View
+              style={styles.handleHit}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <View style={styles.handle} />
+            </View>
+            {/* A way out you can SEE, top right, every time (UX §3): the drag, the
               backdrop and the system back are gestures, and a gesture is not a
               way out. Back, when there is one, sits on the same line at the
               left: a sub-mode's title IS what you are going back from, and a
               header slot may be empty, which left the arrow floating on its own
               row looking like a stray control. */}
-          <View style={styles.titleRow}>
-            {onBack ? (
+            <View style={styles.titleRow}>
+              {onBack ? (
+                <IconButton
+                  icon="back"
+                  accessibilityLabel="Back"
+                  onPress={onBack}
+                />
+              ) : null}
+              <Text style={styles.title} accessibilityRole="header">
+                {title}
+              </Text>
               <IconButton
-                icon="back"
-                accessibilityLabel="Back"
-                onPress={onBack}
+                icon="close"
+                accessibilityLabel="Close"
+                color={theme.text}
+                onPress={onClose}
               />
+            </View>
+            {header != null ? (
+              <View style={styles.header}>{header}</View>
             ) : null}
-            <Text style={styles.title} accessibilityRole="header">
-              {title}
-            </Text>
-            <IconButton
-              icon="close"
-              accessibilityLabel="Close"
-              color={theme.text}
-              onPress={onClose}
-            />
-          </View>
-          {header != null ? <View style={styles.header}>{header}</View> : null}
-          {/* flexShrink so the scroll area yields to the pinned footer under
+            {/* flexShrink so the scroll area yields to the pinned footer under
               the sheet's maxHeight cap. Without it this wrapper claims the
               full content height and pushes the footer off-screen. */}
-          <View style={styles.scrollArea}>
-            {/* Pushed down by the lift its sheet is raised by, so it stays
+            <View style={styles.scrollArea}>
+              {/* Pushed down by the lift its sheet is raised by, so it stays
                 put on screen (see the top of the file). */}
-            <Animated.View
-              style={[
-                styles.scrollHold,
-                { transform: [{ translateY: scroll.lift }] },
-              ]}
-            >
-              <Animated.ScrollView
-                ref={scrollRef}
-                // Held below its place while lifted, it must still draw the
-                // rows above its own top edge; `scrollArea` does the clipping.
-                style={styles.scroll}
-                onLayout={(event) => {
-                  viewport.current = {
-                    ...viewport.current,
-                    height: event.nativeEvent.layout.height,
-                  };
-                }}
-                onScroll={scroll.onInnerScroll}
-                scrollEventThrottle={1}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                // Without this the FIRST tap on any control while the keyboard is
-                // up is swallowed dismissing it, and the button only fires on the
-                // second press — which read as "Save didn't save".
-                keyboardShouldPersistTaps="handled"
-                // What this cannot scroll goes to the sheet's drag (see the top
-                // of the file).
-                nestedScrollEnabled
-                {...dragHandlers}
-                // Frozen while a sub-mode covers it: a drag on the overlay must
-                // not scroll the list hidden behind it. Frozen too while a child
-                // owns the current touch (SheetScrollLock).
-                scrollEnabled={overlay == null && !scrollLocked}
+              <Animated.View
+                style={[
+                  styles.scrollHold,
+                  { transform: [{ translateY: scroll.lift }] },
+                ]}
               >
-                <SheetScrollLock.Provider value={scrollLock}>
-                  <SheetErrorReveal.Provider value={revealError}>
-                    {/* The frame an error measures itself against. Not
+                <Animated.ScrollView
+                  ref={scrollRef}
+                  // Held below its place while lifted, it must still draw the
+                  // rows above its own top edge; `scrollArea` does the clipping.
+                  style={styles.scroll}
+                  onLayout={(event) => {
+                    viewport.current = {
+                      ...viewport.current,
+                      height: event.nativeEvent.layout.height,
+                    };
+                  }}
+                  onScroll={scroll.onInnerScroll}
+                  scrollEventThrottle={1}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                  // Without this the FIRST tap on any control while the keyboard is
+                  // up is swallowed dismissing it, and the button only fires on the
+                  // second press — which read as "Save didn't save".
+                  keyboardShouldPersistTaps="handled"
+                  // What this cannot scroll goes to the sheet's drag (see the top
+                  // of the file).
+                  nestedScrollEnabled
+                  {...dragHandlers}
+                  // Frozen while a sub-mode covers it: a drag on the overlay must
+                  // not scroll the list hidden behind it. Frozen too while a child
+                  // owns the current touch (SheetScrollLock).
+                  scrollEnabled={overlay == null && !scrollLocked}
+                >
+                  <SheetScrollLock.Provider value={scrollLock}>
+                    <SheetErrorReveal.Provider value={revealError}>
+                      {/* The frame an error measures itself against. Not
                       collapsable, or Android flattens it away. */}
-                    <View ref={contentRef} collapsable={false}>
-                      {children}
-                    </View>
-                  </SheetErrorReveal.Provider>
-                </SheetScrollLock.Provider>
-              </Animated.ScrollView>
-            </Animated.View>
-            {overlay != null ? (
-              <View style={styles.overlay}>{overlay}</View>
+                      <View ref={contentRef} collapsable={false}>
+                        {children}
+                      </View>
+                    </SheetErrorReveal.Provider>
+                  </SheetScrollLock.Provider>
+                </Animated.ScrollView>
+              </Animated.View>
+              {overlay != null ? (
+                <View style={styles.overlay}>{overlay}</View>
+              ) : null}
+            </View>
+            {footer != null ? (
+              <View style={styles.footer}>{footer}</View>
             ) : null}
-          </View>
-          {footer != null ? <View style={styles.footer}>{footer}</View> : null}
-        </Animated.View>
+          </Animated.View>
+        </Held>
       </Animated.ScrollView>
     </Modal>
   );
@@ -670,3 +682,16 @@ const styles = StyleSheet.create({
     borderTopColor: theme.line,
   },
 });
+
+/**
+ * What an owner returns while it has nothing to show, in place of null. It
+ * must be the root of what the owner returns when open too: React then keeps
+ * the one sheet, which slides out still drawing what it last held. Null
+ * unmounts the sheet, and it vanished with no animation.
+ * Guard: `sheetPull.test.ts`.
+ */
+export const closedSheet = (
+  <BottomSheet visible={false} onClose={() => {}} title="">
+    {null}
+  </BottomSheet>
+);

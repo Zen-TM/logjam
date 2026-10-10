@@ -51,3 +51,12 @@ export function sheetReseats({
 }): boolean {
   return visible && !touching;
 }
+
+/**
+ * Whether the sheet keeps drawing what it drew last in place of what its
+ * owner hands it now: while it closes, when the owner has already let go of
+ * what it was showing. Guard: `sheetPull.test.ts`.
+ */
+export function sheetHolds({ visible }: { visible: boolean }): boolean {
+  return !visible;
+}

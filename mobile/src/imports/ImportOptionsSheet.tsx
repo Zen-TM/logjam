@@ -19,7 +19,7 @@ import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
 import { assetHue, spacing, theme } from "../theme";
-import { BottomSheet, ColourField, RenameForm, Row } from "../ui";
+import { BottomSheet, closedSheet, ColourField, RenameForm, Row } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -126,7 +126,7 @@ export function ImportOptionsSheet({
     onError,
   });
 
-  if (!imported || !actions) return null;
+  if (!imported || !actions) return closedSheet;
 
   const close = () => {
     setRenaming(false);
