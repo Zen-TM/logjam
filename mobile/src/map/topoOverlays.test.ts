@@ -3,6 +3,7 @@ import { TOPO_LAYERS } from "@logjam/shared";
 import {
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
+  topoOverlayCredits,
   type CompletedOverlaysResponse,
 } from "./topoOverlays";
 import type { MapArtifact } from "./sourceResolver";
@@ -142,5 +143,21 @@ describe("mergeSavedOverlayJobs", () => {
 
   it("returns the online list unchanged when there are no saved artifacts", () => {
     expect(mergeSavedOverlayJobs(response(), [])).toEqual(response());
+  });
+});
+
+describe("topoOverlayCredits", () => {
+  const ref = (layer: string) =>
+    ({ kind: "topo-overlay", jobId: "j", layer }) as never;
+
+  it("credits the LiDAR source once however many LiDAR layers are on", () => {
+    const lines = topoOverlayCredits([ref("hillshade"), ref("contours")]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("LiDAR");
+    expect(lines[0]).toContain("CC BY 4.0");
+  });
+
+  it("says nothing with no overlay on", () => {
+    expect(topoOverlayCredits([])).toEqual([]);
   });
 });
