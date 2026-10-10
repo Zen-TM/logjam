@@ -393,7 +393,7 @@ function BasemapGallery({
   return (
     <div
       role="radiogroup"
-      aria-label="Basemap"
+      aria-label="Map"
       tabIndex={-1}
       className={classes.gallery}
       onKeyDown={onKeyDown}

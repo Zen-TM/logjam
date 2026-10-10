@@ -62,7 +62,7 @@ import {
 } from "expo-sensors";
 import {
   SYSTEM_PLACE_TYPE_IDS,
-  DEM_ATTRIBUTION,
+  demCredits,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
@@ -83,6 +83,7 @@ import {
   snapSegment,
   type IconIdea,
   type SnapMode,
+  type TrackPass,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -264,7 +265,10 @@ import {
   setRecordingMapFocusBoost,
   startTrackRecording,
 } from "../tracks/trackRecorder";
-import { TrackMapLayers } from "../tracks/TrackMapLayers";
+import {
+  TrackMapLayers,
+  type TrackPressHandler,
+} from "../tracks/TrackMapLayers";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
@@ -857,7 +861,7 @@ export function MapScreen({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
-  // sheet has actually closed (never two sheets at once — DESIGN.md §4).
+  // sheet has actually closed (never two sheets at once — DESIGN.md).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
@@ -867,7 +871,7 @@ export function MapScreen({
   const toastNonce = useRef(0);
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
-  // route draw confirms and saves) and the ink (docs/ux-principles.md §11).
+  // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
   const measureDraft = useRouteDraft();
   const routeDraft = useRouteDraft();
   const measuring = measureDraft.active;
@@ -940,7 +944,7 @@ export function MapScreen({
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
-  // the stats a sub-mode one row in (DESIGN.md §5: the same object offers the
+  // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
@@ -1858,7 +1862,7 @@ export function MapScreen({
       // whichever tool won the race.
       if (tool === "measure") {
         // Leaving measure bins its points without asking — a measurement is a
-        // question you asked once, not an asset (docs/ux-principles.md §11).
+        // question you asked once, not an asset (shared/DESIGN.md §11).
         if (measureDraft.active) {
           measureDraft.close();
           return;
@@ -2016,7 +2020,7 @@ export function MapScreen({
       const props = event.nativeEvent.features[0]?.properties;
       // The OPTIONS sheet, not the detail screen: the same six verbs the
       // Places list offers, with "Open place" first because that is what this
-      // tap used to do (DESIGN.md §5). Held as an id so an edit made from
+      // tap used to do (DESIGN.md). Held as an id so an edit made from
       // inside the sheet re-renders it rather than showing a stale copy.
       if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
@@ -2026,11 +2030,11 @@ export function MapScreen({
   const optionsPlace =
     (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
-   *  options sheet closes before one opens (DESIGN.md §4). */
+   *  options sheet closes before one opens (DESIGN.md). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
 
-  /** A recorded line's own verbs, from the map (DESIGN.md §5: the same object
+  /** A recorded line's own verbs, from the map (DESIGN.md: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
    *  sub-mode one row in. Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
@@ -2042,8 +2046,10 @@ export function MapScreen({
    * a visibility flip made inside the sheet re-renders it.
    */
   const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
-  const handleTrackPress = useCallback(
-    (track: Track, coordinates?: { latitude: number; longitude: number }) => {
+  /** When the track in the options sheet was at the spot tapped to open it. */
+  const [optionsTrackPasses, setOptionsTrackPasses] = useState<TrackPass[]>([]);
+  const handleTrackPress = useCallback<TrackPressHandler>(
+    (track, coordinates, passes) => {
       // Same rule as a place pin: the line swallows the press before the map
       // sees it, so while a tool is collecting points it has to place the point
       // itself — otherwise tapping near a track does nothing and reads as
@@ -2054,6 +2060,7 @@ export function MapScreen({
         }
         return;
       }
+      setOptionsTrackPasses(passes ?? []);
       setOptionsTrackId(track.id);
     },
     [addToolPoint, collectingPoints],
@@ -2388,7 +2395,7 @@ export function MapScreen({
 
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
-  // and a subtitle (DESIGN.md §4).
+  // and a subtitle (DESIGN.md).
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
@@ -2463,11 +2470,7 @@ export function MapScreen({
             fitCameraToBbox(outcome.record.bbox);
           }
         } else {
-          const record = await importVectorSource(
-            url,
-            syntheticNameFor(kind),
-            imports.length,
-          );
+          const record = await importVectorSource(url, syntheticNameFor(kind));
           fitCameraToBbox(record.bbox);
         }
       } catch (err) {
@@ -2480,7 +2483,7 @@ export function MapScreen({
         );
       }
     },
-    [imports.length, fitCameraToBbox],
+    [fitCameraToBbox],
   );
   const onIncomingUrl = useEffectEvent(handleIncomingUrl);
   useEffect(() => {
@@ -3361,7 +3364,7 @@ export function MapScreen({
     sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
       allowNetwork: !offlineOnlyRef.current,
     })
-      .then(([elevationM]) => {
+      .then(({ heights: [elevationM] }) => {
         if (seq !== readoutSeq.current || elevationM == null) return;
         publishLiveReadout({
           speedMps,
@@ -3808,7 +3811,7 @@ export function MapScreen({
   /**
    * Start measuring from a spot. Same shape as `startRouteDrawAt` — and the
    * same seeding reason — differing only in which of the two point tools opens,
-   * because they are one implementation (DESIGN.md §3).
+   * because they are one implementation (DESIGN.md).
    */
   const startMeasureAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
@@ -3866,7 +3869,7 @@ export function MapScreen({
         case "place":
           // Straight to the form: with no sheet open there is no Modal to
           // collide with, so this is the one branch that skips the park-and-
-          // reopen dance the sheet needs (DESIGN.md §4).
+          // reopen dance the sheet needs (DESIGN.md).
           setAddPlaceAt(point);
           return;
         default:
@@ -4209,7 +4212,7 @@ export function MapScreen({
       ],
       // The layer's own report of what it could not draw. Present only while it
       // is on AND something is missing: a map drawing less than it says has to
-      // say so (docs/ux-principles.md §11).
+      // say so (shared/DESIGN.md §11).
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
           ? `${routesStatus.unavailable} not downloaded yet`
@@ -5176,7 +5179,11 @@ export function MapScreen({
             is drawn — every height in the app (point readout, route profile,
             gain/loss) comes from it, online or off, so its credit is
             unconditional rather than tied to the active layer. */}
-        <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
+        {demCredits().map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
       </BottomSheet>
 
       {/* Tap: "what's there?" — the question that comes before the long
@@ -5263,7 +5270,7 @@ export function MapScreen({
         </View>
       </BottomSheet>
 
-      {/* ONE form for both modes (DESIGN.md §5): a long-press drops a new
+      {/* ONE form for both modes (DESIGN.md): a long-press drops a new
           place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
@@ -5315,7 +5322,7 @@ export function MapScreen({
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
-          in (DESIGN.md §5). No "Show on map" row here — the user is looking at
+          in (DESIGN.md). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
       <RouteOptionsSheet
         route={optionsRoute}
@@ -5351,6 +5358,7 @@ export function MapScreen({
       <TrackOptionsSheet
         track={tracks.find((track) => track.id === optionsTrackId) ?? null}
         visible={optionsTrackId !== null}
+        passes={optionsTrackPasses}
         onClose={() => setOptionsTrackId(null)}
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
@@ -5425,7 +5433,7 @@ function RouteNameForm({
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState(initialName);
-  // Empty-name requirement shows on SUBMIT, not while typing (docs/ux-principles.md §11);
+  // Empty-name requirement shows on SUBMIT, not while typing (shared/DESIGN.md §11);
   // clears as soon as the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);

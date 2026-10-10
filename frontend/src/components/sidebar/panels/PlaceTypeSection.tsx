@@ -5,6 +5,8 @@ import {
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
   SETTINGS_LIST,
 } from "@logjam/shared";
 
@@ -245,6 +247,7 @@ function PlaceTypeSection({
       {editing !== null && (
         <PlaceTypeDialog
           editing={editing === "new" ? null : editing}
+          types={types}
           saving={saving}
           error={error}
           onDismissError={() => setError(null)}
@@ -344,6 +347,7 @@ function PlaceTypeSection({
  *  finishes or abandons. */
 function PlaceTypeDialog({
   editing,
+  types,
   saving,
   error,
   onDismissError,
@@ -352,6 +356,8 @@ function PlaceTypeDialog({
 }: {
   /** null = adding. */
   editing: TPlaceType | null;
+  /** Every type the user can see, to refuse a name one of them has. */
+  types: TPlaceType[];
   saving: boolean;
   error: string | null;
   onDismissError: () => void;
@@ -363,6 +369,10 @@ function PlaceTypeDialog({
     editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
+  // Shown once something is typed: an empty name is the disabled Save button.
+  const nameError = name.trim()
+    ? placeTypeNameError(name, types, editing)
+    : null;
 
   return (
     <Dialog
@@ -378,7 +388,7 @@ function PlaceTypeDialog({
           <Button
             variant="filled"
             busy={saving}
-            disabled={!name.trim()}
+            disabled={!name.trim() || nameError !== null}
             onClick={() => onSave({ name: name.trim(), iconKey, color })}
           >
             Save
@@ -391,7 +401,8 @@ function PlaceTypeDialog({
           label="Name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          maxLength={60}
+          maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
+          error={nameError}
           disabled={saving}
           data-autofocus
         />

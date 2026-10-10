@@ -16,6 +16,7 @@ import {
   Fragment,
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -129,6 +130,14 @@ export function LogsScreen({
 
   const [typeFilter, setTypeFilter] = useState<string>(ALL_TYPES);
   const [findOpen, setFindOpen] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  // Focused on the next frame, once the row has mounted: `autoFocus` runs
+  // before the field is attached (mobile/DESIGN.md §4).
+  useEffect(() => {
+    if (!findOpen) return;
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [findOpen]);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
@@ -146,7 +155,7 @@ export function LogsScreen({
   const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(
     null,
   );
-  // One toast channel for every async outcome on the screen (DESIGN.md §4).
+  // One toast channel for every async outcome on the screen (DESIGN.md).
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
@@ -159,7 +168,7 @@ export function LogsScreen({
   }, []);
 
   // Sheets don't outlive the tab: coming back to a half-open editor is a stale
-  // prompt, not a resumed task (DESIGN.md §5).
+  // prompt, not a resumed task (DESIGN.md).
   const closeSheets = useCallback(() => {
     setMenuTripId(null);
     setEditing(null);
@@ -229,7 +238,7 @@ export function LogsScreen({
     isDeletable: () => true,
   });
   // A selection is a transient mode over rows you can see; a pending "delete
-  // these five" you no longer remember making is a stale prompt (DESIGN.md §5).
+  // these five" you no longer remember making is a stale prompt (DESIGN.md).
   useFocusEffect(
     useCallback(() => {
       clearSelection();
@@ -420,7 +429,7 @@ export function LogsScreen({
             {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
                 out, and is it going anywhere?" — two questions, so two screens
-                (docs/ux-principles.md §2). It sits beside search because both are ways of
+                (shared/DESIGN.md §2). It sits beside search because both are ways of
                 asking the logbook something, rather than adding to it. */}
             <IconButton
               icon="stats"
@@ -460,8 +469,8 @@ export function LogsScreen({
                 placeholder={copy.searchPlaceholder}
                 placeholderTextColor={theme.textMuted}
                 accessibilityLabel={copy.searchField}
+                ref={searchInputRef}
                 autoCapitalize="none"
-                autoFocus
                 returnKeyType="search"
               />
             </View>
@@ -524,7 +533,7 @@ export function LogsScreen({
 
     // The hidden filters, said out loud: the rail and the search box show
     // their own state where they stand, so this speaks only for what the
-    // closed sheet is doing (DESIGN.md §2).
+    // closed sheet is doing (DESIGN.md).
     filterNote:
       note != null && !selecting ? (
         <View style={styles.rangeNote}>
@@ -800,7 +809,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.regular,
   },
-  // The rail's bottom pad is the gap the list scrolls against (DESIGN.md §2).
+  // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),

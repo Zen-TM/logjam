@@ -55,6 +55,34 @@ export default tseslint.config(
     },
   },
   {
+    // Gotchas of Logjam Web that a selector can hold (frontend/DESIGN.md §3).
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "JSXElement[openingElement.name.name='Dialog'] JSXAttribute[name.name='autoFocus']",
+          message:
+            "autoFocus fires before a dialog is shown, when nothing in it can take focus. Mark the first control data-autofocus and Dialog focuses it (frontend/DESIGN.md §3).",
+        },
+        {
+          selector:
+            "JSXAttribute[name.name='style'] Property[key.name=/^(color|background|backgroundColor|borderColor|outlineColor|fill|stroke)$/]",
+          message:
+            'A colour is a role (--color-<role>), or a hue the kit reads through a custom property (style={{ "--tile-hue": hue }}). Never set one inline (frontend/DESIGN.md §1).',
+        },
+        {
+          selector:
+            "JSXElement > JSXExpressionContainer MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]",
+          message:
+            "An error's message can carry a place name. Show messageFromError(err, \"Couldn't save place.\") through ErrorBanner, FieldError or useToast().error (frontend/DESIGN.md §3).",
+        },
+      ],
+    },
+  },
+  {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
