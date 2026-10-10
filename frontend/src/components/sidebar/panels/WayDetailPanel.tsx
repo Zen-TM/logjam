@@ -49,6 +49,7 @@ import {
   ownerUsername,
   shareEntityWith,
   unshareEntityWith,
+  recolourMedia,
   renameMedia,
   sendCopyOfMedia,
   type TRoute,
@@ -137,7 +138,7 @@ export default function WayDetailPanel({
    * A verb a ROW asked for, run once this page mounts. It is how one verb list
    * serves both surfaces: a row shows Share, Rename and Delete without hosting
    * a second copy of each form (wayActions.ts). CONSUMED, never counted — a
-   * request that stays set fires again on every re-render (DESIGN.md §6).
+   * request that stays set fires again on every re-render (DESIGN.md).
    */
   initialVerb: WayVerbId | null;
   onVerbConsumed: () => void;
@@ -582,9 +583,7 @@ export default function WayDetailPanel({
         )}
 
         {/* ── Properties: changed in place, never in the ⋯ (wayActions.ts) ── */}
-        {/* Route-only: a file's colour is set by whatever made the file, and
-            the API has no way to change it (wayActions.ts). */}
-        {properties.colour && route && (
+        {properties.colour && (route || file) && (
           <section className={classes.section}>
             <ColourField
               label="Colour"
@@ -597,7 +596,10 @@ export default function WayDetailPanel({
               onChange={(next) => {
                 setPendingColour(next);
                 void run(
-                  () => updateRoute(route.id, { color: next }),
+                  () =>
+                    route
+                      ? updateRoute(route.id, { color: next })
+                      : recolourMedia(file!.id, next),
                   "Couldn't change the colour.",
                 );
               }}
@@ -785,7 +787,7 @@ export default function WayDetailPanel({
 }
 
 /** Renaming a file, as a form with a Cancel — never a live field that commits
- *  on blur (DESIGN.md §3). */
+ *  on blur (DESIGN.md). */
 function RenameWayDialog({
   file,
   busy,

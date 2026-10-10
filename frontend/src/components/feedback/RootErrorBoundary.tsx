@@ -60,8 +60,8 @@ export class RootErrorBoundary extends Component<Props, State> {
           <BrandMark className={classes.brandMark} />
           <h1 className={classes.heading}>Something went wrong</h1>
           <p className={classes.message}>
-            The app hit an unexpected error. Reloading usually fixes it. If it
-            keeps happening, sign out and back in.
+            Logjam Web hit an unexpected error. Reloading usually fixes it. If
+            it keeps happening, sign out and back in.
           </p>
           <div className={classes.actions}>
             {/* The kit's own Button: CSS modules and static tokens, so it

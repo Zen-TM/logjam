@@ -1,5 +1,5 @@
 /* Friends gives the panel body its full height: the hero and the rail are
-   pinned, and only the list scrolls (DESIGN.md §2). */
+   pinned, and only the list scrolls (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;

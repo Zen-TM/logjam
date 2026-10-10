@@ -24,8 +24,8 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
 
 ## Rules
 
-- **UI work loads the `design-system` skill**: a screen, sheet, kit
-  component, icon, colour or user-facing string.
+- **Before UI work, read `shared/DESIGN.md` then `DESIGN.md` here**: a screen,
+  sheet, kit component, icon, colour or user-facing string.
 - **Map code follows the MLRN 11 rules:** read [0015](../docs/decisions/0015-mlrn-11-map-interaction-rules.md)
   before changing a layer, a press handler or a camera write.
 - **A guest syncs nothing yet:** gate a new server call through

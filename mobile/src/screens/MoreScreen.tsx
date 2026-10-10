@@ -3,7 +3,7 @@
 //
 // A hub is a menu, and a menu is not very interesting. What makes this screen
 // worth opening is the ONE question it can answer that no other screen owns:
-// "is my work safe?" (DESIGN.md §8). Every other tab is about places, trips or
+// "is my work safe?" (DESIGN.md). Every other tab is about places, trips or
 // maps; this is the only place that can be about the app itself, so the hero is
 // the sync answer in a sentence and the menu sits under it.
 //
@@ -109,7 +109,7 @@ export function MoreScreen({
   const user = userQuery.data;
 
   return (
-    // Hero pinned, menu scrolls (DESIGN.md §2) — the menu is short today, but the rule is
+    // Hero pinned, menu scrolls (DESIGN.md) — the menu is short today, but the rule is
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
       <Hero
@@ -179,7 +179,7 @@ export function MoreScreen({
           title="Friends"
           // Managing friendships needs an account and a connection; say which
           // in place of a subtitle rather than letting the screen fail after
-          // the tap (DESIGN.md §8).
+          // the tap (DESIGN.md).
           onPress={onOpenFriends}
           {...capabilityRowProps("friends", accountState, online)}
           right={<Trailing />}

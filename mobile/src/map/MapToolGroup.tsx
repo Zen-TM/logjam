@@ -5,7 +5,7 @@
 // CHROME_BOTTOM that is deliberately a constant (mapChrome.ts) — growing
 // upward walks the tools into the search pill, and growing the column itself
 // is exactly the "every pinned element is a piece of map the user can't see"
-// tax docs/ux-principles.md §11 warns about. One button costs one button's worth of map no
+// tax shared/DESIGN.md §11 warns about. One button costs one button's worth of map no
 // matter how many tools live behind it.
 //
 // The group closes as soon as a tool arms: the HUD in the top notice stack is
