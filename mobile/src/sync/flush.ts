@@ -229,7 +229,20 @@ async function applyOpResult(
         const ownFields = row.fields_json
           ? (JSON.parse(row.fields_json) as Record<string, unknown>)
           : {};
-        const real = filterSelfConflicts(result.conflicts, base, ownFields);
+        // A value one of this row's still-queued edits writes is this phone's
+        // too: when a batch holding two edits to one field is replayed after
+        // a lost reply, the first is told it replaced the second
+        // (flush.test.ts). That edit is about to write the value again.
+        const later = (await loadOutboxRowsFor(row.entity, row.entity_id)).map(
+          (queued) =>
+            queued.fields_json
+              ? (JSON.parse(queued.fields_json) as Record<string, unknown>)
+              : {},
+        );
+        const real = later.reduce(
+          (kept, fields) => filterSelfConflicts(kept, base, fields),
+          filterSelfConflicts(result.conflicts, base, ownFields),
+        );
         const at = new Date().toISOString();
         // The server's own confirmed row is the name's source, and this is the
         // only moment it is guaranteed to be in hand: the mirror row can be
