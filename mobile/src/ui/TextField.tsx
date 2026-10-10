@@ -39,6 +39,7 @@ type TextFieldProps = {
   | "returnKeyType"
   | "multiline"
   | "editable"
+  | "maxLength"
 >;
 
 export function TextField({

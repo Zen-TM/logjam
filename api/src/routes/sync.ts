@@ -21,6 +21,7 @@ import {
   defsForPlaceType,
   deletePlaceType,
   requireOwnPlaceType,
+  updatePlaceType,
   resolvePlaceTypeId,
 } from "../lib/placeTypes";
 import { getEnv } from "../lib/env";
@@ -1649,10 +1650,12 @@ async function applyPlaceTypeOp(
     if (await createAlreadyTombstoned(userId, "placeType", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
+    // A taken name is renamed, never refused, on this path: see `OnNameTaken`.
     const row = await createPlaceType(
       userId,
       op.id,
       assertValidPlaceType(fields),
+      "rename",
     );
     return { opId: op.opId, status: "applied", row };
   }
@@ -1673,10 +1676,7 @@ async function applyPlaceTypeOp(
     color: fields.color ?? current.color,
     position: fields.position ?? current.position,
   });
-  const row = await prisma.placeType.update({
-    where: { id: op.id },
-    data: merged,
-  });
+  const row = await updatePlaceType(userId, current, merged, "rename");
   return {
     opId: op.opId,
     status: conflicts.length ? "appliedWithConflict" : "applied",
