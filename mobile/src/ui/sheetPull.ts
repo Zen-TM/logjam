@@ -35,3 +35,19 @@ export function sheetPulled({
 }): number {
   return pull - Math.min(pull, Math.max(0, scrolled));
 }
+
+/**
+ * Whether a change in the sheet's height puts it back at its open position.
+ * Not under a finger, which has it where it wants it, and not while it is
+ * closing, where the pull it was let go at is part of the slide out.
+ * Guard: `sheetPull.test.ts`.
+ */
+export function sheetReseats({
+  visible,
+  touching,
+}: {
+  visible: boolean;
+  touching: boolean;
+}): boolean {
+  return visible && !touching;
+}

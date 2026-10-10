@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { DISMISS_DISTANCE, sheetPulled, sheetRelease } from "./sheetPull";
+import {
+  DISMISS_DISTANCE,
+  sheetPulled,
+  sheetRelease,
+  sheetReseats,
+} from "./sheetPull";
 
 describe("sheetRelease", () => {
   it("leaves a sheet at rest alone", () => {
@@ -53,6 +58,25 @@ describe("sheetPulled", () => {
   it("a pull taken back does not close the sheet", () => {
     const pulled = sheetPulled({ pull: 200, scrolled: 190 });
     expect(sheetRelease({ pulled, dragged: true })).toBe("snap");
+  });
+});
+
+// The sheet rests at the END of its scroll, so it is put back there whenever
+// its height changes. Not while it is closing: an owner empties its sheet as
+// it closes, and re-seating the shrunken sheet threw away the pull the finger
+// had left, so an empty shell jumped back up in the middle of the slide out.
+describe("sheetReseats", () => {
+  it("re-seats an open sheet nobody is dragging", () => {
+    expect(sheetReseats({ visible: true, touching: false })).toBe(true);
+  });
+
+  it("leaves a sheet under a finger where the finger has it", () => {
+    expect(sheetReseats({ visible: true, touching: true })).toBe(false);
+  });
+
+  // Red when the `visible` condition is dropped from `sheetReseats`.
+  it("never re-seats a sheet that is closing", () => {
+    expect(sheetReseats({ visible: false, touching: false })).toBe(false);
   });
 });
 

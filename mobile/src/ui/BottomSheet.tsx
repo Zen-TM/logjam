@@ -21,7 +21,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { radius, scrim, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
-import { DISMISS_DISTANCE, sheetPulled, sheetRelease } from "./sheetPull";
+import {
+  DISMISS_DISTANCE,
+  sheetPulled,
+  sheetRelease,
+  sheetReseats,
+} from "./sheetPull";
 
 // Slide-up modal sheet with a handle + title, capped at 80% height and
 // scrolling within.
@@ -218,6 +223,12 @@ export function BottomSheet({
   // The modal's own height: the spacer above the sheet is exactly this tall,
   // so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
+  // The sheet's own height as last laid out, to hold it at while it closes.
+  // An owner empties its sheet as it closes (no title, no rows). A sheet that
+  // shrinks shortens the scroll it is dragged by, the offset the drag left is
+  // then past the new end, Android clamps it, and the pull is gone: the empty
+  // shell jumped back up in the middle of the slide out.
+  const [sheetHeight, setSheetHeight] = useState(0);
   const outerRef = useRef<ScrollView>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
   // that is from its end. `touching`: a finger is dragging it. `dragged`: a
@@ -463,7 +474,8 @@ export function BottomSheet({
         // finishes the job.
         onContentSizeChange={(_width, height) => {
           pull.current.content = height;
-          if (pull.current.touching) return;
+          if (!sheetReseats({ visible, touching: pull.current.touching }))
+            return;
           outerRef.current?.scrollToEnd({ animated: false });
           settleSoon();
         }}
@@ -492,9 +504,14 @@ export function BottomSheet({
             The bottom inset is dropped while the keyboard is up — the keyboard
             already covers the nav bar, so keeping it leaves a dead band. */}
         <Animated.View
+          onLayout={(event) => {
+            const { height } = event.nativeEvent.layout;
+            if (visible && height !== sheetHeight) setSheetHeight(height);
+          }}
           style={[
             styles.sheet,
             {
+              minHeight: visible ? undefined : sheetHeight,
               marginBottom: keyboardHeight,
               // Lifting a tall sheet by the keyboard height would push its TOP
               // off the screen, taking whatever field is up there with it — the
