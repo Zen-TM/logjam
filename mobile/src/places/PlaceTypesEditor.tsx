@@ -51,6 +51,7 @@ import {
 
 import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
+import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
 import {
   createPlaceTypeLocal,
@@ -129,11 +130,15 @@ export type NewPlaceType = { id: string; name: string };
  * that a save button inside the scroll would not be on screen.
  */
 export function usePlaceTypeForm({
+  open,
   editing,
   onSaved,
   onDone,
   onAdded,
 }: {
+  /** Whether the host is showing the form: each open starts a fresh draft
+   *  (`placeTypeFormKey`). */
+  open: boolean;
   /** null = adding. */
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
@@ -143,7 +148,7 @@ export function usePlaceTypeForm({
    *  the sheet stays up, and its new title is the confirmation. */
   onAdded: (type: NewPlaceType) => void;
 }): { body: ReactNode; footer: ReactNode } {
-  const formKey = editing?.id ?? "__new__";
+  const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
   if (seededFor !== formKey) {
