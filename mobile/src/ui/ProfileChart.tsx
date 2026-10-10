@@ -124,7 +124,7 @@ export function ProfileChart({
   series: ProfileSeries;
   /** Renders the scrubbed value — the chart knows no units. */
   formatValue: (value: number) => string;
-  /** Renders the scrubbed position: metres along, or time into the recording. */
+  /** Renders the scrubbed position: metres along, or a time of day. */
   formatX: (x: number) => string;
   /** Shown until the first scrub, in place of the readout. */
   hint: string;
@@ -245,7 +245,7 @@ export function ProfileChart({
           // units do not settle it, since a height and a distance are both
           // metres. "51 m at 3.7 km" says the same thing in the order the
           // question is asked, costs no extra line, and works unchanged for a
-          // speed against a clock ("4.2 km/h at 1:23").
+          // speed against a clock ("4.2 km/h at 2:41 pm").
           <Text style={styles.readout}>
             {scrubbed.value != null ? formatValue(scrubbed.value) : "—"}
             <Text style={styles.readoutAt}>{"  at  "}</Text>

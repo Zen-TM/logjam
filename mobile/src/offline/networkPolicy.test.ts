@@ -1,6 +1,8 @@
+import NetInfo from "@react-native-community/netinfo";
 import { describe, expect, it, vi } from "vitest";
 import { readPref } from "../prefsDb";
 import {
+  canRunNow,
   connectionAllowsMetered,
   isExpensive,
   isMeteredAllowed,
@@ -9,7 +11,7 @@ import {
 
 // The rule under test is pure; its module's two native neighbours are not.
 vi.mock("@react-native-community/netinfo", () => ({
-  default: { fetch: vi.fn() },
+  default: { fetch: vi.fn(), refresh: vi.fn() },
 }));
 vi.mock("../prefsDb", () => ({ readPref: vi.fn(), writePref: vi.fn() }));
 
@@ -62,6 +64,29 @@ describe("connectionAllowsMetered", () => {
     expect(
       connectionAllowsMetered({ isConnected: true, type: "ethernet" }, false),
     ).toBe(true);
+  });
+});
+
+// NetInfo.fetch() answers from the last state it was SENT. Android sends none
+// when it lifts the network block it puts on an app behind another app, and
+// the state sent under that block calls Wi-Fi metered, so back in front a
+// Wi-Fi-only job read "mobile data" on Wi-Fi until the next real change.
+// Seen on the Android 15 emulator with region downloads.
+// Mutation: read `NetInfo.fetch()` again and the first test goes red.
+describe("canRunNow", () => {
+  it("asks the platform now, not the last state NetInfo was sent", async () => {
+    vi.mocked(readPref).mockReturnValue(null);
+    vi.mocked(NetInfo.fetch).mockResolvedValue(hotspot as never);
+    vi.mocked(NetInfo.refresh).mockResolvedValue(wifi as never);
+    expect(await canRunNow("geoPdfDownload")).toBe(true);
+    expect(NetInfo.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the state cannot be read", async () => {
+    vi.mocked(NetInfo.refresh).mockRejectedValue(new Error("no module"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await canRunNow("sync")).toBe(false);
+    logged.mockRestore();
   });
 });
 

@@ -31,7 +31,8 @@ vi.mock("../offline/localStores", () => ({
   scratchFileUri: vi.fn(async (name: string) => `file:///scratch/${name}`),
 }));
 
-const { kmlFromKmz } = await import("./vectorImports");
+const { kmlFromKmz, pickImportColor } = await import("./vectorImports");
+const { TRACK_COLORS } = await import("@logjam/shared");
 
 const KML = `<?xml version="1.0"?><kml><Document><Placemark><Point>
   <coordinates>150.4,-33.5,0</coordinates></Point></Placemark></Document></kml>`;
@@ -72,5 +73,22 @@ describe("kmlFromKmz", () => {
 
   it("refuses bytes that are not a zip at all", () => {
     expect(() => kmlFromKmz(strToU8("not a zip"))).toThrow();
+  });
+});
+
+describe("pickImportColor", () => {
+  // The server reassigns an import's colour at upload with
+  // pickNextTrackColor over what the account already holds. A local guess made
+  // by COUNT disagrees as soon as one import is deleted (two left, colours 0
+  // and 2: count says 2, which is taken), so the line changed colour when the
+  // upload landed.
+  it("is the colour the server will pick: the first one not in use", () => {
+    expect(pickImportColor([TRACK_COLORS[0], TRACK_COLORS[2]])).toBe(
+      TRACK_COLORS[1],
+    );
+  });
+
+  it("ignores rows with no colour", () => {
+    expect(pickImportColor([null, undefined])).toBe(TRACK_COLORS[0]);
   });
 });

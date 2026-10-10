@@ -146,24 +146,27 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
     // the user it is permanent on no evidence and inviting them to discard work.
     return { line: "This change couldn't be saved.", canRetry: true };
   }
+  if (error.code === 0) {
+    // An upload that threw on this phone five times with no status at all
+    // (flush.ts): nothing refused it and no day went by, so neither sentence
+    // below is true of it.
+    return { line: "This keeps failing on this phone.", canRetry: true };
+  }
   if (isTransientSyncError(error.code)) {
-    // ONE line for every temporary failure. A dropped connection (code 0) and a
-    // server that answered but refused (503) are different faults to us and the
-    // same fact to the reader: it didn't get through, and it is worth another
-    // go. Splitting them produced two sentences that looked like two different
-    // problems on two rows of one list.
+    // ONE line for every temporary refusal: a 503 and a 429 are different
+    // faults to us and the same fact to the reader.
     //
-    // A temporary failure only reaches this screen after the engine has spent
-    // its own attempts on it (PUSH_MAX_ATTEMPTS / MEDIA_MAX_ATTEMPTS in
-    // flush.ts). Saying so is what stops "Try again" reading as a chore the app
-    // could have done itself — it already did, five times.
-    const tried = op.attempts > 1 ? `The app tried ${op.attempts} times. ` : "";
+    // It only reaches this screen after the account has answered no for a day
+    // (`shouldGiveUpOnSyncOp`, applied in flush.ts), and the copy says exactly
+    // that. It used to send the reader to find better signal, which was
+    // written for a five-tries cap that a minute of bad signal could reach;
+    // an unanswered send no longer counts at all.
     return {
-      line: "Couldn't reach your account.",
+      line: "Your account kept turning this down for a day.",
       canRetry: true,
       hint:
-        `${tried}Nothing is wrong with the change itself — try again once you're ` +
-        "somewhere with better signal. It waits here until it gets through.",
+        "Nothing is wrong with the change itself, and Logjam GPS has stopped " +
+        "trying on its own. It stays here until you try again.",
     };
   }
   return {

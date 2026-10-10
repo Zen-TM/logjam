@@ -37,7 +37,7 @@ export function BackgroundToast() {
   }, []);
 
   return (
-    <View style={styles.dock} pointerEvents="none">
+    <View style={styles.dock} pointerEvents="box-none">
       <Toast message={message} onDismissed={() => setMessage(null)} />
     </View>
   );
