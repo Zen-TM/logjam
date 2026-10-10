@@ -38,6 +38,7 @@ import {
   type StandaloneFile,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
+  wayVerbIcon,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -77,12 +78,14 @@ import {
   type Stat,
   type Glyph,
 } from "../../../ui";
+import type { TripLogTrack } from "../../dialogs/TripLogDialog";
 import { wayProperties, wayVerbs, type WayVerbId } from "./wayActions";
 import type { WayItem } from "./waysModel";
 import classes from "./WayDetailPanel.module.css";
 
 const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   openPlace: "place",
+  logTrip: wayVerbIcon("logTrip"),
   edit: "edit",
   copy: "copy",
   copyAndRemove: "moveCopy",
@@ -122,6 +125,7 @@ export default function WayDetailPanel({
   onCopied,
   onChanged,
   onOpenPlace,
+  onLogTrip,
   onDeleteFile,
   routeHover,
 }: {
@@ -156,6 +160,9 @@ export default function WayDetailPanel({
   onCopied: (copy: TRoute) => void;
   onChanged: () => void;
   onOpenPlace: (placeId: string) => void;
+  /** Open the trip form with this track in it. The form is App's, as the
+   *  place pages' is theirs: a dialog over the map, not part of this page. */
+  onLogTrip: (track: TripLogTrack) => void;
   onDeleteFile: (file: StandaloneFile) => Promise<void>;
   /** Where along a route the elevation cursor sits, so the map marks it. A
    *  channel rather than a callback into App state: it changes many times a
@@ -382,6 +389,17 @@ export default function WayDetailPanel({
     switch (id) {
       case "openPlace":
         if (way.placeId) onOpenPlace(way.placeId);
+        return;
+      case "logTrip":
+        if (file) {
+          onLogTrip({
+            mediaId: file.id,
+            filename: file.filename,
+            startedAt: file.metadata.startedAt ?? null,
+            // Only a place the user owns: a trip links nobody else's.
+            placeId: linkedPlace?.id ?? null,
+          });
+        }
         return;
       case "edit":
         if (route) onEdit(route);

@@ -81,6 +81,7 @@ import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
+import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
 import {
   buildWays,
   wayFromRoute,
@@ -219,6 +220,11 @@ function App() {
   // A verb a ROW asked for, run once the way's page mounts — how a row offers
   // Share, Rename and Delete without hosting a second copy of each form.
   const [pendingWayVerb, setPendingWayVerb] = useState<WayVerbId | null>(null);
+  // "Log a trip" on a track: the form opens over the map, from here, so the
+  // row's ⋯, the page's ⋯ and a line on the map all reach the same one.
+  const [logTripFromTrack, setLogTripFromTrack] = useState<TripLogTrack | null>(
+    null,
+  );
   // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md).
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
@@ -653,8 +659,9 @@ function App() {
 
   // The overlay's count is the SAME list the Ways page builds — including its
   // de-duplication of a file that both endpoints return — so the number on the
-  // layer row and the number in the page's heading cannot drift.
-  const wayCount = useMemo(
+  // layer row and the number in the page's heading cannot drift. A line pressed
+  // on the map is looked up in it too, so a line opens the page its row does.
+  const allWays = useMemo(
     () =>
       buildWays({
         routes,
@@ -662,9 +669,10 @@ function App() {
         placeTracks,
         currentUserId: currentUser?.id ?? null,
         sharedPlaceIds,
-      }).length,
+      }),
     [routes, standaloneFiles, placeTracks, currentUser?.id, sharedPlaceIds],
   );
+  const wayCount = allWays.length;
 
   // A place list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
@@ -1558,6 +1566,7 @@ function App() {
                   setSelectedPlaceID(placeId);
                   setActivePanel("place-detail");
                 }}
+                onLogTrip={setLogTripFromTrack}
                 onDeleteFile={handleDeleteStandaloneFile}
                 routeHover={routeHover}
               />
@@ -1713,6 +1722,12 @@ function App() {
               openWay(
                 wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
               );
+          }}
+          selectTrack={(mediaId) => {
+            const way = allWays.find(
+              (each) => each.kind !== "route" && each.id === mediaId,
+            );
+            if (way) openWay(way);
           }}
           drawingRoute={drawingRoute}
           drawColor={drawColor ?? undefined}
@@ -1884,6 +1899,27 @@ function App() {
         }}
         onStartEmpty={() => setShowOnboarding(false)}
       />
+
+      {/* The trip form, opened from a track's "Log a trip". Mounted only while
+          it is open, so every open starts from the track it was asked for. */}
+      {logTripFromTrack && (
+        <TripLogDialog
+          open={!pickingCoords}
+          onClose={() => setLogTripFromTrack(null)}
+          onSaved={() => {
+            setLogTripFromTrack(null);
+            refetchAfterTripWrite();
+            refetchCurrentUser();
+          }}
+          places={places}
+          fromTrack={logTripFromTrack}
+          customFieldDefs={customFieldDefs}
+          onCustomFieldDefsChange={setCustomFieldDefs}
+          existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+          onPickCoords={startPickingCoords}
+          onPlaceCreated={refetch}
+        />
+      )}
 
       {/* Unified file importer (places + logbooks) */}
       <UnifiedImportDialog

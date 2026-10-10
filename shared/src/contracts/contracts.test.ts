@@ -17,6 +17,7 @@ import {
   statsUnderActivitiesNote,
   WAY_VERBS,
   wayVerbLabel,
+  wayVerbIcon,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_OVERLAY_REFINEMENTS,
@@ -602,6 +603,17 @@ describe("a way's verbs", () => {
       placeVerbs("gps", "row", false).find(
         (verb) => verb.id === "copyAndRemove",
       )!.label,
+    );
+  });
+
+  // One verb, one word and one glyph on both clients, and the same word and
+  // glyph a place's own "log a trip" wears (shared/DESIGN.md §6).
+  it("declares Log a trip once, with the trip glyph", () => {
+    expect(wayVerbLabel("logTrip", "web")).toBe("Log a trip");
+    expect(wayVerbLabel("logTrip", "gps")).toBe("Log a trip");
+    expect(wayVerbIcon("logTrip")).toBe(
+      placeVerbs("web", "row", true).find((verb) => verb.id === "logTrip")!
+        .icon,
     );
   });
 

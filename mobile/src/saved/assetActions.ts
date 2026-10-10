@@ -213,6 +213,14 @@ export type AssetActions = {
    */
   attachToPlace?: (placeId: string) => Promise<unknown>;
   /**
+   * Present on a recording that can be attached to a trip (it has a line to
+   * attach): "Log a trip" opens the trip form with the track's day, and the
+   * track goes with the trip. A flag and not a callback, for the reason
+   * `editableRouteId` is an id: the form is a sheet of the screen's, not this
+   * descriptor's. Absent on a recording with fewer than two points.
+   */
+  logTrip?: true;
+  /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
    * A LIST rather than the old `(format: ExportFormat) => …`, because the two
@@ -490,6 +498,8 @@ export function trackActions(track: Track): AssetActions {
     resolveBbox: async () => bboxOfPoints(await listTrackPoints(track.id)),
     rename: (name) => updateTrack(track.id, { name }),
     setColor: (color: string) => updateTrack(track.id, { color }),
+    // Attaching writes the points out as a GPX, which needs a line to write.
+    ...(track.pointCount >= 2 ? { logTrip: true as const } : {}),
     // A recording is an observation and stays immutable; this makes a SEPARATE
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS

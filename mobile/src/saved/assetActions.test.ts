@@ -300,6 +300,16 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(trackActions(track(3)).createRouteFrom).toBeDefined();
   });
 
+  // "Log a trip" attaches the recording as a GPX, which needs a line to write.
+  // Parity with Logjam Web, whose wayActions.test.ts checks the same verb on a
+  // track's row and page. Mutation: offer it on every track.
+  it("offers Log a trip on a recording with a line, and not on a dot", () => {
+    expect(trackActions(track(3)).logTrip).toBe(true);
+    expect(trackActions(track(2)).logTrip).toBe(true);
+    expect(trackActions(track(1)).logTrip).toBeUndefined();
+    expect(trackActions(track(0)).logTrip).toBeUndefined();
+  });
+
   it("offers setColor on trackActions and updates track color", async () => {
     const { updateTrack } = await import("../tracks/tracksDb");
     const t = {

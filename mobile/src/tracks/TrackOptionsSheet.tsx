@@ -17,6 +17,8 @@ import {
   messageFromError,
   TRACK_COLORS,
   trackColorName,
+  wayVerbIcon,
+  wayVerbLabel,
   type TrackPass,
 } from "@logjam/shared";
 
@@ -41,6 +43,7 @@ export function TrackOptionsSheet({
   onShowOnMap,
   passes,
   onContinueRecording,
+  onLogTrip,
   onInfo,
   onError,
   allowNetwork = true,
@@ -67,6 +70,12 @@ export function TrackOptionsSheet({
    * recording mode afterwards.
    */
   onContinueRecording: (track: Track) => void;
+  /**
+   * Open the trip form with this track in it. The caller's, as a place's
+   * "Log a trip here" is: the form is a sheet of its own, so this one closes
+   * and the screen opens that one. Required, so a surface cannot forget it.
+   */
+  onLogTrip: (track: Track) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** False in "Simulating offline mode" — the stats sub-mode then reads
@@ -287,6 +296,20 @@ export function TrackOptionsSheet({
                   },
                   (err: unknown) => console.error(err),
                 );
+              }}
+            />
+          ) : null}
+          {/* The same verb, word and glyph as the web's, first among the verbs
+              after the one that goes to the line. */}
+          {actions.logTrip ? (
+            <Row
+              title={wayVerbLabel("logTrip", "gps")}
+              icon={wayVerbIcon("logTrip")}
+              hue={assetHue.track}
+              disabled={busy}
+              onPress={() => {
+                close();
+                onLogTrip(track);
               }}
             />
           ) : null}

@@ -579,6 +579,7 @@ function Map({
   standaloneTracks,
   routes,
   selectRoute,
+  selectTrack,
   routeHover,
   drawingRoute,
   drawColor,
@@ -647,6 +648,8 @@ function Map({
   // there is nothing to fetch and parse per feature.
   routes: TRoute[];
   selectRoute: (id: string) => void;
+  // A track or import line pressed: its media id, for the page that opens it.
+  selectTrack: (mediaId: string) => void;
   /** Where along a line the elevation-profile cursor sits, marked on the map so
    *  the chart and the ground read as the same place. A CHANNEL, not a value:
    *  it changes many times a second (see the subscribing effect). */
@@ -817,6 +820,10 @@ function Map({
   useEffect(() => {
     drawingRouteRef.current = drawingRoute;
   }, [drawingRoute]);
+  const selectTrackRef = useRef(selectTrack);
+  useEffect(() => {
+    selectTrackRef.current = selectTrack;
+  }, [selectTrack]);
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
     selectRouteRef.current = selectRoute;
@@ -1088,6 +1095,19 @@ function Map({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
+      // Invisible click/hover target, as `routes-hit` is for a route: a track
+      // line opens its page, with the same verbs as its row.
+      map.addLayer({
+        id: "place-tracks-hit",
+        type: "line",
+        source: "place-tracks",
+        layout: {
+          visibility: "none",
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: { "line-color": "#000000", "line-opacity": 0, "line-width": 18 },
+      });
       map.addLayer({
         id: "place-tracks-lines",
         type: "line",
@@ -1117,6 +1137,13 @@ function Map({
       map.addSource("standalone-tracks", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "standalone-tracks-hit",
+        type: "line",
+        source: "standalone-tracks",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#000000", "line-opacity": 0, "line-width": 18 },
       });
       map.addLayer({
         id: "standalone-tracks-lines",
@@ -1671,7 +1698,7 @@ function Map({
           mediaId: track.mediaId,
           color: track.color,
           displayUrl: track.displayUrl,
-          stamp: { placeId: track.placeId },
+          stamp: { placeId: track.placeId, mediaId: track.mediaId },
         })),
         "Couldn't load a place track file.",
       );
@@ -1777,10 +1804,12 @@ function Map({
     // The route being drawn stays visible even with the layer off — hiding your
     // own in-progress work would read as the tool being broken.
     for (const id of [
+      "place-tracks-hit",
       "place-tracks-lines",
       "routes-hit",
       "routes-lines",
       "routes-direction",
+      "standalone-tracks-hit",
       "standalone-tracks-lines",
     ]) {
       mapRef.current.setLayoutProperty(
@@ -2138,13 +2167,39 @@ function Map({
       if (pickModeRef.current || drawingRouteRef.current) return;
       map.getCanvas().style.cursor = "";
     };
-    map.on("click", "routes-hit", handleClick);
-    map.on("mouseenter", "routes-hit", handleEnter);
-    map.on("mouseleave", "routes-hit", handleLeave);
+    const handleTrackClick = (
+      e: maplibregl.MapMouseEvent & {
+        features?: maplibregl.MapGeoJSONFeature[];
+      },
+    ) => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      const id = e.features?.[0]?.properties?.mediaId;
+      if (typeof id === "string") selectTrackRef.current(id);
+    };
+    const hitLayers = [
+      "routes-hit",
+      "place-tracks-hit",
+      "standalone-tracks-hit",
+    ];
+    for (const layer of hitLayers) {
+      map.on(
+        "click",
+        layer,
+        layer === "routes-hit" ? handleClick : handleTrackClick,
+      );
+      map.on("mouseenter", layer, handleEnter);
+      map.on("mouseleave", layer, handleLeave);
+    }
     return () => {
-      map.off("click", "routes-hit", handleClick);
-      map.off("mouseenter", "routes-hit", handleEnter);
-      map.off("mouseleave", "routes-hit", handleLeave);
+      for (const layer of hitLayers) {
+        map.off(
+          "click",
+          layer,
+          layer === "routes-hit" ? handleClick : handleTrackClick,
+        );
+        map.off("mouseenter", layer, handleEnter);
+        map.off("mouseleave", layer, handleLeave);
+      }
     };
   }, [mapLoaded]);
 

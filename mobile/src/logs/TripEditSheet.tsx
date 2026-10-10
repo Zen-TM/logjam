@@ -9,10 +9,13 @@ import {
   MAX_PLACES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
+  tripPrefillFromTrack,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
+import type { Track } from "../tracks/tracksDb";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -80,6 +83,7 @@ export function TripEditSheet({
   trip,
   places,
   initialPlaces,
+  fromTrack,
   existingTypes,
   onSaved,
   online,
@@ -95,6 +99,13 @@ export function TripEditSheet({
    * are its own.
    */
   initialPlaces?: TripPlaceLink[];
+  /**
+   * "Log a trip" on a recorded track: a NEW trip opens on the track's own local
+   * day, and the track is attached to it when it is saved (a local write, so it
+   * works with no signal). Ignored when editing. Like `initialPlaces` it is read
+   * when the sheet opens, not when it changes.
+   */
+  fromTrack?: Track | null;
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -202,7 +213,13 @@ export function TripEditSheet({
     setPlaceSearch("");
     setCustomTypes([]);
     setSaving(false);
-    setDateKey(trip ? toDateKey(new Date(trip.date)) : todayDateKey());
+    setDateKey(
+      trip
+        ? toDateKey(new Date(trip.date))
+        : fromTrack
+          ? tripPrefillFromTrack({ startedAt: fromTrack.startedAt }).date
+          : todayDateKey(),
+    );
     setSelected(
       trip ? trip.places.map((link) => ({ ...link })) : (initialPlaces ?? []),
     );
@@ -369,7 +386,7 @@ export function TripEditSheet({
         await updateTripLocal(trip.id, changes);
         onSaved("Trip updated.");
       } else {
-        await createTripLocal({
+        const tripId = await createTripLocal({
           date: isoDate,
           displayName: trimmedName || null,
           notes: trimmedNotes || null,
@@ -377,7 +394,21 @@ export function TripEditSheet({
           customFields: effectiveCustomFields,
           places: selected,
         });
-        onSaved("Trip logged.");
+        // The trip is saved either way, so a track that will not attach is said
+        // in the outcome rather than failing the save and losing the form.
+        const attached =
+          !fromTrack ||
+          (await attachRecordedTrack("tripLog", tripId, fromTrack).catch(
+            (err: unknown) => {
+              console.error(err);
+              return false;
+            },
+          ));
+        onSaved(
+          attached
+            ? "Trip logged."
+            : "Trip logged. The track couldn't be attached.",
+        );
       }
       onClose();
     } catch (err) {
@@ -403,6 +434,7 @@ export function TripEditSheet({
     selected,
     trip,
     types,
+    fromTrack,
   ]);
 
   const fieldForm = useCustomFieldForm({
@@ -569,6 +601,17 @@ export function TripEditSheet({
             right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("places")}
           />
+
+          {/* Read-only: the recording goes with the trip when it is saved. A row
+              with nothing to press is not pressable (shared/DESIGN.md §4). */}
+          {!editing && fromTrack ? (
+            <Row
+              icon="track"
+              title={fromTrack.name}
+              subtitle="Track · attached when you log the trip"
+              titleNumberOfLines={2}
+            />
+          ) : null}
 
           <TextField
             label="Title"

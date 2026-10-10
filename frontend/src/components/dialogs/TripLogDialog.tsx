@@ -15,6 +15,7 @@ import {
   primaryTripType,
   SYSTEM_PLACE_TYPE_IDS,
   todayDateKey,
+  tripPrefillFromTrack,
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
   tripTypeLabel,
@@ -30,9 +31,11 @@ import {
   createTripLog,
   updateTripLog,
   deleteTripLog,
+  getMediaDownloadUrls,
   getTripLog,
   createPlace,
   createCustomField,
+  uploadMedia,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -44,6 +47,7 @@ import {
   type TripDraftForm,
 } from "../../tripDraft";
 import MediaUpload from "../media/MediaUpload";
+import { generateThumbnail, resolveMediaType } from "../media/mediaFiles";
 import MediaGallery from "../media/MediaGallery";
 import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
 import {
@@ -109,6 +113,19 @@ function dedupeTypesPreserveCase(values: string[]): string[] {
 }
 
 /**
+ * A recorded track to log a trip FROM: the form opens on the track's day, with
+ * its place linked and the track already in the Tracks section.
+ */
+export type TripLogTrack = {
+  mediaId: string;
+  /** The file's own name, extension included: the API pins the format on it. */
+  filename: string;
+  startedAt: string | null;
+  /** The track's place, if it is on one the user owns. */
+  placeId: string | null;
+};
+
+/**
  * Log or edit a trip — one form for both, because the fields are identical and
  * a second form would drift (Logjam GPS's `TripEditSheet`).
  *
@@ -123,6 +140,7 @@ function TripLogDialog({
   onSaved,
   places,
   defaultPlaceId = null,
+  fromTrack = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -138,6 +156,8 @@ function TripLogDialog({
   // dialog) — seeds the initial multi-selection. Edit mode always uses the
   // trip's own places. Defaults to none.
   defaultPlaceId?: string | null;
+  // Create-mode only: log the trip from this track (`TripLogTrack`).
+  fromTrack?: TripLogTrack | null;
   tripLog?: TTripLog;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -360,9 +380,20 @@ function TripLogDialog({
       }
       initialFieldValues = vals;
     } else {
-      initialDate = todayDateKey();
+      // A track's own day and place, or the place the dialog was opened on and
+      // today. A place the user no longer has is left out rather than linked.
+      const fromTrackPrefill = fromTrack
+        ? tripPrefillFromTrack(fromTrack)
+        : null;
+      initialDate = fromTrackPrefill?.date ?? todayDateKey();
       initialNotes = "";
-      initialSelectedPlaceIds = defaultPlaceId ? [defaultPlaceId] : [];
+      initialSelectedPlaceIds = fromTrackPrefill
+        ? fromTrackPrefill.placeIds.filter((id) =>
+            places.some((place) => place.id === id),
+          )
+        : defaultPlaceId
+          ? [defaultPlaceId]
+          : [];
       initialDisplayNameInput = "";
       initialSelectedTypes = enforceCanyoningTag(
         [],
@@ -640,6 +671,52 @@ function TripLogDialog({
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
   }
+
+  // "Log a trip" on a track: the track goes into the form as a copy of its file
+  // on the draft trip, the same way a file the user drops here does, so it can
+  // be taken out again and a Cancel deletes it with the draft. Once per open.
+  // The form state it reads is the populate's, which was set during render.
+  const [attachingTrack, setAttachingTrack] = useState(false);
+  const attachedSessionRef = useRef(-1);
+  useEffect(() => {
+    if (!open || tripLog || !fromTrack) return;
+    if (attachedSessionRef.current === formSession) return;
+    attachedSessionRef.current = formSession;
+    setAttachingTrack(true);
+    void (async () => {
+      try {
+        const { items } = await getMediaDownloadUrls([fromTrack.mediaId]);
+        const url = items[0]?.displayUrl;
+        if (!url) throw new Error("The file could not be fetched.");
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("The file could not be fetched.");
+        const file = new File([await response.blob()], fromTrack.filename);
+        const resolved = resolveMediaType(file);
+        if (!resolved) throw new Error("Unsupported track file.");
+        const tripId = await ensureLinkedTripId();
+        const item = await uploadMedia({
+          linkedType: "tripLog",
+          linkedId: tripId,
+          file,
+          mediaType: resolved.mediaType,
+          thumbnail: await generateThumbnail(file, resolved.category),
+        });
+        setMedia((prev) => [...prev, item]);
+      } catch (err) {
+        console.error(err);
+        setError(
+          messageFromError(
+            err,
+            "Couldn't add the track to this trip. You can add it below.",
+          ),
+        );
+      } finally {
+        setAttachingTrack(false);
+      }
+    })();
+    // The attach runs once per open (formSession); the form's own state is read
+    // as it is at that moment, not re-run when it changes.
+  }, [open, tripLog, fromTrack, formSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cancel/close. If a draft trip was materialised but never saved, delete it
   // (cascades its media from S3 + DB + quota) before closing.
@@ -1026,7 +1103,7 @@ function TripLogDialog({
                 form={formId}
                 variant="filled"
                 busy={saving}
-                disabled={!date}
+                disabled={!date || attachingTrack}
               >
                 {tripLog ? "Save changes" : "Log trip"}
               </Button>
@@ -1398,6 +1475,11 @@ function TripLogDialog({
 
           <section className={classes.section}>
             <SectionHeader title="Tracks" />
+            {attachingTrack && (
+              <p className={classes.muted} role="status">
+                Adding the track…
+              </p>
+            )}
             {!mediaLoading && (
               <MediaGallery
                 media={media}

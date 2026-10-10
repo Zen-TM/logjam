@@ -194,6 +194,37 @@ describe("wayVerbs", () => {
     expect(ids(route())).not.toContain("openPlace");
   });
 
+  // One verb on a recorded track's row and its page alike (shared/DESIGN.md
+  // §9), at the same place in both lists: after the verbs that go to the way
+  // and before the ones that act on it. Mutation: drop the `track` test from
+  // the logTrip verb in `wayVerbs`, or push it to the end of the list.
+  it("offers Log a trip on an owned track's row and page, after the openers", () => {
+    const track = importFile({ kind: "track", placeId: "p1" });
+    expect(ids(track, "row").slice(0, 3)).toEqual([
+      "open",
+      "openPlace",
+      "logTrip",
+    ]);
+    expect(ids(track, "detail").slice(0, 2)).toEqual(["openPlace", "logTrip"]);
+  });
+
+  // A route is a plan and an import is somebody's walk with no day of its own;
+  // a track on a friend's place is not the user's to copy into a trip.
+  it("offers Log a trip on no other kind of way", () => {
+    expect(ids(route())).not.toContain("logTrip");
+    expect(ids(importFile())).not.toContain("logTrip");
+    expect(
+      ids(
+        importFile({
+          kind: "track",
+          shared: true,
+          viaPlace: true,
+          placeId: "p1",
+        }),
+      ),
+    ).not.toContain("logTrip");
+  });
+
   it("marks only the destructive verb", () => {
     const danger = wayVerbs(route(), "row").filter((verb) => verb.danger);
     expect(danger.map((verb) => verb.id)).toEqual(["delete"]);
