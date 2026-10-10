@@ -4,6 +4,7 @@ import {
   ARCHIVE_BOUNDS,
   MAX_CLIP_ZOOM,
   createClipTokenStore,
+  pmtilesExtractArgs,
   validateRegionClipRequest,
 } from "./regionClip";
 import { redactPaths } from "./logger";
@@ -156,6 +157,47 @@ describe("privacy: log redaction covers the clip request body", () => {
   it("redactPaths includes every region-bound body field", () => {
     for (const field of ["west", "south", "east", "north"]) {
       expect(redactPaths).toContain(`req.body.${field}`);
+    }
+  });
+});
+
+// Mutation: pass an s3:// URI through as <input> again and the first test goes
+// red. go-pmtiles 1.31.2 then opens "<cwd>/s3:/bucket/key" as a local file,
+// exits 1, and every region clip in prod is a 502.
+describe("pmtilesExtractArgs", () => {
+  it("splits an s3:// archive into --bucket and a key", () => {
+    expect(
+      pmtilesExtractArgs(
+        "s3://some-bucket/master/basemap/nsw.pmtiles",
+        "/tmp/out.pmtiles",
+        "150,-34,151,-33",
+        14,
+        "ap-southeast-2",
+      ),
+    ).toEqual([
+      "extract",
+      "master/basemap/nsw.pmtiles",
+      "/tmp/out.pmtiles",
+      "--bucket=s3://some-bucket?region=ap-southeast-2",
+      "--bbox=150,-34,151,-33",
+      "--maxzoom=14",
+    ]);
+  });
+
+  it("passes a local path or an https URL through as the input", () => {
+    for (const uri of [
+      "/data/nsw.pmtiles",
+      "https://example.com/nsw.pmtiles",
+    ]) {
+      expect(
+        pmtilesExtractArgs(uri, "/tmp/out.pmtiles", "1,2,3,4", 15, "x"),
+      ).toEqual([
+        "extract",
+        uri,
+        "/tmp/out.pmtiles",
+        "--bbox=1,2,3,4",
+        "--maxzoom=15",
+      ]);
     }
   });
 });
