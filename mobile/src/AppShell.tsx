@@ -353,7 +353,7 @@ function MapStackNav() {
           />
         )}
       </MapStack.Screen>
-      {/* Its own hero owns the back affordance (DESIGN.md §2). */}
+      {/* Its own hero owns the back affordance (DESIGN.md). */}
       <MapStack.Screen
         name="MapRegionDownload"
         options={{ headerShown: false }}
@@ -380,7 +380,7 @@ function MapStackNav() {
         )}
       </MapStack.Screen>
       {/* Place and trip detail both carry their own Hero, which owns the
-          back affordance (DESIGN.md §2). */}
+          back affordance (DESIGN.md). */}
       <MapStack.Screen name="MapPlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PlaceDetailScreen
@@ -557,7 +557,7 @@ function PlacesStackNav() {
   return (
     <PlacesStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header on any of these: each screen leads with its own
-          Hero (DESIGN.md §2). */}
+          Hero (DESIGN.md). */}
       <PlacesStack.Screen name="PlaceList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <PlacesScreen
@@ -679,7 +679,7 @@ function TripsStackNav() {
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
       {/* Logs and trip detail both carry their own Hero, so the native
-          header is off and the hero owns the back affordance (DESIGN.md §2). */}
+          header is off and the hero owns the back affordance (DESIGN.md). */}
       <TripsStack.Screen name="TripList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <LogsScreen
@@ -833,7 +833,7 @@ export function AppShell({
 
   // Mirror the account's theme choice onto this device, so a scheme picked in the
   // browser (or on another phone) is what this app opens in next launch. The
-  // device copy is what `theme.ts` reads at module-eval time; see DESIGN.md §12.
+  // device copy is what `theme.ts` reads at module-eval time; see DESIGN.md.
   useEffect(() => {
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
     if (
@@ -1044,7 +1044,7 @@ export function AppShell({
               {() => (
                 <MoreStack.Navigator screenOptions={stackScreenOptions}>
                   {/* Every screen here except Settings leads with its own
-                  Hero, which owns the back affordance (DESIGN.md §2).
+                  Hero, which owns the back affordance (DESIGN.md).
                   Settings is a plain settings list, so it keeps the native
                   header — the rule that a bare-label hero is the pattern being
                   replaced cuts both ways. */}
@@ -1226,7 +1226,7 @@ export function AppShell({
                     )}
                   </MoreStack.Screen>
                   {/* Settings and its sub-pages are plain preference lists, so they
-                  keep the native header and its back button (DESIGN.md §2). */}
+                  keep the native header and its back button (DESIGN.md). */}
                   <MoreStack.Screen
                     name="Settings"
                     options={{ title: "Settings" }}

@@ -336,7 +336,7 @@ export function PickPointScreen({
             icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
-            // disabled one saying why (DESIGN.md §5), which is what the hint
+            // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
             onPress={() => picked && onConfirm(picked)}

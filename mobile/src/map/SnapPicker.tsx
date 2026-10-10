@@ -1,7 +1,7 @@
 // Snap picker for the measure and route-draw HUDs.
 //
 // A wrapped ChipRail from the kit, not a hand-rolled chip row
-// (DESIGN.md §7): four short options, all visible at once, and per §2 the
+// (DESIGN.md): four short options, all visible at once, and per §2 the
 // wrapped form is right because this picks a SETTING rather than filtering a
 // list below it.
 //

@@ -54,7 +54,7 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * a second form would drift.
  *
  * The date picker and the place picker are MODES of this sheet, not sheets of
- * their own (DESIGN.md §4: never open a second sheet from the first). The
+ * their own (DESIGN.md: never open a second sheet from the first). The
  * header title changes with the mode, so the user always knows which step they
  * are on, and there is exactly one animation per tap.
  *
@@ -462,7 +462,7 @@ export function TripEditSheet({
         mode === "form" ? (
           <View style={styles.footerStack}>
             {/* Server refusal / failure while the sheet is still open — the
-                banner sits directly above Save, never a toast (docs/ux-principles.md §11). */}
+                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
             {saveError ? <ErrorBanner message={saveError} /> : null}
             <Button
               label={editing ? "Save changes" : "Log trip"}

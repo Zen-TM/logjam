@@ -225,7 +225,7 @@ export function useCustomFieldForm({
   const [scopeError, setScopeError] = useState<string | null>(null);
   // A save the local write refused, or a failed delete — this form stays open
   // either way, so it reports in its own banner above the footer's buttons
-  // rather than a toast (docs/ux-principles.md §11).
+  // rather than a toast (shared/DESIGN.md §11).
   const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
@@ -395,46 +395,46 @@ export function useCustomFieldForm({
         {/* Range is offered only for numbers, because that is the only place it
             means anything — and it is what makes the web's range slider work,
             and the phone's stop rail. */}
-        {numeric ? (
-          <>
-            <SwitchRow
-              icon="filter"
-              title="Limit to a range"
-              description={
-                bounded
-                  ? "Values must be between the min and max you set"
-                  : "Any number"
-              }
-              checked={bounded}
-              onChange={(next) => patch({ bounded: next })}
-            />
-            {bounded ? (
-              <View style={styles.boundsRow}>
-                <View style={styles.bound}>
-                  <TextField
-                    label="Min"
-                    value={min}
-                    onChangeText={(next) => patch({ min: next })}
-                    keyboardType={
-                      type === "integer" ? "number-pad" : "decimal-pad"
-                    }
-                  />
-                </View>
-                <View style={styles.bound}>
-                  <TextField
-                    label="Max"
-                    value={max}
-                    onChangeText={(next) => patch({ max: next })}
-                    keyboardType={
-                      type === "integer" ? "number-pad" : "decimal-pad"
-                    }
-                  />
-                </View>
-              </View>
-            ) : null}
-          </>
-        ) : null}
       </View>
+      {numeric ? (
+        <View style={styles.rangeBlock}>
+          <SwitchRow
+            icon="filter"
+            title="Limit to a range"
+            description={
+              bounded
+                ? "Values must be between the min and max you set"
+                : "Any number"
+            }
+            checked={bounded}
+            onChange={(next) => patch({ bounded: next })}
+          />
+          {bounded ? (
+            <View style={styles.boundsRow}>
+              <View style={styles.bound}>
+                <TextField
+                  label="Min"
+                  value={min}
+                  onChangeText={(next) => patch({ min: next })}
+                  keyboardType={
+                    type === "integer" ? "number-pad" : "decimal-pad"
+                  }
+                />
+              </View>
+              <View style={styles.bound}>
+                <TextField
+                  label="Max"
+                  value={max}
+                  onChangeText={(next) => patch({ max: next })}
+                  keyboardType={
+                    type === "integer" ? "number-pad" : "decimal-pad"
+                  }
+                />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* WHERE IT APPEARS. "All" is a chip in the same row rather than a toggle
           above it: it is one more answer to the one question this control asks,
@@ -508,7 +508,7 @@ export function useCustomFieldForm({
 
   // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
   // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (docs/ux-principles.md §11).
+  // above that row, never at the top of the form (shared/DESIGN.md §11).
   const footer = (
     <View style={styles.footerStack}>
       {formError ? <ErrorBanner message={formError} /> : null}
@@ -628,6 +628,9 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
   typeBlock: { gap: spacing(0.5) },
+  // A control of its own, so it stands a field's distance from the chips
+  // above, not a label's.
+  rangeBlock: { gap: spacing(1), marginTop: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },

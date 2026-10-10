@@ -1,5 +1,5 @@
 // Which stats are one fact said twice, and so sit on one line: what a line
-// climbs and what it drops, its highest and lowest point (docs/ux-principles.md
+// climbs and what it drops, its highest and lowest point (shared/DESIGN.md
 // §2). A stat with no partner on the surface (a distance) takes the full width,
 // so a pair is never split across two rows and a lone figure never hangs off
 // the end of one.

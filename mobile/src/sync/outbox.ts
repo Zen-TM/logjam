@@ -1136,7 +1136,7 @@ async function enqueueUpdate(
         entity,
         op: "update",
         id,
-        // Conflict DETECTION base (DESIGN.md §4): the server updatedAt this edit saw.
+        // Conflict DETECTION base (DESIGN.md): the server updatedAt this edit saw.
         ...(typeof current.updated_at === "string" && {
           baseUpdatedAt: current.updated_at,
         }),

@@ -2,7 +2,7 @@
 //
 // Mounted once, at the app shell, because the work outlives the screen that
 // started it — the Saved tab's own toast would only fire if the user happened
-// to still be standing there when the job landed (DESIGN.md §4, the corollary).
+// to still be standing there when the job landed (DESIGN.md, the corollary).
 //
 // Two sources, one component: a GeoPDF import and a region download run. A
 // second mounted toast would let two of them overlap in the same dock, and the
