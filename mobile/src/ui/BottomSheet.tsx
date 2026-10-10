@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import { radius, scrim, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
@@ -215,11 +215,20 @@ export function BottomSheet({
   // The PanResponder is created once; route its release through a ref so it
   // always calls the current onClose.
   const onCloseRef = useRef(onClose);
+  const visibleRef = useRef(visible);
   useEffect(() => {
     onCloseRef.current = onClose;
+    visibleRef.current = visible;
   });
 
-  // eslint-disable-next-line react-hooks/refs -- onCloseRef is read only on release, never in render
+  const settle = () =>
+    Animated.spring(drag, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 0,
+    }).start();
+
+  // eslint-disable-next-line react-hooks/refs -- the refs are read only on release, never in render
   const [handlePan] = useState(() =>
     PanResponder.create({
       // Claim on touch-down: the handle has nothing else to do with a touch,
@@ -234,13 +243,16 @@ export function BottomSheet({
       onPanResponderRelease: (_event, gesture) => {
         if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
           onCloseRef.current();
+          // A host may answer by swapping the sheet's content and staying
+          // open (a form going back to its list). Nothing else resets the
+          // drag then, and the sheet sat where the finger left it: off the
+          // screen, with its backdrop still taking every touch.
+          setTimeout(() => {
+            if (visibleRef.current) settle();
+          }, 0);
           return;
         }
-        Animated.spring(drag, {
-          toValue: 0,
-          useNativeDriver: true,
-          bounciness: 0,
-        }).start();
+        settle();
       },
     }),
   );
@@ -419,9 +431,8 @@ const styles = StyleSheet.create({
     marginRight: -spacing(1),
   },
   title: {
+    ...textRole.sheetTitle,
     flex: 1,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
     color: theme.text,
   },
   scrollContent: { paddingBottom: spacing(2) },

@@ -37,6 +37,7 @@ import {
 } from "react-native";
 import {
   drawsYoursHeading,
+  isSystemPlaceTypeId,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
@@ -47,6 +48,7 @@ import {
 
 import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
+import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces } from "../sync/mirrorStore";
 import {
   createPlaceTypeLocal,
@@ -56,21 +58,23 @@ import {
 import {
   Button,
   ErrorBanner,
+  Field,
+  FormStack,
   Row,
   SectionHeader,
   TextField,
   Icon,
   ColourField,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
 const copy = SETTINGS_LIST.copy;
 
-/** A type nobody owns is a built-in: not renameable, not deletable. Same rule
- *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
+/** A built-in: not renameable, not deletable. By pinned id, never by a missing
+ *  owner: a type made on this phone has no owner here until it syncs
+ *  (`sync/placeTypeCreate.test.ts`). */
 export function isSystemPlaceType(type: MirrorPlaceType): boolean {
-  return type.ownerId === null;
+  return isSystemPlaceTypeId(type.id);
 }
 
 export function PlaceTypeList({
@@ -89,7 +93,7 @@ export function PlaceTypeList({
   const own = types.filter((type) => !isSystemPlaceType(type));
   const builtIn = types.filter(isSystemPlaceType);
   return (
-    <View style={styles.body}>
+    <View style={styles.list}>
       {drawsYoursHeading(own.length, builtIn.length) ? (
         <SectionHeader title={copy.yours} count={own.length} />
       ) : null}
@@ -121,16 +125,20 @@ export function PlaceTypeList({
  * that a save button inside the scroll would not be on screen.
  */
 export function usePlaceTypeForm({
+  open,
   editing,
   onSaved,
   onDone,
 }: {
+  /** Whether the host is showing the form: each open starts a fresh draft
+   *  (`placeTypeFormKey`). */
+  open: boolean;
   /** null = adding. */
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
-  const formKey = editing?.id ?? "__new__";
+  const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
   if (seededFor !== formKey) {
@@ -240,7 +248,7 @@ export function usePlaceTypeForm({
   }, [editing, onDone, onSaved]);
 
   const body = (
-    <View style={styles.body}>
+    <FormStack>
       <TextField
         label="Name"
         value={draft.name}
@@ -258,33 +266,38 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <Text style={fieldLabel}>Icon</Text>
-      <View style={styles.grid} onLayout={onGridLayout}>
-        {/* Nothing until the row has been measured — one frame, and the
+      <Field label="Icon">
+        <View style={styles.grid} onLayout={onGridLayout}>
+          {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
-        {cellSize == null
-          ? null
-          : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
-              <Pressable
-                key={iconKey}
-                accessibilityRole="button"
-                accessibilityLabel={iconKey}
-                accessibilityState={{ selected: draft.iconKey === iconKey }}
-                onPress={() => setDraft((current) => ({ ...current, iconKey }))}
-                style={[
-                  styles.cell,
-                  cellSize,
-                  draft.iconKey === iconKey ? styles.cellChosen : null,
-                ]}
-              >
-                <Icon
-                  idea={placeTypeGlyph(iconKey)}
-                  size={20}
-                  color={draft.iconKey === iconKey ? theme.accent : theme.text}
-                />
-              </Pressable>
-            ))}
-      </View>
+          {cellSize == null
+            ? null
+            : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
+                <Pressable
+                  key={iconKey}
+                  accessibilityRole="button"
+                  accessibilityLabel={iconKey}
+                  accessibilityState={{ selected: draft.iconKey === iconKey }}
+                  onPress={() =>
+                    setDraft((current) => ({ ...current, iconKey }))
+                  }
+                  style={[
+                    styles.cell,
+                    cellSize,
+                    draft.iconKey === iconKey ? styles.cellChosen : null,
+                  ]}
+                >
+                  <Icon
+                    idea={placeTypeGlyph(iconKey)}
+                    size={20}
+                    color={
+                      draft.iconKey === iconKey ? theme.accent : theme.text
+                    }
+                  />
+                </Pressable>
+              ))}
+        </View>
+      </Field>
 
       <ColourField
         label="Colour"
@@ -306,11 +319,11 @@ export function usePlaceTypeForm({
           onPress={confirmDelete}
         />
       ) : null}
-    </View>
+    </FormStack>
   );
 
   const footer = (
-    <View style={styles.footer}>
+    <FormStack>
       {/* Not attributable to one control (a local write failing, or the
           places-in-use check itself failing) — the banner sits directly above
           Save, same as every other form (shared/DESIGN.md §11). */}
@@ -328,7 +341,7 @@ export function usePlaceTypeForm({
           />
         </View>
       </View>
-    </View>
+    </FormStack>
   );
 
   return { body, footer };
@@ -386,8 +399,7 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
 const GRID_GAP = spacing(1);
 
 const styles = StyleSheet.create({
-  body: { gap: spacing(1) },
-  footer: { gap: spacing(1) },
+  list: { gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },

@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { Toast, type ToastMessage } from "./ui/Toast";
+import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
 

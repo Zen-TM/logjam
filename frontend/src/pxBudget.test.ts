@@ -48,7 +48,7 @@ const BUDGET: Record<string, number> = {
   "components/feedback/RootErrorBoundary.module.css": 10,
   "components/feedback/ToastProvider.module.css": 4,
   "components/map/LayersPopover.module.css": 28,
-  "components/map/Map.module.css": 27,
+  "components/map/Map.module.css": 25,
   "components/map/MapChrome.module.css": 32,
   "components/map/MapSearchBox.module.css": 15,
   "components/media/Lightbox.module.css": 1,

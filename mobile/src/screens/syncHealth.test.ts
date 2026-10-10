@@ -4,6 +4,7 @@ import {
   relativeTime,
   syncHealth,
   syncIssuesSubtitle,
+  syncIssuesTitle,
   type SyncHealthInput,
 } from "./syncHealth";
 
@@ -336,5 +337,19 @@ describe("syncIssuesSubtitle", () => {
     // have waited a day. Mutation: answer "Everything's synced" for zero.
     expect(syncIssuesSubtitle(0)).toBe("Nothing needs you");
     expect(syncIssuesSubtitle(0)).not.toMatch(/synced/i);
+  });
+});
+
+describe("syncIssuesTitle", () => {
+  it("says changes need the user when some do", () => {
+    expect(syncIssuesTitle(1)).toBe("Some changes need you");
+  });
+
+  it("says the same as More's row when the list is empty", () => {
+    // The screen lists issues and nothing else: a change can be queued, or
+    // have waited a day, with this list empty. Mutation: title the empty
+    // screen "Everything's synced".
+    expect(syncIssuesTitle(0)).toBe(syncIssuesSubtitle(0));
+    expect(syncIssuesTitle(0)).not.toMatch(/synced/i);
   });
 });

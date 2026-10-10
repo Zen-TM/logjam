@@ -6,12 +6,14 @@ import {
   ASSET_HUES,
   CONTROL,
   FONT,
+  FORM_RHYTHM,
   FONT_WEIGHT,
   MOTION,
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
   SPACE,
+  TEXT_ROLES,
 } from "./designTokens.js";
 import {
   DEFAULT_THEME_SCHEME_ID,
@@ -32,6 +34,29 @@ const px = (n: number) => `${n}px`;
 const hexCss = (hex: string) => hex.toLowerCase();
 const rem = (n: number) => `${n / 16}rem`;
 
+/**
+ * `--text-<role>-size|weight|transform`: each role points at the scale's own
+ * property, so the number is still written once. A uppercase role also sets
+ * `transform`; the others leave it to the element.
+ */
+function textRoleProperties(): [string, string][] {
+  return Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
+    if (!("web" in spec)) return [];
+    const role = spec.web as {
+      size: string;
+      weight: string;
+      uppercase?: true;
+    };
+    const props: [string, string][] = [
+      [`--text-${kebab(name)}-size`, `var(--font-${role.size})`],
+      [`--text-${kebab(name)}-weight`, `var(--font-weight-${role.weight})`],
+    ];
+    if (role.uppercase)
+      props.push([`--text-${kebab(name)}-transform`, "uppercase"]);
+    return props;
+  });
+}
+
 /** The scheme-independent custom properties, in emission order. */
 export function webScaleProperties(): [string, string][] {
   return [
@@ -43,6 +68,10 @@ export function webScaleProperties(): [string, string][] {
     ...Object.entries(SPACE)
       .sort(([, a], [, b]) => a - b)
       .map(([n, v]): [string, string] => [`--space-${kebab(n)}`, px(v)]),
+    ...Object.entries(FORM_RHYTHM).map(([n, v]): [string, string] => [
+      `--form-${n}`,
+      px(v),
+    ]),
     ...Object.entries(RADIUS).map(([n, v]): [string, string] => [
       `--radius-${n}`,
       px(v),
@@ -55,6 +84,7 @@ export function webScaleProperties(): [string, string][] {
       `--font-weight-${n}`,
       String(v),
     ]),
+    ...textRoleProperties(),
     ...Object.entries(CONTROL.web).map(([n, v]): [string, string] => [
       `--control-${n}`,
       px(v),

@@ -54,6 +54,7 @@ function ThemeChooser() {
                     <span
                       key={colour}
                       className={classes.swatch}
+                      // eslint-disable-next-line no-restricted-syntax -- these are the OTHER schemes' colours, which no role of the scheme in force can name
                       style={{ backgroundColor: colour }}
                     />
                   ))}

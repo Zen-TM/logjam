@@ -17,8 +17,9 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
   (rail and panel widths, shadows) are in `src/index.css`.
 - **A px literal only for** a 1–2px border or offset, the 768px breakpoint,
   and a shape's own geometry marked `/* intrinsic … */`.
-- **CSS modules only.** An inline `style` only sets a custom property the kit
-  reads (`--tile-hue`, `--chip-hue`), never a colour.
+- **CSS modules only.** An inline `style` sets a computed value, and a
+  colour in it is a custom property the kit reads (`--tile-hue`,
+  `--chip-hue`).
 - **Heights are `min-height` and type is `rem`**, so text can grow. 12px is
   the floor.
 - **Targets follow the pointer, not the width**: `@media (pointer: coarse)`
@@ -28,13 +29,8 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
 - **`--radius-full` is a circle on a square box only**; anything
   stadium-shaped is `--radius-pill`.
 
-| Role | Size / weight |
-|---|---|
-| Page title (hero) | `--font-xl` / 700 |
-| Sheet title, hero metric | `--font-lg` / 600 |
-| Row title | `--font-base` / 600, two lines at most |
-| Body, subtitle, chip, menu item | `--font-sm` (muted for subtitles) |
-| Section title, legend, badge | `--font-xs` / 600; section titles uppercase |
+- **A text style is a role** from `TEXT_ROLES`: `--text-<role>-size` and
+  `-weight`, never a `--font-*` and a weight written by hand.
 
 Radius: `sm` swatch or checkbox; `md` tile, icon button, menu item, field;
 `lg` row, card, map button; `xl` popover, sheet; `pill` anything text-shaped
@@ -91,7 +87,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   `large` for a long one. Footer: Cancel, then the one primary action. Save
   is `type="submit"` tied by `form={formId}` and wears `busy`; pass
   `dismissible={false}` while a request runs. First focus is the element
-  marked `data-autofocus`, not React's `autoFocus`.
+  marked `data-autofocus`.
 - **`ConfirmDialog`**: `destructive` when something is lost, `filled` when
   nothing is. The menu item that leads to it is `danger`, without the fill.
 - **`Popover`** is non-modal. Whether an outside press closes it is the
@@ -103,7 +99,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   current answer as the subtitle.
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
-  field) or `useToast().error` (background). Never render `err.message`.
+  field) or `useToast().error` (background).
 - **Selection starts from a row's tile**, which is its checkbox: Shift-click
   ranges, Ctrl/⌘+A selects all, Escape clears. Rows the verb cannot act on
   dim. `SelectionBar` verbs are icon buttons, so it stays one line at 380.
@@ -136,9 +132,10 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 | A list's closing add button | `ListEnd`, fed the empty state's button |
 | Loading / failed load | `LoadingState` / `ErrorState` |
 
-- **Fields share one look**: a sentence-case label, the control, an optional
-  `hint`, `FieldError`. A label the control above already says is hidden with
-  `hideLabel`, not removed.
+- **A label the control above already says is hidden with `hideLabel`**,
+  not removed.
+- **A screen stylesheet lays out and paints no corner, shadow or fill**:
+  `lookBudget.test.ts` holds each file to a budget that only shrinks.
 - **A disabled `Button` takes `disabledReason`** and stays focusable.
 - **Pure decisions leave the component** into a tested module beside it
   (`placesModel.ts`).

@@ -1817,7 +1817,7 @@ function UnifiedImportDialog({
                         }))
                       }
                     >
-                      <option value="name">Place Name</option>
+                      <option value="name">Place name</option>
                       <option value="date">Date</option>
                       <option value="notes">Notes</option>
                       <option value="type">Type</option>

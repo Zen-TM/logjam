@@ -37,6 +37,22 @@ export const SYSTEM_PLACE_TYPE_IDS = {
   marker: "b0000000-0000-4000-8000-000000000003",
 } as const;
 
+const SYSTEM_PLACE_TYPE_ID_SET: ReadonlySet<string> = new Set(
+  Object.values(SYSTEM_PLACE_TYPE_IDS),
+);
+
+/**
+ * Whether a place type is a built-in, by its pinned id.
+ *
+ * `ownerId === null` is the server's answer, but a type made on a phone has no
+ * owner there until it syncs, and a guest's never does. The ids are pinned, so
+ * this is exact with no account and no signal — the same standard
+ * `isSystemFieldDef` holds to with reserved keys.
+ */
+export function isSystemPlaceTypeId(id: string): boolean {
+  return SYSTEM_PLACE_TYPE_ID_SET.has(id);
+}
+
 export type SystemPlaceTypeKey = keyof typeof SYSTEM_PLACE_TYPE_IDS;
 
 export type SystemPlaceType = {

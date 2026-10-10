@@ -179,6 +179,7 @@ export default function ElevationProfile({
           }}
           aria-hidden="true"
         >
+          {/* eslint-disable-next-line no-restricted-syntax -- the series colour is a runtime value of the chart, not a role */}
           <span className={classes.markerDot} style={{ background: color }} />
           <span className={classes.markerLabel}>
             {formatDistanceM(hovered.sample.distanceM)} ·{" "}
