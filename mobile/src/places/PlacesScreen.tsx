@@ -562,6 +562,7 @@ export function PlacesScreen({
   }, []);
 
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet === "placeTypeForm",
     editing: null,
     onSaved: info,
     onDone: () => setSheet(null),
