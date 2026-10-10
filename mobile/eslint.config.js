@@ -16,6 +16,12 @@ const GPS_GOTCHAS = [
     message:
       "Android drops a fourth Alert button. A list of choices is a BottomSheet; Alert is for a destructive confirm only (mobile/DESIGN.md §4).",
   },
+  {
+    selector:
+      "Property[key.name=/^(shadowColor|shadowOffset|shadowOpacity|shadowRadius)$/]",
+    message:
+      "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
+  },
 ];
 
 // A colour is a role from `theme`, or `withAlpha(token, a)` for a tint
@@ -71,6 +77,13 @@ module.exports = defineConfig([
               group: ["@expo/vector-icons", "@expo/vector-icons/*"],
               message:
                 "Draw icons with <Icon idea=…> from src/ui — add the idea to shared/src/icons.ts if it is missing.",
+            },
+            {
+              // `profileSeries` is pure maths a node test imports; the barrel
+              // would drag react-native in with it.
+              group: ["**/ui/*", "!**/ui/profileSeries"],
+              message:
+                'Import the kit through its barrel: from "../ui", never a file inside it (mobile/DESIGN.md §7).',
             },
           ],
         },

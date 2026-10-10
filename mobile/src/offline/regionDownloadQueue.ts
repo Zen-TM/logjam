@@ -19,7 +19,7 @@ import {
 } from "@logjam/shared";
 
 import { subscribeReconnect } from "../map/connectivity";
-import type { ToastMessage } from "../ui/Toast";
+import type { ToastMessage } from "../ui";
 import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
 import { failureDetail } from "./failureDetail";
 import {

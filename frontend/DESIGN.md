@@ -17,8 +17,9 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
   (rail and panel widths, shadows) are in `src/index.css`.
 - **A px literal only for** a 1–2px border or offset, the 768px breakpoint,
   and a shape's own geometry marked `/* intrinsic … */`.
-- **CSS modules only.** An inline `style` only sets a custom property the kit
-  reads (`--tile-hue`, `--chip-hue`), never a colour.
+- **CSS modules only.** An inline `style` sets a computed value, and a
+  colour in it is a custom property the kit reads (`--tile-hue`,
+  `--chip-hue`).
 - **Heights are `min-height` and type is `rem`**, so text can grow. 12px is
   the floor.
 - **Targets follow the pointer, not the width**: `@media (pointer: coarse)`
