@@ -42,14 +42,17 @@ import {
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
   SETTINGS_LIST,
+  stepAfterPlaceTypeSave,
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
 import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
-import { listMirrorPlaces } from "../sync/mirrorStore";
+import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
 import {
   createPlaceTypeLocal,
   deletePlaceTypeLocal,
@@ -119,6 +122,9 @@ export function PlaceTypeList({
   );
 }
 
+/** A type the form has just made: enough to title and scope what follows. */
+export type NewPlaceType = { id: string; name: string };
+
 /**
  * Add or change one type — a body and a pinned footer, like
  * `useCustomFieldForm` and for the same reason: the icon grid is tall enough
@@ -129,6 +135,7 @@ export function usePlaceTypeForm({
   editing,
   onSaved,
   onDone,
+  onAdded,
 }: {
   /** Whether the host is showing the form: each open starts a fresh draft
    *  (`placeTypeFormKey`). */
@@ -137,6 +144,10 @@ export function usePlaceTypeForm({
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
   onDone: () => void;
+  /** The type just made, for the host to open its attributes on
+   *  (`stepAfterPlaceTypeSave`). Called instead of `onSaved` and `onDone`:
+   *  the sheet stays up, and its new title is the confirmation. */
+  onAdded: (type: NewPlaceType) => void;
 }): { body: ReactNode; footer: ReactNode } {
   const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
@@ -157,14 +168,23 @@ export function usePlaceTypeForm({
 
   const save = useCallback(async () => {
     const name = draft.name.trim();
-    if (!name) {
-      setError("A type needs a name.");
-      return;
-    }
     setError(null);
     setFormError(null);
     setSaving(true);
     try {
+      // Checked against the mirror, so it holds offline. The server keeps a
+      // pushed duplicate under another name rather than refusing it, so this
+      // is the only place the user is told.
+      const nameError = placeTypeNameError(
+        name,
+        await listMirrorPlaceTypes(),
+        editing,
+      );
+      if (nameError) {
+        setError(nameError);
+        return;
+      }
+      let added: NewPlaceType | null = null;
       if (editing) {
         // Field-scoped, so a rename on this phone does not clobber a recolour
         // made on another one.
@@ -175,15 +195,19 @@ export function usePlaceTypeForm({
         if (Object.keys(changes).length > 0) {
           await updatePlaceTypeLocal(editing.id, changes);
         }
-        onSaved("Type updated.");
       } else {
-        await createPlaceTypeLocal({
+        const id = await createPlaceTypeLocal({
           name,
           iconKey: draft.iconKey,
           color: draft.color,
         });
-        onSaved("Type added.");
+        added = { id, name };
       }
+      if (added && stepAfterPlaceTypeSave(added !== null) === "attributes") {
+        onAdded(added);
+        return;
+      }
+      onSaved(added ? "Type added." : "Type updated.");
       onDone();
     } catch (err) {
       console.error(err);
@@ -196,7 +220,7 @@ export function usePlaceTypeForm({
     } finally {
       setSaving(false);
     }
-  }, [draft, editing, onDone, onSaved]);
+  }, [draft, editing, onAdded, onDone, onSaved]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
@@ -254,11 +278,12 @@ export function usePlaceTypeForm({
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
-          // The empty-name requirement is checked on Save (shared/DESIGN.md §11); once
+          // The name is checked on Save (shared/DESIGN.md §11); once
           // shown it clears the moment the field it's about is edited.
           if (error) setError(null);
         }}
         error={error}
+        maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
         autoCapitalize="sentences"
       />
 

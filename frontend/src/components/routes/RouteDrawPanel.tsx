@@ -39,6 +39,7 @@ import {
   Select,
   StatGrid,
   ColourField,
+  FieldError,
   type Stat,
 } from "../../ui";
 import ElevationProfile from "./ElevationProfile";
@@ -197,9 +198,9 @@ export function RouteDrawPanel({
         <StatGrid stats={pairedStatLayout(stats)} />
 
         {atCap && (
-          <p className={classes.warning} role="status">
-            Maximum of {MAX_ROUTE_POINTS} points reached.
-          </p>
+          <FieldError
+            message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+          />
         )}
 
         {/* The terrain under the line, while it is still being decided — the

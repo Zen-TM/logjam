@@ -5,17 +5,23 @@ import {
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
   SETTINGS_LIST,
+  stepAfterPlaceTypeSave,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import {
   createPlaceType,
   deletePlaceType,
+  getPlaceTypes,
   reassignPlaceType,
   updatePlaceType,
   type TPlaceType,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { TypeAttributesDialog } from "./CustomFieldSection";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
   Button,
@@ -70,14 +76,20 @@ function PlaceTypeSection({
   types,
   loading,
   onTypesChange,
+  placeDefs,
+  onPlaceDefsChange,
   onBack,
 }: {
   types: TPlaceType[];
   loading: boolean;
   onTypesChange: (types: TPlaceType[]) => void;
+  /** The user's place attributes, for the step a new type leads into. */
+  placeDefs: ScopedCustomFieldDef[];
+  onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   onBack: () => void;
 }) {
   const [editing, setEditing] = useState<TPlaceType | "new" | null>(null);
+  const [attributesFor, setAttributesFor] = useState<TPlaceType | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
@@ -87,7 +99,6 @@ function PlaceTypeSection({
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
   async function refresh() {
-    const { getPlaceTypes } = await import("../../../placeUtils");
     onTypesChange(await getPlaceTypes());
   }
 
@@ -245,6 +256,7 @@ function PlaceTypeSection({
       {editing !== null && (
         <PlaceTypeDialog
           editing={editing === "new" ? null : editing}
+          types={types}
           saving={saving}
           error={error}
           onDismissError={() => setError(null)}
@@ -253,18 +265,34 @@ function PlaceTypeSection({
             setError(null);
           }}
           onSave={async (draft) => {
+            // Held in an object: the assignment happens inside `run`'s
+            // callback, which the compiler cannot follow for a `let`.
+            const made: { type: TPlaceType | null } = { type: null };
             const ok =
               editing === "new"
-                ? await run(
-                    () => createPlaceType(draft),
-                    "Couldn't create that type.",
-                  )
+                ? await run(async () => {
+                    made.type = await createPlaceType(draft);
+                  }, "Couldn't create that type.")
                 : await run(
                     () => updatePlaceType(editing.id, draft),
                     "Couldn't save that type.",
                   );
-            if (ok) setEditing(null);
+            if (!ok) return;
+            setEditing(null);
+            if (stepAfterPlaceTypeSave(made.type !== null) === "attributes") {
+              setAttributesFor(made.type);
+            }
           }}
+        />
+      )}
+
+      {attributesFor && (
+        <TypeAttributesDialog
+          type={attributesFor}
+          placeTypes={types}
+          defs={placeDefs}
+          onDefsChange={onPlaceDefsChange}
+          onClose={() => setAttributesFor(null)}
         />
       )}
 
@@ -344,6 +372,7 @@ function PlaceTypeSection({
  *  finishes or abandons. */
 function PlaceTypeDialog({
   editing,
+  types,
   saving,
   error,
   onDismissError,
@@ -352,6 +381,8 @@ function PlaceTypeDialog({
 }: {
   /** null = adding. */
   editing: TPlaceType | null;
+  /** Every type the user can see, to refuse a name one of them has. */
+  types: TPlaceType[];
   saving: boolean;
   error: string | null;
   onDismissError: () => void;
@@ -363,6 +394,10 @@ function PlaceTypeDialog({
     editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
+  // Shown once something is typed: an empty name is the disabled Save button.
+  const nameError = name.trim()
+    ? placeTypeNameError(name, types, editing)
+    : null;
 
   return (
     <Dialog
@@ -378,7 +413,7 @@ function PlaceTypeDialog({
           <Button
             variant="filled"
             busy={saving}
-            disabled={!name.trim()}
+            disabled={!name.trim() || nameError !== null}
             onClick={() => onSave({ name: name.trim(), iconKey, color })}
           >
             Save
@@ -391,7 +426,8 @@ function PlaceTypeDialog({
           label="Name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          maxLength={60}
+          maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
+          error={nameError}
           disabled={saving}
           data-autofocus
         />

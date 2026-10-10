@@ -107,8 +107,7 @@ import {
   rgbaCssFromHex,
   contourWidthStops,
   featureLineWidthStops,
-  DEM_ATTRIBUTION_HTML,
-  DEM_TILE_URL_TEMPLATE,
+  TERRARIUM,
   isValidLatitude,
   isValidLongitude,
   type OsmFeatureKey,
@@ -1069,10 +1068,11 @@ function Map({
       map.addSource("3d-terrain-dem", {
         type: "raster-dem",
         // Same tile set, same credit, as the elevation profiles and the
-        // mobile offline DEM — one definition in shared/src/demTiles.ts.
-        tiles: [DEM_TILE_URL_TEMPLATE],
+        // mobile offline DEM — one definition in shared/src/demSources.ts.
+        // MapLibre takes one raster-dem source, so it cannot walk the list.
+        tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
-        attribution: DEM_ATTRIBUTION_HTML,
+        attribution: TERRARIUM.creditHtml,
       });
 
       // Owned place GeoJSON source (starts empty)
