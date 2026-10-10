@@ -96,6 +96,19 @@ export function parseTrackGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
+/**
+ * The cache key for one parsed track file on one map layer: id, stamp AND
+ * colour. The colour is stamped into the features at parse time, so it has to
+ * be part of the key or a recolour keeps drawing the old line.
+ */
+export function trackGeoCacheKey(entry: {
+  mediaId: string;
+  color: string | null;
+  stamp: TrackFeatureStamp;
+}): string {
+  return `${entry.mediaId}|${entry.color}|${JSON.stringify(entry.stamp)}`;
+}
+
 export async function fetchTrackGeoJSON(
   displayUrl: string,
   color: string | null,

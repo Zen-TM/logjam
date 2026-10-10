@@ -26,6 +26,7 @@ import {
   DatePicker,
   ErrorBanner,
   FieldError,
+  FormStack,
   Row,
   SectionHeader,
   TextField,
@@ -54,7 +55,7 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * a second form would drift.
  *
  * The date picker and the place picker are MODES of this sheet, not sheets of
- * their own (DESIGN.md §4: never open a second sheet from the first). The
+ * their own (DESIGN.md: never open a second sheet from the first). The
  * header title changes with the mode, so the user always knows which step they
  * are on, and there is exactly one animation per tap.
  *
@@ -461,9 +462,9 @@ export function TripEditSheet({
       // that scrolls out of reach leaves the handle as the only exit.
       footer={
         mode === "form" ? (
-          <View style={styles.footerStack}>
+          <FormStack>
             {/* Server refusal / failure while the sheet is still open — the
-                banner sits directly above Save, never a toast (docs/ux-principles.md §11). */}
+                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
             {saveError ? <ErrorBanner message={saveError} /> : null}
             <Button
               label={editing ? "Save changes" : "Log trip"}
@@ -471,7 +472,7 @@ export function TripEditSheet({
               loading={saving}
               onPress={() => void save()}
             />
-          </View>
+          </FormStack>
         ) : mode === "fieldForm" ? (
           fieldForm.footer
         ) : mode === "fields" ? (
@@ -492,7 +493,7 @@ export function TripEditSheet({
       }
     >
       {mode === "date" ? (
-        <View style={styles.modeBody}>
+        <FormStack>
           <DatePicker
             value={
               dateTarget.kind === "trip"
@@ -521,7 +522,7 @@ export function TripEditSheet({
               }}
             />
           ) : null}
-        </View>
+        </FormStack>
       ) : null}
 
       {mode === "fields" ? (
@@ -551,7 +552,7 @@ export function TripEditSheet({
       ) : null}
 
       {mode === "form" ? (
-        <View style={styles.form}>
+        <FormStack>
           <Row
             icon="date"
             title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
@@ -570,19 +571,17 @@ export function TripEditSheet({
             onPress={() => setMode("places")}
           />
 
-          <View style={styles.field}>
-            <TextField
-              label="Title"
-              value={displayName}
-              onChangeText={setDisplayName}
-              autoCapitalize="sentences"
-            />
-            {!displayName.trim() ? (
-              <Text style={styles.hint}>
-                Defaults to {derivedTitle ?? "“Untitled trip”"}
-              </Text>
-            ) : null}
-          </View>
+          <TextField
+            label="Title"
+            value={displayName}
+            onChangeText={setDisplayName}
+            autoCapitalize="sentences"
+            hint={
+              displayName.trim()
+                ? undefined
+                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
+            }
+          />
 
           <ChipPicker
             label="Type"
@@ -600,22 +599,20 @@ export function TripEditSheet({
                 ? (primaryTripType(types) ?? undefined)
                 : undefined
             }
+            hint={
+              types.length > 1
+                ? "The starred type sets the trip’s icon."
+                : undefined
+            }
           />
-          {types.length > 1 ? (
-            <Text style={styles.hint}>
-              The starred type sets the trip’s icon.
-            </Text>
-          ) : null}
 
-          <View style={styles.field}>
-            <TextField
-              label="Notes"
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              autoCapitalize="sentences"
-            />
-          </View>
+          <TextField
+            label="Notes"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            autoCapitalize="sentences"
+          />
 
           <CustomFieldValueInputs
             defs={askedFieldDefs}
@@ -659,7 +656,7 @@ export function TripEditSheet({
             right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />
-        </View>
+        </FormStack>
       ) : null}
     </BottomSheet>
   );
@@ -754,11 +751,7 @@ function PlacePicker({
 }
 
 const styles = StyleSheet.create({
-  form: { gap: spacing(1) },
-  footerStack: { gap: spacing(1) },
-  modeBody: { gap: spacing(2) },
   pickerBody: { gap: spacing(1) },
-  field: { gap: spacing(0.5) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   searchWrap: {
     flexDirection: "row",

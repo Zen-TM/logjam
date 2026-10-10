@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import type { ElevationProfile } from "@logjam/shared";
 
-import { elevationSeries } from "./profileSeries";
+import { elevationSeries, timeOfDayFormatter } from "./profileSeries";
 
 const profile: ElevationProfile = {
   samples: [
@@ -50,5 +50,25 @@ describe("elevationSeries", () => {
       samples: [{ distanceM: 0, elevationM: 5 }],
     };
     expect(elevationSeries(flat, 3400).points[0]!.x).toBe(0);
+  });
+});
+
+// Red when the day is dropped from an overnight series, or added to a
+// same-day one.
+describe("timeOfDayFormatter", () => {
+  // Local-time constructors, so the test holds in any time zone.
+  const evening = new Date(2026, 5, 3, 23, 50).getTime();
+  const nextEvening = new Date(2026, 5, 4, 23, 50).getTime();
+  const afterMidnight = new Date(2026, 5, 4, 0, 10).getTime();
+
+  it("is the bare time of day when the series stays within one day", () => {
+    const format = timeOfDayFormatter(evening - 3_600_000, evening);
+    expect(format(evening)).toBe(format(nextEvening));
+    expect(format(evening)).not.toBe(format(evening + 60_000));
+  });
+
+  it("names the day when the series crosses midnight", () => {
+    const format = timeOfDayFormatter(evening, afterMidnight);
+    expect(format(evening)).not.toBe(format(nextEvening));
   });
 });

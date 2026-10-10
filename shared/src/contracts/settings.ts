@@ -2,7 +2,7 @@
 // `PlaceTypeSection.tsx` and `CustomFieldSection.tsx`, Logjam GPS's
 // `screens/SettingsScreen.tsx`, `places/PlaceTypesEditor.tsx` and
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
-// has no hero (docs/ux-principles.md §2).
+// has no hero (shared/DESIGN.md §2).
 import type { NotificationPreferences } from "../themeSchemes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { ScreenContract } from "./types.js";

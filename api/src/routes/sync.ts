@@ -809,6 +809,24 @@ function assertKnownFields(
 // client holds the base row, so it filters: a receipt whose serverValue
 // equals the client's own base value is a self-conflict and is dropped
 // before shelving (flush-engine rule, PR-5).
+//
+// Values are compared as VALUES, not as serialisations: jsonb returns object
+// keys in its own order and a name is trimmed on the way in, so a replay after
+// a lost reply would otherwise be told it replaced the value it wrote itself
+// (sync.unit.test.ts, "stored in another representation").
+function comparable(value: unknown): unknown {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.map(comparable);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, inner]) => [key, comparable(inner)]),
+    );
+  }
+  return value ?? null;
+}
+
 export function conflictReceipts(
   baseUpdatedAt: string | undefined,
   serverUpdatedAt: Date,
@@ -821,7 +839,10 @@ export function conflictReceipts(
   const receipts: { field: string; serverValue: unknown }[] = [];
   for (const [field, value] of Object.entries(incoming)) {
     const serverValue = current[field];
-    if (JSON.stringify(serverValue ?? null) !== JSON.stringify(value ?? null)) {
+    if (
+      JSON.stringify(comparable(serverValue)) !==
+      JSON.stringify(comparable(value))
+    ) {
       receipts.push({ field, serverValue: serverValue ?? null });
     }
   }
@@ -1174,13 +1195,16 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     customFields: trip.customFields,
     placeIds: trip.places.map((link) => link.placeId),
   };
-  // Normalize the incoming date for comparison so equal instants don't owe a
-  // receipt over format differences.
+  // Compare what this op WRITES, not what it carried: equal instants owe no
+  // receipt over a date's format, and neither do the types a canyon-linked
+  // trip is force-tagged with, which a replay finds already stored
+  // (syncPush.test.ts, "a replayed trip update").
   const incomingForConflicts: Record<string, unknown> = {
     ...fields,
     ...(fields.date !== undefined && {
       date: new Date(fields.date as string).toISOString(),
     }),
+    ...(fields.types !== undefined && { types: effectiveTypes }),
   };
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,

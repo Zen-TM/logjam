@@ -1073,9 +1073,8 @@ type ColumnSpec =
     };
 
 /**
- * Generic update enqueue: snapshot base values for newly-dirtied fields
- * (server-confirmed = current column value when the field isn't already
- * dirty), materialize the new values into the mirror columns, extend
+ * Generic update enqueue: snapshot the base value of each field it writes,
+ * materialize the new values into the mirror columns, extend
  * dirty_fields_json, append/coalesce the op.
  */
 async function enqueueUpdate(
@@ -1102,15 +1101,19 @@ async function enqueueUpdate(
       return spec;
     };
 
+    // The base is the value the server will hold when this op arrives. For a
+    // field already dirty that is the earlier queued edit's value, which the
+    // column holds now: without it the server's receipt for that edit reads
+    // as another device's write and is shelved
+    // (updateConflictBase.test.ts). A merge into a queued op keeps that op's
+    // earlier base (appendOp).
     const baseSnapshot: Record<string, unknown> = {};
     for (const field of Object.keys(fields)) {
-      if (!dirtyNow.has(field)) {
-        const spec = specFor(field);
-        baseSnapshot[field] =
-          typeof spec === "string"
-            ? (current[spec] ?? null)
-            : spec.decode(current[spec.column]);
-      }
+      const spec = specFor(field);
+      baseSnapshot[field] =
+        typeof spec === "string"
+          ? (current[spec] ?? null)
+          : spec.decode(current[spec.column]);
       dirtyNow.add(field);
     }
 
@@ -1139,7 +1142,7 @@ async function enqueueUpdate(
         entity,
         op: "update",
         id,
-        // Conflict DETECTION base (DESIGN.md §4): the server updatedAt this edit saw.
+        // Conflict DETECTION base (DESIGN.md): the server updatedAt this edit saw.
         ...(typeof current.updated_at === "string" && {
           baseUpdatedAt: current.updated_at,
         }),

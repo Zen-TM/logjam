@@ -13,6 +13,7 @@ import {
   initialBearingDegrees,
   recordedDurationMs,
   rejectTrackFix,
+  speedClockMs,
   type RecordedTrackPoint,
 } from "./trackStats.js";
 
@@ -863,6 +864,36 @@ describe("computeTrackDetail", () => {
     expect(detail.averageSpeedMps).toBeCloseTo(1.1119, 3);
   });
 
+  // Red when the clock is anchored once at the start instead of per segment:
+  // everything after a pause then reads early by the pause's length.
+  it("reads the time of day at a speed sample, through a pause and past the last fix", () => {
+    const startedAt = Date.UTC(2026, 9, 3, 12, 50); // 23:50 in Sydney
+    const first = walk({
+      count: 5,
+      stepMilliDeg: 1,
+      stepMs: 100_000,
+      startMs: startedAt,
+      segment: 0,
+    });
+    const resumedAt = startedAt + 4_000_000;
+    const second = walk({
+      count: 5,
+      stepMilliDeg: 1,
+      stepMs: 100_000,
+      startMs: resumedAt,
+      segment: 1,
+    });
+    const speed = computeTrackDetail([...first, ...second], {
+      recordedMs: 1_000_000,
+    }).speed!;
+
+    expect(speedClockMs(speed, 0)).toBe(startedAt);
+    expect(speedClockMs(speed, 200_000)).toBe(startedAt + 200_000);
+    expect(speedClockMs(speed, 600_000)).toBe(resumedAt + 200_000);
+    // The wait before Finish runs on from the last fix.
+    expect(speedClockMs(speed, 1_000_000)).toBe(resumedAt + 600_000);
+  });
+
   it("thins a long series down to the chart's cap", () => {
     const detail = computeTrackDetail(
       walk({
@@ -1000,6 +1031,33 @@ describe("computeTrackDetail", () => {
         samples[i - 1]!.distanceM,
       );
     }
+  });
+
+  // Red when the series is thinned by index: a stop is two samples among
+  // hundreds, the stride steps over one or both, and the chart draws a ramp
+  // (or full walking speed) across the longest rest of the day.
+  it("keeps a long stop flat at zero when the series is thinned", () => {
+    const out = walk({ count: 200, stepMilliDeg: 0.1, stepMs: 10_000 });
+    const lastOut = out[out.length - 1]!;
+    const restMs = 40 * 60_000;
+    const back = walk({
+      count: 200,
+      stepMilliDeg: 0.1,
+      stepMs: 10_000,
+      startMs: lastOut.timestampMs + restMs,
+    }).map((p) => ({ ...p, lat: p.lat + (lastOut.lat - BASE_LAT) }));
+    const detail = computeTrackDetail([...out, ...back]);
+    const samples = detail.speed!.samples;
+    expect(samples.length).toBe(ELEVATION_PROFILE_MAX_SAMPLES);
+
+    const restStart = lastOut.timestampMs;
+    const during = samples.filter(
+      (s) =>
+        s.atMs > restStart + 60_000 && s.atMs < restStart + restMs - 60_000,
+    );
+    // The rest is over a third of the recording, so over a third of the chart.
+    expect(during.length).toBeGreaterThan(samples.length / 3);
+    expect(during.every((s) => s.speedMps === 0)).toBe(true);
   });
 
   it("reports the peak speed from the full series, not the thinned chart", () => {

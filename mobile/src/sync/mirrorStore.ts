@@ -1,4 +1,4 @@
-// Mirror row mapping: delta wire rows ⇄ SQLite mirror tables (DESIGN.md §7). Known
+// Mirror row mapping: delta wire rows ⇄ SQLite mirror tables (DESIGN.md). Known
 // fields land in typed columns; anything else the server sent is preserved
 // verbatim in extra_json (additive protocol §10.3, display-only). Reads
 // reassemble the client-facing shapes the screens already consume (TPlace /
@@ -669,7 +669,7 @@ export async function applyTombstone(
     }
   }
 
-  // Pending local ops on a server-deleted row: delete wins (DESIGN.md §4); park them
+  // Pending local ops on a server-deleted row: delete wins (DESIGN.md); park them
   // deadRemote so the parked-ops UI can offer "recreate from local copy".
   //
   // A pending local DELETE is the exception — it wanted exactly what just
