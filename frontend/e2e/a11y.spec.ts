@@ -170,7 +170,12 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    await aside.getByRole("button", { name: "Add a place type" }).click();
+    // The hero's button and the list's end are one button drawn twice
+    // (UX §9, `listEnd.test.ts`), so the first is the hero's.
+    await aside
+      .getByRole("button", { name: "Add a place type" })
+      .first()
+      .click();
     const typeDialog = page.locator("dialog[open]");
     await expect(
       typeDialog.getByRole("radiogroup", { name: "Icon" }),
@@ -241,10 +246,13 @@ test.describe("desktop", () => {
     ).toBeFocused();
     await expectNoViolations(page, "aside");
 
-    // `exact`, because an accessible name matches as a SUBSTRING by default and
-    // this list is the user's own data: a place called "Closet" is three of the
-    // "Close" buttons on this page (its own row, its ⋯, and the sheet's).
-    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // The sheet's own ×, found through the sheet: the panel keeps its × beside
+    // it (UX §3), and a place called "Closet" would add three more "Close"
+    // substrings (its row, its ⋯).
+    await page
+      .getByRole("region", { name: "Sort and filter" })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
     await page
       .getByRole("button", { name: /^Actions for / })
       .first()
@@ -404,7 +412,7 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Logs", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: /trips?$/ }),
+      aside.getByRole("heading", { level: 2, name: "Logs", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
@@ -444,7 +452,7 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Ways", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: /lines?$/ }),
+      aside.getByRole("heading", { level: 2, name: "Ways", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
