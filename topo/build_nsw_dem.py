@@ -10,6 +10,7 @@ docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md
     build_nsw_dem.py fetch SRC [Sheet ...]     # no sheet named = all 343
     build_nsw_dem.py tile  SRC WORK [--jobs N]
     build_nsw_dem.py pack  WORK OUT.pmtiles --extracted "October 2026"
+    build_nsw_dem.py contours SRC WORK OUT.pmtiles --extracted "October 2026"
 
 `fetch` and `tile` skip what is already done, so a killed run restarts where
 it stopped. Run `tile` only once every sheet is fetched: a finished block is
@@ -354,6 +355,82 @@ def pack(work: Path, out: Path, extracted: str) -> None:
     mbtiles.unlink()
 
 
+# ── contours ─────────────────────────────────────────────────────────────────
+
+CONTOUR_INTERVAL_M = 10
+CONTOUR_MAJOR_M = 50  # the clients style `elev % 50 == 0` as a major line
+# 50 m lines from z11, the rest from z13; a client overzooms past z14.
+CONTOUR_ZOOMS = {"major": (11, 14), "minor": (13, 14)}
+
+
+def run(*command: str) -> None:
+    subprocess.run(command, check=True)
+
+
+def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
+    """10 m contours of every sheet, as vector tiles in one PMTiles archive.
+
+    One source layer, `contours`, with one attribute, `elev`: the schema of a
+    LiDAR job's contour layer (`pipeline.py`), so both clients draw it with
+    the layer definitions they already have.
+
+    ponytail: each sheet is contoured alone, so a line ends at a sheet edge and
+    its continuation starts beside it. Contour a buffered mosaic per sheet if
+    the joins show.
+    """
+    if not shutil.which("pmtiles"):
+        sys.exit("contours needs the `pmtiles` binary (go-pmtiles) on PATH")
+    work.mkdir(parents=True, exist_ok=True)
+    lines = work / "contours.gpkg"
+    for sheet in sorted(src.glob("*.tif")):
+        done = work / f"{sheet.stem}.contoured"
+        if done.exists():
+            continue
+        print(sheet.stem, flush=True)
+        smooth = work / f"{sheet.stem}.10m.tif"
+        raw = work / f"{sheet.stem}.gpkg"
+        raw.unlink(missing_ok=True)
+        # Averaged to 10 m first: contours of the raw 5 m grid are knobbly,
+        # and every wiggle is a vertex a phone has to store and draw.
+        run(
+            *["gdalwarp", "-q", "-overwrite", "-tr", "10", "10", "-r", "average"],
+            *["-co", "COMPRESS=ZSTD", str(sheet), str(smooth)],
+        )
+        run(
+            *["gdal_contour", "-q", "-a", "elev", "-i", str(CONTOUR_INTERVAL_M)],
+            *["-snodata", str(NODATA), "-f", "GPKG", str(smooth), str(raw)],
+            *["-nln", "cont"],
+        )
+        for name, test in (("major", "="), ("minor", "<>")):
+            run(
+                *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(lines)],
+                *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
+                "select elev, geom from cont where cast(elev as integer)"
+                f" % {CONTOUR_MAJOR_M} {test} 0",
+            )
+        smooth.unlink()
+        raw.unlink()
+        done.touch()
+
+    mbtiles = out.with_suffix(".mbtiles")
+    mbtiles.unlink(missing_ok=True)
+    conf = {
+        name: {"target_name": "contours", "minzoom": zmin, "maxzoom": zmax}
+        for name, (zmin, zmax) in CONTOUR_ZOOMS.items()
+    }
+    run(
+        *["ogr2ogr", "-q", "-f", "MVT", str(mbtiles), str(lines)],
+        *["-dsco", "FORMAT=MBTILES", "-dsco", "MINZOOM=11", "-dsco", "MAXZOOM=14"],
+        *["-dsco", f"CONF={json.dumps(conf)}"],
+        "-dsco",
+        "DESCRIPTION=Contours derived from the NSW 5 m Digital Elevation Model,"
+        f" © State of New South Wales (Spatial Services), extracted {extracted}."
+        " CC BY 3.0 AU.",
+    )
+    run("pmtiles", "convert", str(mbtiles), str(out))
+    mbtiles.unlink()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -372,9 +449,16 @@ def main() -> None:
         required=True,
         help='when the sheets were downloaded, e.g. "October 2026"',
     )
+    p = sub.add_parser("contours")
+    p.add_argument("src", type=Path)
+    p.add_argument("work", type=Path)
+    p.add_argument("out", type=Path)
+    p.add_argument("--extracted", required=True, help="as for pack")
     args = parser.parse_args()
     if args.command == "fetch":
         fetch(args.src, args.sheets)
+    elif args.command == "contours":
+        contours(args.src, args.work, args.out, args.extracted)
     elif args.command == "tile":
         tile(args.src, args.work, args.jobs)
     else:
