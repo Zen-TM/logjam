@@ -8,7 +8,12 @@
 import { describe, expect, it } from "vitest";
 import type { ElevationProfile } from "@logjam/shared";
 
-import { elevationSeries, timeOfDayFormatter } from "./profileSeries";
+import {
+  elevationSeries,
+  sameSeries,
+  speedSeries,
+  timeOfDayFormatter,
+} from "./profileSeries";
 
 const profile: ElevationProfile = {
   samples: [
@@ -70,5 +75,53 @@ describe("timeOfDayFormatter", () => {
   it("names the day when the series crosses midnight", () => {
     const format = timeOfDayFormatter(evening, afterMidnight);
     expect(format(evening)).not.toBe(format(nextEvening));
+  });
+});
+
+// Red when a tick that changed nothing is read as new data (the chart then
+// rebuilds its columns every second of a recording), or when a real change —
+// a new fix, a moved axis — is read as the same picture.
+describe("sameSeries", () => {
+  it("is true for a rebuilt series with no new point", () => {
+    // What a clock tick does: a fresh profile object holding the same numbers.
+    const tick = {
+      ...profile,
+      samples: profile.samples.map((s) => ({ ...s })),
+    };
+    expect(
+      sameSeries(elevationSeries(profile, 3400), elevationSeries(tick, 3400)),
+    ).toBe(true);
+  });
+
+  it("is false when a point is added, a value moves or the axis scales", () => {
+    const base = elevationSeries(profile, 3400);
+    const grown = {
+      ...profile,
+      samples: [...profile.samples, { distanceM: 4100, elevationM: 25 }],
+    };
+    expect(sameSeries(base, elevationSeries(grown, 3400))).toBe(false);
+    const moved = {
+      ...profile,
+      samples: profile.samples.map((s, i) =>
+        i === 1 ? { ...s, elevationM: 41 } : s,
+      ),
+    };
+    expect(sameSeries(base, elevationSeries(moved, 3400))).toBe(false);
+    expect(sameSeries(base, elevationSeries(profile, 3500))).toBe(false);
+  });
+
+  it("sees the speed tail grow while the party stands still", () => {
+    const speed = (endMs: number) =>
+      speedSeries({
+        samples: [
+          { atMs: 0, speedMps: 1 },
+          { atMs: endMs, speedMps: 0 },
+        ],
+        clock: [{ atMs: 0, timestampMs: 0 }],
+        maxMps: 1,
+        averageMps: 0.5,
+      });
+    expect(sameSeries(speed(1000), speed(1000))).toBe(true);
+    expect(sameSeries(speed(1000), speed(2000))).toBe(false);
   });
 });
