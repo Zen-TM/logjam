@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import { radius, scrim, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
@@ -419,9 +419,8 @@ const styles = StyleSheet.create({
     marginRight: -spacing(1),
   },
   title: {
+    ...textRole.sheetTitle,
     flex: 1,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
     color: theme.text,
   },
   scrollContent: { paddingBottom: spacing(2) },

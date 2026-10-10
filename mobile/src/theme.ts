@@ -13,11 +13,13 @@ import {
   DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
+  FORM_RHYTHM,
   normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
   SPACE_UNIT,
+  TEXT_ROLES,
   THEME_SCHEMES,
   TOUCH_TARGET_MIN,
   type ThemeSchemeId,
@@ -173,6 +175,9 @@ export const fontSize = {
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: number): number => n * SPACE_UNIT;
 
+/** A form's label, field and section gaps (`FORM_RHYTHM` in `@logjam/shared`). */
+export const formRhythm = FORM_RHYTHM;
+
 /** A disabled control's dim, the same number on both clients. */
 export const opacity = OPACITY;
 
@@ -190,6 +195,32 @@ export const fontWeight = {
   medium: weight(FONT_WEIGHT.medium),
   bold: weight(FONT_WEIGHT.bold),
 } as const;
+
+/** One of `TEXT_ROLES`' styles, spread into a text style: `...textRole.title`. */
+type TextRoleStyle = {
+  fontSize: number;
+  fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
+  textTransform?: "uppercase";
+  color?: string;
+};
+export const textRole = Object.fromEntries(
+  Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
+    if (!("gps" in spec)) return [];
+    const role = spec.gps as {
+      size: keyof typeof fontSize;
+      weight: keyof typeof fontWeight;
+      uppercase?: true;
+      muted?: true;
+    };
+    const style: TextRoleStyle = {
+      fontSize: fontSize[role.size],
+      fontWeight: fontWeight[role.weight],
+      ...(role.uppercase ? { textTransform: "uppercase" } : {}),
+      ...(role.muted ? { color: theme.textMuted } : {}),
+    };
+    return [[name, style]];
+  }),
+) as { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
 // Modal/sheet scrims — the only intentional black-alpha overlays. Everything

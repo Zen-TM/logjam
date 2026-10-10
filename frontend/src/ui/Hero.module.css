@@ -24,8 +24,8 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: var(--font-xl);
-  font-weight: 700;
+  font-size: var(--text-title-size);
+  font-weight: var(--text-title-weight);
   color: var(--color-text);
 }
 

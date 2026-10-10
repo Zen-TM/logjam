@@ -865,6 +865,7 @@ function GeoPdfDialog({
                     className={classes.templateField}
                     placeholder="Name this template"
                     value={templateName}
+                    // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                     autoFocus
                     onChange={(event) => {
                       setTemplateName(event.target.value);

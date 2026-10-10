@@ -4,6 +4,7 @@ import {
   FONT_WEIGHT,
   RADIUS,
   SPACE,
+  TEXT_ROLES,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   TOUCH_TARGET_MIN,
@@ -16,6 +17,7 @@ import {
   fontWeight,
   radius,
   spacing,
+  textRole,
   textScale,
   theme,
   touchTargetMin,
@@ -59,5 +61,23 @@ describe("theme parity with @logjam/shared", () => {
     );
     expect(controlSize).toEqual(CONTROL.touch);
     expect(touchTargetMin).toBe(TOUCH_TARGET_MIN);
+  });
+
+  // `textRole.<name>` is the role's size and weight from the shared scale, in
+  // this launch's text scale. Mutation that turns it red: change a role's
+  // `size` in `TEXT_ROLES` without the style following, e.g. hand `title` the
+  // `fontSize.lg` in `theme.ts`.
+  it("draws every type role at the size and weight the shared table names", () => {
+    expect(Object.keys(textRole).sort()).toEqual(
+      Object.keys(TEXT_ROLES).sort(),
+    );
+    for (const [name, spec] of Object.entries(TEXT_ROLES)) {
+      const role = spec.gps;
+      const style = textRole[name as keyof typeof textRole];
+      expect(style.fontSize).toBe(Math.round(FONT.gps[role.size] * textScale));
+      expect(style.fontWeight).toBe(String(FONT_WEIGHT[role.weight]));
+      expect(style.textTransform === "uppercase").toBe("uppercase" in role);
+      expect(style.color === theme.textMuted).toBe("muted" in role);
+    }
   });
 });

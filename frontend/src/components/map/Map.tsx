@@ -1,4 +1,4 @@
-import { Notice } from "../../ui";
+import { Button, Notice } from "../../ui";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
@@ -3086,12 +3086,7 @@ function Map({
             <Notice>{pickVerb} the map to select a location</Notice>
           </div>
           <div className={classes.geoPdfConfirmBar}>
-            <button
-              className={classes.geoPdfButton}
-              onClick={onCancelPickCoords}
-            >
-              Cancel
-            </button>
+            <Button onClick={onCancelPickCoords}>Cancel</Button>
           </div>
         </>
       )}
@@ -3114,18 +3109,10 @@ function Map({
             style={{ aspectRatio: `${geoPdfPaperAspect ?? 210 / 297}` }}
           />
           <div className={classes.geoPdfConfirmBar}>
-            <button
-              className={classes.geoPdfButton}
-              onClick={handleConfirmGeoPdfExtent}
-            >
+            <Button variant="filled" onClick={handleConfirmGeoPdfExtent}>
               Confirm extent
-            </button>
-            <button
-              className={classes.geoPdfButton}
-              onClick={onGeoPdfExtentCancelled}
-            >
-              Cancel
-            </button>
+            </Button>
+            <Button onClick={onGeoPdfExtentCancelled}>Cancel</Button>
           </div>
         </>
       )}

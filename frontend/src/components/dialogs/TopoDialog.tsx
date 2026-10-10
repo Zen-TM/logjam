@@ -556,6 +556,7 @@ export default function TopoDialog({
                       className={classes.saveAsField}
                       placeholder="Name this template"
                       value={saveAsName}
+                      // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                       autoFocus
                       onChange={(event) => setSaveAsName(event.target.value)}
                     />
@@ -967,7 +968,7 @@ function ElvisInstructions({
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Order the tiles from ELVIS" />
+          <SectionHeader title="Order the data from ELVIS" />
           <p className={classes.stepLine}>
             In ELVIS, choose <strong>Order Data</strong>, then{" "}
             <strong>Load File</strong> and give it the shapefile. Then press{" "}
