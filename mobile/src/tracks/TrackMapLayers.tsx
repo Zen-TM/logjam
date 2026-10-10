@@ -7,6 +7,7 @@ import type { RecordedTrackPoint } from "@logjam/shared";
 
 import { listTrackPoints, type Track } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
+import { PIN_FLOOR } from "../map/layerOrder";
 import { stopSourcePress } from "../map/sourcePress";
 
 /** Where on the map a press landed — passed through so a caller can place a
@@ -77,6 +78,9 @@ const TrackLine = memo(function TrackLine({
         key={`track-line-${track.id}`}
         type="line"
         id={`track-line-${track.id}`}
+        // A track recorded or switched on after the pins mounted must still
+        // draw under them (map/layerOrder.ts).
+        beforeId={PIN_FLOOR}
         style={{
           lineColor: track.color,
           lineWidth: 3,

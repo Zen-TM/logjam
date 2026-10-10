@@ -26,6 +26,7 @@ vi.mock("../auth/sessionErrors", () => ({
 }));
 
 const { apiFetch, invalidateCurrentUser } = await import("./apiFetch");
+const { isNoResponse } = await import("./noResponse");
 
 function jsonResponse(body: unknown) {
   return {
@@ -106,4 +107,58 @@ describe("the /users/me cache", () => {
     fetchMock.mockResolvedValue(jsonResponse({ id: "bob" }));
     expect(await apiFetch("/users/me")).toEqual({ id: "bob" });
   });
+});
+
+describe("a request that got no answer", () => {
+  // The sync engine never counts these against an op (flush.ts), so the mark
+  // has to be on exactly the failures where the API said nothing. Mutation:
+  // drop either `markNoResponse` in apiFetch and a case here turns red; mark
+  // the `!res.ok` path and the last one does.
+  async function failure(): Promise<unknown> {
+    return apiFetch("/sync/push", { method: "POST", body: {} }).then(
+      () => null,
+      (err: unknown) => err,
+    );
+  }
+
+  it("marks a connection that was refused or reset", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Network request failed"));
+    expect(isNoResponse(await failure())).toBe(true);
+  });
+
+  it("marks the timeout's abort", async () => {
+    fetchMock.mockRejectedValue(
+      Object.assign(new Error("Aborted"), { name: "AbortError" }),
+    );
+    expect(isNoResponse(await failure())).toBe(true);
+  });
+
+  it("marks a reply cut off before its body arrived", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("Unexpected end of JSON input");
+      },
+      headers: { get: () => null },
+    });
+    expect(isNoResponse(await failure())).toBe(true);
+  });
+
+  it.each([502, 503, 504])(
+    "does not mark a %i: the server, or what stands in front of it, answered",
+    async (status) => {
+      const response = {
+        ok: false,
+        status,
+        json: async () => ({}),
+        clone: () => response,
+        headers: { get: () => null },
+      };
+      fetchMock.mockResolvedValue(response);
+      const err = await failure();
+      expect(isNoResponse(err)).toBe(false);
+      expect((err as { status?: number }).status).toBe(status);
+    },
+  );
 });
