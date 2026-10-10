@@ -191,6 +191,27 @@ to GPU-based tile rendering while avoiding CUDA/ROCm dependency complexity.
 
 ---
 
+## Building the NSW 5 m DEM archive
+
+`build_nsw_dem.py` turns NSW Spatial Services' 5 m DEM sheets into the
+`nsw-5m` archive Logjam reads heights from: terrarium PNG tiles, zoom 8 to 15,
+in one PMTiles file. It is a one-off build, separate from the LiDAR pipeline
+above, and needs GDAL with its Python bindings, NumPy, Pillow and the
+[`pmtiles`](https://github.com/protomaps/go-pmtiles) binary.
+
+```bash
+# One sheet, about 200 MB to download and 10 minutes to tile on 4 cores.
+python build_nsw_dem.py fetch dem/src Katoomba
+python build_nsw_dem.py tile dem/src dem/work --jobs 4
+python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles
+```
+
+`fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
+what is already done, so a stopped run carries on where it left off. The
+format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
+
+---
+
 ## Troubleshooting
 
 **`pdal: command not found`**

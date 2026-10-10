@@ -124,3 +124,4 @@ supersede instead.
 | [0026](0026-plan-fingerprint-covers-planned-values.md) | The apply compares an HMAC of each changed resource's planned values, reporting first and refusing once trusted | 2026-10-02 | Accepted |
 | [0027](0027-pr-plans-run-after-the-maintainer-approves.md) | Pull-request plans run only after the maintainer approves them | 2026-10-03 | Accepted |
 | [0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md) | A height comes from the finest DEM source that has it, and a seam is measured in one source | 2026-10-10 | Accepted |
+| [0029](0029-dem-tiles-are-terrarium-png-in-pmtiles.md) | A DEM Logjam builds is terrarium PNG tiles, rounded to a quarter metre, in one PMTiles archive | 2026-10-10 | Accepted |
