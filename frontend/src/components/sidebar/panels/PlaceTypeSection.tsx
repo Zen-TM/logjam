@@ -8,16 +8,20 @@ import {
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
   SETTINGS_LIST,
+  stepAfterPlaceTypeSave,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import {
   createPlaceType,
   deletePlaceType,
+  getPlaceTypes,
   reassignPlaceType,
   updatePlaceType,
   type TPlaceType,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { TypeAttributesDialog } from "./CustomFieldSection";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
   Button,
@@ -72,14 +76,20 @@ function PlaceTypeSection({
   types,
   loading,
   onTypesChange,
+  placeDefs,
+  onPlaceDefsChange,
   onBack,
 }: {
   types: TPlaceType[];
   loading: boolean;
   onTypesChange: (types: TPlaceType[]) => void;
+  /** The user's place attributes, for the step a new type leads into. */
+  placeDefs: ScopedCustomFieldDef[];
+  onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   onBack: () => void;
 }) {
   const [editing, setEditing] = useState<TPlaceType | "new" | null>(null);
+  const [attributesFor, setAttributesFor] = useState<TPlaceType | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
@@ -89,7 +99,6 @@ function PlaceTypeSection({
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
   async function refresh() {
-    const { getPlaceTypes } = await import("../../../placeUtils");
     onTypesChange(await getPlaceTypes());
   }
 
@@ -256,18 +265,34 @@ function PlaceTypeSection({
             setError(null);
           }}
           onSave={async (draft) => {
+            // Held in an object: the assignment happens inside `run`'s
+            // callback, which the compiler cannot follow for a `let`.
+            const made: { type: TPlaceType | null } = { type: null };
             const ok =
               editing === "new"
-                ? await run(
-                    () => createPlaceType(draft),
-                    "Couldn't create that type.",
-                  )
+                ? await run(async () => {
+                    made.type = await createPlaceType(draft);
+                  }, "Couldn't create that type.")
                 : await run(
                     () => updatePlaceType(editing.id, draft),
                     "Couldn't save that type.",
                   );
-            if (ok) setEditing(null);
+            if (!ok) return;
+            setEditing(null);
+            if (stepAfterPlaceTypeSave(made.type !== null) === "attributes") {
+              setAttributesFor(made.type);
+            }
           }}
+        />
+      )}
+
+      {attributesFor && (
+        <TypeAttributesDialog
+          type={attributesFor}
+          placeTypes={types}
+          defs={placeDefs}
+          onDefsChange={onPlaceDefsChange}
+          onClose={() => setAttributesFor(null)}
         />
       )}
 
