@@ -70,12 +70,6 @@ const SHEET_TRAVEL = Dimensions.get("window").height;
 // How long the sheet must lie still, untouched, before it springs back or
 // closes. A fling keeps reporting scroll, so it is never cut short.
 const SETTLE_MS = 80;
-// How long a close asked for by the drag has to take effect before the sheet
-// springs back instead. Longer than the owner needs to re-render; a sheet that
-// answers a close by staying open (a sub-mode going back to its form) is back
-// in place before the finger returns.
-const CLOSE_GRACE_MS = 400;
-
 /**
  * Lets a child freeze the sheet's scroll for the rest of a touch.
  *
@@ -227,9 +221,9 @@ export function BottomSheet({
   const outerRef = useRef<ScrollView>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
   // that is from its end. `touching`: a finger is dragging it. `dragged`: a
-  // finger has, since it last settled. `closingUntil`: the drag has asked to
-  // close, and the owner may take a few frames to say so; springing back
-  // before this time would fight the slide out.
+  // finger has, since it last settled. `closing`: the drag has asked to close
+  // and the owner has not answered yet; springing back meanwhile would fight
+  // the slide out.
   const pull = useRef({
     content: 0,
     viewport: 0,
@@ -237,7 +231,7 @@ export function BottomSheet({
     last: 0,
     touching: false,
     dragged: false,
-    closingUntil: 0,
+    closing: false,
   });
   // How far the drag has taken the sheet down, before the lift.
   const rawPull = () =>
@@ -311,7 +305,12 @@ export function BottomSheet({
     else settleSoon();
   });
   // What the native driver is doing with the two offsets, for the settle.
+  // Listened to afresh each time the sheet mounts: the native side of a value
+  // is rebuilt with the scroll view it is driven by, and a listener from the
+  // last opening then hears nothing, which left the release rule reading the
+  // offsets of the previous drag.
   useEffect(() => {
+    if (!mounted) return;
     const outer = scroll.outerY.addListener(({ value }) => {
       pull.current.y = value;
       moved();
@@ -324,14 +323,18 @@ export function BottomSheet({
       scroll.outerY.removeListener(outer);
       scroll.innerY.removeListener(inner);
     };
-  }, [scroll]);
+  }, [mounted, scroll]);
 
   useEffect(() => {
     if (visible) {
       // A sheet reopened while still sliding out is wherever it was dragged to.
       pull.current.touching = false;
       pull.current.dragged = false;
-      pull.current.closingUntil = 0;
+      pull.current.closing = false;
+      // Not known until the first scroll event: read as "at rest".
+      pull.current.y = Number.POSITIVE_INFINITY;
+      pull.current.last = 0;
+      viewport.current = { ...viewport.current, y: 0 };
       for (const value of scroll.values) value.setValue(0);
       outerRef.current?.scrollToEnd({ animated: false });
       Animated.timing(progress, {
@@ -354,12 +357,15 @@ export function BottomSheet({
 
   useEffect(() => {
     settleRef.current = () => {
-      if (
-        !visible ||
-        pull.current.touching ||
-        Date.now() < pull.current.closingUntil
-      )
-        return;
+      console.log(
+        visible,
+        JSON.stringify(pull.current),
+        JSON.stringify(viewport.current),
+        rawPull(),
+        pulled(),
+        Date.now(),
+      );
+      if (!visible || pull.current.touching || pull.current.closing) return;
       const outcome = sheetRelease({
         pulled: pulled(),
         dragged: pull.current.dragged,
@@ -380,13 +386,19 @@ export function BottomSheet({
         });
       }
       if (outcome === "close") {
-        pull.current.closingUntil = Date.now() + CLOSE_GRACE_MS;
+        pull.current.closing = true;
         onClose();
-        // A little past the grace, so this settle is not itself refused.
-        setTimeout(() => settleRef.current(), CLOSE_GRACE_MS + 20);
       } else if (outcome === "snap")
         outerRef.current?.scrollToEnd({ animated: true });
     };
+    // The owner has answered a close the drag asked for by rendering this
+    // sheet still open (a sub-mode going back to its form): put it back. Not
+    // on a timer: a slow phone took longer than any sensible wait to close,
+    // and the spring back then fought the slide out.
+    if (pull.current.closing && visible) {
+      pull.current.closing = false;
+      settleSoon();
+    }
   });
   useEffect(
     () => () => {
@@ -466,7 +478,7 @@ export function BottomSheet({
         // clears it, so the sheet cannot stay parked where it was left.
         onTouchStart={() => {
           pull.current.touching = false;
-          pull.current.closingUntil = 0;
+          pull.current.closing = false;
           settleSoon();
         }}
         {...dragHandlers}

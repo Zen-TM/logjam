@@ -170,7 +170,9 @@ comments in `src/map/MapScreen.tsx`; these are the ones a screen designer meets.
 - **The whole sheet drags, not only its handle**: past ~120pt or a flick
   dismisses, less springs back. Content that scrolls drags the sheet once it
   is at its top, in the same gesture; a horizontal gesture inside a sheet
-  stays its own. A tap on the handle does nothing, because a drag is discard.
+  stays its own. A pull can be taken back: the sheet follows the finger up
+  again, and where it is when the finger lifts decides, not that it was
+  pulled. A tap on the handle does nothing, because a drag is discard.
 - **A titled sheet draws a × at the top right of its header.**
 - **The backdrop is the screen-reader dismiss** (`Close <sheet title>`); the
   handle is hidden from assistive tech. The title is therefore read as part of
