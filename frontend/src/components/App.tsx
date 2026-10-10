@@ -182,6 +182,11 @@ function App() {
     : "protomaps";
 
   const [showAdd, setShowAdd] = useState(false);
+  // "Add a place here" from the map: the form opens on this spot.
+  const [addPlaceAt, setAddPlaceAt] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // True when the unified importer was opened from the onboarding wizard, so its
@@ -1723,6 +1728,16 @@ function App() {
                 wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
               );
           }}
+          onAddPlaceAt={(point) => {
+            setAddPlaceAt(point);
+            setShowAdd(true);
+          }}
+          onDrawRouteFrom={(point) => {
+            startDrawingRoute();
+            // The point is the route's first vertex, as a press on the map
+            // there would have made it.
+            routeDraft.addAnchor([point.longitude, point.latitude]);
+          }}
           selectTrack={(mediaId) => {
             const way = allWays.find(
               (each) => each.kind !== "route" && each.id === mediaId,
@@ -1952,7 +1967,11 @@ function App() {
       <PlaceDialog
         place={null}
         open={showAdd && !pickingCoords}
-        onClose={() => setShowAdd(false)}
+        initialCoords={addPlaceAt}
+        onClose={() => {
+          setShowAdd(false);
+          setAddPlaceAt(null);
+        }}
         onSaved={refetch}
         onPickCoords={startPickingCoords}
         onCancelPickCoords={cancelPickingCoords}
