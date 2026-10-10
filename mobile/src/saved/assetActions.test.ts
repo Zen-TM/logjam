@@ -36,6 +36,7 @@ vi.mock("../sync/mediaUpload", () => ({
   attachMediaLocal: vi.fn(),
   deleteMediaLocal: vi.fn(),
   linkStandaloneMediaLocal: vi.fn(),
+  recolourStandaloneMediaLocal: vi.fn(),
   renameStandaloneMediaLocal: vi.fn(),
 }));
 vi.mock("../sync/mirrorStore", () => ({ getMediaById: vi.fn() }));
