@@ -17,7 +17,7 @@ try to make it code; when you convert a rule to code, delete its line.
 
 | Decision | Declared in |
 |---|---|
-| Colour roles and schemes, space, form rhythm, radius, type, control sizes | `designTokens.ts`, `themeSchemes.ts` |
+| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes | `designTokens.ts`, `themeSchemes.ts` |
 | Which glyph stands for an idea | `icons.ts` |
 | Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
 | A shared screen's sections, order, words, verbs and empty states | `contracts/` |

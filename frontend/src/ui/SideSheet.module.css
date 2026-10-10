@@ -40,8 +40,8 @@
 .title {
   flex: 1;
   margin: 0;
-  font-size: var(--font-lg);
-  font-weight: 600;
+  font-size: var(--text-sheet-title-size);
+  font-weight: var(--text-sheet-title-weight);
 }
 
 .title:focus-visible {
@@ -86,9 +86,9 @@
      floats midway and the eye reads it as belonging to the row above. Set on
      the kit rather than per page: every list that stacks sections wants it. */
   padding-top: var(--space-1);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  text-transform: uppercase;
+  font-size: var(--text-section-size);
+  font-weight: var(--text-section-weight);
+  text-transform: var(--text-section-transform);
   letter-spacing: 1px;
   color: var(--color-text-muted);
 }

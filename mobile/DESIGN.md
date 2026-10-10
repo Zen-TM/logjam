@@ -24,14 +24,8 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
   cards.
 - **A photo viewer's chrome is fixed**: a photo sits on black.
 
-| Role | Token |
-|---|---|
-| Screen / hero title | `fontSize.xl`, bold |
-| Hero metric | `fontSize.lg`, medium |
-| Display metric | `fontSize.display`, only where the number is the whole screen |
-| Section header, stat label | `fontSize.xs`, medium, uppercase |
-| Row title | `fontSize.base`, medium |
-| Subtitle, hint, legend | `fontSize.sm`, `textMuted` |
+- **A text style is a role** from `TEXT_ROLES`: `...textRole.<name>`, never
+  a `fontSize` and `fontWeight` written by hand.
 
 Radius: `md` tile or inline surface; `lg` card or row; `xl` sheet; `pill`
 anything text-shaped that is not a card; `sm` swatch.

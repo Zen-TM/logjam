@@ -28,13 +28,8 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
 - **`--radius-full` is a circle on a square box only**; anything
   stadium-shaped is `--radius-pill`.
 
-| Role | Size / weight |
-|---|---|
-| Page title (hero) | `--font-xl` / 700 |
-| Sheet title, hero metric | `--font-lg` / 600 |
-| Row title | `--font-base` / 600, two lines at most |
-| Body, subtitle, chip, menu item | `--font-sm` (muted for subtitles) |
-| Section title, legend, badge | `--font-xs` / 600; section titles uppercase |
+- **A text style is a role** from `TEXT_ROLES`: `--text-<role>-size` and
+  `-weight`, never a `--font-*` and a weight written by hand.
 
 Radius: `sm` swatch or checkbox; `md` tile, icon button, menu item, field;
 `lg` row, card, map button; `xl` popover, sheet; `pill` anything text-shaped

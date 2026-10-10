@@ -138,6 +138,74 @@ export const FONT = {
 export const FONT_WEIGHT = { regular: 400, medium: 600, bold: 700 } as const;
 
 /**
+ * Type roles: which size and weight each kind of text takes, by client. A role
+ * names a size from `FONT` and a weight from `FONT_WEIGHT`, so the scale stays
+ * the one list of numbers; Logjam GPS reads them as `textRole.<name>` (theme.ts)
+ * and Logjam Web as `--text-<name>-size|weight|transform` (webTokens.ts). A
+ * client that does not draw a role has no entry for it. Colour is the screen's
+ * choice among `text` and `textMuted` (`muted` marks the roles that are always
+ * the second), never a role's.
+ */
+type TextRoleStyle<Size extends string> = {
+  size: Size;
+  weight: keyof typeof FONT_WEIGHT;
+  /** A section heading; shared/DESIGN.md §2. */
+  uppercase?: true;
+  muted?: true;
+};
+type TextRoleSpec = {
+  gps?: TextRoleStyle<keyof typeof FONT.gps>;
+  web?: TextRoleStyle<keyof typeof FONT.web>;
+};
+export const TEXT_ROLES = {
+  /** A screen's or a page's own title. */
+  title: {
+    gps: { size: "xl", weight: "bold" },
+    web: { size: "xl", weight: "bold" },
+  },
+  /** A sheet's, dialog's or side sheet's title. */
+  sheetTitle: {
+    gps: { size: "lg", weight: "bold" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** The one figure a hero carries. */
+  metric: {
+    gps: { size: "lg", weight: "medium" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** A figure in a grid of stats. */
+  statValue: {
+    gps: { size: "lg", weight: "bold" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** A row's title. */
+  rowTitle: {
+    gps: { size: "base", weight: "medium" },
+    web: { size: "base", weight: "medium" },
+  },
+  /** What a row says under its title. */
+  subtitle: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "sm", weight: "regular", muted: true },
+  },
+  /** The label of a field or a control: sentence case, never a heading. */
+  label: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "sm", weight: "regular", muted: true },
+  },
+  /** A line under a control saying what it means. */
+  hint: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "xs", weight: "regular", muted: true },
+  },
+  /** A section heading or a stat caption: the only capitals. */
+  section: {
+    gps: { size: "xs", weight: "medium", uppercase: true, muted: true },
+    web: { size: "xs", weight: "medium", uppercase: true, muted: true },
+  },
+} as const satisfies Record<string, TextRoleSpec>;
+
+/**
  * Control heights in px, by pointer: `lg` buttons and text fields, `md`
  * compact buttons, chips and icon buttons, `sm` the round icon button at a
  * pill's end. A mouse keeps the desktop density (still clear of WCAG 2.5.8's

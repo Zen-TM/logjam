@@ -64,8 +64,8 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: var(--font-lg);
-  font-weight: 600;
+  font-size: var(--text-sheet-title-size);
+  font-weight: var(--text-sheet-title-weight);
 }
 
 .title:focus-visible {

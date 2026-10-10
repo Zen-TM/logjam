@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, formRhythm, opacity, theme } from "../theme";
+import { formRhythm, opacity, textRole } from "../theme";
 import { FieldError } from "./FieldError";
 import { fieldLabel } from "./fieldLabel";
 
@@ -64,5 +64,5 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: formRhythm.field,
   },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  hint: textRole.hint,
 });
