@@ -305,6 +305,83 @@ async function claimAndNotify<Row extends { id: string }>(
   return claimedRows.length;
 }
 
+/**
+ * Status-guarded flip to `failed`, plus the input ZIP: the worker that would
+ * have deleted it is the thing that died, and nothing retries from it (retry
+ * is a new job and a new upload). Only the sweep that won the flip deletes.
+ */
+async function failReapedTopoJob(
+  id: string,
+  from: "pending" | "processing",
+): Promise<{ count: number }> {
+  const claim = await prisma.topoJob.updateMany({
+    where: { id, status: from },
+    data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+  });
+  if (claim.count === 1) {
+    try {
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: getEnv().S3_BUCKET_TOPO ?? "",
+          Key: `inputs/${id}/upload.zip`,
+        }),
+      );
+    } catch (err) {
+      logger.warn(
+        { err: safeErrorForLog(err), id },
+        "topo_reaper_input_delete_failed",
+      );
+    }
+  }
+  return claim;
+}
+
+// A browser PUT of even the 25 GB cap finishes well inside a day; an
+// `uploading` row older than this was abandoned (tab closed, network lost).
+const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Abandoned-upload sweep: the user never called /start, so no worker or
+ * reaper will ever touch the row, and its ZIP (not counted in quota) would
+ * stay forever. S3 first, then the status-guarded row delete, so a failure
+ * leaves the row for the next sweep. No notification: the user left on
+ * their own.
+ */
+export async function sweepAbandonedTopoUploads(
+  now: Date = new Date(),
+): Promise<number> {
+  const bucket = getEnv().S3_BUCKET_TOPO ?? "";
+  const rows = await prisma.topoJob.findMany({
+    where: {
+      status: "uploading",
+      createdAt: { lt: new Date(now.getTime() - ABANDONED_UPLOAD_MS) },
+    },
+    select: { id: true },
+  });
+  let swept = 0;
+  for (const { id } of rows) {
+    try {
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: `inputs/${id}/upload.zip`,
+        }),
+      );
+      // Guarded: a /start that landed since the read keeps its row.
+      const gone = await prisma.topoJob.deleteMany({
+        where: { id, status: "uploading" },
+      });
+      swept += gone.count;
+    } catch (err) {
+      logger.error(
+        { err: safeErrorForLog(err), id },
+        "topo_abandoned_upload_sweep_failed",
+      );
+    }
+  }
+  return swept;
+}
+
 /** Same type + payload shape topo/worker.py's failure path writes. */
 function topoJobEntry(row: {
   id: string;
@@ -400,11 +477,7 @@ export async function reapStuckTopoJobs(
   });
   reaped += await claimAndNotify(
     pendingJobs,
-    (id) =>
-      prisma.topoJob.updateMany({
-        where: { id, status: "pending" },
-        data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
-      }),
+    (id) => failReapedTopoJob(id, "pending"),
     topoJobEntry,
   );
 
@@ -437,11 +510,7 @@ export async function reapStuckTopoJobs(
       overdueJobs,
       // status kept in the WHERE: a job that completed between the read and
       // this write must not be flipped back to failed.
-      (id) =>
-        prisma.topoJob.updateMany({
-          where: { id, status: "processing" },
-          data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
-        }),
+      (id) => failReapedTopoJob(id, "processing"),
       topoJobEntry,
     );
     // Best-effort even for rows another instance claimed: the task is dead
@@ -851,6 +920,12 @@ export function startTopoJobReaper(): () => void {
         // next interval.
         logger.error({ err: safeErrorForLog(err) }, "topo_job_reaper_failed");
       });
+    sweepAbandonedTopoUploads().catch((err) => {
+      logger.error(
+        { err: safeErrorForLog(err) },
+        "topo_abandoned_upload_sweep_failed",
+      );
+    });
     queueAutoExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_auto_exports_queued");
