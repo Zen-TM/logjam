@@ -25,7 +25,7 @@ import {
   DEM_TILE_URL_TEMPLATE,
   DEM_TILE_ZOOM,
   demMetresFromRgb,
-  demSampleValue,
+  demSampleHeight,
   resolveDemSamples,
   type SamplePosition,
 } from "@logjam/shared";
@@ -138,8 +138,8 @@ export async function sampleElevations(
     }),
   );
 
-  return resolved.map(({ tileX, tileY, index }) =>
-    demSampleValue(tiles.get(`${tileX}/${tileY}`), index),
+  return resolved.map((address) =>
+    demSampleHeight(tiles.get(`${address.tileX}/${address.tileY}`), address),
   );
 }
 

@@ -33,7 +33,7 @@
 import * as SQLite from "expo-sqlite";
 import {
   DEM_TILE_ZOOM,
-  demSampleValue,
+  demSampleHeight,
   demTileUrl,
   resolveDemSamples,
   xyzToTmsRow,
@@ -182,8 +182,11 @@ export async function sampleElevations(
       if (tile) cacheTile(key, tile, "network");
   }
 
-  return addresses.map(({ tileX, tileY, index }) =>
-    demSampleValue(cachedTile(`${tileX}/${tileY}`, { allowNetwork }), index),
+  return addresses.map((address) =>
+    demSampleHeight(
+      cachedTile(`${address.tileX}/${address.tileY}`, { allowNetwork }),
+      address,
+    ),
   );
 }
 
