@@ -158,6 +158,7 @@ export function CustomFieldList({
  * needing to know about the other.
  */
 export function useCustomFieldForm({
+  open,
   entity,
   defs,
   editing,
@@ -165,6 +166,9 @@ export function useCustomFieldForm({
   onSaved,
   onDone,
 }: {
+  /** Whether the host is showing the form: each open starts a fresh draft
+   *  (`fieldFormKey`). */
+  open: boolean;
   entity: CustomFieldEntity;
   defs: ScopedCustomFieldDef[];
   /** null = adding a new field. */
@@ -191,7 +195,7 @@ export function useCustomFieldForm({
   // component it replaced it is not unmounted between opens — nine separate
   // `useState` initialisers would each keep the PREVIOUS field's value, and the
   // user would open "Water level" and find "Gate code" in the box.
-  const formKey = fieldFormKey(editing, initialTypeId);
+  const formKey = fieldFormKey(open, editing, initialTypeId);
   const [draft, setDraft] = useState<FieldDraft>(() =>
     seedDraft(entity, editing, initialTypeId),
   );
@@ -291,9 +295,6 @@ export function useCustomFieldForm({
     setSaving(true);
     try {
       await saveFieldDefs(entity, next);
-      // The hook outlives the sheet, so an ADD has to hand back an empty form
-      // itself: the next "Add an attribute" otherwise opened on this label.
-      if (!editing) setDraft(seedDraft(entity, null, initialTypeId));
       onSaved(
         next,
         editing
@@ -316,7 +317,6 @@ export function useCustomFieldForm({
     defs,
     editing,
     entity,
-    initialTypeId,
     label,
     max,
     min,

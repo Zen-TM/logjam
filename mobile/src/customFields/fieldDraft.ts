@@ -26,11 +26,17 @@ export type FieldDraft = {
  * one constant key for every "new", the draft seeded on the place form's first
  * render (a Canyon) was still the draft after the user switched the place to a
  * type they had just made, so the attribute was added to Canyon instead.
+ *
+ * Being CLOSED is an identity of its own, as for the place type form
+ * (`placeTypeFormKey`): a label typed and abandoned with Cancel was otherwise
+ * still in the box the next time "Add an attribute" was opened.
  */
 export function fieldFormKey(
+  open: boolean,
   editing: ScopedCustomFieldDef | null,
   initialTypeId: string | undefined,
 ): string {
+  if (!open) return "closed";
   return editing ? `edit:${editing.key}` : `new:${initialTypeId ?? ""}`;
 }
 
