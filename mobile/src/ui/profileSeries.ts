@@ -66,3 +66,41 @@ export function speedSeries(profile: SpeedProfile): ProfileSeries {
     max: profile.maxMps,
   };
 }
+
+/**
+ * Reads a wall-clock instant as a time of day in the device's time zone, for
+ * a series that starts at `startMs` and ends at `endMs`. A series that runs
+ * into another day says which day each time is on, because "12:10 am" on an
+ * overnight recording is otherwise before its own start.
+ */
+export function timeOfDayFormatter(
+  startMs: number,
+  endMs: number,
+): (ms: number) => string {
+  const overnight =
+    new Date(startMs).toDateString() !== new Date(endMs).toDateString();
+  return (ms) =>
+    new Date(ms).toLocaleString(undefined, {
+      weekday: overnight ? "short" : undefined,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+}
+
+/**
+ * Whether two series draw the same picture.
+ *
+ * A live recording rebuilds its series on every 1 Hz tick of the clock — new
+ * arrays, same numbers whenever no fix landed in between (the elevation
+ * profile never moves with the clock) — and the chart is hundreds of Views, so
+ * the tick must be able to tell "new object" from "new data".
+ */
+export function sameSeries(a: ProfileSeries, b: ProfileSeries): boolean {
+  if (a === b) return true;
+  if (a.min !== b.min || a.max !== b.max) return false;
+  if (a.points.length !== b.points.length) return false;
+  return a.points.every((point, i) => {
+    const other = b.points[i]!;
+    return point.x === other.x && point.value === other.value;
+  });
+}

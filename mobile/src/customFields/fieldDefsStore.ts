@@ -21,6 +21,7 @@
 // is precisely why they must not be kept anywhere else. Nothing here logs one.
 import {
   customFieldDefFromRow,
+  isReservedFieldKey,
   type CustomFieldEntity,
   type ScopedCustomFieldDef,
   asFieldValues,
@@ -110,10 +111,23 @@ export async function saveFieldDefs(
     // The editor refuses the verb; this is the belt to that braces, because
     // the local half of a delete is destructive and runs before the server
     // ever sees the op.
-    if (row.ownerId === null) continue;
+    if (isBuiltIn(row)) continue;
     if (!incomingKeys.has(row.key))
       await removeFieldDefById(row.id, entity, row.key);
   }
+
+  // Positions are written only when the caller moved a row. The stored
+  // positions are not 0..n (a delete leaves a gap, built-ins sort in between),
+  // so writing the index on every save renumbered rows nobody touched.
+  const kept = rows.filter((row) => incomingKeys.has(row.key));
+  const storedOrder = [...kept]
+    .sort((a, b) => a.position - b.position || a.key.localeCompare(b.key))
+    .map((row) => row.key);
+  const reordered =
+    defs
+      .filter((def) => byKey.has(def.key))
+      .map((def) => def.key)
+      .join() !== storedOrder.join();
 
   for (const [position, def] of defs.entries()) {
     const row = byKey.get(def.key);
@@ -133,13 +147,13 @@ export async function saveFieldDefs(
     }
     // Same rule for an edit: a built-in field's label, bounds and scoping are
     // not this account's to move, and the push would 404 and park a sync issue.
-    if (row.ownerId === null) continue;
+    if (isBuiltIn(row)) continue;
     const patch: Record<string, unknown> = {};
     if (row.label !== def.label) patch.label = def.label;
     if (row.type !== def.type) patch.type = def.type;
     if (row.min !== (def.min ?? null)) patch.min = def.min ?? null;
     if (row.max !== (def.max ?? null)) patch.max = def.max ?? null;
-    if (row.position !== position) patch.position = position;
+    if (reordered && row.position !== position) patch.position = position;
     if (row.appliesToAllTypes !== def.appliesToAllTypes) {
       patch.appliesToAllTypes = def.appliesToAllTypes;
     }
@@ -153,6 +167,15 @@ export async function saveFieldDefs(
       await updateCustomFieldDefLocal(row.id, patch);
     }
   }
+}
+
+/**
+ * A built-in row. Not `ownerId === null` alone: a definition made on this
+ * phone has no owner here until it syncs, and that test made it impossible to
+ * edit or delete in the meantime. Same rule as `isSystemFieldDef`, on the row.
+ */
+function isBuiltIn(row: { ownerId: string | null; key: string }): boolean {
+  return row.ownerId === null && isReservedFieldKey(row.key);
 }
 
 /** Set equality over two id lists — order is not meaningful in a scoping. */
@@ -200,7 +223,7 @@ export async function removeFieldDef(
   // place in the account, and the server answered the def delete with
   // "already applied" — so the definition came back on the next pull and the
   // values did not.
-  if (row.ownerId === null) {
+  if (isBuiltIn(row)) {
     throw new Error("A built-in field can't be deleted.");
   }
   return removeFieldDefById(row.id, entity, key);

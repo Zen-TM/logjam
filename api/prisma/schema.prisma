@@ -163,6 +163,10 @@ model PlaceType {
   /// this has to hold. Postgres treats NULLs as distinct in a unique index and
   /// Prisma emits a plain UNIQUE, which would let a re-run migration insert a
   /// second global "Canyon"; the migration adds NULLS NOT DISTINCT by raw SQL.
+  ///
+  /// A second unique index, on the name as a person reads it (trimmed, spaces
+  /// collapsed, case ignored), is raw SQL only: Prisma cannot declare an
+  /// index on an expression. See 20261010120000_place_type_name_unique_as_read.
   @@unique([ownerId, name])
   @@index([ownerId, updatedAt])
   @@map("place_types")

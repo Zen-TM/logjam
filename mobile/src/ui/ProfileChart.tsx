@@ -18,7 +18,7 @@
 //
 // Columns are scaled between the profile's own min and max, not from sea
 // level: a place between 700 and 840 m drawn from zero is a flat bar.
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,
   StyleSheet,
@@ -37,7 +37,11 @@ import {
   withAlpha,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
-import type { ProfilePoint, ProfileSeries } from "./profileSeries";
+import {
+  sameSeries,
+  type ProfilePoint,
+  type ProfileSeries,
+} from "./profileSeries";
 
 /**
  * Columns drawn: one per POINT of chart width, capped.
@@ -114,6 +118,51 @@ function toColumns(samples: readonly ProfilePoint[], count: number): Column[] {
   return columns;
 }
 
+/**
+ * The drawn columns, held apart from the chart so a re-render that changed no
+ * data costs nothing: ~400 Views per chart, twice a panel, once a second while
+ * recording. The comparison is on the SERIES, not on `columns` — they are a
+ * pure function of it and the count, and the series is the cheaper thing to
+ * compare. Guard: "sameSeries" in profileSeries.test.ts.
+ */
+const Columns = memo(
+  function Columns({
+    columns,
+    min,
+    span,
+  }: {
+    columns: readonly Column[];
+    series: ProfileSeries;
+    min: number;
+    span: number;
+  }) {
+    return columns.map((column, index) => (
+      // Non-interactive so the TOUCH lands on the container: locationX is
+      // measured against whichever view received it, and a 16px-wide column
+      // reports a locationX near zero — which read as "you are at the start
+      // of the route" wherever you actually pressed.
+      <View key={index} style={styles.column} pointerEvents="none">
+        {column.value == null ? null : (
+          <View
+            style={[
+              styles.bar,
+              {
+                height:
+                  CHART_HEIGHT *
+                  (MIN_COLUMN_FRACTION +
+                    (1 - MIN_COLUMN_FRACTION) * ((column.value - min) / span)),
+              },
+            ]}
+          />
+        )}
+      </View>
+    ));
+  },
+  (prev, next) =>
+    prev.columns.length === next.columns.length &&
+    sameSeries(prev.series, next.series),
+);
+
 export function ProfileChart({
   series,
   formatValue,
@@ -124,7 +173,7 @@ export function ProfileChart({
   series: ProfileSeries;
   /** Renders the scrubbed value — the chart knows no units. */
   formatValue: (value: number) => string;
-  /** Renders the scrubbed position: metres along, or time into the recording. */
+  /** Renders the scrubbed position: metres along, or a time of day. */
   formatX: (x: number) => string;
   /** Shown until the first scrub, in place of the readout. */
   hint: string;
@@ -245,7 +294,7 @@ export function ProfileChart({
           // units do not settle it, since a height and a distance are both
           // metres. "51 m at 3.7 km" says the same thing in the order the
           // question is asked, costs no extra line, and works unchanged for a
-          // speed against a clock ("4.2 km/h at 1:23").
+          // speed against a clock ("4.2 km/h at 2:41 pm").
           <Text style={styles.readout}>
             {scrubbed.value != null ? formatValue(scrubbed.value) : "—"}
             <Text style={styles.readoutAt}>{"  at  "}</Text>
@@ -264,28 +313,7 @@ export function ProfileChart({
         accessibilityLabel={accessibilityLabel}
         {...responder.panHandlers}
       >
-        {columns.map((column, index) => (
-          // Non-interactive so the TOUCH lands on the container: locationX is
-          // measured against whichever view received it, and a 16px-wide column
-          // reports a locationX near zero — which read as "you are at the start
-          // of the route" wherever you actually pressed.
-          <View key={index} style={styles.column} pointerEvents="none">
-            {column.value == null ? null : (
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    height:
-                      CHART_HEIGHT *
-                      (MIN_COLUMN_FRACTION +
-                        (1 - MIN_COLUMN_FRACTION) *
-                          ((column.value - min) / span)),
-                  },
-                ]}
-              />
-            )}
-          </View>
-        ))}
+        <Columns columns={columns} series={series} min={min} span={span} />
         {/* A hairline rather than a highlighted column: at one column per point
             a recoloured column is a pixel wide and invisible. */}
         {scrubIndex != null && columns.length > 1 ? (

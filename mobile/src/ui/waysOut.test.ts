@@ -13,7 +13,7 @@ function sources(dir: string): string[] {
 }
 
 // Anything that opens OVER something else has a visible ×; a pushed page has a
-// back arrow; a root tab has neither (docs/ux-principles.md §3).
+// back arrow; a root tab has neither (shared/DESIGN.md §3).
 describe("ways out", () => {
   // Red when `BottomSheet` loses its ×: every sheet in the app would then have
   // only a gesture. To see it: delete the `icon="close"` line in BottomSheet.tsx.

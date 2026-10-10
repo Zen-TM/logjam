@@ -33,7 +33,7 @@ import {
   type FieldValues,
   type ForeignFieldValue,
 } from "./fieldValues.js";
-import { isInternalFieldValueKey } from "./placeTypes.js";
+import { isInternalFieldValueKey, nameKey } from "./placeTypes.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /**
@@ -122,11 +122,9 @@ export function reconcileCopiedFieldValues(args: {
 export function matchPlaceTypeByName<
   T extends { id: string; name: string; ownerId: string | null },
 >(senderTypeName: string, candidates: readonly T[]): T | null {
-  const needle = senderTypeName.trim().toLowerCase();
+  const needle = nameKey(senderTypeName);
   if (!needle) return null;
-  const named = candidates.filter(
-    (type) => type.name.trim().toLowerCase() === needle,
-  );
+  const named = candidates.filter((type) => nameKey(type.name) === needle);
   return named.find((type) => type.ownerId === null) ?? named[0] ?? null;
 }
 

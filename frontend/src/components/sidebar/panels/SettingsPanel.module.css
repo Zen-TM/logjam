@@ -1,4 +1,4 @@
-/* Settings answers no question (docs/ux-principles.md §2), so its title row is
+/* Settings answers no question (shared/DESIGN.md §2), so its title row is
    only a title and its ×, pinned; the list under it is the scroller: the
    preferences and the three lists the user keeps. */
 .page {

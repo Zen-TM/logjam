@@ -65,8 +65,8 @@ half the screen.
 
 **Every region download also saves the DEM, and that is not optional.** The plan
 in `shared/src/mapRegionEstimate.ts` appends a `terrarium` source
-(`DEM_SOURCE_ID`) to every run: one flat level at `DEM_TILE_ZOOM`, priced into
-the same size estimate, tile cap and free-space check as the basemaps, and
+(`DEM_SOURCE_ID`) to every run: one flat level at `TERRARIUM.sampleZoom`, priced
+into the same size estimate, tile cap and free-space check as the basemaps, and
 enqueued as an ordinary `tile-pyramid` job whose `zMin === zMax`. It lands as a
 `dem-region` artifact — same group id as the run, so Saved shows it inside the
 area's card and deleting the area takes it — which the resolver never draws.
