@@ -154,8 +154,8 @@ async function runCycleOnce(): Promise<void> {
   // still waiting, and nothing else would come back for it: the ladder arms on
   // a failed cycle, and this one didn't fail. The counter is deliberately NOT
   // reset here, so a server that keeps saying 503 is asked at growing
-  // intervals rather than every few seconds until the attempt cap parks the
-  // op in front of the user.
+  // intervals rather than every few seconds for the day it takes
+  // `shouldGiveUpOnSyncOp` to park the op in front of the user.
   if (retryingOps > 0) {
     scheduleBackoffRetry();
     return;

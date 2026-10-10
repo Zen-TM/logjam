@@ -128,3 +128,12 @@ export function composeTopoOverlayRefs(
   }
   return refs;
 }
+
+/**
+ * Credit lines for the overlays being drawn, deduped and in stable source
+ * order — the same lines Logjam Web's attribution control shows. Hillshade,
+ * slope, contours and vegetation all credit the LiDAR (ELVIS) source.
+ */
+export function topoOverlayCredits(refs: readonly TopoOverlayRef[]): string[] {
+  return overlayAttributionLines(refs.map((ref) => ref.layer));
+}
