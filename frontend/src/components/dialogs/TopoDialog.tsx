@@ -45,6 +45,7 @@ import {
   TextField,
   Icon,
   ErrorBanner,
+  FieldError,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
@@ -957,10 +958,7 @@ function ElvisInstructions({
             )}
           </div>
           {warnCredits && (
-            <p className={classes.stepWarning}>
-              An area this size may cost more credits than you have left this
-              month. Try a smaller one.
-            </p>
+            <FieldError message="An area this size may cost more credits than you have left this month. Try a smaller one." />
           )}
         </div>
       </li>
