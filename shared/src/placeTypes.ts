@@ -168,7 +168,7 @@ export function isPlaceTypeIconKey(value: unknown): value is PlaceTypeIconKey {
  */
 export const PLACE_TYPE_COLORS = [
   // MID-LIGHT AND MUTED, drawn from the NSW canyon palette the theme already
-  // speaks in (DESIGN.md §3: "Never a saturated web primary"). The first cut of
+  // speaks in (DESIGN.md: "Never a saturated web primary"). The first cut of
   // this list was a Tailwind-500 ramp — orange-500, green-500, blue-400 — which
   // read as a component from another app the moment it sat on a sheet, and had
   // a harder problem underneath: a chip FILLS itself with its type's colour and

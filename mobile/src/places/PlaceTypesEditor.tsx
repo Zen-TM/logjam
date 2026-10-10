@@ -58,13 +58,14 @@ import {
 import {
   Button,
   ErrorBanner,
+  Field,
+  FormStack,
   Row,
   SectionHeader,
   TextField,
   Icon,
   ColourField,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
 const copy = SETTINGS_LIST.copy;
@@ -92,7 +93,7 @@ export function PlaceTypeList({
   const own = types.filter((type) => !isSystemPlaceType(type));
   const builtIn = types.filter(isSystemPlaceType);
   return (
-    <View style={styles.body}>
+    <View style={styles.list}>
       {drawsYoursHeading(own.length, builtIn.length) ? (
         <SectionHeader title={copy.yours} count={own.length} />
       ) : null}
@@ -187,7 +188,7 @@ export function usePlaceTypeForm({
     } catch (err) {
       console.error(err);
       // The sheet is still open here (onDone only runs on success) — a toast
-      // would render under it and never be seen (docs/ux-principles.md §11), so this is the
+      // would render under it and never be seen (shared/DESIGN.md §11), so this is the
       // footer's banner, not a toast. A local write, so this is a broken
       // database rather than a missing connection — do not offer a network
       // explanation for something reconnecting cannot fix.
@@ -247,13 +248,13 @@ export function usePlaceTypeForm({
   }, [editing, onDone, onSaved]);
 
   const body = (
-    <View style={styles.body}>
+    <FormStack>
       <TextField
         label="Name"
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
-          // The empty-name requirement is checked on Save (docs/ux-principles.md §11); once
+          // The empty-name requirement is checked on Save (shared/DESIGN.md §11); once
           // shown it clears the moment the field it's about is edited.
           if (error) setError(null);
         }}
@@ -265,33 +266,38 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <Text style={fieldLabel}>Icon</Text>
-      <View style={styles.grid} onLayout={onGridLayout}>
-        {/* Nothing until the row has been measured — one frame, and the
+      <Field label="Icon">
+        <View style={styles.grid} onLayout={onGridLayout}>
+          {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
-        {cellSize == null
-          ? null
-          : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
-              <Pressable
-                key={iconKey}
-                accessibilityRole="button"
-                accessibilityLabel={iconKey}
-                accessibilityState={{ selected: draft.iconKey === iconKey }}
-                onPress={() => setDraft((current) => ({ ...current, iconKey }))}
-                style={[
-                  styles.cell,
-                  cellSize,
-                  draft.iconKey === iconKey ? styles.cellChosen : null,
-                ]}
-              >
-                <Icon
-                  idea={placeTypeGlyph(iconKey)}
-                  size={20}
-                  color={draft.iconKey === iconKey ? theme.accent : theme.text}
-                />
-              </Pressable>
-            ))}
-      </View>
+          {cellSize == null
+            ? null
+            : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
+                <Pressable
+                  key={iconKey}
+                  accessibilityRole="button"
+                  accessibilityLabel={iconKey}
+                  accessibilityState={{ selected: draft.iconKey === iconKey }}
+                  onPress={() =>
+                    setDraft((current) => ({ ...current, iconKey }))
+                  }
+                  style={[
+                    styles.cell,
+                    cellSize,
+                    draft.iconKey === iconKey ? styles.cellChosen : null,
+                  ]}
+                >
+                  <Icon
+                    idea={placeTypeGlyph(iconKey)}
+                    size={20}
+                    color={
+                      draft.iconKey === iconKey ? theme.accent : theme.text
+                    }
+                  />
+                </Pressable>
+              ))}
+        </View>
+      </Field>
 
       <ColourField
         label="Colour"
@@ -313,14 +319,14 @@ export function usePlaceTypeForm({
           onPress={confirmDelete}
         />
       ) : null}
-    </View>
+    </FormStack>
   );
 
   const footer = (
-    <View style={styles.footer}>
+    <FormStack>
       {/* Not attributable to one control (a local write failing, or the
           places-in-use check itself failing) — the banner sits directly above
-          Save, same as every other form (docs/ux-principles.md §11). */}
+          Save, same as every other form (shared/DESIGN.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
       <View style={styles.actions}>
         <View style={styles.action}>
@@ -335,7 +341,7 @@ export function usePlaceTypeForm({
           />
         </View>
       </View>
-    </View>
+    </FormStack>
   );
 
   return { body, footer };
@@ -393,8 +399,7 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
 const GRID_GAP = spacing(1);
 
 const styles = StyleSheet.create({
-  body: { gap: spacing(1) },
-  footer: { gap: spacing(1) },
+  list: { gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },

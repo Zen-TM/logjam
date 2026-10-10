@@ -1,6 +1,6 @@
 // The signed-in account page: Logjam Web's `AccountPanel.tsx` and the dialogs
 // it opens, Logjam GPS's `screens/AccountScreen.tsx`. The hero is who you are:
-// the page's own answer (docs/ux-principles.md §2).
+// the page's own answer (shared/DESIGN.md §2).
 import type { ScreenContract } from "./types.js";
 
 export const ACCOUNT = {

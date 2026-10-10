@@ -2,8 +2,8 @@
 
 ## UI
 
-- **UI work loads the `design-system` skill**: a page, panel, sheet, dialog,
-  kit component, icon, colour or user-facing string.
+- **Before UI work, read `shared/DESIGN.md` then `DESIGN.md` here**: a page,
+  panel, sheet, dialog, kit component, icon, colour or user-facing string.
 - **No router:** navigation is `activePanel` (`components/sidebar/panels.ts`);
   a panel never imports from `Map.tsx`, it gets callbacks from `App.tsx`.
 

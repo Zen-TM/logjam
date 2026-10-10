@@ -29,13 +29,14 @@ import {
   Button,
   ChipPicker,
   ErrorBanner,
+  Field,
+  FormStack,
   Row,
   SectionHeader,
   ChipRail,
   TextField,
   SwitchRow,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 import { fieldFormKey, seedDraft, type FieldDraft } from "./fieldDraft";
 
 const listCopy = SETTINGS_LIST.copy;
@@ -99,7 +100,7 @@ export function CustomFieldList({
   const own = defs.filter((def) => !isSystemFieldDef(def));
   const builtIn = defs.filter(isSystemFieldDef);
   return (
-    <View style={styles.body}>
+    <View style={styles.list}>
       {own.length === 0 ? (
         <Text style={styles.hint}>{attributesEmptyHint(noun.one)}</Text>
       ) : null}
@@ -230,7 +231,7 @@ export function useCustomFieldForm({
   const [scopeError, setScopeError] = useState<string | null>(null);
   // A save the local write refused, or a failed delete — this form stays open
   // either way, so it reports in its own banner above the footer's buttons
-  // rather than a toast (docs/ux-principles.md §11).
+  // rather than a toast (shared/DESIGN.md §11).
   const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
@@ -368,7 +369,7 @@ export function useCustomFieldForm({
   }, [defs, editing, entity, noun, onDone, onSaved]);
 
   const body = (
-    <View style={styles.body}>
+    <FormStack>
       <TextField
         label={`${capitalize(ATTRIBUTE_NOUN.one)} name`}
         value={label}
@@ -384,8 +385,10 @@ export function useCustomFieldForm({
           a min and a max are properties of a NUMBER, and standing them apart
           under a heading of their own put them next to the place-type picker,
           which is the other thing on this screen called a "type". */}
-      <View style={styles.typeBlock}>
-        <Text style={fieldLabel}>What it holds</Text>
+      <Field
+        label="What it holds"
+        hint={editing ? "Existing values are kept." : undefined}
+      >
         <ChipRail
           options={CUSTOM_FIELD_TYPES.map((entry) => ({
             value: entry.value,
@@ -394,52 +397,49 @@ export function useCustomFieldForm({
           value={type}
           onChange={(next) => patch({ type: next })}
         />
-        {editing ? (
-          <Text style={styles.hint}>Existing values are kept.</Text>
-        ) : null}
         {/* Range is offered only for numbers, because that is the only place it
             means anything — and it is what makes the web's range slider work,
             and the phone's stop rail. */}
-        {numeric ? (
-          <>
-            <SwitchRow
-              icon="filter"
-              title="Limit to a range"
-              description={
-                bounded
-                  ? "Values must be between the min and max you set"
-                  : "Any number"
-              }
-              checked={bounded}
-              onChange={(next) => patch({ bounded: next })}
-            />
-            {bounded ? (
-              <View style={styles.boundsRow}>
-                <View style={styles.bound}>
-                  <TextField
-                    label="Min"
-                    value={min}
-                    onChangeText={(next) => patch({ min: next })}
-                    keyboardType={
-                      type === "integer" ? "number-pad" : "decimal-pad"
-                    }
-                  />
-                </View>
-                <View style={styles.bound}>
-                  <TextField
-                    label="Max"
-                    value={max}
-                    onChangeText={(next) => patch({ max: next })}
-                    keyboardType={
-                      type === "integer" ? "number-pad" : "decimal-pad"
-                    }
-                  />
-                </View>
+      </Field>
+      {numeric ? (
+        <FormStack>
+          <SwitchRow
+            icon="filter"
+            title="Limit to a range"
+            description={
+              bounded
+                ? "Values must be between the min and max you set"
+                : "Any number"
+            }
+            checked={bounded}
+            onChange={(next) => patch({ bounded: next })}
+          />
+          {bounded ? (
+            <View style={styles.boundsRow}>
+              <View style={styles.bound}>
+                <TextField
+                  label="Min"
+                  value={min}
+                  onChangeText={(next) => patch({ min: next })}
+                  keyboardType={
+                    type === "integer" ? "number-pad" : "decimal-pad"
+                  }
+                />
               </View>
-            ) : null}
-          </>
-        ) : null}
-      </View>
+              <View style={styles.bound}>
+                <TextField
+                  label="Max"
+                  value={max}
+                  onChangeText={(next) => patch({ max: next })}
+                  keyboardType={
+                    type === "integer" ? "number-pad" : "decimal-pad"
+                  }
+                />
+              </View>
+            </View>
+          ) : null}
+        </FormStack>
+      ) : null}
 
       {/* WHERE IT APPEARS. "All" is a chip in the same row rather than a toggle
           above it: it is one more answer to the one question this control asks,
@@ -455,50 +455,46 @@ export function useCustomFieldForm({
       {/* A TRIP field is asked by the trip's own tags, so its chips are trip
           types and "Other" adds one — a field can be set up for an activity
           before its first trip. */}
-      <View style={styles.typeBlock}>
-        <ChipPicker
-          label={entity === "place" ? "Place types" : "Trip types"}
-          options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
-          selected={
-            appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds
+      <ChipPicker
+        label={entity === "place" ? "Place types" : "Trip types"}
+        options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
+        selected={appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds}
+        disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
+        error={scopeError}
+        onToggle={(value) => {
+          setScopeError(null);
+          if (value === ALL_TYPES_CHIP) {
+            patch({ appliesToAll: !appliesToAll });
+            return;
           }
-          disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
-          error={scopeError}
-          onToggle={(value) => {
-            setScopeError(null);
-            if (value === ALL_TYPES_CHIP) {
-              patch({ appliesToAll: !appliesToAll });
-              return;
-            }
-            patch({
-              typeIds: typeIds.includes(value)
-                ? typeIds.filter((existing) => existing !== value)
-                : [...typeIds, value],
-            });
-          }}
-          onAdd={
-            entity === "place"
-              ? undefined
-              : (added) => {
-                  // An existing spelling wins, as it does on the trip form: the
-                  // API refuses case-variant duplicates.
-                  const value =
-                    allScopeValues.find(
-                      (existing) =>
-                        existing.toLowerCase() === added.toLowerCase(),
-                    ) ?? added;
-                  setScopeError(null);
-                  patch({
-                    appliesToAll: false,
-                    typeIds: typeIds.includes(value)
-                      ? typeIds
-                      : [...typeIds, value],
-                  });
-                }
-          }
-          addPlaceholder="Other"
-        />
-      </View>
+          patch({
+            typeIds: typeIds.includes(value)
+              ? typeIds.filter((existing) => existing !== value)
+              : [...typeIds, value],
+          });
+        }}
+        onAdd={
+          entity === "place"
+            ? undefined
+            : (added) => {
+                // An existing spelling wins, as it does on the trip form: the
+                // API refuses case-variant duplicates.
+                const value =
+                  allScopeValues.find(
+                    (existing) =>
+                      existing.toLowerCase() === added.toLowerCase(),
+                  ) ?? added;
+                setScopeError(null);
+                patch({
+                  appliesToAll: false,
+                  typeIds: typeIds.includes(value)
+                    ? typeIds
+                    : [...typeIds, value],
+                });
+              }
+        }
+        addPlaceholder="Other"
+      />
 
       {editing ? (
         <Row
@@ -508,14 +504,14 @@ export function useCustomFieldForm({
           onPress={confirmDelete}
         />
       ) : null}
-    </View>
+    </FormStack>
   );
 
   // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
   // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (docs/ux-principles.md §11).
+  // above that row, never at the top of the form (shared/DESIGN.md §11).
   const footer = (
-    <View style={styles.footerStack}>
+    <FormStack>
       {formError ? <ErrorBanner message={formError} /> : null}
       <View style={styles.actions}>
         <View style={styles.action}>
@@ -530,7 +526,7 @@ export function useCustomFieldForm({
           />
         </View>
       </View>
-    </View>
+    </FormStack>
   );
 
   return { body, footer };
@@ -590,12 +586,10 @@ function typeLabel(type: TripLogCustomFieldType): string {
 }
 
 const styles = StyleSheet.create({
-  body: { gap: spacing(1) },
-  footerStack: { gap: spacing(1) },
+  list: { gap: spacing(1) },
+  hint: { color: theme.textMuted, fontSize: fontSize.sm },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
-  typeBlock: { gap: spacing(0.5) },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },
 });

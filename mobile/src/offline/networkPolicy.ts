@@ -117,11 +117,19 @@ export function connectionAllowsMetered(
  * "should I start" rather than having to ask twice. Failing to read the state
  * counts as not allowed: starting a tens-of-megabytes download on an unknown
  * connection is the expensive way to be wrong.
+ *
+ * `refresh()`, not `fetch()`: `fetch()` answers from the last state NetInfo was
+ * sent, and Android sends none when it lifts the network block it puts on an
+ * app behind another app. The state sent under that block calls Wi-Fi metered,
+ * so a Wi-Fi-only job back in front read "mobile data" on Wi-Fi until the next
+ * real change. `refresh()` is one local call to the platform: it sends nothing
+ * over the radio and arms nothing, so it is no background wakeup
+ * (docs/decisions/0013). Guard: `networkPolicy.test.ts` ("canRunNow").
  */
 export async function canRunNow(job: MeteredJob): Promise<boolean> {
   try {
     return connectionAllowsMetered(
-      await NetInfo.fetch(),
+      await NetInfo.refresh(),
       isMeteredAllowed(job),
     );
   } catch (err) {

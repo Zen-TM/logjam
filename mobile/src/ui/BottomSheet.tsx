@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import { radius, scrim, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
@@ -63,7 +63,7 @@ export const SheetScrollLock = createContext<{
 
 /**
  * How a `FieldError` that has just appeared asks the sheet to bring it into
- * view (docs/ux-principles.md §11, "Form errors"). Null outside a sheet.
+ * view (shared/DESIGN.md §11, "Form errors"). Null outside a sheet.
  */
 export const SheetErrorReveal = createContext<((target: View) => void) | null>(
   null,
@@ -431,9 +431,8 @@ const styles = StyleSheet.create({
     marginRight: -spacing(1),
   },
   title: {
+    ...textRole.sheetTitle,
     flex: 1,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
     color: theme.text,
   },
   scrollContent: { paddingBottom: spacing(2) },

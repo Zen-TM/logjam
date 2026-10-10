@@ -6,6 +6,8 @@ Pure TypeScript that `api`, `frontend` and `mobile` all import.
 - **A declaration here is the only copy.** A client builds from it and never
   re-lists its values; a client that needs something shaped differently
   derives it here, with a test.
+- **Before changing a token, scheme, icon, the kit list or a screen contract,
+  read `DESIGN.md` here.**
 - **Consumers import `shared/dist/`, not `src/`:** after editing, `make shared`
   (or `npm run build` here) before `api`, `frontend` or Metro see the change.
 - **Tests:** `npm test` (vitest), colocated `*.test.ts`; canned inputs in

@@ -10,7 +10,7 @@
 // DEVICE-scoped, all of them, and deliberately: which side your thumb reaches
 // from, whether this handset's screen may stay lit, and what its long press does
 // are claims about a phone, not about a person. None of them syncs, so all of
-// them work as a guest and with no signal (DESIGN.md §8).
+// them work as a guest and with no signal (DESIGN.md).
 //
 // Every read is SYNCHRONOUS (`prefsDb`), because `MapScreen` renders its chrome
 // on the first frame and a layout that settles into the correct side a moment

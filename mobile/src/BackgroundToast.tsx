@@ -2,7 +2,7 @@
 //
 // Mounted once, at the app shell, because the work outlives the screen that
 // started it — the Saved tab's own toast would only fire if the user happened
-// to still be standing there when the job landed (DESIGN.md §4, the corollary).
+// to still be standing there when the job landed (DESIGN.md, the corollary).
 //
 // Two sources, one component: a GeoPDF import and a region download run. A
 // second mounted toast would let two of them overlap in the same dock, and the
@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { Toast, type ToastMessage } from "./ui/Toast";
+import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
 
@@ -37,7 +37,7 @@ export function BackgroundToast() {
   }, []);
 
   return (
-    <View style={styles.dock} pointerEvents="none">
+    <View style={styles.dock} pointerEvents="box-none">
       <Toast message={message} onDismissed={() => setMessage(null)} />
     </View>
   );

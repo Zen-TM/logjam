@@ -204,6 +204,41 @@ describe("saveFieldDefs", () => {
     ]);
   });
 
+  // The phone has no reorder control, so every save hands back the stored
+  // order. Writing `position = index` anyway renumbered rows the user never
+  // touched whenever the stored positions were not 0..n: after a delete, or
+  // with built-ins sorted in between. Each renumber is an update the server
+  // can answer with a conflict nobody can act on.
+  // Mutation: write `position` whenever it differs from the list index.
+  it("leaves positions alone when the order is the stored order", async () => {
+    const grade: ScopedCustomFieldDef = {
+      ...party,
+      key: "grade",
+      label: "Grade",
+      ownerId: null,
+    };
+    // A gap at 1 (a deleted row) and a built-in between the user's two.
+    defRows = [
+      row(water, "tripLog", 0),
+      row(grade, "tripLog", 2),
+      row(party, "tripLog", 4),
+    ];
+    await saveFieldDefs("tripLog", [{ ...water, label: "Flow" }, grade, party]);
+    expect(updated).toEqual([{ id: "row-water", fields: { label: "Flow" } }]);
+  });
+
+  it("adds a field without renumbering the ones before it", async () => {
+    const depth: ScopedCustomFieldDef = {
+      ...party,
+      key: "depth",
+      label: "Depth",
+    };
+    defRows = [row(water, "tripLog", 3), row(party, "tripLog", 7)];
+    await saveFieldDefs("tripLog", [water, party, depth]);
+    expect(created).toHaveLength(1);
+    expect(updated).toEqual([]);
+  });
+
   it("deletes a field the caller dropped", async () => {
     defRows = [row(water, "tripLog", 0), row(party, "tripLog", 1)];
     await saveFieldDefs("tripLog", [water]);

@@ -10,6 +10,7 @@
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { TRACK_COLORS } from "@logjam/shared";
 
 import {
   API_URL,
@@ -55,8 +56,10 @@ async function createStandaloneImport(
   sub: string,
   filename = `import-${Date.now()}-${Math.random().toString(16).slice(2)}.gpx`,
   displayName?: string,
+  color?: string,
 ): Promise<string> {
   const body = {
+    ...(color ? { color } : {}),
     linkedType: "none",
     origin: "import",
     filename,
@@ -389,6 +392,67 @@ describe("the delta pull carries standalone files", () => {
       );
       expect(moved).toBeDefined();
       expect(moved.linkedId).toBe(placeId);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+});
+
+describe("recolouring a standalone file", () => {
+  it("changes the colour to a palette colour and leaves the label alone", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB, undefined, "Keep");
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(ALICE_SUB))
+        .send({ color: TRACK_COLORS[3] });
+      expect(res.status).toBe(200);
+      expect(res.body.color).toBe(TRACK_COLORS[3]);
+      expect(res.body.displayName).toBe("Keep");
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses a colour outside the palette", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(ALICE_SUB))
+        .send({ color: "#123456" });
+      expect(res.status).toBe(400);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses a foreign file with 404", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(BOB_SUB))
+        .send({ color: TRACK_COLORS[3] });
+      expect(res.status).toBe(404);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("keeps the colour the phone picked at upload instead of reassigning it", async () => {
+    const mediaId = await createStandaloneImport(
+      ALICE_SUB,
+      undefined,
+      undefined,
+      TRACK_COLORS[5],
+    );
+    try {
+      const mine = await request(API_URL)
+        .get("/media/standalone")
+        .set(as(ALICE_SUB));
+      const row = mine.body.find((f: { id: string }) => f.id === mediaId);
+      expect(row.color).toBe(TRACK_COLORS[5]);
     } finally {
       await deleteMedia(ALICE_SUB, mediaId);
     }

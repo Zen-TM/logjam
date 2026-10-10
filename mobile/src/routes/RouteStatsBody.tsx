@@ -3,7 +3,7 @@
 //
 // Split out of the old standalone RouteStatsSheet for the same reason
 // `tracks/TrackStatsBody.tsx` was: the stats are a SUB-MODE of the route's
-// options sheet now (DESIGN.md §5), not a sheet of their own, so the body has
+// options sheet now (DESIGN.md), not a sheet of their own, so the body has
 // to be mountable inside someone else's `BottomSheet`.
 //
 // It owns its own elevation hook rather than taking a profile prop — unlike a

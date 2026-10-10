@@ -66,3 +66,23 @@ export function speedSeries(profile: SpeedProfile): ProfileSeries {
     max: profile.maxMps,
   };
 }
+
+/**
+ * Reads a wall-clock instant as a time of day in the device's time zone, for
+ * a series that starts at `startMs` and ends at `endMs`. A series that runs
+ * into another day says which day each time is on, because "12:10 am" on an
+ * overnight recording is otherwise before its own start.
+ */
+export function timeOfDayFormatter(
+  startMs: number,
+  endMs: number,
+): (ms: number) => string {
+  const overnight =
+    new Date(startMs).toDateString() !== new Date(endMs).toDateString();
+  return (ms) =>
+    new Date(ms).toLocaleString(undefined, {
+      weekday: overnight ? "short" : undefined,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+}

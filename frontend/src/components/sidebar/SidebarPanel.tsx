@@ -351,7 +351,7 @@ function SidebarPanel({
       : PANEL_TITLES[activePanel];
 
   // A page with two views draws its switch under its own hero, so the hero
-  // stays the page's first line (DESIGN.md §2).
+  // stays the page's first line (DESIGN.md).
   const logsViewRail = (
     <ChipRail
       label="Logs view"
