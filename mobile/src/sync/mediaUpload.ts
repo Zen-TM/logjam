@@ -22,6 +22,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import { markNoResponse } from "../api/noResponse";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
@@ -459,11 +460,19 @@ async function putFile(
   // mobile/CLAUDE.md's rule is that a second caller inherits the first's
   // guards). A first-byte timeout throws, so the op fails and retries like any
   // other transient error instead of hanging.
+  //
+  // A throw from the task is the transfer dying without an answer from S3 (the
+  // file itself was checked in phase 0), so it is marked as the link's failure;
+  // an answer carries its status so the flush can classify it like the API's.
   const result = await uploadToPresignedUrl(url, fileUri, {
     "Content-Type": contentType,
+  }).catch((err: unknown) => {
+    throw markNoResponse(err);
   });
   if (result.status < 200 || result.status >= 300) {
-    throw new Error(`Upload failed (${result.status})`);
+    throw Object.assign(new Error(`Upload failed (${result.status})`), {
+      status: result.status,
+    });
   }
 }
 
@@ -579,8 +588,7 @@ export async function runMediaCreateOp(
   // bytes (up to 30 MB an image, 500 MB a video) and answer to their own
   // metered gate instead. Not allowed right now is not a failure — undo
   // flush.ts's optimistic attempts bump and leave the op exactly where it
-  // was, so it waits for Wi-Fi like every other large transfer instead of
-  // burning through MEDIA_MAX_ATTEMPTS and parking as a Sync Issue.
+  // was, so it waits for Wi-Fi like every other large transfer.
   if (!(await canRunNow("mediaUpload"))) {
     await db.runAsync(
       "UPDATE outbox SET state = 'queued', attempts = ? WHERE seq = ?",

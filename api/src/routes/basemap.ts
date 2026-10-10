@@ -24,6 +24,7 @@ import {
   CLIP_TOKEN_TTL_MS,
   MAX_CLIP_OUTPUT_BYTES,
   createClipTokenStore,
+  pmtilesExtractArgs,
   validateRegionClipRequest,
 } from "../lib/regionClip";
 
@@ -57,13 +58,7 @@ function runPmtilesExtract(
     // reaches only the pmtiles process, never a log line.
     const child = spawn(
       "pmtiles",
-      [
-        "extract",
-        archiveUri,
-        outPath,
-        `--bbox=${bboxArg}`,
-        `--maxzoom=${maxzoom}`,
-      ],
+      pmtilesExtractArgs(archiveUri, outPath, bboxArg, maxzoom, env.AWS_REGION),
       { stdio: ["ignore", "ignore", "pipe"] },
     );
     // Collect stderr for failure classification but never log it raw — the
