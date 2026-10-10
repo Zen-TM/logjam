@@ -76,9 +76,10 @@ predates this ADR and now carries more weight: the body is redacted from logs
 (`redactPaths` in `lib/logger.ts`), the bbox is never put in a URL, a filename
 or an error message, the token in the GET URL is a random UUID, and the
 clipped file is deleted when it has been sent or after 120 s
-(`CLIP_TOKEN_TTL_MS`). `lib/logger.unit.test.ts` builds its logger from the
-same `redactPaths`, but no test names the bbox fields, and none covers the
-URL, filename and error-message parts.
+(`CLIP_TOKEN_TTL_MS`). Guard: `lib/logger.unit.test.ts` ("the region clip's
+bbox") logs the body Logjam GPS sends and fails if any bound survives, in the
+redacted body or in what `serializeRequestForLog` keeps of the request. No
+test covers the filename and error-message parts.
 
 ## Consequences
 
