@@ -46,7 +46,7 @@ import {
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
-import { Icon, type Glyph } from "../ui";
+import { FieldError, Icon, type Glyph } from "../ui";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -302,7 +302,11 @@ export function MapSearchBar({
             ))}
 
             {loading ? <Text style={styles.status}>Searching…</Text> : null}
-            {error !== null ? <Text style={styles.status}>{error}</Text> : null}
+            {error !== null ? (
+              <View style={styles.statusBox}>
+                <FieldError message={error} />
+              </View>
+            ) : null}
             {!loading && error === null
               ? results.map((result, index) => (
                   <Pressable
@@ -379,6 +383,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
     maxHeight: 260,
+  },
+  statusBox: {
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(1.5),
   },
   status: {
     color: theme.textMuted,
