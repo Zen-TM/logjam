@@ -148,6 +148,7 @@ export function SettingsScreen({
       ? sheet.entity
       : "place";
   const fieldForm = useCustomFieldForm({
+    open: sheet.kind === "fieldForm",
     entity: formEntity,
     defs: defsFor(formEntity),
     editing: sheet.kind === "fieldForm" ? sheet.editing : null,
