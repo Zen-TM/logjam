@@ -7,7 +7,7 @@ import packageJson from "../package.json";
 
 function required(name: string, value: string | undefined): string {
   if (!value) {
-    // Fail loudly — a missing API URL must not silently fall back.
+    // Fail loudly — a missing URL must not silently fall back.
     throw new Error(`Missing required env var ${name}`);
   }
   return value;
@@ -26,7 +26,8 @@ export const config = {
   topoCdnBaseUrl:
     process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjamnsw.com",
   // Where Logjam Web lives: a friend invite link made here opens there.
-  webUrl: process.env.EXPO_PUBLIC_WEB_URL ?? "https://logjamnsw.com",
+  // Required, with no default, so a dev build cannot hand out a link to prod.
+  webUrl: required("EXPO_PUBLIC_WEB_URL", process.env.EXPO_PUBLIC_WEB_URL),
 } as const;
 
 // Client-version discipline (Stage 0): every API request carries this header so

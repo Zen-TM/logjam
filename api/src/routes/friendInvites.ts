@@ -206,13 +206,18 @@ router.post(
       }
       if (notifyInviter) {
         // The type an accepted request writes, so every supported build of
-        // Logjam GPS already draws it (ADR 0022). Ids only; the username is
+        // Logjam GPS already draws it (ADR 0022); `viaInvite` lets a build
+        // that knows it word the row for a link. Ids only; the username is
         // resolved at read time.
         await tx.notification.create({
           data: {
             userId: inviter.id,
             type: "friend_request_accepted",
-            payload: { friendshipId: id, acceptedById: user.id },
+            payload: {
+              friendshipId: id,
+              acceptedById: user.id,
+              viaInvite: true,
+            },
           },
         });
       }

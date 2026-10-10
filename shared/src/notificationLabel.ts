@@ -38,8 +38,13 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request`,
       };
     case "friend_request_accepted":
+      // An invite link redeemed writes this type too, flagged, because the
+      // inviter never sent a request for anyone to accept.
       return {
-        text: `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request`,
+        text:
+          p.viaInvite === true
+            ? `${str(p.acceptedByUsername) ?? "Someone"} used your invite link and is now a friend`
+            : `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request`,
       };
     case "place_shared":
       return {
