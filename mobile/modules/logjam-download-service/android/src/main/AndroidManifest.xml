@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Declared here, not in app.json, so the permissions and the service that
+       needs them arrive and leave together. WAKE_LOCK keeps the CPU up behind
+       a dark screen for the minutes a download runs; see DownloadService.kt. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <application>
+    <service
+      android:name="expo.modules.logjamdownloadservice.DownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+  </application>
+</manifest>

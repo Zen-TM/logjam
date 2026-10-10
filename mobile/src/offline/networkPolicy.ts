@@ -111,6 +111,25 @@ export function connectionAllowsMetered(
 }
 
 /**
+ * Should a job that paused for want of a connection start again on this one?
+ *
+ * Asked on every connectivity change, not on the offline-to-online edge: a
+ * phone coming back usually finds cellular first and Wi-Fi seconds later, and
+ * for a Wi-Fi-only job only the second of those is news.
+ * Guard: `networkPolicy.test.ts` ("connectionWorthResuming").
+ */
+export function connectionWorthResuming(
+  state: ConnectionState & { isInternetReachable?: boolean | null },
+  allowMetered: boolean,
+): boolean {
+  return (
+    state.isConnected === true &&
+    state.isInternetReachable === true &&
+    connectionAllowsMetered(state, allowMetered)
+  );
+}
+
+/**
  * May this job use the connection the phone is on right now?
  *
  * False when there is no connection at all, so a caller gets one answer to
