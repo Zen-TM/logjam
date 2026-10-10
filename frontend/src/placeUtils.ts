@@ -1552,6 +1552,36 @@ export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
 }
 
+// Invite links (api/src/routes/friendInvites.ts). The token only ever travels
+// in a request body.
+export function createFriendInvite(): Promise<{ token: string }> {
+  return apiFetch("/friends/invites", { method: "POST" });
+}
+
+export function getFriendInvites(): Promise<{ id: string }[]> {
+  return apiFetch("/friends/invites");
+}
+
+export function revokeFriendInvites(): Promise<void> {
+  return apiFetch<void>("/friends/invites", { method: "DELETE" });
+}
+
+export function previewFriendInvite(
+  token: string,
+): Promise<{ inviter: { username: string }; alreadyFriends: boolean }> {
+  return apiFetch("/friends/invites/preview", {
+    method: "POST",
+    body: { token },
+  });
+}
+
+export function redeemFriendInvite(token: string): Promise<TFriend> {
+  return apiFetch<TFriend>("/friends/invites/redeem", {
+    method: "POST",
+    body: { token },
+  });
+}
+
 export function useFriends(enabled: boolean) {
   const [friends, setFriends] = useState<TFriend[]>([]);
   const [requests, setRequests] = useState<TFriendRequest[]>([]);

@@ -92,6 +92,11 @@ test.describe("desktop", () => {
     await expect(
       addDialog.getByRole("button", { name: "Add", exact: true }),
     ).toBeVisible();
+    // The invite link sits under the search. Seen, never pressed: minting one
+    // would write to the account.
+    await expect(
+      addDialog.getByRole("button", { name: "Copy invite link" }),
+    ).toBeVisible();
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(addDialog).toHaveCount(0);

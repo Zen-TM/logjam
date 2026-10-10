@@ -30,6 +30,7 @@ describe("app version has one declaration", () => {
 
   it("the client header sends package.json's version", async () => {
     vi.stubEnv("EXPO_PUBLIC_API_URL", "http://127.0.0.1:8080");
+    vi.stubEnv("EXPO_PUBLIC_WEB_URL", "http://localhost:5173");
     const { CLIENT_SEMVER, CLIENT_VERSION } = await import("./config");
     expect(CLIENT_SEMVER).toBe(packageJson.version);
     expect(CLIENT_VERSION).toBe(`mobile/${packageJson.version}`);

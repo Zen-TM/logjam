@@ -66,6 +66,16 @@ export const EXPORT_SECTIONS = {
         include: { requester: otherUser, addressee: otherUser },
       }),
   },
+  // Unspent invite links: when each was made and ends. The link itself is
+  // not kept, only its hash, which is left out as it is no use to its owner.
+  friendInvites: {
+    models: ["FriendInvite"],
+    load: (userId) =>
+      prisma.friendInvite.findMany({
+        where: { inviterId: userId },
+        select: { id: true, createdAt: true, expiresAt: true },
+      }),
+  },
   sharesGiven: {
     models: ["PlaceShare"],
     load: (userId) =>
