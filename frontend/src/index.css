@@ -12,6 +12,8 @@
      coincidence. */
   --filter-sheet-width: var(--panel-width);
   --bottom-nav-height: 68px;
+  /* A button on the map, which the credits and the instruments clear. */
+  --map-button-size: 42px;
 
   /* A PERCENTAGE, so it is a circle only on a square box — a wider one gets
      an ellipse. Anything pill-shaped wants `--radius-pill`. */
