@@ -49,6 +49,7 @@ export function useTypeAttributesStep({
   const toList = () => setForm(null);
 
   const fieldForm = useCustomFieldForm({
+    open: form !== null,
     entity: "place",
     defs,
     editing: form?.editing ?? null,
