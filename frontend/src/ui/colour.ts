@@ -1,5 +1,5 @@
 // Colour-space arithmetic for `ColourField`, out of the component so it is
-// checked (DESIGN.md §6, "Pure decisions leave the component").
+// checked (DESIGN.md, "Pure decisions leave the component").
 //
 // The stored form is `#RRGGBBAA`: a topo's styles carry an opacity, so a colour
 // here is four channels, not the three a native `<input type="color">` offers.

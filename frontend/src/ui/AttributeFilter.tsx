@@ -30,7 +30,7 @@ import classes from "./AttributeFilter.module.css";
  * definitions they show and where the filter is stored (operator, 2026-09-17).
  * Nothing here knows which entity it is filtering, and nothing here may key off
  * a field's NAME: a canyon's grades are ordinary attributes, so the control is
- * chosen by shape or a type gets bespoke UI again (DESIGN.md §2).
+ * chosen by shape or a type gets bespoke UI again (DESIGN.md).
  */
 export function AttributeFilter({
   def,

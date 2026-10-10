@@ -3,18 +3,18 @@
 // templates topos are made with.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (docs/ux-principles.md §2): the hero counts the topos, a TAB each for the topos, the
+// (shared/DESIGN.md §2): the hero counts the topos, a TAB each for the topos, the
 // files exported from them and the templates, and what is still being made
 // pinned under all three. It used to be two buttons, a ribbon stack and four
 // accordions that opened closed, and then one scrolling list that buried the
 // templates under a year of topos (operator, 2026-09-18).
 //
-// A topo's body CENTRES the map on it (DESIGN.md §5, "Opening a thing centres
+// A topo's body CENTRES the map on it (DESIGN.md, "Opening a thing centres
 // the map on it"), and turns LiDAR topos on so there is something there to see.
 // Whether a topo is DRAWN is not this page's business any more: it carried a
 // switch per row, and Layers → LiDAR topos carries the same switch for the same
 // topo — two controls for one setting, on two surfaces that disagreed about
-// where it lived. Visibility belongs to the layer (DESIGN.md §5).
+// where it lived. Visibility belongs to the layer (DESIGN.md).
 //
 // How topos draw their vector layers opens beside the page as a sheet
 // (`TopoStyleSheet`), so the map stays in view while it changes.
@@ -103,11 +103,11 @@ export default function LidarPanel({
   onSheetOpenChange,
   onExpandSheet,
 }: {
-  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md §2). */
+  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
-  /** False until the first fetch of completed topos settles (docs/ux-principles.md §11). */
+  /** False until the first fetch of completed topos settles (shared/DESIGN.md §11). */
   topoJobsLoaded: boolean;
   /** Friends a completed topo can be shared with. */
   friends: TFriend[];

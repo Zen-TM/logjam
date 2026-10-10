@@ -13,7 +13,7 @@
 // they used to gate on connection, back when an account's list lived on the
 // user record.
 //
-// LAYOUT: a plain list, so per DESIGN.md §2 it keeps `ScreenScroll` and the
+// LAYOUT: a plain list, so per DESIGN.md it keeps `ScreenScroll` and the
 // native header rather than being given a hero. There is no headline metric
 // here; a hero whose only content is the word "Settings" is exactly the pattern
 // the hero rule exists to replace.
@@ -171,7 +171,7 @@ export function SettingsScreen({
             icon={icon}
             title={title}
             // Notifications and Offline & Storage are account-backed pages, so
-            // they say so on the way in rather than after the tap (DESIGN.md §8). The
+            // they say so on the way in rather than after the tap (DESIGN.md). The
             // offline tab's switches all govern account-backed downloads or
             // sync, none of which a guest has.
             {...(page === "notifications"

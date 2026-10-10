@@ -1,3 +1,4 @@
+import { Notice } from "../../ui";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
@@ -729,7 +730,7 @@ function Map({
   /**
    * Fit the map to a way's extent: opening one centres it, and so does arming
    * the draw tool on it. A CONSUMED request, not a counter — a counter above
-   * zero fires again on every remount (DESIGN.md §6).
+   * zero fires again on every remount (DESIGN.md).
    */
   flyToBounds?: [number, number, number, number] | null;
   onFlyToBoundsConsumed?: () => void;
@@ -2157,7 +2158,7 @@ function Map({
   // measured at 72ms per pointer move, against 16ms for the same drag with the
   // write removed — the same cost as dragging over dead panel. A Marker is a
   // DOM node the library moves with a CSS transform; the canvas is untouched.
-  // (DESIGN.md §6, which also records the three wrong guesses that preceded
+  // (DESIGN.md, which also records the three wrong guesses that preceded
   // this one.)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -3082,7 +3083,7 @@ function Map({
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>
-            {pickVerb} the map to select a location
+            <Notice>{pickVerb} the map to select a location</Notice>
           </div>
           <div className={classes.geoPdfConfirmBar}>
             <button
@@ -3096,14 +3097,16 @@ function Map({
       )}
       {selectingBbox && (
         <div className={classes.pickBanner}>
-          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to
-          define the topo area
+          <Notice>
+            {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to
+            define the topo area
+          </Notice>
         </div>
       )}
       {selectingGeoPdfExtent && (
         <>
           <div className={classes.pickBanner}>
-            Pan and zoom the map to position the export area
+            <Notice>Pan and zoom the map to position the export area</Notice>
           </div>
           <div
             ref={geoPdfFrameRef}

@@ -15,7 +15,7 @@ type TextFieldProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
-  /** This field's validation message (docs/ux-principles.md §11, "Form errors"): drawn
+  /** This field's validation message (shared/DESIGN.md §11, "Form errors"): drawn
    *  under the input, which takes a warning border. Null renders nothing. */
   error?: string | null;
   /**
