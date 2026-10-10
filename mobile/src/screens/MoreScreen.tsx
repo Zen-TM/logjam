@@ -93,6 +93,7 @@ export function MoreScreen({
     pendingCount,
     issueCount,
     errorKind: syncStatus.errorKind,
+    waitingSince: syncStatus.waitingSince,
     accountState,
   });
   const tone = TONE_STYLE[health.tone];

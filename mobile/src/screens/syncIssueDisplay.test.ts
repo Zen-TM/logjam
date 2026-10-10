@@ -165,22 +165,36 @@ describe("opAdvice", () => {
     expect(advice.hint).toBeUndefined();
   });
 
-  it("gives ONE line for every temporary failure, whatever its code", () => {
-    // A dropped connection (code 0) and a server that refused (503) are two
-    // faults to us and one fact to the reader: it didn't get through. Two
-    // sentences read as two different problems on two rows of one list.
-    const dropped = opAdvice(
-      parked({ error: { code: 0, message: "upload failed" }, attempts: 5 }),
-    );
+  it("says a temporary refusal lasted a day, and blames neither the change nor the signal", () => {
+    // A 503 only reaches this screen after `shouldGiveUpOnSyncOp` let it: the
+    // account answered, and kept answering no, for a day. "Better signal" was
+    // written for the old five-tries cap and sends the reader to look for
+    // something that was never missing.
     const refused = opAdvice(
-      parked({ error: { code: 503, message: "upstream" }, attempts: 5 }),
+      parked({ error: { code: 503, message: "upstream" }, attempts: 40 }),
     );
-    expect(dropped.line).toBe("Couldn't reach your account.");
-    expect(refused.line).toBe(dropped.line);
-    // And it says what the app already spent, so Try again doesn't read as a
-    // chore the app could have done itself.
-    expect(dropped.hint).toMatch(/tried 5 times/);
-    expect(dropped.hint).toMatch(/waits here until it gets through/);
+    expect(refused.line).toBe("Your account kept turning this down for a day.");
+    expect(refused.canRetry).toBe(true);
+    expect(refused.hint).toBe(
+      "Nothing is wrong with the change itself, and Logjam GPS has stopped " +
+        "trying on its own. It stays here until you try again.",
+    );
+    expect(refused.hint).not.toMatch(/signal|tried \d+ times/);
+  });
+
+  it("says an upload that fails on the phone is about the phone", () => {
+    // Code 0 is flush.ts parking an upload that threw five times with no
+    // status at all: nothing was refused and no day went by.
+    const local = opAdvice(
+      parked({
+        entity: "media",
+        op: "create",
+        error: { code: 0, message: "This upload keeps failing on this phone." },
+      }),
+    );
+    expect(local.line).toBe("This keeps failing on this phone.");
+    expect(local.canRetry).toBe(true);
+    expect(local.hint).toBeUndefined();
   });
 
   it.each([0, 401, 408, 429, 500, 503])("offers a retry on %i", (code) => {
@@ -201,21 +215,6 @@ describe("opAdvice", () => {
       parked({ error: { code: 500, message: "ECONNRESET" } }),
     );
     expect(advice.line).not.toContain("ECONNRESET");
-  });
-
-  it("says how many attempts the app already spent, so Retry isn't a chore", () => {
-    // The engine retries transient rejections itself (flush.ts), so anything
-    // temporary that reaches this screen has already been tried repeatedly —
-    // and the copy has to say so, or the button reads as work the app skipped.
-    const advice = opAdvice(
-      parked({ error: { code: 503, message: "x" }, attempts: 5 }),
-    );
-    expect(advice.hint).toMatch(/tried 5 times/);
-    // A first-attempt failure (a media op parked by its own runner) says no
-    // such thing rather than claiming one attempt was five.
-    expect(
-      opAdvice(parked({ error: { code: 0, message: "x" }, attempts: 1 })).hint,
-    ).not.toMatch(/tried/);
   });
 
   it("allows a retry when nothing was recorded", () => {

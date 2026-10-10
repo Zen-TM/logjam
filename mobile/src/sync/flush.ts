@@ -20,7 +20,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { isNoResponse } from "../api/noResponse";
+import { isNoResponse, isTransferCut } from "../api/noResponse";
 import {
   loadOutboxRows,
   loadOutboxRowsFor,
@@ -421,6 +421,13 @@ async function flushMediaOps(): Promise<boolean> {
           "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
           row.seq,
         );
+        // An unanswered API call is the link being down for every op behind
+        // this one too, and each would spend its own timeout before the cycle
+        // reached the delta pull. Only a transfer that died partway goes on:
+        // that is about one file, and stopping for it would let a large video
+        // block every photo queued after it. Guard: "stops the pass when the
+        // API gives no answer" in flush.test.ts.
+        if (!isTransferCut(err)) break;
         continue;
       }
       // Everything else is counted, because not every permanent failure
@@ -456,7 +463,8 @@ async function flushMediaOps(): Promise<boolean> {
 
   if (mirrorTouched) notifyMirrorChanged();
   // The cycle still failed — the engine's backoff is what retries a genuinely
-  // transient outage — but every op got its turn first.
+  // transient outage — but every op got its turn first, unless the link is
+  // down.
   if (firstError) throw firstError;
   return progressed;
 }

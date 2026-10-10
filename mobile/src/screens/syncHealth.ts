@@ -34,6 +34,12 @@ export type SyncHealthInput = {
    * entirely from "no signal", and the difference is what the user acts on.
    */
   errorKind?: "unreachable" | "applyFailed" | "unsupported" | null;
+  /**
+   * ISO instant the queue stopped getting answers, once that has lasted a day
+   * of being online (`SyncStatus.waitingSince`). Nothing is parked and nothing
+   * needs the user; the sentence is the whole surface.
+   */
+  waitingSince?: string | null;
   /** No account: nothing syncs, and the honest answer is a different sentence. */
   accountState?: "guest" | "linked";
   /** Injectable for tests. */
@@ -79,6 +85,48 @@ export function relativeTime(iso: string, now: number): string {
   const days = Math.floor(elapsed / DAY_MS);
   if (days === 1) return "yesterday";
   return `${days} days ago`;
+}
+
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/**
+ * The day something started, as someone would say it: "yesterday", "Tuesday",
+ * then "28 September" once a weekday could mean two different days. In the
+ * phone's own time zone, and by hand because Hermes ships no reliable `Intl`
+ * weekday names.
+ */
+function sinceDay(iso: string, now: number): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "some time ago";
+  const midnight = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.round((midnight(new Date(now)) - midnight(then)) / DAY_MS);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return WEEKDAYS[then.getDay()];
+  return `${then.getDate()} ${MONTHS[then.getMonth()]}`;
 }
 
 function plural(count: number, singular: string, pluralForm: string): string {
@@ -147,6 +195,20 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
           ? `${plural(pendingCount, "other change is", "other changes are")} still queued.`
           : "Everything else is synced.",
       tone: "problem",
+    };
+  }
+
+  // 1.5. Work is queued, the phone says it is online, and a day of that has
+  //      gone by without one answer. Above "Sending…" so the line does not
+  //      flip to a promise of progress for the length of every timeout. Below
+  //      offline (the `online` test): with no signal the ordinary sentence is
+  //      the true one. Tone stays `pending` and there is no verb, because
+  //      there is nothing for the reader to do.
+  if (input.waitingSince && pendingCount > 0 && online) {
+    return {
+      headline: `${plural(pendingCount, "change has", "changes have")} been waiting since ${sinceDay(input.waitingSince, now)}`,
+      detail: "Logjam GPS keeps trying.",
+      tone: "pending",
     };
   }
 
