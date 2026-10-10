@@ -1,4 +1,4 @@
-// "Is my work safe?" — the one question DESIGN.md §8 says an offline-first app
+// "Is my work safe?" — the one question DESIGN.md says an offline-first app
 // owes the user, answered in one sentence for the More hub's hero.
 //
 // Pure so the copy rules are testable: every branch here is a claim about the
@@ -148,6 +148,15 @@ export function syncIssuesSubtitle(issueCount: number): string {
   return issueCount > 0
     ? `${plural(issueCount, "change needs", "changes need")} you`
     : "Nothing needs you";
+}
+
+/**
+ * The Sync issues screen's own title, for the same reason as the row that
+ * opens it: the screen lists issues, so empty means nothing needs the user,
+ * not that nothing is queued.
+ */
+export function syncIssuesTitle(issueCount: number): string {
+  return issueCount > 0 ? "Some changes need you" : syncIssuesSubtitle(0);
 }
 
 export function syncHealth(input: SyncHealthInput): SyncHealth {

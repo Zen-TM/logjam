@@ -2,7 +2,7 @@
 // three-dots AND the sheet the map opens when a place pin is tapped.
 //
 // ONE component for both, on the model of TrackOptionsSheet and for the same
-// reason (DESIGN.md §5): a place reached by tapping its pin must not be a
+// reason (DESIGN.md): a place reached by tapping its pin must not be a
 // lesser object than one reached from the list.
 //
 // WHICH verbs, in what order and under what words is `PLACE_VERBS` in
@@ -86,7 +86,7 @@ export function PlaceOptionsSheet({
   /**
    * Open the trip form with this place already linked. The caller's, not this
    * sheet's: a form is a sheet of its own and nothing may open a second sheet
-   * over an open one (DESIGN.md §4), so the caller closes this and opens that.
+   * over an open one (DESIGN.md), so the caller closes this and opens that.
    */
   onLogTrip: (place: MirrorPlace) => void;
   /** Open the place form. The caller's, for the same reason as `onLogTrip`. */
@@ -238,7 +238,7 @@ export function PlaceOptionsSheet({
 
   const confirmDelete = () => {
     // The sentence is per-instance — it counts the trips that lose their link —
-    // and it is written once, in placeDeleteConfirm (DESIGN.md §5). The count
+    // and it is written once, in placeDeleteConfirm (DESIGN.md). The count
     // is derived HERE from the mirrored trips rather than passed in, so neither
     // surface can hand this dialog a number of its own.
     const linkedTrips = (trips.data ?? []).filter((trip) =>

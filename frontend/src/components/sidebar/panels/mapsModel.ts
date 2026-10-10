@@ -1,8 +1,8 @@
 // What the Maps page says about each map, out of the component so it is checked
-// (DESIGN.md §6).
+// (DESIGN.md).
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (docs/ux-principles.md §2). The second half of that question is `beingMade`: every job the
+// (shared/DESIGN.md §2). The second half of that question is `beingMade`: every job the
 // user is still waiting on — a GeoPDF, a topo, an export of a topo — as one kind
 // of row, newest first, with the words for where it has got to. It used to be a
 // stack of coloured ribbons over the page with a "TOPO"/"EXPORT · GPKG" chip on
@@ -21,7 +21,7 @@ import type { TopoJob } from "../../dialogs/TopoDialog";
 import { type Glyph } from "../../../ui";
 
 /**
- * A kind's glyph and hue (docs/ux-principles.md §8), from Logjam GPS's Saved tab: a GeoPDF
+ * A kind's glyph and hue (shared/DESIGN.md §8), from Logjam GPS's Saved tab: a GeoPDF
  * is a page of paper, a LiDAR topo is terrain in the eucalypt `overlay` hue.
  * What is made FROM a thing wears that thing's hue with its own glyph — an
  * export is a file out of a topo, a template is the settings a map is made

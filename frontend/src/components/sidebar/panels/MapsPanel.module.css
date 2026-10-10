@@ -1,5 +1,5 @@
 /* Maps gives the panel body its full height: the hero and the view switch are
-   pinned, and only the list scrolls (DESIGN.md §2). Shared by both views and
+   pinned, and only the list scrolls (DESIGN.md). Shared by both views and
    the topo style sheet, which are one page. */
 .root {
   flex: 1;
