@@ -126,6 +126,7 @@ import {
   useGeoPdfImportRun,
 } from "../geopdf/importRunner";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
+import { showsGeoPdfRunCard } from "./geoPdfRunCard";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -1798,7 +1799,7 @@ export function SavedScreen({
             Separate from `activeOp` above rather than folded into it: this one
             is not owned by this screen, so it must survive the screen
             unmounting and be here again when the user comes back. */}
-        {importRun ? (
+        {importRun && showsGeoPdfRunCard(filter) ? (
           <Row
             title={importRun.label}
             subtitle={[
@@ -1904,7 +1905,7 @@ export function SavedScreen({
 
         {visibleItems.length === 0 &&
         !activeOp &&
-        !importRun &&
+        !(importRun && showsGeoPdfRunCard(filter)) &&
         (filter !== "region" || downloadGroups.length === 0) ? (
           <EmptyPanel
             filter={filter}

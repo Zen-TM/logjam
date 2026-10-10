@@ -243,18 +243,15 @@ router.post(
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
-    // Headroom pre-check including the declared upload; the authoritative
-    // quota charge still happens on confirm against the real S3 size.
-    await assertHasStorageQuota(
-      user.id,
-      BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
-    );
-
     // Optional client-minted mediaId (Stage 8 §3.5). A client id whose row
     // already exists means the whole three-phase flow already completed —
     // return the existing item (200), never fresh upload URLs. Foreign id →
     // 404 (anti-oracle; see lib/clientSuppliedId.ts).
+    //
+    // BEFORE the track-slot and quota checks, as in confirm below: a client
+    // replays presign when the reply to its confirm was lost, and by then its
+    // own file is what fills the place's track slot and the quota. Guard:
+    // "answers a replayed presign…" in src/__tests__/placeTracks.test.ts.
     const clientMediaId = parseClientSuppliedId(
       (req.body ?? {}).mediaId,
       "mediaId",
@@ -269,6 +266,13 @@ router.post(
         return;
       }
     }
+    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
+    // Headroom pre-check including the declared upload; the authoritative
+    // quota charge still happens on confirm against the real S3 size.
+    await assertHasStorageQuota(
+      user.id,
+      BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
+    );
 
     const mediaId = clientMediaId ?? randomUUID();
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);

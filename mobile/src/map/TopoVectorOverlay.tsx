@@ -46,7 +46,7 @@ function layerFor(
   def: TopoVectorLayerDef,
   idPrefix: string,
   sourceID: string,
-  layerIndex: number,
+  beforeId: string,
 ) {
   const id = `${idPrefix}-${def.suffix}`;
   // One cast for the whole prop bag: buildTopoVectorLayerDefs emits one merged
@@ -56,7 +56,7 @@ function layerFor(
   // v12 note.
   const props = {
     id,
-    layerIndex,
+    beforeId,
     source: sourceID,
     "source-layer": def.sourceLayer,
     type: def.type,
@@ -67,21 +67,30 @@ function layerFor(
   return <Layer key={id} {...props} />;
 }
 
-/** Worst-case layer count for one vector overlay — used for index spacing. */
-export const TOPO_VECTOR_MAX_LAYERS = 32;
+/** The id each of an overlay's layers mounts under, bottom to top. */
+export function topoVectorLayerIds(
+  kind: "contours" | "features",
+  idPrefix: string,
+  vectorStyle: VectorStyleSettings,
+): string[] {
+  return buildTopoVectorLayerDefs(kind, vectorStyle).map(
+    (def) => `${idPrefix}-${def.suffix}`,
+  );
+}
 
 export const TopoVectorOverlay = memo(function TopoVectorOverlay({
   kind,
   idPrefix,
   sourceID,
-  startIndex,
+  beforeIds,
   vectorStyle,
 }: {
   kind: "contours" | "features";
   /** Unique per overlay — layer ids must not collide across jobs. */
   idPrefix: string;
   sourceID: string;
-  startIndex: number;
+  /** `chainBeforeIds` entries for this overlay's `topoVectorLayerIds`. */
+  beforeIds: Record<string, string>;
   vectorStyle: VectorStyleSettings;
 }) {
   const defs = useMemo(
@@ -90,7 +99,14 @@ export const TopoVectorOverlay = memo(function TopoVectorOverlay({
   );
   return (
     <>
-      {defs.map((def, i) => layerFor(def, idPrefix, sourceID, startIndex + i))}
+      {defs.map((def) =>
+        layerFor(
+          def,
+          idPrefix,
+          sourceID,
+          beforeIds[`${idPrefix}-${def.suffix}`],
+        ),
+      )}
     </>
   );
 });
