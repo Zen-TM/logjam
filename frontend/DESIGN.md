@@ -86,7 +86,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   `large` for a long one. Footer: Cancel, then the one primary action. Save
   is `type="submit"` tied by `form={formId}` and wears `busy`; pass
   `dismissible={false}` while a request runs. First focus is the element
-  marked `data-autofocus`, not React's `autoFocus`.
+  marked `data-autofocus`.
 - **`ConfirmDialog`**: `destructive` when something is lost, `filled` when
   nothing is. The menu item that leads to it is `danger`, without the fill.
 - **`Popover`** is non-modal. Whether an outside press closes it is the
@@ -98,7 +98,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   current answer as the subtitle.
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
-  field) or `useToast().error` (background). Never render `err.message`.
+  field) or `useToast().error` (background).
 - **Selection starts from a row's tile**, which is its checkbox: Shift-click
   ranges, Ctrl/⌘+A selects all, Escape clears. Rows the verb cannot act on
   dim. `SelectionBar` verbs are icon buttons, so it stays one line at 380.

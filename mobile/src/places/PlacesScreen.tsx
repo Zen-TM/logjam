@@ -179,6 +179,14 @@ export function PlacesScreen({
 
   const [bucket, setBucket] = useState<Bucket>("all");
   const [findOpen, setFindOpen] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  // Focused on the next frame, once the row has mounted: `autoFocus` runs
+  // before the field is attached (mobile/DESIGN.md §4).
+  useEffect(() => {
+    if (!findOpen) return;
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [findOpen]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
@@ -757,8 +765,8 @@ export function PlacesScreen({
                 placeholder={copy.searchPlaceholder}
                 placeholderTextColor={theme.textMuted}
                 accessibilityLabel={copy.searchField}
+                ref={searchInputRef}
                 autoCapitalize="none"
-                autoFocus
                 returnKeyType="search"
               />
             </View>

@@ -556,6 +556,7 @@ export default function TopoDialog({
                       className={classes.saveAsField}
                       placeholder="Name this template"
                       value={saveAsName}
+                      // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                       autoFocus
                       onChange={(event) => setSaveAsName(event.target.value)}
                     />

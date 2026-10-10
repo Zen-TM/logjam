@@ -12,8 +12,8 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
 ## 1. Tokens
 
 - **Import tokens from `src/theme.ts`**: `theme` (the scheme's role colours),
-  `radius`, `spacing(n)` (8 × n), `fontSize`, `controlSize`. Never a hex or
-  an `rgba()`: a tint is `withAlpha(token, a)`.
+  `radius`, `spacing(n)` (8 × n), `fontSize`, `controlSize`; a tint is
+  `withAlpha(token, a)`.
 - **A scheme change applies at the next launch**, because `theme` is read at
   import. A control that changes it says "applies next time".
 - **Type scales with the OS font size (capped at 2×); spacing and radius do
@@ -96,11 +96,9 @@ handler or a camera write, read
   sub-mode when the sheet opens, not only when it closes.
 - **A choice that leads to a form, a permission prompt or a system picker
   parks the target and opens it from `onClosed`**, or it never resolves.
-- **Focus a field with `.focus()` on the next frame**, not `autoFocus`.
 - **Content that can outgrow the sheet pins its primary action in
   `footer`.**
-- **A list of choices is a sheet, not an `Alert`** (Android drops a fourth
-  button). `Alert` is for destructive confirms only.
+- **`Alert` is for destructive confirms only**; a list of choices is a sheet.
 - **Give every sheet a title**: it draws the × and names the screen-reader
   dismiss.
 - **A background job's toast is at the shell** (`BackgroundToast.tsx`),
