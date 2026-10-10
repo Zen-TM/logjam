@@ -1002,6 +1002,33 @@ describe("computeTrackDetail", () => {
     }
   });
 
+  // Red when the series is thinned by index: a stop is two samples among
+  // hundreds, the stride steps over one or both, and the chart draws a ramp
+  // (or full walking speed) across the longest rest of the day.
+  it("keeps a long stop flat at zero when the series is thinned", () => {
+    const out = walk({ count: 200, stepMilliDeg: 0.1, stepMs: 10_000 });
+    const lastOut = out[out.length - 1]!;
+    const restMs = 40 * 60_000;
+    const back = walk({
+      count: 200,
+      stepMilliDeg: 0.1,
+      stepMs: 10_000,
+      startMs: lastOut.timestampMs + restMs,
+    }).map((p) => ({ ...p, lat: p.lat + (lastOut.lat - BASE_LAT) }));
+    const detail = computeTrackDetail([...out, ...back]);
+    const samples = detail.speed!.samples;
+    expect(samples.length).toBe(ELEVATION_PROFILE_MAX_SAMPLES);
+
+    const restStart = lastOut.timestampMs;
+    const during = samples.filter(
+      (s) =>
+        s.atMs > restStart + 60_000 && s.atMs < restStart + restMs - 60_000,
+    );
+    // The rest is over a third of the recording, so over a third of the chart.
+    expect(during.length).toBeGreaterThan(samples.length / 3);
+    expect(during.every((s) => s.speedMps === 0)).toBe(true);
+  });
+
   it("reports the peak speed from the full series, not the thinned chart", () => {
     // On a short track nothing is decimated, so the peak and the chart's own
     // max are the same number; this pins maxMps to the true maximum rather

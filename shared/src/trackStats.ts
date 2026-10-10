@@ -474,6 +474,35 @@ function decimate<T>(samples: T[], max: number): T[] {
 }
 
 /**
+ * Thin the speed series to `max` samples evenly spaced in TIME, each carrying
+ * the speed of the span it falls in.
+ *
+ * Not `decimate`: that strides by index, and the speed series is a step — a
+ * rest of any length is two samples among hundreds. The stride stepped over
+ * one or both, and the chart drew a ramp, or plain walking speed, across the
+ * longest stop of the day. Sampling the clock gives a stop the share of the
+ * samples it has of the time. Guard: "keeps a long stop flat at zero when the
+ * series is thinned" in trackStats.test.ts.
+ */
+function thinSpeedSteps(samples: SpeedSample[], max: number): SpeedSample[] {
+  if (samples.length <= max || max < 2) return samples;
+  const startMs = samples[0]!.atMs;
+  const totalMs = samples[samples.length - 1]!.atMs - startMs;
+  const out: SpeedSample[] = [];
+  let cursor = 0;
+  for (let i = 0; i < max; i++) {
+    const atMs = startMs + (totalMs * i) / (max - 1);
+    // The LAST sample at or before this instant: where one span ends and the
+    // next begins on the same millisecond, that is the span being entered.
+    while (cursor < samples.length - 1 && samples[cursor + 1]!.atMs <= atMs) {
+      cursor++;
+    }
+    out.push({ atMs, speedMps: samples[cursor]!.speedMps });
+  }
+  return out;
+}
+
+/**
  * Compute everything from the stored series (assumed already
  * acceptance-filtered and ordered by timestamp).
  *
@@ -720,7 +749,7 @@ export function computeTrackDetail(
     rawSpeeds.push({ atMs: durationMs, speedMps: 0 });
     rawSpeeds.push({ atMs: totalMs, speedMps: 0 });
   }
-  const speedSamples = decimate(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
+  const speedSamples = thinSpeedSteps(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
   // The headline peak comes from the FULL series, not the decimated chart: a
   // short sprint that falls between the stride's kept indices would otherwise
   // never reach the number, and the chart's y-scale is derived from it.
@@ -760,8 +789,9 @@ export function computeTrackDetail(
             samples: speedSamples,
             maxMps: maxSpeedMps,
             // The series' own mean, which is NOT distance/duration: it weights
-            // every interval equally where the headline average weights them
-            // by time. The chart's own baseline, and nothing else's.
+            // every SAMPLE equally (each interval on a short series, each
+            // instant on a thinned one). The chart's own baseline, and
+            // nothing else's.
             averageMps:
               speedSamples.reduce((sum, s) => sum + s.speedMps, 0) /
               speedSamples.length,

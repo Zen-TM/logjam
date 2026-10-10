@@ -154,9 +154,9 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
     // problems on two rows of one list.
     //
     // A temporary failure only reaches this screen after the engine has spent
-    // its own attempts on it (PUSH_MAX_ATTEMPTS / MEDIA_MAX_ATTEMPTS in
-    // flush.ts). Saying so is what stops "Try again" reading as a chore the app
-    // could have done itself — it already did, five times.
+    // its own attempts on it (`shouldGiveUpOnSyncOp`, applied in flush.ts).
+    // Saying so is what stops "Try again" reading as a chore the app could have
+    // done itself — it already did, for a day.
     const tried = op.attempts > 1 ? `The app tried ${op.attempts} times. ` : "";
     return {
       line: "Couldn't reach your account.",
