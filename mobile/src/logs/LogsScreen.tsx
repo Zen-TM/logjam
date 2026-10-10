@@ -62,9 +62,9 @@ import {
   type CustomFieldFilter,
   type SectionKeysOn,
   type TripSortKey,
+  tripTitle,
 } from "@logjam/shared";
 
-import { tripTitle } from "../api/tripTitle";
 import {
   fontSize,
   fontWeight,

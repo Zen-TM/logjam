@@ -9,9 +9,13 @@
 import { Fragment } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
-import { tripDeleteConfirm, tripVerbs, type TripVerbId } from "@logjam/shared";
+import {
+  tripDeleteConfirm,
+  tripTitle,
+  tripVerbs,
+  type TripVerbId,
+} from "@logjam/shared";
 
-import { tripTitle } from "../api/tripTitle";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
 import { theme } from "../theme";

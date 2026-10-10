@@ -16,25 +16,15 @@ import {
 import { serializeSharedPlace } from "../lib/placeVisibility";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
-import { getEnv } from "../lib/env";
-import { deleteS3Keys } from "../lib/s3Cleanup";
-import {
-  assertHasStorageQuota,
-  decrementStorageUsed,
-} from "../lib/storageQuota";
+import { deletePlacesCascade } from "../lib/bulkDelete";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 import { copyPlaceMedia, placeMediaToCopy } from "../lib/copyPlaceMedia";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
-import { partitionPlaceMedia, unlinkStandaloneMedia } from "../lib/mediaLink";
 import {
   requirePlaceAccess,
   requirePlaceOwnerAccess,
 } from "../lib/placeAccess";
 import { resolveUser } from "../lib/resolveUser";
-import {
-  placeDeleteTombstones,
-  placeLinkDeleteTombstones,
-  writeTombstones,
-} from "../lib/syncTombstones";
 import {
   assertClientIdReplayable,
   parseClientSuppliedId,
@@ -46,8 +36,6 @@ import {
   validatePlacePayload,
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
-
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 // Bounds for the free-text place fields. `validatePlacePayload` (shared)
 // covers coordinates + numerics only, so a mistyped `name`/`altNames`/`notes`/
@@ -721,128 +709,11 @@ router.delete(
       "Only the owner can delete a place",
     );
 
-    const id = getParam(req.params.id);
-
-    const placeMediaRows = await prisma.media.findMany({
-      where: { linkedType: "place", linkedId: id },
-      select: {
-        id: true,
-        origin: true,
-        s3KeyDisplay: true,
-        s3KeyThumbnail: true,
-        fileSizeBytes: true,
-      },
-    });
-    // A standalone file linked as this place's way (an import, a recorded
-    // track) is UNLINKED, never deleted — it is the user's own file and lives
-    // on in Saved. Only the place's own attachments die with it. Same rule the
-    // linked route already follows; lib/mediaLink.ts owns the decision.
-    const { deleted: media, unlinked: unlinkedMedia } =
-      partitionPlaceMedia(placeMediaRows);
-
-    // S3-first (ARCH-004): the media S3 keys are already captured above, so
-    // delete the blobs before the DB rows. deleteS3Keys throws on failure
-    // (CH-002), aborting before any row is removed — no orphaned blobs, and the
-    // DB still holds the place/media if a retry is needed.
-    const s3Keys = media.flatMap((m) =>
-      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
-    );
-    const totalBytes = media.reduce(
-      (sum, m) => sum + (m.fileSizeBytes ?? 0n),
-      0n,
-    );
-    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
-
-    // Trip logs DETACH on place delete (the TripLogPlace join row cascades
-    // away, not the trip), so a user removing a place keeps their personal
-    // logbook entries and their per-trip media. Place shares and any other
-    // place-linked children still FK-cascade; place-level media has no DB FK
-    // on its polymorphic linkedId, so its deleteMany stays explicit. The quota
-    // decrement shares the transaction (ARCH-004) so a crash after the row
-    // deletes can't leave the quota over-counted (only place media frees
-    // quota now — per-trip media survives with its trip).
-    await prisma.$transaction(async (tx) => {
-      await tx.media.deleteMany({
-        where: { id: { in: media.map((m) => m.id) } },
-      });
-      await unlinkStandaloneMedia(
-        tx,
-        unlinkedMedia.map((m) => m.id),
-      );
-      // Preserve the (about-to-be-deleted) place's name on trips for which
-      // this was their ONLY linked place, so they still carry a label once
-      // the join row cascades away. Trips that keep another linked place
-      // need no backfill (their title still derives from the survivor). Only
-      // fill blanks so an explicit trip displayName is never overwritten.
-      // Queried before place.delete below, while the join row still exists.
-      const soleLinkTrips = await tx.tripLog.findMany({
-        where: { displayName: null, places: { some: { placeId: id } } },
-        select: { id: true, _count: { select: { places: true } } },
-      });
-      const orphanedTripIds = soleLinkTrips
-        .filter((trip) => trip._count.places === 1)
-        .map((trip) => trip.id);
-      if (orphanedTripIds.length > 0) {
-        await tx.tripLog.updateMany({
-          where: { id: { in: orphanedTripIds } },
-          data: { displayName: place.name },
-        });
-      }
-      // Queried before the deleteMany below, while the share rows still exist:
-      // each sharee must be told to forget the place + its place-level media
-      // (sync tombstone fan-out — same transaction as the delete).
-      const shares = await tx.placeShare.findMany({
-        where: { placeId: id },
-        select: { id: true, sharedWithId: true },
-      });
-      // The linked route (if any) SURVIVES this delete — Route.placeId is
-      // SetNull, so it becomes standalone and the owner keeps it. Only the
-      // sharees lose sight of it, which needs a tombstone each.
-      const linkedRoute = await tx.route.findUnique({
-        where: { placeId: id },
-        select: { id: true },
-      });
-      // LINKED PLACES survive — the cascade takes the PlaceLink row, never the
-      // place at the other end — but the link rows themselves go, and nothing
-      // else would tell the owner's mirror about them. No sharee appears here:
-      // a link is owner-private and grants no visibility (lib/shareAccess.ts).
-      // Read before the delete, while the rows still exist.
-      const links = await tx.placeLink.findMany({
-        where: { OR: [{ aPlaceId: id }, { bPlaceId: id }] },
-        select: { id: true },
-      });
-      await writeTombstones(
-        tx,
-        placeLinkDeleteTombstones({
-          ownerId: user.id,
-          linkIds: links.map((link) => link.id),
-        }),
-      );
-      await writeTombstones(
-        tx,
-        placeDeleteTombstones({
-          ownerId: user.id,
-          placeId: id,
-          mediaIds: media.map((m) => m.id),
-          shares,
-          routeId: linkedRoute?.id ?? null,
-          unlinkedMediaIds: unlinkedMedia.map((m) => m.id),
-        }),
-      );
-      await tx.placeShare.deleteMany({ where: { placeId: id } });
-      // Purge place_shared notifications held by OTHER users (the share
-      // recipients) that reference this place — not just the owner's own rows
-      // (PRIV-003). The read-time filter would hide them, but deletion removes
-      // the residual record at rest.
-      await tx.notification.deleteMany({
-        where: {
-          type: "place_shared",
-          payload: { path: ["placeId"], equals: id },
-        },
-      });
-      await tx.place.delete({ where: { id } });
-      await decrementStorageUsed(user.id, totalBytes, tx);
-    });
+    // One cascade for every way a place is deleted (this route, the bulk
+    // route, the sync push op, import undo). Empty means another request
+    // deleted it since the check above.
+    const deleted = await deletePlacesCascade(user.id, [place.id]);
+    if (deleted.length === 0) throw new AppError(404, "Place not found");
 
     res.status(204).send();
   },

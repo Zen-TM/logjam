@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  VISIBLE_PLACES,
-  linkablePlaces,
-  truncationHint,
-} from "./linkablePlaces";
+import { VISIBLE_PLACES, linkablePlaces } from "./linkablePlaces";
 
 const place = (name: string, syncRole?: string) => ({
   id: name,
@@ -47,17 +43,5 @@ describe("linkablePlaces", () => {
   it("counts hidden matches AFTER the filter, not before", () => {
     const owned = [...many(VISIBLE_PLACES + 20), place("Claustral")];
     expect(linkablePlaces(owned, "claustral").hiddenCount).toBe(0);
-  });
-});
-
-describe("truncationHint", () => {
-  it("says nothing when nothing was cut", () => {
-    expect(truncationHint(12, 0)).toBeNull();
-  });
-
-  it("reports the shown and the true total", () => {
-    expect(truncationHint(40, 7)).toBe(
-      "Showing 40 of 47 — keep typing to narrow it down.",
-    );
   });
 });

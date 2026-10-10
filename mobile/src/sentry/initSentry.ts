@@ -11,15 +11,11 @@
 //  - No-op until the user has said yes (crashReportPreference.ts). Guest mode
 //    made this necessary: telemetry with no account behind it has nothing to
 //    "leave the user's account" *to*, so consent is the only way to honour the
-//    root privacy rule. Existing signed-in users are grandfathered by
-//    `grandfatherCrashReports` below.
+//    root privacy rule. Every install is asked once, including one with a stored
+//    identity; none is switched on for the user.
 import * as Sentry from "@sentry/react-native";
 
-import {
-  areCrashReportsEnabled,
-  readCrashReportChoice,
-  setCrashReportsEnabled,
-} from "./crashReportPreference";
+import { areCrashReportsEnabled } from "./crashReportPreference";
 import { scrubBreadcrumb, scrubEvent } from "./scrubEvent";
 
 // The native iOS SDK records its own breadcrumb for every HTTP request, and
@@ -48,19 +44,4 @@ export function initSentry(): void {
     tracesSampleRate: 0,
     ...NATIVE_OPTIONS,
   });
-}
-
-/**
- * Grandfather an install that predates the consent toggle: someone who was
- * already signed in agreed to nothing explicitly, but the reporter has been
- * running for them since day one and re-asking changes nothing about what has
- * already been sent. Only fills an ABSENT preference — a user who has since
- * turned reports off stays off.
- *
- * Takes effect on the next cold start, because `initSentry` runs at module
- * scope before any session is known. One session of missing crash reports for
- * upgrading users is the price of not calling `Sentry.init` twice.
- */
-export function grandfatherCrashReports(): void {
-  if (readCrashReportChoice() === "unset") setCrashReportsEnabled(true);
 }

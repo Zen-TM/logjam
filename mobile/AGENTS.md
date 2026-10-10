@@ -40,8 +40,8 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 - **What leaves the device carries ids, not place data:** push payloads and
   crash reports (through `src/sentry/scrubEvent.ts`) never carry a place's
-  name, coordinates or fields, and a region-of-interest bbox never reaches the
-  server. [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md)
+  name, coordinates or fields, and a region-of-interest bbox goes only to our
+  own API, in a request body (never a URL), to clip a region. [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md)
 - **A new dependency can add Android permissions:** block each with
   `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a

@@ -6,10 +6,8 @@
 // time the app itself is reached (guest or signed in), **defaulting to off**,
 // and Sentry does not initialise until it is answered.
 //
-// An install that already has a local identity is treated as having consented:
-// those users signed up under the previous behaviour where the reporter was
-// always on, and re-prompting them changes nothing about what has already been
-// sent. Only the chooser path is new, and only it asks.
+// No install is treated as having consented. One with a stored identity and no
+// answer reads "unset" like a fresh one: reporting stays off and the sheet asks.
 //
 // PRIVACY: one boolean. The reporter it gates is separately scrubbed
 // (scrubEvent.ts) — this decides whether it runs at all, not what it sends.
@@ -20,9 +18,8 @@ const CRASH_REPORTS_PREF_KEY = "crashReportsEnabled";
 export type CrashReportChoice = "on" | "off" | "unset";
 
 /**
- * The stored choice, distinguishing "said no" from "never asked". The
- * distinction matters exactly once: grandfathering an install that predates the
- * toggle must fill an absent preference without overriding an explicit no.
+ * The stored choice, distinguishing "said no" from "never asked". Only
+ * "unset" asks; an explicit no is an answer, not a gap to fill.
  */
 export function readCrashReportChoice(): CrashReportChoice {
   const stored = readPref(CRASH_REPORTS_PREF_KEY);
@@ -47,8 +44,7 @@ export function areCrashReportsEnabled(): boolean {
  * "Never asked" is the only state that asks — which is what keeps the dialog
  * from being a nag: both of its answers (including "Not now", which stores an
  * explicit off) leave a stored choice behind, and Settings → Privacy and
- * security owns it from then on. Grandfathered installs read "on" here and are
- * never asked either.
+ * security owns it from then on.
  */
 export function needsCrashReportChoice(): boolean {
   return readCrashReportChoice() === "unset";

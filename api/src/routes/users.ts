@@ -721,6 +721,23 @@ router.delete(
             }),
           ]
         : []),
+      // Direct shares and file sends this user made: the Share and
+      // FileSendRecipient rows cascade, the recipients' notification rows do
+      // not. Both payloads carry the sender's id from the first release.
+      prisma.notification.deleteMany({
+        where: {
+          OR: [
+            {
+              type: "item_shared",
+              payload: { path: ["sharedById"], equals: user.id },
+            },
+            {
+              type: "file_sent",
+              payload: { path: ["sentById"], equals: user.id },
+            },
+          ],
+        },
+      }),
       prisma.placeShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),

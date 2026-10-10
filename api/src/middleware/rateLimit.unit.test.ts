@@ -1,5 +1,15 @@
-import { describe, it, expect } from "vitest";
-import { globalLimitMax, userPatchLimitMax } from "./rateLimit";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("../services/prisma", () => ({ default: {} }));
+
+import {
+  bulkImportLimiter,
+  bulkImportLimitMax,
+  globalLimitMax,
+  userPatchLimitMax,
+} from "./rateLimit";
+import placesBulk from "../routes/placesBulk";
+import tripLogsBulk from "../routes/tripLogsBulk";
 
 // The override exists so CI's integration run (one shared per-IP bucket, ~250
 // tests) isn't throttled. The property that matters is that it is inert in
@@ -57,5 +67,44 @@ describe("userPatchLimitMax", () => {
         RATE_LIMIT_USER_PATCH_MAX: "100000",
       }),
     ).toBe(30);
+  });
+});
+
+describe("bulkImportLimiter", () => {
+  it("defaults to 60, takes the CI override, and ignores it in production", () => {
+    expect(bulkImportLimitMax({})).toBe(60);
+    expect(
+      bulkImportLimitMax({
+        NODE_ENV: "development",
+        RATE_LIMIT_BULK_IMPORT_MAX: "100000",
+      }),
+    ).toBe(100000);
+    expect(
+      bulkImportLimitMax({
+        NODE_ENV: "production",
+        RATE_LIMIT_BULK_IMPORT_MAX: "100000",
+      }),
+    ).toBe(60);
+  });
+
+  // Mutation that turns this red: dropping bulkImportLimiter from either
+  // router.post("/") in routes/placesBulk.ts or routes/tripLogsBulk.ts.
+  it("is mounted on POST / of both import routes", () => {
+    for (const router of [placesBulk, tripLogsBulk]) {
+      const layer = (
+        router as unknown as {
+          stack: {
+            route?: {
+              path: string;
+              methods: { post?: boolean };
+              stack: { handle: unknown }[];
+            };
+          }[];
+        }
+      ).stack.find((l) => l.route?.path === "/" && l.route.methods.post);
+      expect(layer!.route!.stack.map((h) => h.handle)).toContain(
+        bulkImportLimiter,
+      );
+    }
   });
 });

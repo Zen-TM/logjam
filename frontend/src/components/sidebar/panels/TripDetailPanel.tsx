@@ -16,6 +16,7 @@ import {
   TRIP_PAGE,
   tripDeleteConfirm,
   tripTypeLabel,
+  tripTitle,
   tripVerbs,
   type MediaItem,
   type ScopedCustomFieldDef,
@@ -23,7 +24,7 @@ import {
   type TripVerbId,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
-import { deleteTripLog, getTripLog, tripTitle } from "../../../placeUtils";
+import { deleteTripLog, getTripLog } from "../../../placeUtils";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import MediaGallery from "../../media/MediaGallery";

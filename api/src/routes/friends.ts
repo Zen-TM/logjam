@@ -121,7 +121,9 @@ router.post(
     const addressee = await prisma.user.findUnique({
       where: { id: addresseeId },
     });
-    if (!addressee) throw new AppError(404, "User not found");
+    // Same refusal a blocked pair gets: a distinct 404 would tell the caller
+    // which user ids exist.
+    if (!addressee) throw new AppError(403, "Unable to send friend request");
 
     // Check for any existing friendship or pending request in either direction
     const existing = await prisma.friendship.findFirst({
@@ -902,15 +904,22 @@ router.get(
       throw new AppError(400, "Search query must be at least 3 characters");
     }
 
-    const users = await prisma.user.findMany({
-      where: {
-        username: { contains: q, mode: "insensitive" },
-        id: { not: user.id },
-      },
-      select: { id: true, username: true },
-      take: 10,
-    });
+    // Same where for the page and the count, so the total reveals nothing
+    // the matching usernames would not.
+    const where = {
+      username: { contains: q, mode: "insensitive" as const },
+      id: { not: user.id },
+    };
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, username: true },
+        take: 10,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
+    res.set("X-Total-Count", String(total));
     res.json(users);
   },
 );

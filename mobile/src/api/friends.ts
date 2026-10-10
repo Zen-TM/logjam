@@ -8,7 +8,7 @@
 // friends joins). Search is capped server-side (min 3 chars, ≤10 results).
 import type { BulkShareItem, FriendShares } from "@logjam/shared";
 
-import { apiFetch } from "./apiFetch";
+import { apiFetch, apiFetchWithTotal } from "./apiFetch";
 
 export type Friend = { id: string; username: string; friendshipId: string };
 
@@ -36,8 +36,10 @@ export function getFriendRequests(): Promise<FriendRequest[]> {
 }
 
 /** Username search (server requires ≥3 chars). Caller must pre-check length. */
-export function searchUsers(query: string): Promise<UserSearchResult[]> {
-  return apiFetch<UserSearchResult[]>(
+export function searchUsers(
+  query: string,
+): Promise<{ data: UserSearchResult[]; total: number | null }> {
+  return apiFetchWithTotal<UserSearchResult[]>(
     `/friends/search?q=${encodeURIComponent(query)}`,
   );
 }

@@ -42,6 +42,7 @@ import {
   friendVerb,
   type FriendsBucket,
   type SectionKeysOn,
+  friendSearchHint,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -450,6 +451,7 @@ function AddFriendDialog({
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TSearchUser[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [sentIds, setSentIds] = useState<ReadonlySet<string>>(new Set());
   const [sendingId, setSendingId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -480,8 +482,11 @@ function AddFriendDialog({
     let cancelled = false;
     timerRef.current = setTimeout(() => {
       searchUsers(query.trim())
-        .then((found) => {
-          if (!cancelled) setResults(found);
+        .then(({ data, total: all }) => {
+          if (!cancelled) {
+            setResults(data);
+            setTotal(all);
+          }
         })
         .catch((err) => {
           if (cancelled) return;
@@ -535,30 +540,37 @@ function AddFriendDialog({
         ) : results.length === 0 ? (
           <p className={classes.note}>{copy.searchEmpty}</p>
         ) : (
-          results.map((user) => (
-            <Row
-              key={user.id}
-              leading={<Avatar username={user.username} />}
-              title={user.username}
-              trailing={
-                friendIds.has(user.id) ? (
-                  <StatusPill label={copy.pillFriend} tone="muted" />
-                ) : sentIds.has(user.id) ? (
-                  <StatusPill label={copy.pillRequested} tone="outline" />
-                ) : (
-                  <Button
-                    compact
-                    variant="outline"
-                    busy={sendingId === user.id}
-                    disabled={sendingId !== null}
-                    onClick={() => void handleSend(user)}
-                  >
-                    {copy.add}
-                  </Button>
-                )
-              }
-            />
-          ))
+          <>
+            {results.map((user) => (
+              <Row
+                key={user.id}
+                leading={<Avatar username={user.username} />}
+                title={user.username}
+                trailing={
+                  friendIds.has(user.id) ? (
+                    <StatusPill label={copy.pillFriend} tone="muted" />
+                  ) : sentIds.has(user.id) ? (
+                    <StatusPill label={copy.pillRequested} tone="outline" />
+                  ) : (
+                    <Button
+                      compact
+                      variant="outline"
+                      busy={sendingId === user.id}
+                      disabled={sendingId !== null}
+                      onClick={() => void handleSend(user)}
+                    >
+                      {copy.add}
+                    </Button>
+                  )
+                }
+              />
+            ))}
+            {friendSearchHint(results.length, total) ? (
+              <p className={classes.note}>
+                {friendSearchHint(results.length, total)}
+              </p>
+            ) : null}
+          </>
         )}
       </div>
     </Dialog>

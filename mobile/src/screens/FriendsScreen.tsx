@@ -50,6 +50,7 @@ import {
   messageFromError,
   type FriendsBucket,
   type SectionKeysOn,
+  friendSearchHint,
 } from "@logjam/shared";
 
 import {
@@ -512,6 +513,7 @@ function AddFriendBody({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   const [sentIds, setSentIds] = useState<string[]>([]);
   // The search field's own problem (§8, rule 1).
@@ -536,9 +538,10 @@ function AddFriendBody({
     let cancelled = false;
     const timer = setTimeout(() => {
       searchUsers(trimmed)
-        .then((users) => {
+        .then(({ data, total: all }) => {
           if (!cancelled) {
-            setResults(users);
+            setResults(data);
+            setTotal(all);
             setSearchError(null);
           }
         })
@@ -618,6 +621,11 @@ function AddFriendBody({
           />
         );
       })}
+      {friendSearchHint(results.length, total) ? (
+        <Text style={styles.hint}>
+          {friendSearchHint(results.length, total)}
+        </Text>
+      ) : null}
       {sendError ? <ErrorBanner message={sendError} /> : null}
     </View>
   );

@@ -1,11 +1,14 @@
-// Extracted cascade-delete logic for places and trips. Shared by
-// placesBulk POST /delete, tripLogsBulk POST /delete, and the import-undo
-// route (DELETE /imports/:batchId). No duplicated cascade logic (CH-001).
+// The one cascade for deleting places and trips. Every route that deletes
+// either goes through here: DELETE /places/:id and /trips/:id, the two bulk
+// POST /delete routes, the sync push delete ops, and import undo (DELETE
+// /imports/:batchId). A second copy drifts: the single place delete once kept
+// its own and missed the trip touch below (src/__tests__/places.test.ts).
 //
 // Ordering invariant (ARCH-004): S3 blobs are deleted BEFORE database rows so
 // an S3 failure leaves rows (and their keys) intact for a retried delete. Row
 // deletes and quota decrement share one transaction.
 
+import { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
@@ -20,6 +23,24 @@ import {
 } from "./syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
+
+/**
+ * Delete media rows and return the bytes of the rows this transaction
+ * actually deleted. Two deletes of the same place or trip both read its media
+ * before either commits; the loser's delete waits for the winner and then
+ * finds nothing, so decrementing by the bytes it read earlier would free them
+ * twice. Guard: "DELETE /places/:id racing itself" in
+ * src/__tests__/places.test.ts.
+ */
+async function deleteMediaReturningBytes(
+  tx: Prisma.TransactionClient,
+  where: Prisma.Sql,
+): Promise<bigint> {
+  const rows = await tx.$queryRaw<{ file_size_bytes: bigint }[]>`
+    DELETE FROM media WHERE ${where} RETURNING file_size_bytes
+  `;
+  return rows.reduce((sum, r) => sum + r.file_size_bytes, 0n);
+}
 
 /** Derived trip titles obey the same length cap as user-supplied ones. */
 export function truncateDisplayName(name: string | null): string | null {
@@ -63,12 +84,11 @@ export async function deletePlacesCascade(
       origin: true,
       s3KeyDisplay: true,
       s3KeyThumbnail: true,
-      fileSizeBytes: true,
     },
   });
   // Standalone files linked as a place's way survive the place (they are the
   // user's own imports and recordings); only its own attachments die with it.
-  // Same rule as the single delete — lib/mediaLink.ts owns it.
+  // lib/mediaLink.ts owns the rule.
   const { deleted: media, unlinked: unlinkedMedia } =
     partitionPlaceMedia(placeMediaRows);
 
@@ -76,16 +96,13 @@ export async function deletePlacesCascade(
   const s3Keys = media.flatMap((m) =>
     [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
   );
-  const totalBytes = media.reduce(
-    (sum, m) => sum + (m.fileSizeBytes ?? 0n),
-    0n,
-  );
   await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
   await prisma.$transaction(async (tx) => {
-    await tx.media.deleteMany({
-      where: { id: { in: media.map((m) => m.id) } },
-    });
+    const freedBytes = await deleteMediaReturningBytes(
+      tx,
+      Prisma.sql`id = ANY(${media.map((m) => m.id)})`,
+    );
     await unlinkStandaloneMedia(
       tx,
       unlinkedMedia.map((m) => m.id),
@@ -194,7 +211,7 @@ export async function deletePlacesCascade(
       data: { updatedAt: new Date() },
     });
     await tx.place.deleteMany({ where: { id: { in: ownedIds } } });
-    await decrementStorageUsed(userId, totalBytes, tx);
+    await decrementStorageUsed(userId, freedBytes, tx);
   });
 
   return ownedIds;
@@ -225,7 +242,6 @@ export async function deleteTripsCascade(
       linkedId: true,
       s3KeyDisplay: true,
       s3KeyThumbnail: true,
-      fileSizeBytes: true,
     },
   });
 
@@ -233,18 +249,15 @@ export async function deleteTripsCascade(
   const s3Keys = media.flatMap((m) =>
     [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
   );
-  const totalBytes = media.reduce(
-    (sum, m) => sum + (m.fileSizeBytes ?? 0n),
-    0n,
-  );
   await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
   await prisma.$transaction(async (tx) => {
-    await tx.media.deleteMany({
-      where: { linkedType: "tripLog", linkedId: { in: ownedIds } },
-    });
+    const freedBytes = await deleteMediaReturningBytes(
+      tx,
+      Prisma.sql`linked_type = 'tripLog' AND linked_id = ANY(${ownedIds})`,
+    );
     await tx.tripLog.deleteMany({ where: { id: { in: ownedIds } } });
-    await decrementStorageUsed(userId, totalBytes, tx);
+    await decrementStorageUsed(userId, freedBytes, tx);
     // Same transaction as the delete (sync tombstone rule).
     await writeTombstones(
       tx,

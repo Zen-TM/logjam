@@ -138,7 +138,24 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.imported).toBe(0);
       expect(res.body.errors).toHaveLength(1);
-      expect(res.body.errors[0].error).toBe("not the place owner");
+      // Same row error as a nonexistent id, or the response is an existence
+      // oracle. Mutation: restore a separate "not the place owner" message.
+      expect(res.body.errors[0].error).toBe("place not found");
+      const missing = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: `${name}-batch2`,
+          trips: [
+            {
+              sourcePlaceName: name,
+              placeId: NONEXISTENT_ID,
+              date: "2024-06-01",
+              displayName: name,
+            },
+          ],
+        });
+      expect(missing.body.errors[0].error).toBe("place not found");
     } finally {
       await deleteTripsBySearch(name);
       await request(API_URL)

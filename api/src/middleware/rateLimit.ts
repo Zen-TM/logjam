@@ -45,7 +45,10 @@ const GLOBAL_MAX_DEFAULT = 300;
 // still wiring up; the var is declared in lib/env.ts so it is still validated
 // and listed at boot. Covered by rateLimit.unit.test.ts.
 function ciLimitMax(
-  name: "RATE_LIMIT_GLOBAL_MAX" | "RATE_LIMIT_USER_PATCH_MAX",
+  name:
+    | "RATE_LIMIT_GLOBAL_MAX"
+    | "RATE_LIMIT_USER_PATCH_MAX"
+    | "RATE_LIMIT_BULK_IMPORT_MAX",
   fallback: number,
   env: NodeJS.ProcessEnv,
 ): number {
@@ -69,6 +72,15 @@ export function userPatchLimitMax(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   return ciLimitMax("RATE_LIMIT_USER_PATCH_MAX", USER_PATCH_MAX_DEFAULT, env);
+}
+
+const BULK_IMPORT_MAX_DEFAULT = 60;
+
+// Same CI headroom and fail-closed rule for bulkImportLimiter.
+export function bulkImportLimitMax(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return ciLimitMax("RATE_LIMIT_BULK_IMPORT_MAX", BULK_IMPORT_MAX_DEFAULT, env);
 }
 
 export const globalLimiter = rateLimit({
@@ -120,6 +132,19 @@ export const elevationLimiter = rateLimit({
 export const userPatchLimiter = rateLimit({
   windowMs: 60_000,
   max: userPatchLimitMax(),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+// POST /places/bulk and /trips/bulk take up to 2000 rows per call, so the
+// global 300/min lets one user push 600k rows a minute. 60 a minute is one
+// import per second, far past a person dropping several CSVs in a row (each
+// call is one whole file). The bulk /delete sub-routes are not on it: they
+// take bounded id lists and a cleanup must never be refused by a prior import.
+export const bulkImportLimiter = rateLimit({
+  windowMs: 60_000,
+  max: bulkImportLimitMax(),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,

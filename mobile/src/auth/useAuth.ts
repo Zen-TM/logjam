@@ -39,7 +39,6 @@ import { mapAuthNextStep, messageFromError } from "@logjam/shared";
 import { config } from "../config";
 import { apiFetch, setSessionRejectedHandler } from "../api/apiFetch";
 import { fetchAuthSessionWithTimeout } from "./authSession";
-import { grandfatherCrashReports } from "../sentry/initSentry";
 import { wipeAllLocalData } from "../offline/wipeLocalData";
 import { unregisterPushNotifications } from "../notifications/pushRegistration";
 import { classifySessionError } from "./sessionErrors";
@@ -134,9 +133,6 @@ export function useAuth() {
     let cancelled = false;
     (async () => {
       const localIdentity = await readLocalIdentity().catch(() => null);
-      // Someone already signed in predates the crash-report toggle; fill their
-      // absent preference rather than silently turning the reporter off.
-      if (localIdentity) grandfatherCrashReports();
       try {
         // Timed out: until this settles `App` shows its loading screen, and a
         // hang here IS the "stuck on the logo screen" a cold start produced in

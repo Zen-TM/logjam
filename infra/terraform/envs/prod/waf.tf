@@ -1,7 +1,7 @@
 # CloudFront WAF web ACLs (us-east-1 / CLOUDFRONT scope) created by the
 # CloudFront console's default protection. web ACL attaches to the web
 # distribution, api ACL to the api distribution (web_acl_id refs in cloudfront.tf).
-# AWS managed rule groups + (api) a 300/5min rate-based rule in count mode.
+# AWS managed rule groups + (api) a 300/5min rate-based rule that blocks.
 
 resource "aws_wafv2_web_acl" "web" {
   provider = aws.us_east_1
