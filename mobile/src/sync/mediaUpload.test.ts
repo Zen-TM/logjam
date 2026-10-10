@@ -62,6 +62,8 @@ vi.mock("expo-crypto", () => ({
   randomUUID: () => "00000000-0000-4000-8000-000000000000",
 }));
 const uploaded: string[] = [];
+/** What the next upload task does instead of succeeding. */
+let uploadOutcome: { status: number } | Error | null = null;
 vi.mock("expo-file-system/legacy", () => ({
   deleteAsync: (path: string) => {
     unlinked.push(path);
@@ -81,6 +83,8 @@ vi.mock("expo-file-system/legacy", () => ({
   ) => ({
     uploadAsync: () => {
       onProgress?.({ totalBytesSent: 1 });
+      if (uploadOutcome instanceof Error) return Promise.reject(uploadOutcome);
+      if (uploadOutcome) return Promise.resolve(uploadOutcome);
       uploaded.push(fileUri);
       return Promise.resolve({ status: 200 });
     },
@@ -95,6 +99,7 @@ const {
   runMediaCreateOp,
   runMediaRecolourOp,
 } = await import("./mediaUpload");
+const { isNoResponse } = await import("../api/noResponse");
 
 describe("attachMediaLocal", () => {
   beforeEach(() => {
@@ -137,6 +142,7 @@ describe("runMediaCreateOp", () => {
       thumbnailUploadUrl: null,
     });
     canRunNow.mockReset().mockResolvedValue(true);
+    uploadOutcome = null;
   });
 
   const row = {
@@ -163,8 +169,7 @@ describe("runMediaCreateOp", () => {
     // The actual media bytes never moved...
     expect(uploaded).toEqual([]);
     // ...and flush.ts's optimistic bump (attempts already incremented before
-    // calling in) is undone, so waiting for Wi-Fi never counts toward
-    // MEDIA_MAX_ATTEMPTS and never surfaces as a Sync Issue.
+    // calling in) is undone: nothing was sent.
     const reset = calls.find((c) => c.sql.includes("state = 'queued'"));
     expect(reset?.args).toEqual([row.attempts, row.seq]);
   });
@@ -189,6 +194,22 @@ describe("runMediaCreateOp", () => {
     const outcome = await runMediaCreateOp(row);
     expect(outcome).toBe("done");
     expect(uploaded).toEqual(["file:///cache/media-cache/media-1.display"]);
+  });
+
+  // The flush counts a failure against the op unless it is marked as the
+  // link's, and classifies an answer by its status (flush.ts). Mutation: drop
+  // the mark or the status in `putFile` and one of these turns red.
+  it("marks a transfer that died mid-upload as the link's failure", async () => {
+    uploadOutcome = new Error("unexpected end of stream");
+    const err = await runMediaCreateOp(row).catch((thrown: unknown) => thrown);
+    expect(isNoResponse(err)).toBe(true);
+  });
+
+  it("passes on the status S3 answered with, unmarked", async () => {
+    uploadOutcome = { status: 503 };
+    const err = await runMediaCreateOp(row).catch((thrown: unknown) => thrown);
+    expect(isNoResponse(err)).toBe(false);
+    expect((err as { status?: number }).status).toBe(503);
   });
 });
 

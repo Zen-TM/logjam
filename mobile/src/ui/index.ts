@@ -46,6 +46,7 @@ export { ProfileChart } from "./ProfileChart";
 export {
   elevationSeries,
   speedSeries,
+  timeOfDayFormatter,
   type ProfilePoint,
   type ProfileSeries,
 } from "./profileSeries";

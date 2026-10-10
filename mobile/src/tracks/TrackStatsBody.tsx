@@ -17,6 +17,7 @@ import {
   formatSpeedMps,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
+  speedClockMs,
   type ElevationProfile,
   type TrackDetail,
 } from "@logjam/shared";
@@ -27,6 +28,7 @@ import {
   StatGrid,
   elevationSeries,
   speedSeries,
+  timeOfDayFormatter,
   type Stat,
 } from "../ui";
 
@@ -153,6 +155,14 @@ export function TrackStatsBody({
     });
   }
 
+  const speed = detail.speed;
+  const formatClock = speed
+    ? timeOfDayFormatter(
+        speedClockMs(speed, 0),
+        speedClockMs(speed, speed.samples[speed.samples.length - 1]!.atMs),
+      )
+    : null;
+
   return (
     <View style={styles.body}>
       {/* Pairs share a line and a lone stat takes the row (`STAT_PAIRS`), so a
@@ -196,17 +206,18 @@ export function TrackStatsBody({
         </Text>
       )}
 
-      {detail.speed ? (
+      {speed && formatClock ? (
         <View style={styles.chartBlock}>
           {/* And the speed chart's is TIME, not distance — the one place the
               two charts differ, and the reason each says which. */}
           <Text style={styles.chartLabel}>Speed vs time</Text>
           <ProfileChart
-            series={speedSeries(detail.speed)}
+            series={speedSeries(speed)}
             formatValue={formatSpeedMps}
             // The speed series runs on a CLOCK, not a tape measure — its x is
-            // time into the recording (see SpeedSample).
-            formatX={formatDurationMs}
+            // time into the recording (see SpeedSample), read out as the time
+            // of day it was: "where were we at 2 pm" is the question asked.
+            formatX={(atMs) => formatClock(speedClockMs(speed, atMs))}
             hint="Press or drag for speeds."
             accessibilityLabel="Speed profile"
           />
