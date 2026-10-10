@@ -368,6 +368,7 @@ export function PlaceEditSheet({
   ]);
 
   const fieldForm = useCustomFieldForm({
+    open: mode === "fieldForm",
     entity: "place",
     defs: customFieldDefs,
     editing: editingField,

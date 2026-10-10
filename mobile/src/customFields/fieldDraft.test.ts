@@ -18,23 +18,35 @@ describe("the attribute form's draft", () => {
   // attribute went on Canyon, the type the form had when it first rendered.
   // Mutation: one constant key for every new attribute.
   it("starts over when a new attribute is opened from a different place type", () => {
-    expect(fieldFormKey(null, "type-canyon")).not.toBe(
-      fieldFormKey(null, "type-cave"),
+    expect(fieldFormKey(true, null, "type-canyon")).not.toBe(
+      fieldFormKey(true, null, "type-cave"),
     );
     expect(seedDraft("place", null, "type-cave").typeIds).toEqual([
       "type-cave",
     ]);
   });
 
+  // Type a label, Cancel, "Add an attribute" again: the abandoned label was
+  // still in the box, because both opens were the same key.
+  // Mutation: a key that ignores `open`.
+  it("starts over each time the form is opened", () => {
+    expect(fieldFormKey(false, null, "type-cave")).not.toBe(
+      fieldFormKey(true, null, "type-cave"),
+    );
+    expect(fieldFormKey(false, null, undefined)).not.toBe(
+      fieldFormKey(true, null, undefined),
+    );
+  });
+
   it("keeps a draft while the same thing is being edited", () => {
-    expect(fieldFormKey(null, "type-cave")).toBe(
-      fieldFormKey(null, "type-cave"),
+    expect(fieldFormKey(true, null, "type-cave")).toBe(
+      fieldFormKey(true, null, "type-cave"),
     );
-    expect(fieldFormKey(depth, "type-cave")).toBe(
-      fieldFormKey(depth, "type-canyon"),
+    expect(fieldFormKey(true, depth, "type-cave")).toBe(
+      fieldFormKey(true, depth, "type-canyon"),
     );
-    expect(fieldFormKey(depth, undefined)).not.toBe(
-      fieldFormKey(null, undefined),
+    expect(fieldFormKey(true, depth, undefined)).not.toBe(
+      fieldFormKey(true, null, undefined),
     );
   });
 
