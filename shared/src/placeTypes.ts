@@ -37,6 +37,22 @@ export const SYSTEM_PLACE_TYPE_IDS = {
   marker: "b0000000-0000-4000-8000-000000000003",
 } as const;
 
+const SYSTEM_PLACE_TYPE_ID_SET: ReadonlySet<string> = new Set(
+  Object.values(SYSTEM_PLACE_TYPE_IDS),
+);
+
+/**
+ * Whether a place type is a built-in, by its pinned id.
+ *
+ * `ownerId === null` is the server's answer, but a type made on a phone has no
+ * owner there until it syncs, and a guest's never does. The ids are pinned, so
+ * this is exact with no account and no signal — the same standard
+ * `isSystemFieldDef` holds to with reserved keys.
+ */
+export function isSystemPlaceTypeId(id: string): boolean {
+  return SYSTEM_PLACE_TYPE_ID_SET.has(id);
+}
+
 export type SystemPlaceTypeKey = keyof typeof SYSTEM_PLACE_TYPE_IDS;
 
 export type SystemPlaceType = {
@@ -152,7 +168,7 @@ export function isPlaceTypeIconKey(value: unknown): value is PlaceTypeIconKey {
  */
 export const PLACE_TYPE_COLORS = [
   // MID-LIGHT AND MUTED, drawn from the NSW canyon palette the theme already
-  // speaks in (DESIGN.md §3: "Never a saturated web primary"). The first cut of
+  // speaks in (DESIGN.md: "Never a saturated web primary"). The first cut of
   // this list was a Tailwind-500 ramp — orange-500, green-500, blue-400 — which
   // read as a component from another app the moment it sat on a sheet, and had
   // a harder problem underneath: a chip FILLS itself with its type's colour and

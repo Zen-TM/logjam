@@ -1,7 +1,7 @@
 // A PLACE'S VERBS, declared once for every surface that acts on one: its row
 // in the list, its page, and (Logjam GPS) its pin on the map.
 //
-// A thing offers the same verbs wherever it appears (docs/ux-principles.md §9).
+// A thing offers the same verbs wherever it appears (shared/DESIGN.md §9).
 // The lists differ by exactly one verb each: Open, absent on the page you are
 // already on, and (Logjam GPS only) Show on map, absent on the map. Ownership decides the rest:
 // a place shared with you is somebody else's ground, so it is copied and let

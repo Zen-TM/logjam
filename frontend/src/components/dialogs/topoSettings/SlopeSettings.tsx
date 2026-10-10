@@ -119,7 +119,7 @@ function computeInsert(
 
 /**
  * Terrain coloured by steepness: a table of bands, its columns headed once
- * (DESIGN.md §6). Every editable number is a unique BOUNDARY owned by exactly
+ * (DESIGN.md). Every editable number is a unique BOUNDARY owned by exactly
  * one box — the transparency threshold and each band's upper angle — so gaps
  * and overlaps are structurally impossible and a band's lower angle is simply
  * the one below it, shown rather than asked for.

@@ -3,13 +3,13 @@
 // The page answers with a count and owns the one acquisition action: Add, which
 // opens the username search in a dialog rather than sitting above the list. The
 // old panel led with that search box, so the first thing on the page was a way
-// to look for people who are not on it (docs/ux-principles.md §2, and Logjam GPS's
+// to look for people who are not on it (shared/DESIGN.md §2, and Logjam GPS's
 // FriendsScreen, which settled this shape).
 //
 // One pinned rail partitions All / Friends / Requests — a true partition,
 // because a pending request is not a friendship yet — over one flat list.
 //
-// A friend's row OPENS their sharing audit, and its ⋯ ACTS (DESIGN.md §5): the audit is
+// A friend's row OPENS their sharing audit, and its ⋯ ACTS (DESIGN.md): the audit is
 // read-only, so a mis-tap there costs nothing, while Remove friend stays behind
 // the menu. A request has nowhere to open to, so it carries Accept and Decline
 // on the card's own footer line.
@@ -247,7 +247,7 @@ function FriendsPanel({
     ),
     buckets: () => (
       // The selection bar takes the rail's slot at the rail's height, so the
-      // list does not move when a selection starts (DESIGN.md §5).
+      // list does not move when a selection starts (DESIGN.md).
       <div className={classes.rails}>
         {selecting ? (
           <SelectionBar

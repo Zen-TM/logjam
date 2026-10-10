@@ -3,7 +3,7 @@
 //
 // ONE definition of the stat list, because a recorded track reached from the
 // map, the same track reached from Saved, and a GPX someone sent you are the
-// same object seen three ways (DESIGN.md §5). A stat added here appears in all
+// same object seen three ways (DESIGN.md). A stat added here appears in all
 // three or in none.
 //
 // What is absent is as deliberate as what is present: a series with no

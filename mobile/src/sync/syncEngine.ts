@@ -4,9 +4,14 @@
 // mutation, manual pull-to-refresh. NEVER a background timer — battery is a
 // field resource.
 import { AppState } from "react-native";
-import { ApiError, computeBackoffMs } from "@logjam/shared";
+import {
+  ApiError,
+  computeBackoffMs,
+  SYNC_GIVE_UP_AFTER_MS,
+} from "@logjam/shared";
 
-import { subscribeReconnect } from "../map/connectivity";
+import { isNoResponse } from "../api/noResponse";
+import { isReachableNow, subscribeReconnect } from "../map/connectivity";
 
 import { fetchCurrentUser } from "../api/queries";
 import { canRunNow } from "../offline/networkPolicy";
@@ -49,6 +54,12 @@ export type SyncStatus = {
   /** User-safe message for the error state (no row contents). */
   errorMessage: string | null;
   errorKind: SyncErrorKind | null;
+  /**
+   * ISO instant the queue stopped getting answers, once that has lasted a day
+   * of this phone being online with Logjam GPS in front (`noteUnanswered`).
+   * Null otherwise. Nothing for the user to resolve: the status line says it.
+   */
+  waitingSince: string | null;
 };
 
 let status: SyncStatus = {
@@ -56,6 +67,7 @@ let status: SyncStatus = {
   lastSyncAt: null,
   errorMessage: null,
   errorKind: null,
+  waitingSince: null,
 };
 const statusListeners = new Set<(status: SyncStatus) => void>();
 
@@ -117,7 +129,7 @@ let followUpRequested = false;
 
 async function runCycleOnce(): Promise<void> {
   const userId = await resolveCurrentUserId();
-  // Cycle order (DESIGN.md §2): push then pull, so the pull's rebase sees post-flush
+  // Cycle order (DESIGN.md): push then pull, so the pull's rebase sees post-flush
   // server state and just-created rows come back confirmed.
   //
   // The pull runs even when the push failed. One unsendable op — a media file
@@ -137,6 +149,8 @@ async function runCycleOnce(): Promise<void> {
   } catch (err) {
     flushError = err;
   }
+  if (isNoResponse(flushError)) await noteUnanswered();
+  else await clearUnanswered();
   await runDeltaPull(userId);
   if (flushError) throw flushError;
   // Eager thumbnail cache (§7.3): best-effort — an offline-again failure
@@ -161,6 +175,63 @@ async function runCycleOnce(): Promise<void> {
     return;
   }
   retryAttempt = 0;
+}
+
+// ── queued work nobody is answering ──────────────────────────────────────────
+//
+// A send that gets no answer is never counted against its op (flush.ts), so an
+// op can sit queued for good without reaching Sync issues, and should: there is
+// nothing about it for the user to decide. What they are owed is the fact,
+// once it has gone on long enough to be one.
+//
+// "Long enough" is a day of this phone calling itself online with Logjam GPS
+// in front of someone. Not wall time: a week in a canyon, or a week in a
+// drawer, is the app working as designed. And no timer measures it (ADR 0013):
+// the only clock is the gap between two failed cycles, which the foreground
+// ladder keeps under five minutes, so a longer gap means the time between was
+// spent in the background or asleep and adds nothing.
+export const UNANSWERED_KEY = "unansweredSends";
+/** Above the ladder's five-minute cap plus a cycle of timeouts. */
+const UNANSWERED_GAP_MAX_MS = 10 * 60_000;
+/** Epoch ms of the last unanswered flush that counted. In memory on purpose:
+ *  a restart is a gap. */
+let lastUnansweredAt: number | null = null;
+
+async function noteUnanswered(): Promise<void> {
+  const now = Date.now();
+  const gap = lastUnansweredAt === null ? 0 : now - lastUnansweredAt;
+  if (AppState.currentState === "background" || !(await isReachableNow())) {
+    lastUnansweredAt = null;
+    return;
+  }
+  lastUnansweredAt = now;
+  let stored: { ms?: unknown; since?: unknown } = {};
+  try {
+    stored = JSON.parse((await getSyncStateValue(UNANSWERED_KEY)) ?? "{}") as {
+      ms?: unknown;
+      since?: unknown;
+    };
+  } catch {
+    // Unreadable is the same as absent: the count starts again.
+  }
+  const ms =
+    (typeof stored.ms === "number" ? stored.ms : 0) +
+    (gap <= UNANSWERED_GAP_MAX_MS ? gap : 0);
+  const since =
+    typeof stored.since === "string"
+      ? stored.since
+      : new Date(now).toISOString();
+  await setSyncStateValue(UNANSWERED_KEY, JSON.stringify({ ms, since }));
+  setStatus({ waitingSince: ms >= SYNC_GIVE_UP_AFTER_MS ? since : null });
+}
+
+async function clearUnanswered(): Promise<void> {
+  lastUnansweredAt = null;
+  // One write per cycle would be the common case paying for the rare one.
+  if ((await getSyncStateValue(UNANSWERED_KEY)) !== null) {
+    await clearSyncStateValue(UNANSWERED_KEY);
+  }
+  if (status.waitingSince !== null) setStatus({ waitingSince: null });
 }
 
 // APPLY_FAILED_KEY lives in syncDb (with the other sync_state keys) because
@@ -278,7 +349,7 @@ function scheduleBackoffRetry(): void {
   }, delay);
 }
 
-// ── debounced local-mutation trigger (DESIGN.md §2) ────────────────────────────────────
+// ── debounced local-mutation trigger (DESIGN.md) ────────────────────────────────────
 
 const MUTATION_SYNC_DEBOUNCE_MS = 10_000;
 let mutationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -335,6 +406,10 @@ export function registerSyncTriggers(): () => void {
   // A previous registration's cleanup left the engine stopped; a fresh sign-in
   // starts from clean module state rather than inheriting the old one's.
   stopped = false;
+  lastUnansweredAt = null;
+  // The stored count belongs to the queue and survives; the sentence is
+  // restored by the next unanswered cycle, never inherited from a session.
+  status = { ...status, waitingSince: null };
   retryAttempt = 0;
   lastAutoSyncAt = 0;
   followUpRequested = false;

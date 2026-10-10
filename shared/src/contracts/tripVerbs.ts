@@ -1,6 +1,6 @@
 // A TRIP'S VERBS, declared once for every surface that acts on one: its row in
 // the logbook and its page. The lists differ by exactly one verb: Open, absent
-// on the page you are already on (docs/ux-principles.md §9).
+// on the page you are already on (shared/DESIGN.md §9).
 import type { IconIdea } from "../icons.js";
 
 export type TripVerbSurface = "row" | "page";

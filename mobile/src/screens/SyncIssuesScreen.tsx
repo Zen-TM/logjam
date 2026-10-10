@@ -27,7 +27,7 @@
 // The converse rule holds too — where a row below the prose does the thing, the
 // prose telling the user to go and do it is deleted.
 //
-// LAYOUT (docs/ux-principles.md §2, §2, §7): hero states the count; the rail holds the
+// LAYOUT (shared/DESIGN.md §2, §2, §7): hero states the count; the rail holds the
 // one-line hint and becomes the multi-select bar in place, at the same height,
 // so the list cannot jump; rows carry a ⋯ that becomes the selection checkbox,
 // in the same 40pt box, so nothing resizes there either.
@@ -96,7 +96,7 @@ import {
   shelfSubtitle,
   shelfTitle,
 } from "./syncIssueDisplay";
-import { relativeTime } from "./syncHealth";
+import { relativeTime, syncIssuesTitle } from "./syncHealth";
 
 type Issue =
   | { kind: "stuck"; key: string; op: ParkedOp }
@@ -127,7 +127,7 @@ export function SyncIssuesScreen({
   // stays pure and every reload refreshes it.
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const [menuIssue, setMenuIssue] = useState<Issue | null>(null);
-  // ONE toast channel for every outcome (DESIGN.md §4). A row leaving the list
+  // ONE toast channel for every outcome (DESIGN.md). A row leaving the list
   // is the only feedback most of these actions have, and "it vanished" is not
   // the same message as "it worked" — especially for Try again, where the row
   // disappearing means the change finally landed.
@@ -268,7 +268,7 @@ export function SyncIssuesScreen({
 
   const runRetry = useCallback(() => {
     // Not destructive, so the selection stays: the rows are all still there and
-    // the obvious next move is another verb on the same set (DESIGN.md §5).
+    // the obvious next move is another verb on the same set (DESIGN.md).
     void Promise.all(retryable.map((op) => retryParkedOp(op.seq)))
       .then(() => {
         notify(
@@ -505,7 +505,7 @@ export function SyncIssuesScreen({
   );
 
   // Stable identities so the memoised rows don't all re-render on an unrelated
-  // state change (DESIGN.md §7).
+  // state change (DESIGN.md).
   const openMenu = useCallback((item: Issue) => setMenuIssue(item), []);
   const renderItem = useCallback(
     ({ item }: { item: Issue }) => (
@@ -527,7 +527,7 @@ export function SyncIssuesScreen({
     <View style={styles.root}>
       <Hero
         eyebrow="Account sync issues"
-        title={total > 0 ? "Some changes need you" : "Everything's synced"}
+        title={syncIssuesTitle(total)}
         onBack={onBack}
         value={total === 1 ? "1 change" : `${total} changes`}
       />
@@ -607,7 +607,7 @@ export function SyncIssuesScreen({
         ListEmptyComponent={<EmptyPanel />}
       />
 
-      {/* Per-entry actions, titled with the entry (DESIGN.md §5). */}
+      {/* Per-entry actions, titled with the entry (DESIGN.md). */}
       <BottomSheet
         visible={menuIssue !== null}
         onClose={() => setMenuIssue(null)}
@@ -848,7 +848,7 @@ function issueTitle(issue: Issue): string {
 }
 
 // Memoised, with callbacks that take the item rather than closing over it —
-// DESIGN.md §9.
+// DESIGN.md.
 const IssueRow = memo(function IssueRow({
   item,
   now,
@@ -866,7 +866,7 @@ const IssueRow = memo(function IssueRow({
 }) {
   const openOrToggle = () => (selecting ? onToggle(item) : onMenu(item));
   // The ⋯ and the checkbox share one 40pt box, so entering the mode cannot
-  // resize a row and shift the list under the finger that started it (DESIGN.md §5).
+  // resize a row and shift the list under the finger that started it (DESIGN.md).
   const trailing = selecting ? (
     <SelectionMark selected={selected} />
   ) : (
