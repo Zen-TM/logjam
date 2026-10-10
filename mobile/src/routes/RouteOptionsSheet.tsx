@@ -2,7 +2,7 @@
 // sheet the map opens when a route line is tapped.
 //
 // ONE component for both on purpose. The two surfaces offering different verbs
-// for the same object is exactly the drift DESIGN.md §5 is about, and the
+// for the same object is exactly the drift DESIGN.md is about, and the
 // actions themselves already have a single source in saved/assetActions.ts.
 // This is that descriptor rendered.
 //
@@ -71,7 +71,7 @@ export function RouteOptionsSheet({
   /**
    * Fly the map to this route. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md §5: "View on map" is the one row the two surfaces differ by).
+   * (DESIGN.md: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: () => void;
   /** Arm the map's draw tool on this route. Editing is a map gesture, so both
@@ -88,7 +88,7 @@ export function RouteOptionsSheet({
   // one component is both Saved's three-dots sheet and the map's route sheet,
   // and a callback would have given the verb to whichever surface remembered
   // to pass it. That asymmetry is the bug this sheet exists to prevent
-  // (DESIGN.md §5).
+  // (DESIGN.md).
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
@@ -204,7 +204,7 @@ export function RouteOptionsSheet({
   });
 
   // THE place picker, as a sub-mode of this sheet rather than a second sheet
-  // the caller had to remember to mount (DESIGN.md §4). Same panel a track's
+  // the caller had to remember to mount (DESIGN.md). Same panel a track's
   // and an import's options render.
   const placePicker = usePlacePicker({
     source: "route",
@@ -297,7 +297,7 @@ export function RouteOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §4 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = sharing
     ? () => setSharing(false)
     : renaming

@@ -32,7 +32,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PACKAGE="com.logjamnsw.mobile"
+# The application id is app.config.ts's to decide (LOGJAM_APP_VARIANT=dev is a
+# second app beside the real one): ask it, so this never launches the other.
+PACKAGE="$(npx expo config --json | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).android.package')"
 APK="android/app/build/outputs/apk/debug/app-debug.apk"
 
 # The AVD this project develops against. Create it in Android Studio if missing;

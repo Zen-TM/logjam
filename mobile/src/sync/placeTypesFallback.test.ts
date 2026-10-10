@@ -33,8 +33,18 @@ describe("listMirrorPlaceTypes", () => {
     expect(types.every((type) => type.ownerId === null)).toBe(true);
   });
 
-  it("uses the mirror once it holds anything at all", async () => {
+  it("uses the mirrored built-ins once it holds them", async () => {
     rows = [
+      {
+        id: SYSTEM_PLACE_TYPE_IDS.canyon,
+        owner_id: null,
+        name: "Canyon",
+        icon_key: "droplet",
+        color: "#E4C5AA",
+        position: 0,
+        created_at: null,
+        updated_at: null,
+      },
       {
         id: "type-1",
         owner_id: "user-1",
@@ -48,6 +58,16 @@ describe("listMirrorPlaceTypes", () => {
     ];
     const types = await listMirrorPlaceTypes();
     expect(types).toEqual([
+      {
+        id: SYSTEM_PLACE_TYPE_IDS.canyon,
+        ownerId: null,
+        name: "Canyon",
+        iconKey: "droplet",
+        color: "#E4C5AA",
+        position: 0,
+        createdAt: "",
+        updatedAt: "",
+      },
       {
         id: "type-1",
         ownerId: "user-1",

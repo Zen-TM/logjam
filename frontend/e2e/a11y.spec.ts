@@ -23,7 +23,7 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 /**
  * A surface is measured once it has finished ARRIVING.
  *
- * `Dialog` fades itself in (`@starting-style`, DESIGN.md §4), and axe computes
+ * `Dialog` fades itself in (`@starting-style`, DESIGN.md), and axe computes
  * contrast from what is PAINTED — so a check running while the dialog is
  * half-way there measures its colours composited against the page behind it
  * and reports both a shade light. That is not hypothetical: it failed
@@ -166,7 +166,7 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "aside");
 
-    // A list opens in place, with the arrow back out (DESIGN.md §2).
+    // A list opens in place, with the arrow back out (DESIGN.md).
     await aside.getByRole("button", { name: /^Place types/ }).click();
     await expect(
       aside.getByRole("heading", { name: "Place types" }),
@@ -175,7 +175,12 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    await aside.getByRole("button", { name: "Add a place type" }).click();
+    // The hero's button and the list's end are one button drawn twice
+    // (UX §9, `listEnd.test.ts`), so the first is the hero's.
+    await aside
+      .getByRole("button", { name: "Add a place type" })
+      .first()
+      .click();
     const typeDialog = page.locator("dialog[open]");
     await expect(
       typeDialog.getByRole("radiogroup", { name: "Icon" }),
@@ -246,10 +251,13 @@ test.describe("desktop", () => {
     ).toBeFocused();
     await expectNoViolations(page, "aside");
 
-    // `exact`, because an accessible name matches as a SUBSTRING by default and
-    // this list is the user's own data: a place called "Closet" is three of the
-    // "Close" buttons on this page (its own row, its ⋯, and the sheet's).
-    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // The sheet's own ×, found through the sheet: the panel keeps its × beside
+    // it (UX §3), and a place called "Closet" would add three more "Close"
+    // substrings (its row, its ⋯).
+    await page
+      .getByRole("region", { name: "Sort and filter" })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
     await page
       .getByRole("button", { name: /^Actions for / })
       .first()
@@ -309,7 +317,7 @@ test.describe("desktop", () => {
       timeout: 15_000,
     });
 
-    // The tile IS the checkbox (DESIGN.md §5), and the bar replaces the rail.
+    // The tile IS the checkbox (DESIGN.md), and the bar replaces the rail.
     await list.getByRole("checkbox").first().click();
     await list.getByRole("button", { name: "Share or export" }).click();
 
@@ -409,11 +417,11 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Logs", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: /trips?$/ }),
+      aside.getByRole("heading", { level: 2, name: "Logs", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md §4).
+    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md).
     const rowMenu = aside
       .getByRole("button", { name: /^Actions for / })
       .first();
@@ -449,7 +457,7 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Ways", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: /lines?$/ }),
+      aside.getByRole("heading", { level: 2, name: "Ways", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
@@ -473,7 +481,7 @@ test.describe("desktop", () => {
       .first()
       .getByRole("button", { name: /^Actions for/ })
       .click();
-    await page.getByRole("menuitem", { name: "Send a copy…" }).click();
+    await page.getByRole("menuitem", { name: "Send a copy" }).click();
     const sendDialog = page.locator("dialog[open]");
     await expect(
       sendDialog.getByRole("button", { name: "Send a copy" }),
@@ -705,7 +713,7 @@ test.describe("desktop", () => {
 
     // Every row here is new, so the REVIEW step is skipped rather than shown
     // empty: a page with no decisions on it is a click asking the user to agree
-    // that there was nothing to do (docs/ux-principles.md §2).
+    // that there was nothing to do (shared/DESIGN.md §2).
     await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await expect(
       dialog.getByRole("heading", { name: "Confirm import" }),
@@ -714,7 +722,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
 
     // The merge policy is a row that opens a SUB-VIEW, never an accordion
-    // (DESIGN.md §4); its eight switches are named by the field each decides.
+    // (DESIGN.md); its eight switches are named by the field each decides.
     await dialog.getByRole("button", { name: /^Merge settings/ }).click();
     await expect(
       dialog.getByRole("heading", { name: "Merge settings" }),

@@ -1,5 +1,5 @@
 // The verb list for ONE notification — the sheet the inbox's ⋯ opens
-// (DESIGN.md §5: per-item actions live in an overflow sheet, titled with the
+// (DESIGN.md: per-item actions live in an overflow sheet, titled with the
 // item, so rows stay clean and a mis-tap can't destroy anything).
 //
 // Four verbs, and no more. "Open" is the row's own tap, repeated here because
@@ -18,7 +18,7 @@
 // (`notificationActions.ts` stays the single source of those).
 //
 // PRIVACY: the sheet's title is the row's own label, which may carry a place
-// name or a filename — user text, rendered and never logged (docs/ux-principles.md §13).
+// name or a filename — user text, rendered and never logged (shared/DESIGN.md §13).
 import { Alert, StyleSheet, View } from "react-native";
 
 import type { TNotification } from "../api/types";
@@ -72,7 +72,7 @@ export function NotificationOptionsSheet({
     act(() =>
       // One notification, so the sentence is short — but it is still a dialog,
       // because a delete is not undoable and there is no trash to fish it out
-      // of (DESIGN.md §5).
+      // of (DESIGN.md).
       Alert.alert(
         notificationDeleteConfirm(1).confirmTitle,
         notificationDeleteConfirm(1).confirmBody,

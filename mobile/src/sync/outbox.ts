@@ -538,8 +538,14 @@ export async function createPlaceTypeLocal(draft: {
   // Append after the user's own types. System types hold 0-2 and sort first by
   // their null owner, so a user's first type starting at 3 keeps the two orders
   // agreeing without the client having to know how many built-ins there are.
+  // "The user's own" is "not a built-in id", never "has an owner": a type made
+  // here has no owner until it syncs, so two made offline shared a position.
+  const systemIds = Object.values(SYSTEM_PLACE_TYPE_IDS);
   const last = await db.getFirstAsync<{ position: number }>(
-    "SELECT position FROM place_types WHERE owner_id IS NOT NULL ORDER BY position DESC LIMIT 1",
+    `SELECT position FROM place_types
+      WHERE id NOT IN (${systemIds.map(() => "?").join(", ")})
+      ORDER BY position DESC LIMIT 1`,
+    ...systemIds,
   );
   const position = last ? last.position + 1 : SYSTEM_PLACE_TYPE_COUNT;
   const fields = {
@@ -1067,9 +1073,8 @@ type ColumnSpec =
     };
 
 /**
- * Generic update enqueue: snapshot base values for newly-dirtied fields
- * (server-confirmed = current column value when the field isn't already
- * dirty), materialize the new values into the mirror columns, extend
+ * Generic update enqueue: snapshot the base value of each field it writes,
+ * materialize the new values into the mirror columns, extend
  * dirty_fields_json, append/coalesce the op.
  */
 async function enqueueUpdate(
@@ -1096,15 +1101,19 @@ async function enqueueUpdate(
       return spec;
     };
 
+    // The base is the value the server will hold when this op arrives. For a
+    // field already dirty that is the earlier queued edit's value, which the
+    // column holds now: without it the server's receipt for that edit reads
+    // as another device's write and is shelved
+    // (updateConflictBase.test.ts). A merge into a queued op keeps that op's
+    // earlier base (appendOp).
     const baseSnapshot: Record<string, unknown> = {};
     for (const field of Object.keys(fields)) {
-      if (!dirtyNow.has(field)) {
-        const spec = specFor(field);
-        baseSnapshot[field] =
-          typeof spec === "string"
-            ? (current[spec] ?? null)
-            : spec.decode(current[spec.column]);
-      }
+      const spec = specFor(field);
+      baseSnapshot[field] =
+        typeof spec === "string"
+          ? (current[spec] ?? null)
+          : spec.decode(current[spec.column]);
       dirtyNow.add(field);
     }
 
@@ -1133,7 +1142,7 @@ async function enqueueUpdate(
         entity,
         op: "update",
         id,
-        // Conflict DETECTION base (DESIGN.md §4): the server updatedAt this edit saw.
+        // Conflict DETECTION base (DESIGN.md): the server updatedAt this edit saw.
         ...(typeof current.updated_at === "string" && {
           baseUpdatedAt: current.updated_at,
         }),

@@ -2,7 +2,7 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import { DEM_TILE_ZOOM } from "./demTiles.js";
+import { TERRARIUM } from "./demSources.js";
 
 export type RegionBbox = {
   west: number;
@@ -163,7 +163,10 @@ export type OfflineBasemapId = "six-topo" | "six-base" | "six-imagery";
  * it never appears in the layer picker, and it is deliberately outside
  * `OfflineBasemapId` so it cannot leak into one.
  */
-export const DEM_SOURCE_ID = "terrarium";
+export const DEM_SOURCE_ID = TERRARIUM.id;
+
+/** The only zoom the DEM is saved at: the one the sampler reads. */
+const DEM_ZOOM = TERRARIUM.sampleZoom;
 
 /** Anything the tile-pyramid downloader can fetch — basemaps plus the DEM. */
 export type DownloadableTileSourceId = OfflineBasemapId | typeof DEM_SOURCE_ID;
@@ -219,8 +222,8 @@ const TILE_BYTES: Record<
     17: { meanBytes: 9_113, p90Bytes: 15_942 },
     18: { meanBytes: 5_720, p90Bytes: 8_066 },
   },
-  // ONE zoom, because DEM_TILE_ZOOM is the only level anything reads
-  // (shared/src/demTiles.ts). Measured 2026-08-16, same script, 14 tiles over
+  // ONE zoom, because a source's `sampleZoom` is the only level anything
+  // reads (shared/src/demSources.ts). Measured 2026-08-16, same script, 14 tiles over
   // the same two bboxes: terrarium PNGs are noise-like height fields, so town
   // and bush cost the same and the spread is narrow.
   terrarium: {
@@ -335,7 +338,7 @@ export function planRegionForBasemaps(
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
 ): MultiSourceRegionPlan {
-  const demPlan = planRegionTiles(bbox, DEM_TILE_ZOOM, DEM_TILE_ZOOM);
+  const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const perSource = [
     ...basemapIds.map((basemapId) => {
       const clamped = Math.min(zMax, maxZoomFor(basemapId));
@@ -350,8 +353,8 @@ export function planRegionForBasemaps(
     }),
     {
       basemapId: DEM_SOURCE_ID as DownloadableTileSourceId,
-      zMin: DEM_TILE_ZOOM,
-      zMax: DEM_TILE_ZOOM,
+      zMin: DEM_ZOOM,
+      zMax: DEM_ZOOM,
       plan: demPlan,
       size: estimateRegionSize(demPlan, DEM_SOURCE_ID),
     },
