@@ -145,11 +145,15 @@ const db = {
         ? rows.filter((row) => row.state === "retrying").length
         : 0,
     }),
-  getAllAsync: (sql: string) =>
+  getAllAsync: (sql: string, ...args: unknown[]) =>
     Promise.resolve(
       sql.includes("entity = 'media'")
         ? rows.filter((row) => row.entity === "media" && row.state === "queued")
-        : rows,
+        : sql.includes("entity = ? AND entity_id = ?")
+          ? rows.filter(
+              (row) => row.entity === args[0] && row.entity_id === args[1],
+            )
+          : rows,
     ),
 };
 
@@ -420,6 +424,53 @@ describe("a write the server applied whose reply was lost", () => {
 
     expect(rows).toEqual([]);
     expect(shelved).toEqual([]);
+  });
+
+  // Two edits to one field went up in one batch and the reply was lost. The
+  // row now holds the SECOND edit's value, so the replayed first edit is told
+  // it replaced that; the second is then told it replaced the first.
+  // Mutation: compare a receipt only against the op's own base and value.
+  it("does not shelve a value a later queued edit of this phone wrote", async () => {
+    const edit = (seq: number, from: string, to: string): Row => ({
+      ...pushRow(seq),
+      entity_id: "wp-1",
+      attempts: 1,
+      fields_json: JSON.stringify({ name: to }),
+      base_fields_json: JSON.stringify({ name: from }),
+    });
+    rows = [edit(1, "before", "first"), pushRow(2), edit(3, "first", "second")];
+    answers.set("op-1", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "name", serverValue: "second" }],
+    });
+    answers.set("op-3", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "name", serverValue: "first" }],
+    });
+
+    await flushOutbox();
+
+    expect(rows).toEqual([]);
+    expect(shelved).toEqual([]);
+  });
+
+  it("still shelves a value that only another row's queued edit matches", async () => {
+    rows = [
+      {
+        ...pushRow(1),
+        fields_json: JSON.stringify({ name: "mine" }),
+        base_fields_json: JSON.stringify({ name: "before" }),
+      },
+      { ...pushRow(2), fields_json: JSON.stringify({ name: "theirs" }) },
+    ];
+    answers.set("op-1", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "name", serverValue: "theirs" }],
+    });
+
+    await flushOutbox();
+
+    expect(shelved).toHaveLength(1);
   });
 
   it("still shelves a value another device wrote", async () => {
