@@ -133,6 +133,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 
 - **A label the control above already says is hidden with `hideLabel`**,
   not removed.
+- **A screen stylesheet lays out and paints no corner, shadow or fill**:
+  `lookBudget.test.ts` holds each file to a budget that only shrinks.
 - **A disabled `Button` takes `disabledReason`** and stays focusable.
 - **Pure decisions leave the component** into a tested module beside it
   (`placesModel.ts`).
