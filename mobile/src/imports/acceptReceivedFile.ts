@@ -16,7 +16,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import { acceptFileSend, downloadFileSend } from "../api/fileSends";
 import { importGeoPdfFile } from "../geopdf/importPipeline";
 import { runGeoPdfImport } from "../geopdf/importRunner";
-import { listVectorImports } from "./importsDb";
 import { importVectorSource } from "./vectorImports";
 
 /** A PDF goes through the GeoPDF pipeline; everything else is a vector import. */
@@ -54,8 +53,7 @@ export async function acceptReceivedFile(
       // The same function the OS "Open in Logjam" intent calls — the
       // recipient's GeoJSON is derived here, from the original bytes, rather
       // than being handed a lossy round trip.
-      const existing = await listVectorImports();
-      await importVectorSource(uri, filename, existing.length, sentByUsername);
+      await importVectorSource(uri, filename, sentByUsername);
     }
   } finally {
     if (scratchUri) {
