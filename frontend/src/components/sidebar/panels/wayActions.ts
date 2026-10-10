@@ -162,12 +162,11 @@ export function wayProperties(
 ): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
-    // The colour IS the way's identity on the map — but only a ROUTE's can be
-    // changed from here. `PATCH /media/:id` takes a display name and nothing
-    // else (it 400s without one), so a file's colour is set by whatever made
-    // the file. Offering a picker that silently did nothing would be worse
-    // than not offering one.
-    colour: owned && way.kind === "route",
+    // The colour IS the way's identity on the map. A route's and an import's
+    // can be changed from here; a recording's lives on the phone that made it
+    // (its own table), so a picker here would paint a line that phone never
+    // redraws.
+    colour: owned && (way.kind === "route" || way.kind === "import"),
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

@@ -1437,6 +1437,13 @@ export function renameMedia(
   });
 }
 
+export function recolourMedia(id: string, color: string): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}`, {
+    method: "PATCH",
+    body: { color },
+  });
+}
+
 export function getMediaDownloadUrls(ids: string[]): Promise<{
   items: { id: string; displayUrl: string; thumbnailUrl: string | null }[];
 }> {

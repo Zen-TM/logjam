@@ -49,6 +49,7 @@ import {
   ownerUsername,
   shareEntityWith,
   unshareEntityWith,
+  recolourMedia,
   renameMedia,
   sendCopyOfMedia,
   type TRoute,
@@ -582,9 +583,7 @@ export default function WayDetailPanel({
         )}
 
         {/* ── Properties: changed in place, never in the ⋯ (wayActions.ts) ── */}
-        {/* Route-only: a file's colour is set by whatever made the file, and
-            the API has no way to change it (wayActions.ts). */}
-        {properties.colour && route && (
+        {properties.colour && (route || file) && (
           <section className={classes.section}>
             <ColourField
               label="Colour"
@@ -597,7 +596,10 @@ export default function WayDetailPanel({
               onChange={(next) => {
                 setPendingColour(next);
                 void run(
-                  () => updateRoute(route.id, { color: next }),
+                  () =>
+                    route
+                      ? updateRoute(route.id, { color: next })
+                      : recolourMedia(file!.id, next),
                   "Couldn't change the colour.",
                 );
               }}
