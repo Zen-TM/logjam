@@ -33,7 +33,7 @@
 // PRIVACY: the line is precise wilderness coordinates. Source 2 sends it to our
 // own API and nowhere else; source 3 sends only TILE INDICES (a ~4.9 km cell)
 // to AWS's public bucket, from the user's own connection. Never log either.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildElevationProfile,
   densifyLineSegments,
@@ -110,7 +110,13 @@ export function useElevationProfile(
   // re-request and a moved vertex does. A line needs at least two points
   // across its segments, as before.
   const totalPoints = segments.reduce((n, s) => n + s.length, 0);
-  const geometryKey = totalPoints >= 2 ? JSON.stringify(segments) : null;
+  // Memoised: a live recording re-renders its panel every second, and the line
+  // only changes every few dozen points — serialising it per render was the
+  // single largest per-tick cost here.
+  const geometryKey = useMemo(
+    () => (totalPoints >= 2 ? JSON.stringify(segments) : null),
+    [segments, totalPoints],
+  );
   // Guards against a slow response for an older line landing after a newer
   // one — without it, undoing a point could leave the pre-undo profile on
   // screen.
