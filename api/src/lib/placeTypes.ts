@@ -201,8 +201,9 @@ async function settlePlaceTypeName(
   return freePlaceTypeName(name, types, exceptId);
 }
 
-/** The database's own exact-match unique index, lost to a concurrent write
- *  between the check above and the insert. Same answer as the check. */
+/** The database's unique indexes (the exact name, and the name as read), lost
+ *  to a concurrent write between the check above and the insert. Same answer
+ *  as the check. Guard: `prisma/upgrade-check/verify.sql`. */
 function rethrowNameRace(e: unknown, name: string): never {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
     throw new AppError(409, placeTypeNameTakenError(name));

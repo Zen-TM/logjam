@@ -10,33 +10,8 @@ SELECT to_regclass('upgrade_check.baseline') IS NOT NULL AS applies \gset
 
 CREATE TEMP TABLE after AS
 SELECT * FROM (VALUES
-  ('users',             (SELECT count(*) FROM users)),
-  -- The base has no waypoints, so every place is a migrated canyon.
-  ('places',            (SELECT count(*) FROM places
-                          WHERE place_type_id = 'b0000000-0000-4000-8000-000000000001')),
-  ('place_shares',      (SELECT count(*) FROM place_shares)),
-  ('trip_logs',         (SELECT count(*) FROM trip_logs)),
-  ('trip_log_places',   (SELECT count(*) FROM trip_log_places)),
-  ('friendships',       (SELECT count(*) FROM friendships)),
-  ('notifications',     (SELECT count(*) FROM notifications)),
-  ('place_shared_notes',(SELECT count(*) FROM notifications
-                          WHERE type = 'place_shared' AND payload ? 'placeId' AND NOT payload ? 'canyonId')),
-  ('media',             (SELECT count(*) FROM media)),
-  ('media_on_places',   (SELECT count(*) FROM media WHERE linked_type = 'place')),
-  ('geo_pdf_marker_cfg',(SELECT count(*) FROM geo_pdf_templates
-                          WHERE config ? 'placeMarkers' AND NOT config ? 'canyonMarkers')),
-  ('user_field_defs',   (SELECT count(*) FROM custom_field_defs WHERE owner_id IS NOT NULL)),
-  ('v_grade',           (SELECT count(*) FROM places WHERE field_values ? 'v_grade')),
-  ('a_grade',           (SELECT count(*) FROM places WHERE field_values ? 'a_grade')),
-  ('commitment',        (SELECT count(*) FROM places WHERE field_values ? 'commitment')),
-  ('quality',           (SELECT count(*) FROM places WHERE field_values ? 'quality')),
-  ('hours',             (SELECT count(*) FROM places WHERE field_values ? 'hours')),
-  ('num_abseils',       (SELECT count(*) FROM places WHERE field_values ? 'num_abseils')),
-  ('longest_abseil',    (SELECT count(*) FROM places WHERE field_values ? 'longest_abseil')),
-  ('_sources',          (SELECT count(*) FROM places WHERE field_values ? '_sources')),
-  ('custom_values',     (SELECT count(*) FROM places, jsonb_object_keys(field_values) AS k
-                          WHERE k NOT IN ('v_grade', 'a_grade', 'commitment', 'quality', 'hours',
-                                          'num_abseils', 'longest_abseil', '_sources')))
+  ('place_types', (SELECT count(*) FROM place_types)),
+  ('places',      (SELECT count(*) FROM places))
 ) AS t(metric, value);
 
 \echo 'upgrade-check after head migrations (base -> after):'
@@ -46,7 +21,7 @@ SELECT b.metric, b.value AS base, a.value AS after,
  ORDER BY status DESC, b.metric;
 
 DO $$
-DECLARE bad TEXT;
+DECLARE bad TEXT; moved BIGINT;
 BEGIN
   SELECT string_agg(format('%s: %s -> %s', b.metric, b.value, coalesce(a.value::text, 'missing')), '; ')
     INTO bad
@@ -55,29 +30,44 @@ BEGIN
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'upgrade-check: data not carried across: %', bad;
   END IF;
+  SELECT count(*) INTO moved
+    FROM upgrade_check.place_type_of b LEFT JOIN places p USING (id)
+   WHERE p.place_type_id IS DISTINCT FROM b.place_type_id;
+  IF moved > 0 THEN
+    RAISE EXCEPTION 'upgrade-check: % place(s) changed type or went missing', moved;
+  END IF;
 END $$;
 
--- Fixture-specific outcomes: the reserved-key collisions were renamed with
--- their values, not overwritten or dropped.
+-- Fixture-specific outcomes: the earliest of each set kept its name, the
+-- later ones took the next FREE suffix, and the index now refuses another.
+-- Mutations: drop the rename loop and the migration fails on CREATE INDEX;
+-- drop the index and the insert at the bottom is accepted.
 SELECT EXISTS (SELECT 1 FROM users WHERE id = 'upgrade-fixture-owner') AS fixtures \gset
 \if :fixtures
 DO $$
-DECLARE fv JSONB; defs TEXT[];
+DECLARE names TEXT[]; untouched BIGINT;
 BEGIN
-  SELECT field_values INTO fv FROM places WHERE id = 'upgrade-fixture-graded';
-  SELECT array_agg(key ORDER BY key) INTO defs
-    FROM custom_field_defs WHERE owner_id = 'upgrade-fixture-owner';
-  IF fv ->> 'capacity_2' IS DISTINCT FROM '5' OR fv ? 'capacity'
-     OR fv ->> 'has_water_2' IS DISTINCT FROM 'true' OR fv ? 'has_water'
-     OR fv ->> 'rope' IS DISTINCT FROM '60'
-     OR fv ->> 'v_grade' IS DISTINCT FROM '3' OR fv ->> 'longest_abseil' IS DISTINCT FROM '25.5' THEN
-    RAISE EXCEPTION 'upgrade-check: fixture place field_values wrong: %', fv;
+  SELECT array_agg(name ORDER BY id) INTO names
+    FROM place_types WHERE owner_id = 'upgrade-fixture-owner';
+  IF names IS DISTINCT FROM
+     ARRAY['Cave', 'cave (3)', 'Cave (2)', 'CAVE (4)', 'canyon (2)', 'Hut'] THEN
+    RAISE EXCEPTION 'upgrade-check: fixture place type names wrong: %', names;
   END IF;
-  IF defs IS DISTINCT FROM ARRAY['capacity_2', 'has_water_2', 'party', 'rope'] THEN
-    RAISE EXCEPTION 'upgrade-check: fixture field definitions wrong: %', defs;
+  -- A renamed row is bumped for the delta pull; one left alone is not.
+  SELECT count(*) INTO untouched
+    FROM place_types
+   WHERE owner_id = 'upgrade-fixture-owner' AND updated_at < '2026-02-01';
+  IF untouched <> 3 THEN
+    RAISE EXCEPTION 'upgrade-check: expected 3 fixture types left untouched, found %', untouched;
   END IF;
+  BEGIN
+    INSERT INTO place_types (id, owner_id, name, icon_key, color, updated_at)
+    VALUES ('upgrade-fixture-type-7', 'upgrade-fixture-owner', '  hUT', 'map-pin', '#F97316', now());
+    RAISE EXCEPTION 'upgrade-check: the as-read index accepted a duplicate name';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
 END $$;
-\echo 'upgrade-check: fixture collisions renamed with their values'
+\echo 'upgrade-check: fixture duplicates renamed, places kept, index refuses another'
 \endif
 
 DROP SCHEMA upgrade_check CASCADE;
