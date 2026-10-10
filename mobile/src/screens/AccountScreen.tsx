@@ -32,6 +32,7 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
+import type { SignOutHandler } from "../offline/signOutConfirm";
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
@@ -169,7 +170,7 @@ export function AccountScreen({
   onOpenFriends,
 }: {
   onBack: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
   const { accountState } = useAccountState();
@@ -192,7 +193,7 @@ function LinkedAccountScreen({
   onOpenFriends,
 }: {
   onBack: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
   const query = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
@@ -324,7 +325,7 @@ function LinkedAccountScreen({
           label={copy.signOut}
           variant="outlineAccent"
           icon="signOut"
-          onPress={onSignOut}
+          onPress={() => onSignOut()}
         />
         <Row
           icon="delete"
@@ -377,7 +378,10 @@ function LinkedAccountScreen({
           />
         ) : null}
         {sheet === "delete" ? (
-          <DeleteAccountForm username={user.username} onDeleted={onSignOut} />
+          <DeleteAccountForm
+            username={user.username}
+            onDeleted={() => onSignOut({ accountDeleted: true })}
+          />
         ) : null}
       </BottomSheet>
 

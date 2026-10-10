@@ -10,13 +10,11 @@ import {
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import {
   categoryHasThumbnail,
   mediaCategory,
-  trackPointsToGpx,
   type MediaCategory,
 } from "@logjam/shared";
 
@@ -30,12 +28,12 @@ import {
   withAlpha,
 } from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
+import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { scratchFileUri } from "../offline/localStores";
 import { savesCapturesToGallery } from "./galleryPreference";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
-import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
+import { listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader, Icon, type Glyph } from "../ui";
 import { MediaViewer } from "./MediaViewer";
 
@@ -299,41 +297,17 @@ export function MediaStrip({
     await attach({ uri: asset.uri, mimeType, fileName: asset.name });
   }, [attach, fail]);
 
-  const attachRecordedTrack = useCallback(
+  const attachTrack = useCallback(
     async (track: Track) => {
       setBusy(true);
-      // A GPX of a recorded track is the densest coordinate artefact this app
-      // produces — a timestamped trace of a whole descent. It is scratch: it
-      // exists only until `attachMediaLocal` has copied it into media-cache/,
-      // so it goes in the wiped scratch dir AND is deleted here (the GeoPDF
-      // pipeline's contract, which this path never had).
-      let scratch: string | null = null;
       try {
-        const points = await listTrackPoints(track.id);
-        if (points.length < 2) {
+        if (!(await attachRecordedTrack(linkedType, linkedId, track))) {
           fail("That track has too few points to attach.");
-          return;
         }
-        // Written out as GPX, the shape both clients already read: the
-        // attachment shows on the web trip and on the map, and the file is one
-        // the user can open anywhere. The local recording is left untouched.
-        const gpx = trackPointsToGpx(track.name, points);
-        scratch = await scratchFileUri(`${track.id}.gpx`);
-        await FileSystem.writeAsStringAsync(scratch, gpx);
-        await attachMediaLocal(linkedType, linkedId, {
-          uri: scratch,
-          mimeType: "application/gpx+xml",
-          fileName: `${track.name}.gpx`,
-        });
       } catch (err) {
         console.error(err);
         fail("That track couldn't be attached.");
       } finally {
-        if (scratch) {
-          await FileSystem.deleteAsync(scratch, { idempotent: true }).catch(
-            console.error,
-          );
-        }
         setBusy(false);
       }
     },
@@ -536,7 +510,7 @@ export function MediaStrip({
                     hue={track.color}
                     title={track.name}
                     subtitle={trackSummary(track)}
-                    onPress={() => void attachRecordedTrack(track)}
+                    onPress={() => void attachTrack(track)}
                   />
                 ))}
               </>

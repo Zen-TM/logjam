@@ -165,6 +165,7 @@ import {
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
+import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
   geoPdfActions,
@@ -179,6 +180,7 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
+import type { Track } from "../tracks/tracksDb";
 import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
@@ -480,6 +482,9 @@ export function SavedScreen({
   // rename, account list). Transient and out of the layout — a banner in the
   // list reflows content under the user's thumb and then lingers unowned.
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  // The recording whose "Log a trip" was pressed: the trip form opens over the
+  // sheet that closed to hand it over.
+  const [loggingTrack, setLoggingTrack] = useState<Track | null>(null);
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -2486,8 +2491,15 @@ export function SavedScreen({
           }
         }}
         onContinueRecording={(track) => onContinueRecording(track.id)}
+        onLogTrip={setLoggingTrack}
         onInfo={info}
         onError={fail}
+      />
+
+      <LogTripFromTrackSheet
+        track={loggingTrack}
+        onClose={() => setLoggingTrack(null)}
+        onSaved={info}
       />
 
       <ImportOptionsSheet

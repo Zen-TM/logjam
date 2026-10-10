@@ -22,6 +22,14 @@
 
 .map {
   --map-inset-left: 0px;
+  /* How far in from the map's right edge the credits stop: past the action
+     column (its edge gap, one button, a gap), so the credits are never under a
+     button and a button is never over them, whatever page or sheet is open. */
+  --map-actions-clear: calc(
+    var(--space-2) +
+    var(--map-button-size) +
+    var(--space-1)
+  );
   position: absolute;
   top: 0;
   left: var(--nav-rail-width);
@@ -50,7 +58,7 @@
 
 /* The scale bar sits on the instrument edge, beside MapChrome's compass. */
 :global(#map .maplibregl-ctrl-bottom-left) {
-  left: calc(var(--map-inset-left) + 16px + 42px + 10px);
+  left: calc(var(--map-inset-left) + 16px + var(--map-button-size) + 10px);
   bottom: 26px;
   transition: left var(--motion-med) ease-out;
 }
@@ -74,8 +82,8 @@
 }
 
 :global(#map .maplibregl-ctrl-bottom-right) {
-  right: 16px;
-  bottom: 12px;
+  right: var(--map-actions-clear);
+  bottom: var(--space-1-5);
 }
 
 :global(#map .maplibregl-ctrl-attrib) {
@@ -88,8 +96,27 @@
   color: var(--color-accent);
 }
 
+/* A wrapped box is not a stadium: pill ends would clip the text. `lg` is the
+   box's own corner at any height, and at 24px (the (i) alone, or one line) it
+   is a circle's or a pill's. */
 :global(#map .maplibregl-ctrl-attrib.maplibregl-compact) {
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
+}
+
+/* Open, the credits wrap to as many lines as they need, between the left edge
+   of the visible map and the action column, with their text padded clear of the
+   corners. */
+:global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
+  box-sizing: border-box;
+  min-height: var(--space-3);
+  max-width: calc(
+    100vw -
+    var(--nav-rail-width) -
+    var(--map-inset-left) -
+    var(--space-2) -
+    var(--map-actions-clear)
+  );
+  padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
 }
 
 /* MapLibre draws the (i) as a dark data-URI icon; every scheme is dark. */
@@ -120,25 +147,26 @@
   }
 
   :global(#map .maplibregl-ctrl-bottom-left) {
-    left: calc(12px + 42px + 10px);
+    left: calc(12px + var(--map-button-size) + 10px);
     bottom: calc(var(--bottom-nav-height) + 22px);
   }
 
+  /* The credits keep the action column's edge on this side too: they open
+     leftwards of it and wrap, rather than run under the scale bar clipped. */
+  .map {
+    --map-actions-clear: calc(
+      var(--space-1-5) +
+      var(--map-button-size) +
+      var(--space-1)
+    );
+  }
+
   :global(#map .maplibregl-ctrl-bottom-right) {
-    right: 12px;
     bottom: calc(var(--bottom-nav-height) + 8px);
   }
 
-  /* The attribution starts expanded until the map is first moved; on a 390px
-     viewport that pill can run under the scale bar — cap it (MOBILE-10). */
   :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
-    max-width: calc(100vw - 130px);
-  }
-
-  :global(#map .maplibregl-ctrl-attrib-inner) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: calc(100vw - var(--space-1-5) - var(--map-actions-clear));
   }
 
   .geoPdfConfirmBar {

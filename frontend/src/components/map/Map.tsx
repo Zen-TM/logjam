@@ -15,9 +15,11 @@ import {
   MAP_INK,
   PLACE_TYPE_COLORS,
   SHARED_PLACE_COLOR,
+  type MapPointCoord,
   type RegionBbox,
 } from "@logjam/shared";
 import { useBoxDraw } from "./useBoxDraw";
+import MapPointPopover from "./MapPointPopover";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
@@ -579,6 +581,9 @@ function Map({
   standaloneTracks,
   routes,
   selectRoute,
+  selectTrack,
+  onAddPlaceAt,
+  onDrawRouteFrom,
   routeHover,
   drawingRoute,
   drawColor,
@@ -647,6 +652,11 @@ function Map({
   // there is nothing to fetch and parse per feature.
   routes: TRoute[];
   selectRoute: (id: string) => void;
+  // A track or import line pressed: its media id, for the page that opens it.
+  selectTrack: (mediaId: string) => void;
+  /** "What is here?" verbs: each hands the point to the flow that exists. */
+  onAddPlaceAt: (point: MapPointCoord) => void;
+  onDrawRouteFrom: (point: MapPointCoord) => void;
   /** Where along a line the elevation-profile cursor sits, marked on the map so
    *  the chart and the ground read as the same place. A CHANNEL, not a value:
    *  it changes many times a second (see the subscribing effect). */
@@ -817,6 +827,32 @@ function Map({
   useEffect(() => {
     drawingRouteRef.current = drawingRoute;
   }, [drawingRoute]);
+  const selectTrackRef = useRef(selectTrack);
+  useEffect(() => {
+    selectTrackRef.current = selectTrack;
+  }, [selectTrack]);
+  const panelOpenRef = useRef(panelOpen);
+  const sheetOpenRef = useRef(sheetOpen);
+  useEffect(() => {
+    panelOpenRef.current = panelOpen;
+    sheetOpenRef.current = sheetOpen;
+  }, [panelOpen, sheetOpen]);
+  // "What is here?": the point being asked about, with the fix the browser
+  // already had when it was asked (null: it never has to be asked for one).
+  const [asked, setAsked] = useState<{
+    point: MapPointCoord;
+    from: MapPointCoord | null;
+  } | null>(null);
+  // The latest fix, in memory only: it feeds the distance and bearing in that
+  // panel and goes nowhere else (see the GeolocateControl note below).
+  const userFixRef = useRef<MapPointCoord | null>(null);
+  // When the panel last closed, so the press that closed it (a click elsewhere
+  // on the map) is not also read as a new question.
+  const askedClosedAt = useRef(0);
+  const closeAsked = useCallback(() => {
+    askedClosedAt.current = Date.now();
+    setAsked(null);
+  }, []);
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
     selectRouteRef.current = selectRoute;
@@ -975,6 +1011,17 @@ function Map({
       showUserLocation: true,
     });
     map.addControl(geolocate, "top-right");
+    // The fix is kept in memory for "What is here?" and cleared when locating
+    // stops, so a stale one never gives a distance. Never persisted or sent.
+    geolocate.on("geolocate", (event) => {
+      userFixRef.current = {
+        latitude: event.coords.latitude,
+        longitude: event.coords.longitude,
+      };
+    });
+    geolocate.on("trackuserlocationend", () => {
+      userFixRef.current = null;
+    });
     // Compact: it collapses to an (i) once the map is moved, which OSMF's
     // attribution guideline allows while the credit stays one press away.
     map.addControl(
@@ -1088,6 +1135,19 @@ function Map({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
+      // Invisible click/hover target, as `routes-hit` is for a route: a track
+      // line opens its page, with the same verbs as its row.
+      map.addLayer({
+        id: "place-tracks-hit",
+        type: "line",
+        source: "place-tracks",
+        layout: {
+          visibility: "none",
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: { "line-color": "#000000", "line-opacity": 0, "line-width": 18 },
+      });
       map.addLayer({
         id: "place-tracks-lines",
         type: "line",
@@ -1117,6 +1177,13 @@ function Map({
       map.addSource("standalone-tracks", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "standalone-tracks-hit",
+        type: "line",
+        source: "standalone-tracks",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#000000", "line-opacity": 0, "line-width": 18 },
       });
       map.addLayer({
         id: "standalone-tracks-lines",
@@ -1671,7 +1738,7 @@ function Map({
           mediaId: track.mediaId,
           color: track.color,
           displayUrl: track.displayUrl,
-          stamp: { placeId: track.placeId },
+          stamp: { placeId: track.placeId, mediaId: track.mediaId },
         })),
         "Couldn't load a place track file.",
       );
@@ -1711,6 +1778,96 @@ function Map({
       cancelled = true;
     };
   }, [standaloneTracks, mapLoaded, loadTrackSource]);
+
+  // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
+  // or feature under it), a right-click asks wherever it lands, and Enter on
+  // the focused map asks about the middle of what is visible. The panel is
+  // drawn by `MapPointPopover`; this only decides when it is asked.
+  //
+  // A tap asks and a press-and-hold commits (shared/DESIGN.md §3), so nothing
+  // here writes anything: its verbs hand off to flows that confirm for
+  // themselves.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    // Everything on the map that has a press of its own.
+    const PRESSABLE = [
+      "place-circles",
+      "shared-place-halos",
+      "shared-place-circles",
+      "routes-hit",
+      "place-tracks-hit",
+      "standalone-tracks-hit",
+    ];
+    // Long enough for a double-click to zoom without a panel flashing up.
+    const SINGLE_PRESS_MS = 250;
+    // Pressing the panel's own dismissal and the map in one gesture.
+    const JUST_CLOSED_MS = 300;
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const cancel = () => {
+      if (pending) clearTimeout(pending);
+      pending = null;
+    };
+    const armed = () => pickModeRef.current || drawingRouteRef.current;
+    const ask = (latitude: number, longitude: number) =>
+      setAsked({
+        point: { latitude, longitude },
+        from: userFixRef.current,
+      });
+
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      if (armed() || Date.now() - askedClosedAt.current < JUST_CLOSED_MS)
+        return;
+      const layers = PRESSABLE.filter((id) => map.getLayer(id));
+      if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
+      cancel();
+      const { lat, lng } = e.lngLat;
+      pending = setTimeout(() => {
+        pending = null;
+        ask(lat, lng);
+      }, SINGLE_PRESS_MS);
+    };
+    const onContextMenu = (e: maplibregl.MapMouseEvent) => {
+      if (armed()) return;
+      e.originalEvent.preventDefault();
+      cancel();
+      ask(e.lngLat.lat, e.lngLat.lng);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || armed()) return;
+      event.preventDefault();
+      // The middle of the map the user can SEE: the page and its sheet cover
+      // the left of the canvas, and their widths are the layout's tokens.
+      const root = getComputedStyle(document.documentElement);
+      const width = (name: string) =>
+        Number.parseFloat(root.getPropertyValue(name)) || 0;
+      const narrow = window.innerWidth <= MOBILE_MAX_WIDTH_PX;
+      const inset = narrow
+        ? 0
+        : (panelOpenRef.current ? width("--panel-width") : 0) +
+          (sheetOpenRef.current ? width("--filter-sheet-width") : 0);
+      const box = map.getContainer().getBoundingClientRect();
+      const centre = map.unproject([
+        inset + (box.width - inset) / 2,
+        box.height / 2,
+      ]);
+      ask(centre.lat, centre.lng);
+    };
+    const canvas = map.getCanvas();
+    map.on("click", onClick);
+    map.on("dblclick", cancel);
+    map.on("movestart", cancel);
+    map.on("contextmenu", onContextMenu);
+    canvas.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancel();
+      map.off("click", onClick);
+      map.off("dblclick", cancel);
+      map.off("movestart", cancel);
+      map.off("contextmenu", onContextMenu);
+      canvas.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mapLoaded]);
 
   // Coordinate picking mode
   const onCoordsPickedRef = useRef(onCoordsPicked);
@@ -1777,10 +1934,12 @@ function Map({
     // The route being drawn stays visible even with the layer off — hiding your
     // own in-progress work would read as the tool being broken.
     for (const id of [
+      "place-tracks-hit",
       "place-tracks-lines",
       "routes-hit",
       "routes-lines",
       "routes-direction",
+      "standalone-tracks-hit",
       "standalone-tracks-lines",
     ]) {
       mapRef.current.setLayoutProperty(
@@ -2138,13 +2297,39 @@ function Map({
       if (pickModeRef.current || drawingRouteRef.current) return;
       map.getCanvas().style.cursor = "";
     };
-    map.on("click", "routes-hit", handleClick);
-    map.on("mouseenter", "routes-hit", handleEnter);
-    map.on("mouseleave", "routes-hit", handleLeave);
+    const handleTrackClick = (
+      e: maplibregl.MapMouseEvent & {
+        features?: maplibregl.MapGeoJSONFeature[];
+      },
+    ) => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      const id = e.features?.[0]?.properties?.mediaId;
+      if (typeof id === "string") selectTrackRef.current(id);
+    };
+    const hitLayers = [
+      "routes-hit",
+      "place-tracks-hit",
+      "standalone-tracks-hit",
+    ];
+    for (const layer of hitLayers) {
+      map.on(
+        "click",
+        layer,
+        layer === "routes-hit" ? handleClick : handleTrackClick,
+      );
+      map.on("mouseenter", layer, handleEnter);
+      map.on("mouseleave", layer, handleLeave);
+    }
     return () => {
-      map.off("click", "routes-hit", handleClick);
-      map.off("mouseenter", "routes-hit", handleEnter);
-      map.off("mouseleave", "routes-hit", handleLeave);
+      for (const layer of hitLayers) {
+        map.off(
+          "click",
+          layer,
+          layer === "routes-hit" ? handleClick : handleTrackClick,
+        );
+        map.off("mouseenter", layer, handleEnter);
+        map.off("mouseleave", layer, handleLeave);
+      }
     };
   }, [mapLoaded]);
 
@@ -3080,6 +3265,16 @@ function Map({
           />
         }
       />
+      {asked && drawableMap && (
+        <MapPointPopover
+          map={drawableMap}
+          point={asked.point}
+          from={asked.from}
+          onClose={closeAsked}
+          onAddPlace={onAddPlaceAt}
+          onDrawRoute={onDrawRouteFrom}
+        />
+      )}
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>

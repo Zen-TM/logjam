@@ -739,6 +739,41 @@ test.describe("desktop", () => {
       page.getByRole("button", { name: "Layers", exact: true }),
     ).toBeFocused();
   });
+
+  test("What is here?: asked by a right-click, drawn at the point", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const box = (await canvas.boundingBox())!;
+    // A right-click asks wherever it lands, so a seeded pin under the pointer
+    // cannot swallow the press.
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+      button: "right",
+    });
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Add a place here" }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Copy coordinates" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+
+    // Escape closes it, takes the dot with it and gives focus back to the map.
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
+    await expect(canvas).toBeFocused();
+
+    // Reachable without a pointer: Enter on the focused map asks about the
+    // middle of what is visible, and Tab walks the panel's own controls.
+    await page.keyboard.press("Enter");
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("button", { name: "Close" })).toBeFocused();
+  });
 });
 
 /**
@@ -809,6 +844,21 @@ test.describe("narrow web", () => {
     await page.getByRole("button", { name: /^More/ }).click();
     await expect(page.getByRole("menu", { name: "More pages" })).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
+  });
+
+  test("What is here?: the panel stays inside the phone", async ({ page }) => {
+    await openApp(page);
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel).toBeVisible();
+    const inside = await panel.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= window.innerWidth;
+    });
+    expect(inside).toBe(true);
+    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
   });
 
   test("a form dialog filling the phone's screen", async ({ page }) => {

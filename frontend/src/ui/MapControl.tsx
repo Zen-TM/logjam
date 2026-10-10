@@ -87,3 +87,12 @@ export function Notice({
     </div>
   );
 }
+
+/**
+ * The dot a press on the map leaves at the point it asked about ("What is
+ * here?"), so the question has an answer's place to point at. A drawn dot and
+ * not an arrow: the popover anchors to it and the pointer passes through it.
+ */
+export function MapPointDot() {
+  return <span className={classes.pointDot} aria-hidden />;
+}

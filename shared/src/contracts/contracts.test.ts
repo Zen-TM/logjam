@@ -17,6 +17,12 @@ import {
   statsUnderActivitiesNote,
   WAY_VERBS,
   wayVerbLabel,
+  wayVerbIcon,
+  mapPointFacts,
+  mapPointVerbs,
+  MAP_POINT,
+  MAP_POINT_NO_FIX_NOTE,
+  MAP_POINT_VERBS,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_OVERLAY_REFINEMENTS,
@@ -605,6 +611,17 @@ describe("a way's verbs", () => {
     );
   });
 
+  // One verb, one word and one glyph on both clients, and the same word and
+  // glyph a place's own "log a trip" wears (shared/DESIGN.md §6).
+  it("declares Log a trip once, with the trip glyph", () => {
+    expect(wayVerbLabel("logTrip", "web")).toBe("Log a trip");
+    expect(wayVerbLabel("logTrip", "gps")).toBe("Log a trip");
+    expect(wayVerbIcon("logTrip")).toBe(
+      placeVerbs("web", "row", true).find((verb) => verb.id === "logTrip")!
+        .icon,
+    );
+  });
+
   it("marks a dialog with an ellipsis on Logjam Web only", () => {
     expect(wayVerbLabel("share", "web")).toBe("Share…");
     expect(wayVerbLabel("share", "gps")).toBe("Share");
@@ -662,5 +679,93 @@ describe("the map's overlays list", () => {
   it("refines only rows that exist", () => {
     for (const row of Object.keys(MAP_OVERLAY_REFINEMENTS))
       expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toContain(row);
+  });
+});
+
+// What a press on empty map answers, on both clients (shared/DESIGN.md §3).
+describe("the map point panel", () => {
+  const point = { latitude: -33.65, longitude: 150.35 };
+
+  it("shows where it is and how high, and nothing from a fix it lacks", () => {
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "known", metres: 412.4 },
+      from: null,
+    });
+    expect(facts.map((fact) => [fact.key, fact.value])).toEqual([
+      ["position", "-33.65000, 150.35000"],
+      ["elevation", "412 m"],
+    ]);
+    // The position takes the line and can be copied; the rest do not.
+    expect(facts[0]).toMatchObject({ span: true, copyable: true });
+  });
+
+  it("adds distance and bearing only from a fix the device already has", () => {
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "checking" },
+      from: { latitude: -33.66, longitude: 150.35 },
+    });
+    expect(facts.map((fact) => fact.key)).toEqual([
+      "position",
+      "elevation",
+      "distance",
+      "bearing",
+    ]);
+    expect(facts[1].value).toBe("Checking…");
+    expect(facts[2].value).toMatch(/^1\.1 km$|^1,?1\d\d m$/);
+    expect(facts[3].value).toMatch(/^N 0°$|^N 360°$|^N \d+°$/);
+  });
+
+  it("says why there is no height rather than showing a dash", () => {
+    const unavailable = mapPointFacts({
+      point,
+      elevation: { state: "unavailable" },
+      from: null,
+    });
+    expect(unavailable[1].value).toBe("Needs a connection");
+  });
+
+  // Mutation: give a verb `on: "web"` with no client that draws it, or two
+  // clients the same verb under one id with different words.
+  it("gives each client its own verbs, in order, each with a reason", () => {
+    expect(mapPointVerbs("web").map((verb) => verb.id)).toEqual([
+      "addPlace",
+      "drawRoute",
+      "copy",
+    ]);
+    expect(mapPointVerbs("gps").map((verb) => verb.id)).toEqual([
+      "navigate",
+      "dropMarker",
+    ]);
+    for (const verb of MAP_POINT_VERBS)
+      expect(verb.reason.length).toBeGreaterThan(0);
+    // The words Logjam GPS's sheet showed before the contract existed.
+    expect(mapPointVerbs("gps")).toEqual([
+      {
+        id: "navigate",
+        icon: "navigateTo",
+        label: "Navigate to this point",
+        subtitle: "Live distance and bearing — nothing saved",
+      },
+      {
+        id: "dropMarker",
+        icon: "flag",
+        label: "Drop a marker here",
+        subtitle: "Saved, and synced",
+      },
+    ]);
+  });
+
+  it("keeps its sections and facts in step", () => {
+    const keys = MAP_POINT.sections.map((section) => section.key);
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "unavailable" },
+      from: { latitude: -33.66, longitude: 150.34 },
+    });
+    expect(facts.map((fact) => fact.key)).toEqual(keys);
+    expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");
+    expect(MAP_POINT_NO_FIX_NOTE.gps).toContain("locate button");
   });
 });

@@ -19,6 +19,7 @@ import {
   routeToGpx,
   routeToKml,
   type StandaloneFile,
+  wayVerbIcon,
 } from "@logjam/shared";
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
 import { ownerUsername } from "../../../placeUtils";
@@ -65,6 +66,7 @@ const KIND_IDENTITY: Record<WayKind, { icon: Glyph; hue: string }> = {
 const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   open: "route",
   openPlace: "place",
+  logTrip: wayVerbIcon("logTrip"),
   edit: "edit",
   copy: "copy",
   copyAndRemove: "moveCopy",

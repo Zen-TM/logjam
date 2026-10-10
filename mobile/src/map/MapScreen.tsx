@@ -270,6 +270,7 @@ import {
   type TrackPressHandler,
 } from "../tracks/TrackMapLayers";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
+import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
 import { RecordingSheet } from "../tracks/RecordingSheet";
@@ -2033,6 +2034,8 @@ export function MapScreen({
    *  options sheet closes before one opens (DESIGN.md). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
+  // The recording whose "Log a trip" was pressed.
+  const [loggingTrack, setLoggingTrack] = useState<Track | null>(null);
 
   /** A recorded line's own verbs, from the map (DESIGN.md: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
@@ -5358,8 +5361,15 @@ export function MapScreen({
         onClose={() => setOptionsTrackId(null)}
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
+        onLogTrip={setLoggingTrack}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
+      />
+
+      <LogTripFromTrackSheet
+        track={loggingTrack}
+        onClose={() => setLoggingTrack(null)}
+        onSaved={(text) => notify(text, "info")}
       />
 
       {/* An imported file's verbs, from the features the user tapped. Same
