@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { DISMISS_DISTANCE, sheetRelease } from "./sheetPull";
+import { DISMISS_DISTANCE, sheetPulled, sheetRelease } from "./sheetPull";
 
 describe("sheetRelease", () => {
   it("leaves a sheet at rest alone", () => {
@@ -25,6 +25,34 @@ describe("sheetRelease", () => {
   // frame with no finger involved, and would close itself.
   it("never closes a sheet nobody dragged", () => {
     expect(sheetRelease({ pulled: 600, dragged: false })).toBe("snap");
+  });
+});
+
+// A pull the finger takes back. Android scrolls the CONTENT when a drag that
+// pulled the sheet down turns upward, so how far the sheet is really down is
+// the pull less what the content has scrolled since.
+describe("sheetPulled", () => {
+  it("is the pull when the content has not scrolled", () => {
+    expect(sheetPulled({ pull: 200, scrolled: 0 })).toBe(200);
+  });
+
+  it("gives back what the finger took back", () => {
+    expect(sheetPulled({ pull: 200, scrolled: 150 })).toBe(50);
+  });
+
+  it("stops at the open position, where the content starts to scroll", () => {
+    expect(sheetPulled({ pull: 200, scrolled: 500 })).toBe(0);
+  });
+
+  it("is zero for a sheet at rest however far its content is scrolled", () => {
+    expect(sheetPulled({ pull: 0, scrolled: 300 })).toBe(0);
+  });
+
+  // Red when the release reads the raw pull instead of `sheetPulled`: a sheet
+  // dragged down 200pt and brought all the way back closed when let go.
+  it("a pull taken back does not close the sheet", () => {
+    const pulled = sheetPulled({ pull: 200, scrolled: 190 });
+    expect(sheetRelease({ pulled, dragged: true })).toBe("snap");
   });
 });
 

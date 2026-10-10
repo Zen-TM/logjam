@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { IconButton } from "./IconButton";
-import { DISMISS_DISTANCE, sheetRelease } from "./sheetPull";
+import { DISMISS_DISTANCE, sheetPulled, sheetRelease } from "./sheetPull";
 
 // Slide-up modal sheet with a handle + title, capped at 80% height and
 // scrolling within.
@@ -44,6 +44,19 @@ import { DISMISS_DISTANCE, sheetRelease } from "./sheetPull";
 // cannot scroll to the outer one (Android nested scrolling,
 // `nestedScrollEnabled`), which is what makes one gesture cross from scrolling
 // to dragging without a jump. Guard: `sheetPull.test.ts`.
+//
+// The hand-off is one way. When a drag that pulled the sheet down turns back
+// up, Android scrolls the CONTENT: a ScrollView offers its parent only what it
+// cannot scroll itself, and it can always scroll up. Left alone, the sheet
+// stays down while its content slides, and closes on release. So the sheet is
+// LIFTED by what the content has scrolled, up to the whole pull (`lift`
+// below), on the native driver so it keeps to the finger. The inner
+// ScrollView is pushed back down by the same amount, which leaves it where it
+// was on screen: a scroll view that moves under the finger it is tracking
+// reads its own movement as more drag. Its content has scrolled up by exactly
+// the lift, so the content rides with the sheet and nothing appears to scroll
+// until the sheet is back at its open position. Once the finger is off, the
+// lift is folded into the two real scroll offsets (`settle`).
 //
 // ponytail: Android only. iOS does not chain two vertical scroll views inside
 // one gesture, so there a scrollable sheet drags by its header; it needs a
@@ -221,13 +234,97 @@ export function BottomSheet({
     content: 0,
     viewport: 0,
     y: 0,
+    last: 0,
     touching: false,
     dragged: false,
     closingUntil: 0,
   });
-  const pulled = () =>
+  // How far the drag has taken the sheet down, before the lift.
+  const rawPull = () =>
     Math.max(0, pull.current.content - pull.current.viewport - pull.current.y);
+  const pulled = () =>
+    sheetPulled({ pull: rawPull(), scrolled: viewport.current.y });
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The settle runs from a timer, so it reads the current props through a ref.
+  const settleRef = useRef(() => {});
+  const [scroll] = useState(() => {
+    const outerY = new Animated.Value(0);
+    const outerContent = new Animated.Value(0);
+    const outerViewport = new Animated.Value(0);
+    const innerY = new Animated.Value(0);
+    // All three from ONE scroll event, so the pull is never computed from a
+    // new offset and an old size (a sheet that shrinks is clamped at once).
+    const pullNode = Animated.subtract(
+      Animated.subtract(outerContent, outerViewport),
+      outerY,
+    );
+    // min(innerY, pull), written as innerY - max(innerY - pull, 0): the
+    // native driver has no min of two values.
+    const lift = Animated.subtract(
+      innerY,
+      Animated.subtract(innerY, pullNode).interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 1],
+        extrapolateLeft: "clamp",
+      }),
+    );
+    return {
+      outerY,
+      innerY,
+      values: [outerY, outerContent, outerViewport, innerY],
+      lift,
+      onOuterScroll: Animated.event(
+        [
+          {
+            nativeEvent: {
+              contentOffset: { y: outerY },
+              contentSize: { height: outerContent },
+              layoutMeasurement: { height: outerViewport },
+            },
+          },
+        ],
+        { useNativeDriver: true },
+      ),
+      onInnerScroll: Animated.event(
+        [{ nativeEvent: { contentOffset: { y: innerY } } }],
+        { useNativeDriver: true },
+      ),
+    };
+  });
+  const settleSoon = () => {
+    if (settleTimer.current != null) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
+  };
+  const moved = useEffectEvent(() => {
+    const now = pulled();
+    const sinking = now > pull.current.last;
+    pull.current.last = now;
+    // A flick: the fling has carried it far enough, so go now. Only on the
+    // way DOWN: a sheet flicked back up is on its way to staying open.
+    if (
+      !pull.current.touching &&
+      pull.current.dragged &&
+      sinking &&
+      now > DISMISS_DISTANCE
+    )
+      settleRef.current();
+    else settleSoon();
+  });
+  // What the native driver is doing with the two offsets, for the settle.
+  useEffect(() => {
+    const outer = scroll.outerY.addListener(({ value }) => {
+      pull.current.y = value;
+      moved();
+    });
+    const inner = scroll.innerY.addListener(({ value }) => {
+      viewport.current = { ...viewport.current, y: value };
+      moved();
+    });
+    return () => {
+      scroll.outerY.removeListener(outer);
+      scroll.innerY.removeListener(inner);
+    };
+  }, [scroll]);
 
   useEffect(() => {
     if (visible) {
@@ -235,6 +332,7 @@ export function BottomSheet({
       pull.current.touching = false;
       pull.current.dragged = false;
       pull.current.closingUntil = 0;
+      for (const value of scroll.values) value.setValue(0);
       outerRef.current?.scrollToEnd({ animated: false });
       Animated.timing(progress, {
         toValue: 1,
@@ -252,10 +350,8 @@ export function BottomSheet({
       setMounted(false);
       notifyClosed();
     });
-  }, [progress, visible]);
+  }, [progress, scroll, visible]);
 
-  // The settle runs from a timer, so it reads the current props through a ref.
-  const settleRef = useRef(() => {});
   useEffect(() => {
     settleRef.current = () => {
       if (
@@ -269,6 +365,20 @@ export function BottomSheet({
         dragged: pull.current.dragged,
       });
       pull.current.dragged = false;
+      // Fold the lift into the real offsets: the sheet's scroll takes it, the
+      // content's gives it up, and nothing moves on screen. Not on the way
+      // out, where the sheet should leave from where it is.
+      const lift = Math.min(rawPull(), viewport.current.y);
+      if (outcome !== "close" && lift > 0) {
+        outerRef.current?.scrollTo({
+          y: pull.current.y + lift,
+          animated: false,
+        });
+        scrollRef.current?.scrollTo({
+          y: viewport.current.y - lift,
+          animated: false,
+        });
+      }
       if (outcome === "close") {
         pull.current.closingUntil = Date.now() + CLOSE_GRACE_MS;
         onClose();
@@ -284,10 +394,6 @@ export function BottomSheet({
     },
     [],
   );
-  const settleSoon = () => {
-    if (settleTimer.current != null) clearTimeout(settleTimer.current);
-    settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
-  };
   // Both scroll views report the drag: whichever one the finger landed in owns
   // the touch, and the inner one moves the sheet through the outer.
   const dragHandlers = {
@@ -303,10 +409,13 @@ export function BottomSheet({
 
   if (!mounted) return null;
 
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [SHEET_TRAVEL, 0],
-  });
+  const translateY = Animated.subtract(
+    progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [SHEET_TRAVEL, 0],
+    }),
+    scroll.lift,
+  );
 
   return (
     <Modal
@@ -321,7 +430,7 @@ export function BottomSheet({
         style={[styles.backdrop, { opacity: progress }]}
         pointerEvents="none"
       />
-      <ScrollView
+      <Animated.ScrollView
         ref={outerRef}
         style={styles.dock}
         // Not a scroll container to a screen reader: its one job is the drag.
@@ -333,7 +442,8 @@ export function BottomSheet({
         // A child that owns the touch (SheetScrollLock) owns it against the
         // sheet's drag too.
         scrollEnabled={!scrollLocked}
-        scrollEventThrottle={16}
+        // Every frame: the lift is driven from these events.
+        scrollEventThrottle={1}
         onLayout={(event) => {
           const { height } = event.nativeEvent.layout;
           pull.current.viewport = height;
@@ -351,17 +461,7 @@ export function BottomSheet({
           outerRef.current?.scrollToEnd({ animated: false });
           settleSoon();
         }}
-        onScroll={(event) => {
-          pull.current.y = event.nativeEvent.contentOffset.y;
-          // A flick: the fling has carried it far enough, so go now.
-          if (
-            !pull.current.touching &&
-            pull.current.dragged &&
-            pulled() > DISMISS_DISTANCE
-          )
-            settleRef.current();
-          else settleSoon();
-        }}
+        onScroll={scroll.onOuterScroll}
         // A drag that ends in a cancel never reports its end; the next touch
         // clears it, so the sheet cannot stay parked where it was left.
         onTouchStart={() => {
@@ -443,60 +543,69 @@ export function BottomSheet({
               the sheet's maxHeight cap. Without it this wrapper claims the
               full content height and pushes the footer off-screen. */}
           <View style={styles.scrollArea}>
-            <ScrollView
-              ref={scrollRef}
-              onLayout={(event) => {
-                viewport.current = {
-                  ...viewport.current,
-                  height: event.nativeEvent.layout.height,
-                };
-              }}
-              onScroll={(event) => {
-                viewport.current = {
-                  ...viewport.current,
-                  y: event.nativeEvent.contentOffset.y,
-                };
-              }}
-              scrollEventThrottle={32}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              // Without this the FIRST tap on any control while the keyboard is
-              // up is swallowed dismissing it, and the button only fires on the
-              // second press — which read as "Save didn't save".
-              keyboardShouldPersistTaps="handled"
-              // What this cannot scroll goes to the sheet's drag (see the top
-              // of the file).
-              nestedScrollEnabled
-              {...dragHandlers}
-              // Frozen while a sub-mode covers it: a drag on the overlay must
-              // not scroll the list hidden behind it. Frozen too while a child
-              // owns the current touch (SheetScrollLock).
-              scrollEnabled={overlay == null && !scrollLocked}
+            {/* Pushed down by the lift its sheet is raised by, so it stays
+                put on screen (see the top of the file). */}
+            <Animated.View
+              style={[
+                styles.scrollHold,
+                { transform: [{ translateY: scroll.lift }] },
+              ]}
             >
-              <SheetScrollLock.Provider value={scrollLock}>
-                <SheetErrorReveal.Provider value={revealError}>
-                  {/* The frame an error measures itself against. Not
+              <Animated.ScrollView
+                ref={scrollRef}
+                // Held below its place while lifted, it must still draw the
+                // rows above its own top edge; `scrollArea` does the clipping.
+                style={styles.scroll}
+                onLayout={(event) => {
+                  viewport.current = {
+                    ...viewport.current,
+                    height: event.nativeEvent.layout.height,
+                  };
+                }}
+                onScroll={scroll.onInnerScroll}
+                scrollEventThrottle={1}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                // Without this the FIRST tap on any control while the keyboard is
+                // up is swallowed dismissing it, and the button only fires on the
+                // second press — which read as "Save didn't save".
+                keyboardShouldPersistTaps="handled"
+                // What this cannot scroll goes to the sheet's drag (see the top
+                // of the file).
+                nestedScrollEnabled
+                {...dragHandlers}
+                // Frozen while a sub-mode covers it: a drag on the overlay must
+                // not scroll the list hidden behind it. Frozen too while a child
+                // owns the current touch (SheetScrollLock).
+                scrollEnabled={overlay == null && !scrollLocked}
+              >
+                <SheetScrollLock.Provider value={scrollLock}>
+                  <SheetErrorReveal.Provider value={revealError}>
+                    {/* The frame an error measures itself against. Not
                       collapsable, or Android flattens it away. */}
-                  <View ref={contentRef} collapsable={false}>
-                    {children}
-                  </View>
-                </SheetErrorReveal.Provider>
-              </SheetScrollLock.Provider>
-            </ScrollView>
+                    <View ref={contentRef} collapsable={false}>
+                      {children}
+                    </View>
+                  </SheetErrorReveal.Provider>
+                </SheetScrollLock.Provider>
+              </Animated.ScrollView>
+            </Animated.View>
             {overlay != null ? (
               <View style={styles.overlay}>{overlay}</View>
             ) : null}
           </View>
           {footer != null ? <View style={styles.footer}>{footer}</View> : null}
         </Animated.View>
-      </ScrollView>
+      </Animated.ScrollView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   header: { paddingBottom: spacing(1) },
-  scrollArea: { flexShrink: 1 },
+  scrollArea: { flexShrink: 1, overflow: "hidden" },
+  scrollHold: { flexShrink: 1 },
+  scroll: { overflow: "visible" },
   // Opaque, so the list it covers doesn't ghost through.
   overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.page },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: scrim.light },

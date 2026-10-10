@@ -18,3 +18,20 @@ export function sheetRelease({
   if (pulled <= 0) return "rest";
   return dragged && pulled > DISMISS_DISTANCE ? "close" : "snap";
 }
+
+/**
+ * How far down the sheet really is. `pull` is how far the drag has taken it;
+ * `scrolled` is how far its content has scrolled. A drag that pulls the sheet
+ * down and then turns back scrolls the CONTENT (Android gives a scroll view
+ * no way to hand the upward half to its parent), so the sheet is raised by
+ * what the content scrolled, up to the whole pull. Guard: `sheetPull.test.ts`.
+ */
+export function sheetPulled({
+  pull,
+  scrolled,
+}: {
+  pull: number;
+  scrolled: number;
+}): number {
+  return pull - Math.min(pull, Math.max(0, scrolled));
+}
