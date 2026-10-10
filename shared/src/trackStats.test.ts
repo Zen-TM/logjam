@@ -13,6 +13,7 @@ import {
   initialBearingDegrees,
   recordedDurationMs,
   rejectTrackFix,
+  speedClockMs,
   type RecordedTrackPoint,
 } from "./trackStats.js";
 
@@ -861,6 +862,36 @@ describe("computeTrackDetail", () => {
     expect(detail.durationMs).toBe(800_000);
     expect(detail.distanceM).toBeCloseTo(8 * LAT_STEP_M_PER_MILLIDEG, 0);
     expect(detail.averageSpeedMps).toBeCloseTo(1.1119, 3);
+  });
+
+  // Red when the clock is anchored once at the start instead of per segment:
+  // everything after a pause then reads early by the pause's length.
+  it("reads the time of day at a speed sample, through a pause and past the last fix", () => {
+    const startedAt = Date.UTC(2026, 9, 3, 12, 50); // 23:50 in Sydney
+    const first = walk({
+      count: 5,
+      stepMilliDeg: 1,
+      stepMs: 100_000,
+      startMs: startedAt,
+      segment: 0,
+    });
+    const resumedAt = startedAt + 4_000_000;
+    const second = walk({
+      count: 5,
+      stepMilliDeg: 1,
+      stepMs: 100_000,
+      startMs: resumedAt,
+      segment: 1,
+    });
+    const speed = computeTrackDetail([...first, ...second], {
+      recordedMs: 1_000_000,
+    }).speed!;
+
+    expect(speedClockMs(speed, 0)).toBe(startedAt);
+    expect(speedClockMs(speed, 200_000)).toBe(startedAt + 200_000);
+    expect(speedClockMs(speed, 600_000)).toBe(resumedAt + 200_000);
+    // The wait before Finish runs on from the last fix.
+    expect(speedClockMs(speed, 1_000_000)).toBe(resumedAt + 600_000);
   });
 
   it("thins a long series down to the chart's cap", () => {

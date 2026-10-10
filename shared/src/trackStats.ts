@@ -428,9 +428,30 @@ export type SpeedSample = { atMs: number; speedMps: number };
 
 export type SpeedProfile = {
   samples: SpeedSample[];
+  /**
+   * Where the recording clock meets the wall clock: one anchor per segment,
+   * in order. Kept beside the samples rather than on them because `atMs`
+   * skips pauses and the samples are thinned, so a time of day interpolated
+   * between two samples either side of a pause would be wrong by up to the
+   * pause's length. Read it through `speedClockMs`.
+   */
+  clock: { atMs: number; timestampMs: number }[];
   maxMps: number;
   averageMps: number;
 };
+
+/**
+ * The wall-clock time (epoch ms) at `atMs` into the recording. Guard: "reads
+ * the time of day at a speed sample" in trackStats.test.ts.
+ */
+export function speedClockMs(profile: SpeedProfile, atMs: number): number {
+  let anchor = profile.clock[0]!;
+  for (const next of profile.clock) {
+    if (next.atMs > atMs) break;
+    anchor = next;
+  }
+  return anchor.timestampMs + (atMs - anchor.atMs);
+}
 
 /**
  * Everything derivable from a stored series, in one pass.
@@ -551,6 +572,7 @@ export function computeTrackDetail(
   let durationMs = 0;
   let movingMs = 0;
   const rawSpeeds: SpeedSample[] = [];
+  const clock: SpeedProfile["clock"] = [];
   // Distance along the line at each POINT, for the profiles' x axis. It shares
   // the smoothed positions the distance total is built from, so the chart's
   // last x and the headline distance are the same number.
@@ -586,6 +608,9 @@ export function computeTrackDetail(
     // can draw the same answer the stats give rather than a near-zero average.
     const segmentStopped: number[] = [];
     distanceAt[start] = distanceM;
+    if (timed) {
+      clock.push({ atMs: durationMs, timestampMs: segment[0]!.timestampMs! });
+    }
     for (let i = 1; i < segment.length; i++) {
       const stepM = haversineMeters(
         lats[i - 1]!,
@@ -787,6 +812,7 @@ export function computeTrackDetail(
       speedSamples.length >= 2
         ? {
             samples: speedSamples,
+            clock,
             maxMps: maxSpeedMps,
             // The series' own mean, which is NOT distance/duration: it weights
             // every SAMPLE equally (each interval on a short series, each
