@@ -33,8 +33,10 @@
 // suppresses it entirely.
 import * as SQLite from "expo-sqlite";
 import {
+  demArchive,
   demTileKey,
   demTileUrl,
+  readDemArchive,
   sampleDem,
   xyzToTmsRow,
   type DemSamples,
@@ -43,6 +45,9 @@ import {
   type SamplePosition,
 } from "@logjam/shared";
 
+import { config } from "../config";
+import { fileSource } from "../map/snapLines";
+import type { MapArtifact } from "../map/sourceResolver";
 import { decodeDemPng } from "./demPng";
 import { cacheTile, cachedTile, clearDemTileCache } from "./demTileCache";
 import { REGION_DIR } from "./localStores";
@@ -53,32 +58,40 @@ import { regionFileName } from "./regionMbtiles";
 const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
 
 /** Registry rows are the index of what is on disk; the files are the data. */
-async function demArtifactIds(source: DemSource): Promise<string[]> {
+async function demArtifacts(source: DemSource): Promise<MapArtifact[]> {
   const artifacts = await listArtifacts();
-  return artifacts
-    .filter((a) => a.kind === "dem-region" && a.logicalKey === source.id)
-    .map((a) => a.id);
+  return artifacts.filter(
+    (a) => a.kind === "dem-region" && a.logicalKey === source.id,
+  );
 }
 
 /**
  * Read the wanted tiles out of one saved DEM region.
  *
- * Opened read-only and queried for the whole batch in one pass, because opening
- * an MBTiles per tile would mean an open per profile sample.
+ * A source built into an archive is saved as a PMTiles clip; the worldwide
+ * tile set as the MBTiles the tile engine wrote. An MBTiles is opened
+ * read-only and queried for the whole batch in one pass, because opening one
+ * per tile would mean an open per profile sample.
  */
 async function readTilesFrom(
-  artifactId: string,
-  zoom: number,
+  artifact: MapArtifact,
+  source: DemSource,
   wanted: readonly DemTileAddress[],
 ): Promise<Map<string, Float32Array>> {
   const found = new Map<string, Float32Array>();
+  if (artifact.format === "pmtiles") {
+    const archive = demArchive(fileSource(artifact.path));
+    for (const [key, png] of await readDemArchive(archive, source, wanted))
+      found.set(key, decodeDemPng(png));
+    return found;
+  }
+  const zoom = source.sampleZoom;
   const db = await SQLite.openDatabaseAsync(
-    regionFileName(artifactId),
+    regionFileName(artifact.id),
     {},
     REGION_DIR_PATH,
   );
   try {
-    // A region download may be writing a sibling file; wait rather than throw.
     await db.execAsync("PRAGMA busy_timeout = 3000;");
     for (const { tileX, tileY } of wanted) {
       const row = await db.getFirstAsync<{ tile_data: Uint8Array }>(
@@ -101,104 +114,128 @@ async function readTilesFrom(
 const TILE_FETCH_TIMEOUT_MS = 10_000;
 
 /**
- * How many tiles one lookup may fetch.
+ * How many kilometres of line one lookup may fetch tiles for, as a count of
+ * z13 tiles (~4.9 km each); a source read at a deeper zoom gets twice as many
+ * per zoom, because a line crosses twice as many.
  *
  * A point needs one and a drawn route a handful, but a long imported line
  * could address dozens, and this is an enrichment nobody asked to pay for.
- * Over the cap the uncovered part simply has no height, which is a state the
- * profile already renders.
+ * Over the cap the uncovered part simply has no height from this source,
+ * which is a state the profile already renders.
  *
  * ponytail: fixed cap, no queue. Raise it if real routes turn out to straddle
  * more than this.
  */
-const MAX_TILES_PER_FETCH = 6;
+const MAX_TILES_PER_FETCH_Z13 = 6;
 
-async function fetchDemTile(
+/** The public tile set, or our own archive on the CDN: whichever it is. */
+async function fetchDemTiles(
   source: DemSource,
-  tileX: number,
-  tileY: number,
-): Promise<Float32Array | null> {
-  // An archive source is not read on the phone yet: it has nothing, so the
-  // position falls through to the next source.
-  const { urlTemplate } = source;
-  if (urlTemplate == null) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TILE_FETCH_TIMEOUT_MS);
+  wanted: readonly DemTileAddress[],
+): Promise<Map<string, Float32Array>> {
+  const found = new Map<string, Float32Array>();
+  const batch = wanted.slice(
+    0,
+    MAX_TILES_PER_FETCH_Z13 * 2 ** Math.max(0, source.sampleZoom - 13),
+  );
+  const { urlTemplate, archivePath } = source;
   try {
-    const url = demTileUrl({ ...source, urlTemplate }, tileX, tileY);
-    const response = await fetch(url, {
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    return decodeDemPng(new Uint8Array(await response.arrayBuffer()));
+    if (archivePath != null) {
+      // Byte ranges of our own file: nothing in the request names a tile.
+      const archive = demArchive(`${config.topoCdnBaseUrl}/${archivePath}`);
+      for (const [key, png] of await readDemArchive(archive, source, batch))
+        found.set(key, decodeDemPng(png));
+    } else if (urlTemplate != null) {
+      await Promise.all(
+        batch.map(async (address) => {
+          const controller = new AbortController();
+          const timer = setTimeout(
+            () => controller.abort(),
+            TILE_FETCH_TIMEOUT_MS,
+          );
+          try {
+            const response = await fetch(
+              demTileUrl(
+                { ...source, urlTemplate },
+                address.tileX,
+                address.tileY,
+              ),
+              { signal: controller.signal },
+            );
+            if (response.ok)
+              found.set(
+                demTileKey(address),
+                decodeDemPng(new Uint8Array(await response.arrayBuffer())),
+              );
+          } catch {
+            // No height from the network for this tile; not an error to show.
+          } finally {
+            clearTimeout(timer);
+          }
+        }),
+      );
+    }
   } catch {
-    // No signal, a 404 over ocean, a truncated body. All mean "no height",
-    // and none is worth a log line that would carry the tile indices.
-    return null;
-  } finally {
-    clearTimeout(timer);
+    // An archive that is not there or will not answer has nothing: the
+    // positions fall through to the next source.
   }
+  return found;
 }
 
 /**
  * The tiles this phone can produce for one source: saved regions first, then
- * the public tiles when `allowNetwork` and nothing on disk has the tile.
+ * the network when `allowNetwork` and nothing on disk has the tile.
  */
 async function readTiles(
   source: DemSource,
   wanted: readonly DemTileAddress[],
   allowNetwork: boolean,
 ): Promise<Map<string, Float32Array>> {
-  const cacheKey = (address: DemTileAddress) =>
-    `${source.id}/${demTileKey(address)}`;
+  const cacheKey = (key: string) => `${source.id}/${key}`;
+  // Filled as tiles are found, not read back out of the cache at the end: the
+  // cache is smaller than a long line's tile count at z15.
+  const tiles = new Map<string, Float32Array>();
   const needed = new Map<string, DemTileAddress>();
   for (const address of wanted) {
+    const key = demTileKey(address);
     // A network tile held in memory is not usable while simulating offline, so
     // it counts as missing and the saved regions get asked for it instead.
-    if (!cachedTile(cacheKey(address), { allowNetwork }))
-      needed.set(demTileKey(address), address);
+    const cached = cachedTile(cacheKey(key), { allowNetwork });
+    if (cached) tiles.set(key, cached);
+    else needed.set(key, address);
   }
+  const keep = (
+    found: Map<string, Float32Array>,
+    origin: "saved" | "network",
+  ) => {
+    for (const [key, tile] of found) {
+      cacheTile(cacheKey(key), tile, origin);
+      tiles.set(key, tile);
+      needed.delete(key);
+    }
+  };
 
   if (needed.size > 0) {
-    for (const artifactId of await demArtifactIds(source)) {
+    for (const artifact of await demArtifacts(source)) {
       if (needed.size === 0) break;
-      let found: Map<string, Float32Array>;
       try {
-        found = await readTilesFrom(artifactId, source.sampleZoom, [
-          ...needed.values(),
-        ]);
+        keep(
+          await readTilesFrom(artifact, source, [...needed.values()]),
+          "saved",
+        );
       } catch (err) {
         // One unreadable region must not cost the heights the others hold.
         // (`failureDetail`-free on purpose: the message could carry a path.)
         console.error(err);
-        continue;
-      }
-      for (const [key, tile] of found) {
-        cacheTile(`${source.id}/${key}`, tile, "saved");
-        needed.delete(key);
       }
     }
   }
 
   // Whatever the device could not answer, ask the network for — but only what
   // is still missing, so a partly-covered line costs only its uncovered tiles.
-  if (allowNetwork && needed.size > 0) {
-    const batch = [...needed.values()].slice(0, MAX_TILES_PER_FETCH);
-    const fetched = await Promise.all(
-      batch.map(async (address) => ({
-        address,
-        tile: await fetchDemTile(source, address.tileX, address.tileY),
-      })),
-    );
-    for (const { address, tile } of fetched)
-      if (tile) cacheTile(cacheKey(address), tile, "network");
-  }
+  if (allowNetwork && needed.size > 0)
+    keep(await fetchDemTiles(source, [...needed.values()]), "network");
 
-  const tiles = new Map<string, Float32Array>();
-  for (const address of wanted) {
-    const tile = cachedTile(cacheKey(address), { allowNetwork });
-    if (tile) tiles.set(demTileKey(address), tile);
-  }
   return tiles;
 }
 

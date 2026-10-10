@@ -2,7 +2,7 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import { TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
 
 export type RegionBbox = {
   west: number;
@@ -303,7 +303,50 @@ export function estimateRegionSeconds(totalTiles: number): number {
   return Math.ceil(totalTiles / REGION_TILES_PER_SECOND);
 }
 
+/**
+ * MEASURED bytes of one tile of a DEM archive at its `sampleZoom`: full z15
+ * tiles of six whole sheets built by `topo/build_nsw_dem.py`, from 4.7 KB on
+ * the Hay plain to 36 KB in the ranges. People save rugged ground, so the p90
+ * is the rugged figure, not a statistical one.
+ */
+const DEM_ARCHIVE_TILE_BYTES: Record<
+  string,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  "nsw-5m": { meanBytes: 24_000, p90Bytes: 36_000 },
+};
+
+/**
+ * The DEM archives an offline area saves a clip of: every one whose coverage
+ * the area touches. All of them, not just the finest, because a finer source
+ * has holes and edges, and a line that crosses one is measured in the source
+ * underneath (`sampleDem`). The worldwide tile set is saved with every area
+ * regardless, by the tile engine (`DEM_SOURCE_ID`).
+ */
+export function planDemDownload(
+  bbox: RegionBbox,
+  sources: readonly DemSource[] = DEM_SOURCES,
+): DemSource[] {
+  return sources.filter(({ archivePath, coverage }) => {
+    if (archivePath == null) return false;
+    if (!coverage) return true;
+    const [west, south, east, north] = coverage;
+    return (
+      bbox.east >= west &&
+      bbox.west <= east &&
+      bbox.north >= south &&
+      bbox.south <= north
+    );
+  });
+}
+
 export interface MultiSourceRegionPlan {
+  /**
+   * DEM archive clips: one request each to our own API, so they count toward
+   * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
+   * fetched one by one from a provider.
+   */
+  demArchives: { sourceId: string; size: RegionSizeEstimate }[];
   perSource: {
     basemapId: DownloadableTileSourceId;
     /** Shallowest level of this source's pyramid. Flat sources set it to zMax. */
@@ -337,8 +380,24 @@ export function planRegionForBasemaps(
   basemapIds: OfflineBasemapId[],
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
+  /** False for a guest: the clip endpoint needs a signed-in user. */
+  includeDemArchives = false,
 ): MultiSourceRegionPlan {
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
+  const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
+    (source) => {
+      const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
+      const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+      return {
+        sourceId: source.id,
+        size: {
+          meanBytes: tiles.totalTiles * perTile.meanBytes,
+          p90Bytes: tiles.totalTiles * perTile.p90Bytes,
+        },
+      };
+    },
+  );
+
   const perSource = [
     ...basemapIds.map((basemapId) => {
       const clamped = Math.min(zMax, maxZoomFor(basemapId));
@@ -360,11 +419,14 @@ export function planRegionForBasemaps(
     },
   ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
+  const bytes = (key: keyof RegionSizeEstimate) =>
+    [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0);
   return {
     perSource,
+    demArchives,
     totalTiles,
-    meanBytes: perSource.reduce((sum, s) => sum + s.size.meanBytes, 0),
-    p90Bytes: perSource.reduce((sum, s) => sum + s.size.p90Bytes, 0),
+    meanBytes: bytes("meanBytes"),
+    p90Bytes: bytes("p90Bytes"),
     seconds: estimateRegionSeconds(totalTiles),
   };
 }

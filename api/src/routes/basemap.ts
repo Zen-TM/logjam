@@ -52,13 +52,21 @@ function runPmtilesExtract(
   outPath: string,
   bboxArg: string,
   maxzoom: number,
+  minzoom?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     // Args passed as an array — no shell, no injection surface. The bbox
     // reaches only the pmtiles process, never a log line.
     const child = spawn(
       "pmtiles",
-      pmtilesExtractArgs(archiveUri, outPath, bboxArg, maxzoom, env.AWS_REGION),
+      pmtilesExtractArgs(
+        archiveUri,
+        outPath,
+        bboxArg,
+        maxzoom,
+        env.AWS_REGION,
+        minzoom,
+      ),
       { stdio: ["ignore", "ignore", "pipe"] },
     );
     // Collect stderr for failure classification but never log it raw — the
@@ -100,21 +108,28 @@ router.post(
   regionClipLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    if (!env.PROTOMAPS_ARCHIVE_URI) {
-      throw new AppError(503, "Region clips are not available");
-    }
     const validated = validateRegionClipRequest(req.body);
     if (!validated.ok) throw new AppError(400, validated.error);
-    const { bbox, maxzoom } = validated.value;
+    const { bbox, maxzoom, dem } = validated.value;
+    // A DEM archive is cut from where it is served (shared demSources.ts); the
+    // basemap from its own configured location.
+    const archiveUri = dem
+      ? env.TOPO_CDN_BASE_URL &&
+        `${env.TOPO_CDN_BASE_URL.replace(/\/$/, "")}/${dem.archivePath}`
+      : env.PROTOMAPS_ARCHIVE_URI;
+    if (!archiveUri) {
+      throw new AppError(503, "Region clips are not available");
+    }
 
     const outPath = path.join(os.tmpdir(), `clip-${randomUUID()}.pmtiles`);
     const bboxArg = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
     try {
       await runPmtilesExtract(
-        env.PROTOMAPS_ARCHIVE_URI,
+        archiveUri,
         outPath,
         bboxArg,
         maxzoom,
+        dem ? maxzoom : undefined,
       );
       const { size } = await fs.stat(outPath);
       if (size > MAX_CLIP_OUTPUT_BYTES) {

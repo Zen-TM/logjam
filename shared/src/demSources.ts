@@ -13,7 +13,7 @@
 // PRIVACY: positions here are precise wilderness coordinates and a tile index
 // is a coarse location. Nothing in this file logs, and no reader may.
 
-import type { PMTiles } from "pmtiles";
+import { PMTiles, type Source } from "pmtiles";
 
 import {
   demSampleHeight,
@@ -127,6 +127,25 @@ export type DemTileAddress = { tileX: number; tileY: number };
 /** The key a `DemTileReader` files a decoded tile under. */
 export function demTileKey({ tileX, tileY }: DemTileAddress): string {
   return `${tileX}/${tileY}`;
+}
+
+const archives = new Map<string, PMTiles>();
+
+/**
+ * An open archive, from a URL or a runtime's own `Source` over a file. Held
+ * per key, because the object keeps the header and directory pages: opening
+ * one per lookup would fetch them again every time.
+ */
+export function demArchive(archive: string | Source): PMTiles {
+  const key = typeof archive === "string" ? archive : archive.getKey();
+  let opened = archives.get(key);
+  if (!opened) archives.set(key, (opened = new PMTiles(archive)));
+  return opened;
+}
+
+/** Test seam: the archives are module-scoped and would leak between tests. */
+export function clearDemArchives() {
+  archives.clear();
 }
 
 /**

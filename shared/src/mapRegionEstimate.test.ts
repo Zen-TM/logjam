@@ -10,6 +10,7 @@ import {
   estimateRegionSeconds,
   estimateRegionSize,
   lonLatToTile,
+  planDemDownload,
   planRegionForBasemaps,
   planRegionTiles,
   regionEdgesKm,
@@ -212,6 +213,26 @@ describe("planRegionForBasemaps", () => {
   /** The basemap pyramids only — every plan also carries the DEM (see below). */
   const basemapSources = (job: ReturnType<typeof planRegionForBasemaps>) =>
     job.perSource.filter((s) => s.basemapId !== DEM_SOURCE_ID);
+
+  // Mutation: save only the finest DEM that covers the area and a line that
+  // leaves it offline has no height, and no source to measure the seam in.
+  it("saves a clip of every DEM archive the area touches, on top of the worldwide tiles", () => {
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, true);
+    expect(job.demArchives.map((a) => a.sourceId)).toEqual(["nsw-5m"]);
+    expect(job.perSource.map((s) => s.basemapId)).toEqual([DEM_SOURCE_ID]);
+    const worldwide = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
+    expect(worldwide.demArchives).toEqual([]);
+    // The clip counts toward the bytes the free-space check reads, not the
+    // tiles the politeness cap counts.
+    expect(job.p90Bytes).toBeGreaterThan(worldwide.p90Bytes);
+    expect(job.totalTiles).toBe(worldwide.totalTiles);
+  });
+
+  it("saves no archive for an area outside every archive's coverage", () => {
+    const perth = { west: 115.8, south: -32.0, east: 115.9, north: -31.9 };
+    expect(planDemDownload(perth)).toEqual([]);
+    expect(planDemDownload(TEN_KM).map((s) => s.id)).toEqual(["nsw-5m"]);
+  });
 
   it("clamps each source to its own deepest served level", () => {
     const job = planRegionForBasemaps(

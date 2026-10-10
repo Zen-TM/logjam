@@ -19,8 +19,10 @@
 // here logs a coordinate, a tile URL, or a tile index — an upstream failure is
 // reported by status alone.
 import { loadImage, createCanvas } from "canvas";
-import { PMTiles } from "pmtiles";
+import type { PMTiles } from "pmtiles";
 import {
+  clearDemArchives,
+  demArchive,
   demMetresFromRgb,
   demTileKey,
   demTileUrl,
@@ -121,7 +123,7 @@ async function archiveFor(
   const known = archives.get(source.id);
   if (known && (known.archive || Date.now() - known.at < ARCHIVE_RETRY_MS))
     return known.archive;
-  let archive: PMTiles | null = new PMTiles(
+  let archive: PMTiles | null = demArchive(
     `${base.replace(/\/$/, "")}/${source.archivePath}`,
   );
   try {
@@ -191,4 +193,5 @@ export function sampleElevations(
 export function clearDemTileCache() {
   tileCache.clear();
   archives.clear();
+  clearDemArchives();
 }

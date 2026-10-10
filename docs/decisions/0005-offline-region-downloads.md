@@ -70,6 +70,10 @@ into the same size estimate, tile cap and free-space check as the basemaps, and
 enqueued as an ordinary `tile-pyramid` job whose `zMin === zMax`. It lands as a
 `dem-region` artifact — same group id as the run, so Saved shows it inside the
 area's card and deleting the area takes it — which the resolver never draws.
+A signed-in run also saves one clip of each DEM archive the area touches
+(`planDemDownload` in the same file), fetched like the vector basemap's clip and
+filed as a second `dem-region` artifact under that source's id (updated
+2026-10-11).
 Without it, elevation profiles, point heights and route gain/loss die the moment
 the phone loses signal, which is the trip the download exists for. The reader is
 `offline/demLookup.ts` (MBTiles → `demPng.ts` → the shared pixel maths), wired

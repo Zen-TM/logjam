@@ -45,7 +45,10 @@ export type RegionTaskSpec =
   | {
       taskKind: "http-file";
       id: string;
-      basemapId: "protomaps";
+      /** The vector basemap, or a DEM archive source's id (`demSourceId`). */
+      basemapId: string;
+      /** Set when the clip is of a DEM archive: shared demSources.ts. */
+      demSourceId?: string;
       label: string;
       groupId: string;
       groupLabel: string;
@@ -306,6 +309,7 @@ async function runProtomapsClip(
         groupLabel: spec.groupLabel,
         bbox: spec.bbox,
         zMax: spec.zMax,
+        demSourceId: spec.demSourceId,
       },
       (progress) =>
         onProgress({
