@@ -116,6 +116,19 @@ export async function saveFieldDefs(
       await removeFieldDefById(row.id, entity, row.key);
   }
 
+  // Positions are written only when the caller moved a row. The stored
+  // positions are not 0..n (a delete leaves a gap, built-ins sort in between),
+  // so writing the index on every save renumbered rows nobody touched.
+  const kept = rows.filter((row) => incomingKeys.has(row.key));
+  const storedOrder = [...kept]
+    .sort((a, b) => a.position - b.position || a.key.localeCompare(b.key))
+    .map((row) => row.key);
+  const reordered =
+    defs
+      .filter((def) => byKey.has(def.key))
+      .map((def) => def.key)
+      .join() !== storedOrder.join();
+
   for (const [position, def] of defs.entries()) {
     const row = byKey.get(def.key);
     if (!row) {
@@ -140,7 +153,7 @@ export async function saveFieldDefs(
     if (row.type !== def.type) patch.type = def.type;
     if (row.min !== (def.min ?? null)) patch.min = def.min ?? null;
     if (row.max !== (def.max ?? null)) patch.max = def.max ?? null;
-    if (row.position !== position) patch.position = position;
+    if (reordered && row.position !== position) patch.position = position;
     if (row.appliesToAllTypes !== def.appliesToAllTypes) {
       patch.appliesToAllTypes = def.appliesToAllTypes;
     }

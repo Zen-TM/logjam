@@ -94,6 +94,33 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
   return { ok: true, value: { bbox, maxzoom } };
 }
 
+/**
+ * Argv for `pmtiles extract`. An `s3://bucket/key` archive has to be split:
+ * go-pmtiles only reads a bucket through `--bucket`, and given the whole URI
+ * as <input> it opens it as a local path and exits 1 — which made every region
+ * clip a 502 in prod, where the archive is in S3, while local dev (a file
+ * path) worked. Guard: `regionClip.unit.test.ts` ("pmtilesExtractArgs").
+ */
+export function pmtilesExtractArgs(
+  archiveUri: string,
+  outPath: string,
+  bboxArg: string,
+  maxzoom: number,
+  awsRegion: string,
+): string[] {
+  const s3 = /^s3:\/\/([^/]+)\/(.+)$/.exec(archiveUri);
+  return [
+    "extract",
+    s3 ? s3[2] : archiveUri,
+    outPath,
+    // The region rides the URL so the extract does not depend on AWS_REGION
+    // being set in the container's environment.
+    ...(s3 ? [`--bucket=s3://${s3[1]}?region=${awsRegion}`] : []),
+    `--bbox=${bboxArg}`,
+    `--maxzoom=${maxzoom}`,
+  ];
+}
+
 // ── Token store ──────────────────────────────────────────────────────────────
 //
 // SINGLE-INSTANCE ASSUMPTION (same as ARCH-007 in middleware/rateLimit.ts):

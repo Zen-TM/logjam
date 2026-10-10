@@ -21,7 +21,7 @@
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
-import type { ToastMessage } from "../ui/Toast";
+import type { ToastMessage } from "../ui";
 import type { GeoPdfImportState } from "./geoPdfImportsDb";
 import type { GeoPdfImportEstimate } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
 

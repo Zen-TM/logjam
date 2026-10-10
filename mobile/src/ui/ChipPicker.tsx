@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, formRhythm, radius, spacing, theme } from "../theme";
 import { Chip, type ChipOption } from "./Chip";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
@@ -26,6 +26,7 @@ export function ChipPicker({
   addPlaceholder = "Add",
   disabledValues,
   primaryValue,
+  hint,
   error,
 }: {
   label: string;
@@ -42,7 +43,9 @@ export function ChipPicker({
    *  first type picks its glyph and hue. Starred rather than moved to the
    *  front, since chips keep their positions. */
   primaryValue?: string;
-  /** The problem with this choice (docs/ux-principles.md §11, "Form errors"). */
+  /** One plain sentence under the chips saying what the choice does. */
+  hint?: string;
+  /** The problem with this choice (shared/DESIGN.md §11, "Form errors"). */
   error?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
@@ -101,13 +104,15 @@ export function ChipPicker({
           />
         ) : null}
       </View>
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       <FieldError message={error} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing(0.5) },
+  wrap: { gap: formRhythm.label },
+  hint: { color: theme.textMuted, fontSize: fontSize.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   input: {
     minWidth: 120,

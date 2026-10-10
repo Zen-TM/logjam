@@ -5,7 +5,7 @@
 // holds the state's LiDAR, the user orders the tiles they want and uploads the
 // ZIP that arrives. That errand is several steps long and is needed once, so it
 // lives in a sub-view of this dialog rather than above the thing it explains
-// (DESIGN.md §4: a picker inside a dialog swaps the body and backs out to the
+// (DESIGN.md: a picker inside a dialog swaps the body and backs out to the
 // form). The raster settings are the other sub-view.
 import { useState, useRef, Fragment, useEffect, useCallback } from "react";
 import {
@@ -556,6 +556,7 @@ export default function TopoDialog({
                       className={classes.saveAsField}
                       placeholder="Name this template"
                       value={saveAsName}
+                      // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                       autoFocus
                       onChange={(event) => setSaveAsName(event.target.value)}
                     />
@@ -967,7 +968,7 @@ function ElvisInstructions({
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Order the tiles from ELVIS" />
+          <SectionHeader title="Order the data from ELVIS" />
           <p className={classes.stepLine}>
             In ELVIS, choose <strong>Order Data</strong>, then{" "}
             <strong>Load File</strong> and give it the shapefile. Then press{" "}

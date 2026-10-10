@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -94,10 +94,7 @@ const styles = StyleSheet.create({
     gap: spacing(1),
   },
   eyebrow: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
+    ...textRole.section,
     letterSpacing: 1,
   },
   // The back button sits on the eyebrow line and hangs into the horizontal
@@ -110,17 +107,15 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   title: {
     flex: 1,
+    ...textRole.title,
     color: theme.text,
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
   },
   // The metric is supporting information, not the point of the screen: one
   // step above body text, not a billboard. `fontSize.display` is reserved for
   // a screen whose whole purpose IS the number.
   value: {
+    ...textRole.metric,
     color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
   },
   valueSuffix: {
     color: theme.textMuted,

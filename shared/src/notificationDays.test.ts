@@ -62,7 +62,7 @@ describe("groupNotificationsByDay", () => {
 
   it("keeps an early-morning local time in today", () => {
     // 00:30 AEST is the previous day in UTC. Reading the day in UTC would file
-    // this morning's notification under "Yesterday" (DESIGN.md §11).
+    // this morning's notification under "Yesterday" (DESIGN.md).
     const sections = groupNotificationsByDay(
       [at(localIso(2026, 6, 30, 0))],
       NOW,
