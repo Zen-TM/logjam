@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEM_TILE_ZOOM } from "./demTiles.js";
+import { TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
   MAX_REGION_TILES,
@@ -253,7 +253,7 @@ describe("planRegionForBasemaps", () => {
       const dem = job.perSource.filter((s) => s.basemapId === DEM_SOURCE_ID);
       expect(dem).toHaveLength(1);
       expect(dem[0].plan.perZoom.map((level) => level.z)).toEqual([
-        DEM_TILE_ZOOM,
+        TERRARIUM.sampleZoom,
       ]);
     }
   });

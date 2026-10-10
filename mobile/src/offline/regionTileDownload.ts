@@ -25,10 +25,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import {
   BASEMAP_CATALOG,
-  DEM_ATTRIBUTION,
   DEM_SOURCE_ID,
-  DEM_TILE_URL_TEMPLATE,
   REGION_MIN_ZOOM,
+  TERRARIUM,
   planRegionTiles,
   type DownloadableTileSourceId,
   type RegionBbox,
@@ -216,8 +215,8 @@ function tileSourceFor(sourceId: DownloadableTileSourceId): {
 } {
   if (sourceId === DEM_SOURCE_ID) {
     return {
-      urlTemplate: DEM_TILE_URL_TEMPLATE,
-      attribution: DEM_ATTRIBUTION,
+      urlTemplate: TERRARIUM.urlTemplate,
+      attribution: TERRARIUM.credit,
       kind: "dem-region",
     };
   }

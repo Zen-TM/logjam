@@ -8,12 +8,13 @@
 //    warm tile cache for web and mobile alike, and — the point — it fetches
 //    the DEM tiles on ITS connection, so the tile indices that trace where the
 //    user is drawing never leave the device. See api/src/services/elevation.ts.
-// 3. The public terrarium tiles, fetched direct. The fallback: a guest has no
+// 3. The public DEM tiles, fetched direct. The fallback: a guest has no
 //    account to authenticate the API call with, and a deployed API older than
 //    this app has no such route. It costs the privacy 2 was protecting, which
 //    is why it is last rather than first.
 //
-// All three read the same tile set at the same zoom, so the answers agree.
+// All three read the same DEM sources at the same zoom (`sampleDem` in
+// shared/src/demSources.ts), so the answers agree.
 //
 // Still never a failure. Drawing a route in the field is the offline case the
 // whole outbox exists for, so the tools stay fully usable with no elevation:
@@ -72,10 +73,10 @@ async function profileFromDem(
   const positions = densifyLineSegments(segments);
 
   const saved = await sampleElevations(positions);
-  if (saved.every((value) => value != null)) {
+  if (saved.heights.every((value) => value != null)) {
     return buildElevationProfile(positions, saved);
   }
-  const partial = saved.some((value) => value != null)
+  const partial = saved.heights.some((value) => value != null)
     ? buildElevationProfile(positions, saved)
     : null;
 
@@ -95,7 +96,7 @@ async function profileFromDem(
 
   if (!sources.tiles) return partial;
   const fetched = await sampleElevations(positions, { allowNetwork: true });
-  if (fetched.every((value) => value == null)) return partial;
+  if (fetched.heights.every((value) => value == null)) return partial;
   return buildElevationProfile(positions, fetched);
 }
 
