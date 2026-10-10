@@ -203,12 +203,48 @@ above, and needs GDAL with its Python bindings, NumPy, Pillow and the
 # One sheet, about 200 MB to download and 10 minutes to tile on 4 cores.
 python build_nsw_dem.py fetch dem/src Katoomba
 python build_nsw_dem.py tile dem/src dem/work --jobs 4
-python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles
+python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2026"
 ```
 
 `fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
 what is already done, so a stopped run carries on where it left off. The
 format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
+
+### The statewide build
+
+All 343 sheets, once. Why Logjam hosts its own copy, and what the licence
+asks: [ADR 0030](../docs/decisions/0030-nsw-heights-come-from-the-spatial-services-5m-dem.md).
+
+| | |
+|---|---|
+| Machine | 16 cores, 32 GB RAM, 200 GB disk, in `ap-southeast-2` so the upload is local |
+| Download | 65 GB of zips, about 70 GB once converted |
+| `tile` | up to about 150 core-hours, so 9 to 10 hours on 16 cores (two rugged sheets took 52 core-minutes; flat ones are quicker) |
+| Result | about 16 GB (extrapolated from six whole sheets) |
+
+```bash
+python build_nsw_dem.py fetch dem/src
+python build_nsw_dem.py tile dem/src dem/work --jobs 16
+python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "<Month Year>"
+pmtiles show dem/nsw-5m.pmtiles     # zoom 8 to 15, bounds are NSW
+```
+
+Run `tile` only after `fetch` has finished: a block is built from every sheet
+that touches it, and a finished block is not rebuilt when a neighbour arrives.
+
+Publishing is a prod change and the maintainer's to make. The archive goes to
+the topo bucket at the path `NSW_5M.archivePath` names in
+`shared/src/demSources.ts`:
+
+```bash
+aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
+```
+
+No deploy is needed. The API looks for the archive every five minutes and
+starts reading it when it appears; the clients read it on their next lookup.
+If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
+the same week.
 
 ---
 
