@@ -92,38 +92,35 @@ afterEach(cleanup);
  * when the step lists every attribute instead of the new type's.
  */
 describe("a new place type leads into its attributes", () => {
+  // By text and selector rather than by role: the type dialog holds a radio
+  // per icon, and a role query computes every one's accessible name.
+  const openDialog = () => document.querySelector("dialog[open]");
+
   it("opens the new type's attributes after Save, with only the ones a place of it shows", async () => {
     renderSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /type/i })[0]);
+    fireEvent.click(screen.getAllByText("Add a place type")[0]);
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Cave" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByText("Save"));
 
-    // A generous wait: the section re-reads its types through a lazy import
-    // before the step opens, which a cold run takes over a second to resolve.
-    await screen.findByRole(
-      "heading",
-      { name: "Cave attributes" },
-      { timeout: 10_000 },
-    );
-    const dialog = screen.getByRole("dialog");
-    expect(dialog.textContent).toContain("Gate code");
-    expect(dialog.textContent).not.toContain("Bunks");
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    await screen.findByText("Cave attributes");
+    const dialog = openDialog();
+    expect(dialog?.textContent).toContain("Gate code");
+    expect(dialog?.textContent).not.toContain("Bunks");
 
     // One press past it.
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByText("Done"));
+    expect(openDialog()).toBeNull();
   });
 
   it("goes back to the list after a change to an existing type", async () => {
     renderSection();
-    fireEvent.click(screen.getByRole("button", { name: /^Hut/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), {
-      timeout: 10_000,
-    });
-    expect(screen.queryByRole("heading", { name: /attributes$/ })).toBeNull();
+    // The row lays a button over its card; its title is in a span too.
+    fireEvent.click(screen.getAllByText("Hut")[0].closest("button")!);
+    expect(openDialog()).not.toBeNull();
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(openDialog()).toBeNull());
+    expect(screen.queryByText(/attributes$/)).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ import {
 import {
   createPlaceType,
   deletePlaceType,
+  getPlaceTypes,
   reassignPlaceType,
   updatePlaceType,
   type TPlaceType,
@@ -98,7 +99,6 @@ function PlaceTypeSection({
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
   async function refresh() {
-    const { getPlaceTypes } = await import("../../../placeUtils");
     onTypesChange(await getPlaceTypes());
   }
 
