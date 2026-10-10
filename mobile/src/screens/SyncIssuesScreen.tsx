@@ -13,11 +13,11 @@
 // WHAT REACHES THIS SCREEN IS WHAT THE APP CANNOT DO ITSELF. A rejection the
 // server might answer differently next time (503, 429, a dropped connection)
 // is the engine's problem, not the user's: `flush.ts` parks it as `retrying`
-// and the cycle comes back for it, up to PUSH_MAX_ATTEMPTS. So a row here is
-// either a refusal about the request, a row deleted under the edit, a value
-// another device overwrote, or something that has already failed five times —
-// which is why the sheet's retry copy can say how many attempts the app spent
-// before asking.
+// and the cycle comes back for it, for a day (`shouldGiveUpOnSyncOp`). So a row
+// here is either a refusal about the request, a row deleted under the edit, a
+// value another device overwrote, or something the app has already retried by
+// itself — which is why the sheet's retry copy can say how many attempts it
+// spent before asking.
 //
 // PROSE IS RATIONED, NOT BANNED. This page should be rare, and a user who
 // reaches it is confused by definition — so a sheet says what the change WAS
