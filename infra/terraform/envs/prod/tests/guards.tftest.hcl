@@ -106,3 +106,109 @@ run "ci_reads_no_secret_or_user_data" {
     error_message = "The CI privacy Deny lost a statement that keeps user data and logs out of CI (local.ci_readonly_privacy_deny)."
   }
 }
+
+run "contributor_is_read_only_and_mfa_gated" {
+  command = plan
+  plan_options {
+    target = [
+      aws_iam_group_policy.contributor,
+      aws_iam_group_policy_attachments_exclusive.contributor,
+      aws_iam_group_policies_exclusive.contributor,
+      aws_iam_user_policy_attachments_exclusive.contributor,
+      aws_iam_user_policies_exclusive.contributor,
+    ]
+  }
+
+  # A mocked provider cannot import the group or the user the policies
+  # attach to.
+  override_resource {
+    target          = aws_iam_group.contributor
+    values          = { name = "logjam-developers" }
+    override_during = plan
+  }
+
+  override_resource {
+    target          = aws_iam_user.contributor
+    values          = { name = "collaborator-oliver" }
+    override_during = plan
+  }
+
+  override_resource {
+    target          = aws_kms_key.cognito_email
+    values          = { arn = "arn:aws:kms:ap-southeast-2:620853681701:key/mock" }
+    override_during = plan
+  }
+
+  # Mutation: attaching any managed policy besides ReadOnlyAccess (a revived
+  # broad one), adding a second inline policy, or switching either exclusive
+  # resource off lets the contributor's grant widen past the CI plan role's.
+  assert {
+    condition = (
+      toset(aws_iam_group_policy_attachments_exclusive.contributor.policy_arns) == toset(["arn:aws:iam::aws:policy/ReadOnlyAccess"]) &&
+      toset(aws_iam_group_policies_exclusive.contributor.policy_names) == toset([aws_iam_group_policy.contributor.name])
+    )
+    error_message = "The contributor group may hold only ReadOnlyAccess and its one inline policy, managed exclusively (docs/decisions/0028)."
+  }
+
+  # Red when a policy is attached to the user directly in Terraform, or when
+  # either exclusive resource is removed: a direct grant would sit beside the
+  # group's and not be covered by the asserts in this run.
+  assert {
+    condition = (
+      length(aws_iam_user_policy_attachments_exclusive.contributor.policy_arns) == 0 &&
+      length(aws_iam_user_policies_exclusive.contributor.policy_names) == 0
+    )
+    error_message = "The contributor user may hold no policy of its own; the grant comes through the group."
+  }
+
+  # Mutation: dropping a statement from the shared privacy Deny, or building
+  # the group policy without it, gives the contributor secret values, logs
+  # and the user directory.
+  assert {
+    condition = alltrue([
+      for st in jsondecode(local.ci_readonly_privacy_deny).Statement :
+      contains(jsondecode(aws_iam_group_policy.contributor.policy).Statement, st)
+    ])
+    error_message = "The contributor group policy must carry every statement of the CI privacy Deny."
+  }
+
+  # Mutation: changing BoolIfExists to Bool, flipping the value to "true",
+  # narrowing Resource, or turning NotAction into Action makes the gate
+  # skippable or leaves most of the account open without MFA.
+  assert {
+    condition = anytrue([
+      for st in jsondecode(aws_iam_group_policy.contributor.policy).Statement :
+      st.Effect == "Deny" && st.Resource == "*" && can(st.NotAction) &&
+      st.Condition == { BoolIfExists = { "aws:MultiFactorAuthPresent" = "false" } } &&
+      !contains(st.NotAction, "iam:DeactivateMFADevice") && !contains(st.NotAction, "iam:DeleteVirtualMFADevice")
+    ])
+    error_message = "The contributor group must be denied everything but MFA enrolment without MFA (docs/decisions/0028)."
+  }
+
+  # Mutation: an Allow outside the self-service set (his own password and
+  # MFA) widens a read-only grant.
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_iam_group_policy.contributor.policy).Statement :
+      st.Effect == "Deny" || alltrue([for a in flatten([st.Action]) : startswith(a, "iam:")])
+    ])
+    error_message = "The contributor group policy may Allow only IAM self-service actions: a contributor changes AWS through a PR (docs/decisions/0028)."
+  }
+
+  # Mutation: dropping the statement, or narrowing it to one key, lets the
+  # contributor download the Terraform state.
+  assert {
+    condition = anytrue([
+      for st in jsondecode(aws_iam_group_policy.contributor.policy).Statement :
+      st.Effect == "Deny" && try(st.Resource, null) == "arn:aws:s3:::logjam-tfstate-620853681701/*" &&
+      contains(flatten([st.Action]), "s3:GetObject") && contains(flatten([st.Action]), "s3:GetObjectVersion")
+    ])
+    error_message = "The contributor group must be denied every object in the state bucket (docs/decisions/0028)."
+  }
+
+  # Mutation: growing the policy past the inline group limit (apply fails).
+  assert {
+    condition     = length(aws_iam_group_policy.contributor.policy) < 5120
+    error_message = "The contributor group policy no longer fits the 5,120-character inline limit."
+  }
+}
