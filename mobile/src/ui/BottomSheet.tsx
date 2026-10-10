@@ -357,14 +357,6 @@ export function BottomSheet({
 
   useEffect(() => {
     settleRef.current = () => {
-      console.log(
-        visible,
-        JSON.stringify(pull.current),
-        JSON.stringify(viewport.current),
-        rawPull(),
-        pulled(),
-        Date.now(),
-      );
       if (!visible || pull.current.touching || pull.current.closing) return;
       const outcome = sheetRelease({
         pulled: pulled(),
