@@ -240,6 +240,8 @@ model Place {
   @@unique([ownerId, placeTypeId, importKey])
   @@index([ownerId])
   @@index([ownerId, placeTypeId])
+  @@index([placeTypeId])
+  @@index([forkedFromId])
   @@index([ownerId, importBatchId])
   @@map("places")
 }
@@ -385,6 +387,9 @@ model PlaceShare {
   sharedBy     User     @relation("sharedBy", fields: [sharedById], references: [id], onDelete: Cascade)
   sharedWith   User     @relation("sharedWith", fields: [sharedWithId], references: [id], onDelete: Cascade)
 
+  // One grant per (place, recipient). The index on placeId alone is now
+  // redundant with this key's leading column; it stays until a contract step.
+  @@unique([placeId, sharedWithId])
   @@index([placeId])
   @@index([sharedWithId])
   @@index([sharedById])
@@ -617,6 +622,7 @@ model PlaceLink {
 
   @@unique([ownerId, aPlaceId, bPlaceId])
   @@index([ownerId, updatedAt])
+  @@index([aPlaceId])
   @@index([bPlaceId])
   @@map("place_links")
 }
