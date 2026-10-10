@@ -476,7 +476,7 @@ test.describe("desktop", () => {
       .first()
       .getByRole("button", { name: /^Actions for/ })
       .click();
-    await page.getByRole("menuitem", { name: "Send a copy…" }).click();
+    await page.getByRole("menuitem", { name: "Send a copy" }).click();
     const sendDialog = page.locator("dialog[open]");
     await expect(
       sendDialog.getByRole("button", { name: "Send a copy" }),
