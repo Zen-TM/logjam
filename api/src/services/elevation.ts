@@ -113,7 +113,7 @@ const archives = new Map<string, { archive: PMTiles | null; at: number }>();
  * once and remembered, because every profile in NSW would otherwise pay for
  * the failed open. A read that fails AFTER the archive opened throws.
  */
-async function archiveFor(
+export async function demArchiveFor(
   source: DemSource & { archivePath: string },
 ): Promise<PMTiles | null> {
   // The CDN the clients read it from too: byte ranges of our own file, which
@@ -142,7 +142,7 @@ async function tileBytes(
   wanted: readonly DemTileAddress[],
 ): Promise<Map<string, Uint8Array>> {
   if (source.archivePath != null) {
-    const archive = await archiveFor({
+    const archive = await demArchiveFor({
       ...source,
       archivePath: source.archivePath,
     });

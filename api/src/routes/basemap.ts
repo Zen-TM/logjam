@@ -19,6 +19,7 @@ import { AppError } from "../middleware/errorHandler";
 import { regionClipLimiter } from "../middleware/rateLimit";
 import { resolveUser } from "../lib/resolveUser";
 import { getEnv } from "../lib/env";
+import { demArchiveFor } from "../services/elevation";
 import { logger } from "../lib/logger";
 import {
   CLIP_TOKEN_TTL_MS,
@@ -117,7 +118,9 @@ router.post(
       ? env.TOPO_CDN_BASE_URL &&
         `${env.TOPO_CDN_BASE_URL.replace(/\/$/, "")}/${dem.archivePath}`
       : env.PROTOMAPS_ARCHIVE_URI;
-    if (!archiveUri) {
+    // An archive that is not there yet is "not available", which the phone
+    // skips quietly for a DEM; a clip that then fails is a 502 it reports.
+    if (!archiveUri || (dem && !(await demArchiveFor(dem)))) {
       throw new AppError(503, "Region clips are not available");
     }
 

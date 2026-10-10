@@ -337,6 +337,12 @@ async function runProtomapsClip(
     // user round that loop indefinitely. (It is also the whole of the 503 seen
     // in local dev: PROTOMAPS_ARCHIVE_URI is unset there and no archive exists
     // to cut from — see api/src/routes/basemap.ts.)
+    // A DEM archive the server does not have (503) is not this run's failure:
+    // the worldwide tiles are saved regardless, so the area still has heights.
+    // The job leaves the queue as if it had never been planned.
+    if (spec.demSourceId && err instanceof ApiError && err.status === 503) {
+      return { status: "cancelled" };
+    }
     if (err instanceof ApiError && err.status >= 500) {
       return { status: "failed", code: "source-unavailable" };
     }
