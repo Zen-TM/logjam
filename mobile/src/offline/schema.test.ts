@@ -4,11 +4,10 @@
 // on every upgraded device; a column added only to ADDED_COLUMNS is the
 // mirror, and both break at a distance from the edit. This asserts the pair
 // agrees, which is the failure root CLAUDE.md records having shipped once.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ADDED_COLUMNS, SCHEMA_SQL } from "./schema";
+import { OFFLINE_TABLES } from "./wipedStores";
 
 /** Column names declared in `CREATE TABLE <name> ( ... )`, per table. */
 function createTableColumns(sql: string): Map<string, Set<string>> {
@@ -63,32 +62,23 @@ describe("offline schema", () => {
   });
 });
 
-// MOT-001: OFFLINE_TABLES (wipeLocalData.ts) vs the CREATE TABLEs above is a
-// THIRD hand-kept pair, beside ADDED_COLUMNS, with its own drift history —
-// `track_point_rejected` (lon/lat of every rejected fix) joined SCHEMA_SQL
-// without joining OFFLINE_TABLES, so those coordinates survived the
-// account-transition wipe on a shared phone. Scanned as text, like
-// localStores.test.ts, because wipeLocalData.ts pulls in expo-file-system and
-// several native-backed modules that don't exist in a vitest process.
+// MOT-001: OFFLINE_TABLES (wipedStores.ts, which wipeLocalData.ts clears) vs
+// the CREATE TABLEs above is a THIRD hand-kept pair, beside ADDED_COLUMNS, with
+// its own drift history — `track_point_rejected` (lon/lat of every rejected
+// fix) joined SCHEMA_SQL without joining OFFLINE_TABLES, so those coordinates
+// survived the account-transition wipe on a shared phone. `wipedStores.test.ts`
+// holds the same pair together for the sign-out confirmation as well.
 describe("the sign-out wipe covers every table this schema creates", () => {
-  const wipe = readFileSync(join(__dirname, "wipeLocalData.ts"), "utf8");
-
-  /** Table names inside the OFFLINE_TABLES array literal. */
-  function offlineTables(): string[] {
-    const block = wipe.match(/const OFFLINE_TABLES = \[([\s\S]*?)\] as const;/);
-    if (!block)
-      throw new Error("OFFLINE_TABLES is gone — the wipe has no list");
-    return [...block[1].matchAll(/"(\w+)"/g)].map((m) => m[1]!);
-  }
-
   it("wipes every table SCHEMA_SQL creates", () => {
     const created = [...createTableColumns(SCHEMA_SQL).keys()];
     expect(created.length).toBeGreaterThan(0);
-    const missing = created.filter((table) => !offlineTables().includes(table));
+    const missing = created.filter(
+      (table) => !(OFFLINE_TABLES as readonly string[]).includes(table),
+    );
     expect(missing).toEqual([]);
   });
 
   it("holds the table the audit found leaking", () => {
-    expect(offlineTables()).toContain("track_point_rejected");
+    expect(OFFLINE_TABLES).toContain("track_point_rejected");
   });
 });

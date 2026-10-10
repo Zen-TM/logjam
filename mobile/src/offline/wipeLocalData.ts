@@ -22,9 +22,11 @@
 // destination state, not here.
 //
 // **The list of stores is not maintained here.** On-disk trees come from
-// `localStores.ts` and mirror tables from `sync/mirrorSchema.ts` — the same
-// declarations the producers are built from, because a list kept beside the
-// wipe is a list that drifts out of it. That drift is the whole defect class:
+// `localStores.ts`, mirror tables from `sync/mirrorSchema.ts` and this
+// database's tables from `wipedStores.ts`, which also says which of them hold
+// what the sign-out confirmation must name — the same declarations the
+// producers are built from, because a list kept beside the wipe is a list that
+// drifts out of it. That drift is the whole defect class:
 // `routes` was added to the schema and not the wipe, GPX exports were written
 // to a cache directory nobody had declared, and MapLibre's ambient tile cache
 // was never anyone's store at all.
@@ -43,26 +45,7 @@ import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
 import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
-
-/** Every table in `logjam-offline.db`. */
-const OFFLINE_TABLES = [
-  "map_artifact",
-  "import_view_state",
-  "geo_pdf_import",
-  "track_point",
-  "track_point_rejected",
-  "track",
-  // (No "waypoint": Stage 8 made waypoints a synced entity, so they live in
-  // logjam.db and go with `wipeAllSyncData`. The legacy table is not created
-  // on a fresh install any more, so a DELETE naming it would throw "no such
-  // table" and take the WHOLE offline wipe — regions, tracks, route drafts —
-  // down with it. An upgraded device that has not run the promotion yet still
-  // has rows, so the wipe DROPs it below instead.)
-  "overlay_enabled",
-  // An unfinished route draft is coordinates through a place — the most
-  // sensitive shape of data this app holds.
-  "route_draft",
-] as const;
+import { OFFLINE_TABLES } from "./wipedStores";
 
 /**
  * How long a worker gets to stop before the wipe proceeds without it. Both
