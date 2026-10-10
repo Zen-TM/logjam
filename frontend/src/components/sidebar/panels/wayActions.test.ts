@@ -211,10 +211,16 @@ describe("wayProperties", () => {
     expect(wayProperties(route({ shared: true })).colour).toBe(false);
   });
 
-  // PATCH /media/:id takes a display name and nothing else, so a picker on a
-  // file would set a colour the server never stores.
-  it("offers no colour on a file, which the API cannot change", () => {
-    expect(wayProperties(importFile()).colour).toBe(false);
+  // PATCH /media/:id takes a palette colour since imports became recolourable.
+  it("lets the owner change an import's colour and nobody else", () => {
+    expect(wayProperties(importFile()).colour).toBe(true);
+    expect(wayProperties(importFile({ shared: true })).colour).toBe(false);
+  });
+
+  // A recording's colour is kept on the phone that made it, so a picker here
+  // would paint a line that phone never redraws.
+  it("offers no colour on a recorded track", () => {
+    expect(wayProperties(importFile({ kind: "track" })).colour).toBe(false);
   });
 
   it("always says where a way lives", () => {

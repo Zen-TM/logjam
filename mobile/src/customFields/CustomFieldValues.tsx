@@ -23,6 +23,7 @@ import {
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
+  Field,
   IconButton,
   Row,
   ChipRail,
@@ -30,7 +31,6 @@ import {
   type ChipOption,
   Icon,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -138,8 +138,7 @@ function CustomFieldValueInput({
     for (const stop of stops)
       options.push({ value: String(stop), label: String(stop) });
     return (
-      <View style={styles.field}>
-        <Text style={styles.railLabel}>{def.label}</Text>
+      <Field label={def.label}>
         <Beside trailing={trailing}>
           <ChipRail
             scroll
@@ -148,13 +147,12 @@ function CustomFieldValueInput({
             onChange={onChange}
           />
         </Beside>
-      </View>
+      </Field>
     );
   }
   if (def.type === "boolean") {
     return (
-      <View style={styles.field}>
-        <Text style={styles.railLabel}>{label}</Text>
+      <Field label={label}>
         <Beside trailing={trailing}>
           <ChipRail
             options={BOOLEAN_OPTIONS}
@@ -162,7 +160,7 @@ function CustomFieldValueInput({
             onChange={onChange}
           />
         </Beside>
-      </View>
+      </Field>
     );
   }
   if (def.type === "date") {
@@ -179,22 +177,20 @@ function CustomFieldValueInput({
     );
   }
   return (
-    <View style={styles.field}>
-      <TextField
-        label={label}
-        value={value}
-        onChangeText={onChange}
-        accessory={trailing}
-        keyboardType={
-          def.type === "integer"
-            ? "number-pad"
-            : def.type === "float"
-              ? "decimal-pad"
-              : "default"
-        }
-        autoCapitalize="sentences"
-      />
-    </View>
+    <TextField
+      label={label}
+      value={value}
+      onChangeText={onChange}
+      accessory={trailing}
+      keyboardType={
+        def.type === "integer"
+          ? "number-pad"
+          : def.type === "float"
+            ? "decimal-pad"
+            : "default"
+      }
+      autoCapitalize="sentences"
+    />
   );
 }
 
@@ -216,11 +212,6 @@ function Beside({
 }
 
 const styles = StyleSheet.create({
-  field: { gap: spacing(0.5) },
-  // Matches `TextField`'s own label exactly. A rail and a number box sit in one
-  // list under one heading now, so a label beside a different one reads as two
-  // different kinds of control.
-  railLabel: fieldLabel,
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.

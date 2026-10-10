@@ -162,7 +162,7 @@ async function sendBatch(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
         JSON.stringify({
           code: status,
-          message: "The server rejected this change. Retry or discard it.",
+          message: "Couldn't send this change. Try again or discard it.",
         }),
         seqs[0],
       );
@@ -447,7 +447,7 @@ async function flushMediaOps(): Promise<boolean> {
           JSON.stringify({
             code: transient ? status : 0,
             message:
-              "This upload keeps failing on this phone. Retry or discard it.",
+              "This upload keeps failing on this phone. Try again or discard it.",
           }),
           row.seq,
         );

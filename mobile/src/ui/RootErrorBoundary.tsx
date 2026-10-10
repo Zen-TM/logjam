@@ -54,7 +54,7 @@ export class RootErrorBoundary extends Component<Props, State> {
       <View style={styles.container}>
         <Text style={styles.title}>Something went wrong</Text>
         <Text style={styles.message}>
-          Logjam hit an unexpected error. Restarting the app usually fixes it.
+          Logjam GPS hit an unexpected error. Restarting it usually fixes it.
         </Text>
         <Button
           label="Restart"

@@ -7,12 +7,11 @@ import {
 } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   opacity,
   radius,
   spacing,
+  textRole,
   theme,
   withAlpha,
 } from "../theme";
@@ -230,12 +229,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing(0.5),
   },
-  title: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  subtitle: { color: theme.textMuted, fontSize: fontSize.sm },
+  title: { ...textRole.rowTitle, color: theme.text },
+  subtitle: textRole.subtitle,
   progressTrack: {
     position: "absolute",
     left: 0,

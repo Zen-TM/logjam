@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import { radius, scrim, spacing, textRole, theme } from "../theme";
 import { IconButton } from "./IconButton";
 import { DISMISS_DISTANCE, sheetPulled, sheetRelease } from "./sheetPull";
 
@@ -384,9 +384,11 @@ export function BottomSheet({
         outerRef.current?.scrollToEnd({ animated: true });
     };
     // The owner has answered a close the drag asked for by rendering this
-    // sheet still open (a sub-mode going back to its form): put it back. Not
-    // on a timer: a slow phone took longer than any sensible wait to close,
-    // and the spring back then fought the slide out.
+    // sheet still open (a sub-mode going back to its form, a form going back
+    // to its list): put it back, or it sits where the finger left it, off the
+    // screen, with its backdrop still taking every touch. Not on a timer: a
+    // slow phone took longer than any sensible wait to close, and the spring
+    // back then fought the slide out.
     if (pull.current.closing && visible) {
       pull.current.closing = false;
       settleSoon();
@@ -638,9 +640,8 @@ const styles = StyleSheet.create({
     marginRight: -spacing(1),
   },
   title: {
+    ...textRole.sheetTitle,
     flex: 1,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
     color: theme.text,
   },
   scrollContent: { paddingBottom: spacing(2) },
