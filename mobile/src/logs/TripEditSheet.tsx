@@ -14,8 +14,7 @@ import {
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
-import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
-import type { Track } from "../tracks/tracksDb";
+import type { TripTrackSource } from "../tracks/tripTrackSource";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -100,12 +99,13 @@ export function TripEditSheet({
    */
   initialPlaces?: TripPlaceLink[];
   /**
-   * "Log a trip" on a recorded track: a NEW trip opens on the track's own local
-   * day, and the track is attached to it when it is saved (a local write, so it
-   * works with no signal). Ignored when editing. Like `initialPlaces` it is read
+   * "Log a trip" on a track: a NEW trip opens on the track's own local day, and
+   * the track is attached to it when it is saved (a local write; a track whose
+   * file is not on the phone is fetched once, so that one needs a connection).
+   * Ignored when editing. Like `initialPlaces` it is read
    * when the sheet opens, not when it changes.
    */
-  fromTrack?: Track | null;
+  fromTrack?: TripTrackSource | null;
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -398,12 +398,10 @@ export function TripEditSheet({
         // in the outcome rather than failing the save and losing the form.
         const attached =
           !fromTrack ||
-          (await attachRecordedTrack("tripLog", tripId, fromTrack).catch(
-            (err: unknown) => {
-              console.error(err);
-              return false;
-            },
-          ));
+          (await fromTrack.attach(tripId).catch((err: unknown) => {
+            console.error(err);
+            return false;
+          }));
         onSaved(
           attached
             ? "Trip logged."

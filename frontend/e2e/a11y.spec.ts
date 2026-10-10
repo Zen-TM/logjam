@@ -744,6 +744,9 @@ test.describe("desktop", () => {
     page,
   }) => {
     await openApp(page);
+    // The canvas is on screen before the map has loaded and its handlers are
+    // attached; the zoom buttons are enabled once it has.
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const canvas = page.locator("canvas.maplibregl-canvas");
     const box = (await canvas.boundingBox())!;
     // A right-click asks wherever it lands, so a seeded pin under the pointer
@@ -848,6 +851,7 @@ test.describe("narrow web", () => {
 
   test("What is here?: the panel stays inside the phone", async ({ page }) => {
     await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const canvas = page.locator("canvas.maplibregl-canvas");
     await canvas.focus();
     await page.keyboard.press("Enter");

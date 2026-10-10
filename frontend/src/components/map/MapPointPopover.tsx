@@ -10,6 +10,7 @@ import {
   type MapPointVerbId,
 } from "@logjam/shared";
 import { useElevationProfile } from "../../placeUtils";
+import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
 import {
   IconTile,
@@ -49,6 +50,10 @@ export default function MapPointPopover({
   onDrawRoute: (point: MapPointCoord) => void;
 }) {
   const toast = useToast();
+  // On narrow web the tab bar owns the bottom of the screen, and a panel below
+  // the point would cover it (and sit too close to its buttons to press): it
+  // opens above the point there instead.
+  const narrow = useIsMobile();
   // The element the dot is drawn into, and the popover's anchor: a marker, so
   // it stays on the point while the map moves under it.
   const [anchorEl] = useState(() => document.createElement("div"));
@@ -121,7 +126,7 @@ export default function MapPointPopover({
         onClose={close}
         anchorRef={anchorRef}
         label={MAP_POINT.title}
-        placement="bottom-start"
+        placement={narrow ? "top-start" : "bottom-start"}
         fit
         dismissOnOutsidePress
       >

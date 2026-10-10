@@ -30,6 +30,16 @@
     var(--map-button-size) +
     var(--space-1)
   );
+  /* And how far from the left edge of the visible map: past the compass and the
+     scale bar at its longest, so the credits clear the instrument edge too. */
+  --scale-bar-max: 160px; /* intrinsic: ScaleControl's maxWidth in Map.tsx */
+  --instrument-gap: 10px; /* intrinsic: the compass to the scale bar */
+  --map-instruments-clear: calc(
+    var(--space-2) +
+    var(--map-button-size) +
+    var(--instrument-gap) +
+    var(--scale-bar-max)
+  );
   position: absolute;
   top: 0;
   left: var(--nav-rail-width);
@@ -103,18 +113,22 @@
   border-radius: var(--radius-lg);
 }
 
-/* Open, the credits wrap to as many lines as they need, between the left edge
-   of the visible map and the action column, with their text padded clear of the
-   corners. */
+/* Open, the credits wrap to as many lines as they need, between the instrument
+   edge and the action column, with their text padded clear of the corners. */
 :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
   box-sizing: border-box;
   min-height: var(--space-3);
-  max-width: calc(
-    100vw -
-    var(--nav-rail-width) -
-    var(--map-inset-left) -
-    var(--space-2) -
-    var(--map-actions-clear)
+  /* Never narrower than a readable column: on a small map the credits give up
+     the instrument edge before they give up being readable. */
+  max-width: max(
+    calc(
+      100vw -
+      var(--nav-rail-width) -
+      var(--map-inset-left) -
+      var(--map-instruments-clear) -
+      var(--map-actions-clear)
+    ),
+    calc(var(--space-6) * 5)
   );
   padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
 }
@@ -159,14 +173,17 @@
       var(--map-button-size) +
       var(--space-1)
     );
+    --scale-bar-max: 100px; /* intrinsic: the narrow ScaleControl's maxWidth */
+    --map-instruments-clear: calc(
+      var(--space-1-5) +
+      var(--map-button-size) +
+      var(--instrument-gap) +
+      var(--scale-bar-max)
+    );
   }
 
   :global(#map .maplibregl-ctrl-bottom-right) {
     bottom: calc(var(--bottom-nav-height) + 8px);
-  }
-
-  :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
-    max-width: calc(100vw - var(--space-1-5) - var(--map-actions-clear));
   }
 
   .geoPdfConfirmBar {

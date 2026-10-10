@@ -29,6 +29,7 @@ import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { type Track } from "./tracksDb";
+import type { TripTrackSource } from "./tripTrackSource";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
@@ -75,7 +76,7 @@ export function TrackOptionsSheet({
    * "Log a trip here" is: the form is a sheet of its own, so this one closes
    * and the screen opens that one. Required, so a surface cannot forget it.
    */
-  onLogTrip: (track: Track) => void;
+  onLogTrip: (track: TripTrackSource) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** False in "Simulating offline mode" — the stats sub-mode then reads
@@ -309,7 +310,7 @@ export function TrackOptionsSheet({
               disabled={busy}
               onPress={() => {
                 close();
-                onLogTrip(track);
+                if (actions.logTrip) onLogTrip(actions.logTrip);
               }}
             />
           ) : null}

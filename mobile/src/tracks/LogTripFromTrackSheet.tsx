@@ -4,7 +4,7 @@ import { distinctTripTypes } from "@logjam/shared";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { useConnectivity } from "../map/connectivity";
 import { useMirrorPlaces, useMirrorTrips } from "../sync/useSyncQueries";
-import type { Track } from "./tracksDb";
+import type { TripTrackSource } from "./tripTrackSource";
 
 /**
  * The trip form, opened from a recorded track's "Log a trip": the same
@@ -21,7 +21,7 @@ export function LogTripFromTrackSheet({
   onSaved,
 }: {
   /** Null while closed. */
-  track: Track | null;
+  track: TripTrackSource | null;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {

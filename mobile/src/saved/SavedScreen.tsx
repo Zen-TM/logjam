@@ -57,6 +57,8 @@ import {
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  wayVerbIcon,
+  wayVerbLabel,
   type IconIdea,
   type SharableEntityType,
   type TopoLayerFormat,
@@ -180,7 +182,7 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
-import type { Track } from "../tracks/tracksDb";
+import type { TripTrackSource } from "../tracks/tripTrackSource";
 import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
@@ -380,6 +382,8 @@ type SavedItem = {
    * revocable view of a row, this one gives away a copy for good.
    */
   sendCopy?: NonNullable<AssetActions["sendCopy"]>;
+  /** A track that can go into a new trip — see `AssetActions.logTrip`. */
+  logTrip?: AssetActions["logTrip"];
   /** What the row's search matches against — lowercased, and wider than the
    *  visible title. */
   search?: { haystack: string };
@@ -484,7 +488,9 @@ export function SavedScreen({
   const [toast, setToast] = useState<ToastMessage | null>(null);
   // The recording whose "Log a trip" was pressed: the trip form opens over the
   // sheet that closed to hand it over.
-  const [loggingTrack, setLoggingTrack] = useState<Track | null>(null);
+  const [loggingTrack, setLoggingTrack] = useState<TripTrackSource | null>(
+    null,
+  );
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -2354,6 +2360,28 @@ export function SavedScreen({
                     const target = menuItem;
                     closeItemSheet();
                     showOnMap(target);
+                  }}
+                />
+              ) : null}
+              {/* A track in the account that was recorded elsewhere: the same
+                  verb, word and glyph as a recording made here, first after
+                  the one that goes to the line. Its file is fetched once if
+                  it is not on this phone, so offline it says why it waits. */}
+              {menuItem.logTrip ? (
+                <Row
+                  title={wayVerbLabel("logTrip", "gps")}
+                  icon={wayVerbIcon("logTrip")}
+                  hue={assetHue[menuItem.category]}
+                  subtitle={
+                    menuItem.logTrip.needsConnection && !online
+                      ? "Needs a connection"
+                      : undefined
+                  }
+                  disabled={menuItem.logTrip.needsConnection && !online}
+                  onPress={() => {
+                    const source = menuItem.logTrip;
+                    closeItemSheet();
+                    if (source) setLoggingTrack(source);
                   }}
                 />
               ) : null}
