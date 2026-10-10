@@ -72,14 +72,19 @@ export function mapAuthNextStep(step: string): string {
 
 // ── User-facing message derivation ────────────────────────────────────────────
 
+const SERVER_ERROR_MESSAGE =
+  "Something went wrong on our end. Please try again.";
+const NETWORK_ERROR_MESSAGE =
+  "Couldn't reach Logjam. Please check your connection and try again.";
+
 const STATUS_MESSAGES: Record<number, string | undefined> = {
   401: "You're not authorised to do that. Please sign in and try again.",
   403: "You don't have permission to do that.",
   404: "The requested item could not be found.",
   409: undefined, // let serverMessage win for 409 (domain-specific conflicts)
   429: "Too many requests. Please wait a moment and try again.",
-  500: "Something went wrong on the server. Please try again.",
-  503: "The server is temporarily unavailable. Please try again shortly.",
+  500: SERVER_ERROR_MESSAGE,
+  503: "Logjam is temporarily unavailable. Please try again shortly.",
 };
 
 export function messageFromError(err: unknown, fallback: string): string {
@@ -87,8 +92,7 @@ export function messageFromError(err: unknown, fallback: string): string {
     if (err.serverMessage) return err.serverMessage;
     const statusMsg = STATUS_MESSAGES[err.status];
     if (statusMsg) return statusMsg;
-    if (err.status >= 500)
-      return "Something went wrong on the server. Please try again.";
+    if (err.status >= 500) return SERVER_ERROR_MESSAGE;
     if (err.status >= 400) return fallback;
   }
 
@@ -96,7 +100,7 @@ export function messageFromError(err: unknown, fallback: string): string {
   if (authMsg) return authMsg;
 
   if (err instanceof Error && err.message === "Network Error") {
-    return "Couldn't reach the server. Please check your connection and try again.";
+    return NETWORK_ERROR_MESSAGE;
   }
   // Browser fetch throws TypeError("Failed to fetch"); React Native's fetch
   // throws TypeError("Network request failed"). Match both.
@@ -104,7 +108,7 @@ export function messageFromError(err: unknown, fallback: string): string {
     err instanceof TypeError &&
     /fetch|network request failed/i.test(err.message)
   ) {
-    return "Couldn't reach the server. Please check your connection and try again.";
+    return NETWORK_ERROR_MESSAGE;
   }
 
   return fallback;

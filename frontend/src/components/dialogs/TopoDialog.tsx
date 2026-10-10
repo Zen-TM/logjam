@@ -967,7 +967,7 @@ function ElvisInstructions({
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Order the tiles from ELVIS" />
+          <SectionHeader title="Order the data from ELVIS" />
           <p className={classes.stepLine}>
             In ELVIS, choose <strong>Order Data</strong>, then{" "}
             <strong>Load File</strong> and give it the shapefile. Then press{" "}

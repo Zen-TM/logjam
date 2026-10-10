@@ -46,6 +46,7 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BASEMAP_CATALOG } from "@logjam/shared";
 
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
@@ -299,7 +300,7 @@ export function PickPointScreen({
           <Pressable
             key={id}
             accessibilityRole="button"
-            accessibilityLabel={`Use the ${id} basemap`}
+            accessibilityLabel={`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? "this map"}`}
             accessibilityState={{ selected: id === basemapId }}
             style={[styles.thumb, id === basemapId && styles.thumbActive]}
             onPress={() => setBasemapId(id)}

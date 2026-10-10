@@ -21,6 +21,7 @@ try to make it code; when you convert a rule to code, delete its line.
 | Which glyph stands for an idea | `icons.ts` |
 | Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
 | A shared screen's sections, order, words, verbs and empty states | `contracts/` |
+| Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.
@@ -263,17 +264,15 @@ renumber.
 
 ## 12. Copy and helper text
 
-- **Name the surface: Logjam Web or Logjam GPS**, never "the app".
-- **Sentence case; a button is a verb** ("Make a map", not "Map").
+- **Name the surface: Logjam Web or Logjam GPS.**
+- **A button is a verb** ("Make a map", not "Map").
 - **Helper text is the exception.** Where a label and an icon are not enough:
   one plain sentence saying what the setting means, an example over a rule
   ("315° is what most maps use"). A label that says it gets no hint.
 - **A screen used daily spends no prose.** A screen visited once when
   confused may explain itself, if every line changes what the user does next.
-- **"Try again", never "Retry"**, and only where trying again can help.
+- **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
-- **No internal words**: "map", "map data", "Logjam", not "basemap", "tiles",
-  "the server".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
   another type").
 - **Name what failed** ("Download didn't finish").

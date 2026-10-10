@@ -25,7 +25,7 @@ describe("messageFromError", () => {
 
   it("uses a generic 5xx message for unmapped server errors", () => {
     expect(messageFromError(new ApiError(502, "/x", "GET"), "fallback")).toBe(
-      "Something went wrong on the server. Please try again.",
+      "Something went wrong on our end. Please try again.",
     );
   });
 
@@ -37,21 +37,17 @@ describe("messageFromError", () => {
 
   it("detects a network fetch TypeError (browser)", () => {
     const err = new TypeError("Failed to fetch");
-    expect(messageFromError(err, "fallback")).toMatch(
-      /Couldn't reach the server/,
-    );
+    expect(messageFromError(err, "fallback")).toMatch(/Couldn't reach Logjam/);
   });
 
   it("detects a network fetch TypeError (React Native)", () => {
     const err = new TypeError("Network request failed");
-    expect(messageFromError(err, "fallback")).toMatch(
-      /Couldn't reach the server/,
-    );
+    expect(messageFromError(err, "fallback")).toMatch(/Couldn't reach Logjam/);
   });
 
   it("detects a 'Network Error' message", () => {
     expect(messageFromError(new Error("Network Error"), "fallback")).toMatch(
-      /Couldn't reach the server/,
+      /Couldn't reach Logjam/,
     );
   });
 

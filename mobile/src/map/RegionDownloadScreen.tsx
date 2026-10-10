@@ -746,7 +746,7 @@ export function RegionDownloadScreen({
           {/* The honesty the progress screen's back-press warning used to
               carry, in the one place every download now passes through. */}
           <Text style={styles.namingNote}>
-            Downloads pause when the app is closed. Watch them in Saved.
+            Downloads pause when Logjam GPS is closed. Watch them in Saved.
           </Text>
         </View>
       </BottomSheet>

@@ -197,7 +197,7 @@ function formatDay(iso: string): string {
 /** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */
 function basemapName(logicalKey: string): string {
   return (
-    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Basemap"
+    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Map"
   );
 }
 
@@ -1888,7 +1888,7 @@ export function SavedScreen({
               <Row
                 key={group.groupId}
                 title={group.label}
-                subtitle={`Didn't finish · ${group.tilesStored.toLocaleString()} tiles already saved`}
+                subtitle="Didn't finish · some map data is already saved"
                 icon="saveOffline"
                 hue={theme.warning}
                 right={
@@ -2057,7 +2057,7 @@ export function SavedScreen({
             failure is only worth reporting inside the filter that needs it. */}
         {filter === "overlay" && overlaysQuery.error ? (
           <Row
-            title="Couldn't reach the server"
+            title="Couldn't reach Logjam"
             subtitle="Your saved overlays still work offline."
             icon="offline"
             hue={theme.warning}
@@ -2578,7 +2578,7 @@ function EmptyPanel({
       hint: "Places need maps that work with no signal. Save a region before you leave town.",
     },
     region: {
-      title: "No offline basemap",
+      title: "No offline map",
       hint: "Without a saved region the map is blank once you lose signal.",
     },
     overlay: {
