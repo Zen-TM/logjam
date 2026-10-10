@@ -31,7 +31,6 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
 | Display metric | `fontSize.display`, only where the number is the whole screen |
 | Section header, stat label | `fontSize.xs`, medium, uppercase |
 | Row title | `fontSize.base`, medium |
-| Field or control label | `ui/fieldLabel.ts` |
 | Subtitle, hint, legend | `fontSize.sm`, `textMuted` |
 
 Radius: `md` tile or inline surface; `lg` card or row; `xl` sheet; `pill`
@@ -140,6 +139,8 @@ handler or a camera write, read
 
 - **Edit in a sheet, not in the row**: a field in a list ends up under the
   keyboard.
+- **A form is a `FormStack` of `Field`s** (`TextField` is one). A form
+  sets no `gap` of its own.
 - **One control's problem is its `error` prop; the whole form's is an
   `ErrorBanner` above submit**, in the pinned footer. The sheet scrolls to
   the first error out of view.

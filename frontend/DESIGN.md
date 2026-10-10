@@ -136,9 +136,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 | A list's closing add button | `ListEnd`, fed the empty state's button |
 | Loading / failed load | `LoadingState` / `ErrorState` |
 
-- **Fields share one look**: a sentence-case label, the control, an optional
-  `hint`, `FieldError`. A label the control above already says is hidden with
-  `hideLabel`, not removed.
+- **A label the control above already says is hidden with `hideLabel`**,
+  not removed.
 - **A disabled `Button` takes `disabledReason`** and stays focusable.
 - **Pure decisions leave the component** into a tested module beside it
   (`placesModel.ts`).

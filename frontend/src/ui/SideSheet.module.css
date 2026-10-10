@@ -58,7 +58,7 @@
   padding: var(--space-1-5) var(--gutter);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--form-section);
 }
 
 .foot {

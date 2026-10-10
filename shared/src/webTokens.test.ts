@@ -44,6 +44,7 @@ describe("webTokensCss", () => {
     );
     expect(root.get("--color-on-fill")).toBe(INK.toLowerCase());
     expect(root.get("--space-1-5")).toBe("12px");
+    expect(root.get("--form-field")).toBe("12px");
     expect(root.get("--font-sm")).toBe("0.8125rem");
     expect(root.get("--control-lg")).toBe("36px");
     expect(root.get("--motion-fast")).toBe("150ms");

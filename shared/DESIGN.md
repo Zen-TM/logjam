@@ -17,7 +17,7 @@ try to make it code; when you convert a rule to code, delete its line.
 
 | Decision | Declared in |
 |---|---|
-| Colour roles and schemes, space, radius, type, control sizes | `designTokens.ts`, `themeSchemes.ts` |
+| Colour roles and schemes, space, form rhythm, radius, type, control sizes | `designTokens.ts`, `themeSchemes.ts` |
 | Which glyph stands for an idea | `icons.ts` |
 | Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
 | A shared screen's sections, order, words, verbs and empty states | `contracts/` |
@@ -72,8 +72,7 @@ renumber.
   only when "Built in" is opposite it.
 - **A pill, badge or notice centres its text in itself**, not only itself on
   the screen.
-- **Capitals mark a section heading and nothing else.** A field or control
-  label is sentence case, small and muted.
+- **Capitals mark a section heading and nothing else.**
 - **A title does not repeat a count the screen already shows.**
 - **A pair is drawn on one line** (ascent and descent, highest and lowest);
   a figure with no partner takes the whole line. Pairs: `statPairs.ts`.

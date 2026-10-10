@@ -6,6 +6,7 @@ import {
   ASSET_HUES,
   CONTROL,
   FONT,
+  FORM_RHYTHM,
   FONT_WEIGHT,
   MOTION,
   OPACITY,
@@ -43,6 +44,10 @@ export function webScaleProperties(): [string, string][] {
     ...Object.entries(SPACE)
       .sort(([, a], [, b]) => a - b)
       .map(([n, v]): [string, string] => [`--space-${kebab(n)}`, px(v)]),
+    ...Object.entries(FORM_RHYTHM).map(([n, v]): [string, string] => [
+      `--form-${n}`,
+      px(v),
+    ]),
     ...Object.entries(RADIUS).map(([n, v]): [string, string] => [
       `--radius-${n}`,
       px(v),

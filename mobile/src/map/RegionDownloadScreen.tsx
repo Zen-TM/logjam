@@ -54,12 +54,12 @@ import {
   BottomSheet,
   Button,
   Chip,
+  Field,
   Hero,
   Notice,
   ChipRail,
   TextField,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 import {
   enqueueRegionDownloads,
   setRegionGroupLabel,
@@ -674,9 +674,9 @@ export function RegionDownloadScreen({
         ) : null}
 
         <View style={styles.panelBody}>
-          <View style={styles.detailBlock}>
-            <View style={styles.detailHeader}>
-              <Text style={fieldLabel}>Detail</Text>
+          <Field
+            label="Detail"
+            aside={
               <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
@@ -686,7 +686,8 @@ export function RegionDownloadScreen({
                   ? `z${deepestZoom} · sharp at any zoom`
                   : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
               </Text>
-            </View>
+            }
+          >
             <ChipRail
               scroll
               options={DETAIL_ZOOMS.map((zoom) => ({
@@ -696,7 +697,7 @@ export function RegionDownloadScreen({
               value={String(detailZoom)}
               onChange={(next) => setDetailZoom(Number(next))}
             />
-          </View>
+          </Field>
 
           {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
@@ -814,12 +815,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing(1),
     paddingHorizontal: spacing(2),
-  },
-  detailBlock: { gap: spacing(0.75) },
-  detailHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
   detailCaption: { color: theme.textMuted, fontSize: fontSize.xs },
 });

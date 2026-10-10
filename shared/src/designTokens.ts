@@ -107,6 +107,23 @@ export const SPACE = {
 } as const;
 
 /**
+ * The rhythm of a form, in px: how far a label sits from its control, one field
+ * from the next, and a section heading from what is above it. Both clients lay
+ * a form out with these three and no others (Logjam GPS's `Field`/`FormStack`
+ * and `SectionHeader`, Logjam Web's `--form-*` properties), so a control never
+ * sits a label's distance from the chips above it. Guard: `FORM_RHYTHM` in
+ * `designTokens.test.ts` holds the order label < field < section.
+ */
+export const FORM_RHYTHM = {
+  /** A label, a hint or an error to the control it is about. */
+  label: SPACE["0.5"],
+  /** One field (label, control, hint, error) to the next. */
+  field: SPACE["1.5"],
+  /** The space above a section heading, which divides two groups of fields. */
+  section: SPACE["2"],
+} as const;
+
+/**
  * Type sizes in px, by medium. Logjam GPS is read at arm's length on a phone;
  * Logjam Web is a desktop density, a step smaller, emitted in rem so a browser
  * text-size setting reaches every label. 12 is the floor on both. `display`

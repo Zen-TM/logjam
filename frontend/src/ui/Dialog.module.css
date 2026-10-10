@@ -78,7 +78,7 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1-5);
+  gap: var(--form-field);
   padding: var(--space-1) var(--gutter) var(--space-1);
   border-bottom: var(--hairline);
 }
@@ -93,7 +93,7 @@
      the dialog and gave it a second scrollbar that moved the pinned header. */
   position: relative;
   overflow-y: auto;
-  padding: var(--space-1-5) var(--gutter);
+  padding: var(--form-field) var(--gutter);
   font-size: var(--font-sm);
   line-height: 1.45;
 }

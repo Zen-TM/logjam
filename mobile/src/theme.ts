@@ -13,6 +13,7 @@ import {
   DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
+  FORM_RHYTHM,
   normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
@@ -172,6 +173,9 @@ export const fontSize = {
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: number): number => n * SPACE_UNIT;
+
+/** A form's label, field and section gaps (`FORM_RHYTHM` in `@logjam/shared`). */
+export const formRhythm = FORM_RHYTHM;
 
 /** A disabled control's dim, the same number on both clients. */
 export const opacity = OPACITY;

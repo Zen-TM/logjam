@@ -1,6 +1,6 @@
 import { StyleSheet, Text } from "react-native";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, formRhythm, theme } from "../theme";
 
 // Uppercase, letter-spaced section label — the one heading style shared by the
 // layer sheet, forms (TextField reuses the same treatment), and list sections.
@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
     color: theme.textMuted,
-    marginTop: spacing(2),
-    marginBottom: spacing(0.5),
+    marginTop: formRhythm.section,
+    marginBottom: formRhythm.label,
   },
 });
