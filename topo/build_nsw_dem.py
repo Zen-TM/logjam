@@ -52,6 +52,9 @@ BLOCK_TILES = 2 ** (ZMAX - BLOCK_ZOOM)  # z15 tiles along one block edge
 # open ground. At 1/8 m a rugged tile is ~22 % larger.
 ROUNDING_M = 0.25
 NODATA = -9999.0
+# The widest gap interpolated across, in z15 pixels (~4 m each). Enough for
+# the join between two sheets; a real hole in the data is far wider and stays.
+SEAM_FILL_PX = 4
 HALF_WORLD_M = 20037508.342789244
 
 INDEX_URL = (
@@ -226,7 +229,12 @@ def build_block(job: Tuple[int, int, List[str], str]) -> Optional[str]:
         srcNodata=NODATA,
         dstNodata=NODATA,
     )
-    heights = warped.GetRasterBand(1).ReadAsArray().astype(np.float32)
+    band = warped.GetRasterBand(1)
+    # Neighbouring sheets do not quite meet: measured at 150°E, the last
+    # heights of one and the first of the next are 5 to 9 m apart, which is a
+    # strip of no-data two or three pixels wide along every sheet edge.
+    gdal.FillNodata(band, None, SEAM_FILL_PX, 0)
+    heights = band.ReadAsArray().astype(np.float32)
     warped = None
     heights[heights <= -1000] = np.nan
 
