@@ -45,6 +45,7 @@ import {
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
   SETTINGS_LIST,
+  stepAfterPlaceTypeSave,
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
@@ -119,6 +120,9 @@ export function PlaceTypeList({
   );
 }
 
+/** A type the form has just made: enough to title and scope what follows. */
+export type NewPlaceType = { id: string; name: string };
+
 /**
  * Add or change one type — a body and a pinned footer, like
  * `useCustomFieldForm` and for the same reason: the icon grid is tall enough
@@ -128,11 +132,16 @@ export function usePlaceTypeForm({
   editing,
   onSaved,
   onDone,
+  onAdded,
 }: {
   /** null = adding. */
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
   onDone: () => void;
+  /** The type just made, for the host to open its attributes on
+   *  (`stepAfterPlaceTypeSave`). Called instead of `onSaved` and `onDone`:
+   *  the sheet stays up, and its new title is the confirmation. */
+  onAdded: (type: NewPlaceType) => void;
 }): { body: ReactNode; footer: ReactNode } {
   const formKey = editing?.id ?? "__new__";
   const [draft, setDraft] = useState(() => seedDraft(editing));
@@ -169,6 +178,7 @@ export function usePlaceTypeForm({
         setError(nameError);
         return;
       }
+      let added: NewPlaceType | null = null;
       if (editing) {
         // Field-scoped, so a rename on this phone does not clobber a recolour
         // made on another one.
@@ -179,15 +189,21 @@ export function usePlaceTypeForm({
         if (Object.keys(changes).length > 0) {
           await updatePlaceTypeLocal(editing.id, changes);
         }
-        onSaved("Type updated.");
       } else {
-        await createPlaceTypeLocal({
+        const id = await createPlaceTypeLocal({
           name,
           iconKey: draft.iconKey,
           color: draft.color,
         });
-        onSaved("Type added.");
+        added = { id, name };
+        // The next open of this form is another new type, not this one again.
+        setDraft(seedDraft(null));
       }
+      if (added && stepAfterPlaceTypeSave(added !== null) === "attributes") {
+        onAdded(added);
+        return;
+      }
+      onSaved(added ? "Type added." : "Type updated.");
       onDone();
     } catch (err) {
       console.error(err);
@@ -200,7 +216,7 @@ export function usePlaceTypeForm({
     } finally {
       setSaving(false);
     }
-  }, [draft, editing, onDone, onSaved]);
+  }, [draft, editing, onAdded, onDone, onSaved]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;

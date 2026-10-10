@@ -117,7 +117,8 @@ import { PlaceEditSheet } from "./PlaceEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
 import { setAreaPickerStart, takePickedArea } from "../map/pickedArea";
 import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
-import { usePlaceTypeForm } from "./PlaceTypesEditor";
+import { usePlaceTypeForm, type NewPlaceType } from "./PlaceTypesEditor";
+import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { PlaceFilterSheet } from "./PlaceFilterSheet";
 import {
@@ -185,8 +186,9 @@ export function PlacesScreen({
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
   const [sheet, setSheet] = useState<
-    "filters" | "bulkShare" | "placeTypeForm" | null
+    "filters" | "bulkShare" | "placeTypeForm" | "typeAttributes" | null
   >(null);
+  const [addedType, setAddedType] = useState<NewPlaceType | null>(null);
   const mapFilter = usePlaceMapFilter();
   const [menuPlaceId, setMenuPlaceId] = useState<string | null>(null);
   /** The sheet owns its own share sub-mode and forgets it on close. */
@@ -564,6 +566,14 @@ export function PlacesScreen({
   const placeTypeForm = usePlaceTypeForm({
     editing: null,
     onSaved: info,
+    onDone: () => setSheet(null),
+    onAdded: (type) => {
+      setAddedType(type);
+      setSheet("typeAttributes");
+    },
+  });
+  const typeAttributes = useTypeAttributesStep({
+    type: sheet === "typeAttributes" ? addedType : null,
     onDone: () => setSheet(null),
   });
 
@@ -965,14 +975,26 @@ export function PlacesScreen({
 
       {/* Making a type without leaving the tab that made you want one. The
           same form Settings uses, so the two cannot drift; only ADD is offered
-          here — editing and deleting a type belong with the list of them. */}
+          here — editing and deleting a type belong with the list of them. The
+          new type's attributes follow in the same sheet. */}
       <BottomSheet
-        visible={sheet === "placeTypeForm"}
-        onClose={() => setSheet(null)}
-        title="New place type"
-        footer={placeTypeForm.footer}
+        visible={sheet === "placeTypeForm" || sheet === "typeAttributes"}
+        onClose={
+          sheet === "typeAttributes"
+            ? typeAttributes.onClose
+            : () => setSheet(null)
+        }
+        title={
+          sheet === "typeAttributes" ? typeAttributes.title : "New place type"
+        }
+        onBack={sheet === "typeAttributes" ? typeAttributes.onBack : undefined}
+        footer={
+          sheet === "typeAttributes"
+            ? typeAttributes.footer
+            : placeTypeForm.footer
+        }
       >
-        {placeTypeForm.body}
+        {sheet === "typeAttributes" ? typeAttributes.body : placeTypeForm.body}
       </BottomSheet>
 
       <PlaceFilterSheet
