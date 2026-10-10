@@ -92,7 +92,7 @@ import {
   isPlaceDoneByViewer,
   type TPlaceType,
 } from "../../placeUtils";
-import { fetchTrackGeoJSON } from "../media/trackGeo";
+import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -1626,10 +1626,10 @@ function Map({
       const cache = trackGeoCacheRef.current;
       const collections = await Promise.all(
         entries.map((entry) => {
-          // Keyed by id AND stamp: a standalone file LINKED to a place appears
-          // in both lists with different stamps, and one cache entry per key
-          // keeps each layer's features stamped for its own layer.
-          const cacheKey = `${entry.mediaId}|${JSON.stringify(entry.stamp)}`;
+          // Keyed by id, colour AND stamp: a standalone file LINKED to a place
+          // appears in both lists with different stamps, and one cache entry
+          // per key keeps each layer's features stamped for its own layer.
+          const cacheKey = trackGeoCacheKey(entry);
           let cached = cache[cacheKey];
           // Discard a cached entry whose presigned URL has rotated so the fresh
           // URL retries; same-URL failures stay cached (LAYERS-2).

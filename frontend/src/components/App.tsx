@@ -1553,6 +1553,9 @@ function App() {
                 onChanged={() => {
                   refetchRoutes();
                   refetchStandaloneFiles();
+                  // A file linked to a place is drawn by the place-tracks layer
+                  // too, from its own copy of the colour.
+                  refetchPlaceTracks();
                 }}
                 onOpenPlace={(placeId) => {
                   setSelectedPlaceID(placeId);
