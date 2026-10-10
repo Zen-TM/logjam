@@ -10,7 +10,16 @@ import {
   clearDemTileCache,
   sampleElevations as sampleDemElevations,
 } from "./elevation";
-import { TERRARIUM, type SamplePosition } from "@logjam/shared";
+import { NSW_5M, TERRARIUM, type SamplePosition } from "@logjam/shared";
+
+// The archive source is read from the CDN base, which the unit env leaves
+// unset: these tests then see the worldwide source alone, as before. The
+// parity case for the archive sets it.
+const envOverride = vi.hoisted(() => ({}) as { TOPO_CDN_BASE_URL?: string });
+vi.mock("../lib/env", async (original) => {
+  const real = await original<typeof import("../lib/env")>();
+  return { ...real, getEnv: () => ({ ...real.getEnv(), ...envOverride }) };
+});
 
 const sampleElevations = async (positions: readonly SamplePosition[]) =>
   (await sampleDemElevations(positions)).heights;
@@ -52,6 +61,7 @@ const NEARBY: SamplePosition[] = [
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  delete envOverride.TOPO_CDN_BASE_URL;
   clearDemTileCache();
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -162,5 +172,64 @@ describe("sampleElevations", () => {
     dem.heights.forEach((height, i) =>
       expect(height).toBeCloseTo(parity.heights[i]!, 2),
     );
+  });
+
+  // The same pair again for a source read from an archive, on a line that
+  // leaves the archive: three positions in the fixture archive (three real
+  // z15 tiles of the NSW 5 m DEM), then two it lacks, which fall through to
+  // the worldwide tile. The join between them is a seam, so `levelled` is in
+  // the fixture too.
+  //
+  // Mutation: read the archive at any zoom but the source's `sampleZoom`, or
+  // skip the fall-through, and the source ids stop matching.
+  it("reads an archive source and falls through where it ends (parity)", async () => {
+    const fixtures = join(__dirname, "../../../shared/src/__fixtures__");
+    const parity = JSON.parse(
+      readFileSync(join(fixtures, "dem-parity-nsw.json"), "utf8"),
+    ) as {
+      positions: SamplePosition[];
+      heights: number[];
+      levelled: number[];
+      sourceIds: string[];
+    };
+    const archive = readFileSync(join(fixtures, "nsw-5m-z15-katoomba.pmtiles"));
+    const worldwide = readFileSync(
+      join(fixtures, "terrarium-z13-7516-4911.png"),
+    );
+    envOverride.TOPO_CDN_BASE_URL = "https://cdn.test";
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url !== `https://cdn.test/${NSW_5M.archivePath}`)
+        return pngResponse(worldwide);
+      const range = new Headers(init?.headers).get("range")!;
+      const [from, to] = range.replace("bytes=", "").split("-").map(Number);
+      return new Response(new Uint8Array(archive.subarray(from, to! + 1)), {
+        status: 206,
+      });
+    });
+
+    const dem = await sampleDemElevations(parity.positions);
+    expect(dem.sourceIds).toEqual(parity.sourceIds);
+    dem.heights.forEach((height, i) =>
+      expect(height).toBeCloseTo(parity.heights[i]!, 1),
+    );
+    dem.levelled.forEach((height, i) =>
+      expect(height).toBeCloseTo(parity.levelled[i]!, 1),
+    );
+  });
+
+  it("treats an archive that will not open as a source with nothing", async () => {
+    envOverride.TOPO_CDN_BASE_URL = "https://cdn.test";
+    fetchMock.mockImplementation(async (url: string) =>
+      url.startsWith("https://cdn.test")
+        ? new Response("", { status: 404 })
+        : pngResponse(terrariumTile(() => 700)),
+    );
+    const dem = await sampleDemElevations(NEARBY);
+    expect(dem.sourceIds).toEqual(["terrarium", "terrarium"]);
+    // Asked once, then remembered: not once per profile.
+    await sampleDemElevations(NEARBY);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes("cdn.test")),
+    ).toHaveLength(1);
   });
 });

@@ -6,8 +6,14 @@
 // `canvas`, Logjam GPS reads saved files and decodes with `fflate`.
 // docs/decisions/0028-a-height-comes-from-the-finest-dem-source-that-has-it.md
 //
+// A source is either a public XYZ tile set (`urlTemplate`) or a PMTiles archive
+// Logjam builds and serves itself (`archivePath`).
+// docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md
+//
 // PRIVACY: positions here are precise wilderness coordinates and a tile index
 // is a coarse location. Nothing in this file logs, and no reader may.
+
+import type { PMTiles } from "pmtiles";
 
 import {
   demSampleHeight,
@@ -31,8 +37,16 @@ export type DemSource = {
    * here", and the position falls through to the next source.
    */
   coverage: readonly [number, number, number, number] | null;
-  /** XYZ template; `{y}` is the XYZ row, not the TMS row MBTiles stores. */
-  urlTemplate: string;
+  /**
+   * XYZ template of a public tile set; `{y}` is the XYZ row, not the TMS row
+   * MBTiles stores. Null for a source read from an archive.
+   */
+  urlTemplate: string | null;
+  /**
+   * A PMTiles archive under the CDN's `/master`, beside the vector basemap.
+   * Null for a public tile set.
+   */
+  archivePath: string | null;
   /** Required by the source's terms wherever a height from it is shown. */
   credit: string;
   /** The same credit for MapLibre, which renders HTML in `attribution`. */
@@ -48,6 +62,7 @@ export const TERRARIUM = {
   id: "terrarium",
   sampleZoom: 13,
   coverage: null,
+  archivePath: null,
   urlTemplate:
     "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
   credit: "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.",
@@ -55,8 +70,29 @@ export const TERRARIUM = {
     'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).',
 } as const satisfies DemSource;
 
+/**
+ * NSW Spatial Services' 5 m DEM: bare earth, from LiDAR in the east and
+ * photogrammetry in the west, built by `topo/build_nsw_dem.py`. A z15 pixel is
+ * ~4 m at this latitude, the first zoom finer than the data.
+ */
+export const NSW_5M = {
+  id: "nsw-5m",
+  sampleZoom: 15,
+  // NSW and the ACT. Inside it a tile the build did not produce is simply
+  // absent, and the position falls through.
+  coverage: [140.9, -37.6, 153.7, -28.0],
+  urlTemplate: null,
+  archivePath: "master/dem/nsw-5m.pmtiles",
+  // The licence asks for the credit, the licence's name, a note that this is
+  // derived, and the date it was extracted from Spatial Services.
+  credit:
+    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
+  creditHtml:
+    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
+} as const satisfies DemSource;
+
 /** Every source, finest first. The order IS the precedence. */
-export const DEM_SOURCES: readonly DemSource[] = [TERRARIUM];
+export const DEM_SOURCES: readonly DemSource[] = [NSW_5M, TERRARIUM];
 
 /**
  * The tile URL for an address in a source, at the zoom it is read at.
@@ -66,7 +102,7 @@ export const DEM_SOURCES: readonly DemSource[] = [TERRARIUM];
  * the caller shows a confident height from the wrong place.
  */
 export function demTileUrl(
-  source: DemSource,
+  source: DemSource & { urlTemplate: string },
   tileX: number,
   tileY: number,
 ): string {
@@ -91,6 +127,30 @@ export type DemTileAddress = { tileX: number; tileY: number };
 /** The key a `DemTileReader` files a decoded tile under. */
 export function demTileKey({ tileX, tileY }: DemTileAddress): string {
   return `${tileX}/${tileY}`;
+}
+
+/**
+ * The PNG bytes an archive holds for these tiles, keyed by `demTileKey`. The
+ * runtime opens the archive (a URL, or its own `Source` over a file) and
+ * decodes the bytes; a tile the archive lacks is simply absent.
+ */
+export async function readDemArchive(
+  archive: PMTiles,
+  source: DemSource,
+  tiles: readonly DemTileAddress[],
+): Promise<Map<string, Uint8Array>> {
+  const found = new Map<string, Uint8Array>();
+  await Promise.all(
+    tiles.map(async (address) => {
+      const tile = await archive.getZxy(
+        source.sampleZoom,
+        address.tileX,
+        address.tileY,
+      );
+      if (tile) found.set(demTileKey(address), new Uint8Array(tile.data));
+    }),
+  );
+  return found;
 }
 
 /**

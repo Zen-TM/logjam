@@ -37,6 +37,16 @@ describe("the declaration", () => {
     expect(DEM_SOURCES.at(-1)!.coverage).toBeNull();
   });
 
+  // Mutation: give a source both a tile set and an archive, or neither, and
+  // each reader has to guess which one to read.
+  it("serves each source one way: a public tile set or an archive", () => {
+    for (const source of DEM_SOURCES)
+      expect(
+        (source.urlTemplate == null) !== (source.archivePath == null),
+        source.id,
+      ).toBe(true);
+  });
+
   it("credits only the sources a result was read from", () => {
     expect(demCredits(["terrarium"])).toEqual([TERRARIUM.credit]);
     expect(demCredits([])).toEqual([]);
@@ -45,7 +55,9 @@ describe("the declaration", () => {
   // Mutation: paste a source's host into a reader instead of importing the
   // declaration, and this names the file.
   it("is the only place a DEM host is written", () => {
-    const prefixes = DEM_SOURCES.map((s) => s.urlTemplate.split("{")[0]!);
+    const prefixes = DEM_SOURCES.map(
+      (s) => s.archivePath ?? s.urlTemplate!.split("{")[0]!,
+    );
     const offenders: string[] = [];
     for (const pkg of ["api", "frontend", "mobile", "shared"]) {
       const root = join(import.meta.dirname, "../..", pkg, "src");
