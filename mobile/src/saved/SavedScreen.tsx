@@ -19,7 +19,9 @@
 //     search field stays put, disabled — and offers the group verbs (select
 //     all, delete).
 // Not-yet-downloaded topo overlays are the one non-on-device list: they live
-// under the LiDAR Topos filter below the saved ones, never in "All".
+// under the LiDAR Topos filter below the saved ones, never in "All". Region
+// downloads in flight or unfinished are partly on device, so they show under
+// both Regions and All.
 //
 // This screen mounts the same registry/hooks MapScreen does
 // (useMapArtifacts, useGeoPdfImports, useVectorImports, useTracks); each
@@ -147,6 +149,10 @@ import {
   regionGroupKey,
 } from "../offline/artifactGroups";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
+import {
+  groupUnfinishedRegions,
+  type UnfinishedRegionGroup,
+} from "../offline/unfinishedRegionGroups";
 import {
   deleteRegionFile,
   listUnfinishedRegions,
@@ -662,9 +668,11 @@ export function SavedScreen({
   }, [queuedIds]);
   useEffect(refreshOrphans, [refreshOrphans]);
 
-  const resumeOrphan = useCallback((region: UnfinishedRegion) => {
-    enqueueRegionDownloads([
-      {
+  const orphanGroups = groupUnfinishedRegions(orphans);
+
+  const resumeOrphan = useCallback((group: UnfinishedRegionGroup) => {
+    enqueueRegionDownloads(
+      group.regions.map((region) => ({
         taskKind: "tile-pyramid",
         id: region.id,
         basemapId: region.basemapId,
@@ -682,12 +690,13 @@ export function SavedScreen({
         zMin: region.zMin,
         zMax: region.zMax,
         allowCellular: false,
-      },
-    ]);
-    setOrphans((current) => current.filter((row) => row.id !== region.id));
+      })),
+    );
+    const resumed = new Set(group.regions.map((region) => region.id));
+    setOrphans((current) => current.filter((row) => !resumed.has(row.id)));
   }, []);
 
-  const discardOrphan = useCallback((region: UnfinishedRegion) => {
+  const discardOrphan = useCallback((group: UnfinishedRegionGroup) => {
     Alert.alert(
       "Discard this download?",
       "The download so far will be deleted from this phone.",
@@ -697,10 +706,9 @@ export function SavedScreen({
           text: "Discard",
           style: "destructive",
           onPress: () => {
-            void deleteRegionFile(region.id);
-            setOrphans((current) =>
-              current.filter((row) => row.id !== region.id),
-            );
+            const gone = new Set(group.regions.map((region) => region.id));
+            for (const id of gone) void deleteRegionFile(id);
+            setOrphans((current) => current.filter((row) => !gone.has(row.id)));
           },
         },
       ],
@@ -710,6 +718,9 @@ export function SavedScreen({
   // the card's ⋯ sheet rather than expanded under it: four states' worth of
   // copy and up to three buttons per job is a panel, and unfolding it would
   // push the saved regions off the screen while the user watches.
+  // Unfinished areas are on the device (their bytes count against it), so All
+  // lists them with Regions rather than hiding them from the inventory.
+  const showsDownloads = filter === "region" || filter === "all";
   const [downloadSheetId, setDownloadSheetId] = useState<string | null>(null);
   const downloadSheetGroup =
     downloadGroups.find((group) => group.groupId === downloadSheetId) ?? null;
@@ -1834,10 +1845,8 @@ export function SavedScreen({
         ) : null}
 
         {/* Downloading regions, one card per run, at the top of the Regions
-            filter and nowhere else — "All" is an inventory of what is actually
-            on the device, and these are not there yet. Same rule the GeoPDF
-            import card follows. */}
-        {filter === "region" && downloadGroups.length > 0 ? (
+            and All filters. Same shape as the GeoPDF import card. */}
+        {showsDownloads && downloadGroups.length > 0 ? (
           <>
             {downloadGroups.map((group) => (
               <Row
@@ -1873,13 +1882,13 @@ export function SavedScreen({
           </>
         ) : null}
 
-        {filter === "region" && orphans.length > 0 ? (
+        {showsDownloads && orphans.length > 0 ? (
           <>
-            {orphans.map((region) => (
+            {orphanGroups.map((group) => (
               <Row
-                key={region.id}
-                title={region.groupLabel ?? region.label}
-                subtitle={`Didn't finish · ${region.tilesStored.toLocaleString()} tiles already saved`}
+                key={group.groupId}
+                title={group.label}
+                subtitle={`Didn't finish · ${group.tilesStored.toLocaleString()} tiles already saved`}
                 icon="saveOffline"
                 hue={theme.warning}
                 right={
@@ -1888,13 +1897,13 @@ export function SavedScreen({
                       label="Resume"
                       variant="outlineAccent"
                       compact
-                      onPress={() => resumeOrphan(region)}
+                      onPress={() => resumeOrphan(group)}
                     />
                     <IconButton
                       icon="delete"
                       color={theme.warning}
-                      accessibilityLabel={`Discard the unfinished download ${region.label}`}
-                      onPress={() => discardOrphan(region)}
+                      accessibilityLabel={`Discard the unfinished download ${group.label}`}
+                      onPress={() => discardOrphan(group)}
                     />
                   </View>
                 }
@@ -1906,7 +1915,8 @@ export function SavedScreen({
         {visibleItems.length === 0 &&
         !activeOp &&
         !(importRun && showsGeoPdfRunCard(filter)) &&
-        (filter !== "region" || downloadGroups.length === 0) ? (
+        (!showsDownloads ||
+          (downloadGroups.length === 0 && orphans.length === 0)) ? (
           <EmptyPanel
             filter={filter}
             online={online}
