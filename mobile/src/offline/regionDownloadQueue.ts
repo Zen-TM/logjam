@@ -45,7 +45,10 @@ export type RegionTaskSpec =
   | {
       taskKind: "http-file";
       id: string;
-      basemapId: "protomaps";
+      /** The vector basemap, or a DEM archive source's id (`demSourceId`). */
+      basemapId: string;
+      /** Set when the clip is of a DEM archive: shared demSources.ts. */
+      demSourceId?: string;
       label: string;
       groupId: string;
       groupLabel: string;
@@ -306,6 +309,7 @@ async function runProtomapsClip(
         groupLabel: spec.groupLabel,
         bbox: spec.bbox,
         zMax: spec.zMax,
+        demSourceId: spec.demSourceId,
       },
       (progress) =>
         onProgress({
@@ -333,6 +337,12 @@ async function runProtomapsClip(
     // user round that loop indefinitely. (It is also the whole of the 503 seen
     // in local dev: PROTOMAPS_ARCHIVE_URI is unset there and no archive exists
     // to cut from — see api/src/routes/basemap.ts.)
+    // A DEM archive the server does not have (503) is not this run's failure:
+    // the worldwide tiles are saved regardless, so the area still has heights.
+    // The job leaves the queue as if it had never been planned.
+    if (spec.demSourceId && err instanceof ApiError && err.status === 503) {
+      return { status: "cancelled" };
+    }
     if (err instanceof ApiError && err.status >= 500) {
       return { status: "failed", code: "source-unavailable" };
     }

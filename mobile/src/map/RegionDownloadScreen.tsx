@@ -41,6 +41,7 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
+  NSW_5M,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
@@ -148,6 +149,7 @@ function regionLabelFor(basemapId: string): string {
   // The DEM is not a map in the catalog and is not one to the user either —
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
+  if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }
@@ -374,7 +376,14 @@ export function RegionDownloadScreen({
   const includesVector = selected.includes("protomaps");
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
-    ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
+    ? planRegionForBasemaps(
+        bbox,
+        pyramidIds,
+        detailZoom,
+        catalogMaxZoom,
+        // The clip endpoint needs a signed-in user, as the vector map does.
+        !isGuest,
+      )
     : null;
   const caps =
     bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
@@ -418,6 +427,18 @@ export function RegionDownloadScreen({
           bbox,
           zMin: source.zMin,
           zMax: source.zMax,
+          allowCellular,
+        })),
+        ...job.demArchives.map(({ sourceId }) => ({
+          taskKind: "http-file" as const,
+          id: uuid(),
+          basemapId: sourceId,
+          demSourceId: sourceId,
+          label: regionLabelFor(sourceId),
+          groupId,
+          groupLabel,
+          bbox,
+          zMax: detailZoom,
           allowCellular,
         })),
         ...(includesVector

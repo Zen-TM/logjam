@@ -19,8 +19,10 @@
 // here logs a coordinate, a tile URL, or a tile index — an upstream failure is
 // reported by status alone.
 import { loadImage, createCanvas } from "canvas";
-import { PMTiles } from "pmtiles";
+import type { PMTiles } from "pmtiles";
 import {
+  clearDemArchives,
+  demArchive,
   demMetresFromRgb,
   demTileKey,
   demTileUrl,
@@ -111,7 +113,7 @@ const archives = new Map<string, { archive: PMTiles | null; at: number }>();
  * once and remembered, because every profile in NSW would otherwise pay for
  * the failed open. A read that fails AFTER the archive opened throws.
  */
-async function archiveFor(
+export async function demArchiveFor(
   source: DemSource & { archivePath: string },
 ): Promise<PMTiles | null> {
   // The CDN the clients read it from too: byte ranges of our own file, which
@@ -121,7 +123,7 @@ async function archiveFor(
   const known = archives.get(source.id);
   if (known && (known.archive || Date.now() - known.at < ARCHIVE_RETRY_MS))
     return known.archive;
-  let archive: PMTiles | null = new PMTiles(
+  let archive: PMTiles | null = demArchive(
     `${base.replace(/\/$/, "")}/${source.archivePath}`,
   );
   try {
@@ -140,7 +142,7 @@ async function tileBytes(
   wanted: readonly DemTileAddress[],
 ): Promise<Map<string, Uint8Array>> {
   if (source.archivePath != null) {
-    const archive = await archiveFor({
+    const archive = await demArchiveFor({
       ...source,
       archivePath: source.archivePath,
     });
@@ -191,4 +193,5 @@ export function sampleElevations(
 export function clearDemTileCache() {
   tileCache.clear();
   archives.clear();
+  clearDemArchives();
 }

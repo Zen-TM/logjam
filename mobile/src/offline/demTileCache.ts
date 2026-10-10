@@ -15,7 +15,7 @@
 // burst over neighbouring tiles, where true LRU would barely differ.
 export type TileOrigin = "saved" | "network";
 
-const MAX_CACHED_TILES = 8;
+const MAX_CACHED_TILES = 32;
 
 type Entry = { tile: Float32Array; origin: TileOrigin };
 
