@@ -62,7 +62,7 @@ import {
 } from "expo-sensors";
 import {
   SYSTEM_PLACE_TYPE_IDS,
-  DEM_ATTRIBUTION,
+  demCredits,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
@@ -3364,7 +3364,7 @@ export function MapScreen({
     sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
       allowNetwork: !offlineOnlyRef.current,
     })
-      .then(([elevationM]) => {
+      .then(({ heights: [elevationM] }) => {
         if (seq !== readoutSeq.current || elevationM == null) return;
         publishLiveReadout({
           speedMps,
@@ -5179,7 +5179,11 @@ export function MapScreen({
             is drawn — every height in the app (point readout, route profile,
             gain/loss) comes from it, online or off, so its credit is
             unconditional rather than tied to the active layer. */}
-        <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
+        {demCredits().map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
       </BottomSheet>
 
       {/* Tap: "what's there?" — the question that comes before the long

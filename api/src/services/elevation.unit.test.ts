@@ -2,14 +2,18 @@
 // are genuine PNGs built with the same canvas library the decoder uses, so a
 // change that breaks the byte layout (channel order, premultiplied alpha, the
 // -32768 offset) fails here rather than silently reading mountains as valleys.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createCanvas } from "canvas";
 import {
-  DEM_TILE_ZOOM,
   clearDemTileCache,
-  sampleElevations,
+  sampleElevations as sampleDemElevations,
 } from "./elevation";
-import type { SamplePosition } from "@logjam/shared";
+import { TERRARIUM, type SamplePosition } from "@logjam/shared";
+
+const sampleElevations = async (positions: readonly SamplePosition[]) =>
+  (await sampleDemElevations(positions)).heights;
 
 const TILE_SIZE = 256;
 
@@ -106,7 +110,7 @@ describe("sampleElevations", () => {
   it("requests the DEM at the documented zoom", async () => {
     fetchMock.mockResolvedValue(pngResponse(terrariumTile(() => 500)));
     await sampleElevations(NEARBY.slice(0, 1));
-    expect(fetchMock.mock.calls[0]![0]).toContain(`/${DEM_TILE_ZOOM}/`);
+    expect(fetchMock.mock.calls[0]![0]).toContain(`/${TERRARIUM.sampleZoom}/`);
   });
 
   it("reports null where the DEM has no tile", async () => {
@@ -131,6 +135,32 @@ describe("sampleElevations", () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
     await expect(sampleElevations(NEARBY)).rejects.toThrow(
       /^DEM tile request failed with status 503$/,
+    );
+  });
+
+  // Half of the DEM parity pair; the other half is
+  // mobile/src/offline/demLookup.test.ts. Both readers are handed the same
+  // real tile and must give the heights and source ids in the fixture, which
+  // were worked out by a third, independent decoder.
+  //
+  // Mutation: sample in this reader instead of through `sampleDem` and the
+  // heights drift from Logjam GPS's by metres.
+  it("reads the heights and source ids Logjam GPS reads from the same tile (parity)", async () => {
+    const fixtures = join(__dirname, "../../../shared/src/__fixtures__");
+    const parity = JSON.parse(
+      readFileSync(join(fixtures, "dem-parity.json"), "utf8"),
+    ) as {
+      positions: SamplePosition[];
+      heights: number[];
+      sourceIds: string[];
+    };
+    fetchMock.mockResolvedValue(
+      pngResponse(readFileSync(join(fixtures, "terrarium-z13-7516-4911.png"))),
+    );
+    const dem = await sampleDemElevations(parity.positions);
+    expect(dem.sourceIds).toEqual(parity.sourceIds);
+    dem.heights.forEach((height, i) =>
+      expect(height).toBeCloseTo(parity.heights[i]!, 2),
     );
   });
 });

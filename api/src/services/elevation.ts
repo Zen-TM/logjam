@@ -11,31 +11,29 @@
 // same tiles locally, out of the MBTiles the region download wrote
 // (mobile/src/offline/demLookup.ts); that path fetches the tiles direct from S3
 // at download time, exactly as the raster basemap download already does. The
-// pixel maths, the zoom and the no-data rule are shared so the two agree —
-// see shared/src/demTiles.ts.
-//
-// The DEM is the AWS Open Data terrarium tile set, the same source the web
-// map's 3D terrain uses, so a profile agrees with the hills drawn under it.
+// choice of source, the pixel maths, the zoom and the no-data rule are shared
+// so the two agree: `sampleDem` in shared/src/demSources.ts. This file is only
+// the tile I/O it is handed.
 //
 // PRIVACY: positions passed in are precise wilderness coordinates. Nothing
 // here logs a coordinate, a tile URL, or a tile index — an upstream failure is
 // reported by status alone.
 import { loadImage, createCanvas } from "canvas";
 import {
-  DEM_TILE_URL_TEMPLATE,
-  DEM_TILE_ZOOM,
   demMetresFromRgb,
-  demSampleHeight,
-  resolveDemSamples,
+  demTileKey,
+  demTileUrl,
+  sampleDem,
+  type DemSamples,
+  type DemSource,
+  type DemTileAddress,
   type SamplePosition,
 } from "@logjam/shared";
-
-export { DEM_ATTRIBUTION, DEM_TILE_ZOOM } from "@logjam/shared";
 
 const TILE_FETCH_TIMEOUT_MS = 8_000;
 
 /**
- * Decoded tiles held in memory, keyed "z/x/y". One tile is 256×256 float
+ * Decoded tiles held in memory, keyed "source/x/y". One tile is 256×256 float
  * metres — 256 KB — so this ceiling is ~16 MB, and the whole Blue Mountains
  * is a couple of dozen tiles. Insertion-ordered eviction (a Map iterates in
  * insertion order, so the first key is the oldest) rather than true LRU:
@@ -63,14 +61,11 @@ function cacheTile(key: string, tile: Float32Array) {
  * silently render a flat profile over real mountains.
  */
 async function fetchTile(
-  zoom: number,
+  source: DemSource,
   tileX: number,
   tileY: number,
 ): Promise<Float32Array | null> {
-  const url = DEM_TILE_URL_TEMPLATE.replace("{z}", String(zoom))
-    .replace("{x}", String(tileX))
-    .replace("{y}", String(tileY));
-  const response = await fetch(url, {
+  const response = await fetch(demTileUrl(source, tileX, tileY), {
     signal: AbortSignal.timeout(TILE_FETCH_TIMEOUT_MS),
   });
   if (response.status === 404) return null;
@@ -99,48 +94,40 @@ async function fetchTile(
 }
 
 async function tileFor(
-  zoom: number,
+  source: DemSource,
   tileX: number,
   tileY: number,
 ): Promise<Float32Array | null> {
-  const key = `${zoom}/${tileX}/${tileY}`;
+  const key = `${source.id}/${tileX}/${tileY}`;
   const cached = tileCache.get(key);
   if (cached) return cached;
-  const tile = await fetchTile(zoom, tileX, tileY);
+  const tile = await fetchTile(source, tileX, tileY);
   // Absent tiles are not cached: they are rare, and caching a null would need
   // a second map to distinguish "known absent" from "not yet fetched".
   if (tile) cacheTile(key, tile);
   return tile;
 }
 
-/**
- * Read the DEM at each position, in order. Null where the DEM has no coverage.
- *
- * Positions are grouped by tile so each tile is fetched at most once per call,
- * which is what makes a 256-sample profile a handful of requests rather than
- * 256.
- */
-export async function sampleElevations(
-  positions: readonly SamplePosition[],
-): Promise<(number | null)[]> {
-  if (positions.length === 0) return [];
-
-  // Resolve every position to its tile and in-tile pixel first, so the fetch
-  // set is known before any network work starts.
-  const resolved = resolveDemSamples(positions);
-
-  const uniqueKeys = [...new Set(resolved.map((r) => `${r.tileX}/${r.tileY}`))];
-  const tiles = new Map<string, Float32Array | null>();
+/** Each tile is fetched at most once per call, and held for the next. */
+async function readTiles(
+  source: DemSource,
+  wanted: readonly DemTileAddress[],
+): Promise<Map<string, Float32Array>> {
+  const tiles = new Map<string, Float32Array>();
   await Promise.all(
-    uniqueKeys.map(async (key) => {
-      const [tileX, tileY] = key.split("/").map(Number);
-      tiles.set(key, await tileFor(DEM_TILE_ZOOM, tileX!, tileY!));
+    wanted.map(async (address) => {
+      const tile = await tileFor(source, address.tileX, address.tileY);
+      if (tile) tiles.set(demTileKey(address), tile);
     }),
   );
+  return tiles;
+}
 
-  return resolved.map((address) =>
-    demSampleHeight(tiles.get(`${address.tileX}/${address.tileY}`), address),
-  );
+/** Read the DEM at each position, in order. Null where no source has it. */
+export function sampleElevations(
+  positions: readonly SamplePosition[],
+): Promise<DemSamples> {
+  return sampleDem(positions, readTiles);
 }
 
 /** Test seam — the cache is process-wide and would otherwise leak between tests. */

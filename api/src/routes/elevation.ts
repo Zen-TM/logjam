@@ -14,13 +14,14 @@ import { AppError } from "../middleware/errorHandler";
 import { elevationLimiter } from "../middleware/rateLimit";
 import {
   buildElevationProfile,
+  demCredits,
   densifyLineSegments,
   MAX_ROUTE_POINTS,
   parseRoutePoints,
   ROUTE_ERRORS,
   type RoutePoint,
 } from "@logjam/shared";
-import { DEM_ATTRIBUTION, sampleElevations } from "../services/elevation";
+import { sampleElevations } from "../services/elevation";
 
 const router = Router();
 
@@ -62,10 +63,15 @@ router.post(
     }
 
     const positions = densifyLineSegments(segments);
-    const elevations = await sampleElevations(positions);
-    const profile = buildElevationProfile(positions, elevations);
+    const profile = buildElevationProfile(
+      positions,
+      await sampleElevations(positions),
+    );
 
-    res.json({ ...profile, attribution: DEM_ATTRIBUTION });
+    res.json({
+      ...profile,
+      attribution: demCredits(profile.demSourceIds).join(" "),
+    });
   },
 );
 

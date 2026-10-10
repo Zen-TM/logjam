@@ -1,14 +1,16 @@
 // Elevation from the DEM: the tiles saved on this phone first, then the public
 // tile set over the network.
 //
-// Every "save maps offline" run writes a `dem-region` MBTiles of terrarium
-// tiles at DEM_TILE_ZOOM (regionTileDownload.ts). This reads them back, so a
+// Every "save maps offline" run writes a `dem-region` MBTiles of a DEM
+// source's tiles at its `sampleZoom` (regionTileDownload.ts), filed under the
+// source's id. This reads them back, so a
 // route profile, a point's height and a track's gain/loss keep working in a
 // place with no signal — the trip the download exists for.
 //
-// The maths is the server sampler's, imported rather than re-derived
-// (shared/src/demTiles.ts): same zoom, same pixel address, same no-data rule,
-// so a profile drawn offline matches the one drawn online over the same line.
+// The sampling is the server's, imported rather than re-derived (`sampleDem`
+// in shared/src/demSources.ts): same choice of source, same zoom, same pixel
+// address, same no-data rule, so a profile drawn offline matches the one drawn
+// online over the same line. This file is only the tile I/O it is handed.
 //
 // PRIVACY. The positions are precise wilderness coordinates and the tile
 // indices are a coarse location (a z13 tile is ~4.9 km across). Nothing here
@@ -16,9 +18,8 @@
 // height", by returning nulls, and a fetch failure is deliberately NOT logged
 // because the URL carries the tile indices.
 //
-// The network path asks AWS's public `elevation-tiles-prod` bucket directly,
-// which is the same bucket a region download already fetches from, and it
-// needs no account. It is the LAST resort, not the first: `useElevationProfile`
+// The network path asks the source's public tile host directly, which is the
+// same host a region download already fetches from, and it needs no account. It is the LAST resort, not the first: `useElevationProfile`
 // prefers our own API when signed in, precisely so the tile requests — which
 // trace where the user is drawing — go out on the server's connection rather
 // than the user's (api/src/services/elevation.ts says the same from the other
@@ -32,11 +33,13 @@
 // suppresses it entirely.
 import * as SQLite from "expo-sqlite";
 import {
-  DEM_TILE_ZOOM,
-  demSampleHeight,
+  demTileKey,
   demTileUrl,
-  resolveDemSamples,
+  sampleDem,
   xyzToTmsRow,
+  type DemSamples,
+  type DemSource,
+  type DemTileAddress,
   type SamplePosition,
 } from "@logjam/shared";
 
@@ -50,9 +53,11 @@ import { regionFileName } from "./regionMbtiles";
 const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
 
 /** Registry rows are the index of what is on disk; the files are the data. */
-async function demArtifactIds(): Promise<string[]> {
+async function demArtifactIds(source: DemSource): Promise<string[]> {
   const artifacts = await listArtifacts();
-  return artifacts.filter((a) => a.kind === "dem-region").map((a) => a.id);
+  return artifacts
+    .filter((a) => a.kind === "dem-region" && a.logicalKey === source.id)
+    .map((a) => a.id);
 }
 
 /**
@@ -63,7 +68,8 @@ async function demArtifactIds(): Promise<string[]> {
  */
 async function readTilesFrom(
   artifactId: string,
-  wanted: { tileX: number; tileY: number }[],
+  zoom: number,
+  wanted: readonly DemTileAddress[],
 ): Promise<Map<string, Float32Array>> {
   const found = new Map<string, Float32Array>();
   const db = await SQLite.openDatabaseAsync(
@@ -78,12 +84,12 @@ async function readTilesFrom(
       const row = await db.getFirstAsync<{ tile_data: Uint8Array }>(
         `SELECT tile_data FROM tiles
          WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?`,
-        DEM_TILE_ZOOM,
+        zoom,
         tileX,
-        xyzToTmsRow(DEM_TILE_ZOOM, tileY),
+        xyzToTmsRow(zoom, tileY),
       );
       if (!row?.tile_data) continue;
-      found.set(`${tileX}/${tileY}`, decodeDemPng(row.tile_data));
+      found.set(demTileKey({ tileX, tileY }), decodeDemPng(row.tile_data));
     }
   } finally {
     await db.closeAsync().catch(() => {});
@@ -108,13 +114,14 @@ const TILE_FETCH_TIMEOUT_MS = 10_000;
 const MAX_TILES_PER_FETCH = 6;
 
 async function fetchDemTile(
+  source: DemSource,
   tileX: number,
   tileY: number,
 ): Promise<Float32Array | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TILE_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(demTileUrl(tileX, tileY), {
+    const response = await fetch(demTileUrl(source, tileX, tileY), {
       signal: controller.signal,
     });
     if (!response.ok) return null;
@@ -129,32 +136,32 @@ async function fetchDemTile(
 }
 
 /**
- * Read the DEM at each position: saved regions first, then the public tiles
- * when `allowNetwork` and nothing on disk covers the point. Null where neither
- * can answer — the same answer the server's sampler gives outside the DEM's
- * coverage, and never a zero.
+ * The tiles this phone can produce for one source: saved regions first, then
+ * the public tiles when `allowNetwork` and nothing on disk has the tile.
  */
-export async function sampleElevations(
-  positions: readonly SamplePosition[],
-  { allowNetwork = false }: { allowNetwork?: boolean } = {},
-): Promise<(number | null)[]> {
-  if (positions.length === 0) return [];
-
-  const addresses = resolveDemSamples(positions);
-  const needed = new Map<string, { tileX: number; tileY: number }>();
-  for (const { tileX, tileY } of addresses) {
-    const key = `${tileX}/${tileY}`;
+async function readTiles(
+  source: DemSource,
+  wanted: readonly DemTileAddress[],
+  allowNetwork: boolean,
+): Promise<Map<string, Float32Array>> {
+  const cacheKey = (address: DemTileAddress) =>
+    `${source.id}/${demTileKey(address)}`;
+  const needed = new Map<string, DemTileAddress>();
+  for (const address of wanted) {
     // A network tile held in memory is not usable while simulating offline, so
     // it counts as missing and the saved regions get asked for it instead.
-    if (!cachedTile(key, { allowNetwork })) needed.set(key, { tileX, tileY });
+    if (!cachedTile(cacheKey(address), { allowNetwork }))
+      needed.set(demTileKey(address), address);
   }
 
   if (needed.size > 0) {
-    for (const artifactId of await demArtifactIds()) {
+    for (const artifactId of await demArtifactIds(source)) {
       if (needed.size === 0) break;
       let found: Map<string, Float32Array>;
       try {
-        found = await readTilesFrom(artifactId, [...needed.values()]);
+        found = await readTilesFrom(artifactId, source.sampleZoom, [
+          ...needed.values(),
+        ]);
       } catch (err) {
         // One unreadable region must not cost the heights the others hold.
         // (`failureDetail`-free on purpose: the message could carry a path.)
@@ -162,7 +169,7 @@ export async function sampleElevations(
         continue;
       }
       for (const [key, tile] of found) {
-        cacheTile(key, tile, "saved");
+        cacheTile(`${source.id}/${key}`, tile, "saved");
         needed.delete(key);
       }
     }
@@ -173,27 +180,41 @@ export async function sampleElevations(
   if (allowNetwork && needed.size > 0) {
     const batch = [...needed.values()].slice(0, MAX_TILES_PER_FETCH);
     const fetched = await Promise.all(
-      batch.map(async ({ tileX, tileY }) => ({
-        key: `${tileX}/${tileY}`,
-        tile: await fetchDemTile(tileX, tileY),
+      batch.map(async (address) => ({
+        address,
+        tile: await fetchDemTile(source, address.tileX, address.tileY),
       })),
     );
-    for (const { key, tile } of fetched)
-      if (tile) cacheTile(key, tile, "network");
+    for (const { address, tile } of fetched)
+      if (tile) cacheTile(cacheKey(address), tile, "network");
   }
 
-  return addresses.map((address) =>
-    demSampleHeight(
-      cachedTile(`${address.tileX}/${address.tileY}`, { allowNetwork }),
-      address,
-    ),
+  const tiles = new Map<string, Float32Array>();
+  for (const address of wanted) {
+    const tile = cachedTile(cacheKey(address), { allowNetwork });
+    if (tile) tiles.set(demTileKey(address), tile);
+  }
+  return tiles;
+}
+
+/**
+ * Read the DEM at each position. Null where neither the phone nor (when
+ * `allowNetwork`) the public tiles can answer — the same answer the server's
+ * sampler gives outside the DEM's coverage, and never a zero.
+ */
+export async function sampleElevations(
+  positions: readonly SamplePosition[],
+  { allowNetwork = false }: { allowNetwork?: boolean } = {},
+): Promise<DemSamples> {
+  return sampleDem(positions, (source, wanted) =>
+    readTiles(source, wanted, allowNetwork),
   );
 }
 
 /** Saved regions only — the guaranteed-no-network read. */
 export async function sampleElevationsOffline(
   positions: readonly SamplePosition[],
-): Promise<(number | null)[]> {
+): Promise<DemSamples> {
   return sampleElevations(positions);
 }
 
