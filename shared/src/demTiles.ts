@@ -17,10 +17,11 @@ import type { SamplePosition } from "./elevation.js";
 
 /**
  * Zoom to read the DEM at. The underlying data over Australia is ~30 m
- * (1-arcsec SRTM), and a z13 tile is ~4.9 km across at this latitude, so its
- * 256 px grid lands near 19 m/px: a little finer than the source, which
- * captures ridge detail without sampling zoom levels that only interpolate.
- * Deeper zooms would also multiply the tile count for no extra truth.
+ * (1-arcsec SRTM, whole metres), and a z13 tile is ~4.1 km across in NSW
+ * (4.9 km at the equator), so its 256 px grid lands near 16 m/px: finer than
+ * the source, which captures ridge detail without sampling zoom levels that
+ * only interpolate. Deeper zooms would also multiply the tile count for no
+ * extra truth: z15 read against a 5 m LiDAR surface is no closer than z13.
  */
 export const DEM_TILE_ZOOM = 13;
 
