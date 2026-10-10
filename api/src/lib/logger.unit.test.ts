@@ -55,6 +55,41 @@ describe("logger redaction", () => {
     expect(nested.coords).toBe("[redacted]");
   });
 
+  // The vector clip request (POST /basemap/region-clip) is the one place a
+  // saved area's bounds reach the API, and every signed-in region save makes
+  // it (docs/decisions/0029). The body is exactly what Logjam GPS sends.
+  // Mutation: delete any one of "req.body.west|south|east|north" from
+  // `redactPaths` and the first test goes red; put `body` back into
+  // `serializeRequestForLog` and the second does.
+  describe("the region clip's bbox", () => {
+    const clipBody = {
+      west: 150.2613,
+      south: -33.7457,
+      east: 150.3689,
+      north: -33.6551,
+      maxzoom: 15,
+    };
+    const bounds = ["150.2613", "33.7457", "150.3689", "33.6551"];
+
+    it("is censored if a log line ever carries the request body", () => {
+      const line = JSON.stringify(captureLog({ req: { body: clipBody } }));
+      for (const bound of bounds) expect(line).not.toContain(bound);
+    });
+
+    it("is not in what the request logger keeps of the request", () => {
+      const kept = JSON.stringify(
+        serializeRequestForLog({
+          id: "r1",
+          method: "POST",
+          url: "/basemap/region-clip",
+          body: clipBody,
+        } as Parameters<typeof serializeRequestForLog>[0]),
+      );
+      for (const bound of bounds) expect(kept).not.toContain(bound);
+      expect(kept).toContain("/basemap/region-clip");
+    });
+  });
+
   it("masks authorization and cookie headers", () => {
     const out = captureLog({
       req: {

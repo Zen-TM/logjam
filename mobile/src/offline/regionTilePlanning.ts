@@ -5,7 +5,12 @@
 //
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
-import type { RegionBbox, RegionTilePlan } from "@logjam/shared";
+import {
+  MAX_REGION_AREA_KM2,
+  regionEdgesKm,
+  type RegionBbox,
+  type RegionTilePlan,
+} from "@logjam/shared";
 
 import { hashKey } from "../map/sourceResolver";
 
@@ -57,6 +62,25 @@ export function tileUrlFrom(
     .replace("{z}", String(z))
     .replace("{y}", String(y))
     .replace("{x}", String(x));
+}
+
+/**
+ * Does the vector map come with this area?
+ *
+ * It rides along with every region a signed-in user saves, as the DEM does:
+ * it is a few megabytes, and without it the Vector map is blank out there and
+ * the route and measure tools stop snapping to tracks. A guest cannot have it
+ * (the clip is cut by an authed API call), and the clip endpoint refuses an
+ * area over `MAX_REGION_AREA_KM2`: the rasters still save, without it.
+ * Guard: `regionTilePlanning.test.ts` ("vectorClipFor").
+ */
+export function vectorClipFor(
+  isGuest: boolean,
+  bbox: RegionBbox,
+): "include" | "too-large" | "none" {
+  if (isGuest) return "none";
+  const [widthKm, heightKm] = regionEdgesKm(bbox);
+  return widthKm * heightKm > MAX_REGION_AREA_KM2 ? "too-large" : "include";
 }
 
 export type TileVerdict = "ok" | "gap" | "backoff" | "retry";
