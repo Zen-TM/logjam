@@ -87,5 +87,21 @@ class TestBlocks(unittest.TestCase):
         self.assertEqual(len(blocks), 6)
 
 
+class TestContourSchema(unittest.TestCase):
+    # Both clients pick out major lines with `elev % 50 == 0` and read the
+    # `contours` source layer. Mutation: change CONTOUR_MAJOR_M here alone and
+    # the 50 m lines the archive carries from z11 are no longer the ones the
+    # clients draw bold.
+    def test_major_interval_is_the_one_the_clients_filter_on(self):
+        from build_nsw_dem import CONTOUR_INTERVAL_M, CONTOUR_MAJOR_M
+
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        with open(os.path.join(root, "mobile/src/map/topoVectorLayers.ts")) as f:
+            client = f.read()
+        self.assertIn(f'["get", "elev"]], {CONTOUR_MAJOR_M}]', client)
+        self.assertIn('sourceLayer: "contours"', client)
+        self.assertEqual(CONTOUR_MAJOR_M % CONTOUR_INTERVAL_M, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
