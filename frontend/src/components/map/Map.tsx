@@ -9,7 +9,7 @@ import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 // which Vite's bundling breaks. vite.config.ts emits the worker and the shared
 // chunk it imports under a content-hashed path and exposes its URL here.
 setWorkerUrl(maplibreWorkerUrl);
-import { Protocol } from "pmtiles";
+import { PMTiles, Protocol } from "pmtiles";
 import {
   INK,
   MAP_INK,
@@ -17,6 +17,7 @@ import {
   SHARED_PLACE_COLOR,
   type RegionBbox,
 } from "@logjam/shared";
+import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
@@ -1065,11 +1066,10 @@ function Map({
       });
 
       // 3D Terrain - Soruce DEM for 3d Terrain
-      map.addSource("3d-terrain-dem", {
+      map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
-        // Same tile set, same credit, as the elevation profiles and the
-        // mobile offline DEM — one definition in shared/src/demSources.ts.
-        // MapLibre takes one raster-dem source, so it cannot walk the list.
+        // The worldwide source in shared/src/demSources.ts. The NSW one is
+        // added when 3D is switched on over NSW: see terrainSource.ts.
         tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
         attribution: TERRARIUM.creditHtml,
@@ -3016,9 +3016,13 @@ function Map({
   }, []);
 
   // Toggle 3d Terrain
+  // Choosing the terrain source is asynchronous; this is whether 3D is still
+  // wanted when the answer arrives.
+  const wants3DRef = useRef(false);
   const toggleTerrain = () => {
     const map = mapRef.current;
     if (!map) return;
+    wants3DRef.current = !is3D;
     if (is3D) {
       // Turning off — nothing to wait for, flatten immediately
       map.setTerrain(null);
@@ -3036,10 +3040,22 @@ function Map({
       }
       map.setMaxPitch(60);
       map.touchPitch.enable();
-      // Turning on — wait for the terrain tiles to actually load before tilting
-      map.setTerrain({ source: "3d-terrain-dem", exaggeration: 1.5 });
-      map.once("idle", () => {
-        map.easeTo({ pitch: 30, duration: 1200 });
+      void terrainSourceFor(
+        map,
+        async (url) => {
+          const archive = new PMTiles(url);
+          await archive.getHeader();
+          // Hand the opened archive to the protocol, so it is not opened twice.
+          pmtilesProtocol.add(archive);
+        },
+        window.location.origin,
+      ).then((source) => {
+        if (!wants3DRef.current) return;
+        // Turning on — wait for the terrain tiles to actually load before tilting
+        map.setTerrain({ source, exaggeration: 1.5 });
+        map.once("idle", () => {
+          map.easeTo({ pitch: 30, duration: 1200 });
+        });
       });
     }
 
