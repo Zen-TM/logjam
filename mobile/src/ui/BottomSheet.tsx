@@ -89,7 +89,7 @@ export const SheetScrollLock = createContext<{
 
 /**
  * How a `FieldError` that has just appeared asks the sheet to bring it into
- * view (docs/ux-principles.md §11, "Form errors"). Null outside a sheet.
+ * view (shared/DESIGN.md §11, "Form errors"). Null outside a sheet.
  */
 export const SheetErrorReveal = createContext<((target: View) => void) | null>(
   null,

@@ -1,7 +1,7 @@
 // Account — "who am I on this service, and what am I using of it?"
 //
 // The two quota meters ARE the question this screen exists for, so unlike the
-// Saved tab (where storage is context) they get real weight here (docs/ux-principles.md §2,
+// Saved tab (where storage is context) they get real weight here (shared/DESIGN.md §2,
 // §4). Everything else is the sign-in identity and the two irreversible things:
 // signing out (which drops unsynced work — the confirmation lives in App.tsx)
 // and deleting the account.
@@ -399,7 +399,7 @@ function UsernameForm({
 
   const save = useCallback(async () => {
     const trimmed = value.trim();
-    // Empty is a requirement, shown on submit (docs/ux-principles.md §11); unchanged is not
+    // Empty is a requirement, shown on submit (shared/DESIGN.md §11); unchanged is not
     // an error at all, just nothing to do.
     if (!trimmed) {
       setError("Enter a username.");
@@ -415,7 +415,7 @@ function UsernameForm({
       console.error(err);
       // The server's own 409 text ("Username already taken") is worth showing,
       // which is what messageFromError prefers when the API supplies one —
-      // and it's this one field's problem, so it renders under it (docs/ux-principles.md §11).
+      // and it's this one field's problem, so it renders under it (shared/DESIGN.md §11).
       setError(messageFromError(err, "Couldn't save that username."));
     } finally {
       setSaving(false);

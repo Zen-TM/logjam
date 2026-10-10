@@ -73,7 +73,7 @@ const FIELD_LABEL: Record<string, string> = {
  * Fields whose VALUE must never be rendered, whatever the op happens to carry.
  * A parked place create holds latitude/longitude, and this screen is exactly the
  * kind of page that ends up in a screenshot attached to a bug report — which is
- * the reason docs/ux-principles.md §13 keeps coordinates off lists entirely.
+ * the reason shared/DESIGN.md §13 keeps coordinates off lists entirely.
  */
 const UNRENDERABLE_FIELDS = new Set(["latitude", "longitude"]);
 
@@ -249,7 +249,7 @@ export function salvageableFields(op: ParkedOp): string[] {
  *
  * PRIVACY: values go through `previewValue`, which refuses coordinates; a
  * create op carries them and this screen is the one that ends up in a
- * screenshot (docs/ux-principles.md §13). Media's fields are bookkeeping — filename only.
+ * screenshot (shared/DESIGN.md §13). Media's fields are bookkeeping — filename only.
  */
 export type OpChange = { label: string; value: string; rejected: boolean };
 

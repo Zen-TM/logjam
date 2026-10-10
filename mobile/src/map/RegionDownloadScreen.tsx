@@ -398,7 +398,7 @@ export function RegionDownloadScreen({
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
   const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
 
-  // ONE warning, over the map (DESIGN.md §5). The three cap reasons
+  // ONE warning, over the map (DESIGN.md). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
   // user and all have the same ways out, so they are one chip — three
   // sentences in a hero band cost more map than they ever bought.
@@ -527,7 +527,7 @@ export function RegionDownloadScreen({
   }, [naming]);
 
   // Focused on the next frame, not with `autoFocus` — the field mounts inside
-  // an animating Modal, whose window is not focusable yet (DESIGN.md §4).
+  // an animating Modal, whose window is not focusable yet (DESIGN.md).
   const isNaming = naming != null;
   useEffect(() => {
     if (!isNaming) return;

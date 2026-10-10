@@ -13,7 +13,7 @@ function sources(dir: string): string[] {
 }
 
 // Uppercase is for a heading, a stat caption or the hero's eyebrow: never for
-// the label of a field or a control (docs/ux-principles.md §2; `fieldLabel`).
+// the label of a field or a control (shared/DESIGN.md §2; `fieldLabel`).
 // The files below are the whole list of places allowed to set it. Red when a
 // new file sets `textTransform: "uppercase"`: a field label there would read as
 // a second section heading. To see it: add that style to `ui/TextField.tsx`.

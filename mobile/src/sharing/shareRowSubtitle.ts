@@ -14,7 +14,7 @@ export type ShareRowState = {
 };
 
 /**
- * ORDER IS THE POINT. A closed door names itself first (DESIGN.md §8:
+ * ORDER IS THE POINT. A closed door names itself first (DESIGN.md:
  * needs-account beats needs-connection, and both beat anything derived from
  * data we could not fetch) — telling a guest "not shared with anyone yet" is a
  * claim about a list we never loaded.
