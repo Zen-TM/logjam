@@ -24,6 +24,7 @@ import {
   createPlaceType,
   deletePlaceType,
   requireOwnPlaceType,
+  updatePlaceType,
   visiblePlaceTypeWhere,
 } from "../lib/placeTypes";
 import {
@@ -108,7 +109,7 @@ router.patch(
       color: req.body?.color ?? current.color,
       position: req.body?.position ?? current.position,
     });
-    res.json(await prisma.placeType.update({ where: { id }, data: merged }));
+    res.json(await updatePlaceType(user.id, current, merged));
   },
 );
 

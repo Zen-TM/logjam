@@ -11,6 +11,11 @@ import {
   SHARED_PLACE_COLOR,
   isReservedFieldKey,
   isSystemPlaceTypeId,
+  freePlaceTypeName,
+  nameKey,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
+  placeTypeNameTaken,
   isInternalFieldValueKey,
   SOURCES_FIELD_KEY,
   systemRowIds,
@@ -229,5 +234,55 @@ describe("PLACE_TYPE_COLOR_NAMES", () => {
   it("answers with the hex for a colour outside the palette", () => {
     expect(placeTypeColorName("#123456")).toBe("#123456");
     expect(placeTypeColorName(null)).toBe("No colour");
+  });
+});
+
+describe("a place type's name is the user's only one of it", () => {
+  const types = [
+    { id: SYSTEM_PLACE_TYPE_IDS.canyon, name: "Canyon" },
+    { id: "own-1", name: "Swimming hole" },
+  ];
+
+  it("compares names as a person reads them", () => {
+    expect(nameKey("  Swimming   Hole ")).toBe("swimming hole");
+    // Mutation: an exact `===` on the names.
+    expect(placeTypeNameTaken("swimming hole", types)).toBe(true);
+    expect(placeTypeNameTaken(" SWIMMING  HOLE ", types)).toBe(true);
+    expect(placeTypeNameTaken("Cave", types)).toBe(false);
+  });
+
+  it("counts the built-ins, which belong to no account", () => {
+    expect(placeTypeNameTaken("canyon", types)).toBe(true);
+  });
+
+  it("lets a type keep its own name, in any case", () => {
+    expect(placeTypeNameTaken("Swimming Hole", types, "own-1")).toBe(false);
+    expect(placeTypeNameTaken("Canyon", types, "own-1")).toBe(true);
+  });
+
+  it("words the form's refusal, and lets a legacy duplicate keep its name", () => {
+    expect(placeTypeNameError("  ", types)).toBe("A place type needs a name.");
+    expect(placeTypeNameError("canyon ", types)).toBe(
+      'You already have a place type called "canyon".',
+    );
+    expect(placeTypeNameError("Cave", types)).toBeNull();
+    const legacy = { id: "own-2", name: "canyon" };
+    expect(placeTypeNameError("Canyon", [...types, legacy], legacy)).toBeNull();
+    expect(placeTypeNameError("swimming hole", types, legacy)).not.toBeNull();
+  });
+
+  it("finds the sync push a free name instead of refusing", () => {
+    expect(freePlaceTypeName(" Cave ", types)).toBe("Cave");
+    expect(freePlaceTypeName("canyon", types)).toBe("canyon (2)");
+    expect(
+      freePlaceTypeName("Canyon", [...types, { id: "x", name: "CANYON (2)" }]),
+    ).toBe("Canyon (3)");
+  });
+
+  it("keeps a renamed duplicate inside the length limit", () => {
+    const long = "a".repeat(PLACE_TYPE_NAME_MAX_LENGTH);
+    const renamed = freePlaceTypeName(long, [{ id: "x", name: long }]);
+    expect(renamed).toHaveLength(PLACE_TYPE_NAME_MAX_LENGTH);
+    expect(renamed.endsWith(" (2)")).toBe(true);
   });
 });

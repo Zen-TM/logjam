@@ -14,7 +14,7 @@ import { throttleWrites } from "./_rateLimitGate";
 // still failed, in the hook, with a message about nothing.
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
-import { PLACE_TYPE_COLORS, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import { PLACE_TYPE_COLORS } from "@logjam/shared";
 
 import {
   API_URL,
@@ -321,23 +321,25 @@ describe("foreignFields is owner-private (§2.6)", () => {
 });
 
 describe("copy reconciliation (§2.6 rules 1 and 3)", () => {
-  it("lands a sender's own 'Campsite' on the recipient's SYSTEM Campsite", async () => {
-    // The trap: branching on the sender's type KIND would create a second,
-    // user-owned Campsite for bob — two Campsite tabs, and the zero-places
-    // self-heal never fires because the copy just put a place in the new one.
-    const aliceCampsite = await makeType(ALICE_SUB, "Campsite");
+  // The system-first half of rule 1 (a sender's own "Campsite" lands on the
+  // recipient's built-in) is pinned in shared/src/placeCopy.test.ts: no route
+  // lets a user make a type with a built-in's name any more, so it can only
+  // be reached by rows from before that rule.
+  it("lands a sender's type on the recipient's type of the same name, whatever its case", async () => {
+    // The trap: an exact match would create a second type for bob, and two
+    // tabs that read the same.
+    const stamp = Date.now();
+    const aliceType = await makeType(ALICE_SUB, `Bivvy ${stamp}`);
+    const bobType = await makeType(BOB_SUB, `bivvy  ${stamp}`);
     const place = await makePlace(ALICE_SUB, {
-      placeTypeId: aliceCampsite,
-      name: "Name-matched campsite",
+      placeTypeId: aliceType,
+      name: "Name-matched bivvy",
       latitude: -33.64,
       longitude: 150.34,
     });
     await shareWith(ALICE_SUB, place.id as string, BOB_ID);
 
     const before = await request(API_URL).get("/place-types").set(as(BOB_SUB));
-    const beforeCount = (before.body.types as { name: string }[]).filter(
-      (t) => t.name.toLowerCase() === "campsite",
-    ).length;
 
     const copy = await request(API_URL)
       .post(`/places/${place.id as string}/copy`)
@@ -347,16 +349,13 @@ describe("copy reconciliation (§2.6 rules 1 and 3)", () => {
     expect(copy.status, JSON.stringify(copy.body)).toBe(201);
     createdPlaces.push({ sub: BOB_SUB, id: copy.body.id as string });
 
-    expect(copy.body.placeTypeId).toBe(SYSTEM_PLACE_TYPE_IDS.campsite);
+    expect(copy.body.placeTypeId).toBe(bobType);
     expect(copy.body.createdPlaceType).toBe(false);
 
     const after = await request(API_URL).get("/place-types").set(as(BOB_SUB));
-    expect(
-      (after.body.types as { name: string }[]).filter(
-        (t) => t.name.toLowerCase() === "campsite",
-      ).length,
-      "no second Campsite may appear",
-    ).toBe(beforeCount);
+    expect(after.body.types.length, "no second type may appear").toBe(
+      before.body.types.length,
+    );
   });
 
   it("creates a type only when nothing matches, and says that it did", async () => {

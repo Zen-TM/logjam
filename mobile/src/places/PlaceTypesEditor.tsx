@@ -42,6 +42,8 @@ import {
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
   SETTINGS_LIST,
   type PlaceTypeIconKey,
 } from "@logjam/shared";
@@ -49,7 +51,7 @@ import {
 import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
-import { listMirrorPlaces } from "../sync/mirrorStore";
+import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
 import {
   createPlaceTypeLocal,
   deletePlaceTypeLocal,
@@ -157,14 +159,22 @@ export function usePlaceTypeForm({
 
   const save = useCallback(async () => {
     const name = draft.name.trim();
-    if (!name) {
-      setError("A type needs a name.");
-      return;
-    }
     setError(null);
     setFormError(null);
     setSaving(true);
     try {
+      // Checked against the mirror, so it holds offline. The server keeps a
+      // pushed duplicate under another name rather than refusing it, so this
+      // is the only place the user is told.
+      const nameError = placeTypeNameError(
+        name,
+        await listMirrorPlaceTypes(),
+        editing,
+      );
+      if (nameError) {
+        setError(nameError);
+        return;
+      }
       if (editing) {
         // Field-scoped, so a rename on this phone does not clobber a recolour
         // made on another one.
@@ -254,11 +264,12 @@ export function usePlaceTypeForm({
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
-          // The empty-name requirement is checked on Save (shared/DESIGN.md §11); once
+          // The name is checked on Save (shared/DESIGN.md §11); once
           // shown it clears the moment the field it's about is edited.
           if (error) setError(null);
         }}
         error={error}
+        maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
         autoCapitalize="sentences"
       />
 
