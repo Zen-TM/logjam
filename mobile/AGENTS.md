@@ -36,7 +36,7 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 - **What leaves the device carries ids, not place data:** push payloads and
   crash reports (through `src/sentry/scrubEvent.ts`) never carry a place's
   name, coordinates or fields, and a region-of-interest bbox reaches the
-  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md)
+  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0028](../docs/decisions/0028-vector-map-with-every-signed-in-region.md)
 - **A new dependency can add Android permissions:** block each with
   `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a
