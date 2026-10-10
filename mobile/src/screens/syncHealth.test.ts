@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { relativeTime, syncHealth, type SyncHealthInput } from "./syncHealth";
+import {
+  relativeTime,
+  syncHealth,
+  syncIssuesSubtitle,
+  type SyncHealthInput,
+} from "./syncHealth";
 
 const NOW = Date.parse("2026-07-30T10:00:00.000Z");
 
@@ -317,5 +322,19 @@ describe("syncHealth", () => {
       expect(health.headline).toBe("200 changes waiting to sync");
       expect(health.detail).toContain("when you have signal");
     });
+  });
+});
+
+describe("syncIssuesSubtitle", () => {
+  it("counts what needs the user", () => {
+    expect(syncIssuesSubtitle(1)).toBe("1 change needs you");
+    expect(syncIssuesSubtitle(3)).toBe("3 changes need you");
+  });
+
+  it("claims nothing about the queue when there are no issues", () => {
+    // The row sits under the hero, which may be saying changes are queued or
+    // have waited a day. Mutation: answer "Everything's synced" for zero.
+    expect(syncIssuesSubtitle(0)).toBe("Nothing needs you");
+    expect(syncIssuesSubtitle(0)).not.toMatch(/synced/i);
   });
 });

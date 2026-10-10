@@ -45,7 +45,7 @@ import {
   type Glyph,
   type ToastMessage,
 } from "../ui";
-import { syncHealth, type SyncTone } from "./syncHealth";
+import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
@@ -190,13 +190,7 @@ export function MoreScreen({
             icon="warning"
             hue={issueCount > 0 ? theme.warning : undefined}
             title="Account sync issues"
-            subtitle={
-              issueCount > 0
-                ? issueCount === 1
-                  ? "1 change needs you"
-                  : `${issueCount} changes need you`
-                : "Everything's synced"
-            }
+            subtitle={syncIssuesSubtitle(issueCount)}
             onPress={onOpenSyncIssues}
             right={
               <Trailing

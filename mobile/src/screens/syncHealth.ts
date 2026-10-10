@@ -138,6 +138,18 @@ function lastSyncDetail(lastSyncAt: string | null, now: number): string {
   return `Last synced ${relativeTime(lastSyncAt, now)}.`;
 }
 
+/**
+ * The subtitle of More's "Account sync issues" row. It answers for ISSUES
+ * only: with none it used to say "Everything's synced", directly under a hero
+ * line saying a change had been waiting since Tuesday. Whether everything is
+ * synced is the hero's sentence to say, and this row cannot know it.
+ */
+export function syncIssuesSubtitle(issueCount: number): string {
+  return issueCount > 0
+    ? `${plural(issueCount, "change needs", "changes need")} you`
+    : "Nothing needs you";
+}
+
 export function syncHealth(input: SyncHealthInput): SyncHealth {
   const { online, state, lastSyncAt, pendingCount, issueCount } = input;
   const now = input.now ?? Date.now();
