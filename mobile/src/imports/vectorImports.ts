@@ -15,7 +15,7 @@ import { unzipSync } from "fflate";
 import {
   parseVectorImport,
   IMPORT_ERRORS,
-  pickTrackColorByIndex,
+  pickNextTrackColor,
   MEDIA_EXTENSION_BY_MIME,
   TRACK_MIME_TYPES,
 } from "@logjam/shared";
@@ -30,7 +30,7 @@ import {
   createStandaloneMediaLocal,
   deleteMediaLocal,
 } from "../sync/mediaUpload";
-import { getMediaById } from "../sync/mirrorStore";
+import { getMediaById, listStandaloneMedia } from "../sync/mirrorStore";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { IMPORTS_DIR } from "../offline/localStores";
 import { importDisplayName } from "./importName";
@@ -40,8 +40,16 @@ import { stageIncomingFile } from "./stagedFile";
 // complexity guard, this just refuses to read absurd files into memory.
 const MAX_IMPORT_FILE_BYTES = 30 * 1024 * 1024;
 
-export function pickImportColor(existingCount: number): string {
-  return pickTrackColorByIndex(existingCount);
+/**
+ * The colour a new import gets until the upload lands. It is the server's own
+ * rule (api/src/routes/media.ts runs the same `pickNextTrackColor` over the
+ * account's media), so the confirm usually hands back the colour already
+ * drawn instead of recolouring the line.
+ */
+export function pickImportColor(
+  existingColors: readonly (string | null | undefined)[],
+): string {
+  return pickNextTrackColor(existingColors);
 }
 
 export function randomId(): string {
@@ -120,7 +128,6 @@ export type ImportOutcome =
 export async function importVectorSource(
   sourceUri: string,
   displayName: string,
-  existingCount: number,
   /** Friend this file arrived from, when it came in through "Send a copy". */
   sentBy: string | null = null,
 ): Promise<VectorImport> {
@@ -138,7 +145,7 @@ export async function importVectorSource(
     scratchName: `vector-incoming-${randomId()}`,
   });
   try {
-    return await parseAndStore(staged.uri, displayName, existingCount, sentBy);
+    return await parseAndStore(staged.uri, displayName, sentBy);
   } finally {
     if (staged.scratch) {
       await FileSystem.deleteAsync(staged.scratch, { idempotent: true }).catch(
@@ -151,7 +158,6 @@ export async function importVectorSource(
 async function parseAndStore(
   sourceUri: string,
   displayName: string,
-  existingCount: number,
   sentBy: string | null,
 ): Promise<VectorImport> {
   let sourceName = displayName;
@@ -208,7 +214,12 @@ async function parseAndStore(
       displayName: name,
       // A local guess so the line draws before the upload lands; the server
       // reassigns authoritatively at confirm (see finalizeConfirmed).
-      color: pickImportColor(existingCount),
+      color: pickImportColor(
+        [
+          ...(await listStandaloneMedia("import")),
+          ...(await listStandaloneMedia("track")),
+        ].map((m) => m.color),
+      ),
       metadata: {
         bbox: parsed.bbox,
         featureCount: parsed.features.length,
@@ -262,9 +273,7 @@ function sourceExtension(sourceName: string): "gpx" | "kml" | "geojson" {
  * (static messages); returns `cancelled` when the user backs out of the
  * picker.
  */
-export async function importVectorFileFromPicker(
-  existingCount: number,
-): Promise<ImportOutcome> {
+export async function importVectorFileFromPicker(): Promise<ImportOutcome> {
   const picked = await DocumentPicker.getDocumentAsync({
     // GPX/KML MIME types are inconsistent across Android file providers —
     // accept everything and let the extension-dispatching parser decide.
@@ -276,7 +285,7 @@ export async function importVectorFileFromPicker(
     return { status: "cancelled" };
   }
   const asset = picked.assets[0];
-  const record = await importVectorSource(asset.uri, asset.name, existingCount);
+  const record = await importVectorSource(asset.uri, asset.name);
   return { status: "imported", record };
 }
 

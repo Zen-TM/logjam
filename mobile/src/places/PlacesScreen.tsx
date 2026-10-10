@@ -14,7 +14,7 @@
 // renders from too. Filtering shares its predicate (`passesPlaceFilters`).
 //
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
-// location detail (docs/ux-principles.md §13). Nothing here is logged, and the failure paths
+// location detail (shared/DESIGN.md §13). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a place name.
 import { numericFieldValue } from "@logjam/shared";
 import {
@@ -57,6 +57,8 @@ import {
   placeDeleteConfirm,
   placesCountLabel,
   placesEmptyKind,
+  placeTypeHasTab,
+  isSystemPlaceTypeId,
   listSelectionLabel,
   placesEmptyState,
   placesFilterNote,
@@ -179,6 +181,14 @@ export function PlacesScreen({
 
   const [bucket, setBucket] = useState<Bucket>("all");
   const [findOpen, setFindOpen] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  // Focused on the next frame, once the row has mounted: `autoFocus` runs
+  // before the field is attached (mobile/DESIGN.md §4).
+  useEffect(() => {
+    if (!findOpen) return;
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [findOpen]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
@@ -267,7 +277,7 @@ export function PlacesScreen({
     setToast({ text, tone: "error", nonce: toastNonce.current });
   }, []);
 
-  // Sheets don't outlive the tab (DESIGN.md §5) — with ONE exception, and it is
+  // Sheets don't outlive the tab (DESIGN.md) — with ONE exception, and it is
   // the same focus effect because the two must not race: arriving back from the
   // point picker is not "the user came to this tab", it is the second half of
   // something they started here. `takePickedPoint` consumes the answer, so a
@@ -378,7 +388,7 @@ export function PlacesScreen({
     isDeletable: (place) => place.syncRole === "owner",
   });
   // A selection is a transient mode over rows you can see; a pending "delete
-  // these five" you no longer remember making is a stale prompt (DESIGN.md §5).
+  // these five" you no longer remember making is a stale prompt (DESIGN.md).
   useFocusEffect(
     useCallback(() => {
       clearSelection();
@@ -452,10 +462,9 @@ export function PlacesScreen({
   // permanent control, because "which kind of place am I looking at" is the
   // question people arrive with (§5.4).
   //
-  // MEMBERSHIP is decided over the whole collection, not the filtered view: a
-  // type with no places at all never appears (a canyoner should not be offered
-  // a Campsite tab they have never used), but a tab does NOT come and go as the
-  // user types — the bucket rail's rule, for the same reason.
+  // MEMBERSHIP is `placeTypeHasTab`, decided over the whole collection, not
+  // the filtered view: a tab does NOT come and go as the user types — the
+  // bucket rail's rule, for the same reason.
   const typeTotals = useMemo(() => {
     const counts = new Map<string, number>();
     for (const place of places) {
@@ -494,7 +503,12 @@ export function PlacesScreen({
     () => [
       { value: ALL_TYPES, label: copy.anyType, count: withoutType.length },
       ...placeTypes
-        .filter((type) => (typeTotals.get(type.id) ?? 0) > 0)
+        .filter((type) =>
+          placeTypeHasTab({
+            builtIn: isSystemPlaceTypeId(type.id),
+            places: typeTotals.get(type.id) ?? 0,
+          }),
+        )
         .map((type) => ({
           value: type.id,
           label: type.name,
@@ -521,7 +535,7 @@ export function PlacesScreen({
    * notices they want a new type, and Settings is three taps and a different
    * mental mode away. The chip is drawn last so it never moves as types come
    * and go, and it is an action rather than a selectable value — `selectType`
-   * intercepts it (DESIGN.md §5: a control that changes mode says so by what it
+   * intercepts it (DESIGN.md: a control that changes mode says so by what it
    * does, not by looking different).
    */
   const railOptions: ChipOption<string>[] = useMemo(
@@ -556,6 +570,7 @@ export function PlacesScreen({
   }, []);
 
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet === "placeTypeForm",
     editing: null,
     onSaved: info,
     onDone: () => setSheet(null),
@@ -634,7 +649,7 @@ export function PlacesScreen({
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
   // Stable identities so the memoised rows never re-render for a state change
-  // that has nothing to do with them (DESIGN.md §7).
+  // that has nothing to do with them (DESIGN.md).
   const openPlace = useCallback(
     (place: MirrorPlace) => onOpenPlace(place),
     [onOpenPlace],
@@ -745,7 +760,7 @@ export function PlacesScreen({
       >
         {/* One slot, two uses: the tick-list meter is the answer you came for,
             and the search row replaces it in place so opening search doesn't
-            shove the list down (DESIGN.md §2). */}
+            shove the list down (DESIGN.md). */}
         {findOpen ? (
           <View style={styles.findRow}>
             <View style={styles.searchWrap}>
@@ -757,8 +772,8 @@ export function PlacesScreen({
                 placeholder={copy.searchPlaceholder}
                 placeholderTextColor={theme.textMuted}
                 accessibilityLabel={copy.searchField}
+                ref={searchInputRef}
                 autoCapitalize="none"
-                autoFocus
                 returnKeyType="search"
               />
             </View>
@@ -794,7 +809,7 @@ export function PlacesScreen({
           one yet would have hidden the affordance from everyone who needs it. */}
         {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
           ~52pt of chrome out from under the finger that had just long-pressed a
-          row, sliding every row up mid-gesture — the same jump DESIGN.md §5
+          row, sliding every row up mid-gesture — the same jump DESIGN.md
           fixed once for the bucket rail. A filter that cannot be changed during
           a selection still has to say what the selection is drawn from. */}
         <View
@@ -1171,7 +1186,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.regular,
   },
-  // The rail's bottom pad is the gap the list scrolls against (DESIGN.md §2).
+  // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   // The type rail sits directly under the hero and carries the bucket rail's
   // top padding, so the pair reads as one block rather than two stacked bars.
   typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },

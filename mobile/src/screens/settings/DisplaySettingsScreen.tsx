@@ -4,7 +4,7 @@
 // module constants snapshotted by ~45 `StyleSheet.create` calls at import time,
 // so repainting a running app means a provider plus a style factory in every one
 // of those files — a large diff across every screen already built, for a
-// preference people set once (DESIGN.md §1).
+// preference people set once (DESIGN.md).
 //
 // The theme is the one preference here with an account copy: it is a single
 // scalar with no merge hazard, and a scheme picked in a browser is what this

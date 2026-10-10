@@ -3,7 +3,11 @@
 // mount this BEFORE the place sources so places stay on top.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
-import type { RecordedTrackPoint } from "@logjam/shared";
+import {
+  trackPassesNear,
+  type RecordedTrackPoint,
+  type TrackPass,
+} from "@logjam/shared";
 
 import { listTrackPoints, type Track } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
@@ -13,6 +17,16 @@ import { stopSourcePress } from "../map/sourcePress";
 /** Where on the map a press landed — passed through so a caller can place a
  *  point there when a tool is armed (the layer swallowed the press first). */
 export type TrackPressCoordinates = { latitude: number; longitude: number };
+
+/**
+ * A press on a track: the track, where the press landed, and when the track
+ * was at that spot (empty for a press that is not asking, see MapScreen).
+ */
+export type TrackPressHandler = (
+  track: Track,
+  coordinates?: TrackPressCoordinates,
+  passes?: TrackPass[],
+) => void;
 
 // Stable identity for "no points loaded yet" — a fresh [] per render would
 // defeat TrackLine's memo.
@@ -35,7 +49,7 @@ const TrackLine = memo(function TrackLine({
   track: Track;
   stored: RecordedTrackPoint[];
   liveCoord: [number, number] | null;
-  onPress: (track: Track, coordinates?: TrackPressCoordinates) => void;
+  onPress: TrackPressHandler;
 }) {
   const tail = track.state === "recording" ? liveCoord : null;
   const shape = useMemo(() => {
@@ -71,7 +85,13 @@ const TrackLine = memo(function TrackLine({
       onPress={(event) => {
         stopSourcePress(event);
         const [longitude, latitude] = event.nativeEvent.lngLat;
-        onPress(track, { latitude, longitude });
+        // The stored points are already in memory for the line, so the
+        // answer costs one pass over them and no read.
+        onPress(
+          track,
+          { latitude, longitude },
+          trackPassesNear(stored, { lat: latitude, lon: longitude }),
+        );
       }}
     >
       <Layer
@@ -119,7 +139,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   showTracks: boolean;
   /** Tapping a recorded line opens its options. Stable identity required —
    *  TrackLine is memoised against MapScreen's compass-rate re-render. */
-  onTrackPress: (track: Track, coordinates?: TrackPressCoordinates) => void;
+  onTrackPress: TrackPressHandler;
 }) {
   const visibleTracks = tracks.filter(
     (track) => track.visible && (track.state !== "done" || showTracks),

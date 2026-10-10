@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { dateSummary, formatDateKey } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, formRhythm, spacing, theme } from "../theme";
 import { Chip } from "./Chip";
 
 /**
@@ -62,7 +62,7 @@ function shortDate(key: string): string {
 }
 
 const styles = StyleSheet.create({
-  block: { gap: spacing(0.75) },
+  block: { gap: formRhythm.label },
   header: {
     flexDirection: "row",
     alignItems: "center",

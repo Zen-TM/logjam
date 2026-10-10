@@ -10,6 +10,7 @@ import {
   RESERVED_FIELD_KEYS,
   SHARED_PLACE_COLOR,
   isReservedFieldKey,
+  isSystemPlaceTypeId,
   isInternalFieldValueKey,
   SOURCES_FIELD_KEY,
   systemRowIds,
@@ -32,6 +33,17 @@ describe("system row ids", () => {
       expect(isUuidV4(id), `${id} is not a UUIDv4`).toBe(true);
     }
     expect(() => assertSystemIdsAreUuidV4()).not.toThrow();
+  });
+
+  // A type made on a phone has no owner until it syncs, so "no owner" cannot
+  // be the test for a built-in there. The pinned ids can.
+  it("are what makes a place type a built-in", () => {
+    for (const type of SYSTEM_PLACE_TYPES) {
+      expect(isSystemPlaceTypeId(type.id)).toBe(true);
+    }
+    expect(isSystemPlaceTypeId("3f0c1a52-7c1e-4b0a-9f55-0d6f1f1f2a10")).toBe(
+      false,
+    );
   });
 
   it("are distinct", () => {

@@ -36,10 +36,10 @@ const router = Router();
 // GET /place-types — the types this user can put a place into, system first.
 //
 // Carries `placeCount` because the clients need it for TWO rules that would
-// otherwise each cost a query per type: a type with zero places is hidden from
-// the tab bar and the map layers panel (but ALWAYS offered in the create-a-place
-// picker, or you could never make your first canyon), and a type with places in
-// it cannot be deleted.
+// otherwise each cost a query per type: a built-in with zero places is hidden
+// from the tab bar (`placeTypeHasTab`) and any empty type from the map layers
+// panel (but ALWAYS offered in the create-a-place picker, or you could never
+// make your first canyon), and a type with places in it cannot be deleted.
 //
 // This is the owner's own count over their own places, so it is not the
 // owner-private-aggregate case — there is no sharee who can reach this route.
