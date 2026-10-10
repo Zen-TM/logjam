@@ -37,6 +37,7 @@ import {
 } from "react-native";
 import {
   drawsYoursHeading,
+  isSystemPlaceTypeId,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
@@ -47,6 +48,7 @@ import {
 
 import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
+import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces } from "../sync/mirrorStore";
 import {
   createPlaceTypeLocal,
@@ -68,10 +70,11 @@ import { placeTypeGlyph } from "./placeTypeIcon";
 
 const copy = SETTINGS_LIST.copy;
 
-/** A type nobody owns is a built-in: not renameable, not deletable. Same rule
- *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
+/** A built-in: not renameable, not deletable. By pinned id, never by a missing
+ *  owner: a type made on this phone has no owner here until it syncs
+ *  (`sync/placeTypeCreate.test.ts`). */
 export function isSystemPlaceType(type: MirrorPlaceType): boolean {
-  return type.ownerId === null;
+  return isSystemPlaceTypeId(type.id);
 }
 
 export function PlaceTypeList({
@@ -122,16 +125,20 @@ export function PlaceTypeList({
  * that a save button inside the scroll would not be on screen.
  */
 export function usePlaceTypeForm({
+  open,
   editing,
   onSaved,
   onDone,
 }: {
+  /** Whether the host is showing the form: each open starts a fresh draft
+   *  (`placeTypeFormKey`). */
+  open: boolean;
   /** null = adding. */
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
-  const formKey = editing?.id ?? "__new__";
+  const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
   if (seededFor !== formKey) {
