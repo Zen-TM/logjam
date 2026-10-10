@@ -201,8 +201,6 @@ export function usePlaceTypeForm({
           color: draft.color,
         });
         added = { id, name };
-        // The next open of this form is another new type, not this one again.
-        setDraft(seedDraft(null));
       }
       if (added && stepAfterPlaceTypeSave(added !== null) === "attributes") {
         onAdded(added);
