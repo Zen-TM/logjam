@@ -2,7 +2,7 @@
 // made, and the templates they are made from.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (docs/ux-principles.md §2). Its hero counts the finished GeoPDFs; a TAB each for the maps
+// (shared/DESIGN.md §2). Its hero counts the finished GeoPDFs; a TAB each for the maps
 // and the templates they are made from; and what is still being made pinned
 // under both. It was two buttons, a stack of job ribbons and two accordions
 // that opened closed — so the page's own answer was behind a click — and then
@@ -11,7 +11,7 @@
 //
 // A GeoPDF's body DOWNLOADS it. A PDF has nowhere in this app to open to — the
 // list view carries no extent to centre the map on — and in a browser opening a
-// PDF is fetching it. Its ⋯ holds every verb, Download first (DESIGN.md §3).
+// PDF is fetching it. Its ⋯ holds every verb, Download first (DESIGN.md).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { removeShareConfirm } from "@logjam/shared";
 import {
@@ -66,7 +66,7 @@ export default function GeoPdfsPanel({
   geoPdfJobsRefetch,
   friends,
 }: {
-  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md §2). */
+  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -151,7 +151,7 @@ export default function GeoPdfsPanel({
       : [];
     // Owner-only: a GeoPDF shared with you is yours to read and download, not
     // to share on or delete, and the API answers both with 403 — so they are
-    // absent rather than offered and refused (DESIGN.md §5).
+    // absent rather than offered and refused (DESIGN.md).
     if (job.syncRole === "owner") {
       return [
         ...download,
@@ -395,7 +395,7 @@ export default function GeoPdfsPanel({
             );
           })}
           {/* The server caps the list; say so rather than letting older GeoPDFs
-            quietly not exist (docs/ux-principles.md §11). */}
+            quietly not exist (shared/DESIGN.md §11). */}
           {jobsTotal != null && jobsTotal > jobs.length && (
             <p className={classes.note}>
               Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}.

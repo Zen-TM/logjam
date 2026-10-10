@@ -4,7 +4,7 @@
 // A SIDE SHEET beside the LiDAR topos view, not an accordion inside it. These
 // are styles someone tunes by watching the map change, and a sheet beside the
 // panel leaves the map in view and live — the reason filters open that way too
-// (DESIGN.md §2). It was an accordion at the bottom of the page with its own
+// (DESIGN.md). It was an accordion at the bottom of the page with its own
 // Contours | Features tab strip, so a colour change happened with the map's
 // answer scrolled out of sight.
 //
@@ -171,7 +171,7 @@ function StyleForm({
                 name={label}
                 hint={OSM_FEATURE_TAG_HINTS[key]}
                 // Present while off, not removed: the style is kept for when
-                // the feature comes back on (DESIGN.md §5).
+                // the feature comes back on (DESIGN.md).
                 enabled={style.enabled}
                 onEnabledChange={(enabled) => setFeature(key, { enabled })}
               >

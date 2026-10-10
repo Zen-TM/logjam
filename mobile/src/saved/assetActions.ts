@@ -1,5 +1,5 @@
 // The three verbs every saved asset supports — *show on map*, *rename*,
-// *delete* — as one descriptor per kind (DESIGN.md §5: uniformity is the
+// *delete* — as one descriptor per kind (DESIGN.md: uniformity is the
 // feature).
 //
 // This exists because SEVERAL surfaces offer them, and two copies of "what does
@@ -43,6 +43,7 @@ import { deleteVectorImport } from "../imports/vectorImports";
 import {
   deleteMediaLocal,
   linkStandaloneMediaLocal,
+  recolourStandaloneMediaLocal,
   renameStandaloneMediaLocal,
 } from "../sync/mediaUpload";
 import {
@@ -335,13 +336,14 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     // Renaming an import is a change to the FILE, not to this phone's view of
     // it, so it goes through the media row and reaches every device.
     rename: (name) => renameStandaloneMediaLocal(imported.id, name),
+    setColor: (color) => recolourStandaloneMediaLocal(imported.id, color),
     exports: [
       ...originalRow,
       // A GeoJSON source ships its own bytes; anything else ships the derived
       // collection, which is all the GeoJSON there is. Withheld entirely when
       // NEITHER is on this phone — a file that synced as a row but has not been
       // downloaded here has nothing to export, and the row that can only fail
-      // is absent rather than offered (DESIGN.md §5).
+      // is absent rather than offered (DESIGN.md).
       ...(geoJsonSource(imported, sourceFormat)
         ? [
             {

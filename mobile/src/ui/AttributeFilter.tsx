@@ -14,7 +14,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, formRhythm, spacing, theme } from "../theme";
 import { Chip } from "./Chip";
 import { DateRangeFilter } from "./DateRangeFilter";
 import { RangePills } from "./RangePills";
@@ -302,7 +302,7 @@ function ThresholdFilter({
 }
 
 const styles = StyleSheet.create({
-  block: { gap: spacing(0.75) },
+  block: { gap: formRhythm.label },
   blockHeader: {
     flexDirection: "row",
     alignItems: "center",

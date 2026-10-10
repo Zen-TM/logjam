@@ -16,11 +16,16 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   A release APK for a device is only `./scripts/build-local-apk.sh`.
 - A second identity: `EXPO_PUBLIC_FAKE_SUB=fake-bob-sub` (dev only, baked into
   the bundle).
+- **A phone that holds a real Logjam GPS gets the dev variant:**
+  `LOGJAM_APP_VARIANT=dev` at prebuild, for Metro and for `dev:android` builds
+  `com.logjamnsw.mobile.dev` ("Logjam Dev", scheme `logjamdev`), which installs
+  beside it. A dev build under the real id replaces that app, and signing in
+  as another user wipes its local data. Guard: `src/appVariant.test.ts`.
 
 ## Rules
 
-- **UI work loads the `design-system` skill**: a screen, sheet, kit
-  component, icon, colour or user-facing string.
+- **Before UI work, read `shared/DESIGN.md` then `DESIGN.md` here**: a screen,
+  sheet, kit component, icon, colour or user-facing string.
 - **Map code follows the MLRN 11 rules:** read [0015](../docs/decisions/0015-mlrn-11-map-interaction-rules.md)
   before changing a layer, a press handler or a camera write.
 - **A guest syncs nothing yet:** gate a new server call through
@@ -36,7 +41,7 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 - **What leaves the device carries ids, not place data:** push payloads and
   crash reports (through `src/sentry/scrubEvent.ts`) never carry a place's
   name, coordinates or fields, and a region-of-interest bbox reaches the
-  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0028](../docs/decisions/0028-vector-map-with-every-signed-in-region.md)
+  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0029](../docs/decisions/0029-vector-map-with-every-signed-in-region.md)
 - **A new dependency can add Android permissions:** block each with
   `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a

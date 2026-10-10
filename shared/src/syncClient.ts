@@ -41,6 +41,55 @@ export function isTransientSyncError(code: number): boolean {
   );
 }
 
+/** Failures an op must collect before it can be handed to the user. */
+export const SYNC_GIVE_UP_FAILURES = 5;
+/** How long a TEMPORARY failure must have lasted before it is. */
+export const SYNC_GIVE_UP_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/** An op's failures that came with an answer, and when the first one did. */
+export type SyncFailureTally = { failures: number; since: string };
+
+/**
+ * Count one more answered failure. `previous` is whatever the op's last error
+ * record held, so a record written before the tally existed starts a new one.
+ *
+ * A request that got NO answer (a timeout, a reset connection) is never passed
+ * here: it says something about the link and nothing about the op.
+ */
+export function tallySyncFailure(
+  previous: unknown,
+  now: Date,
+): SyncFailureTally {
+  const prior = (previous ?? {}) as Partial<SyncFailureTally>;
+  const known =
+    typeof prior.failures === "number" && typeof prior.since === "string";
+  return {
+    failures: (known ? (prior.failures as number) : 0) + 1,
+    since: known ? (prior.since as string) : now.toISOString(),
+  };
+}
+
+/**
+ * Whether an op that keeps failing becomes the user's problem.
+ *
+ * A temporary failure (`isTransientSyncError`) needs the count AND the window.
+ * The count alone parked every queued upload after about a minute on a bad
+ * link, because the retry ladder starts at one second; the window alone would
+ * park an op for two refusals a day apart. Anything else has no reason to get
+ * better with time, so the count decides.
+ */
+export function shouldGiveUpOnSyncOp(
+  tally: SyncFailureTally,
+  transient: boolean,
+  now: Date,
+): boolean {
+  if (tally.failures < SYNC_GIVE_UP_FAILURES) return false;
+  return (
+    !transient ||
+    now.getTime() - Date.parse(tally.since) >= SYNC_GIVE_UP_AFTER_MS
+  );
+}
+
 export type OutboxEntry = {
   /** Local monotonic FIFO sequence — never reordered (§8.2). */
   seq: number;
@@ -223,16 +272,44 @@ export function selectFlushBatch(
 // the base row, so a receipt whose serverValue equals the client's own base
 // value is a self-conflict (nobody else touched the field) and is dropped
 // before shelving.
+//
+// So is a receipt whose serverValue is what this op WROTE. That happens when
+// the reply to a push is lost and the op is sent again: the row already holds
+// the op's values under a newer updatedAt, and the server compares by
+// serialisation, so a value it stores differently from how it arrived (jsonb
+// reorders keys, names are trimmed) reads as replaced.
+
+/** Serialised for comparison: key order and outer whitespace don't count. */
+function comparable(value: unknown): string {
+  return JSON.stringify(value ?? null, (_key, inner: unknown) => {
+    if (typeof inner === "string") return inner.trim();
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      const record = inner as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.keys(record)
+          .sort()
+          .map((key) => [key, record[key]]),
+      );
+    }
+    return inner;
+  });
+}
 
 export function filterSelfConflicts(
   receipts: SyncConflictReceipt[],
   baseRow: Record<string, unknown>,
+  ownFields: Record<string, unknown> = {},
 ): SyncConflictReceipt[] {
-  return receipts.filter(
-    (receipt) =>
-      JSON.stringify(receipt.serverValue ?? null) !==
-      JSON.stringify(baseRow[receipt.field] ?? null),
-  );
+  return receipts.filter((receipt) => {
+    const server = comparable(receipt.serverValue);
+    return (
+      server !== comparable(baseRow[receipt.field]) &&
+      !(
+        receipt.field in ownFields &&
+        server === comparable(ownFields[receipt.field])
+      )
+    );
+  });
 }
 
 // ── Rebase-on-pull (§8.5) ────────────────────────────────────────────────────

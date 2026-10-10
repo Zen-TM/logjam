@@ -1,4 +1,4 @@
-# 0028. A signed-in region save always includes the vector map; a guest's never does
+# 0029. A signed-in region save always includes the vector map; a guest's never does
 
 - **Date:** 2026-10-10
 - **Status:** Accepted

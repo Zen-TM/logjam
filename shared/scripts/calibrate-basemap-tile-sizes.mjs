@@ -32,7 +32,7 @@ const SOURCES = [
   { id: "six-base", url: six("NSW_Base_Map"), minZoom: 12, maxZoom: 18 },
   { id: "six-imagery", url: six("NSW_Imagery"), minZoom: 12, maxZoom: 18 },
   // The DEM the offline elevation download saves. ONE zoom, because that is the
-  // only level anything reads it at (DEM_TILE_ZOOM in src/demTiles.ts) — a
+  // only level anything reads it at (`sampleZoom` in src/demSources.ts) — a
   // pyramid would be tiles nothing ever opens.
   {
     id: "terrarium",

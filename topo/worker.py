@@ -331,6 +331,16 @@ def delete_s3_prefix_best_effort(prefix: str):
         log.warning(f"Best-effort cleanup of {prefix} failed: {e}")
 
 
+def delete_input_zip_best_effort(key: str):
+    """Delete the uploaded ELVIS ZIP. Never raises: a leftover is a storage
+    cost, not a reason to change the job's outcome."""
+    try:
+        s3.delete_object(Bucket=BUCKET, Key=key)
+        log.info(f"Deleted input ZIP {key}")
+    except Exception as e:
+        log.warning(f"Failed to delete input ZIP {key}: {e}")
+
+
 def get_job(conn, job_id: str) -> dict:
     with conn.cursor() as cur:
         cur.execute("SELECT * FROM topo_jobs WHERE id = %s", (job_id,))
@@ -869,11 +879,7 @@ def main():
                 if isinstance(output_tile_count, int):
                     extra["output_tile_count"] = output_tile_count
 
-        try:
-            s3.delete_object(Bucket=BUCKET, Key=job["s3_input_key"])
-            log.info(f"Deleted input ZIP {job['s3_input_key']}")
-        except Exception as e:
-            log.warning(f"Failed to delete input ZIP {job['s3_input_key']}: {e}")
+        delete_input_zip_best_effort(job["s3_input_key"])
 
         # Status flip + storage increment committed together (ARCH-009).
         # Guarded on `processing` (Design L1): if the job was reaped or
@@ -937,6 +943,8 @@ def main():
             return
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
         error_text = safe_error_message(e)
+        # Retry is a new job with a new upload, so nothing reuses this ZIP.
+        delete_input_zip_best_effort(job["s3_input_key"])
         updated = update_status(
             conn,
             JOB_ID,
