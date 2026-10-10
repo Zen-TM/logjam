@@ -135,6 +135,7 @@ export function SettingsScreen({
 
   const placeTypes = useMirrorPlaceTypes();
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet.kind === "placeTypeForm",
     editing: sheet.kind === "placeTypeForm" ? sheet.editing : null,
     onSaved: (message) => notify(message),
     onDone: () => setSheet({ kind: "placeTypes" }),
