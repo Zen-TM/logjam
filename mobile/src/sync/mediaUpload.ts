@@ -22,7 +22,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { markNoResponse } from "../api/noResponse";
+import { markTransferCut } from "../api/noResponse";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
@@ -517,7 +517,7 @@ async function putFile(
   const result = await uploadToPresignedUrl(url, fileUri, {
     "Content-Type": contentType,
   }).catch((err: unknown) => {
-    throw markNoResponse(err);
+    throw markTransferCut(err);
   });
   if (result.status < 200 || result.status >= 300) {
     throw Object.assign(new Error(`Upload failed (${result.status})`), {

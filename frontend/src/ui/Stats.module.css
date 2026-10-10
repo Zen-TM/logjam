@@ -120,7 +120,7 @@
 
 .statValue {
   margin: 0;
-  font-size: var(--font-lg);
-  font-weight: 600;
+  font-size: var(--text-stat-value-size);
+  font-weight: var(--text-stat-value-weight);
   color: var(--color-text);
 }

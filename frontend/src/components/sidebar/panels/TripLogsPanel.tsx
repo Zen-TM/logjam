@@ -125,7 +125,7 @@ function TripLogsPanel({
   onQuotaChanged: () => void;
   onRefetchPlaces: () => void;
   onOpenUnifiedImport: () => void;
-  /** A trip is READ on its own page (DESIGN.md §4), not in a dialog. */
+  /** A trip is READ on its own page (DESIGN.md), not in a dialog. */
   onOpenTrip: (tripLogId: string) => void;
   /** The date sheet is open beside the panel, so the map's chrome slides clear. */
   onFiltersOpenChange: (open: boolean) => void;
@@ -743,7 +743,7 @@ function TripLogsPanel({
     typeRail,
     // The hidden filters, said out loud: the rail and the search box show
     // their own state where they stand, so this speaks only for what the
-    // closed sheet is doing (DESIGN.md §2).
+    // closed sheet is doing (DESIGN.md).
     filterNote: note != null && !sheetOpen && !selecting && (
       <div className={classes.strip}>
         <span className={classes.stripText}>{note}</span>

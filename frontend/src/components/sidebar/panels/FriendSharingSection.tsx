@@ -13,7 +13,7 @@
 // `buildShareCards` in @logjam/shared, the same call Logjam GPS makes.
 //
 // SELECTION, LIKE EVERY OTHER LIST THAT ACTS IN BULK. The tile is the checkbox
-// and the bar takes the rail's place at the same height (DESIGN.md §5), as on
+// and the bar takes the rail's place at the same height (DESIGN.md), as on
 // Places, Logs and the Inbox — and as on Logjam GPS's own FriendSharesScreen,
 // which is the screen this one mirrors. It shipped instead with a per-row verb
 // and one "Unshare all", which is the shape to notice: an all-or-nothing bulk

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { relativeTime, syncHealth, type SyncHealthInput } from "./syncHealth";
+import {
+  relativeTime,
+  syncHealth,
+  syncIssuesSubtitle,
+  type SyncHealthInput,
+} from "./syncHealth";
 
 const NOW = Date.parse("2026-07-30T10:00:00.000Z");
 
@@ -53,6 +58,79 @@ describe("syncHealth", () => {
     expect(health.tone).toBe("ok");
     expect(health.headline).toBe("Everything's synced");
     expect(health.detail).toBe("You're offline, and nothing is waiting.");
+  });
+
+  describe("changes that have gone a day unanswered", () => {
+    // Local-time instants, so the weekday holds in whatever zone runs this.
+    const now = new Date(2026, 9, 10, 9, 0).getTime(); // Saturday 10 October
+    const tuesday = new Date(2026, 9, 6, 13, 0).toISOString();
+
+    it("says how many and since when, and asks nothing of the reader", () => {
+      const health = syncHealth(
+        input({ pendingCount: 3, state: "error", waitingSince: tuesday, now }),
+      );
+      expect(health).toEqual({
+        headline: "3 changes have been waiting since Tuesday",
+        detail: "Logjam GPS keeps trying.",
+        tone: "pending",
+      });
+    });
+
+    it("holds that sentence while the next try is running", () => {
+      // Otherwise the line flips to "Sending 3 changes…" for the length of
+      // every timeout, which is the optimistic label this branch replaces.
+      const health = syncHealth(
+        input({
+          pendingCount: 1,
+          state: "syncing",
+          waitingSince: tuesday,
+          now,
+        }),
+      );
+      expect(health.headline).toBe("1 change has been waiting since Tuesday");
+    });
+
+    it("names the date once the weekday would be ambiguous", () => {
+      const health = syncHealth(
+        input({
+          pendingCount: 2,
+          waitingSince: new Date(2026, 8, 28, 13, 0).toISOString(),
+          now,
+        }),
+      );
+      expect(health.headline).toBe(
+        "2 changes have been waiting since 28 September",
+      );
+    });
+
+    it("says yesterday for yesterday", () => {
+      const health = syncHealth(
+        input({
+          pendingCount: 2,
+          waitingSince: new Date(2026, 9, 9, 8, 0).toISOString(),
+          now,
+        }),
+      );
+      expect(health.headline).toBe(
+        "2 changes have been waiting since yesterday",
+      );
+    });
+
+    it("gives way to offline, to an empty queue and to a change that needs the user", () => {
+      expect(
+        syncHealth(
+          input({ pendingCount: 3, online: false, waitingSince: tuesday, now }),
+        ).headline,
+      ).toBe("3 changes waiting to sync");
+      expect(syncHealth(input({ waitingSince: tuesday, now })).headline).toBe(
+        "Everything's synced",
+      );
+      expect(
+        syncHealth(
+          input({ pendingCount: 3, issueCount: 1, waitingSince: tuesday, now }),
+        ).headline,
+      ).toBe("1 change needs you");
+    });
   });
 
   it("promises signal, not progress, while offline with a queue", () => {
@@ -244,5 +322,19 @@ describe("syncHealth", () => {
       expect(health.headline).toBe("200 changes waiting to sync");
       expect(health.detail).toContain("when you have signal");
     });
+  });
+});
+
+describe("syncIssuesSubtitle", () => {
+  it("counts what needs the user", () => {
+    expect(syncIssuesSubtitle(1)).toBe("1 change needs you");
+    expect(syncIssuesSubtitle(3)).toBe("3 changes need you");
+  });
+
+  it("claims nothing about the queue when there are no issues", () => {
+    // The row sits under the hero, which may be saying changes are queued or
+    // have waited a day. Mutation: answer "Everything's synced" for zero.
+    expect(syncIssuesSubtitle(0)).toBe("Nothing needs you");
+    expect(syncIssuesSubtitle(0)).not.toMatch(/synced/i);
   });
 });

@@ -221,6 +221,59 @@ describe("sync push — FIFO batch lifecycle", () => {
 });
 
 describe("sync push — conflicts (§6)", () => {
+  // The reply to a push can be lost after the write landed, and the phone
+  // sends the op again with its original base. A canyon-linked trip is
+  // force-tagged, so the stored types are not the ones the op carried.
+  // Mutation: compare the op's raw `types` instead of the types it writes.
+  it("a replayed trip update whose types the server rewrote owes no receipt", async () => {
+    const placeId = randomUUID();
+    const tripId = randomUUID();
+    const created = await push(ALICE_SUB, [
+      {
+        opId: randomUUID(),
+        entity: "place",
+        op: "create",
+        id: placeId,
+        fields: {
+          placeTypeId: CANYON_TYPE_ID,
+          name: "Replay place",
+          latitude: -33.65,
+          longitude: 150.25,
+        },
+      },
+      {
+        opId: randomUUID(),
+        entity: "tripLog",
+        op: "create",
+        id: tripId,
+        fields: { date: "2026-07-12", placeIds: [placeId] },
+      },
+    ]);
+    const base = created.body.results[1].row.updatedAt;
+    const update = {
+      opId: randomUUID(),
+      entity: "tripLog",
+      op: "update",
+      id: tripId,
+      baseUpdatedAt: base,
+      fields: { types: ["hiking"], displayName: " Replay trip " },
+    };
+    try {
+      const first = await push(ALICE_SUB, [update]);
+      expect(first.body.results[0].status).toBe("applied");
+      expect(first.body.results[0].row.types).toEqual(["hiking", "canyoning"]);
+
+      const replay = await push(ALICE_SUB, [update]);
+      expect(replay.body.results[0].status).toBe("applied");
+      expect(replay.body.results[0].conflicts).toBeUndefined();
+    } finally {
+      await push(ALICE_SUB, [
+        { opId: randomUUID(), entity: "tripLog", op: "delete", id: tripId },
+        { opId: randomUUID(), entity: "place", op: "delete", id: placeId },
+      ]);
+    }
+  });
+
   it("stale base + server-differing field → appliedWithConflict, last flush wins, receipt carries the overwritten value", async () => {
     const placeId = randomUUID();
     await push(ALICE_SUB, [

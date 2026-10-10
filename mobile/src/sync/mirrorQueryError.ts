@@ -8,7 +8,7 @@ import type { SyncStatus } from "./syncEngine";
  * narrower than "the last cycle failed".
  *
  * `unreachable` — offline, a 5xx — is not an error a screen should report. Offline is a normal state for this app
- * (DESIGN.md §8), the status persists between attempts so it is true for as
+ * (DESIGN.md), the status persists between attempts so it is true for as
  * long as the user has no signal, and the message ("Couldn't sync. Will
  * retry.") offers nothing to do about it. It was a permanent full-screen
  * `ErrorState` in front of Places and Logs on a first run with no signal —

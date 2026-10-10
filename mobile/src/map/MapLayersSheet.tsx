@@ -10,9 +10,9 @@
 //   Layers   — what is drawn on top of it?
 //   Offline  — what works with no signal?
 //
-// Tabs rather than a second sheet, per DESIGN.md §4: one sheet, content swapped
+// Tabs rather than a second sheet, per DESIGN.md: one sheet, content swapped
 // in place. The rail is pinned, so switching tabs never scrolls the list you are
-// working in out of reach (DESIGN.md §3).
+// working in out of reach (DESIGN.md).
 //
 // The Layers tab is one row PER KIND, not per file: a phone with thirty tracks
 // and a dozen GeoPDFs made that tab a scroll of near-identical switches with no
@@ -87,7 +87,7 @@ export type LayerToggleEntry = {
   /**
    * Live state worth a second line, and ONLY that: "2 not downloaded yet" on a
    * layer that is drawing less than its count. Never a description of what the
-   * layer is (DESIGN.md §5) — those are what this tab just lost.
+   * layer is (DESIGN.md) — those are what this tab just lost.
    */
   note?: string;
   value: boolean;
@@ -258,7 +258,7 @@ function BasemapTab({
             // rows the user scrolls past every time, and the thumbnail already
             // says what the map looks like far better than the words did. The
             // subtitle now carries STATE and nothing else — which is why the
-            // one that survives is the offline reason (DESIGN.md §8).
+            // one that survives is the offline reason (DESIGN.md).
             subtitle={unavailable ? "Needs a connection" : undefined}
             disabled={unavailable}
             onPress={() => onBasemapChange(id)}
@@ -282,7 +282,7 @@ function BasemapTab({
 /**
  * One kind of layer: its glyph, how many exist, and a switch. No subtitle — the
  * count IS the state, and the sentence that used to sit there explained a thing
- * the user can see on the map behind the sheet (DESIGN.md §5).
+ * the user can see on the map behind the sheet (DESIGN.md).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
   const [expanded, setExpanded] = useState(false);
@@ -656,7 +656,7 @@ function OfflineTab({
 
 const styles = StyleSheet.create({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
-  // (DESIGN.md §3).
+  // (DESIGN.md).
   rail: { paddingBottom: spacing(1.5) },
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },

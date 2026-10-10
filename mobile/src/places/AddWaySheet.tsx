@@ -27,7 +27,7 @@
 // three of the five have not chosen a file yet at that point, and confirming a
 // deletion the user can still back out of is how a file goes missing.
 //
-// Each list is a SUB-MODE of this sheet, never a second sheet (DESIGN.md §4),
+// Each list is a SUB-MODE of this sheet, never a second sheet (DESIGN.md),
 // and every sub-mode resets on the sheet's OPEN edge, because the place screen
 // closes it from outside.
 //
@@ -92,7 +92,7 @@ export function AddWaySheet({
   /**
    * Work deferred until this sheet has fully closed. A system picker launched
    * from inside an open Modal can never attach its own window, and its promise
-   * simply never settles — the button looks dead (DESIGN.md §5).
+   * simply never settles — the button looks dead (DESIGN.md).
    */
   const [pending, setPending] = useState<null | (() => Promise<void>)>(null);
 
@@ -237,7 +237,7 @@ export function AddWaySheet({
       return !needle || route.name.toLowerCase().includes(needle);
     });
 
-  // A verb that can only refuse is absent (DESIGN.md §5): an import with no
+  // A verb that can only refuse is absent (DESIGN.md): an import with no
   // .gpx/.kml original, and a recording too short to make a route from, both
   // withhold their descriptor, so neither reaches this list.
   const attachableImports = (imports ?? []).filter(

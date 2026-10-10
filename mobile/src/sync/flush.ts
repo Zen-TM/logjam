@@ -20,7 +20,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { isNoResponse } from "../api/noResponse";
+import { isNoResponse, isTransferCut } from "../api/noResponse";
 import {
   loadOutboxRows,
   loadOutboxRowsFor,
@@ -162,7 +162,7 @@ async function sendBatch(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
         JSON.stringify({
           code: status,
-          message: "The server rejected this change. Retry or discard it.",
+          message: "Couldn't send this change. Try again or discard it.",
         }),
         seqs[0],
       );
@@ -217,7 +217,7 @@ async function applyOpResult(
       await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
 
       if (result.status === "appliedWithConflict" && result.conflicts?.length) {
-        // Server over-reports by contract (DESIGN.md §4) — drop receipts whose
+        // Server over-reports by contract (DESIGN.md) — drop receipts whose
         // serverValue matches the base this edit was made against.
         const base = row.base_fields_json
           ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
@@ -422,6 +422,13 @@ async function flushMediaOps(): Promise<boolean> {
           "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
           row.seq,
         );
+        // An unanswered API call is the link being down for every op behind
+        // this one too, and each would spend its own timeout before the cycle
+        // reached the delta pull. Only a transfer that died partway goes on:
+        // that is about one file, and stopping for it would let a large video
+        // block every photo queued after it. Guard: "stops the pass when the
+        // API gives no answer" in flush.test.ts.
+        if (!isTransferCut(err)) break;
         continue;
       }
       // Everything else is counted, because not every permanent failure
@@ -440,7 +447,7 @@ async function flushMediaOps(): Promise<boolean> {
           JSON.stringify({
             code: transient ? status : 0,
             message:
-              "This upload keeps failing on this phone. Retry or discard it.",
+              "This upload keeps failing on this phone. Try again or discard it.",
           }),
           row.seq,
         );
@@ -457,7 +464,8 @@ async function flushMediaOps(): Promise<boolean> {
 
   if (mirrorTouched) notifyMirrorChanged();
   // The cycle still failed — the engine's backoff is what retries a genuinely
-  // transient outage — but every op got its turn first.
+  // transient outage — but every op got its turn first, unless the link is
+  // down.
   if (firstError) throw firstError;
   return progressed;
 }
