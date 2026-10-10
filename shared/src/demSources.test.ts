@@ -164,6 +164,8 @@ describe("sampleDem", () => {
     expect(dem.levelled).toEqual([1099, 1101]);
   });
 
+  // Mutation: start the step at the raw difference between the two heights
+  // instead of 0, and the 1001 m jump between unrelated surfaces is climbed.
   it("does not count the step when no source has both points", async () => {
     const left = source("left", 1000, 1, [0, 100]);
     const right = source("right", 2000, 1, [100, 200]);
@@ -174,6 +176,8 @@ describe("sampleDem", () => {
     expect(dem.levelled).toEqual([1099, 1099, 1100]);
   });
 
+  // Mutation: forget the last known sample at a null, so the next one starts
+  // a fresh run, and the join across the gap is left in `levelled`.
   it("treats a gap between two sources as a seam too", async () => {
     const left = source("left", 1000, 1, [0, 100]);
     const right = source("right", 2000, 1, [110, 200]);
