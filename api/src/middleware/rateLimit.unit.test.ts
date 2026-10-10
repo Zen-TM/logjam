@@ -1,5 +1,13 @@
+import express from "express";
+import request from "supertest";
 import { describe, it, expect } from "vitest";
-import { globalLimitMax, userPatchLimitMax } from "./rateLimit";
+import type { AuthenticatedRequest } from "./auth";
+import {
+  globalLimitMax,
+  REGION_CLIPS_PER_HOUR,
+  regionClipLimiter,
+  userPatchLimitMax,
+} from "./rateLimit";
 
 // The override exists so CI's integration run (one shared per-IP bucket, ~250
 // tests) isn't throttled. The property that matters is that it is inert in
@@ -57,5 +65,47 @@ describe("userPatchLimitMax", () => {
         RATE_LIMIT_USER_PATCH_MAX: "100000",
       }),
     ).toBe(30);
+  });
+});
+
+// Every signed-in region save in Logjam GPS asks for one clip
+// (docs/decisions/0028), so the limit has to sit above an honest session and
+// still be a limit. Mutation: set REGION_CLIPS_PER_HOUR back to 10 and the
+// first test goes red (a user planning a trip is refused at the eleventh
+// area); drop `regionClipLimiter` from the route chain here and the second
+// goes red.
+describe("regionClipLimiter", () => {
+  function clipApp() {
+    const app = express();
+    app.use((req, _res, next) => {
+      (req as AuthenticatedRequest).user = {
+        sub: String(req.headers["x-test-sub"]),
+      } as AuthenticatedRequest["user"];
+      next();
+    });
+    app.post("/clip", regionClipLimiter, (_req, res) => {
+      res.sendStatus(200);
+    });
+    return app;
+  }
+
+  it("lets one user save thirty areas in an hour", async () => {
+    expect(REGION_CLIPS_PER_HOUR).toBeGreaterThanOrEqual(30);
+    const app = clipApp();
+    for (let i = 0; i < 30; i++) {
+      const res = await request(app).post("/clip").set("x-test-sub", "heavy");
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("still refuses past the limit, per user", async () => {
+    const app = clipApp();
+    for (let i = 0; i < REGION_CLIPS_PER_HOUR; i++) {
+      await request(app).post("/clip").set("x-test-sub", "greedy");
+    }
+    const over = await request(app).post("/clip").set("x-test-sub", "greedy");
+    expect(over.status).toBe(429);
+    const other = await request(app).post("/clip").set("x-test-sub", "other");
+    expect(other.status).toBe(200);
   });
 });

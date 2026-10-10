@@ -92,9 +92,17 @@ test covers the filename and error-message parts.
   when, and how many bytes came back, and the server process sees the bbox for
   the length of the request. A user who wants an area kept from Logjam
   entirely can now only get that by saving it as a guest.
-- **Negative:** `regionClipLimiter` (`middleware/rateLimit.ts`) allows 10 clips
-  an hour per user, and every save now spends one. The eleventh save in an
-  hour keeps its rasters and reports the vector map as not finished.
+- **Negative:** every save now spends one clip of the per-user limit, so the
+  limit went from 10 an hour to 60 (`REGION_CLIPS_PER_HOUR` in
+  `middleware/rateLimit.ts`; guard `middleware/rateLimit.unit.test.ts`,
+  "regionClipLimiter"). One clip costs the server a `pmtiles extract` (under
+  a second against a local copy of the archive; not timed against S3 in prod,
+  where the route kills it at 25 s), a temporary file of
+  1 to 7 MB in the bush, and that many bytes sent back, so the number is set
+  by the honest case, an area a minute for an hour, and not by cost. It is
+  still a limit: at the 80 MB output cap, 60 clips is about 5 GB of egress an
+  hour per account, six times what the old limit allowed. Past it a save
+  keeps its rasters and reports the vector map as not finished.
 - **Negative:** region saves now depend on the clip endpoint working in prod.
   When this was decided it did not: prod returned 502 for every clip, because
   `pmtiles extract` was handed an `s3://` URI it reads as a local path. That
