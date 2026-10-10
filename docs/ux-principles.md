@@ -312,7 +312,8 @@ it, the rule names the test.
   error's message.
 - **A toast reports the outcome of an action.** It goes on its own, after
   long enough to read, pauses while hovered or focused, and errors stay longer
-  than confirmations.
+  than confirmations. On Logjam GPS it can be cleared early, by a swipe or its ×,
+  and only the toast itself takes touches, never the space around it.
 - **Say what is true, not what is hopeful.** A queued upload offline says
   "Waiting", not "Uploading…". A layer that draws part of the picture says
   which part is missing.

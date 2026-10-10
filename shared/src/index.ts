@@ -42,6 +42,7 @@ export * from "./rangeSelect.js";
 export * from "./mapRegionEstimate.js";
 export * from "./vectorImport.js";
 export * from "./trackStats.js";
+export * from "./trackPasses.js";
 export * from "./apiTypes.js";
 export * from "./sync.js";
 export * from "./sharing.js";

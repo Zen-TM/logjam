@@ -16,6 +16,11 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   A release APK for a device is only `./scripts/build-local-apk.sh`.
 - A second identity: `EXPO_PUBLIC_FAKE_SUB=fake-bob-sub` (dev only, baked into
   the bundle).
+- **A phone that holds a real Logjam GPS gets the dev variant:**
+  `LOGJAM_APP_VARIANT=dev` at prebuild, for Metro and for `dev:android` builds
+  `com.logjamnsw.mobile.dev` ("Logjam Dev", scheme `logjamdev`), which installs
+  beside it. A dev build under the real id replaces that app, and signing in
+  as another user wipes its local data. Guard: `src/appVariant.test.ts`.
 
 ## Rules
 
