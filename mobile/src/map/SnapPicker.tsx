@@ -10,7 +10,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { SnapMode } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { spacing } from "../theme";
 import { ChipRail } from "../ui";
 import { fieldLabel } from "../ui/fieldLabel";
 
@@ -45,5 +45,4 @@ export function SnapPicker({
 const styles = StyleSheet.create({
   wrap: { gap: spacing(0.5) },
   label: fieldLabel,
-  note: { color: theme.warning, fontSize: fontSize.xs },
 });

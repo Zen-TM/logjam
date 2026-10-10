@@ -36,7 +36,7 @@ import type { TUser } from "../api/types";
 import { formatBytes } from "../format";
 import { listMediaForLinked } from "../sync/mirrorStore";
 import { fontSize, lineHeight, spacing, theme } from "../theme";
-import { BottomSheet, Button, SwitchRow } from "../ui";
+import { BottomSheet, Button, FieldError, SwitchRow } from "../ui";
 import type { CopyAndRemoveTarget } from "./copyAndRemove";
 
 /** What the sheet found attached to the places being copied. */
@@ -216,9 +216,7 @@ export function useCopyPanel({
             share verb follows (`useShareRowProps`). */}
         {!online ? (
           <View style={styles.note}>
-            <Text style={styles.noteText}>
-              Saving a copy needs a connection.
-            </Text>
+            <FieldError message="Saving a copy needs a connection." />
           </View>
         ) : null}
       </>
@@ -270,5 +268,4 @@ const styles = StyleSheet.create({
     paddingBottom: spacing(1.5),
   },
   note: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5) },
-  noteText: { color: theme.warning, fontSize: fontSize.sm },
 });
