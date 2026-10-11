@@ -10,7 +10,7 @@
 // device in the mirror. Nothing is logged, and photos leave only through the
 // outbox's authed upload.
 import { Fragment, useCallback, useRef, useState, type ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   attributeRows,
   contractSectionKeys,
@@ -28,7 +28,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { fontSize, lineHeight, spacing, theme } from "../theme";
+import { fontSize, lineHeight, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
   useMirrorPlaces,
@@ -63,6 +63,9 @@ export function TripDetailScreen({
    *  here, first) — nothing is drawn on the map. */
   onFocusOnMap: (bbox: [number, number, number, number]) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const live = useMirrorTrip(trip.id);
   const current = live.data ?? trip;
   const media = useMirrorMedia("tripLog", trip.id);
@@ -83,7 +86,7 @@ export function TripDetailScreen({
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
 
-  const meta = tripTypeMeta(primaryTripType(current.types));
+  const meta = tripTypeMeta(primaryTripType(current.types), theme);
   const attachments = media.data ?? [];
   const photoCount = attachments.filter((item) => {
     const category = mediaCategory(item.mediaType);
@@ -110,8 +113,8 @@ export function TripDetailScreen({
             <StatusPill
               key={type}
               label={tripTypeLabel(type)}
-              icon={tripTypeMeta(type).icon}
-              hue={tripTypeMeta(type).hue}
+              icon={tripTypeMeta(type, theme).icon}
+              hue={tripTypeMeta(type, theme).hue}
             />
           ))
         ) : (
@@ -266,9 +269,9 @@ export function TripDetailScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   screen: { flex: 1, backgroundColor: theme.page },
-  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(4),
@@ -280,4 +283,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
   },
-});
+}));

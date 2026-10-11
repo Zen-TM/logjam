@@ -1,6 +1,6 @@
 /* The route tool as a page: hero pinned, body scrolls, actions pinned at the
    foot so Save and Cancel are reachable however long the body gets. Nothing
-   here floats — the map is the canvas and takes every click (DESIGN.md §2). */
+   here floats — the map is the canvas and takes every click (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;
@@ -49,12 +49,6 @@
   font-size: var(--font-xs);
   font-style: italic;
   line-height: 1.3;
-}
-
-.warning {
-  margin: 0;
-  color: var(--color-warning);
-  font-size: var(--font-sm);
 }
 
 /* Pinned: ending the mode must not require scrolling to find the button.

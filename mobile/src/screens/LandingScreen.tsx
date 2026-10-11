@@ -28,25 +28,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import {
-  fontSize,
-  fontWeight,
-  lineHeight,
-  radius,
-  spacing,
-  theme,
-} from "../theme";
-import { Button, ErrorBanner, TextField, TextLink } from "../ui";
+import { fontSize, lineHeight, radius, spacing, makeStyles } from "../theme";
+import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
 export function LandingScreen({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   // A guest LINKING an account is the only visitor with somewhere else to go,
   // so they get "Back"; everyone else can still go on without an account.
   // Not `auth.state === "chooser"`: this screen renders for `signIn` too, and
@@ -104,6 +98,8 @@ function SignInPanel({
   offersGuest: boolean;
   onExplainGuest: () => void;
 }) {
+  const styles = useStyles();
+
   const [email, setEmail] = useState(auth.pendingUsername);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -115,7 +111,7 @@ function SignInPanel({
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <TextField
         label="Email"
         value={email}
@@ -136,7 +132,7 @@ function SignInPanel({
         onSubmitEditing={submit}
       />
       {/* Directly above the submit it belongs to, not at the top of the
-          screen — never at the top of the form (docs/ux-principles.md §11). */}
+          screen — never at the top of the form (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Sign in" onPress={submit} loading={submitting} />
       <TextLink label="Forgot password?" onPress={auth.goToForgotPassword} />
@@ -158,7 +154,7 @@ function SignInPanel({
           <Button label="Back" variant="ghost" onPress={auth.backToChooser} />
         )}
       </View>
-    </View>
+    </FormStack>
   );
 }
 
@@ -174,8 +170,10 @@ function GuestExplainer({
   /** Returns false when the choice could not be stored (auth.error says why). */
   onContinue: () => boolean;
 }) {
+  const styles = useStyles();
+
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Without an account</Text>
       <Text style={styles.body}>
         Everything you record stays on this phone and is never uploaded or
@@ -187,7 +185,7 @@ function GuestExplainer({
         Downloaded topos work without one.
       </Text>
       {/* "Continue anyway" is this panel's submit — a failure to store the
-          choice belongs directly above it (docs/ux-principles.md §11). */}
+          choice belongs directly above it (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <View style={styles.secondary}>
         <Button
@@ -202,11 +200,11 @@ function GuestExplainer({
         />
         <Button label="Back to login" variant="ghost" onPress={onBack} />
       </View>
-    </View>
+    </FormStack>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -232,26 +230,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     marginBottom: spacing(1),
   },
-  appTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.text,
-  },
+  appTitle: { ...textRole.title, color: theme.text },
   tagline: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
     textAlign: "center",
   },
-  form: { gap: spacing(2) },
-  heading: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
-    color: theme.text,
-  },
+  heading: { ...textRole.metric, color: theme.text },
   body: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
     lineHeight: lineHeight.body,
   },
   secondary: { gap: spacing(0.5) },
-});
+}));

@@ -3,17 +3,18 @@
 // is true for the fetched current user; the server rejects any consentVersion
 // other than CURRENT_CONSENT_VERSION.
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
 
+import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
 import {
   PRIVACY_POLICY_URL,
   TERMS_URL,
   openLegalDocument,
 } from "../legalLinks";
-import { fontSize, fontWeight, lineHeight, spacing, theme } from "../theme";
+import { fontSize, lineHeight, spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextLink } from "../ui";
 
 export function ConsentGate({
@@ -21,8 +22,10 @@ export function ConsentGate({
   onSignOut,
 }: {
   onConsented: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
 }) {
+  const styles = useStyles();
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // No nav header on the gates, so the status-bar/camera inset is ours to clear.
@@ -74,12 +77,12 @@ export function ConsentGate({
       />
       {error ? <ErrorBanner message={error} onRetry={agree} /> : null}
       <Button label="Agree and continue" onPress={agree} loading={submitting} />
-      <Button label="Sign out" variant="ghost" onPress={onSignOut} />
+      <Button label="Sign out" variant="ghost" onPress={() => onSignOut()} />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   content: {
     flexGrow: 1,
@@ -87,14 +90,10 @@ const styles = StyleSheet.create({
     padding: spacing(3),
     gap: spacing(2),
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.text,
-  },
+  title: { ...textRole.title, color: theme.text },
   body: {
     fontSize: fontSize.base,
     color: theme.text,
     lineHeight: lineHeight.body,
   },
-});
+}));

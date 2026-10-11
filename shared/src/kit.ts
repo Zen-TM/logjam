@@ -29,6 +29,9 @@ export const KIT_COMPONENTS = {
   TextLink: gps("Logjam Web writes a native anchor, styled by the page"),
   MapButton: web("floats over the map; Logjam GPS's map chrome is its own"),
   MapButtonGroup: web("one shadowed block of MapButtons"),
+  MapPointDot: web(
+    "the dot a press on the map leaves at the spot it asked about; Logjam GPS asks in a sheet and draws its cursor in the map layers",
+  ),
 
   // — chips and filters —
   Chip: both,
@@ -80,6 +83,12 @@ export const KIT_COMPONENTS = {
 
   // — form controls —
   TextField: both,
+  Field: gps(
+    "a label, control, hint and error at the form rhythm; Logjam Web's TextField, Select and RangeField share one inside TextField.tsx",
+  ),
+  FormStack: gps(
+    "a form's fields at the one field-to-field gap; Logjam Web's dialog body sets it in CSS",
+  ),
   Toggle: both,
   TextArea: web("Logjam GPS's TextField takes multiline"),
   NumberField: web("Logjam GPS's TextField takes a numeric keyboard"),

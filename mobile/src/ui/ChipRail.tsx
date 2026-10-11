@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { spacing, theme, withAlpha } from "../theme";
+import { spacing, withAlpha, useTheme } from "../theme";
 import { Chip, CHIP_HEIGHT, type ChipOption } from "./Chip";
 
 // A single-line (`scroll`) control is exactly one chip tall — re-exported so
@@ -153,6 +153,8 @@ function Rail<T extends string>({
 // than slicing a chip in half. Without it a rail whose chips happen to end
 // flush at the screen edge looks like the complete set.
 function EdgeFade({ side }: { side: "start" | "end" }) {
+  const theme = useTheme();
+
   const solid = side === "end";
   return (
     <LinearGradient

@@ -1,4 +1,4 @@
-// Place detail — "what am I walking into?" (docs/ux-principles.md §2). The grade, the
+// Place detail — "what am I walking into?" (shared/DESIGN.md §2). The grade, the
 // numbers that decide the day, and the notes come first; sharing and admin sit
 // below them, because you read this screen at a trailhead and manage it at home.
 //
@@ -9,7 +9,7 @@
 //
 // PRIVACY: this is the one screen that does show a coordinate, because it is the
 // answer to its own question and the user asked for this place by name. It
-// stays here — never on a list row (docs/ux-principles.md §13). Sharing is owner-only and
+// stays here — never on a list row (shared/DESIGN.md §13). Sharing is owner-only and
 // username-only; recipients never see this section at all.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import {
@@ -60,12 +60,12 @@ import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { AddWaySheet } from "./AddWaySheet";
 import {
-  assetHue,
   fontSize,
-  fontWeight,
   lineHeight,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
+  useHues,
 } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -105,7 +105,7 @@ import {
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
-import { PLACE_STATUS_META } from "./placeMeta";
+import { placeStatusMeta } from "./placeMeta";
 import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
 
 /** A parked value as one line. Objects are stringified rather than dropped:
@@ -159,6 +159,10 @@ export function PlaceDetailScreen({
   /** The place this screen is showing is gone — leave, don't render a husk. */
   onDeleted: () => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const query = useMirrorPlace(placeId);
   const media = useMirrorMedia("place", placeId);
   const trips = useMirrorTrips();
@@ -213,7 +217,7 @@ export function PlaceDetailScreen({
     trip.places.some((link) => link.id === placeId),
   );
   const status = placeStatus(place, linkedTrips.length);
-  const statusMeta = PLACE_STATUS_META[status];
+  const statusMeta = placeStatusMeta(theme)[status];
   const grade = formatCanyonGrade(place);
 
   const photoCount = attachments.filter((item) => {
@@ -982,6 +986,8 @@ function PlaceSharingSection({
   openRequest: number;
   onShareRequested: () => void;
 }) {
+  const styles = useStyles();
+
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // THE sharing panel, identical to the one Saved, the route sheet, the track
@@ -1022,7 +1028,7 @@ function PlaceSharingSection({
       ) : null}
 
       {/* Offline this door is closed WITH THE REASON in place of its subtitle
-          (DESIGN.md §8) rather than hidden, so the feature doesn't appear to
+          (DESIGN.md) rather than hidden, so the feature doesn't appear to
           come and go. */}
       <Row
         icon="shareFriend"
@@ -1043,9 +1049,9 @@ function PlaceSharingSection({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(4),
@@ -1076,17 +1082,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: spacing(2),
-    paddingVertical: spacing(0.875),
+    paddingVertical: spacing(1),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.line,
   },
   fieldRowLast: { borderBottomWidth: 0 },
   fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   fieldValue: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     textAlign: "right",
     flexShrink: 1,
   },
-});
+}));

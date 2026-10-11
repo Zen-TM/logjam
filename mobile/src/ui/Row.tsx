@@ -1,20 +1,13 @@
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { Pressable, Text, View, type ViewStyle } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   opacity,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
@@ -81,7 +74,7 @@ export function Row({
   footer?: React.ReactNode;
   progress?: number | null;
   onPress?: () => void;
-  /** Press-and-hold — the way a multi-select starts (DESIGN.md §5). */
+  /** Press-and-hold — the way a multi-select starts (DESIGN.md). */
   onLongPress?: () => void;
   /**
    * The row IS a switch (`SwitchRow`): pressing anywhere on it flips it, and a
@@ -108,6 +101,9 @@ export function Row({
   subtitleNumberOfLines?: number;
   style?: ViewStyle | ViewStyle[];
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const tint = hue ?? theme.accent;
   const lead =
     leading ??
@@ -192,7 +188,7 @@ export function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   row: {
     // Column + centred: with no footer this lays out exactly as the old
     // flex-row card did (one full-width child, vertically centred when the
@@ -207,7 +203,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
-  footer: { paddingTop: spacing(1.25) },
+  footer: { paddingTop: spacing(1) },
   pressed: { backgroundColor: theme.cardPressed },
   // An accent edge and no tint: a tint dropped the subtitle's contrast
   // (UX §9), and Logjam Web's selected row is the same edge.
@@ -230,12 +226,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing(0.5),
   },
-  title: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  subtitle: { color: theme.textMuted, fontSize: fontSize.sm },
+  title: { ...textRole.rowTitle, color: theme.text },
+  subtitle: textRole.subtitle,
   progressTrack: {
     position: "absolute",
     left: 0,
@@ -245,4 +237,4 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.text, 0.1),
   },
   progressFill: { height: 3, borderRadius: radius.pill },
-});
+}));

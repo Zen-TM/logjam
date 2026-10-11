@@ -1,6 +1,13 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  controlSize,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 /**
@@ -27,6 +34,9 @@ export function Notice({
   action?: React.ReactNode;
   tone?: "info" | "warning";
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const warning = tone === "warning";
   return (
     <View
@@ -46,14 +56,14 @@ export function Notice({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   notice: {
     alignSelf: "center",
     maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(1),
-    minHeight: 36,
+    minHeight: controlSize.md,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
     borderRadius: radius.lg,
@@ -69,4 +79,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: "center",
   },
-});
+}));

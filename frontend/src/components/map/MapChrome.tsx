@@ -74,7 +74,9 @@ export default function MapChrome({
   const [locate, setLocate] = useState<LocateState>("off");
   const [toolsOpen, setToolsOpen] = useState(false);
   const trayId = useId();
-  const trayRef = useRef<HTMLDivElement>(null);
+  // The tray AND its button: opening the tray leaves focus on the button, so
+  // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
+  const toolsLineRef = useRef<HTMLDivElement>(null);
   const toolsButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -120,7 +122,7 @@ export default function MapChrome({
     };
   }, [map, geolocate, toast]);
 
-  useEscape(toolsOpen ? trayRef : null, () => {
+  useEscape(toolsOpen ? toolsLineRef : null, () => {
     setToolsOpen(false);
     toolsButtonRef.current?.focus();
   });
@@ -141,10 +143,9 @@ export default function MapChrome({
       <div className={classes.topRight}>{layersButton}</div>
 
       <div className={classes.actions}>
-        <div className={classes.toolsLine}>
+        <div ref={toolsLineRef} className={classes.toolsLine}>
           {toolsOpen && (
             <div
-              ref={trayRef}
               id={trayId}
               role="group"
               aria-label="Tools"
@@ -196,7 +197,9 @@ export default function MapChrome({
           )}
           <MapButton
             ref={toolsButtonRef}
-            icon="measure"
+            // Logjam GPS's glyphs for the same button; the ruler is the measure
+            // tool's alone (one idea, one icon).
+            icon={toolsOpen ? "close" : "add"}
             label="Tools"
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}

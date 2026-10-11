@@ -5,6 +5,7 @@
 //
 // Only the labels both clients draw are declared here: which verbs a given
 // way has is decided by what it is and whose it is, where the rows are built.
+import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
 
 type WayVerbDeclaration = {
@@ -12,11 +13,18 @@ type WayVerbDeclaration = {
   /** One word for both, or each client's. A "…" is Logjam Web's: its menu
    *  items mark the ones that open a dialog. */
   label: string | Record<ContractPlatform, string>;
+  /** The idea its glyph stands for, where the verb has one of its own to say
+   *  (a client otherwise glyphs the verbs it already had). */
+  icon?: IconIdea;
 };
 
 export const WAY_VERBS = [
   { id: "open", label: "Open" },
   { id: "openPlace", label: "Open its place" },
+  // A recorded track only: it opens the real trip form with the track's day, its
+  // place and the track itself already in it (`tripPrefillFromTrack`). The
+  // same verb as a place's "Log a trip here", at the same glyph.
+  { id: "logTrip", label: "Log a trip", icon: "trip" },
   { id: "edit", label: "Edit points" },
   // Not "Copy": the promise is that it becomes YOURS, unaffected by the owner
   // later unsharing it.
@@ -45,4 +53,12 @@ export function wayVerbLabel(
 ): string {
   const label = WAY_VERBS.find((verb) => verb.id === id)!.label;
   return typeof label === "string" ? label : label[platform];
+}
+
+/** One verb's glyph, where it declares one. */
+export function wayVerbIcon(id: WayVerbId): IconIdea | undefined {
+  const verb = WAY_VERBS.find((entry) => entry.id === id) as
+    | WayVerbDeclaration
+    | undefined;
+  return verb?.icon;
 }

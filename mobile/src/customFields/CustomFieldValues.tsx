@@ -9,7 +9,7 @@
 //
 // A date field opens the sheet's own date picker rather than asking the user to
 // type an ISO string, which is why `onPickDate` is a callback: the picker is a
-// MODE of the host sheet (DESIGN.md §4 — never a second modal), and only the
+// MODE of the host sheet (DESIGN.md — never a second modal), and only the
 // host knows how to enter it.
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -21,8 +21,9 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
+  Field,
   IconButton,
   Row,
   ChipRail,
@@ -30,7 +31,6 @@ import {
   type ChipOption,
   Icon,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -95,6 +95,8 @@ export function CustomFieldValueInputs({
  * attribute is a CARD; a recorded one is a table row" in mobile/CLAUDE.md.
  */
 export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
+  const styles = useStyles();
+
   return (
     <View>
       {rows.map(([key, label, value, type], index) => (
@@ -128,6 +130,8 @@ function CustomFieldValueInput({
   /** Drawn beside the CONTROL, centred on it — not beside the label above it. */
   trailing?: React.ReactNode;
 }) {
+  const theme = useTheme();
+
   const label = customFieldDisplayLabel(def);
   // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
   // places have gaps, and a picker with no way back to blank turns "I don't
@@ -138,8 +142,7 @@ function CustomFieldValueInput({
     for (const stop of stops)
       options.push({ value: String(stop), label: String(stop) });
     return (
-      <View style={styles.field}>
-        <Text style={styles.railLabel}>{def.label}</Text>
+      <Field label={def.label}>
         <Beside trailing={trailing}>
           <ChipRail
             scroll
@@ -148,13 +151,12 @@ function CustomFieldValueInput({
             onChange={onChange}
           />
         </Beside>
-      </View>
+      </Field>
     );
   }
   if (def.type === "boolean") {
     return (
-      <View style={styles.field}>
-        <Text style={styles.railLabel}>{label}</Text>
+      <Field label={label}>
         <Beside trailing={trailing}>
           <ChipRail
             options={BOOLEAN_OPTIONS}
@@ -162,7 +164,7 @@ function CustomFieldValueInput({
             onChange={onChange}
           />
         </Beside>
-      </View>
+      </Field>
     );
   }
   if (def.type === "date") {
@@ -179,22 +181,20 @@ function CustomFieldValueInput({
     );
   }
   return (
-    <View style={styles.field}>
-      <TextField
-        label={label}
-        value={value}
-        onChangeText={onChange}
-        accessory={trailing}
-        keyboardType={
-          def.type === "integer"
-            ? "number-pad"
-            : def.type === "float"
-              ? "decimal-pad"
-              : "default"
-        }
-        autoCapitalize="sentences"
-      />
-    </View>
+    <TextField
+      label={label}
+      value={value}
+      onChangeText={onChange}
+      accessory={trailing}
+      keyboardType={
+        def.type === "integer"
+          ? "number-pad"
+          : def.type === "float"
+            ? "decimal-pad"
+            : "default"
+      }
+      autoCapitalize="sentences"
+    />
   );
 }
 
@@ -206,6 +206,8 @@ function Beside({
   trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   if (!trailing) return <>{children}</>;
   return (
     <View style={styles.beside}>
@@ -215,12 +217,7 @@ function Beside({
   );
 }
 
-const styles = StyleSheet.create({
-  field: { gap: spacing(0.5) },
-  // Matches `TextField`'s own label exactly. A rail and a number box sit in one
-  // list under one heading now, so a label beside a different one reads as two
-  // different kinds of control.
-  railLabel: fieldLabel,
+const useStyles = makeStyles((theme, textRole) => ({
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.
@@ -230,17 +227,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: spacing(2),
-    paddingVertical: spacing(0.875),
+    paddingVertical: spacing(1),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.line,
   },
   tableRowLast: { borderBottomWidth: 0 },
   tableKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   tableValue: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     textAlign: "right",
     flexShrink: 1,
   },
-});
+}));

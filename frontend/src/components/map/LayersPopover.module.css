@@ -114,14 +114,9 @@
   cursor: grab;
 }
 
-.info {
-  display: inline-flex;
-  color: var(--color-text-muted);
-}
-
 .warning {
   font-size: var(--font-xs);
-  color: var(--color-warning);
+  color: var(--color-text);
 }
 
 .gallery {

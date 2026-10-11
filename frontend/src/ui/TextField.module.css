@@ -1,13 +1,13 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: var(--form-label);
 }
 
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {
-  font-size: var(--font-sm);
+  font-size: var(--text-label-size);
   color: var(--color-text-muted);
 }
 
@@ -56,7 +56,7 @@
 
 .hint {
   margin: 0;
-  font-size: var(--font-xs);
+  font-size: var(--text-hint-size);
   color: var(--color-text-muted);
 }
 
@@ -132,7 +132,7 @@
 .rangeField {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: var(--form-label);
 }
 
 .rangeHead {

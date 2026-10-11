@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
@@ -9,10 +9,19 @@ import {
   MAX_PLACES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
+  tripPrefillFromTrack,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  controlSize,
+} from "../theme";
+import type { TripTrackSource } from "../tracks/tripTrackSource";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -26,6 +35,7 @@ import {
   DatePicker,
   ErrorBanner,
   FieldError,
+  FormStack,
   Row,
   SectionHeader,
   TextField,
@@ -54,7 +64,7 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * a second form would drift.
  *
  * The date picker and the place picker are MODES of this sheet, not sheets of
- * their own (DESIGN.md §4: never open a second sheet from the first). The
+ * their own (DESIGN.md: never open a second sheet from the first). The
  * header title changes with the mode, so the user always knows which step they
  * are on, and there is exactly one animation per tap.
  *
@@ -79,6 +89,7 @@ export function TripEditSheet({
   trip,
   places,
   initialPlaces,
+  fromTrack,
   existingTypes,
   onSaved,
   online,
@@ -94,6 +105,14 @@ export function TripEditSheet({
    * are its own.
    */
   initialPlaces?: TripPlaceLink[];
+  /**
+   * "Log a trip" on a track: a NEW trip opens on the track's own local day, and
+   * the track is attached to it when it is saved (a local write; a track whose
+   * file is not on the phone is fetched once, so that one needs a connection).
+   * Ignored when editing. Like `initialPlaces` it is read
+   * when the sheet opens, not when it changes.
+   */
+  fromTrack?: TripTrackSource | null;
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -104,6 +123,9 @@ export function TripEditSheet({
    */
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const editing = trip != null;
   const [mode, setMode] = useState<Mode>("form");
   const [dateKey, setDateKey] = useState(todayDateKey);
@@ -201,7 +223,13 @@ export function TripEditSheet({
     setPlaceSearch("");
     setCustomTypes([]);
     setSaving(false);
-    setDateKey(trip ? toDateKey(new Date(trip.date)) : todayDateKey());
+    setDateKey(
+      trip
+        ? toDateKey(new Date(trip.date))
+        : fromTrack
+          ? tripPrefillFromTrack({ startedAt: fromTrack.startedAt }).date
+          : todayDateKey(),
+    );
     setSelected(
       trip ? trip.places.map((link) => ({ ...link })) : (initialPlaces ?? []),
     );
@@ -258,10 +286,10 @@ export function TripEditSheet({
     return vocabulary.map((type) => ({
       value: type,
       label: tripTypeLabel(type),
-      hue: tripTypeMeta(type).hue,
-      icon: tripTypeMeta(type).icon,
+      hue: tripTypeMeta(type, theme).hue,
+      icon: tripTypeMeta(type, theme).icon,
     }));
-  }, [customTypes, existingTypes, types]);
+  }, [customTypes, existingTypes, types, theme]);
 
   const toggleType = useCallback((type: string) => {
     setTypes((current) =>
@@ -368,7 +396,7 @@ export function TripEditSheet({
         await updateTripLocal(trip.id, changes);
         onSaved("Trip updated.");
       } else {
-        await createTripLocal({
+        const tripId = await createTripLocal({
           date: isoDate,
           displayName: trimmedName || null,
           notes: trimmedNotes || null,
@@ -376,7 +404,19 @@ export function TripEditSheet({
           customFields: effectiveCustomFields,
           places: selected,
         });
-        onSaved("Trip logged.");
+        // The trip is saved either way, so a track that will not attach is said
+        // in the outcome rather than failing the save and losing the form.
+        const attached =
+          !fromTrack ||
+          (await fromTrack.attach(tripId).catch((err: unknown) => {
+            console.error(err);
+            return false;
+          }));
+        onSaved(
+          attached
+            ? "Trip logged."
+            : "Trip logged. The track couldn't be attached.",
+        );
       }
       onClose();
     } catch (err) {
@@ -402,9 +442,11 @@ export function TripEditSheet({
     selected,
     trip,
     types,
+    fromTrack,
   ]);
 
   const fieldForm = useCustomFieldForm({
+    open: mode === "fieldForm",
     entity: "tripLog",
     defs: customFieldDefs,
     editing: editingField,
@@ -460,9 +502,9 @@ export function TripEditSheet({
       // that scrolls out of reach leaves the handle as the only exit.
       footer={
         mode === "form" ? (
-          <View style={styles.footerStack}>
+          <FormStack>
             {/* Server refusal / failure while the sheet is still open — the
-                banner sits directly above Save, never a toast (docs/ux-principles.md §11). */}
+                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
             {saveError ? <ErrorBanner message={saveError} /> : null}
             <Button
               label={editing ? "Save changes" : "Log trip"}
@@ -470,7 +512,7 @@ export function TripEditSheet({
               loading={saving}
               onPress={() => void save()}
             />
-          </View>
+          </FormStack>
         ) : mode === "fieldForm" ? (
           fieldForm.footer
         ) : mode === "fields" ? (
@@ -491,7 +533,7 @@ export function TripEditSheet({
       }
     >
       {mode === "date" ? (
-        <View style={styles.modeBody}>
+        <FormStack>
           <DatePicker
             value={
               dateTarget.kind === "trip"
@@ -520,7 +562,7 @@ export function TripEditSheet({
               }}
             />
           ) : null}
-        </View>
+        </FormStack>
       ) : null}
 
       {mode === "fields" ? (
@@ -550,7 +592,7 @@ export function TripEditSheet({
       ) : null}
 
       {mode === "form" ? (
-        <View style={styles.form}>
+        <FormStack>
           <Row
             icon="date"
             title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
@@ -569,19 +611,28 @@ export function TripEditSheet({
             onPress={() => setMode("places")}
           />
 
-          <View style={styles.field}>
-            <TextField
-              label="Title"
-              value={displayName}
-              onChangeText={setDisplayName}
-              autoCapitalize="sentences"
+          {/* Read-only: the recording goes with the trip when it is saved. A row
+              with nothing to press is not pressable (shared/DESIGN.md §4). */}
+          {!editing && fromTrack ? (
+            <Row
+              icon="track"
+              title={fromTrack.name}
+              subtitle="Track · attached when you log the trip"
+              titleNumberOfLines={2}
             />
-            {!displayName.trim() ? (
-              <Text style={styles.hint}>
-                Defaults to {derivedTitle ?? "“Untitled trip”"}
-              </Text>
-            ) : null}
-          </View>
+          ) : null}
+
+          <TextField
+            label="Title"
+            value={displayName}
+            onChangeText={setDisplayName}
+            autoCapitalize="sentences"
+            hint={
+              displayName.trim()
+                ? undefined
+                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
+            }
+          />
 
           <ChipPicker
             label="Type"
@@ -599,22 +650,20 @@ export function TripEditSheet({
                 ? (primaryTripType(types) ?? undefined)
                 : undefined
             }
+            hint={
+              types.length > 1
+                ? "The starred type sets the trip’s icon."
+                : undefined
+            }
           />
-          {types.length > 1 ? (
-            <Text style={styles.hint}>
-              The starred type sets the trip’s icon.
-            </Text>
-          ) : null}
 
-          <View style={styles.field}>
-            <TextField
-              label="Notes"
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              autoCapitalize="sentences"
-            />
-          </View>
+          <TextField
+            label="Notes"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            autoCapitalize="sentences"
+          />
 
           <CustomFieldValueInputs
             defs={askedFieldDefs}
@@ -658,7 +707,7 @@ export function TripEditSheet({
             right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />
-        </View>
+        </FormStack>
       ) : null}
     </BottomSheet>
   );
@@ -687,6 +736,9 @@ function PlacePicker({
   onSearch: (next: string) => void;
   onToggle: (place: MirrorPlace) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const selectedIds = new Set(selected.map((link) => link.id));
   const query = search.trim().toLowerCase();
   const matches = places.filter(
@@ -752,12 +804,8 @@ function PlacePicker({
   );
 }
 
-const styles = StyleSheet.create({
-  form: { gap: spacing(1) },
-  footerStack: { gap: spacing(1) },
-  modeBody: { gap: spacing(2) },
+const useStyles = makeStyles((theme, textRole) => ({
   pickerBody: { gap: spacing(1) },
-  field: { gap: spacing(0.5) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   searchWrap: {
     flexDirection: "row",
@@ -768,12 +816,7 @@ const styles = StyleSheet.create({
     borderColor: theme.lineStrong,
     backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
-    minHeight: 44,
+    minHeight: controlSize.lg,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
-});
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
+}));

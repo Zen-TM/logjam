@@ -22,7 +22,7 @@
 //
 // It is a HOOK returning `{ title, body, footer }` rather than a plain
 // component because a sheet's primary action belongs in `BottomSheet`'s pinned
-// `footer` (DESIGN.md §4) — a Send button that scrolls away behind a long
+// `footer` (DESIGN.md) — a Send button that scrolls away behind a long
 // friend list leaves the drag handle as the only exit, and the handle means
 // discard. Callers spread the three pieces onto the sheet they already own;
 // nothing opens a second sheet.
@@ -42,7 +42,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -86,8 +85,10 @@ import {
   lineHeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
+  controlSize,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -142,7 +143,7 @@ export type SharePanelTarget =
  * Both verbs need the network — a grant is not an outbox operation and a send
  * is an upload — so offline the row is dimmed and says "Needs a connection"
  * rather than disappearing or opening a panel that can only apologise
- * (DESIGN.md §8). Sharing is also the FIRST thing on most saved items that
+ * (DESIGN.md). Sharing is also the FIRST thing on most saved items that
  * needs a connection at all, which is why the row has to say so itself.
  *
  * One helper rather than six call sites reaching for `capabilityRowProps`,
@@ -201,6 +202,8 @@ export function useSharePanel({
   footer: React.ReactNode | null;
   sharing: ReturnType<typeof useSharing>;
 } {
+  const styles = useStyles();
+
   const isCopy = target?.kind === "copy";
   const bulkPlan = target?.kind === "bulk" ? target.plan : null;
 
@@ -438,7 +441,7 @@ export function useSharePanel({
       ),
       footer: (
         // The send failure reports directly above the button it failed under
-        // (docs/ux-principles.md §11) — the form is still open, so this is not a toast.
+        // (shared/DESIGN.md §11) — the form is still open, so this is not a toast.
         <View style={styles.footerStack}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
           {/* No `loading`: `Button` replaces the label with a spinner, and the
@@ -461,7 +464,7 @@ export function useSharePanel({
 
   if (target.kind === "copy") {
     // The closed door names itself rather than the panel vanishing
-    // (DESIGN.md §8) — a feature that comes and goes is worse than one that
+    // (DESIGN.md) — a feature that comes and goes is worse than one that
     // says why. Sharing's capability covers this: a guest has no friends and
     // no endpoint that would answer, and offline it cannot work at all.
     if (friends.status.status === "unavailable") {
@@ -712,6 +715,9 @@ function FriendRows({
   /** What to say when there is nobody to offer. Per-surface wording. */
   emptyText: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (friends === null) {
     return <ActivityIndicator color={theme.accent} style={styles.spinner} />;
   }
@@ -783,6 +789,9 @@ function PromiseBanner({
   tone: "share" | "copy";
   text: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const hue = tone === "copy" ? theme.warning : theme.accent;
   return (
     <View
@@ -805,8 +814,10 @@ function PromiseBanner({
   );
 }
 
-/** The reason, in place of the panel. DESIGN.md §8 — never a blank space. */
+/** The reason, in place of the panel. DESIGN.md — never a blank space. */
 function ClosedDoor({ text }: { text: string }) {
+  const styles = useStyles();
+
   return <Text style={styles.muted}>{text}</Text>;
 }
 
@@ -819,6 +830,9 @@ function SearchField({
   onChangeText: (next: string) => void;
   disabled: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.search}>
       <Icon idea="search" size={18} color={theme.textMuted} />
@@ -847,7 +861,7 @@ function SearchField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: spacing(1) },
   footerStack: { gap: spacing(1.5) },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
@@ -860,7 +874,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing(1.5),
   },
-  promiseIcon: { marginTop: 1 },
+  promiseIcon: { marginTop: spacing(0.25) },
   promiseText: {
     flex: 1,
     color: theme.text,
@@ -876,7 +890,7 @@ const styles = StyleSheet.create({
     borderColor: theme.line,
     borderRadius: radius.pill,
     paddingHorizontal: spacing(1.5),
-    minHeight: 44,
+    minHeight: controlSize.lg,
   },
   searchInput: {
     flex: 1,
@@ -884,4 +898,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     paddingVertical: spacing(1),
   },
-});
+}));

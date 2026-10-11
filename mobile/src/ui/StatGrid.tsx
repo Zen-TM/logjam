@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
 
 export type Stat = {
@@ -23,6 +23,9 @@ export type Stat = {
 // fill means "press me" (UX §4). A read-only cell sits on the page with the
 // same box, so a grid of both lines up.
 export function StatGrid({ stats }: { stats: Stat[] }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.grid}>
       {stats.map((stat) => {
@@ -73,7 +76,7 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   cell: {
     flexGrow: 1,
@@ -88,21 +91,14 @@ const styles = StyleSheet.create({
   readOnly: { backgroundColor: "transparent", borderColor: "transparent" },
   span: { flexBasis: "100%" },
   pressed: { backgroundColor: theme.cardPressed },
-  label: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  label: { ...textRole.section, letterSpacing: 0.8 },
   valueRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing(1) },
   value: {
     flexShrink: 1,
+    ...textRole.statValue,
     color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
   },
   // Pushed to the cell's right edge; the bottom nudge sits it on the value's
   // baseline rather than on the bottom of its line box.
   copyGlyph: { marginLeft: "auto", marginBottom: spacing(0.5) },
-});
+}));

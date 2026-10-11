@@ -27,7 +27,7 @@ export type CompletedOverlaysResponse = {
      * So surfaces test for the NEGATIVE — `=== "shared"` withholds an
      * owner-only verb, unknown does not. Gating on `=== "owner"` instead made
      * Share disappear from every saved topo the moment the signal went, which
-     * is the vanishing-feature DESIGN.md §8 forbids; the row is shown dimmed
+     * is the vanishing-feature DESIGN.md forbids; the row is shown dimmed
      * with its reason instead, and the verb needs the network anyway.
      */
     syncRole?: "owner" | "shared";
@@ -127,4 +127,13 @@ export function composeTopoOverlayRefs(
     }
   }
   return refs;
+}
+
+/**
+ * Credit lines for the overlays being drawn, deduped and in stable source
+ * order — the same lines Logjam Web's attribution control shows. Hillshade,
+ * slope, contours and vegetation all credit the LiDAR (ELVIS) source.
+ */
+export function topoOverlayCredits(refs: readonly TopoOverlayRef[]): string[] {
+  return overlayAttributionLines(refs.map((ref) => ref.layer));
 }

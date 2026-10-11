@@ -1,7 +1,7 @@
 // Account — "who am I on this service, and what am I using of it?"
 //
 // The two quota meters ARE the question this screen exists for, so unlike the
-// Saved tab (where storage is context) they get real weight here (docs/ux-principles.md §2,
+// Saved tab (where storage is context) they get real weight here (shared/DESIGN.md §2,
 // §4). Everything else is the sign-in identity and the two irreversible things:
 // signing out (which drops unsynced work — the confirmation lives in App.tsx)
 // and deleting the account.
@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
 import {
   ACCOUNT,
@@ -32,6 +32,7 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
+import type { SignOutHandler } from "../offline/signOutConfirm";
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
@@ -43,7 +44,14 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import { assetHue, fontSize, lineHeight, spacing, theme } from "../theme";
+import {
+  fontSize,
+  lineHeight,
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -75,6 +83,8 @@ const copy = ACCOUNT.copy;
  * field, not after.
  */
 function GuestAccountScreen({ onBack }: { onBack: () => void }) {
+  const styles = useStyles();
+
   const { linkAccount } = useAccountState();
   const [counts, setCounts] = useState<LocalEntityCounts | null>(null);
 
@@ -169,7 +179,7 @@ export function AccountScreen({
   onOpenFriends,
 }: {
   onBack: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
   const { accountState } = useAccountState();
@@ -192,9 +202,13 @@ function LinkedAccountScreen({
   onOpenFriends,
 }: {
   onBack: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const query = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
   const online = useConnectivity() === "online";
   const [sheet, setSheet] = useState<SheetMode>("closed");
@@ -324,7 +338,7 @@ function LinkedAccountScreen({
           label={copy.signOut}
           variant="outlineAccent"
           icon="signOut"
-          onPress={onSignOut}
+          onPress={() => onSignOut()}
         />
         <Row
           icon="delete"
@@ -377,7 +391,10 @@ function LinkedAccountScreen({
           />
         ) : null}
         {sheet === "delete" ? (
-          <DeleteAccountForm username={user.username} onDeleted={onSignOut} />
+          <DeleteAccountForm
+            username={user.username}
+            onDeleted={() => onSignOut({ accountDeleted: true })}
+          />
         ) : null}
       </BottomSheet>
 
@@ -393,13 +410,15 @@ function UsernameForm({
   current: string;
   onSaved: () => void;
 }) {
+  const styles = useStyles();
+
   const [value, setValue] = useState(current);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const save = useCallback(async () => {
     const trimmed = value.trim();
-    // Empty is a requirement, shown on submit (docs/ux-principles.md §11); unchanged is not
+    // Empty is a requirement, shown on submit (shared/DESIGN.md §11); unchanged is not
     // an error at all, just nothing to do.
     if (!trimmed) {
       setError("Enter a username.");
@@ -415,7 +434,7 @@ function UsernameForm({
       console.error(err);
       // The server's own 409 text ("Username already taken") is worth showing,
       // which is what messageFromError prefers when the API supplies one —
-      // and it's this one field's problem, so it renders under it (docs/ux-principles.md §11).
+      // and it's this one field's problem, so it renders under it (shared/DESIGN.md §11).
       setError(messageFromError(err, "Couldn't save that username."));
     } finally {
       setSaving(false);
@@ -459,6 +478,8 @@ function EmailForm({
   current: string;
   onSaved: () => void;
 }) {
+  const styles = useStyles();
+
   const [step, setStep] = useState<"request" | "confirm">("request");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -572,6 +593,8 @@ function DeleteAccountForm({
   username: string;
   onDeleted: () => void;
 }) {
+  const styles = useStyles();
+
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -614,7 +637,7 @@ function DeleteAccountForm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   email: { color: theme.textMuted, fontSize: fontSize.sm },
   body: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
@@ -632,4 +655,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: lineHeight.body,
   },
-});
+}));

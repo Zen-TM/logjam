@@ -27,15 +27,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { compassPointFor } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  textScale,
-  theme,
-  withAlpha,
-} from "../theme";
+import { radius, spacing, textScale, withAlpha, makeStyles } from "../theme";
 import type { NorthReference } from "./mapPreferences";
 import { compassTicks, displayHeading } from "./compassTape";
 
@@ -79,6 +71,8 @@ export function CompassStrip({
    */
   reference?: NorthReference;
 }) {
+  const styles = useStyles();
+
   if (heading == null || width <= 0) return null;
   // Applied once, here, to the whole tape: shifting the heading shifts every
   // tick and label with it, which is what makes the centre line read the
@@ -119,7 +113,10 @@ export function CompassStrip({
   );
 }
 
-const styles = StyleSheet.create({
+/** Centred on the strip by pulling it back half its own width. */
+const CENTRE_LINE_WIDTH = 2;
+
+const useStyles = makeStyles((theme, textRole) => ({
   frame: {
     backgroundColor: withAlpha(theme.page, 0.92),
     borderWidth: 1,
@@ -140,7 +137,7 @@ const styles = StyleSheet.create({
     marginLeft: -LABEL_WIDTH / 2,
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: spacing(0.375),
+    paddingVertical: spacing(0.5),
   },
   markMajor: { width: 1.5, height: 6, backgroundColor: theme.text },
   markMinor: {
@@ -149,26 +146,24 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.text, 0.6),
   },
   label: {
+    ...textRole.caption,
     color: theme.text,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   reference: {
+    ...textRole.caption,
     position: "absolute",
     left: spacing(0.5),
     bottom: spacing(0.25),
     color: withAlpha(theme.text, 0.7),
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
   },
   centreLine: {
     position: "absolute",
     top: 0,
     bottom: 0,
     left: "50%",
-    width: 2,
-    marginLeft: -1,
+    width: CENTRE_LINE_WIDTH,
+    marginLeft: -CENTRE_LINE_WIDTH / 2,
     backgroundColor: theme.accent,
   },
-});
+}));

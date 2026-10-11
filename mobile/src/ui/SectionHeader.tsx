@@ -1,6 +1,6 @@
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 
-import { fontSize, spacing, theme } from "../theme";
+import { formRhythm, makeStyles } from "../theme";
 
 // Uppercase, letter-spaced section label — the one heading style shared by the
 // layer sheet, forms (TextField reuses the same treatment), and list sections.
@@ -12,6 +12,8 @@ export function SectionHeader({
   /** How many the section holds: "TRIPS · 3". The same prop Logjam Web takes. */
   count?: number;
 }) {
+  const styles = useStyles();
+
   return (
     <Text style={styles.header} accessibilityRole="header">
       {count != null ? `${title} · ${count}` : title}
@@ -19,14 +21,11 @@ export function SectionHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   header: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
+    ...textRole.section,
     letterSpacing: 0.8,
-    color: theme.textMuted,
-    marginTop: spacing(2),
-    marginBottom: spacing(0.5),
+    marginTop: formRhythm.section,
+    marginBottom: formRhythm.label,
   },
-});
+}));

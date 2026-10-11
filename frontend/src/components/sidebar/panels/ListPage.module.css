@@ -1,5 +1,5 @@
 /* The shape every list PAGE inside Settings takes: hero pinned, only the list
-   scrolls (DESIGN.md §2). Shared by the place types and the two attribute
+   scrolls (DESIGN.md). Shared by the place types and the two attribute
    lists, which are the same page with different rows. */
 .root {
   flex: 1;

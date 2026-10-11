@@ -15,7 +15,7 @@
 //
 // A verb is ABSENT when it cannot exist for this way (a file has no direction
 // to reverse), never present-and-refused — the API answers 403 or 404 for the
-// ones the user may not have, so offering them would be a lie (DESIGN.md §5).
+// ones the user may not have, so offering them would be a lie (DESIGN.md).
 //
 // A verb that ENDS the user's relationship with the way sits below a rule
 // (`separated`), whether or not it destroys anything. There are three, and only
@@ -40,6 +40,7 @@ import type { WayItem, WayKind } from "./waysModel";
 export type WayVerbId =
   | "open"
   | "openPlace"
+  | "logTrip"
   | "edit"
   | "copy"
   | "copyAndRemove"
@@ -113,6 +114,10 @@ export function wayVerbs(
   // already looking at it.
   if (surface === "row") verbs.push(verb("open"));
   if (way.placeId) verbs.push(verb("openPlace"));
+  // A recorded track only, and the owner's: it is attached to the trip as a
+  // copy of the file, which is the owner's to take. An import is somebody
+  // else's walk with no start of its own, and a route is a plan, not a day out.
+  if (owned && way.kind === "track") verbs.push(verb("logTrip"));
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
   // Taking your own copy of someone else's route. `POST /routes/:id/copy` has
@@ -162,12 +167,11 @@ export function wayProperties(
 ): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
-    // The colour IS the way's identity on the map — but only a ROUTE's can be
-    // changed from here. `PATCH /media/:id` takes a display name and nothing
-    // else (it 400s without one), so a file's colour is set by whatever made
-    // the file. Offering a picker that silently did nothing would be worse
-    // than not offering one.
-    colour: owned && way.kind === "route",
+    // The colour IS the way's identity on the map. A route's and an import's
+    // can be changed from here; a recording's lives on the phone that made it
+    // (its own table), so a picker here would paint a line that phone never
+    // redraws.
+    colour: owned && (way.kind === "route" || way.kind === "import"),
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

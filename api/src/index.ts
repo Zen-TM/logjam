@@ -34,6 +34,7 @@ import sharesRouter from "./routes/shares";
 import bulkShareRouter from "./routes/bulkShare";
 import fileSendsRouter from "./routes/fileSends";
 import friendsRouter from "./routes/friends";
+import friendInvitesRouter from "./routes/friendInvites";
 import notificationsRouter from "./routes/notifications";
 import ropewikiRouter from "./routes/ropewiki";
 import topoJobsRouter from "./routes/topoJobs";
@@ -216,6 +217,8 @@ app.use("/shares", sharesRouter);
 // direct-share router would say otherwise.
 app.use("/bulk-share", bulkShareRouter);
 app.use("/file-sends", fileSendsRouter);
+// Before /friends: its DELETE /:id would otherwise take DELETE /friends/invites.
+app.use("/friends/invites", friendInvitesRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);
 app.use("/devices", devicesRouter);

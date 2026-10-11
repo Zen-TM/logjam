@@ -41,6 +41,7 @@ import {
   type MediaLinkedType,
   type MediaOrigin,
   pickNextTrackColor,
+  parseRouteColor,
   MEDIA_SIZE_CAPS,
   MEDIA_DISPLAY_NAME_MAX,
   readMediaMetadata,
@@ -242,18 +243,15 @@ router.post(
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
-    // Headroom pre-check including the declared upload; the authoritative
-    // quota charge still happens on confirm against the real S3 size.
-    await assertHasStorageQuota(
-      user.id,
-      BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
-    );
-
     // Optional client-minted mediaId (Stage 8 §3.5). A client id whose row
     // already exists means the whole three-phase flow already completed —
     // return the existing item (200), never fresh upload URLs. Foreign id →
     // 404 (anti-oracle; see lib/clientSuppliedId.ts).
+    //
+    // BEFORE the track-slot and quota checks, as in confirm below: a client
+    // replays presign when the reply to its confirm was lost, and by then its
+    // own file is what fills the place's track slot and the quota. Guard:
+    // "answers a replayed presign…" in src/__tests__/placeTracks.test.ts.
     const clientMediaId = parseClientSuppliedId(
       (req.body ?? {}).mediaId,
       "mediaId",
@@ -268,6 +266,13 @@ router.post(
         return;
       }
     }
+    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
+    // Headroom pre-check including the declared upload; the authoritative
+    // quota charge still happens on confirm against the real S3 size.
+    await assertHasStorageQuota(
+      user.id,
+      BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
+    );
 
     const mediaId = clientMediaId ?? randomUUID();
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
@@ -400,9 +405,12 @@ router.post(
             },
             select: { color: true },
           });
-          assignedColor = pickNextTrackColor(
-            existingTracks.map((t) => t.color),
-          );
+          // The phone's own pick wins when it is a palette colour: the line
+          // is already drawn in it, and recolouring at upload is the flicker
+          // this avoids. Anything else falls back to the next unused colour.
+          assignedColor =
+            parseRouteColor(body.color) ??
+            pickNextTrackColor(existingTracks.map((t) => t.color));
         }
 
         return tx.media.create({
@@ -586,12 +594,13 @@ router.get(
   },
 );
 
-// PATCH /media/:id — rename a standalone file.
+// PATCH /media/:id — rename or recolour a standalone file.
 //
-// The label has to sync or it diverges per device, which is the inconsistency
-// this whole change exists to remove. Only `displayName` is editable: the
-// filename is what the download is called and what pins the track format, and
-// nothing about the bytes can change once they are confirmed.
+// The label and the colour have to sync or they diverge per device, which is
+// the inconsistency this whole change exists to remove. Only `displayName` and
+// `color` are editable: the filename is what the download is called and what
+// pins the track format, and nothing about the bytes can change once they are
+// confirmed. `color` is limited to the shared palette (parseRouteColor).
 router.patch(
   "/:id",
   requireAuth,
@@ -599,10 +608,19 @@ router.patch(
     const user = await getUser(req.user!.sub);
     const id = getParam(req.params.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    if (!("displayName" in body)) {
-      throw new AppError(400, "displayName is required");
+    if (!("displayName" in body) && !("color" in body)) {
+      throw new AppError(400, "displayName or color is required");
     }
-    const displayName = parseMediaDisplayName(body.displayName);
+    const data: { displayName?: string | null; color?: string } = {};
+    if ("displayName" in body) {
+      data.displayName = parseMediaDisplayName(body.displayName);
+    }
+    if ("color" in body) {
+      const color = parseRouteColor(body.color);
+      if (color === null)
+        throw new AppError(400, "color must be a palette colour");
+      data.color = color;
+    }
 
     // Owner-scoped; a foreign id gets the same 404 a missing one gets (the
     // anti-oracle this file's other handlers argue).
@@ -613,13 +631,13 @@ router.patch(
     if (media.origin === null) {
       throw new AppError(
         400,
-        "Only an import or a recorded track can be renamed",
+        "Only an import or a recorded track can be edited",
       );
     }
 
     const updated = await prisma.media.update({
       where: { id },
-      data: { displayName },
+      data,
     });
     res.json(await toMediaItem(updated));
   },

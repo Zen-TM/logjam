@@ -1,6 +1,5 @@
-import { tripTypeIdentity } from "@logjam/shared";
+import { type ThemeTokens, tripTypeIdentity } from "@logjam/shared";
 
-import { theme } from "../theme";
 import { type Glyph } from "../ui";
 
 export { primaryTripType, tripTypeLabel } from "@logjam/shared";
@@ -16,7 +15,10 @@ type TripTypeMeta = {
   hue: string;
 };
 
-export function tripTypeMeta(type: string | null | undefined): TripTypeMeta {
+export function tripTypeMeta(
+  type: string | null | undefined,
+  theme: ThemeTokens,
+): TripTypeMeta {
   const { icon, hue } = tripTypeIdentity(type);
   return {
     icon: { picked: icon },

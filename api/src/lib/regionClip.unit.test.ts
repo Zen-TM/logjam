@@ -4,6 +4,7 @@ import {
   ARCHIVE_BOUNDS,
   MAX_CLIP_ZOOM,
   createClipTokenStore,
+  pmtilesExtractArgs,
   validateRegionClipRequest,
 } from "./regionClip";
 import { redactPaths } from "./logger";
@@ -156,6 +157,105 @@ describe("privacy: log redaction covers the clip request body", () => {
   it("redactPaths includes every region-bound body field", () => {
     for (const field of ["west", "south", "east", "north"]) {
       expect(redactPaths).toContain(`req.body.${field}`);
+    }
+  });
+});
+
+// Mutation: pass an s3:// URI through as <input> again and the first test goes
+// red. go-pmtiles 1.31.2 then opens "<cwd>/s3:/bucket/key" as a local file,
+// exits 1, and every region clip in prod is a 502.
+describe("validateRegionClipRequest, for a DEM archive", () => {
+  // Mutation: let the caller's maxzoom stand for a DEM clip and a phone saves
+  // a zoom the sampler never reads, and has no height offline.
+  it("pins the clip to the one zoom the source is read at", () => {
+    const result = validateRegionClipRequest({
+      ...BLUE_MOUNTAINS,
+      maxzoom: 9,
+      demSourceId: "nsw-5m",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { minzoom: 15, maxzoom: 15, archive: { id: "nsw-5m" } },
+    });
+  });
+
+  // Mutation: read `contours` loosely (`if (b.contours)`) and any truthy junk
+  // in the body turns a basemap clip into a contour clip.
+  it("cuts the contour archive at its own zooms, only when asked plainly", () => {
+    expect(
+      validateRegionClipRequest({ ...BLUE_MOUNTAINS, contours: true }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        minzoom: 11,
+        maxzoom: 14,
+        archive: { archivePath: "master/contours/nsw-10m.pmtiles" },
+      },
+    });
+    const basemap = validateRegionClipRequest({
+      ...BLUE_MOUNTAINS,
+      contours: "yes",
+    });
+    expect(basemap.ok && basemap.value.archive).toBeUndefined();
+  });
+
+  it("refuses a source that is not an archive, or not a source", () => {
+    for (const demSourceId of ["terrarium", "nope", 7]) {
+      expect(
+        validateRegionClipRequest({ ...BLUE_MOUNTAINS, demSourceId }),
+      ).toEqual({ ok: false, error: "Unknown elevation source" });
+    }
+  });
+});
+
+describe("pmtilesExtractArgs", () => {
+  it("adds a floor only when asked, so a basemap clip keeps its overview", () => {
+    const args = (minzoom?: number) =>
+      pmtilesExtractArgs(
+        "/a.pmtiles",
+        "/o.pmtiles",
+        "1,2,3,4",
+        15,
+        "r",
+        minzoom,
+      );
+    expect(args()).not.toContain("--minzoom=15");
+    expect(args(15)).toContain("--minzoom=15");
+  });
+
+  it("splits an s3:// archive into --bucket and a key", () => {
+    expect(
+      pmtilesExtractArgs(
+        "s3://some-bucket/master/basemap/nsw.pmtiles",
+        "/tmp/out.pmtiles",
+        "150,-34,151,-33",
+        14,
+        "ap-southeast-2",
+      ),
+    ).toEqual([
+      "extract",
+      "master/basemap/nsw.pmtiles",
+      "/tmp/out.pmtiles",
+      "--bucket=s3://some-bucket?region=ap-southeast-2",
+      "--bbox=150,-34,151,-33",
+      "--maxzoom=14",
+    ]);
+  });
+
+  it("passes a local path or an https URL through as the input", () => {
+    for (const uri of [
+      "/data/nsw.pmtiles",
+      "https://example.com/nsw.pmtiles",
+    ]) {
+      expect(
+        pmtilesExtractArgs(uri, "/tmp/out.pmtiles", "1,2,3,4", 15, "x"),
+      ).toEqual([
+        "extract",
+        uri,
+        "/tmp/out.pmtiles",
+        "--bbox=1,2,3,4",
+        "--maxzoom=15",
+      ]);
     }
   });
 });
