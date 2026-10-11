@@ -529,25 +529,18 @@ export function useCustomFieldForm({
     </FormStack>
   );
 
-  // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
-  // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (shared/DESIGN.md §11).
+  // The sheet's × (and the back arrow) leave the form; the footer holds only
+  // the commit (shared/DESIGN.md §3). The banner sits above it, never at the
+  // top of the form (§11).
   const footer = (
     <FormStack>
       {formError ? <ErrorBanner message={formError} /> : null}
-      <View style={styles.actions}>
-        <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-        </View>
-        <View style={styles.action}>
-          <Button
-            label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
-            icon="done"
-            loading={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      </View>
+      <Button
+        label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
+        icon="done"
+        loading={saving}
+        onPress={() => void save()}
+      />
     </FormStack>
   );
 
@@ -610,8 +603,6 @@ function typeLabel(type: TripLogCustomFieldType): string {
 const useStyles = makeStyles((theme) => ({
   list: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-  actions: { flexDirection: "row", gap: spacing(1) },
-  action: { flex: 1 },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },
 }));

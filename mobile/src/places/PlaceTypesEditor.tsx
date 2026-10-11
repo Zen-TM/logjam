@@ -357,19 +357,12 @@ export function usePlaceTypeForm({
           places-in-use check itself failing) — the banner sits directly above
           Save, same as every other form (shared/DESIGN.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
-      <View style={styles.actions}>
-        <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-        </View>
-        <View style={styles.action}>
-          <Button
-            label={editing ? "Save" : "Add type"}
-            icon="done"
-            loading={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      </View>
+      <Button
+        label={editing ? "Save" : "Add type"}
+        icon="done"
+        loading={saving}
+        onPress={() => void save()}
+      />
     </FormStack>
   );
 
@@ -429,8 +422,6 @@ const GRID_GAP = spacing(1);
 
 const useStyles = makeStyles((theme) => ({
   list: { gap: spacing(1) },
-  actions: { flexDirection: "row", gap: spacing(1) },
-  action: { flex: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
   // A chosen cell changes its edge's colour, never its width: Fabric drops a
   // rounded card's children when a border width changes (mobile/DESIGN.md §7).

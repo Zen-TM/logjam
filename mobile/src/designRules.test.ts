@@ -94,6 +94,26 @@ describe("an empty list is the kit's EmptyState", () => {
   });
 });
 
+describe("a form in a sheet is left by the sheet's ×", () => {
+  // shared/DESIGN.md §3: its footer holds only the submit. A Cancel button is
+  // for a full-screen pick or a sub-view that backs out to its sheet.
+  // Mutation: put `<Button label="Cancel" …>` back in a `CustomFieldsEditor`
+  // or `PlaceTypesEditor` footer.
+  const MAY_CANCEL = [
+    "map/PickAreaScreen.tsx",
+    "map/PickPointScreen.tsx",
+    "places/PlaceFilterSheet.tsx",
+    "logs/LogsFilterSheet.tsx",
+  ];
+  it("has no Cancel button outside a pick or a sub-view", () => {
+    const offenders = sources(SRC)
+      .filter((path) => /label="Cancel"/.test(readFileSync(path, "utf8")))
+      .map((path) => relative(SRC, path))
+      .filter((file) => !MAY_CANCEL.includes(file));
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("space is a step of the scale", () => {
   // `spacing()` takes a `SpaceStep`, so 6dp (0.75) does not typecheck; and a
   // bare number in a space property is a lint error. Mutations: add "0.75" to
