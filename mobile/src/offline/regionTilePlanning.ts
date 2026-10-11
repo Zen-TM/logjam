@@ -90,3 +90,23 @@ export function classifyTileResponse(
 export function deadTileBudget(totalTiles: number): number {
   return Math.max(10, Math.floor(totalTiles * 0.01));
 }
+
+/**
+ * What a tile that has used up its retries means.
+ *
+ * A download keeps running when the app leaves the foreground, for as long as
+ * Android lets the process run. The one thing that can go wrong back there is
+ * the OS withholding the network from a process that is still alive, and that
+ * is not the provider failing: the job parks (the queue re-queues it on the
+ * next foreground edge) instead of spending its dead-tile budget on it.
+ * With no connection at all it is neither: the job waits for the connection,
+ * which the queue bounds behind another app (`mayResumeOnReconnect`).
+ * Guard: `regionTilePlanning.test.ts` ("exhaustedTileOutcome").
+ */
+export function exhaustedTileOutcome(
+  appState: string,
+  online: boolean,
+): "dead" | "park" | "offline" {
+  if (!online) return "offline";
+  return appState === "active" ? "dead" : "park";
+}
