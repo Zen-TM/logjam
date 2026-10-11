@@ -157,13 +157,13 @@ export async function listTracksNeedingBackup(): Promise<Track[]> {
 
 /**
  * Finished recordings whose climb could come from a finer source than the one
- * stored, oldest check first — what the upgrade pass works through
+ * stored, newest first — what the upgrade pass works through
  * (`tracks/trackClimb.ts`). A track already on `finestSource` is never
- * selected, nor one the network was asked about since `checkedBefore`.
+ * selected, nor one the network had nothing finer for under `sourcesKey`.
  */
 export async function listTracksDueClimbUpgrade(
   finestSource: string,
-  checkedBefore: string,
+  sourcesKey: string,
   limit: number,
 ): Promise<Track[]> {
   const db = await getOfflineDb();
@@ -171,25 +171,28 @@ export async function listTracksDueClimbUpgrade(
     `SELECT * FROM track
      WHERE state = 'done' AND pointCount > 1
        AND (elevationSource IS NULL OR elevationSource != ?)
-       AND (elevationCheckedAt IS NULL OR elevationCheckedAt < ?)
-     ORDER BY elevationCheckedAt ASC, endedAt DESC
+       AND elevationCheckedFor IS NOT ?
+     ORDER BY endedAt DESC
      LIMIT ?`,
     finestSource,
-    checkedBefore,
+    sourcesKey,
     limit,
   );
   return rows.map(rowToTrack);
 }
 
 /**
- * Note that the network had no finer climb for this track just now. Does not
- * bump `updatedAt` or notify: nothing a screen shows has changed.
+ * Note that the network had no finer climb for this track under `sourcesKey`.
+ * Does not bump `updatedAt` or notify: nothing a screen shows has changed.
  */
-export async function markTrackClimbChecked(id: string): Promise<void> {
+export async function markTrackClimbChecked(
+  id: string,
+  sourcesKey: string,
+): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync(
-    "UPDATE track SET elevationCheckedAt = ? WHERE id = ?",
-    new Date().toISOString(),
+    "UPDATE track SET elevationCheckedFor = ? WHERE id = ?",
+    sourcesKey,
     id,
   );
 }
@@ -314,8 +317,10 @@ export async function updateTrack(
     // before a batch landed would clobber the increment and leave the row
     // claiming fewer points than the table holds — which the map layer reads as
     // "the series was rewritten" and answers with a full reload.
+    // The check mark goes with the figures it was about: a recording
+    // continued and finished again is a longer line nobody has asked about.
     sets.push(
-      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?, elevationSource = ?",
+      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?, elevationSource = ?, elevationCheckedFor = NULL",
     );
     args.push(
       patch.stats.distanceM,

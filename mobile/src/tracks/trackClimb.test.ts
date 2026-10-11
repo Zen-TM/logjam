@@ -69,10 +69,9 @@ const updateTrack = vi.fn(
     if (row && patch.climb) row.elevationSource = patch.climb.elevationSource;
   },
 );
-const markTrackClimbChecked = vi.fn(async (_id: string) => {});
+const markTrackClimbChecked = vi.fn(async (_id: string, _key: string) => {});
 const listTracksDueClimbUpgrade = vi.fn(
-  async (_finest: string, _before: string, limit: number) =>
-    rows.slice(0, limit),
+  async (_finest: string, _key: string, limit: number) => rows.slice(0, limit),
 );
 const listTrackPoints = vi.fn(async (_id: string) =>
   [0, 1, 2].map((i) => ({
@@ -86,9 +85,10 @@ const listTrackPoints = vi.fn(async (_id: string) =>
 vi.mock("./tracksDb", () => ({
   getTrack: async (id: string) => rows.find((r) => r.id === id) ?? null,
   listTrackPoints: (id: string) => listTrackPoints(id),
-  listTracksDueClimbUpgrade: (finest: string, before: string, limit: number) =>
-    listTracksDueClimbUpgrade(finest, before, limit),
-  markTrackClimbChecked: (id: string) => markTrackClimbChecked(id),
+  listTracksDueClimbUpgrade: (finest: string, key: string, limit: number) =>
+    listTracksDueClimbUpgrade(finest, key, limit),
+  markTrackClimbChecked: (id: string, key: string) =>
+    markTrackClimbChecked(id, key),
   updateTrack: (id: string, patch: { climb?: { elevationSource: string } }) =>
     updateTrack(id, patch),
 }));
@@ -256,11 +256,15 @@ describe("the upgrade pass", () => {
     apiFetch.mockResolvedValueOnce(apiProfile(["terrarium"]));
     expect(await upgradeTrackClimbs()).toBe(0);
     expect(updateTrack).not.toHaveBeenCalled();
-    expect(markTrackClimbChecked).toHaveBeenCalledWith("track-1");
+    // Marked with the key the list was asked under, so the same sources never
+    // select it again and a changed declaration does.
+    const key = listTracksDueClimbUpgrade.mock.calls[0]![1];
+    expect(key).toContain("nsw-5m");
+    expect(markTrackClimbChecked).toHaveBeenCalledWith("track-1", key);
   });
 
-  // Mutation: mark on a failed request and one bad link costs every old track
-  // a week on GPS figures.
+  // Mutation: mark on a failed request and one bad link leaves every old
+  // track on GPS figures until the DEM sources next change.
   it("stops at a failed request and leaves the rest unmarked", async () => {
     rows = [track(), track({ id: "track-2" })];
     apiFetch.mockRejectedValueOnce({ status: 503 });
@@ -270,8 +274,8 @@ describe("the upgrade pass", () => {
   });
 
   // The saved terrain can be coarser than what the API holds: its answer is
-  // taken, and the track is still asked about, so it is not left a week on
-  // the coarse figure.
+  // taken, and the track is still asked about, so it is not left on the
+  // coarse figure.
   it("keeps the saved terrain's coarser answer when the request fails, unmarked", async () => {
     rows = [track()];
     saved = { heightM: 600, sourceId: "terrarium" };
@@ -288,7 +292,10 @@ describe("the upgrade pass", () => {
     apiFetch.mockRejectedValueOnce({ status: 400 });
     apiFetch.mockResolvedValueOnce(apiProfile(["nsw-5m"]));
     expect(await upgradeTrackClimbs()).toBe(1);
-    expect(markTrackClimbChecked).toHaveBeenCalledWith("track-1");
+    expect(markTrackClimbChecked).toHaveBeenCalledWith(
+      "track-1",
+      expect.any(String),
+    );
     expect(rows[1]!.elevationSource).toBe("nsw-5m");
   });
 });

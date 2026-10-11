@@ -40,13 +40,17 @@ import {
 } from "./tracksDb";
 
 /**
- * How long a track the network had no finer climb for waits before it is
- * asked about again. The answer changes only when the DEM coverage does.
+ * What a "nothing finer" answer was true of. A track the network had no finer
+ * climb for is asked about again only when this changes: a source added, or
+ * one whose footprint grew. Nothing polls.
  *
- * ponytail: a fixed wait, not a coverage version. If the API ever says which
- * DEM build it serves, compare that instead.
+ * ponytail: the declaration, not the archive behind it. A rebuilt archive
+ * that fills holes inside an unchanged `coverage` re-asks nothing; give the
+ * source a build number here if that ever happens.
  */
-const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+const SOURCES_KEY = JSON.stringify(
+  DEM_SOURCES.map((source) => [source.id, source.coverage]),
+);
 
 /**
  * Tracks one pass reads. Each is a full read of a series and maybe a request,
@@ -123,7 +127,7 @@ export async function upgradeTrackClimbs(): Promise<number> {
   const due = await listTracksDueClimbUpgrade(
     // Finest first: the order is the precedence.
     DEM_SOURCES[0]!.id,
-    new Date(Date.now() - RECHECK_AFTER_MS).toISOString(),
+    SOURCES_KEY,
     TRACKS_PER_PASS,
   );
   const finest = DEM_SOURCES[0]!.id;
@@ -161,7 +165,7 @@ export async function upgradeTrackClimbs(): Promise<number> {
     // Marked whether or not anything changed: a track still short of the
     // finest source (outside its footprint, say) must not be read again on
     // every cycle.
-    await markTrackClimbChecked(track.id);
+    await markTrackClimbChecked(track.id, SOURCES_KEY);
   }
   return replaced;
 }
