@@ -340,7 +340,27 @@ export function planDemDownload(
   });
 }
 
+/**
+ * MEASURED bytes per square kilometre of a clip of the statewide contours
+ * (zooms 11 to 14), cut from the Katoomba and Port Hacking sheets: 4 KB on
+ * the coastal plain, 16 to 17 KB across the Blue Mountains, 23 KB over the
+ * Grose gorge alone. People save rugged ground, so the mean is the mountain
+ * figure and the p90 the gorge.
+ */
+const CONTOUR_CLIP_BYTES_PER_KM2 = { meanBytes: 16_000, p90Bytes: 23_000 };
+
+export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
+  const [widthKm, heightKm] = regionEdgesKm(bbox);
+  const km2 = widthKm * heightKm;
+  return {
+    meanBytes: Math.round(km2 * CONTOUR_CLIP_BYTES_PER_KM2.meanBytes),
+    p90Bytes: Math.round(km2 * CONTOUR_CLIP_BYTES_PER_KM2.p90Bytes),
+  };
+}
+
 export interface MultiSourceRegionPlan {
+  /** The contour clip, when the user is saving one: bytes only, like a DEM. */
+  contours: RegionSizeEstimate | null;
   /**
    * DEM archive clips: one request each to our own API, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
@@ -382,7 +402,10 @@ export function planRegionForBasemaps(
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
   /** False for a guest: the clip endpoint needs a signed-in user. */
   includeDemArchives = false,
+  /** True when a clip of the statewide contours is saved with the area. */
+  includeContours = false,
 ): MultiSourceRegionPlan {
+  const contours = includeContours ? estimateContourClip(bbox) : null;
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
     (source) => {
@@ -420,8 +443,10 @@ export function planRegionForBasemaps(
   ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>
-    [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0);
+    [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
+    (contours?.[key] ?? 0);
   return {
+    contours,
     perSource,
     demArchives,
     totalTiles,

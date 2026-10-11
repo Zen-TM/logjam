@@ -228,6 +228,31 @@ describe("planRegionForBasemaps", () => {
     expect(job.totalTiles).toBe(worldwide.totalTiles);
   });
 
+  // Mutation: leave the contour clip out of the totals and the free-space
+  // check passes an area whose download then does not fit.
+  it("counts a contour clip in the bytes only when one is being saved", () => {
+    const without = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, true);
+    const withClip = planRegionForBasemaps(
+      TEN_KM,
+      [],
+      15,
+      maxZoomFor,
+      true,
+      true,
+    );
+    expect(without.contours).toBeNull();
+    // About 100 km² at the measured 16 KB a square kilometre.
+    expect(withClip.contours!.meanBytes).toBeGreaterThan(1_000_000);
+    expect(withClip.contours!.meanBytes).toBeLessThan(2_500_000);
+    expect(withClip.meanBytes - without.meanBytes).toBe(
+      withClip.contours!.meanBytes,
+    );
+    expect(withClip.p90Bytes - without.p90Bytes).toBe(
+      withClip.contours!.p90Bytes,
+    );
+    expect(withClip.totalTiles).toBe(without.totalTiles);
+  });
+
   it("saves no archive for an area outside every archive's coverage", () => {
     const perth = { west: 115.8, south: -32.0, east: 115.9, north: -31.9 };
     expect(planDemDownload(perth)).toEqual([]);

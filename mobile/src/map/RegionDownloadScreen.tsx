@@ -62,6 +62,7 @@ import {
   Hero,
   Notice,
   ChipRail,
+  SwitchRow,
   TextField,
 } from "../ui";
 import {
@@ -240,6 +241,8 @@ export function RegionDownloadScreen({
   // to change it — which a greyed chip could not.
   const isGuest = useAccountState().accountState === "guest";
   const [contoursOverImagery] = useState(readContoursOverImagery);
+  // An add-on to the maps that draw contours, on until switched off.
+  const [saveContours, setSaveContours] = useState(true);
   const downloadable = isGuest
     ? DOWNLOADABLE.filter((id) => id !== "protomaps")
     : DOWNLOADABLE;
@@ -379,11 +382,12 @@ export function RegionDownloadScreen({
 
   const pyramidIds = selected.filter(isRasterPyramid);
   const includesVector = selected.includes("protomaps");
-  // Saved with any map that draws them, so it looks the same out of range.
-  // A guest has none: the clip endpoint needs a signed-in user.
-  const includesContours =
+  // Offered with any map that draws them, so it can look the same out of
+  // range. A guest has none: the clip endpoint needs a signed-in user.
+  const offersContours =
     !isGuest &&
     selected.some((id) => drawsNswContours(id, contoursOverImagery));
+  const includesContours = offersContours && saveContours;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
     ? planRegionForBasemaps(
@@ -393,6 +397,7 @@ export function RegionDownloadScreen({
         catalogMaxZoom,
         // The clip endpoint needs a signed-in user, as the vector map does.
         !isGuest,
+        includesContours,
       )
     : null;
   const caps =
@@ -745,6 +750,19 @@ export function RegionDownloadScreen({
               onChange={(next) => setDetailZoom(Number(next))}
             />
           </Field>
+
+          {offersContours ? (
+            <SwitchRow
+              title="Contours"
+              description={
+                job?.contours
+                  ? `≈ ${formatBytes(job.contours.meanBytes)}`
+                  : undefined
+              }
+              checked={saveContours}
+              onChange={setSaveContours}
+            />
+          ) : null}
 
           {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
