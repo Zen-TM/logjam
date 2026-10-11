@@ -366,7 +366,7 @@ export function RegionDownloadScreen({
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
   const pyramidIds = selected;
-  const vectorClip = bbox ? vectorClipFor(isGuest, bbox) : "none";
+  const vectorClip = bbox ? vectorClipFor(isGuest) : "none";
   const includesVector = vectorClip === "include";
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
@@ -681,9 +681,7 @@ export function RegionDownloadScreen({
         <Text style={styles.sourceNote}>
           {isGuest
             ? "The detailed map needs an account. These download without one."
-            : vectorClip === "too-large"
-              ? "This area is too big for the detailed map. Shrink it to include it."
-              : "The detailed map is saved with every area."}
+            : "The detailed map is saved with every area."}
         </Text>
 
         <View style={styles.panelBody}>
