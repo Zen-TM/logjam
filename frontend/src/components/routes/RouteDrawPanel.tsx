@@ -18,7 +18,7 @@
 // CONTROLS COME FIRST because they change what the next click does, while the
 // stats describe what the last one produced — a control below the readout it
 // governs reads as a footnote to it (operator, 2026-09-17).
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   densifyLine,
   formatDistanceM,

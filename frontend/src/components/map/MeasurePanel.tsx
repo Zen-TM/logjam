@@ -61,7 +61,7 @@ export function MeasurePanel({
     clear: {
       run: onClear,
       disabled: points.length === 0,
-      reason: "No points to clear",
+      reason: "Nothing to clear",
     },
     // Logjam GPS's way out; here it is the hero's ×.
     leave: { run: onClose, disabled: false, reason: "" },
@@ -119,6 +119,7 @@ export function MeasurePanel({
                 label={verb.label}
                 onClick={verbs[verb.id].run}
                 disabled={verbs[verb.id].disabled}
+                disabledReason={verbs[verb.id].reason}
               />
             ),
           )}

@@ -20,10 +20,6 @@ const ALLOWED: { file: string; reason: string }[] = [
     reason:
       "the active filter's summary, not a name: the field opens to show it whole",
   },
-  {
-    file: "components/map/MapSearchBox.module.css",
-    reason: "a place name in a result: wraps with the map chrome's own pass",
-  },
 ];
 
 function stylesheets(dir: string): string[] {
