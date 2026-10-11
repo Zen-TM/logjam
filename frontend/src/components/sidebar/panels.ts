@@ -1,3 +1,5 @@
+import { MAP_MEASURE } from "@logjam/shared";
+
 /**
  * The pages of Logjam Web. One per question a user arrives with:
  * Places · Logs (and Stats) · Ways (routes, tracks, imports) · Maps (GeoPDFs,
@@ -19,7 +21,10 @@ export type PanelId =
   | "way-detail"
   // The route tool, as a page rather than a card over the map: the map is the
   // canvas and nothing should float on it while a line is being drawn.
-  | "way-draw";
+  | "way-draw"
+  // The measure tool, a page for the same reason. It is armed exactly while
+  // this page is open: nothing is kept, so leaving the page is leaving the tool.
+  | "measure";
 
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
@@ -35,6 +40,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   "trip-detail": "Trip",
   "way-detail": "Way",
   "way-draw": "Draw a route",
+  measure: MAP_MEASURE.title,
 };
 
 /** A page with two views swaps its content in place under one rail of chips,

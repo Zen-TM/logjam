@@ -790,6 +790,69 @@ test.describe("desktop", () => {
     await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Close" })).toBeFocused();
   });
+
+  test("Measure: armed from the Tools tray or a point, a page in the panel", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const aside = page.locator("aside");
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const tools = page.getByRole("button", { name: "Tools", exact: true });
+    const tray = page.getByRole("group", { name: "Tools" });
+
+    // Opening the tray leaves focus on its button: Escape closes it from there.
+    await tools.click();
+    await expect(tray).toBeVisible();
+    await expectNoViolations(page, "[role='group'][aria-label='Tools']");
+    await page.keyboard.press("Escape");
+    await expect(tray).toHaveCount(0);
+    await expect(tools).toBeFocused();
+
+    await tools.click();
+    await tray.getByRole("button", { name: "Measure distance" }).click();
+    await expect(tray).toHaveCount(0);
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "Measure distance" }),
+    ).toBeVisible();
+    const status = aside.getByRole("status");
+    await expect(status).toHaveText("Click the map to measure");
+    await expectNoViolations(page, "aside");
+
+    // Without a pointer: Enter on the focused map places a point at the middle
+    // of it, and the arrow keys move the map under that.
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText("1 point");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText("2 points");
+    await expect(aside.locator("dd").first()).toHaveText(/\d (m|km)$/);
+    await expectNoViolations(page, "aside");
+
+    await aside.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(status).toHaveText("Click the map to measure");
+
+    // Nothing is kept, so leaving asks nothing.
+    await aside.getByRole("button", { name: "Close" }).click();
+    await expect(aside.getByRole("heading", { level: 2 })).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+
+    // "Measure from here" on a point arms it with that point already placed.
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+      button: "right",
+    });
+    await page
+      .getByRole("dialog", { name: "This point" })
+      .getByRole("button", { name: "Measure from here" })
+      .click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "Measure distance" }),
+    ).toBeVisible();
+    await expect(aside.getByRole("status")).toHaveText("1 point");
+  });
 });
 
 /**
@@ -876,6 +939,22 @@ test.describe("narrow web", () => {
     });
     expect(inside).toBe(true);
     await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+  });
+
+  test("Measure: the tool's page is the sheet under the map", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page.getByRole("button", { name: "Measure distance" }).click();
+    const sheet = page.getByRole("complementary", { name: "Measure distance" });
+    await expect(sheet).toBeVisible();
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet.getByRole("status")).toHaveText("1 point");
+    await expectNoViolations(page, "aside");
+    await expectNoViolations(page, "#map");
   });
 
   test("a form dialog filling the phone's screen", async ({ page }) => {
