@@ -18,7 +18,13 @@ import { Alert, AppState, StyleSheet, View } from "react-native";
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import { useElevationProfile } from "../map/useElevationProfile";
 import { spacing, theme } from "../theme";
-import { BottomSheet, Button, FieldError, IconButton } from "../ui";
+import {
+  BottomSheet,
+  closedSheet,
+  Button,
+  FieldError,
+  IconButton,
+} from "../ui";
 import { confirmFinishRecording } from "./finishRecordingPrompt";
 import { TrackStatsBody } from "./TrackStatsBody";
 import {
@@ -180,7 +186,7 @@ export function RecordingSheet({
     );
   }, [activeTrack, onClose]);
 
-  if (!activeTrack) return null;
+  if (!activeTrack) return closedSheet;
 
   return (
     <BottomSheet

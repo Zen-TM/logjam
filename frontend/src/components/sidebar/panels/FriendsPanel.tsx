@@ -34,6 +34,8 @@ import {
   contractSectionKeys,
   FRIENDS,
   friendAcceptedMessage,
+  friendInviteUrl,
+  friendInvitesLiveLabel,
   friendRemovedMessage,
   friendsRemovedMessage,
   friendsRemoveConfirm,
@@ -68,6 +70,9 @@ import {
 } from "../../../ui";
 import type { TFriend, TFriendRequest, TSearchUser } from "../../../placeUtils";
 import {
+  createFriendInvite,
+  getFriendInvites,
+  revokeFriendInvites,
   searchUsers,
   sendFriendRequest,
   acceptFriendRequest,
@@ -560,8 +565,91 @@ function AddFriendDialog({
             />
           ))
         )}
+        <InviteLink open={open} />
       </div>
     </Dialog>
+  );
+}
+
+/** The other way to add someone: a link to send, for when they are not at
+ *  hand to spell a username. The link is shown as well as copied, because a
+ *  browser may refuse the clipboard and the link exists only in this reply. */
+function InviteLink({ open }: { open: boolean }) {
+  const toast = useToast();
+  const [link, setLink] = useState<string | null>(null);
+  const [live, setLive] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getFriendInvites()
+      .then((invites) => {
+        if (!cancelled) setLive(invites.length);
+      })
+      // The count is a courtesy; the buttons work without it.
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+      setLink(null);
+    };
+  }, [open]);
+
+  async function handleCopy() {
+    setBusy(true);
+    try {
+      const { token } = await createFriendInvite();
+      const url = friendInviteUrl(window.location.origin, token);
+      setLink(url);
+      setLive((count) => count + 1);
+      await navigator.clipboard.writeText(url);
+      toast.success(copy.inviteCopied);
+    } catch (err) {
+      console.error(err);
+      // With a link on screen the failure was the clipboard's, and the link
+      // can still be selected by hand.
+      toast.error(messageFromError(err, copy.inviteFailed));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRevoke() {
+    setBusy(true);
+    try {
+      await revokeFriendInvites();
+      setLink(null);
+      setLive(0);
+      toast.success(copy.inviteRevoked);
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, copy.inviteRevokeFailed));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={classes.invite}>
+      <p className={classes.note}>{copy.inviteHint}</p>
+      <Button
+        variant="outline"
+        icon="link"
+        busy={busy}
+        onClick={() => void handleCopy()}
+      >
+        {copy.inviteCopy}
+      </Button>
+      {link && <p className={classes.inviteLink}>{link}</p>}
+      {live > 0 && (
+        <p className={classes.note}>
+          {friendInvitesLiveLabel(live)}{" "}
+          <Button compact disabled={busy} onClick={() => void handleRevoke()}>
+            {copy.inviteRevoke}
+          </Button>
+        </p>
+      )}
+    </div>
   );
 }
 

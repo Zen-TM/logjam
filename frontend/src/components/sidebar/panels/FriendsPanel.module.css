@@ -46,3 +46,22 @@
   font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
+
+/* The invite link, under the search: a second way in, so it sits apart. */
+.invite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1-5);
+  border-top: var(--hairline);
+}
+
+.inviteLink {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
