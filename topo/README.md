@@ -208,12 +208,12 @@ python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2
 
 `fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
 what is already done, so a stopped run carries on where it left off. The
-format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
+format and why: [ADR 0030](../docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md).
 
 ### The statewide build
 
 All 343 sheets, once. Why Logjam hosts its own copy, and what the licence
-asks: [ADR 0030](../docs/decisions/0030-nsw-heights-come-from-the-spatial-services-5m-dem.md).
+asks: [ADR 0031](../docs/decisions/0031-nsw-heights-come-from-the-spatial-services-5m-dem.md).
 
 Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM:
 

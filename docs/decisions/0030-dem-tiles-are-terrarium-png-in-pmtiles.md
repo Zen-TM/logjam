@@ -1,4 +1,4 @@
-# 0029. A DEM Logjam builds is terrarium PNG tiles, rounded to a quarter metre, in one PMTiles archive
+# 0030. A DEM Logjam builds is terrarium PNG tiles, rounded to a quarter metre, in one PMTiles archive
 
 - **Date:** 2026-10-10
 - **Status:** Accepted

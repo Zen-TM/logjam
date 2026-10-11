@@ -5,7 +5,7 @@ build_nsw_dem.py
 One-off build of the `nsw-5m` DEM archive from the NSW Spatial Services 5 m
 DEM sheets: terrarium PNG tiles, 256 px, zoom 8 to 15, heights rounded to a
 quarter of a metre, in one PMTiles file.
-docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md
+docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md
 
     build_nsw_dem.py fetch SRC [Sheet ...]     # no sheet named = all 343
     build_nsw_dem.py tile  SRC WORK [--jobs N]
@@ -16,7 +16,7 @@ it stopped. Run `tile` only once every sheet is fetched: a finished block is
 not rebuilt when a neighbouring sheet arrives later. `pack` needs the
 `pmtiles` binary (go-pmtiles) on PATH, and stamps the archive with the month
 the sheets were downloaded, which the data's licence asks derived products to
-show (docs/decisions/0030-nsw-heights-come-from-the-spatial-services-5m-dem.md).
+show (docs/decisions/0031-nsw-heights-come-from-the-spatial-services-5m-dem.md).
 
 The work unit is one zoom-10 tile (a "block", about 33 km across here), NOT
 one sheet: sheets are in three MGA zones and a tile on a sheet edge needs

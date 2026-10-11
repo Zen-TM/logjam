@@ -1,4 +1,4 @@
-# 0030. Heights in NSW come from the Spatial Services 5 m DEM, built once into our own archive
+# 0031. Heights in NSW come from the Spatial Services 5 m DEM, built once into our own archive
 
 - **Date:** 2026-10-10
 - **Status:** Accepted
@@ -32,7 +32,7 @@ Property ... remains unchanged, maintained and preserved".
   ([0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)).
 - **Our own copy.** `topo/build_nsw_dem.py` builds every sheet into one
   archive, kept in the topo bucket beside the vector basemap
-  ([0029](0029-dem-tiles-are-terrarium-png-in-pmtiles.md)). Nothing asks
+  ([0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md)). Nothing asks
   Spatial Services for data at run time.
 - **All of the state**, not only the rugged or forested parts.
 - **The credit** is shown wherever a height from it is shown, and names the
