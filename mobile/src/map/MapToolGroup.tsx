@@ -135,7 +135,11 @@ export function MapToolGroup({
             ]}
             onPress={() => onPickTool(tool.id)}
           >
-            <Icon idea={tool.icon} size={FAB_ICON} color={theme.text} />
+            <Icon
+              idea={tool.icon}
+              size={FAB_ICON}
+              color={activeTool === tool.id ? theme.onFill : theme.text}
+            />
           </Pressable>
         </Animated.View>
       ))}
@@ -154,7 +158,7 @@ export function MapToolGroup({
         <Icon
           idea={open ? "close" : "add"}
           size={FAB_ICON}
-          color={theme.text}
+          color={open || activeTool ? theme.onFill : theme.text}
         />
       </Pressable>
     </View>

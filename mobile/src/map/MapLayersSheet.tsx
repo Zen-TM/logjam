@@ -44,7 +44,14 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme, useHues } from "../theme";
+import {
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+  controlSize,
+  opacity,
+} from "../theme";
 import {
   BottomSheet,
   Row,
@@ -714,11 +721,11 @@ const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },
   // A row something above it has already decided for.
-  inert: { opacity: 0.4 },
+  inert: { opacity: opacity.disabled },
   // Items hang off their group's row, indented so the hierarchy is visible
   // without a second card colour.
   groupItems: { gap: spacing(0.5), paddingLeft: spacing(2) },
-  itemRow: { minHeight: 48, paddingVertical: spacing(1) },
+  itemRow: { minHeight: controlSize.lg, paddingVertical: spacing(1) },
   dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // Tabular so a column of counts lines up down the tab rather than shuffling

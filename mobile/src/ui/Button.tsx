@@ -5,8 +5,8 @@ import {
   fontSize,
   opacity,
   radius,
+  slopTo,
   spacing,
-  touchTargetMin,
   makeStyles,
   useTheme,
 } from "../theme";
@@ -14,7 +14,7 @@ import { Icon, type Glyph } from "./Icon";
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
-const COMPACT_SLOP = (touchTargetMin - controlSize.md) / 2;
+const COMPACT_SLOP = slopTo(controlSize.md);
 
 type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost";
 

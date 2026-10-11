@@ -15,7 +15,43 @@ import { copySay, copyViolations, userFacingStrings } from "@logjam/shared";
 // Mutation that turns it red: set `title` in `ui/RootErrorBoundary.tsx`'s text
 // back to "…Restarting the app usually fixes it."
 const SRC = join(__dirname);
-const ALLOWED: { file: string; text: string; reason: string }[] = [];
+const APP = join(__dirname, "..", "App.tsx");
+// "Name the surface" (§12): where the words mean this client they say Logjam
+// GPS. Bare "Logjam" is the service (the account, the server) or the brand, so
+// it is listed with the reason rather than banned outright.
+const BARE_LOGJAM = /\bLogjam\b(?! (?:GPS|Web|account|GeoPDF)\b)/;
+const ALLOWED: { file: string; text: string; reason: string }[] = [
+  {
+    file: "screens/LandingScreen.tsx",
+    text: "Logjam",
+    reason: "the wordmark on the sign-in screen",
+  },
+  {
+    file: "screens/AuthFlow.tsx",
+    text: "Logjam",
+    reason: "the wordmark on the sign-in screen",
+  },
+  {
+    file: "screens/ConsentGate.tsx",
+    text: "Logjam",
+    reason: "the terms and the agreement are the service's, on both clients",
+  },
+  {
+    file: "screens/settings/NotificationSettingsScreen.tsx",
+    text: "Notifications from Logjam",
+    reason: "the service sends them, to every client",
+  },
+  {
+    file: "saved/SavedScreen.tsx",
+    text: "Couldn't reach Logjam",
+    reason: "the service, in our words for a failed request",
+  },
+  {
+    file: "offline/RegionDownloadRow.tsx",
+    text: "Logjam couldn't prepare this map",
+    reason: "the service clips the map, not this phone",
+  },
+];
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -37,8 +73,26 @@ describe("copy on Logjam GPS", () => {
     expect(first.text).toBe("Open it");
   });
 
+  it("names the surface where it means this client", () => {
+    const offenders = [...sources(SRC), APP].flatMap((path) =>
+      userFacingStrings(ts, path, readFileSync(path, "utf8"))
+        .filter(
+          ({ text }) =>
+            BARE_LOGJAM.test(text) &&
+            !ALLOWED.some(
+              (a) => relative(SRC, path) === a.file && text.includes(a.text),
+            ),
+        )
+        .map(
+          ({ line, text }) =>
+            `${relative(SRC, path)}:${line} "${text}" — say Logjam GPS`,
+        ),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("breaks no copy rule", () => {
-    const offenders = sources(SRC).flatMap((path) =>
+    const offenders = [...sources(SRC), APP].flatMap((path) =>
       userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
         ({ line, text }) =>
           copyViolations(text)

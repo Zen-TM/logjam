@@ -88,6 +88,7 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  controlSize,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -889,7 +890,7 @@ const useStyles = makeStyles((theme) => ({
     borderColor: theme.line,
     borderRadius: radius.pill,
     paddingHorizontal: spacing(1.5),
-    minHeight: 44,
+    minHeight: controlSize.lg,
   },
   searchInput: {
     flex: 1,

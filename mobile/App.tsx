@@ -153,7 +153,7 @@ export default function App() {
           <Text style={styles.blockingLine}>
             {warning
               ? `This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`
-              : `This version (${CLIENT_VERSION}) is no longer supported. Minimum supported version is ${minVersionGate.minVersion}. Please update the app to continue.`}
+              : `This version (${CLIENT_VERSION}) is no longer supported. Update Logjam GPS to version ${minVersionGate.minVersion} or later to continue.`}
           </Text>
           {openStore ? (
             <Button
@@ -206,7 +206,7 @@ export default function App() {
                   // use this phone would otherwise inherit the remains silently.
                   Alert.alert(
                     "Some data couldn't be removed",
-                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear the app's storage in Android settings to be sure.`,
+                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
                   );
                 }
                 await auth.signOut();

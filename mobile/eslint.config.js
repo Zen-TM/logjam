@@ -35,6 +35,18 @@ const GPS_GOTCHAS = [
       "A text style is a role: ...textRole.<name> (body, control, caption, rowTitle, …) from makeStyles((theme, textRole) => …), never a fontSize and fontWeight written together (mobile/DESIGN.md §1, TEXT_ROLES in shared).",
   },
   {
+    selector:
+      "TemplateLiteral:has(MemberExpression[object.name='theme']) > TemplateElement[value.raw=/^[0-9A-Fa-f]{2}$/]",
+    message:
+      "A tint is withAlpha(theme.<role>, a), never a role with hex digits appended (mobile/DESIGN.md §1).",
+  },
+  {
+    selector:
+      "Property[key.name=/^(minHeight|minWidth)$/] > Literal[raw=/^(32|36|40|44|48)$/]",
+    message:
+      "A control's size is a step of controlSize (sm 32, md 40, lg 48); a smaller thing reaches 48 with hitSlop (mobile/DESIGN.md §1).",
+  },
+  {
     selector: `Property[key.name=/${SPACING_PROPS}/] > Literal[value!=0][raw=/^[0-9.]+$/], Property[key.name=/${SPACING_PROPS}/] > UnaryExpression > Literal`,
     message:
       "Space is a step of the scale: spacing(0.5), spacing(1), … (shared/src/designTokens.ts SPACE). A raw number, a negative or an off-scale fraction leaves it.",

@@ -94,6 +94,7 @@ import {
   makeStyles,
   useTheme,
   useHues,
+  opacity,
 } from "../theme";
 import {
   BottomSheet,
@@ -2802,7 +2803,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // Dims the tag rail while selecting, same treatment as TextField's own
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
-  railInert: { opacity: 0.45 },
+  railInert: { opacity: opacity.disabled },
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),

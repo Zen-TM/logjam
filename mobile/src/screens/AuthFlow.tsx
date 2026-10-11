@@ -8,17 +8,11 @@
 // screen for the current AuthState. All Cognito errors arrive pre-mapped to
 // user-friendly strings via messageFromError/mapAuthError — never raw.
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
 import { fontSize, spacing, makeStyles } from "../theme";
-import { Button, ErrorBanner, TextField, TextLink } from "../ui";
+import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -62,7 +56,7 @@ function SignUpForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Sign up</Text>
       <TextField
         label="Username"
@@ -97,7 +91,7 @@ function SignUpForm({ auth }: { auth: Auth }) {
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Create account" onPress={submit} loading={submitting} />
       <TextLink label="Have an account? Sign in" onPress={auth.goToSignIn} />
-    </View>
+    </FormStack>
   );
 }
 
@@ -123,7 +117,7 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Confirm your email</Text>
       <Text style={styles.hint}>
         We sent a verification code to {auth.pendingUsername}.
@@ -149,7 +143,7 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
       />
       <TextLink label="Resend code" onPress={resend} />
       {resendMessage ? <Text style={styles.hint}>{resendMessage}</Text> : null}
-    </View>
+    </FormStack>
   );
 }
 
@@ -166,7 +160,7 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Reset password</Text>
       <TextField
         label="Email"
@@ -179,7 +173,7 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Send reset code" onPress={submit} loading={submitting} />
       <TextLink label="Back to sign in" onPress={auth.goToSignIn} />
-    </View>
+    </FormStack>
   );
 }
 
@@ -197,7 +191,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Enter reset code</Text>
       <Text style={styles.hint}>
         We sent a reset code to {auth.pendingUsername}.
@@ -219,7 +213,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Reset password" onPress={submit} loading={submitting} />
       <TextLink label="Back to sign in" onPress={auth.goToSignIn} />
-    </View>
+    </FormStack>
   );
 }
 
@@ -237,7 +231,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     textAlign: "center",
     marginBottom: spacing(2),
   },
-  form: { gap: spacing(2) },
   heading: { ...textRole.metric, color: theme.text },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
 }));

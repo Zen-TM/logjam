@@ -111,7 +111,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     width: CHIP_WIDTH,
     height: READOUT_CHIP_HEIGHT,
-    backgroundColor: `${theme.page}CC`,
+    backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },

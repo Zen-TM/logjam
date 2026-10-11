@@ -79,6 +79,8 @@ import {
   makeStyles,
   useTheme,
   useHues,
+  controlSize,
+  opacity,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
@@ -1209,7 +1211,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderColor: withAlpha(theme.accent, 0.4),
     backgroundColor: withAlpha(theme.page, 0.5),
     paddingHorizontal: spacing(1.5),
-    minHeight: 40,
+    minHeight: controlSize.md,
   },
   searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
@@ -1217,7 +1219,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // top padding, so the pair reads as one block rather than two stacked bars.
   typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },
   // Dimmed, not gone: see the comment at the render site.
-  railInert: { opacity: 0.4 },
+  railInert: { opacity: opacity.disabled },
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),

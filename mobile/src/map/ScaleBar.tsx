@@ -11,7 +11,7 @@
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { Text, View } from "react-native";
 
-import { fontSize, radius, spacing, makeStyles } from "../theme";
+import { fontSize, radius, spacing, makeStyles, withAlpha } from "../theme";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
 export type ScaleBarHandle = {
@@ -78,7 +78,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   root: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
-    backgroundColor: `${theme.page}CC`,
+    backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(1),
     paddingTop: spacing(0.25),

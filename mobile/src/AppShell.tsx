@@ -40,7 +40,6 @@ import {
   spacing,
   useTheme,
   useThemeMode,
-  withAlpha,
 } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
@@ -988,7 +987,7 @@ export function AppShell({
               headerShown: false,
               tabBarStyle: {
                 backgroundColor: theme.card,
-                borderTopColor: withAlpha(theme.text, 0.25),
+                borderTopColor: theme.line,
                 borderTopWidth: 1,
                 // Breathing room between the border and the icons. The library's
                 // bar is iOS-sized (49pt plus the bottom inset) and sits the icons

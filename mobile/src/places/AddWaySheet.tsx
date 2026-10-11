@@ -327,7 +327,7 @@ export function AddWaySheet({
             icon="track"
             hue={assetHue.track}
             title="Use a recorded track"
-            subtitle="A track you recorded in Logjam"
+            subtitle="A track you recorded in Logjam GPS"
             disabled={busy}
             onPress={() => setMode("tracks")}
           />

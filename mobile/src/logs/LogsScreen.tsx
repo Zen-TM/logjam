@@ -71,6 +71,7 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  controlSize,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
@@ -809,7 +810,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderColor: withAlpha(theme.accent, 0.4),
     backgroundColor: withAlpha(theme.page, 0.5),
     paddingHorizontal: spacing(1.5),
-    minHeight: 40,
+    minHeight: controlSize.md,
   },
   searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).

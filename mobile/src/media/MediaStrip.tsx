@@ -226,7 +226,7 @@ export function MediaStrip({
             askAgainMessage:
               "Allow photo library access to attach photos and videos.",
             settingsMessage:
-              "Photo access was previously denied. Enable it for Logjam in system settings.",
+              "Photo access was previously denied. Enable it for Logjam GPS in system settings.",
             canAskAgain: permission.canAskAgain,
           });
           return;
@@ -259,7 +259,7 @@ export function MediaStrip({
               title: "Camera permission needed",
               askAgainMessage: "Allow camera access to take a photo here.",
               settingsMessage:
-                "The camera was previously denied. Enable it for Logjam in system settings.",
+                "The camera was previously denied. Enable it for Logjam GPS in system settings.",
               canAskAgain: permission.canAskAgain,
             });
             return;
@@ -485,7 +485,7 @@ export function MediaStrip({
                 <Row
                   icon="track"
                   title="Attach a recorded track"
-                  subtitle="A track you recorded in Logjam"
+                  subtitle="A track you recorded in Logjam GPS"
                   onPress={() => setSourceMode("tracks")}
                 />
               </>
@@ -627,7 +627,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     width: TILE_SIZE,
     height: TILE_SIZE,
     borderRadius: radius.lg,
-    backgroundColor: theme.cardPressed,
+    backgroundColor: theme.card,
   },
   glyphTile: {
     alignItems: "center",

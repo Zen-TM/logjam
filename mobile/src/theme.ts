@@ -253,6 +253,9 @@ export const opacity = OPACITY;
 export const controlSize = CONTROL.touch;
 /** Every pressable's hit area, visual size plus `hitSlop`. */
 export const touchTargetMin = TOUCH_TARGET_MIN;
+/** `hitSlop` that takes something drawn at `size` to the 48 dp target. */
+export const slopTo = (size: number): number =>
+  Math.max(0, (touchTargetMin - size) / 2);
 
 // Weight + line-height scales so type roles are consistent across screens
 // (page title = xl/bold, body = base/regular at body line-height). RN wants

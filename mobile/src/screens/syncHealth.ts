@@ -240,7 +240,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
       return {
         headline: `Uploading ${plural(pendingCount, "change", "changes")}…`,
         detail:
-          "This can take a while, and photos are the slow part. You can keep using the app.",
+          "This can take a while, and photos are the slow part. You can keep using Logjam GPS.",
         tone: "pending",
       };
     }

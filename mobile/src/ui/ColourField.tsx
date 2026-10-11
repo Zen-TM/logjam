@@ -6,9 +6,9 @@ import {
   radius,
   scrim,
   spacing,
-  withAlpha,
   makeStyles,
   useTheme,
+  opacity,
 } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -145,7 +145,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: CELL / 2,
   },
   pressed: { backgroundColor: theme.cardPressed },
-  disabled: { opacity: 0.4 },
+  disabled: { opacity: opacity.disabled },
   // The disc's own hairline, so a light swatch does not vanish into a light
   // card (and a dark one into a dark card).
   swatch: {
@@ -155,7 +155,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.2),
+    borderColor: theme.line,
   },
   backdrop: {
     flex: 1,

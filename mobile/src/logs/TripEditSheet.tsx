@@ -13,7 +13,14 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  controlSize,
+} from "../theme";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -809,7 +816,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderColor: theme.lineStrong,
     backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
-    minHeight: 44,
+    minHeight: controlSize.lg,
   },
   searchInput: { ...textRole.body, flex: 1, color: theme.text },
 }));

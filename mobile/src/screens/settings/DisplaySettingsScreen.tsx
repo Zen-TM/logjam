@@ -137,7 +137,7 @@ export function DisplaySettingsScreen() {
           hint={
             textScale === chosenTextScale
               ? undefined
-              : "Applies next time you open Logjam."
+              : "Applies next time you open Logjam GPS."
           }
         />
       </ScreenScroll>
@@ -223,7 +223,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     height: 32,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.2),
+    borderColor: theme.line,
   },
   schemeName: { ...textRole.rowTitle, flex: 1, color: theme.text },
 }));

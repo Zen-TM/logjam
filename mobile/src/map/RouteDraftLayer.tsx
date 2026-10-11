@@ -33,7 +33,7 @@ import {
   arrowSegmentFeatures,
   routeArrowStyle,
 } from "./routeArrowStyle";
-import { useTheme, withAlpha } from "../theme";
+import { touchTargetMin, useTheme, withAlpha } from "../theme";
 
 /**
  * Anchor sizes and fills.
@@ -346,15 +346,17 @@ export function RouteDraftLayer({
 
 const styles = StyleSheet.create({
   // Invisible, and deliberately far bigger than the dot it grabs: the visible
-  // anchor is ~14px and a 14px touch target is unhittable with a thumb.
+  // anchor is ~14px and a 14px touch target is unhittable with a thumb. A
+  // ViewAnnotation's child cannot take a hitSlop, so the view is the 48 dp
+  // target itself.
   //
   // The alpha is 0.01 rather than 0: MLRN rasterises the child view, and a
   // fully empty bitmap makes it fall back to its own red default pin. One
   // percent of a colour is a bitmap.
   handle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: touchTargetMin,
+    height: touchTargetMin,
+    borderRadius: touchTargetMin / 2,
     backgroundColor: withAlpha(MAP_INK.ring, 0.01),
   },
 });

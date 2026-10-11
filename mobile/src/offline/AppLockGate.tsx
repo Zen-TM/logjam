@@ -118,7 +118,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         return;
       }
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock Logjam",
+        promptMessage: "Unlock Logjam GPS",
       });
       if (result.success) {
         lastUnlockAt.current = Date.now();

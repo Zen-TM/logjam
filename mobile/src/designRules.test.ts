@@ -144,3 +144,23 @@ describe("a text style is a role", () => {
     expect(messages).toEqual([]);
   }, 60_000);
 });
+
+describe("a colour tint and a control size are tokens", () => {
+  // Mutations: delete the TemplateLiteral or the minHeight selector from
+  // GPS_GOTCHAS in eslint.config.js.
+  it("bans hex digits appended to a role", async () => {
+    const messages = await lint(
+      "const c = (theme) => `${theme.page}CC`;\n",
+      "src/map/Probe.tsx",
+    );
+    expect(messages).toHaveLength(1);
+  }, 60_000);
+
+  it("bans a literal control height", async () => {
+    const messages = await lint(
+      "export const s = { minHeight: 44 };\n",
+      "src/screens/Probe.tsx",
+    );
+    expect(messages).toHaveLength(1);
+  }, 60_000);
+});

@@ -1,6 +1,13 @@
 import { Pressable, Text, View } from "react-native";
 
-import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  withAlpha,
+} from "../theme";
 import { Icon } from "./Icon";
 
 type ErrorBannerProps = {
@@ -54,8 +61,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing(1),
-    // Warning hue at ~12% — 8-digit hex so it tracks the active scheme.
-    backgroundColor: `${theme.warning}1F`,
+    // Warning hue at ~12%, so it tracks the active scheme.
+    backgroundColor: withAlpha(theme.warning, 0.12),
     borderWidth: 1,
     borderColor: theme.warning,
     borderRadius: radius.md,

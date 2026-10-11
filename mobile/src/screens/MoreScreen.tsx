@@ -119,7 +119,7 @@ export function MoreScreen({
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
       <Hero
-        eyebrow={isGuest ? "Logjam" : user ? "Signed in as" : "Logjam"}
+        eyebrow={isGuest ? "Logjam GPS" : user ? "Signed in as" : "Logjam GPS"}
         title={isGuest ? "No account" : (user?.username ?? "Your account")}
         actions={
           // "Sync now" is meaningless without an account, so the hero's one

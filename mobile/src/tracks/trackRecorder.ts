@@ -73,7 +73,7 @@ function locationOptions(): Location.LocationTaskOptions {
     activityType: Location.ActivityType.Fitness,
     foregroundService: {
       notificationTitle: "Recording track",
-      notificationBody: "Logjam is recording. Open the app to pause or finish.",
+      notificationBody: "Logjam GPS is recording. Open it to pause or finish.",
       killServiceOnDestroy: false,
     },
   };
