@@ -11,7 +11,7 @@
 // DETAIL surface, which is what this is — the user asked about this exact spot.
 // The list rule is unaffected, and nothing here is logged or persisted: the
 // point lives in the map screen's state until the sheet is dismissed.
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clipboard, StyleSheet, Text, View } from "react-native";
 import {
   compassPointFor,
@@ -22,6 +22,7 @@ import {
 
 import { fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
+import { slopeAt } from "../offline/demLookup";
 import { useElevationProfile } from "./useElevationProfile";
 
 /** A bare lat/lng, as the map hands one back from a tap. */
@@ -105,6 +106,22 @@ function PointDetail({
   });
   const elevationM = profile?.samples[0]?.elevationM ?? null;
 
+  // Null until known, and null for good where only the coarse worldwide DEM
+  // has heights: the tile is then simply absent, never a guess.
+  const [slopeDeg, setSlopeDeg] = useState<number | null>(null);
+  useEffect(() => {
+    let current = true;
+    // Never a failure to show, and not logged: the error could carry the point.
+    slopeAt(point.longitude, point.latitude, { allowNetwork })
+      .catch(() => null)
+      .then((slope) => {
+        if (current) setSlopeDeg(slope);
+      });
+    return () => {
+      current = false;
+    };
+  }, [point.latitude, point.longitude, allowNetwork]);
+
   const distanceM = userCoord
     ? haversineMeters(
         userCoord[1],
@@ -150,6 +167,9 @@ function PointDetail({
             value: `${compassPointFor(bearingDeg)} ${Math.round(bearingDeg)}°`,
           },
         ]
+      : []),
+    ...(slopeDeg != null
+      ? [{ label: "Slope", value: `${Math.round(slopeDeg)}°` }]
       : []),
   ];
 
