@@ -80,8 +80,10 @@ the API path never could.
 - **Update 2026-10-11: a signed-in run also saves one clip of each DEM archive
   the area touches** (`planDemDownload` in the same file), fetched like the
   vector basemap's clip and filed as a second `dem-region` artifact under that
-  source's id. It is left out of an area larger than the clip endpoint cuts,
-  and a guest saves the worldwide tiles only. The worldwide tiles are still
+  source's id. A guest saves the worldwide tiles only. Because nearly every
+  run now asks the clip endpoint for something, its area limit
+  (`MAX_REGION_AREA_KM2`) applies to every download, not only to ones with
+  the vector map. The worldwide tiles are still
   saved with every area, which is what holds this decision up. Everything else
   above stands.
 

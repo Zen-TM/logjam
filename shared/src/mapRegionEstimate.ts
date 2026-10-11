@@ -97,13 +97,13 @@ export function planRegionTiles(
 export const MAX_REGION_TILES = 4000;
 /** Non-blocking "large region" warning threshold. */
 export const SOFT_WARN_TILES = 1500;
-/** Sanity bound on a degenerate bbox, independent of the tile cap. */
+/** Stops a long thin strip, which the area limit alone would allow. */
 export const MAX_REGION_EDGE_KM = 50;
 
 const EARTH_RADIUS_KM = 6371;
 
 /** Great-circle-ish edge lengths of the bbox (km): [widthAtCenterLat, height]. */
-/** Area cap for the server-side vector clip. The API enforces the same
+/** Area cap for every download, set by the server-side clip. The API enforces the same
  * number (api/src/lib/regionClip.ts imports it) — one source, so the client
  * can never offer a region the server will refuse. */
 export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
@@ -131,20 +131,16 @@ export type RegionCapCheck =
 export function checkRegionCaps(
   bbox: RegionBbox,
   totalTiles: number,
-  /** True when the selection includes the server-side vector clip, which has
-   * its own AREA cap on top of the per-edge one. */
-  includesVectorClip = false,
 ): RegionCapCheck {
   const [w, h] = regionEdgesKm(bbox);
   if (w > MAX_REGION_EDGE_KM || h > MAX_REGION_EDGE_KM) {
     return { ok: false, reason: "edge-too-long" };
   }
-  // The two caps disagreed: a 50 × 40 km box passes both edge tests at
-  // 2000 km² and is then refused by the clip endpoint. With only the vector
-  // map selected there are no tiles to trip the tile cap, so the client
-  // happily enqueued a job that could never succeed — and the failure
-  // surfaced as "That didn't finish. Try again."
-  if (includesVectorClip && w * h > MAX_REGION_AREA_KM2) {
+  // One area for every download, whatever is in it. The clip endpoint refuses
+  // anything larger, and nearly every run asks it for something (the vector
+  // map, contours, a DEM archive), so a second, larger limit for the runs
+  // that did not only ever offered areas that then failed.
+  if (w * h > MAX_REGION_AREA_KM2) {
     return { ok: false, reason: "area-too-large" };
   }
   if (totalTiles > MAX_REGION_TILES) {
@@ -422,26 +418,19 @@ export function planRegionForBasemaps(
 ): MultiSourceRegionPlan {
   const contours = includeContours ? estimateContourClip(bbox) : null;
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
-  // The clip endpoint refuses an area over its cap, and a raster-only area
-  // may be larger than that (`checkRegionCaps`). The archive clip is a rider
-  // nobody chose, so it is left out there rather than failing the run or
-  // shrinking what a raster download may cover: the worldwide tiles are saved
-  // regardless, and the area still has heights.
-  const [widthKm, heightKm] = regionEdgesKm(bbox);
-  const clipFits = widthKm * heightKm <= MAX_REGION_AREA_KM2;
-  const demArchives = (
-    includeDemArchives && clipFits ? planDemDownload(bbox) : []
-  ).map((source) => {
-    const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
-    const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
-    return {
-      sourceId: source.id,
-      size: {
-        meanBytes: tiles.totalTiles * perTile.meanBytes,
-        p90Bytes: tiles.totalTiles * perTile.p90Bytes,
-      },
-    };
-  });
+  const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
+    (source) => {
+      const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
+      const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+      return {
+        sourceId: source.id,
+        size: {
+          meanBytes: tiles.totalTiles * perTile.meanBytes,
+          p90Bytes: tiles.totalTiles * perTile.p90Bytes,
+        },
+      };
+    },
+  );
 
   const perSource = [
     ...basemapIds.map((basemapId) => {
