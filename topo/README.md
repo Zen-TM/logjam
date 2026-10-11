@@ -215,16 +215,22 @@ format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in
 All 343 sheets, once. Why Logjam hosts its own copy, and what the licence
 asks: [ADR 0030](../docs/decisions/0030-nsw-heights-come-from-the-spatial-services-5m-dem.md).
 
+Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM:
+
 | | |
 |---|---|
-| Machine | 16 cores, 32 GB RAM, 200 GB disk, in `ap-southeast-2` so the upload is local |
-| Download | 65 GB of zips, about 70 GB once converted |
-| `tile` | up to about 150 core-hours, so 9 to 10 hours on 16 cores (two rugged sheets took 52 core-minutes; flat ones are quicker) |
-| Result | about 16 GB (extrapolated from six whole sheets) |
+| `fetch` | 1 h 49 min, one sheet at a time; about 60 GB on disk once converted |
+| `tile` | 1 h 36 min with 30 workers, for 885 blocks (about 48 core-hours) |
+| `pack` | 3 min |
+| Result | 16.9 GB, 1,027,356 tiles |
+| Disk | 96 GB in use when `pack` finished; allow 150 GB |
+
+A worker needs about 2 GB of RAM. Any machine with GDAL, Python and `pmtiles`
+does: nothing here touches AWS until the archive is published.
 
 ```bash
 python3 build_nsw_dem.py fetch dem/src
-python3 build_nsw_dem.py tile dem/src dem/work --jobs 16
+python3 build_nsw_dem.py tile dem/src dem/work --jobs 30
 python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "<Month Year>"
 pmtiles show dem/nsw-5m.pmtiles     # zoom 8 to 15, bounds are NSW
 ```
@@ -237,7 +243,8 @@ the topo bucket at the path `NSW_5M.archivePath` names in
 `shared/src/demSources.ts`:
 
 ```bash
-aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles
+aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
+  --content-type application/vnd.pmtiles
 curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
 ```
 
