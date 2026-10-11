@@ -88,6 +88,7 @@ import {
 } from "./sidebar/panels/waysModel";
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
+import FriendInviteDialog from "./dialogs/FriendInviteDialog";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
@@ -1831,6 +1832,8 @@ function App() {
         onActiveLayerChange={setActiveLayerId}
         mapView={mapCenter}
       />
+
+      <FriendInviteDialog enabled={loadsUserData} onFriended={refetchFriends} />
 
       <ConfirmDialog
         open={cancelRouteGuard.guardOpen}
