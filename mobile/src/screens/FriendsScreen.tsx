@@ -34,6 +34,7 @@ import {
   Alert,
   FlatList,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -41,6 +42,8 @@ import {
 import {
   contractSectionKeys,
   friendAcceptedMessage,
+  friendInviteMessage,
+  friendInviteUrl,
   friendRemovedMessage,
   friendRemoveConfirm,
   friendsEmptyKind,
@@ -54,6 +57,7 @@ import {
 
 import {
   acceptFriendRequest,
+  createFriendInvite,
   declineFriendRequest,
   getFriendRequests,
   getFriends,
@@ -64,6 +68,7 @@ import {
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
+import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { placeHue, fontSize, spacing, theme } from "../theme";
@@ -572,6 +577,26 @@ function AddFriendBody({
     [onSent],
   );
 
+  // The other way to add someone: a link, handed to whichever app the user
+  // sends messages with. It opens Logjam Web, so it works for someone who has
+  // no Logjam GPS. Its failure is this button's, hence the same banner.
+  const [inviting, setInviting] = useState(false);
+  const shareInvite = useCallback(async () => {
+    setSendError(null);
+    setInviting(true);
+    try {
+      const { token } = await createFriendInvite();
+      await Share.share({
+        message: friendInviteMessage(friendInviteUrl(config.webUrl, token)),
+      });
+    } catch (err) {
+      console.error(err);
+      setSendError(messageFromError(err, copy.inviteFailed));
+    } finally {
+      setInviting(false);
+    }
+  }, []);
+
   const trimmed = query.trim();
   return (
     <View style={styles.addBody}>
@@ -618,6 +643,14 @@ function AddFriendBody({
           />
         );
       })}
+      <Text style={styles.hint}>{copy.inviteHint}</Text>
+      <Button
+        label={copy.inviteShare}
+        icon="link"
+        variant="outlineAccent"
+        disabled={inviting}
+        onPress={() => void shareInvite()}
+      />
       {sendError ? <ErrorBanner message={sendError} /> : null}
     </View>
   );

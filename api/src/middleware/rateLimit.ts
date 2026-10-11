@@ -87,6 +87,26 @@ export const friendsSearchLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// Minting a friend invite link. A person hands out a few; this bounds how many
+// rows one account can leave in friend_invites (they expire in days).
+export const friendInviteCreateLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+// Previewing and spending a link. The token is 256 random bits, so this is not
+// what stops guessing; it stops one account hammering the lookup.
+export const friendInviteRedeemLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const ropeWikiHeavyLimiter = rateLimit({
   windowMs: 5 * 60_000,
   max: 5,

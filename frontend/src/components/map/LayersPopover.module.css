@@ -121,7 +121,7 @@
 
 .warning {
   font-size: var(--font-xs);
-  color: var(--color-warning);
+  color: var(--color-text);
 }
 
 .gallery {

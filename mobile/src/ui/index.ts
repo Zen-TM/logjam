@@ -29,7 +29,7 @@ export { Toggle } from "./Toggle";
 export { SwitchRow } from "./SwitchRow";
 export { Notice } from "./Notice";
 export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
-export { BottomSheet } from "./BottomSheet";
+export { BottomSheet, closedSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";
 export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";

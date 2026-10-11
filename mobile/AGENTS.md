@@ -47,7 +47,8 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a
   retry, poll or timer arms only in the foreground, and a sensor runs only
   while the screen that shows it is focused. The backgrounded recorder only
-  appends points; any other background work needs the maintainer's sign-off. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
+  appends points and a map download the user started keeps running; any other
+  background work needs the maintainer's sign-off. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
 
 ## Builds and verify
 

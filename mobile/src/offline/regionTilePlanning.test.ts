@@ -4,6 +4,7 @@ import { planRegionTiles } from "@logjam/shared";
 import {
   classifyTileResponse,
   deadTileBudget,
+  exhaustedTileOutcome,
   regionPlanHash,
   regionTileSequence,
   tileUrlFrom,
@@ -118,5 +119,24 @@ describe("vectorClipFor", () => {
     // ~46 km x ~44 km: inside the 50 km edge cap, over the 1600 km² clip cap.
     const wide = { west: 150, south: -34, east: 150.5, north: -33.6 };
     expect(vectorClipFor(false, wide)).toBe("too-large");
+  });
+});
+
+// Mutation: return "dead" whatever the app state and the second line goes red.
+// The download then counts every tile Android refused it behind another app
+// against the dead budget and ends as a failure instead of waiting.
+describe("exhaustedTileOutcome", () => {
+  it("counts a tile dead in the foreground and parks the job behind another app", () => {
+    expect(exhaustedTileOutcome("active", true)).toBe("dead");
+    expect(exhaustedTileOutcome("background", true)).toBe("park");
+  });
+
+  // Mutation: ignore `online` and both lines go red. Behind another app the
+  // job then parks until the user is back instead of waiting for the
+  // connection (seen on the emulator: airplane mode stopped the download for
+  // good); in front, a dropped connection spends the dead-tile budget.
+  it("waits for the connection when there is none, wherever the app is", () => {
+    expect(exhaustedTileOutcome("background", false)).toBe("offline");
+    expect(exhaustedTileOutcome("active", false)).toBe("offline");
   });
 });
