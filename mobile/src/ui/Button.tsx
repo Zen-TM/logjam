@@ -112,7 +112,7 @@ const useStyles = makeStyles((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing(0.75),
+    gap: spacing(0.5),
     borderRadius: radius.pill,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
@@ -124,7 +124,7 @@ const useStyles = makeStyles((theme) => ({
     minWidth: controlSize.lg,
   },
   compact: {
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(0.5),
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
     minWidth: controlSize.md,

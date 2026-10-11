@@ -80,20 +80,20 @@ export function Meter({
 }
 
 const useStyles = makeStyles((theme) => ({
-  wrap: { gap: spacing(1.25) },
+  wrap: { gap: spacing(1) },
   track: {
     flexDirection: "row",
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
     backgroundColor: withAlpha(theme.text, 0.1),
-    gap: 2,
+    gap: spacing(0.25),
   },
   legend: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing(1.5),
-    rowGap: spacing(0.75),
+    rowGap: spacing(0.5),
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   dot: { width: 8, height: 8, borderRadius: radius.pill },

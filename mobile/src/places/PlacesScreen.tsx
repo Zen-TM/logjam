@@ -1250,7 +1250,7 @@ const useStyles = makeStyles((theme) => ({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.

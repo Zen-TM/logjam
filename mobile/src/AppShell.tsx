@@ -265,7 +265,7 @@ const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
 /** `@react-navigation/bottom-tabs`' own TABBAR_HEIGHT_UIKIT, which it does not export. */
 const TAB_BAR_BASE_HEIGHT = 49;
-const TAB_BAR_TOP_PAD = spacing(0.75);
+const TAB_BAR_TOP_PAD = spacing(0.5);
 
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which

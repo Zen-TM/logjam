@@ -80,7 +80,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "flex-start",
     backgroundColor: `${theme.page}CC`,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing(0.75),
+    paddingHorizontal: spacing(1),
     paddingTop: spacing(0.25),
     paddingBottom: spacing(0.5),
     gap: spacing(0.25),

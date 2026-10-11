@@ -4,6 +4,7 @@ import {
   FONT_WEIGHT,
   RADIUS,
   SPACE,
+  type SpaceStep,
   TEXT_ROLES,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
@@ -40,7 +41,7 @@ describe("theme parity with @logjam/shared", () => {
 
   it("lays out on the shared spacing steps", () => {
     for (const [step, px] of Object.entries(SPACE)) {
-      expect(spacing(Number(step))).toBe(px);
+      expect(spacing(Number(step) as SpaceStep)).toBe(px);
     }
   });
 

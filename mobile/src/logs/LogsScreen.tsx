@@ -850,7 +850,7 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "space-between",
     backgroundColor: theme.page,
     paddingTop: spacing(1),
-    paddingBottom: spacing(0.75),
+    paddingBottom: spacing(0.5),
   },
   yearLabel: {
     color: theme.text,

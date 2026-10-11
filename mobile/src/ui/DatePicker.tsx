@@ -554,8 +554,8 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "center",
   },
   yearPill: {
-    paddingHorizontal: spacing(1.25),
-    paddingVertical: spacing(0.75),
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.5),
     borderRadius: radius.pill,
     // Same reason as dayPill: keep the background drawable present from the
     // first layout so paging back to a selected year can't lose its rounding.

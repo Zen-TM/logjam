@@ -4,6 +4,11 @@ const expoConfig = require("eslint-config-expo/flat");
 const globals = require("globals");
 const { builtinRules } = require("eslint/use-at-your-own-risk");
 
+// The style properties that hold space between things. `spacing()` takes only
+// the scale's steps by type; a bare number would walk round that.
+const SPACING_PROPS =
+  "^(gap|rowGap|columnGap|(padding|margin)(Horizontal|Vertical|Top|Bottom|Left|Right|Start|End)?)$";
+
 // Gotchas of Logjam GPS that a selector can hold (mobile/DESIGN.md §4, §1).
 const GPS_GOTCHAS = [
   {
@@ -22,6 +27,11 @@ const GPS_GOTCHAS = [
       "Property[key.name=/^(shadowColor|shadowOffset|shadowOpacity|shadowRadius)$/]",
     message:
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
+  },
+  {
+    selector: `Property[key.name=/${SPACING_PROPS}/] > Literal[value!=0][raw=/^[0-9.]+$/], Property[key.name=/${SPACING_PROPS}/] > UnaryExpression > Literal`,
+    message:
+      "Space is a step of the scale: spacing(0.5), spacing(1), … (shared/src/designTokens.ts SPACE). A raw number, a negative or an off-scale fraction leaves it.",
   },
   {
     selector:

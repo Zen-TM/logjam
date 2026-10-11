@@ -1052,7 +1052,7 @@ function PlaceSharingSection({
 
 const useStyles = makeStyles((theme) => ({
   screen: { flex: 1, backgroundColor: theme.page },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(4),
@@ -1083,7 +1083,7 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: spacing(2),
-    paddingVertical: spacing(0.875),
+    paddingVertical: spacing(1),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.line,
   },

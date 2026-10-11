@@ -271,7 +271,7 @@ export function TripDetailScreen({
 
 const useStyles = makeStyles((theme) => ({
   screen: { flex: 1, backgroundColor: theme.page },
-  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(4),

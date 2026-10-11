@@ -46,7 +46,7 @@ export function ElevationReadout({
 }
 
 const useStyles = makeStyles((theme) => ({
-  row: { flexDirection: "row", alignItems: "baseline", gap: spacing(1.25) },
+  row: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
   value: {
     color: theme.text,
     fontSize: fontSize.sm,

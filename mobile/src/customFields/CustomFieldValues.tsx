@@ -227,7 +227,7 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: spacing(2),
-    paddingVertical: spacing(0.875),
+    paddingVertical: spacing(1),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.line,
   },

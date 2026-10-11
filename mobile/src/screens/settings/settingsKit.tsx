@@ -115,9 +115,5 @@ export function Hint({ text }: { text: string }) {
 }
 
 const useStyles = makeStyles((theme) => ({
-  hint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    marginTop: spacing(-0.5),
-  },
+  hint: { color: theme.textMuted, fontSize: fontSize.sm },
 }));

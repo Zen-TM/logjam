@@ -44,7 +44,7 @@ export function FieldError({ message }: { message?: string | null }) {
 }
 
 const useStyles = makeStyles((theme) => ({
-  line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.75) },
+  line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.5) },
   // The glyph sits on the first line of the text, whatever the text size.
   error: { flex: 1, fontSize: fontSize.sm, color: theme.text },
 }));

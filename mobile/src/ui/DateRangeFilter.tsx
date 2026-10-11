@@ -84,5 +84,5 @@ const useStyles = makeStyles((theme) => ({
   value: { color: theme.textMuted, fontSize: fontSize.sm },
   // Words are text-coloured; the weight says it is set.
   valueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));

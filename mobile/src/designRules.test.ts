@@ -3,6 +3,8 @@ import { join, relative } from "node:path";
 import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 
+import { spacing } from "./theme";
+
 // Rules of mobile/DESIGN.md that a lint rule or a scan of the source holds, so
 // they are not followed by memory.
 //
@@ -90,4 +92,36 @@ describe("an empty list is the kit's EmptyState", () => {
       .map((path) => relative(SRC, path));
     expect(offenders).toEqual([]);
   });
+});
+
+describe("space is a step of the scale", () => {
+  // `spacing()` takes a `SpaceStep`, so 6dp (0.75) does not typecheck; and a
+  // bare number in a space property is a lint error. Mutations: add "0.75" to
+  // SPACE (the directive below is then unused and typecheck fails); drop
+  // SPACING_PROPS from eslint.config.js.
+  it("is the scale's steps and nothing between them", () => {
+    expect(spacing(0.25)).toBe(2);
+    // @ts-expect-error 6dp is not a step: inside one object take 4, between 8
+    expect(spacing(0.75)).toBe(6);
+  });
+
+  it("bans a bare number or a negative in a space property", async () => {
+    for (const style of [
+      "{ gap: 8 }",
+      "{ paddingHorizontal: 6 }",
+      "{ marginLeft: -1 }",
+    ]) {
+      const messages = await lint(
+        `export const s = ${style};\n`,
+        "src/screens/Probe.tsx",
+      );
+      expect(messages, style).toHaveLength(1);
+    }
+    expect(
+      await lint(
+        "export const s = { gap: 0, flex: 1, width: 8 };\n",
+        "src/screens/Probe.tsx",
+      ),
+    ).toEqual([]);
+  }, 60_000);
 });

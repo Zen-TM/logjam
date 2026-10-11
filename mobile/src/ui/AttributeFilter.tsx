@@ -329,7 +329,7 @@ const useStyles = makeStyles((theme) => ({
   blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
   // Words are text-coloured; the weight says it is set.
   blockValueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   pair: { flexDirection: "row", gap: spacing(1) },
   pairField: { flex: 1, maxWidth: 200 },
 }));

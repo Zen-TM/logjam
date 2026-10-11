@@ -140,7 +140,7 @@ const useStyles = makeStyles((theme) => ({
   divider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
-    marginVertical: spacing(0.75),
+    marginVertical: spacing(1),
     backgroundColor: withAlpha(theme.text, 0.25),
   },
 }));

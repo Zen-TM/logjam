@@ -343,6 +343,9 @@ export function ProfileChart({
   );
 }
 
+/** Centred on its x by pulling it back half its own width. */
+const SCRUB_LINE_WIDTH = 2;
+
 const useStyles = makeStyles((theme) => ({
   wrap: { gap: spacing(0.5) },
   readoutRow: { height: 18, justifyContent: "center" },
@@ -369,8 +372,8 @@ const useStyles = makeStyles((theme) => ({
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 2,
-    marginLeft: -1,
+    width: SCRUB_LINE_WIDTH,
+    marginLeft: -SCRUB_LINE_WIDTH / 2,
     backgroundColor: theme.text,
   },
   fade: { ...StyleSheet.absoluteFill, top: "55%" },

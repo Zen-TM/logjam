@@ -425,7 +425,7 @@ async function currentHeading(): Promise<number | null> {
 }
 
 /** Gap between the stacked instruments, and the same value their container uses. */
-const INSTRUMENT_GAP = spacing(0.75);
+const INSTRUMENT_GAP = spacing(1);
 
 /**
  * How long to wait for a `rotation` reading before deciding the device has no

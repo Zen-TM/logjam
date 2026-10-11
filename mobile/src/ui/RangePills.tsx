@@ -73,7 +73,7 @@ export function RangePills({
 }
 
 const useStyles = makeStyles((theme) => ({
-  wrap: { gap: spacing(0.75) },
+  wrap: { gap: spacing(1) },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -93,5 +93,5 @@ const useStyles = makeStyles((theme) => ({
   // Active is said by weight and by the clear button beside it, never by an
   // intent colour: words are `text`.
   valueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));

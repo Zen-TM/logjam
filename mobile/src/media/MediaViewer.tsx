@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     backgroundColor: withAlpha(photoChrome.page, 0.6),
     borderRadius: radius.pill,
-    paddingHorizontal: spacing(1.25),
+    paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.25),
     overflow: "hidden",
   },

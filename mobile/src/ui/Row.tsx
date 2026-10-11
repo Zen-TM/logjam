@@ -203,7 +203,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     overflow: "hidden",
   },
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
-  footer: { paddingTop: spacing(1.25) },
+  footer: { paddingTop: spacing(1) },
   pressed: { backgroundColor: theme.cardPressed },
   // An accent edge and no tint: a tint dropped the subtitle's contrast
   // (UX §9), and Logjam Web's selected row is the same edge.

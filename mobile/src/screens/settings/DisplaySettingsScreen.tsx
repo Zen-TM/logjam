@@ -216,7 +216,7 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: withAlpha(theme.accent, 0.1),
   },
   schemePressed: { backgroundColor: theme.cardPressed },
-  swatches: { flexDirection: "row", gap: 3 },
+  swatches: { flexDirection: "row", gap: spacing(0.5) },
   // The hairline is load-bearing, not decoration: a scheme's `card` IS the
   // card colour these sit on when it is the scheme in force, so without an edge that swatch simply vanishes and
   // the scheme looks like it has two colours.

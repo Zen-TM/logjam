@@ -121,6 +121,9 @@ export function CompassStrip({
   );
 }
 
+/** Centred on the strip by pulling it back half its own width. */
+const CENTRE_LINE_WIDTH = 2;
+
 const useStyles = makeStyles((theme) => ({
   frame: {
     backgroundColor: withAlpha(theme.page, 0.92),
@@ -142,7 +145,7 @@ const useStyles = makeStyles((theme) => ({
     marginLeft: -LABEL_WIDTH / 2,
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: spacing(0.375),
+    paddingVertical: spacing(0.5),
   },
   markMajor: { width: 1.5, height: 6, backgroundColor: theme.text },
   markMinor: {
@@ -169,8 +172,8 @@ const useStyles = makeStyles((theme) => ({
     top: 0,
     bottom: 0,
     left: "50%",
-    width: 2,
-    marginLeft: -1,
+    width: CENTRE_LINE_WIDTH,
+    marginLeft: -CENTRE_LINE_WIDTH / 2,
     backgroundColor: theme.accent,
   },
 }));

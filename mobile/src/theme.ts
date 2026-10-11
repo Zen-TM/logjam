@@ -27,6 +27,7 @@ import {
   PLACE_STATUS_HUES,
   RADIUS,
   SPACE_UNIT,
+  type SpaceStep,
   TEXT_ROLES,
   THEME_SCHEMES,
   TOUCH_TARGET_MIN,
@@ -240,7 +241,7 @@ export const fontSize = {
   display: scaled(FONT.gps.display),
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
-export const spacing = (n: number): number => n * SPACE_UNIT;
+export const spacing = (n: SpaceStep): number => n * SPACE_UNIT;
 
 /** A form's label, field and section gaps (`FORM_RHYTHM` in `@logjam/shared`). */
 export const formRhythm = FORM_RHYTHM;

@@ -156,10 +156,13 @@ export const RADIUS = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 /**
  * Spacing steps (8 × n), named by n. The one scale both clients lay out with:
  * Logjam GPS's `spacing(n)`, Logjam Web's `--space-<n>` (`--space-1-5` is 12).
- * A value off these steps is a decision to leave the system, and needs saying.
+ * 2 is a hairline gap inside one object (a label over its figure); 6 is not a
+ * step: inside one object take 4, between objects 8. Logjam GPS's `spacing()`
+ * takes only a `SpaceStep`, so an off-scale value does not typecheck.
  */
 export const SPACE_UNIT = 8;
 export const SPACE = {
+  "0.25": 2,
   "0.5": 4,
   "1": 8,
   "1.5": 12,
@@ -168,6 +171,11 @@ export const SPACE = {
   "4": 32,
   "6": 48,
 } as const;
+
+/** A key of `SPACE` as the number `spacing(n)` is called with. */
+export type SpaceStep = {
+  [K in keyof typeof SPACE]: K extends `${infer N extends number}` ? N : never;
+}[keyof typeof SPACE];
 
 /**
  * The rhythm of a form, in px: how far a label sits from its control, one field

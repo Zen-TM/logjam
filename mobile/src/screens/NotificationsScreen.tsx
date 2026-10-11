@@ -1481,7 +1481,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: theme.page,
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(1),
   },
   dayLabel: {
     color: theme.textMuted,
@@ -1517,7 +1517,7 @@ const useStyles = makeStyles((theme) => ({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
@@ -1526,6 +1526,6 @@ const useStyles = makeStyles((theme) => ({
     color: theme.textMuted,
     fontSize: fontSize.xs,
     textAlign: "center",
-    paddingTop: spacing(0.75),
+    paddingTop: spacing(0.5),
   },
 }));

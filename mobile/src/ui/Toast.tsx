@@ -164,7 +164,7 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(1),
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
     maxWidth: "100%",
   },

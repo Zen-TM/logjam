@@ -873,7 +873,7 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.lg,
     padding: spacing(1.5),
   },
-  promiseIcon: { marginTop: 1 },
+  promiseIcon: { marginTop: spacing(0.25) },
   promiseText: {
     flex: 1,
     color: theme.text,

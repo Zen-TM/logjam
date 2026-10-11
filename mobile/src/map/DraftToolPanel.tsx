@@ -227,7 +227,7 @@ const useStyles = makeStyles((theme) => ({
     borderColor: withAlpha(theme.accent, 0.4),
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(1),
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   distance: {
@@ -243,8 +243,8 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "wrap",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
-  group: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  group: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   spacer: { flex: 1 },
 }));

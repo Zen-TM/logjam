@@ -129,13 +129,13 @@ const useStyles = makeStyles((theme) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(0.5),
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.line,
     backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(0.5),
     minHeight: CHIP_HEIGHT,
     // A pill is never narrower than it is tall: a one-glyph chip is a circle.
     minWidth: CHIP_HEIGHT,
