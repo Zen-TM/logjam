@@ -320,13 +320,18 @@ def pack(work: Path, out: Path, extracted: str) -> None:
     )
     db.execute("create table metadata (name text, value text)")
     # MBTiles rows are TMS: flipped from the XYZ rows used everywhere else.
-    flip = "insert into tiles values (?1, ?2, (1 << ?1) - 1 - ?3, ?4)"
+    insert = "insert into tiles values (?, ?, ?, ?)"
+
+    def flipped(rows):
+        return ((z, x, (1 << z) - 1 - y, data) for z, x, y, data in rows)
+
     for block in sorted(work.glob("*.sqlite")):
         # Closed by hand: a statewide run has more blocks than a process has
         # file descriptors, and a connection left to the collector holds one.
         with contextlib.closing(sqlite3.connect(block)) as tiles:
-            db.executemany(flip, tiles.execute("select z, x, y, data from tiles"))
-    db.executemany(flip, coarse_tiles(work))
+            rows = tiles.execute("select z, x, y, data from tiles")
+            db.executemany(insert, flipped(rows))
+    db.executemany(insert, flipped(coarse_tiles(work)))
     db.execute(
         "create unique index tile_index on tiles (zoom_level, tile_column, tile_row)"
     )
