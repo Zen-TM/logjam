@@ -201,9 +201,9 @@ above, and needs GDAL with its Python bindings, NumPy, Pillow and the
 
 ```bash
 # One sheet, about 200 MB to download and 10 minutes to tile on 4 cores.
-python build_nsw_dem.py fetch dem/src Katoomba
-python build_nsw_dem.py tile dem/src dem/work --jobs 4
-python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2026"
+python3 build_nsw_dem.py fetch dem/src Katoomba
+python3 build_nsw_dem.py tile dem/src dem/work --jobs 4
+python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2026"
 ```
 
 `fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
@@ -223,9 +223,9 @@ asks: [ADR 0030](../docs/decisions/0030-nsw-heights-come-from-the-spatial-servic
 | Result | about 16 GB (extrapolated from six whole sheets) |
 
 ```bash
-python build_nsw_dem.py fetch dem/src
-python build_nsw_dem.py tile dem/src dem/work --jobs 16
-python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "<Month Year>"
+python3 build_nsw_dem.py fetch dem/src
+python3 build_nsw_dem.py tile dem/src dem/work --jobs 16
+python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "<Month Year>"
 pmtiles show dem/nsw-5m.pmtiles     # zoom 8 to 15, bounds are NSW
 ```
 
