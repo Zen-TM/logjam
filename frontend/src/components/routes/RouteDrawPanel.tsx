@@ -24,6 +24,7 @@ import {
   formatDistanceM,
   routeLengthM,
   trackColorName,
+  MAP_MEASURE,
   MAX_ROUTE_POINTS,
   TRACK_COLORS,
   PAIRED_STAT_LABELS,
@@ -209,7 +210,7 @@ export function RouteDrawPanel({
             ) : (
               <p className={classes.note}>
                 {profileLoading
-                  ? "Reading the terrain…"
+                  ? MAP_MEASURE.copy.readingTerrain
                   : "Pause to read the terrain under this line."}
               </p>
             )}
@@ -240,7 +241,6 @@ export function RouteDrawPanel({
             row taller for it, and the body above is then the same page a saved
             way shows (operator, 2026-09-17). */}
         <SnapSelect
-          label="Snap to"
           value={snapMode}
           disabled={saving}
           onChange={onSnapModeChange}

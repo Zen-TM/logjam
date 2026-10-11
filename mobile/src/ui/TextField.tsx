@@ -106,7 +106,7 @@ const useStyles = makeStyles((theme) => ({
     borderColor: theme.lineStrong,
     backgroundColor: theme.field,
     borderRadius: radius.md,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(1.5),
     fontSize: fontSize.base,
     color: theme.text,

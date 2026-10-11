@@ -20,8 +20,8 @@ import {
 
 import {
   fontSize,
-  fontWeight,
   radius,
+  ON_SCRIM,
   scrim,
   spacing,
   withAlpha,
@@ -227,7 +227,7 @@ export function MediaStrip({
             askAgainMessage:
               "Allow photo library access to attach photos and videos.",
             settingsMessage:
-              "Photo access was previously denied. Enable it for Logjam in system settings.",
+              "Photo access was previously denied. Enable it for Logjam GPS in system settings.",
             canAskAgain: permission.canAskAgain,
           });
           return;
@@ -260,7 +260,7 @@ export function MediaStrip({
               title: "Camera permission needed",
               askAgainMessage: "Allow camera access to take a photo here.",
               settingsMessage:
-                "The camera was previously denied. Enable it for Logjam in system settings.",
+                "The camera was previously denied. Enable it for Logjam GPS in system settings.",
               canAskAgain: permission.canAskAgain,
             });
             return;
@@ -486,7 +486,7 @@ export function MediaStrip({
                 <Row
                   icon="track"
                   title="Attach a recorded track"
-                  subtitle="A track you recorded in Logjam"
+                  subtitle="A track you recorded in Logjam GPS"
                   onPress={() => setSourceMode("tracks")}
                 />
               </>
@@ -586,7 +586,7 @@ function AttachmentTile({
       )}
       {category === "video" ? (
         <View style={styles.playBadge}>
-          <Icon idea="play" size={12} color={theme.text} />
+          <Icon idea="play" size={12} color={ON_SCRIM} />
         </View>
       ) : null}
       {item.syncState === "pendingUpload" ? (
@@ -620,7 +620,7 @@ function trackSummary(track: Track): string {
 
 const TILE_SIZE = 96;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   row: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   emptyHint: { color: theme.textMuted, fontSize: fontSize.sm, maxWidth: 200 },
   tileWrap: { position: "relative" },
@@ -628,7 +628,7 @@ const useStyles = makeStyles((theme) => ({
     width: TILE_SIZE,
     height: TILE_SIZE,
     borderRadius: radius.lg,
-    backgroundColor: theme.cardPressed,
+    backgroundColor: theme.card,
   },
   glyphTile: {
     alignItems: "center",
@@ -654,13 +654,14 @@ const useStyles = makeStyles((theme) => ({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: scrim.light,
+    backgroundColor: scrim.heavy,
     paddingVertical: spacing(0.25),
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },
+  // Words on a scrim are white in every scheme (shared/DESIGN.md §7).
   pendingBadgeText: {
-    color: theme.text,
+    color: ON_SCRIM,
     fontSize: fontSize.xs,
     textAlign: "center",
   },
@@ -673,11 +674,7 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(0.25),
   },
   addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
-  addTileLabel: {
-    color: theme.accent,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  addTileLabel: { ...textRole.caption, color: theme.accent },
   tileLoading: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

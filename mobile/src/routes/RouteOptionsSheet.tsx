@@ -29,7 +29,7 @@ import {
   wayVerbLabel,
 } from "@logjam/shared";
 
-import { useTheme, useHues } from "../theme";
+import { spacing, useTheme, useHues } from "../theme";
 import { BottomSheet, closedSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useCopyPanel } from "../sharing/CopySheet";
@@ -527,5 +527,5 @@ export function RouteOptionsSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 8 },
+  body: { gap: spacing(1) },
 });

@@ -144,6 +144,26 @@ describe("buildCustomFieldDef", () => {
     });
   });
 
+  it("says a range problem is about the bounds, not the label", () => {
+    const draft = {
+      label: "Depth",
+      type: "integer" as const,
+      bounded: true,
+    };
+    for (const [min, max] of [
+      ["", "5"],
+      ["a", "5"],
+      ["9", "5"],
+    ]) {
+      const result = buildCustomFieldDef({ ...draft, min, max }, []);
+      expect(result).toMatchObject({ field: "bounds" });
+    }
+    // The label's own problems carry no field.
+    expect(
+      buildCustomFieldDef({ ...draft, label: " ", min: "", max: "" }, []),
+    ).toEqual({ error: "Label is required." });
+  });
+
   it("rejects empty label", () => {
     const result = buildCustomFieldDef(
       { label: "  ", type: "string", bounded: false, min: "", max: "" },
@@ -218,6 +238,7 @@ describe("buildCustomFieldDef", () => {
     );
     expect(result).toEqual({
       error: "Both min and max are required for a bounded field.",
+      field: "bounds",
     });
   });
 
@@ -228,6 +249,7 @@ describe("buildCustomFieldDef", () => {
     );
     expect(result).toEqual({
       error: "Both min and max are required for a bounded field.",
+      field: "bounds",
     });
   });
 
@@ -236,7 +258,10 @@ describe("buildCustomFieldDef", () => {
       { label: "Rating", type: "integer", bounded: true, min: "abc", max: "5" },
       [],
     );
-    expect(result).toEqual({ error: "Min and max must be valid numbers." });
+    expect(result).toEqual({
+      error: "Min and max must be valid numbers.",
+      field: "bounds",
+    });
   });
 
   it("rejects min >= max", () => {
@@ -244,7 +269,10 @@ describe("buildCustomFieldDef", () => {
       { label: "Rating", type: "integer", bounded: true, min: "5", max: "5" },
       [],
     );
-    expect(result).toEqual({ error: "Minimum must be less than maximum." });
+    expect(result).toEqual({
+      error: "Minimum must be less than maximum.",
+      field: "bounds",
+    });
   });
 
   it("ignores bounded flag for non-numeric types", () => {

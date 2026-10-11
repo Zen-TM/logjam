@@ -3,11 +3,10 @@ import { ActivityIndicator, Pressable, Text } from "react-native";
 import {
   controlSize,
   fontSize,
-  fontWeight,
   opacity,
   radius,
+  slopTo,
   spacing,
-  touchTargetMin,
   makeStyles,
   useTheme,
 } from "../theme";
@@ -15,7 +14,7 @@ import { Icon, type Glyph } from "./Icon";
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
-const COMPACT_SLOP = (touchTargetMin - controlSize.md) / 2;
+const COMPACT_SLOP = slopTo(controlSize.md);
 
 type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost";
 
@@ -107,12 +106,12 @@ export function Button({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing(0.75),
+    gap: spacing(0.5),
     borderRadius: radius.pill,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
@@ -124,7 +123,7 @@ const useStyles = makeStyles((theme) => ({
     minWidth: controlSize.lg,
   },
   compact: {
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(0.5),
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
     minWidth: controlSize.md,
@@ -139,6 +138,6 @@ const useStyles = makeStyles((theme) => ({
   pressed: { backgroundColor: theme.cardPressed },
   pressedFilled: { opacity: 0.85 },
   disabled: { opacity: opacity.disabled },
-  label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
+  label: { ...textRole.rowTitle },
   labelCompact: { fontSize: fontSize.sm },
 }));

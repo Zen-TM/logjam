@@ -391,11 +391,13 @@ export type CustomFieldDraft = {
 /**
  * Validate a custom-field draft and produce a `TripLogCustomFieldDef` ready
  * for persistence, or a user-facing error string. Pure — no side effects.
+ * `field: "bounds"` says the error is about the min and max, so a form puts it
+ * under them; without it the error is about the label.
  */
 export function buildCustomFieldDef(
   draft: CustomFieldDraft,
   existingDefs: TripLogCustomFieldDef[],
-): { def: TripLogCustomFieldDef } | { error: string } {
+): { def: TripLogCustomFieldDef } | { error: string; field?: "bounds" } {
   const label = draft.label.trim();
   if (!label) return { error: "Label is required." };
 
@@ -416,7 +418,10 @@ export function buildCustomFieldDef(
 
   if (isNumeric && draft.bounded) {
     if (draft.min.trim() === "" || draft.max.trim() === "") {
-      return { error: "Both min and max are required for a bounded field." };
+      return {
+        error: "Both min and max are required for a bounded field.",
+        field: "bounds",
+      };
     }
     const min =
       draft.type === "integer"
@@ -427,10 +432,10 @@ export function buildCustomFieldDef(
         ? parseInt(draft.max, 10)
         : parseFloat(draft.max);
     if (!isFinite(min) || !isFinite(max)) {
-      return { error: "Min and max must be valid numbers." };
+      return { error: "Min and max must be valid numbers.", field: "bounds" };
     }
     if (min >= max) {
-      return { error: "Minimum must be less than maximum." };
+      return { error: "Minimum must be less than maximum.", field: "bounds" };
     }
     bounds = { min, max };
   }

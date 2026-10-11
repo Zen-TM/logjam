@@ -89,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -1432,41 +1432,36 @@ function EmptyPanel({
   searching: boolean;
   onShowAll: () => void;
 }) {
-  const styles = useStyles();
-
   const copy = INBOX.copy;
   if (searching) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noMatchTitle}</Text>
-        <Text style={styles.emptyHint}>{copy.noMatchBody}</Text>
-        <Button label={copy.clearSearch} variant="ghost" onPress={onShowAll} />
-      </View>
+      <EmptyState
+        title={copy.noMatchTitle}
+        hint={copy.noMatchBody}
+        action={{
+          label: copy.clearSearch,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
   if (bucket !== "all") {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>
-          {bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
-        </Text>
-        <Button
-          label={copy.showEverything}
-          variant="ghost"
-          onPress={onShowAll}
-        />
-      </View>
+      <EmptyState
+        title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        action={{
+          label: copy.showEverything,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-    </View>
-  );
+  return <EmptyState title={copy.firstRunTitle} hint={copy.firstRunBody} />;
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
@@ -1486,15 +1481,9 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: theme.page,
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(1),
   },
-  dayLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  dayLabel: { ...textRole.section, color: theme.textMuted },
   dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks
@@ -1522,7 +1511,7 @@ const useStyles = makeStyles((theme) => ({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
@@ -1531,14 +1520,6 @@ const useStyles = makeStyles((theme) => ({
     color: theme.textMuted,
     fontSize: fontSize.xs,
     textAlign: "center",
-    paddingTop: spacing(0.75),
-  },
-  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
+    paddingTop: spacing(0.5),
   },
 }));

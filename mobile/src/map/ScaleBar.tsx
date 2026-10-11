@@ -11,7 +11,7 @@
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, makeStyles } from "../theme";
+import { fontSize, radius, spacing, makeStyles, withAlpha } from "../theme";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
 export type ScaleBarHandle = {
@@ -72,24 +72,20 @@ export const ScaleBar = forwardRef<
   );
 });
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   // Translucent warm backing: the bar sits over map imagery that can be any
   // brightness, and hairlines over topo raster are otherwise unreadable.
   root: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
-    backgroundColor: `${theme.page}CC`,
+    backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
-    paddingHorizontal: spacing(0.75),
+    paddingHorizontal: spacing(1),
     paddingTop: spacing(0.25),
     paddingBottom: spacing(0.5),
     gap: spacing(0.25),
   },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.caption, color: theme.text },
   // Capped rule: bottom edge plus down-turned ends.
   rule: {
     height: 6,

@@ -39,6 +39,7 @@ import {
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   wayVerbIcon,
+  MAP_MEASURE,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -571,7 +572,7 @@ export default function WayDetailPanel({
         {route && (
           <section className={classes.section}>
             {profileLoading && (
-              <p className={classes.note}>Reading the terrain…</p>
+              <p className={classes.note}>{MAP_MEASURE.copy.readingTerrain}</p>
             )}
             {profileError && <p className={classes.note}>{profileError}</p>}
             {profile && (

@@ -11,6 +11,7 @@ import { routeLengthM, type RoutePoint } from "../routeValidation.js";
 import { PAIRED_STAT_LABELS } from "../statPairs.js";
 import { formatDistanceM } from "../trackStats.js";
 import type { IconIdea } from "../icons.js";
+import type { SnapMode } from "../snapToPath.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 
 export const MAP_MEASURE = {
@@ -37,6 +38,17 @@ export const MAP_MEASURE = {
 
 /** The glyph on the tool's button and on every verb that arms it. */
 export const MAP_MEASURE_ICON: IconIdea = "measure";
+
+/**
+ * What the next segment of a drawn line follows, in the order each client lists
+ * it: the measure tool's and the route tool's setting, so one set of words.
+ */
+export const MAP_SNAP_OPTIONS: readonly { value: SnapMode; label: string }[] = [
+  { value: "off", label: "Nothing (straight lines)" },
+  { value: "trails", label: "Trails" },
+  { value: "waterways", label: "Creeks & rivers" },
+  { value: "both", label: "Trails, creeks & rivers" },
+];
 
 /** Shown until the first point lands. Differs only by how each medium presses. */
 export const MAP_MEASURE_START_NOTE: Record<ContractPlatform, string> = {

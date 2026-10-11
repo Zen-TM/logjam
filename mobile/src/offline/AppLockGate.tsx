@@ -26,7 +26,7 @@ import {
   isAppLockEnabled,
   onAppLockPreferenceChanged,
 } from "./appLockPreference";
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
 // fires background/active AppState churn on the host activity. Any relock
@@ -118,7 +118,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         return;
       }
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock Logjam",
+        promptMessage: "Unlock Logjam GPS",
       });
       if (result.success) {
         lastUnlockAt.current = Date.now();
@@ -190,7 +190,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   container: {
     flex: 1,
     alignItems: "center",
@@ -199,11 +199,7 @@ const useStyles = makeStyles((theme) => ({
     padding: spacing(3),
     backgroundColor: theme.page,
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.text,
-  },
+  title: { ...textRole.title, color: theme.text },
   line: {
     fontSize: fontSize.sm,
     color: theme.textMuted,

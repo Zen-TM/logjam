@@ -17,7 +17,7 @@ import { MAP_INK } from "@logjam/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
-import { radius, withAlpha, makeStyles } from "../theme";
+import { radius, scrim, withAlpha, makeStyles } from "../theme";
 import { moveFrameEdge, type FrameEdge, type FrameInsets } from "./regionFrame";
 
 /** Touch height of a handle; the visible bar is much thinner. */
@@ -250,7 +250,7 @@ const useStyles = makeStyles((theme) => ({
   // "not this", and a scheme tint over a map reads as a colour cast. The four
   // panels never overlap, so the alpha composites exactly once everywhere —
   // any overlap would show as a darker band where two panels met.
-  dim: { position: "absolute", backgroundColor: "rgba(0,0,0,0.45)" },
+  dim: { position: "absolute", backgroundColor: scrim.light },
   outline: {
     position: "absolute",
     borderWidth: 2,

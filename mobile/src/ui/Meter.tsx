@@ -1,13 +1,6 @@
 import { Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  withAlpha,
-  makeStyles,
-} from "../theme";
+import { fontSize, radius, spacing, withAlpha, makeStyles } from "../theme";
 
 export type MeterSegment = {
   /** Legend text. */
@@ -79,28 +72,24 @@ export function Meter({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
-  wrap: { gap: spacing(1.25) },
+const useStyles = makeStyles((theme, textRole) => ({
+  wrap: { gap: spacing(1) },
   track: {
     flexDirection: "row",
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
     backgroundColor: withAlpha(theme.text, 0.1),
-    gap: 2,
+    gap: spacing(0.25),
   },
   legend: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing(1.5),
-    rowGap: spacing(0.75),
+    rowGap: spacing(0.5),
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   legendLabel: { color: theme.textMuted, fontSize: fontSize.xs },
-  legendValue: {
-    color: theme.text,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  legendValue: { ...textRole.caption, color: theme.text },
 }));

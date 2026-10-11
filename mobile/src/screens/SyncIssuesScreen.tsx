@@ -58,6 +58,7 @@ import {
   Toast,
   useBulkSelection,
   type ToastMessage,
+  EmptyState,
 } from "../ui";
 import { onMirrorChanged } from "../sync/syncDb";
 import { getMirrorTrip, type MirrorTrip } from "../sync/mirrorStore";
@@ -919,15 +920,11 @@ const IssueRow = memo(function IssueRow({
 });
 
 function EmptyPanel() {
-  const styles = useStyles();
-
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>Nothing to sort out</Text>
-      <Text style={styles.emptyHint}>
-        Every change you&apos;ve made has reached your account.
-      </Text>
-    </View>
+    <EmptyState
+      title="Nothing to sort out"
+      hint="Every change you've made has reached your account."
+    />
   );
 }
 
@@ -959,12 +956,4 @@ const useStyles = makeStyles((theme) => ({
   // The line the rejection is about, so two changes over one complaint stop
   // being a guessing game.
   menuValueRejected: { fontWeight: fontWeight.bold },
-  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
 }));

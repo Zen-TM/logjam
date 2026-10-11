@@ -5,7 +5,7 @@
 // SHAPE, not for a recurring arrangement of existing ones).
 import { Text } from "react-native";
 
-import { fontSize, spacing, makeStyles } from "../../theme";
+import { fontSize, makeStyles } from "../../theme";
 import {
   SectionHeader,
   ChipRail,
@@ -115,9 +115,5 @@ export function Hint({ text }: { text: string }) {
 }
 
 const useStyles = makeStyles((theme) => ({
-  hint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    marginTop: spacing(-0.5),
-  },
+  hint: { color: theme.textMuted, fontSize: fontSize.sm },
 }));

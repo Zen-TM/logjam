@@ -68,7 +68,7 @@ function Fallback({ onRestart }: { onRestart: () => void }) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   container: {
     flex: 1,
     alignItems: "center",
@@ -78,8 +78,7 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.page,
   },
   title: {
-    fontSize: fontSize.xl,
-    fontWeight: "600",
+    ...textRole.title,
     color: theme.text,
     textAlign: "center",
   },

@@ -679,5 +679,5 @@ const useStyles = makeStyles((theme) => ({
   hint: { color: theme.textMuted, fontSize: fontSize.sm, flex: 1 },
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
-  fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
 }));

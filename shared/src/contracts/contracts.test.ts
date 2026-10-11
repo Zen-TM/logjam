@@ -25,6 +25,7 @@ import {
   MAP_MEASURE,
   MAP_MEASURE_START_NOTE,
   MAP_MEASURE_VERBS,
+  MAP_SNAP_OPTIONS,
   mapPointFacts,
   mapPointVerbs,
   MAP_POINT,
@@ -866,5 +867,17 @@ describe("the measure tool", () => {
       expect("on" in verb, verb.id).toBe("reason" in verb);
     expect(MAP_MEASURE_START_NOTE.web).toBe("Click the map to measure");
     expect(MAP_MEASURE_START_NOTE.gps).toBe("Tap the map to measure");
+  });
+});
+
+describe("the snap words", () => {
+  it("name every snap mode once", () => {
+    expect(MAP_SNAP_OPTIONS.map((option) => option.value)).toEqual([
+      "off",
+      "trails",
+      "waterways",
+      "both",
+    ]);
+    expect(new Set(MAP_SNAP_OPTIONS.map((o) => o.label)).size).toBe(4);
   });
 });

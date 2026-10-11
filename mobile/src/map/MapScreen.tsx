@@ -85,6 +85,8 @@ import {
   type TrackPass,
   drawsNswContours,
   nswContourStyle,
+  MAP_INK,
+  MAP_MEASURE,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -110,10 +112,10 @@ import {
 } from "../sync/useSyncQueries";
 import { config } from "../config";
 import {
-  fontSize,
-  fontWeight,
+  slopTo,
   spacing,
   makeStyles,
+  touchTargetMin,
   useTheme,
   useHues,
 } from "../theme";
@@ -186,6 +188,7 @@ import {
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import {
+  MARKER_COLORS,
   isNorthUpLocked,
   isScaleBarEnabled,
   isSpeedElevationEnabled,
@@ -423,7 +426,7 @@ async function currentHeading(): Promise<number | null> {
 }
 
 /** Gap between the stacked instruments, and the same value their container uses. */
-const INSTRUMENT_GAP = spacing(0.75);
+const INSTRUMENT_GAP = spacing(1);
 
 /**
  * How long to wait for a `rotation` reading before deciding the device has no
@@ -2490,7 +2493,7 @@ export function MapScreen({
         if (kind === null) {
           Alert.alert(
             "Can't open this file",
-            "Logjam can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+            "Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
           );
           return;
         }
@@ -4693,7 +4696,7 @@ export function MapScreen({
               style={{
                 circleRadius: 5,
                 circleColor: imported.color,
-                circleStrokeColor: "#ffffff",
+                circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 1.5,
               }}
             />
@@ -4743,7 +4746,7 @@ export function MapScreen({
               id="nav-line-layer"
               beforeId={PIN_FLOOR}
               style={{
-                lineColor: "#4285F4",
+                lineColor: MARKER_COLORS[markerColorId],
                 lineWidth: 2,
                 lineOpacity: 0.8,
                 lineDasharray: [2, 2],
@@ -4819,7 +4822,7 @@ export function MapScreen({
                 style={{
                   circleRadius: 5,
                   circleColor: theme.accent,
-                  circleStrokeColor: "#ffffff",
+                  circleStrokeColor: MAP_INK.ring,
                   circleStrokeWidth: 2,
                 }}
               />
@@ -5136,13 +5139,14 @@ export function MapScreen({
           <Icon
             idea={LOCATE_ICON[followMode]}
             size={FAB_ICON}
-            color={theme.text}
+            color={followMode !== "off" ? theme.onFill : theme.text}
           />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
           style={styles.miniButton}
+          hitSlop={slopTo(MINI_FAB_SIZE)}
           onPress={() => setAttributionOpen(true)}
         >
           <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
@@ -5321,7 +5325,7 @@ export function MapScreen({
           />
           <Row
             icon="measure"
-            title="Measure from here"
+            title={MAP_MEASURE.copy.fromHere}
             onPress={() => {
               const point = longPressPoint;
               setLongPressPoint(null);
@@ -5582,14 +5586,15 @@ function RouteNameForm({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the
-  // same 44 dp the rest of the app treats as a real touch target. Solid rather
-  // than translucent — it sits over the map, which can be any colour under it.
+  // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
+  // rather than translucent — it sits over the map, which can be any colour
+  // under it.
   anchorDelete: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: touchTargetMin,
+    height: touchTargetMin,
+    borderRadius: touchTargetMin / 2,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.warning,
@@ -5646,9 +5651,5 @@ const useStyles = makeStyles((theme) => ({
   // Where the navigation readout sits: a Notice, centred, in the notice stack's
   // column.
   navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
-  attributionText: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
+  attributionText: { ...textRole.hint, color: theme.textMuted },
 }));

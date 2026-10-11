@@ -61,8 +61,8 @@ export function CrashReportConsent() {
       }
     >
       <Text style={styles.body}>
-        If Logjam crashes, we get the technical details. Reports are anonymous
-        and stripped of place names and coordinates.
+        If Logjam GPS crashes, we get the technical details. Reports are
+        anonymous and stripped of place names and coordinates.
       </Text>
       <Text style={styles.body}>
         Off by default. Change it any time in Settings › Privacy and security.

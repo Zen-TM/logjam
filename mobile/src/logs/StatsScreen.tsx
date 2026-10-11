@@ -66,19 +66,13 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import { useTracks } from "../tracks/useTracks";
-import {
-  fontSize,
-  fontWeight,
-  spacing,
-  withAlpha,
-  makeStyles,
-  useTheme,
-} from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
   ActivitySpark,
   Chip,
   EmptyState,
   Hero,
+  Meter,
   Row,
   ScreenScroll,
   SectionHeader,
@@ -378,24 +372,13 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
                 {entry.logged} of {entry.total}
               </Text>
             </View>
-            <View style={styles.meterTrack}>
-              <View
-                style={[
-                  styles.meterFill,
-                  {
-                    // `flexGrow` rather than a percentage width: a zero-logged
-                    // type still has to render its track, and a 0 % width child
-                    // inside a rounded, clipped bar is the empty-card trap
-                    // DESIGN.md warns about.
-                    flexGrow: Math.max(entry.logged, 0),
-                    backgroundColor: entry.color,
-                  },
-                ]}
-              />
-              <View
-                style={{ flexGrow: Math.max(entry.total - entry.logged, 0) }}
-              />
-            </View>
+            <Meter
+              segments={[
+                { label: entry.name, value: entry.logged, hue: entry.color },
+              ]}
+              total={entry.total}
+              legend={false}
+            />
           </View>
         ))}
         {stats.mostReturned ? (
@@ -590,7 +573,7 @@ function RowMetric({ value, suffix }: { value: string; suffix: string }) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   // `ScreenScroll` gaps its own direct children; a section wrapping several
   // rows has to repeat that or its rows sit flush against each other.
@@ -609,11 +592,7 @@ const useStyles = makeStyles((theme) => ({
     fontSize: fontSize.sm,
     marginTop: spacing(0.25),
   },
-  rowValue: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  rowValue: { ...textRole.rowTitle, color: theme.text },
   // Read-only, so it sits on the page: a card fill would say "press me".
   completion: { gap: spacing(1) },
   meterRow: { marginBottom: spacing(1) },
@@ -625,12 +604,4 @@ const useStyles = makeStyles((theme) => ({
   },
   meterName: { color: theme.text, fontSize: fontSize.sm },
   meterValue: { color: theme.textMuted, fontSize: fontSize.xs },
-  meterTrack: {
-    flexDirection: "row",
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
-    backgroundColor: withAlpha(theme.text, 0.08),
-  },
-  meterFill: { borderRadius: 4 },
 }));

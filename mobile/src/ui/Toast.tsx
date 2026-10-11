@@ -1,14 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  makeStyles,
-  useTheme,
-} from "../theme";
+import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
@@ -150,7 +143,7 @@ export function Toast({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   dock: {
     position: "absolute",
     left: spacing(2),
@@ -164,7 +157,7 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(1),
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
     maxWidth: "100%",
   },
@@ -173,10 +166,5 @@ const useStyles = makeStyles((theme) => ({
   toastInfo: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   toastError: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   close: { marginLeft: spacing(0.5) },
-  text: {
-    flexShrink: 1,
-    color: theme.onInverse,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  text: { ...textRole.control, flexShrink: 1, color: theme.onInverse },
 }));

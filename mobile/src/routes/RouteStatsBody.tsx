@@ -17,12 +17,13 @@
 import { Text, View } from "react-native";
 import {
   formatDistanceM,
+  MAP_MEASURE,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   routeLengthM,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import { ProfileChart, StatGrid, elevationSeries } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -89,7 +90,7 @@ export function RouteStatsBody({
       ) : (
         <Text style={styles.pending}>
           {loading
-            ? "Reading the terrain…"
+            ? MAP_MEASURE.copy.readingTerrain
             : "Elevation needs a connection; distance always shows."}
         </Text>
       )}
@@ -97,14 +98,8 @@ export function RouteStatsBody({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
-  chartLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+const useStyles = makeStyles((theme, textRole) => ({
+  chartLabel: { ...textRole.section, color: theme.textMuted },
   body: { gap: spacing(1.5) },
   band: {
     color: theme.textMuted,

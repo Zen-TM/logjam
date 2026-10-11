@@ -46,12 +46,11 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BASEMAP_CATALOG } from "@logjam/shared";
+import { BASEMAP_CATALOG, MAP_INK } from "@logjam/shared";
 
 import { config } from "../config";
 import {
-  fontSize,
-  fontWeight,
+  ON_SCRIM,
   radius,
   scrim,
   spacing,
@@ -296,7 +295,7 @@ export function PickPointScreen({
               style={{
                 circleRadius: 8,
                 circleColor: theme.accent,
-                circleStrokeColor: "#ffffff",
+                circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 3,
               }}
             />
@@ -364,7 +363,7 @@ function noop() {}
 /** Stable empty list — a fresh `[]` per render defeats RoutesLayer's memo. */
 const EMPTY_ROUTES: never[] = [];
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   basemaps: {
     position: "absolute",
@@ -390,11 +389,8 @@ const useStyles = makeStyles((theme) => ({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1),
   },
-  hintText: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  // On a scrim, so white in every scheme (shared/DESIGN.md §7).
+  hintText: { ...textRole.hint, color: ON_SCRIM },
   actions: {
     position: "absolute",
     left: 0,

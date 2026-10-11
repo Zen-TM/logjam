@@ -2,7 +2,7 @@
 // (`routes/RouteDrawPanel.tsx`) and the measure tool (`MeasurePanel.tsx`) are
 // one interaction, so the parts that would otherwise be written twice are here.
 import { useEffect, useState } from "react";
-import type { SnapMode } from "@logjam/shared";
+import { MAP_MEASURE, MAP_SNAP_OPTIONS, type SnapMode } from "@logjam/shared";
 import { Select } from "../../ui";
 
 /** How long the line must sit still before its terrain is read. A profile per
@@ -61,27 +61,26 @@ export function useUndoKey(onUndo: () => void) {
 /** What the next segment follows. A tool's own setting, so it lives in the
  *  tool's footer and not in Layers (shared/DESIGN.md §15). */
 export function SnapSelect({
-  label,
   value,
   disabled,
   onChange,
 }: {
-  label: string;
   value: SnapMode;
   disabled?: boolean;
   onChange: (mode: SnapMode) => void;
 }) {
   return (
     <Select
-      label={label}
+      label={MAP_MEASURE.copy.snap}
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value as SnapMode)}
     >
-      <option value="off">Nothing (straight lines)</option>
-      <option value="trails">Trails</option>
-      <option value="waterways">Creeks &amp; rivers</option>
-      <option value="both">Trails, creeks &amp; rivers</option>
+      {MAP_SNAP_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
     </Select>
   );
 }

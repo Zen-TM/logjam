@@ -818,7 +818,7 @@ const useStyles = makeStyles((theme) => ({
   panel: {
     height: PANEL_HEIGHT,
     backgroundColor: theme.page,
-    paddingTop: spacing(1.25),
+    paddingTop: spacing(1),
     paddingBottom: spacing(1.5),
     gap: spacing(1),
     borderTopWidth: 1,
@@ -828,7 +828,7 @@ const useStyles = makeStyles((theme) => ({
     flex: 1,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(1),
-    gap: spacing(1.25),
+    gap: spacing(1),
   },
   // Horizontally scrolling, like the detail rail: four chips wrapped onto a
   // second line and took the height straight out of the map.

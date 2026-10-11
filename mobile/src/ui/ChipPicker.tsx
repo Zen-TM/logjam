@@ -8,6 +8,7 @@ import {
   spacing,
   makeStyles,
   useTheme,
+  controlSize,
 } from "../theme";
 import { Chip, type ChipOption } from "./Chip";
 import { FieldError } from "./FieldError";
@@ -126,7 +127,7 @@ const useStyles = makeStyles((theme) => ({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   input: {
     minWidth: 120,
-    minHeight: 36,
+    minHeight: controlSize.md,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.accent,

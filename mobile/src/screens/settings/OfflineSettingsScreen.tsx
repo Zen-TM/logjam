@@ -276,8 +276,7 @@ export function OfflineSettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  // Clears the Hint's own negative top margin (it is built to tuck under the
-  // control it belongs to) and sets this one off from the row above, which it
-  // is a note about the page for rather than a note about that row.
-  footnote: { paddingTop: spacing(2.5), paddingBottom: spacing(1) },
+  // Sets this one off from the row above, which it is a note about the page
+  // for rather than a note about that row.
+  footnote: { paddingTop: spacing(2), paddingBottom: spacing(1) },
 });

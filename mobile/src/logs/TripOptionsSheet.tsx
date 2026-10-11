@@ -14,7 +14,7 @@ import { tripDeleteConfirm, tripVerbs, type TripVerbId } from "@logjam/shared";
 import { tripTitle } from "../api/tripTitle";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
-import { makeStyles, useTheme } from "../theme";
+import { makeStyles, spacing, useTheme } from "../theme";
 import { BottomSheet, Row } from "../ui";
 
 export function TripOptionsSheet({
@@ -105,6 +105,6 @@ export function TripOptionsSheet({
 }
 
 const useStyles = makeStyles((theme) => ({
-  body: { gap: 8 },
+  body: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
 }));

@@ -343,13 +343,15 @@ export function ProfileChart({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+/** Centred on its x by pulling it back half its own width. */
+const SCRUB_LINE_WIDTH = 2;
+
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(0.5) },
   readoutRow: { height: 18, justifyContent: "center" },
   readout: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   readoutHint: { color: theme.textMuted, fontSize: fontSize.xs },
@@ -369,8 +371,8 @@ const useStyles = makeStyles((theme) => ({
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 2,
-    marginLeft: -1,
+    width: SCRUB_LINE_WIDTH,
+    marginLeft: -SCRUB_LINE_WIDTH / 2,
     backgroundColor: theme.text,
   },
   fade: { ...StyleSheet.absoluteFill, top: "55%" },

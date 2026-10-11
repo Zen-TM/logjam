@@ -40,7 +40,6 @@ import {
   spacing,
   useTheme,
   useThemeMode,
-  withAlpha,
 } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
@@ -265,7 +264,7 @@ const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
 /** `@react-navigation/bottom-tabs`' own TABBAR_HEIGHT_UIKIT, which it does not export. */
 const TAB_BAR_BASE_HEIGHT = 49;
-const TAB_BAR_TOP_PAD = spacing(0.75);
+const TAB_BAR_TOP_PAD = spacing(0.5);
 
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which
@@ -988,7 +987,7 @@ export function AppShell({
               headerShown: false,
               tabBarStyle: {
                 backgroundColor: theme.card,
-                borderTopColor: withAlpha(theme.text, 0.25),
+                borderTopColor: theme.line,
                 borderTopWidth: 1,
                 // Breathing room between the border and the icons. The library's
                 // bar is iOS-sized (49pt plus the bottom inset) and sits the icons

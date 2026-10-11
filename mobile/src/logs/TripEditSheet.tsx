@@ -15,11 +15,11 @@ import {
 
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
   makeStyles,
   useTheme,
+  controlSize,
 } from "../theme";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
@@ -804,7 +804,7 @@ function PlacePicker({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   pickerBody: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   searchWrap: {
@@ -816,12 +816,7 @@ const useStyles = makeStyles((theme) => ({
     borderColor: theme.lineStrong,
     backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
-    minHeight: 44,
+    minHeight: controlSize.lg,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
 }));

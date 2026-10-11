@@ -2,15 +2,13 @@ import { useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   radius,
   scrim,
   spacing,
-  withAlpha,
   makeStyles,
   useTheme,
+  opacity,
 } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -130,7 +128,7 @@ export function ColourField({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   field: {
     flexDirection: "row",
     alignItems: "center",
@@ -138,12 +136,7 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(1),
     minHeight: CELL,
   },
-  label: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.rowTitle, flex: 1, color: theme.text },
   trigger: {
     width: CELL,
     height: CELL,
@@ -152,7 +145,7 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: CELL / 2,
   },
   pressed: { backgroundColor: theme.cardPressed },
-  disabled: { opacity: 0.4 },
+  disabled: { opacity: opacity.disabled },
   // The disc's own hairline, so a light swatch does not vanish into a light
   // card (and a dark one into a dark card).
   swatch: {
@@ -162,7 +155,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.2),
+    borderColor: theme.line,
   },
   backdrop: {
     flex: 1,
@@ -186,11 +179,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  title: { ...textRole.rowTitle, color: theme.text },
   // Three to a row, as on Logjam Web: a single flat row of ten spends the width
   // showing nine colours nobody picked.
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center" },

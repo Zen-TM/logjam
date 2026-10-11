@@ -673,21 +673,15 @@ function EmptyPanel({
   kind: "firstRun" | "noRequests" | null;
   onAdd: () => void;
 }) {
-  const styles = useStyles();
-
   if (kind === "noRequests") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noRequestsTitle}</Text>
-      </View>
-    );
+    return <EmptyState title={copy.noRequestsTitle} />;
   }
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-      <Button label={copy.addTitle} icon="addFriend" onPress={onAdd} />
-    </View>
+    <EmptyState
+      title={copy.firstRunTitle}
+      hint={copy.firstRunBody}
+      action={{ label: copy.addTitle, icon: "addFriend", onPress: onAdd }}
+    />
   );
 }
 
@@ -709,16 +703,4 @@ const useStyles = makeStyles((theme) => ({
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1.5),
-    paddingVertical: spacing(6),
-  },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
 }));

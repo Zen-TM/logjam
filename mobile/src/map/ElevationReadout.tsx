@@ -4,9 +4,9 @@
 // reads as broken, and a "—" placeholder in a tool used offline would sit
 // there permanently implying something is wrong. Absence is the honest state.
 import { Text, View } from "react-native";
-import type { ElevationProfile } from "@logjam/shared";
+import { MAP_MEASURE, type ElevationProfile } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 
 export function ElevationReadout({
   profile,
@@ -19,7 +19,7 @@ export function ElevationReadout({
 
   if (!profile) {
     return loading ? (
-      <Text style={styles.pending}>Reading the terrain…</Text>
+      <Text style={styles.pending}>{MAP_MEASURE.copy.readingTerrain}</Text>
     ) : null;
   }
   return (
@@ -45,12 +45,11 @@ export function ElevationReadout({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
-  row: { flexDirection: "row", alignItems: "baseline", gap: spacing(1.25) },
+const useStyles = makeStyles((theme, textRole) => ({
+  row: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
   value: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   range: {

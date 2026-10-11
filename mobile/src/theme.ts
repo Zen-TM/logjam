@@ -27,6 +27,7 @@ import {
   PLACE_STATUS_HUES,
   RADIUS,
   SPACE_UNIT,
+  type SpaceStep,
   TEXT_ROLES,
   THEME_SCHEMES,
   TOUCH_TARGET_MIN,
@@ -240,7 +241,7 @@ export const fontSize = {
   display: scaled(FONT.gps.display),
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
-export const spacing = (n: number): number => n * SPACE_UNIT;
+export const spacing = (n: SpaceStep): number => n * SPACE_UNIT;
 
 /** A form's label, field and section gaps (`FORM_RHYTHM` in `@logjam/shared`). */
 export const formRhythm = FORM_RHYTHM;
@@ -252,6 +253,9 @@ export const opacity = OPACITY;
 export const controlSize = CONTROL.touch;
 /** Every pressable's hit area, visual size plus `hitSlop`. */
 export const touchTargetMin = TOUCH_TARGET_MIN;
+/** `hitSlop` that takes something drawn at `size` to the 48 dp target. */
+export const slopTo = (size: number): number =>
+  Math.max(0, (touchTargetMin - size) / 2);
 
 // Weight + line-height scales so type roles are consistent across screens
 // (page title = xl/bold, body = base/regular at body line-height). RN wants
@@ -283,6 +287,8 @@ export const textRolesFor = perScheme(
           uppercase?: true;
           muted?: true;
         };
+        // The one place a size and a weight are written together.
+        // eslint-disable-next-line no-restricted-syntax
         const style: TextRoleStyle = {
           fontSize: fontSize[role.size],
           fontWeight: fontWeight[role.weight],
@@ -295,15 +301,8 @@ export const textRolesFor = perScheme(
 );
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
-// Modal/sheet scrims — the only intentional black-alpha overlays. Everything
-// else derives from the scheme. `light` for bottom sheets, `heavy` for
-// full-screen edit modals, `photo` for the full-res photo viewer (a photo is
-// judged against black, and any scheme tint here reads as a colour cast).
-export const scrim = {
-  light: "rgba(0,0,0,0.5)",
-  heavy: "rgba(0,0,0,0.6)",
-  photo: "rgba(0,0,0,0.92)",
-} as const;
+// Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
+export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";
 
 // Default touch-target padding for small text/icon actions.
 export const hitSlop = 8;

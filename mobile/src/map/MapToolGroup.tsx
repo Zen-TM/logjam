@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, View } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
-import type { IconIdea } from "@logjam/shared";
+import { MAP_MEASURE, MAP_MEASURE_ICON, type IconIdea } from "@logjam/shared";
 
 import { makeStyles, useTheme } from "../theme";
 import { Icon } from "../ui";
@@ -23,7 +23,7 @@ import { Icon } from "../ui";
 export type MapTool = "measure" | "route";
 
 const TOOLS: { id: MapTool; label: string; icon: IconIdea }[] = [
-  { id: "measure", label: "Measure distance", icon: "measure" },
+  { id: "measure", label: MAP_MEASURE.title, icon: MAP_MEASURE_ICON },
   { id: "route", label: "Draw a route", icon: "draw" },
 ];
 
@@ -135,7 +135,11 @@ export function MapToolGroup({
             ]}
             onPress={() => onPickTool(tool.id)}
           >
-            <Icon idea={tool.icon} size={FAB_ICON} color={theme.text} />
+            <Icon
+              idea={tool.icon}
+              size={FAB_ICON}
+              color={activeTool === tool.id ? theme.onFill : theme.text}
+            />
           </Pressable>
         </Animated.View>
       ))}
@@ -154,7 +158,7 @@ export function MapToolGroup({
         <Icon
           idea={open ? "close" : "add"}
           size={FAB_ICON}
-          color={theme.text}
+          color={open || activeTool ? theme.onFill : theme.text}
         />
       </Pressable>
     </View>

@@ -314,22 +314,18 @@ function BooleanFilter({ def, value, onChange }: Props) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   block: { gap: formRhythm.label },
   blockHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  blockLabel: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  blockLabel: { ...textRole.control, color: theme.text },
   blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
   // Words are text-coloured; the weight says it is set.
   blockValueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   pair: { flexDirection: "row", gap: spacing(1) },
   pairField: { flex: 1, maxWidth: 200 },
 }));

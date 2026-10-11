@@ -23,8 +23,6 @@ import { useAccountState } from "../../auth/AccountStateContext";
 import {
   TEXT_SCALES,
   chosenTextScale,
-  fontSize,
-  fontWeight,
   persistTextScale,
   setThemeSchemeId,
   useThemeSchemeId,
@@ -139,7 +137,7 @@ export function DisplaySettingsScreen() {
           hint={
             textScale === chosenTextScale
               ? undefined
-              : "Applies next time you open Logjam."
+              : "Applies next time you open Logjam GPS."
           }
         />
       </ScreenScroll>
@@ -198,7 +196,7 @@ function SchemeCard({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   schemes: { gap: spacing(1) },
   scheme: {
     flexDirection: "row",
@@ -216,7 +214,7 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: withAlpha(theme.accent, 0.1),
   },
   schemePressed: { backgroundColor: theme.cardPressed },
-  swatches: { flexDirection: "row", gap: 3 },
+  swatches: { flexDirection: "row", gap: spacing(0.5) },
   // The hairline is load-bearing, not decoration: a scheme's `card` IS the
   // card colour these sit on when it is the scheme in force, so without an edge that swatch simply vanishes and
   // the scheme looks like it has two colours.
@@ -225,12 +223,7 @@ const useStyles = makeStyles((theme) => ({
     height: 32,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.2),
+    borderColor: theme.line,
   },
-  schemeName: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  schemeName: { ...textRole.rowTitle, flex: 1, color: theme.text },
 }));

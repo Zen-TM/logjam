@@ -1,6 +1,13 @@
 import { Text, View } from "react-native";
 
-import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  controlSize,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 /**
@@ -56,7 +63,7 @@ const useStyles = makeStyles((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(1),
-    minHeight: 36,
+    minHeight: controlSize.md,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
     borderRadius: radius.lg,

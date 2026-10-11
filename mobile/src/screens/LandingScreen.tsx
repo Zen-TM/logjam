@@ -33,15 +33,8 @@ import {
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import {
-  fontSize,
-  fontWeight,
-  lineHeight,
-  radius,
-  spacing,
-  makeStyles,
-} from "../theme";
-import { Button, ErrorBanner, TextField, TextLink } from "../ui";
+import { fontSize, lineHeight, radius, spacing, makeStyles } from "../theme";
+import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -118,7 +111,7 @@ function SignInPanel({
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <TextField
         label="Email"
         value={email}
@@ -161,7 +154,7 @@ function SignInPanel({
           <Button label="Back" variant="ghost" onPress={auth.backToChooser} />
         )}
       </View>
-    </View>
+    </FormStack>
   );
 }
 
@@ -180,7 +173,7 @@ function GuestExplainer({
   const styles = useStyles();
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Without an account</Text>
       <Text style={styles.body}>
         Everything you record stays on this phone and is never uploaded or
@@ -207,11 +200,11 @@ function GuestExplainer({
         />
         <Button label="Back to login" variant="ghost" onPress={onBack} />
       </View>
-    </View>
+    </FormStack>
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -237,22 +230,13 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.xl,
     marginBottom: spacing(1),
   },
-  appTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.text,
-  },
+  appTitle: { ...textRole.title, color: theme.text },
   tagline: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
     textAlign: "center",
   },
-  form: { gap: spacing(2) },
-  heading: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
-    color: theme.text,
-  },
+  heading: { ...textRole.metric, color: theme.text },
   body: {
     fontSize: fontSize.sm,
     color: theme.textMuted,

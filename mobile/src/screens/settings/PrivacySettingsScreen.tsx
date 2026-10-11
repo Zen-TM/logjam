@@ -100,7 +100,7 @@ export function PrivacySettingsScreen() {
           // No trailing pill beside the switch: the switch is already the
           // trailing element, and a pill next to it was what forced this
           // sentence to ellipsise.
-          subtitle="Asks for your fingerprint or PIN each time Logjam opens."
+          subtitle="Asks for your fingerprint or PIN each time Logjam GPS opens."
           value={appLockEnabled}
           ready
           onToggle={() => void toggleAppLock()}
@@ -128,7 +128,7 @@ export function PrivacySettingsScreen() {
           // Says the consequence, which is the part a switch label can't: the
           // copy is out of Logjam's storage and its backup exclusion, and
           // nothing here can take it back.
-          subtitle="A copy of anything you shoot in Logjam goes to your camera roll."
+          subtitle="A copy of anything you shoot in Logjam GPS goes to your camera roll."
           subtitleNumberOfLines={2}
           value={saveToGallery}
           ready

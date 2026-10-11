@@ -240,7 +240,7 @@ export function LogsFilterSheet(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
 });
