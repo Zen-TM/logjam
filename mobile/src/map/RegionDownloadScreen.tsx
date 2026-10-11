@@ -50,7 +50,6 @@ import {
 } from "@logjam/shared";
 
 import { config } from "../config";
-import { readContoursOverImagery } from "./basemapPreference";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
 import { fontSize, spacing, theme } from "../theme";
@@ -245,9 +244,8 @@ export function RegionDownloadScreen({
   // refuse is worse than no chip. The note under the rail says why, and where
   // to change it — which a greyed chip could not.
   const isGuest = useAccountState().accountState === "guest";
-  const [contoursOverImagery] = useState(readContoursOverImagery);
   // An add-on to the maps that draw contours, on until switched off.
-  const [contoursChoice, setContoursChoice] = useState<boolean | null>(null);
+  const [saveContours, setSaveContours] = useState(true);
   const downloadable = isGuest
     ? DOWNLOADABLE.filter((id) => id !== "protomaps")
     : DOWNLOADABLE;
@@ -387,15 +385,12 @@ export function RegionDownloadScreen({
 
   const pyramidIds = selected.filter(isRasterPyramid);
   const includesVector = selected.includes("protomaps");
-  // Offered with any map that draws them, so it can look the same out of
-  // range. A guest has none: the clip endpoint needs a signed-in user.
+  // Offered with any map contours can be drawn on (the vector basemap, and
+  // imagery). It asks whether to DOWNLOAD them, which is not the map's switch
+  // for showing them over imagery, so it does not follow that one. A guest
+  // has none: the clip endpoint needs a signed-in user.
   const offersContours =
     !isGuest && selected.some((id) => drawsNswContours(id, true));
-  // Until the user says: on when a chosen map draws them as the map screen
-  // is set now, so imagery alone starts where its own Contours switch is.
-  const saveContours =
-    contoursChoice ??
-    selected.some((id) => drawsNswContours(id, contoursOverImagery));
   const includesContours = offersContours && saveContours;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
@@ -785,7 +780,7 @@ export function RegionDownloadScreen({
               }
               style={styles.contoursRow}
               checked={saveContours}
-              onChange={setContoursChoice}
+              onChange={setSaveContours}
             />
           ) : null}
 
