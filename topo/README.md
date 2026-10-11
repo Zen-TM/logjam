@@ -203,12 +203,66 @@ above, and needs GDAL with its Python bindings, NumPy, Pillow and the
 # One sheet, about 200 MB to download and 10 minutes to tile on 4 cores.
 python3 build_nsw_dem.py fetch dem/src Katoomba
 python3 build_nsw_dem.py tile dem/src dem/work --jobs 4
-python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles
+python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2026"
 ```
 
 `fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
 what is already done, so a stopped run carries on where it left off. The
 format and why: [ADR 0030](../docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md).
+
+Contours of the same sheets, as vector tiles for the vector basemap (10 m
+lines, the 50 m ones from zoom 11 and the rest from zoom 14):
+
+```bash
+python3 build_nsw_dem.py contours dem/src dem/contours-work dem/contours-nsw.pmtiles \
+  --extracted "October 2026"
+```
+
+A stopped contour run also carries on: each sheet's lines are kept whole or
+not at all.
+
+### The statewide build
+
+All 343 sheets, once. Why Logjam hosts its own copy, and what the licence
+asks: [ADR 0031](../docs/decisions/0031-nsw-heights-come-from-the-spatial-services-5m-dem.md).
+
+Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM:
+
+| | |
+|---|---|
+| `fetch` | 1 h 49 min, one sheet at a time; about 60 GB on disk once converted |
+| `tile` | 1 h 36 min with 30 workers, for 885 blocks (about 48 core-hours) |
+| `pack` | 3 min |
+| Result | 16.9 GB, 1,027,356 tiles |
+| Disk | 96 GB in use when `pack` finished; allow 150 GB |
+
+Any machine with GDAL, Python and `pmtiles` does: nothing here touches AWS
+until the archive is published.
+
+```bash
+python3 build_nsw_dem.py fetch dem/src
+python3 build_nsw_dem.py tile dem/src dem/work --jobs 30
+python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "<Month Year>"
+pmtiles show dem/nsw-5m.pmtiles     # zoom 8 to 15, bounds are NSW
+```
+
+Run `tile` only after `fetch` has finished: a block is built from every sheet
+that touches it, and a finished block is not rebuilt when a neighbour arrives.
+
+Publishing is a prod change and the maintainer's to make. The archive goes to
+the topo bucket at the path `NSW_5M.archivePath` names in
+`shared/src/demSources.ts`:
+
+```bash
+aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
+  --content-type application/vnd.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
+```
+
+No deploy is needed. The API looks for the archive every five minutes and
+starts reading it when it appears; the clients read it on their next lookup.
+If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
+the same week.
 
 ---
 
