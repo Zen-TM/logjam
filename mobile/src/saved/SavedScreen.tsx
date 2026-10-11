@@ -51,6 +51,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
+  NSW_5M,
   TOPO_LAYERS,
   formatDistanceM,
   mediaDisplayName,
@@ -203,9 +204,10 @@ function basemapName(logicalKey: string): string {
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
 function regionMemberName(artifact: MapArtifact): string {
-  return artifact.kind === "dem-region"
-    ? "Elevation data"
-    : basemapName(artifact.logicalKey);
+  if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
+  return artifact.logicalKey === NSW_5M.id
+    ? "Elevation data, NSW 5 m"
+    : "Elevation data";
 }
 
 /** A topo-overlay artifact's logicalKey is `<jobId>/<layer>`. */

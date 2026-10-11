@@ -8,8 +8,10 @@
 // never appear in URLs, filenames, error messages, or persisted storage.
 import { randomUUID } from "crypto";
 import {
+  DEM_SOURCES,
   MAX_REGION_AREA_KM2,
   regionEdgesKm,
+  type DemSource,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -31,6 +33,11 @@ export const CLIP_TOKEN_TTL_MS = 120_000;
 export type RegionClipRequest = {
   bbox: RegionBbox;
   maxzoom: number;
+  /**
+   * Set when the clip is of a DEM archive, not the basemap: the one zoom the
+   * sampler reads, so a saved area never holds a depth nothing uses.
+   */
+  dem?: DemSource & { archivePath: string };
 };
 
 export type RegionClipValidation =
@@ -91,6 +98,21 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
     maxzoom = b.maxzoom;
   }
 
+  if (b.demSourceId !== undefined) {
+    const dem = DEM_SOURCES.find((source) => source.id === b.demSourceId);
+    if (!dem || dem.archivePath == null) {
+      return { ok: false, error: "Unknown elevation source" };
+    }
+    return {
+      ok: true,
+      value: {
+        bbox,
+        maxzoom: dem.sampleZoom,
+        dem: { ...dem, archivePath: dem.archivePath },
+      },
+    };
+  }
+
   return { ok: true, value: { bbox, maxzoom } };
 }
 
@@ -107,6 +129,7 @@ export function pmtilesExtractArgs(
   bboxArg: string,
   maxzoom: number,
   awsRegion: string,
+  minzoom?: number,
 ): string[] {
   const s3 = /^s3:\/\/([^/]+)\/(.+)$/.exec(archiveUri);
   return [
@@ -118,6 +141,7 @@ export function pmtilesExtractArgs(
     ...(s3 ? [`--bucket=s3://${s3[1]}?region=${awsRegion}`] : []),
     `--bbox=${bboxArg}`,
     `--maxzoom=${maxzoom}`,
+    ...(minzoom != null ? [`--minzoom=${minzoom}`] : []),
   ];
 }
 

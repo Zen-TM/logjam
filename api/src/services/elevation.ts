@@ -19,8 +19,11 @@
 // here logs a coordinate, a tile URL, or a tile index — an upstream failure is
 // reported by status alone.
 import { loadImage, createCanvas } from "canvas";
-import { FetchSource, PMTiles, type Source } from "pmtiles";
+import { FetchSource, type PMTiles, type Source } from "pmtiles";
 import {
+  clearDemArchives,
+  demArchive,
+  forgetDemArchive,
   demMetresFromRgb,
   demTileKey,
   demTileUrl,
@@ -130,7 +133,7 @@ const archives = new Map<string, { archive: PMTiles | null; at: number }>();
  * once and remembered, because every profile in NSW would otherwise pay for
  * the failed open. A read that fails AFTER the archive opened throws.
  */
-async function archiveFor(
+export async function demArchiveFor(
   source: DemSource & { archivePath: string },
 ): Promise<PMTiles | null> {
   // The CDN the clients read it from too: byte ranges of our own file, which
@@ -140,13 +143,16 @@ async function archiveFor(
   const known = archives.get(source.id);
   if (known && (known.archive || Date.now() - known.at < ARCHIVE_RETRY_MS))
     return known.archive;
-  let archive: PMTiles | null = new PMTiles(
+  let archive: PMTiles | null = demArchive(
     timedSource(`${base.replace(/\/$/, "")}/${source.archivePath}`),
   );
   try {
     await archive.getHeader();
   } catch {
     logger.warn({ demSource: source.id }, "DEM archive could not be opened");
+    // Or the retry in five minutes is handed this same object, which
+    // remembers that it failed and never asks the CDN again.
+    forgetDemArchive(archive);
     archive = null;
   }
   archives.set(source.id, { archive, at: Date.now() });
@@ -159,7 +165,7 @@ async function tileBytes(
   wanted: readonly DemTileAddress[],
 ): Promise<Map<string, Uint8Array>> {
   if (source.archivePath != null) {
-    const archive = await archiveFor({
+    const archive = await demArchiveFor({
       ...source,
       archivePath: source.archivePath,
     });
@@ -210,4 +216,5 @@ export function sampleElevations(
 export function clearDemTileCache() {
   tileCache.clear();
   archives.clear();
+  clearDemArchives();
 }

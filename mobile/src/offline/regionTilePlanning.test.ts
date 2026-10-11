@@ -111,14 +111,8 @@ describe("deadTileBudget", () => {
 // download screen then enqueues an authed clip request a guest cannot make.
 describe("vectorClipFor", () => {
   it("rides along for a signed-in user, never for a guest", () => {
-    expect(vectorClipFor(false, BBOX)).toBe("include");
-    expect(vectorClipFor(true, BBOX)).toBe("none");
-  });
-
-  it("is left out of an area the clip endpoint would refuse", () => {
-    // ~46 km x ~44 km: inside the 50 km edge cap, over the 1600 km² clip cap.
-    const wide = { west: 150, south: -34, east: 150.5, north: -33.6 };
-    expect(vectorClipFor(false, wide)).toBe("too-large");
+    expect(vectorClipFor(false)).toBe("include");
+    expect(vectorClipFor(true)).toBe("none");
   });
 });
 

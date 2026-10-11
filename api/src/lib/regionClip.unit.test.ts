@@ -164,7 +164,45 @@ describe("privacy: log redaction covers the clip request body", () => {
 // Mutation: pass an s3:// URI through as <input> again and the first test goes
 // red. go-pmtiles 1.31.2 then opens "<cwd>/s3:/bucket/key" as a local file,
 // exits 1, and every region clip in prod is a 502.
+describe("validateRegionClipRequest, for a DEM archive", () => {
+  // Mutation: let the caller's maxzoom stand for a DEM clip and a phone saves
+  // a zoom the sampler never reads, and has no height offline.
+  it("pins the clip to the one zoom the source is read at", () => {
+    const result = validateRegionClipRequest({
+      ...BLUE_MOUNTAINS,
+      maxzoom: 9,
+      demSourceId: "nsw-5m",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { maxzoom: 15, dem: { id: "nsw-5m" } },
+    });
+  });
+
+  it("refuses a source that is not an archive, or not a source", () => {
+    for (const demSourceId of ["terrarium", "nope", 7]) {
+      expect(
+        validateRegionClipRequest({ ...BLUE_MOUNTAINS, demSourceId }),
+      ).toEqual({ ok: false, error: "Unknown elevation source" });
+    }
+  });
+});
+
 describe("pmtilesExtractArgs", () => {
+  it("adds a floor only when asked, so a basemap clip keeps its overview", () => {
+    const args = (minzoom?: number) =>
+      pmtilesExtractArgs(
+        "/a.pmtiles",
+        "/o.pmtiles",
+        "1,2,3,4",
+        15,
+        "r",
+        minzoom,
+      );
+    expect(args()).not.toContain("--minzoom=15");
+    expect(args(15)).toContain("--minzoom=15");
+  });
+
   it("splits an s3:// archive into --bucket and a key", () => {
     expect(
       pmtilesExtractArgs(
