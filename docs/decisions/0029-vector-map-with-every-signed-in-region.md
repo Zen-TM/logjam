@@ -65,11 +65,15 @@ is a factor of four in megabytes and minutes. For the clip the saving is small
 (a 40 km bush box is 4.6 MB at z15 and 1.8 MB at z13), and a lower zoom drops
 the minor tracks the snapping exists for.
 
-**Over `MAX_REGION_AREA_KM2` (1600 km², a 40 km square) the rasters save
-without the clip, and the screen says so before the Save tap.** The endpoint
-refuses a larger bbox (`MAX_CLIP_AREA_KM2` in `lib/regionClip.ts`, the same
-constant), so the client does not ask. A failed clip never fails the region:
-the rest saves and the card reports one map that did not finish.
+**No area larger than `MAX_REGION_AREA_KM2` (1600 km², a 40 km square) can be
+saved, by anyone, whatever maps are picked.** The endpoint refuses a larger
+bbox (`MAX_CLIP_AREA_KM2` in `lib/regionClip.ts`, the same constant), and a
+larger area could only be saved without the clip: the save this decision
+exists to end. `checkRegionCaps` in `shared/src/mapRegionEstimate.ts` refuses
+it on the save screen, with the other limits. A clip that fails for any other
+reason never fails the region: the rest saves and the card reports one map
+that did not finish. (Updated 2026-10-11: as first written, an area over the
+limit saved its rasters without the clip.)
 
 **The bbox goes to the API in the request body and nowhere else.** This rule
 predates this ADR and now carries more weight: the body is redacted from logs

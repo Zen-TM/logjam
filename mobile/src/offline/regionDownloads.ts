@@ -54,14 +54,23 @@ export async function downloadProtomapsRegion(
      * archive's own z15.
      */
     zMax?: number;
+    /**
+     * Set to clip a DEM archive instead of the basemap. The server pins the
+     * clip to the one zoom that source is read at, whatever `zMax` says.
+     */
+    demSourceId?: string;
   },
   onProgress?: (progress: RegionDownloadProgress) => void,
 ): Promise<MapArtifact> {
-  const { bbox, id } = spec;
+  const { bbox, id, demSourceId } = spec;
   const maxzoom = spec.zMax;
   const clip = await apiFetch<RegionClipResponse>("/basemap/region-clip", {
     method: "POST",
-    body: maxzoom != null ? { ...bbox, maxzoom } : bbox,
+    body: demSourceId
+      ? { ...bbox, demSourceId }
+      : maxzoom != null
+        ? { ...bbox, maxzoom }
+        : bbox,
   });
 
   // The server has now told us exactly how big this is (up to 80 MB), and this
@@ -107,10 +116,12 @@ export async function downloadProtomapsRegion(
 
     const artifact: MapArtifact = {
       id,
-      kind: "basemap-region",
-      logicalKey: "protomaps",
+      // A DEM clip is filed under its source id, which is what the sampler
+      // looks saved files up by (offline/demLookup.ts).
+      kind: demSourceId ? "dem-region" : "basemap-region",
+      logicalKey: demSourceId ?? "protomaps",
       format: "pmtiles",
-      sourceType: "vector",
+      sourceType: demSourceId ? "raster" : "vector",
       // Registry stores the scheme-less absolute path; the resolver prefixes
       // pmtiles://file:// itself.
       path: fileUri.replace(/^file:\/\//, ""),

@@ -77,6 +77,13 @@ into `useElevationProfile` LOCAL FIRST: saved regions answer, and only a line
 nothing on disk covers goes to the API. That also gives a guest elevation, which
 the API path never could.
 
+- **Update 2026-10-11: a signed-in run also saves one clip of each DEM archive
+  the area touches** (`planDemDownload` in the same file), fetched like the
+  vector basemap's clip and filed as a second `dem-region` artifact under that
+  source's id. A guest saves the worldwide tiles only. The worldwide tiles are still
+  saved with every area, which is what holds this decision up. Everything else
+  above stands.
+
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by
 `shared/scripts/calibrate-basemap-tile-sizes.mjs` (bush AND town samples — a

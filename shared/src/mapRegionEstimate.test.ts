@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
+  MAX_REGION_AREA_KM2,
+  MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
   REGION_MIN_ZOOM,
   SOFT_WARN_TILES,
@@ -10,6 +12,7 @@ import {
   estimateRegionSeconds,
   estimateRegionSize,
   lonLatToTile,
+  planDemDownload,
   planRegionForBasemaps,
   planRegionTiles,
   regionEdgesKm,
@@ -117,7 +120,7 @@ describe("caps", () => {
     const bbox: RegionBbox = {
       west: 150.0,
       south: -33.9,
-      east: 150.45,
+      east: 150.43,
       north: -33.55,
     };
     const plan = planRegionTiles(bbox, 8, 16);
@@ -125,6 +128,19 @@ describe("caps", () => {
     expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({
       ok: false,
       reason: "too-many-tiles",
+    });
+  });
+
+  // Mutation: apply the area limit only to some saves, and a 50 x 35 km area
+  // is offered, then saved without the clips the endpoint refuses to cut.
+  it("rejects an area over MAX_REGION_AREA_KM2 whatever is being saved", () => {
+    const bbox = { west: 150.0, south: -34.0, east: 150.54, north: -33.69 };
+    const [w, h] = regionEdgesKm(bbox);
+    expect(Math.max(w, h)).toBeLessThan(MAX_REGION_EDGE_KM);
+    expect(w * h).toBeGreaterThan(MAX_REGION_AREA_KM2);
+    expect(checkRegionCaps(bbox, 1)).toEqual({
+      ok: false,
+      reason: "area-too-large",
     });
   });
 
@@ -212,6 +228,42 @@ describe("planRegionForBasemaps", () => {
   /** The basemap pyramids only — every plan also carries the DEM (see below). */
   const basemapSources = (job: ReturnType<typeof planRegionForBasemaps>) =>
     job.perSource.filter((s) => s.basemapId !== DEM_SOURCE_ID);
+
+  // Mutation: save only the finest DEM that covers the area and a line that
+  // leaves it offline has no height, and no source to measure the seam in.
+  it("saves a clip of every DEM archive the area touches, on top of the worldwide tiles", () => {
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, true);
+    expect(job.demArchives.map((a) => a.sourceId)).toEqual(["nsw-5m"]);
+    expect(job.perSource.map((s) => s.basemapId)).toEqual([DEM_SOURCE_ID]);
+    const worldwide = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
+    expect(worldwide.demArchives).toEqual([]);
+    // The clip counts toward the bytes the free-space check reads, not the
+    // tiles the politeness cap counts.
+    expect(job.p90Bytes).toBeGreaterThan(worldwide.p90Bytes);
+    expect(job.totalTiles).toBe(worldwide.totalTiles);
+  });
+
+  // Mutation: add an archive source to DEM_SOURCES without its measured tile
+  // size, and planning any area inside it throws.
+  it("has a measured tile size for every archive source", () => {
+    for (const source of DEM_SOURCES.filter((s) => s.archivePath != null)) {
+      const [west, south] = source.coverage ?? [150, -34];
+      const inside = {
+        west,
+        south,
+        east: west + 0.05,
+        north: south + 0.05,
+      };
+      const job = planRegionForBasemaps(inside, [], 15, maxZoomFor, true);
+      expect(job.demArchives.map((a) => a.sourceId)).toContain(source.id);
+    }
+  });
+
+  it("saves no archive for an area outside every archive's coverage", () => {
+    const perth = { west: 115.8, south: -32.0, east: 115.9, north: -31.9 };
+    expect(planDemDownload(perth)).toEqual([]);
+    expect(planDemDownload(TEN_KM).map((s) => s.id)).toEqual(["nsw-5m"]);
+  });
 
   it("clamps each source to its own deepest served level", () => {
     const job = planRegionForBasemaps(

@@ -13,7 +13,7 @@
 // PRIVACY: positions here are precise wilderness coordinates and a tile index
 // is a coarse location. Nothing in this file logs, and no reader may.
 
-import type { PMTiles } from "pmtiles";
+import { PMTiles, type Source } from "pmtiles";
 
 import {
   demSampleHeight,
@@ -129,6 +129,39 @@ export function demTileKey({ tileX, tileY }: DemTileAddress): string {
   return `${tileX}/${tileY}`;
 }
 
+const archives = new Map<string, PMTiles>();
+
+/**
+ * An open archive, from a URL or a runtime's own `Source` over a file. Held
+ * per key, because the object keeps the header and directory pages: opening
+ * one per lookup would fetch them again every time.
+ */
+export function demArchive(archive: string | Source): PMTiles {
+  const key = typeof archive === "string" ? archive : archive.getKey();
+  let opened = archives.get(key);
+  if (!opened) archives.set(key, (opened = new PMTiles(archive)));
+  return opened;
+}
+
+/**
+ * Drop an archive that failed to open or read. The library remembers a failed
+ * header or directory read for the life of the object, so the same object
+ * would fail every later lookup without asking again: a phone that tapped the
+ * map once out of range would have no NSW heights until it restarted.
+ */
+export function forgetDemArchive(archive: PMTiles) {
+  for (const [key, held] of archives)
+    if (held === archive) archives.delete(key);
+}
+
+/**
+ * Every open archive, dropped. On sign-out too: an archive opened on a saved
+ * clip holds that clip's header, which carries the saved area's bounds.
+ */
+export function clearDemArchives() {
+  archives.clear();
+}
+
 /**
  * The PNG bytes an archive holds for these tiles, keyed by `demTileKey`. The
  * runtime opens the archive (a URL, or its own `Source` over a file) and
@@ -140,16 +173,21 @@ export async function readDemArchive(
   tiles: readonly DemTileAddress[],
 ): Promise<Map<string, Uint8Array>> {
   const found = new Map<string, Uint8Array>();
-  await Promise.all(
-    tiles.map(async (address) => {
-      const tile = await archive.getZxy(
-        source.sampleZoom,
-        address.tileX,
-        address.tileY,
-      );
-      if (tile) found.set(demTileKey(address), new Uint8Array(tile.data));
-    }),
-  );
+  try {
+    await Promise.all(
+      tiles.map(async (address) => {
+        const tile = await archive.getZxy(
+          source.sampleZoom,
+          address.tileX,
+          address.tileY,
+        );
+        if (tile) found.set(demTileKey(address), new Uint8Array(tile.data));
+      }),
+    );
+  } catch (error) {
+    forgetDemArchive(archive);
+    throw error;
+  }
   return found;
 }
 

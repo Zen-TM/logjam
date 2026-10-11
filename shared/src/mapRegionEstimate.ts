@@ -2,7 +2,7 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import { TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
 
 export type RegionBbox = {
   west: number;
@@ -96,13 +96,13 @@ export function planRegionTiles(
 export const MAX_REGION_TILES = 4000;
 /** Non-blocking "large region" warning threshold. */
 export const SOFT_WARN_TILES = 1500;
-/** Sanity bound on a degenerate bbox, independent of the tile cap. */
+/** Stops a long thin strip, which the area limit alone would allow. */
 export const MAX_REGION_EDGE_KM = 50;
 
 const EARTH_RADIUS_KM = 6371;
 
 /** Great-circle-ish edge lengths of the bbox (km): [widthAtCenterLat, height]. */
-/** Area cap for the server-side vector clip. The API enforces the same
+/** Area cap for every save, set by the server-side clip. The API enforces the same
  * number (api/src/lib/regionClip.ts imports it) — one source, so the client
  * can never offer a region the server will refuse. */
 export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
@@ -130,20 +130,16 @@ export type RegionCapCheck =
 export function checkRegionCaps(
   bbox: RegionBbox,
   totalTiles: number,
-  /** True when the selection includes the server-side vector clip, which has
-   * its own AREA cap on top of the per-edge one. */
-  includesVectorClip = false,
 ): RegionCapCheck {
   const [w, h] = regionEdgesKm(bbox);
   if (w > MAX_REGION_EDGE_KM || h > MAX_REGION_EDGE_KM) {
     return { ok: false, reason: "edge-too-long" };
   }
-  // The two caps disagreed: a 50 × 40 km box passes both edge tests at
-  // 2000 km² and is then refused by the clip endpoint. With only the vector
-  // map selected there are no tiles to trip the tile cap, so the client
-  // happily enqueued a job that could never succeed — and the failure
-  // surfaced as "That didn't finish. Try again."
-  if (includesVectorClip && w * h > MAX_REGION_AREA_KM2) {
+  // One area for every save, whatever is in it (docs/decisions/0029). The
+  // clip endpoint refuses anything larger, and every signed-in save asks it
+  // for the vector map, the contours and a DEM archive: a larger area could
+  // only be saved without them, which is the save that breaks in the field.
+  if (w * h > MAX_REGION_AREA_KM2) {
     return { ok: false, reason: "area-too-large" };
   }
   if (totalTiles > MAX_REGION_TILES) {
@@ -303,7 +299,50 @@ export function estimateRegionSeconds(totalTiles: number): number {
   return Math.ceil(totalTiles / REGION_TILES_PER_SECOND);
 }
 
+/**
+ * MEASURED bytes of one tile of a DEM archive at its `sampleZoom`: full z15
+ * tiles of six whole sheets built by `topo/build_nsw_dem.py`, from 4.7 KB on
+ * the Hay plain to 36 KB in the ranges. People save rugged ground, so the p90
+ * is the rugged figure, not a statistical one.
+ */
+const DEM_ARCHIVE_TILE_BYTES: Record<
+  string,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  "nsw-5m": { meanBytes: 24_000, p90Bytes: 36_000 },
+};
+
+/**
+ * The DEM archives an offline area saves a clip of: every one whose coverage
+ * the area touches. All of them, not just the finest, because a finer source
+ * has holes and edges, and a line that crosses one is measured in the source
+ * underneath (`sampleDem`). The worldwide tile set is saved with every area
+ * regardless, by the tile engine (`DEM_SOURCE_ID`).
+ */
+export function planDemDownload(
+  bbox: RegionBbox,
+  sources: readonly DemSource[] = DEM_SOURCES,
+): DemSource[] {
+  return sources.filter(({ archivePath, coverage }) => {
+    if (archivePath == null) return false;
+    if (!coverage) return true;
+    const [west, south, east, north] = coverage;
+    return (
+      bbox.east >= west &&
+      bbox.west <= east &&
+      bbox.north >= south &&
+      bbox.south <= north
+    );
+  });
+}
+
 export interface MultiSourceRegionPlan {
+  /**
+   * DEM archive clips: one request each to our own API, so they count toward
+   * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
+   * fetched one by one from a provider.
+   */
+  demArchives: { sourceId: string; size: RegionSizeEstimate }[];
   perSource: {
     basemapId: DownloadableTileSourceId;
     /** Shallowest level of this source's pyramid. Flat sources set it to zMax. */
@@ -337,8 +376,24 @@ export function planRegionForBasemaps(
   basemapIds: OfflineBasemapId[],
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
+  /** False for a guest: the clip endpoint needs a signed-in user. */
+  includeDemArchives = false,
 ): MultiSourceRegionPlan {
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
+  const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
+    (source) => {
+      const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
+      const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+      return {
+        sourceId: source.id,
+        size: {
+          meanBytes: tiles.totalTiles * perTile.meanBytes,
+          p90Bytes: tiles.totalTiles * perTile.p90Bytes,
+        },
+      };
+    },
+  );
+
   const perSource = [
     ...basemapIds.map((basemapId) => {
       const clamped = Math.min(zMax, maxZoomFor(basemapId));
@@ -360,11 +415,14 @@ export function planRegionForBasemaps(
     },
   ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
+  const bytes = (key: keyof RegionSizeEstimate) =>
+    [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0);
   return {
     perSource,
+    demArchives,
     totalTiles,
-    meanBytes: perSource.reduce((sum, s) => sum + s.size.meanBytes, 0),
-    p90Bytes: perSource.reduce((sum, s) => sum + s.size.p90Bytes, 0),
+    meanBytes: bytes("meanBytes"),
+    p90Bytes: bytes("p90Bytes"),
     seconds: estimateRegionSeconds(totalTiles),
   };
 }
