@@ -37,14 +37,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
 
 import {
   buildShareCards,
@@ -79,7 +72,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { requestSync } from "../sync/syncEngine";
-import { placeHue, fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   EmptyState,
@@ -148,6 +141,10 @@ export function FriendSharesScreen({
   /** Open a place's detail page. Pushed in the caller's stack, so Back returns here. */
   onOpenPlace: (placeId: string) => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("friends", accountState),
@@ -693,6 +690,8 @@ function ShareCardRow({
   onOpen: (card: FriendShareCard) => void;
   onToggle: (card: FriendShareCard) => void;
 }) {
+  const { placeHue } = useHues();
+
   const openOrToggle = () =>
     selecting && selectable ? onToggle(card) : onOpen(card);
   return (
@@ -746,6 +745,9 @@ function ShareCardMenu({
   onCopyAndRemove: (card: FriendShareCard) => void;
   onRemove: (card: FriendShareCard) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const kind = SHARE_KIND_LABEL[card.row.entityType];
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking
@@ -845,7 +847,7 @@ function ShareCardMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Both children are CHIP_RAIL_HEIGHT tall by construction, which is
   // what keeps the list still when the bar swaps in (DESIGN.md).
@@ -865,4 +867,4 @@ const styles = StyleSheet.create({
   },
   menuBody: { gap: spacing(1) },
   menuNote: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+}));

@@ -3,10 +3,10 @@
 // Renders NOTHING until there is a profile: an empty row that later fills in
 // reads as broken, and a "—" placeholder in a tool used offline would sit
 // there permanently implying something is wrong. Absence is the honest state.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { ElevationProfile } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
 
 export function ElevationReadout({
   profile,
@@ -15,6 +15,8 @@ export function ElevationReadout({
   profile: ElevationProfile | null;
   loading: boolean;
 }) {
+  const styles = useStyles();
+
   if (!profile) {
     return loading ? (
       <Text style={styles.pending}>Reading the terrain…</Text>
@@ -43,7 +45,7 @@ export function ElevationReadout({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   row: { flexDirection: "row", alignItems: "baseline", gap: spacing(1.25) },
   value: {
     color: theme.text,
@@ -57,4 +59,4 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   pending: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

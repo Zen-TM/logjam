@@ -27,7 +27,6 @@ import {
   Keyboard,
   RefreshControl,
   SectionList,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -70,8 +69,9 @@ import {
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
@@ -117,6 +117,9 @@ export function LogsScreen({
   onOpenTrip: (trip: MirrorTrip) => void;
   onOpenStats: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const guest = useAccountState().accountState === "guest";
@@ -305,8 +308,8 @@ export function LogsScreen({
         .map(({ type, count }) => ({
           value: type,
           label: tripTypeLabel(type),
-          hue: tripTypeMeta(type).hue,
-          icon: tripTypeMeta(type).icon,
+          hue: tripTypeMeta(type, theme).hue,
+          icon: tripTypeMeta(type, theme).icon,
           count,
           // A chip the other filters have emptied stays in place but can't be
           // tapped into a dead end — removing it instead would make the rail
@@ -318,14 +321,14 @@ export function LogsScreen({
             {
               value: NO_TYPE_FILTER_VALUE,
               label: "No type",
-              hue: tripTypeMeta(null).hue,
+              hue: tripTypeMeta(null, theme).hue,
               count: untyped,
               disabled: untyped === 0 && typeFilter !== NO_TYPE_FILTER_VALUE,
             },
           ]
         : []),
     ];
-  }, [distinctTypes, trips, typeFilter, withoutType]);
+  }, [distinctTypes, trips, typeFilter, withoutType, theme]);
 
   const spark = useMemo(() => monthlyTripCounts(trips, new Date()), [trips]);
   const recentCount = useMemo(
@@ -377,7 +380,7 @@ export function LogsScreen({
         <Text style={styles.yearCount}>{section.count}</Text>
       </View>
     ),
-    [],
+    [styles],
   );
 
   const clearFind = useCallback(() => {
@@ -689,7 +692,10 @@ const TripRow = memo(function TripRow({
   selected: boolean;
   onToggle: () => void;
 }) {
-  const meta = tripTypeMeta(primaryTripType(trip.types));
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = tripTypeMeta(primaryTripType(trip.types), theme);
   return (
     <Row
       icon={meta.icon}
@@ -761,6 +767,9 @@ function EmptyPanel({
   onLogTrip: () => void;
   onClear: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.empty}>
       <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
@@ -783,7 +792,7 @@ function EmptyPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
@@ -886,4 +895,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: "center",
   },
-});
+}));

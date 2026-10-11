@@ -29,8 +29,8 @@ import {
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
 } from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
@@ -60,6 +60,8 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
    *  a wakeup nobody sees. */
   active: boolean;
 }) {
+  const styles = useStyles();
+
   const readout = useLiveReadout();
   const [now, setNow] = useState(() => Date.now());
 
@@ -108,7 +110,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // Same translucent warm backing as the scale bar — these sit in one stack
   // over map imagery of any brightness and have to read as one instrument set.
   chip: {
@@ -141,4 +143,4 @@ const styles = StyleSheet.create({
     marginVertical: spacing(0.75),
     backgroundColor: withAlpha(theme.text, 0.25),
   },
-});
+}));

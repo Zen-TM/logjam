@@ -1,14 +1,14 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import {
-  Animated,
-  PanResponder,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+} from "../theme";
 import { Icon } from "./Icon";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
@@ -42,6 +42,9 @@ export function Toast({
   message: ToastMessage | null;
   onDismissed: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [opacity] = useState(() => new Animated.Value(0));
   const [lift] = useState(() => new Animated.Value(12));
   const [slide] = useState(() => new Animated.Value(0));
@@ -147,7 +150,7 @@ export function Toast({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   dock: {
     position: "absolute",
     left: spacing(2),
@@ -176,4 +179,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
-});
+}));

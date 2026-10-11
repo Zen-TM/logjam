@@ -12,12 +12,12 @@
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
 import { useEffect, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Pressable, View } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
 import type { IconIdea } from "@logjam/shared";
 
-import { theme } from "../theme";
+import { makeStyles, useTheme } from "../theme";
 import { Icon } from "../ui";
 
 export type MapTool = "measure" | "route";
@@ -49,6 +49,9 @@ export function MapToolGroup({
   onToggleOpen: () => void;
   onPickTool: (tool: MapTool) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // Each tool slides out from directly UNDER the + button, one after the
   // next, and translateX runs on the native driver — no width animation, no
   // fade.
@@ -158,7 +161,7 @@ export function MapToolGroup({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // The group occupies exactly one button's width in the column. Every
   // child (each tool, the +) is its own ABSOLUTE sibling so opening the
   // group can't widen the row: laid out in flow, growth pushed the whole
@@ -212,4 +215,4 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   armedToolSlot: { zIndex: 2, elevation: 2 },
-});
+}));

@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
 import {
   ACCOUNT,
@@ -44,7 +44,14 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import { assetHue, fontSize, lineHeight, spacing, theme } from "../theme";
+import {
+  fontSize,
+  lineHeight,
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -76,6 +83,8 @@ const copy = ACCOUNT.copy;
  * field, not after.
  */
 function GuestAccountScreen({ onBack }: { onBack: () => void }) {
+  const styles = useStyles();
+
   const { linkAccount } = useAccountState();
   const [counts, setCounts] = useState<LocalEntityCounts | null>(null);
 
@@ -196,6 +205,10 @@ function LinkedAccountScreen({
   onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const query = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
   const online = useConnectivity() === "online";
   const [sheet, setSheet] = useState<SheetMode>("closed");
@@ -397,6 +410,8 @@ function UsernameForm({
   current: string;
   onSaved: () => void;
 }) {
+  const styles = useStyles();
+
   const [value, setValue] = useState(current);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -463,6 +478,8 @@ function EmailForm({
   current: string;
   onSaved: () => void;
 }) {
+  const styles = useStyles();
+
   const [step, setStep] = useState<"request" | "confirm">("request");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -576,6 +593,8 @@ function DeleteAccountForm({
   username: string;
   onDeleted: () => void;
 }) {
+  const styles = useStyles();
+
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -618,7 +637,7 @@ function DeleteAccountForm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   email: { color: theme.textMuted, fontSize: fontSize.sm },
   body: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
@@ -636,4 +655,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: lineHeight.body,
   },
-});
+}));

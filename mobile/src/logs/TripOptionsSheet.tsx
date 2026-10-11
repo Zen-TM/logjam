@@ -14,7 +14,7 @@ import { tripDeleteConfirm, tripVerbs, type TripVerbId } from "@logjam/shared";
 import { tripTitle } from "../api/tripTitle";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
-import { theme } from "../theme";
+import { makeStyles, useTheme } from "../theme";
 import { BottomSheet, Row } from "../ui";
 
 export function TripOptionsSheet({
@@ -41,6 +41,9 @@ export function TripOptionsSheet({
   /** The trip is deleted: a page showing it must leave. */
   onGone?: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const confirmDelete = (target: MirrorTrip) => {
     const confirm = tripDeleteConfirm(1);
     Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
@@ -101,7 +104,7 @@ export function TripOptionsSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: 8 },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
-});
+}));

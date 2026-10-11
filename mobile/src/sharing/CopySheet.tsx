@@ -21,7 +21,7 @@
 // PRIVACY: place names reach this sheet — a user cannot decide about "3 things"
 // — and nothing here logs.
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import {
   copyAndRemoveConfirm,
@@ -35,7 +35,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import type { TUser } from "../api/types";
 import { formatBytes } from "../format";
 import { listMediaForLinked } from "../sync/mirrorStore";
-import { fontSize, lineHeight, spacing, theme } from "../theme";
+import { fontSize, lineHeight, spacing, makeStyles } from "../theme";
 import { BottomSheet, Button, FieldError, SwitchRow } from "../ui";
 import type { CopyAndRemoveTarget } from "./copyAndRemove";
 
@@ -111,6 +111,8 @@ export function useCopyPanel({
   body: React.ReactNode;
   footer: React.ReactNode;
 } {
+  const styles = useStyles();
+
   const visible = active;
   const { accountState } = useAccountState();
   // Gated on `active` as well as on having an account: this hook now lives
@@ -259,7 +261,7 @@ export function CopySheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: {
     color: theme.textMuted,
     fontSize: fontSize.base,
@@ -268,4 +270,4 @@ const styles = StyleSheet.create({
     paddingBottom: spacing(1.5),
   },
   note: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5) },
-});
+}));
