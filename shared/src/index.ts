@@ -54,6 +54,7 @@ export * from "./routeExport.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
 export * from "./demSources.js";
+export * from "./nswContours.js";
 export * from "./demTiles.js";
 export * from "./snapToPath.js";
 export * from "./snapTiles.js";

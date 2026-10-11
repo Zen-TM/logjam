@@ -43,6 +43,7 @@ import {
   checkRegionCaps,
   DEM_SOURCE_ID,
   NSW_5M,
+  NSW_CONTOURS,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
@@ -145,6 +146,7 @@ function regionLabelFor(basemapId: string): string {
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
   if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
+  if (basemapId === NSW_CONTOURS.id) return "Contours";
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }
@@ -368,6 +370,10 @@ export function RegionDownloadScreen({
   const pyramidIds = selected;
   const vectorClip = bbox ? vectorClipFor(isGuest) : "none";
   const includesVector = vectorClip === "include";
+  // The contours ride with the vector map they are always drawn on, unasked:
+  // at most about 19 MB on the largest mountain area. So they follow its rule
+  // (docs/decisions/0029): every signed-in save has them, a guest's has none.
+  const includesContours = includesVector;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
     ? planRegionForBasemaps(
@@ -377,6 +383,7 @@ export function RegionDownloadScreen({
         catalogMaxZoom,
         // The clip endpoint needs a signed-in user, as the vector map does.
         !isGuest,
+        includesContours,
       )
     : null;
   const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
@@ -433,6 +440,22 @@ export function RegionDownloadScreen({
           zMax: detailZoom,
           allowCellular,
         })),
+        ...(includesContours
+          ? [
+              {
+                taskKind: "http-file" as const,
+                id: uuid(),
+                basemapId: NSW_CONTOURS.id,
+                contours: true,
+                label: regionLabelFor(NSW_CONTOURS.id),
+                groupId,
+                groupLabel,
+                bbox,
+                zMax: NSW_CONTOURS.maxzoom,
+                allowCellular,
+              },
+            ]
+          : []),
         ...(includesVector
           ? [
               {
@@ -453,7 +476,7 @@ export function RegionDownloadScreen({
           : []),
       ]);
     },
-    [bbox, includesVector, job],
+    [bbox, includesContours, includesVector, job],
   );
 
   const handleSave = useCallback(() => {

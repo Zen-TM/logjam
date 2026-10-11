@@ -3,6 +3,7 @@
 // all derive from the same deterministic plan so they can never disagree.
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
+import { NSW_CONTOURS } from "./nswContours.js";
 
 export type RegionBbox = {
   west: number;
@@ -336,7 +337,41 @@ export function planDemDownload(
   });
 }
 
+/**
+ * MEASURED bytes of one tile of the statewide contours at each zoom a clip
+ * holds, from single-zoom clips of the Katoomba and Port Hacking sheets. A
+ * clip is whole tiles, so a small area costs far more per square kilometre
+ * than a large one, and only a tile count says so. People save rugged ground:
+ * the p90 is the Grose gorge, the mean leans toward the mountains and away
+ * from the coastal plain, which is a third to a quarter of it.
+ */
+const CONTOUR_TILE_BYTES: Record<
+  number,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  11: { meanBytes: 110_000, p90Bytes: 147_000 },
+  12: { meanBytes: 40_000, p90Bytes: 47_000 },
+  13: { meanBytes: 15_000, p90Bytes: 18_000 },
+  14: { meanBytes: 24_000, p90Bytes: 28_000 },
+};
+
+export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
+  const { perZoom } = planRegionTiles(
+    bbox,
+    NSW_CONTOURS.minzoom,
+    NSW_CONTOURS.maxzoom,
+  );
+  const bytes = (key: keyof RegionSizeEstimate) =>
+    perZoom.reduce(
+      (sum, { z, count }) => sum + count * CONTOUR_TILE_BYTES[z]![key],
+      0,
+    );
+  return { meanBytes: bytes("meanBytes"), p90Bytes: bytes("p90Bytes") };
+}
+
 export interface MultiSourceRegionPlan {
+  /** The contour clip, when the user is saving one: bytes only, like a DEM. */
+  contours: RegionSizeEstimate | null;
   /**
    * DEM archive clips: one request each to our own API, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
@@ -378,7 +413,10 @@ export function planRegionForBasemaps(
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
   /** False for a guest: the clip endpoint needs a signed-in user. */
   includeDemArchives = false,
+  /** True when a clip of the statewide contours is saved with the area. */
+  includeContours = false,
 ): MultiSourceRegionPlan {
+  const contours = includeContours ? estimateContourClip(bbox) : null;
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
     (source) => {
@@ -416,8 +454,10 @@ export function planRegionForBasemaps(
   ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>
-    [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0);
+    [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
+    (contours?.[key] ?? 0);
   return {
+    contours,
     perSource,
     demArchives,
     totalTiles,

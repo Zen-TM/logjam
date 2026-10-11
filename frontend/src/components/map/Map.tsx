@@ -16,6 +16,8 @@ import {
   PLACE_TYPE_COLORS,
   SHARED_PLACE_COLOR,
   type RegionBbox,
+  contourLabelHalo,
+  nswContourStyle,
 } from "@logjam/shared";
 import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
@@ -249,6 +251,22 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * Light flavor only: the web app has no dark theme (index.css carries a single
  * prefers-color-scheme rule that inverts icons, nothing more).
  */
+/**
+ * The entry of `topoLayers` that is the statewide contours, not a topo area's
+ * layer. No dash, and it contains "contours": this file splits a layer id at
+ * its first dash and styles an entry as contours by that word.
+ */
+export const NSW_CONTOURS_ENTRY_ID = "nswcontours";
+
+/** The statewide contours have their own fixed look (shared nswContours.ts). */
+function paintStyleFor(
+  entryId: string,
+  style: VectorStyleSettings,
+  basemapId: string,
+): VectorStyleSettings {
+  return entryId === NSW_CONTOURS_ENTRY_ID ? nswContourStyle(basemapId) : style;
+}
+
 function addProtomapsBasemap(
   map: maplibregl.Map,
   visibility: "visible" | "none",
@@ -428,7 +446,8 @@ function applyVectorPaint(
       | "line-width"
       | "fill-color"
       | "fill-outline-color"
-      | "text-color",
+      | "text-color"
+      | "text-halo-color",
     value: string | number | maplibregl.ExpressionSpecification,
   ): void => {
     if (map.getLayer(lid)) map.setPaintProperty(lid, prop, value as never);
@@ -465,6 +484,11 @@ function applyVectorPaint(
       `topo-${entryId}-labels`,
       "text-color",
       rgbaCss(vs.contours.majorColour),
+    );
+    setPaint(
+      `topo-${entryId}-labels`,
+      "text-halo-color",
+      contourLabelHalo(vs.contours.majorColour),
     );
     setLabelSize(`topo-${entryId}-labels`);
     return;
@@ -2677,7 +2701,12 @@ function Map({
     // Paint freshly created (or rebuilt) layers with the current style so they
     // never flash a default colour before the paint effect runs.
     for (const { id } of layers) {
-      applyVectorPaint(map, id, id.includes("contours"), vs);
+      applyVectorPaint(
+        map,
+        id,
+        id.includes("contours"),
+        paintStyleFor(id, vs, activeLayerIdRef.current),
+      );
     }
 
     // Reorder: ensure layers appear in the order specified by topoLayers array.
@@ -2717,9 +2746,14 @@ function Map({
     const map = mapRef.current;
     const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
     for (const { id } of topoLayers ?? []) {
-      applyVectorPaint(map, id, id.includes("contours"), vs);
+      applyVectorPaint(
+        map,
+        id,
+        id.includes("contours"),
+        paintStyleFor(id, vs, activeLayerId),
+      );
     }
-  }, [topoLayers, vectorStyle, mapLoaded]);
+  }, [topoLayers, vectorStyle, mapLoaded, activeLayerId]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);

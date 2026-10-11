@@ -204,6 +204,7 @@ function basemapName(logicalKey: string): string {
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
 function regionMemberName(artifact: MapArtifact): string {
+  if (artifact.kind === "contours-region") return "Contours";
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
   return artifact.logicalKey === NSW_5M.id
     ? "Elevation data, NSW 5 m"
@@ -639,7 +640,10 @@ export function SavedScreen({
   // what the area cost, and deleting the area has to take it with it. It is not
   // one of the "maps", though — see `basemapMembers`.
   const regionArtifacts = artifacts.filter(
-    (a) => a.kind === "basemap-region" || a.kind === "dem-region",
+    (a) =>
+      a.kind === "basemap-region" ||
+      a.kind === "dem-region" ||
+      a.kind === "contours-region",
   );
 
   // A region download in flight, as one card per run at the top of the Regions
@@ -996,9 +1000,9 @@ export function SavedScreen({
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
-      // when they picked two.
+      // when they picked two. Nor are the contours, drawn with one of them.
       const basemapMembers = group.members.filter(
-        (a) => a.kind !== "dem-region",
+        (a) => a.kind === "basemap-region",
       );
       rows.push({
         key: savedRegionKey(group.key),

@@ -175,8 +175,28 @@ describe("validateRegionClipRequest, for a DEM archive", () => {
     });
     expect(result).toMatchObject({
       ok: true,
-      value: { maxzoom: 15, dem: { id: "nsw-5m" } },
+      value: { minzoom: 15, maxzoom: 15, archive: { id: "nsw-5m" } },
     });
+  });
+
+  // Mutation: read `contours` loosely (`if (b.contours)`) and any truthy junk
+  // in the body turns a basemap clip into a contour clip.
+  it("cuts the contour archive at its own zooms, only when asked plainly", () => {
+    expect(
+      validateRegionClipRequest({ ...BLUE_MOUNTAINS, contours: true }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        minzoom: 11,
+        maxzoom: 14,
+        archive: { archivePath: "master/contours/nsw-10m.pmtiles" },
+      },
+    });
+    const basemap = validateRegionClipRequest({
+      ...BLUE_MOUNTAINS,
+      contours: "yes",
+    });
+    expect(basemap.ok && basemap.value.archive).toBeUndefined();
   });
 
   it("refuses a source that is not an archive, or not a source", () => {

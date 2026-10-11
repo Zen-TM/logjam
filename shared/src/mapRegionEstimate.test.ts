@@ -243,6 +243,31 @@ describe("planRegionForBasemaps", () => {
     expect(job.totalTiles).toBe(worldwide.totalTiles);
   });
 
+  // Mutation: leave the contour clip out of the totals and the free-space
+  // check passes an area whose download then does not fit.
+  it("counts a contour clip in the bytes only when one is being saved", () => {
+    const without = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, true);
+    const withClip = planRegionForBasemaps(
+      TEN_KM,
+      [],
+      15,
+      maxZoomFor,
+      true,
+      true,
+    );
+    expect(without.contours).toBeNull();
+    // A real clip of 10 km of the Grose gorge is 1.7 MB.
+    expect(withClip.contours!.meanBytes).toBeGreaterThan(1_200_000);
+    expect(withClip.contours!.p90Bytes).toBeLessThan(2_500_000);
+    expect(withClip.meanBytes - without.meanBytes).toBe(
+      withClip.contours!.meanBytes,
+    );
+    expect(withClip.p90Bytes - without.p90Bytes).toBe(
+      withClip.contours!.p90Bytes,
+    );
+    expect(withClip.totalTiles).toBe(without.totalTiles);
+  });
+
   // Mutation: add an archive source to DEM_SOURCES without its measured tile
   // size, and planning any area inside it throws.
   it("has a measured tile size for every archive source", () => {

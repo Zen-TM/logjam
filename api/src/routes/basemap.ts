@@ -111,29 +111,24 @@ router.post(
     const user = await resolveUser(req.user!.sub);
     const validated = validateRegionClipRequest(req.body);
     if (!validated.ok) throw new AppError(400, validated.error);
-    const { bbox, maxzoom, dem } = validated.value;
-    // A DEM archive is cut from where it is served (shared demSources.ts); the
-    // basemap from its own configured location.
-    const archiveUri = dem
+    const { bbox, minzoom, maxzoom, archive } = validated.value;
+    // A DEM or contour archive is cut from where it is served (shared
+    // demSources.ts, nswContours.ts); the basemap from its own configured
+    // location.
+    const archiveUri = archive
       ? env.TOPO_CDN_BASE_URL &&
-        `${env.TOPO_CDN_BASE_URL.replace(/\/$/, "")}/${dem.archivePath}`
+        `${env.TOPO_CDN_BASE_URL.replace(/\/$/, "")}/${archive.archivePath}`
       : env.PROTOMAPS_ARCHIVE_URI;
     // An archive that is not there yet is "not available", which the phone
-    // skips quietly for a DEM; a clip that then fails is a 502 it reports.
-    if (!archiveUri || (dem && !(await demArchiveFor(dem)))) {
+    // skips quietly for these two; a clip that then fails is a 502 it reports.
+    if (!archiveUri || (archive && !(await demArchiveFor(archive)))) {
       throw new AppError(503, "Region clips are not available");
     }
 
     const outPath = path.join(os.tmpdir(), `clip-${randomUUID()}.pmtiles`);
     const bboxArg = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
     try {
-      await runPmtilesExtract(
-        archiveUri,
-        outPath,
-        bboxArg,
-        maxzoom,
-        dem ? maxzoom : undefined,
-      );
+      await runPmtilesExtract(archiveUri, outPath, bboxArg, maxzoom, minzoom);
       const { size } = await fs.stat(outPath);
       if (size > MAX_CLIP_OUTPUT_BYTES) {
         await fs.unlink(outPath);
