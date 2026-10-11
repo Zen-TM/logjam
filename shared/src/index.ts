@@ -7,6 +7,7 @@ export * from "./tripName.js";
 export * from "./tripFilter.js";
 export * from "./logbookStats.js";
 export * from "./logbook.js";
+export * from "./trackTrip.js";
 export * from "./tripTypeIdentity.js";
 export * from "./trackExport.js";
 export * from "./elvisZip.js";

@@ -38,7 +38,8 @@
   right: 16px;
 }
 
-/* Clears MapLibre's attribution, which sits in the bottom-right corner. */
+/* Clears the bottom strip: MapLibre's credits open leftwards of this column
+   (`--map-actions-clear`), and the (i) sits in that strip. */
 .actions {
   position: absolute;
   z-index: 3;

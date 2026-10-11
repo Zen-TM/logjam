@@ -95,7 +95,7 @@ function FreeColourField({
         anchorRef={triggerRef}
         label={label}
         placement="bottom-end"
-        className={classes.popover}
+        fit
         dismissOnOutsidePress
       >
         <div
@@ -222,13 +222,15 @@ function PaletteField({
         anchorRef={triggerRef}
         label={label}
         placement="bottom-end"
-        className={choice.swatchPopover}
+        fit
         // This popover IS the field's value being chosen, so looking away
         // settles it — like every other control that picks a value.
         dismissOnOutsidePress
       >
         <fieldset className={choice.swatches}>
-          <legend className={choice.legend}>{label}</legend>
+          {/* The field's label is the row the swatch sits on; the palette itself
+              only needs the name for a screen reader. */}
+          <legend className="visually-hidden">{label}</legend>
           <div className={choice.swatchGrid}>
             {colors.map((color) => (
               <input
