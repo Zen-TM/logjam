@@ -37,6 +37,8 @@ import {
 } from "./recordingPreferences";
 import { startSensorLog, stopSensorLog } from "./sensorLog";
 import { backUpFinishedTrack } from "./trackBackup";
+import { climbFromSavedTerrain } from "./trackClimb";
+import { toElevationLine } from "./trackLine";
 import { enqueueTrackWrite, resetTrackWriteHealth } from "./trackWriteQueue";
 import {
   addTrackPointSuppression,
@@ -398,6 +400,7 @@ export async function startTrackRecording(): Promise<Track> {
     durationMs: 0,
     elevationGainM: 0,
     elevationLossM: 0,
+    elevationSource: null,
     pointCount: 0,
     startedAt: now.toISOString(),
     endedAt: null,
@@ -553,6 +556,10 @@ export async function finishTrackRecording(
   const points = await listTrackPoints(trackId);
   const stats = {
     ...computeTrackStats(points),
+    // The climb from the terrain saved on this phone where it covers the whole
+    // track; null keeps the recorder's GPS figures. No request at the finish
+    // tap: the upgrade pass asks the network later (`trackClimb.ts`).
+    ...(await climbFromSavedTerrain(toElevationLine(points))),
     durationMs: trackDurationMs(track, endedAt.getTime()),
   };
   await updateTrack(trackId, {

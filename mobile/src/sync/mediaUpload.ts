@@ -19,6 +19,7 @@ import {
   MEDIA_EXTENSION_BY_MIME,
   type MediaMetadata,
   type MediaOrigin,
+  type TrackClimb,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -405,6 +406,54 @@ export async function recolourStandaloneMediaLocal(
 }
 
 /**
+ * Replace a recorded track's climb on its file. Optimistic like a recolour and
+ * supersedes for the same reason: two readings are one climb. A file still
+ * waiting to upload has its queued create rewritten too, so the confirm does
+ * not hand the old figures back over the new ones.
+ */
+export async function reclimbStandaloneMediaLocal(
+  mediaId: string,
+  climb: TrackClimb,
+): Promise<void> {
+  const db = await getSyncDb();
+  // `json_patch` merges the three keys into the object and leaves the rest.
+  const patch = JSON.stringify(climb satisfies ClimbFields);
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      `UPDATE media
+       SET metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?)
+       WHERE id = ?`,
+      patch,
+      mediaId,
+    );
+    await db.runAsync(
+      `UPDATE outbox SET fields_json = json_patch(fields_json, ?)
+       WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+         AND state = 'queued'`,
+      JSON.stringify({ metadata: climb }),
+      mediaId,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox
+       WHERE entity = 'media' AND op = 'reclimb' AND entity_id = ?
+         AND state = 'queued'`,
+      mediaId,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'reclimb', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      patch,
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
+/**
  * Link a standalone file to a place as its way, or unlink it (`placeId`
  * null). The mirror moves immediately; the op carries the move to the server.
  *
@@ -481,6 +530,9 @@ type MediaFields = {
 
 /** Fields of a recolour op (`op = 'recolour'`). */
 type RecolourFields = { color: string };
+
+/** Fields of a climb replacement (`op = 'reclimb'`). */
+type ClimbFields = TrackClimb;
 
 /** Fields of a rename op (`op = 'rename'`). */
 type RenameFields = { displayName: string | null };
@@ -742,6 +794,30 @@ export async function runMediaRecolourOp(
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status !== 404) throw err;
+  }
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
+  return "done";
+}
+
+/**
+ * Replace a track's climb server-side. Same idempotence and 404 rule as a
+ * rename. A 400 is dropped too: an API older than this op refuses a body with
+ * no name or colour in it, and a figure nobody asked for must not surface as a
+ * sync issue. The phone keeps the better figure; the account keeps its old one.
+ */
+export async function runMediaReclimbOp(
+  row: MediaOpRow,
+): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  const fields = JSON.parse(row.fields_json ?? "{}") as ClimbFields;
+  try {
+    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}`, {
+      method: "PATCH",
+      body: fields,
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404 && status !== 400) throw err;
   }
   await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
   return "done";

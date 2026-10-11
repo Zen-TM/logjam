@@ -329,3 +329,37 @@ export function buildElevationProfile(
     ),
   };
 }
+
+/** A track's climb and descent, with the source they were read from. */
+export type TrackClimb = {
+  elevationGainM: number;
+  elevationLossM: number;
+  /** One of `CLIMB_SOURCES`. */
+  elevationSource: string;
+};
+
+/**
+ * The climb a DEM profile gives a track, or null when it cannot give one.
+ *
+ * All or nothing: one sample no source could answer would sum two surfaces
+ * (the DEM and nothing) into one figure, so the track keeps its GPS climb.
+ *
+ * The source recorded is the COARSEST any sample came from, so a track that
+ * leaves the fine DEM's footprint for a while is offered again when the fine
+ * one grows to cover it. A profile that does not say (an API older than
+ * `demSourceIds`) is taken as the coarsest DEM for the same reason.
+ */
+export function climbFromProfile(
+  profile: ElevationProfile | null,
+): TrackClimb | null {
+  if (!profile || profile.samples.length < 2) return null;
+  if (profile.samples.some((sample) => sample.elevationM == null)) return null;
+  const known = DEM_SOURCES.map((source) => source.id);
+  const used = known.filter((id) => profile.demSourceIds?.includes(id));
+  const read = used.length > 0 ? used : known;
+  return {
+    elevationGainM: profile.gainM,
+    elevationLossM: profile.lossM,
+    elevationSource: read[read.length - 1]!,
+  };
+}

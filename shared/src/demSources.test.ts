@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CLIMB_SOURCES,
   DEM_SOURCES,
+  GPS_CLIMB_SOURCE,
   NSW_5M,
   clearDemArchives,
   demArchive,
@@ -12,6 +14,7 @@ import {
   TERRARIUM,
   demCredits,
   demTileUrl,
+  isFinerClimbSource,
   sampleDem,
   type DemSource,
   type DemTileReader,
@@ -77,6 +80,29 @@ describe("the declaration", () => {
       offenders,
       "read a DEM source's URL from DEM_SOURCES (docs/decisions/0028)",
     ).toEqual([]);
+  });
+});
+
+describe("climb sources", () => {
+  it("rank every DEM source above GPS heights, finest first", () => {
+    expect(CLIMB_SOURCES).toEqual([
+      ...DEM_SOURCES.map((source) => source.id),
+      GPS_CLIMB_SOURCE,
+    ]);
+    expect(isFinerClimbSource("nsw-5m", "terrarium")).toBe(true);
+    expect(isFinerClimbSource("terrarium", "gps")).toBe(true);
+    expect(isFinerClimbSource("terrarium", "nsw-5m")).toBe(false);
+    expect(isFinerClimbSource("nsw-5m", "nsw-5m")).toBe(false);
+    expect(isFinerClimbSource("gps", "gps")).toBe(false);
+  });
+
+  it("take a climb with no source beside it as GPS", () => {
+    expect(isFinerClimbSource("terrarium", null)).toBe(true);
+    expect(isFinerClimbSource("terrarium", undefined)).toBe(true);
+  });
+
+  it("never replace a climb from a source this build does not know", () => {
+    expect(isFinerClimbSource("nsw-5m", "nsw-1m")).toBe(false);
   });
 });
 

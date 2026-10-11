@@ -95,6 +95,41 @@ export const NSW_5M = {
 export const DEM_SOURCES: readonly DemSource[] = [NSW_5M, TERRARIUM];
 
 /**
+ * A climb summed from the recorder's own GPS heights: what a track carries
+ * when no DEM could answer along the whole of it, and what a stored climb
+ * with no source beside it is taken to be.
+ */
+export const GPS_CLIMB_SOURCE = "gps";
+
+/**
+ * Where a track's stored climb and descent can have come from, finest first:
+ * every DEM source, then GPS heights. Recorded beside the figures so a phone
+ * can tell later that a finer source could now answer.
+ */
+export const CLIMB_SOURCES: readonly string[] = [
+  ...DEM_SOURCES.map((source) => source.id),
+  GPS_CLIMB_SOURCE,
+];
+
+export function isClimbSource(value: unknown): value is string {
+  return CLIMB_SOURCES.includes(value as string);
+}
+
+/**
+ * Whether a climb read from `candidate` should replace one stored from
+ * `stored`. Nothing stored means GPS. An id this build does not know was
+ * written by a newer one from a source it cannot read, so it is never
+ * replaced.
+ */
+export function isFinerClimbSource(
+  candidate: string,
+  stored: string | null | undefined,
+): boolean {
+  const rank = CLIMB_SOURCES.indexOf(candidate);
+  return rank >= 0 && rank < CLIMB_SOURCES.indexOf(stored ?? GPS_CLIMB_SOURCE);
+}
+
+/**
  * The tile URL for an address in a source, at the zoom it is read at.
  *
  * The y is the XYZ row, NOT the TMS row an MBTiles store flips to. Getting
