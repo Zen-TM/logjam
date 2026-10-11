@@ -30,13 +30,13 @@ import {
   pairedStatLayout,
 } from "@logjam/shared";
 import type { SnapMode } from "../map/Map";
+import { SnapSelect, useSettledLine, useUndoKey } from "../map/draftTool";
 import { useElevationProfile } from "../../placeUtils";
 import {
   Button,
   Hero,
   IconButton,
   SectionHeader,
-  Select,
   StatGrid,
   ColourField,
   FieldError,
@@ -45,11 +45,6 @@ import {
 import ElevationProfile from "./ElevationProfile";
 import type { RouteHoverChannel } from "../map/routeHover";
 import classes from "./RouteDrawPanel.module.css";
-
-/** How long the line must sit still before its terrain is read. A profile per
- *  placed vertex would be one request per click; this asks once the user pauses,
- *  which is when they are looking at the figures anyway. */
-const PROFILE_SETTLE_MS = 700;
 
 type RouteDrawPanelProps = {
   points: [number, number][];
@@ -104,45 +99,13 @@ export function RouteDrawPanel({
   // message stays for that count and goes with the next point or undo.
   const [shortAt, setShortAt] = useState<number | null>(null);
 
-  // The line as it was when the user last paused. Profiling the live draft
-  // would fire a request per click and re-render the chart mid-gesture.
-  //
-  // SEEDED with the line as it arrives, when there is one: opening the editor
-  // on an existing route is not a pause to wait out — the geometry is the one
-  // just being looked at, and its profile is already cached, so the chart
-  // should be there rather than appear 700ms later (operator, 2026-09-17).
-  const [settled, setSettled] = useState<[number, number][] | null>(() =>
-    points.length >= 2 ? points : null,
-  );
-  // No line, nothing to profile: dropped during render, not after a pause.
-  // (A pending timer for the last line is cleared by the effect's cleanup.)
-  if (points.length < 2 && settled !== null) setSettled(null);
-  useEffect(() => {
-    if (points.length < 2) return;
-    const timer = window.setTimeout(
-      () => setSettled(points),
-      PROFILE_SETTLE_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [points]);
+  // The line as it was when the user last paused (`useSettledLine`).
+  const settled = useSettledLine(points);
   const { profile, loading: profileLoading } = useElevationProfile(settled);
 
   // Ctrl+Z / Cmd+Z, because this is a drawing tool and that is what the gesture
-  // means everywhere else (operator, 2026-09-17). Bound while the tool is
-  // mounted, which is exactly while a draft exists; it defers to a focused
-  // field so it can never eat an undo meant for typing.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "z" && event.key !== "Z") return;
-      if (!event.ctrlKey && !event.metaKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable]")) return;
-      event.preventDefault();
-      onUndo();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onUndo]);
+  // means everywhere else (operator, 2026-09-17).
+  useUndoKey(onUndo);
 
   // The SAME densification the server profiled, so a sample index maps straight
   // back to a coordinate on the line.
@@ -276,17 +239,12 @@ export function RouteDrawPanel({
             rather than above figures it says nothing about. The footer is one
             row taller for it, and the body above is then the same page a saved
             way shows (operator, 2026-09-17). */}
-        <Select
+        <SnapSelect
           label="Snap to"
           value={snapMode}
           disabled={saving}
-          onChange={(event) => onSnapModeChange(event.target.value as SnapMode)}
-        >
-          <option value="off">Nothing (straight lines)</option>
-          <option value="trails">Trails</option>
-          <option value="waterways">Creeks &amp; rivers</option>
-          <option value="both">Trails, creeks &amp; rivers</option>
-        </Select>
+          onChange={onSnapModeChange}
+        />
 
         <div className={classes.buttons}>
           <IconButton
