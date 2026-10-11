@@ -2,6 +2,7 @@
 const { defineConfig } = require("eslint/config");
 const expoConfig = require("eslint-config-expo/flat");
 const globals = require("globals");
+const { builtinRules } = require("eslint/use-at-your-own-risk");
 
 // Gotchas of Logjam GPS that a selector can hold (mobile/DESIGN.md §4, §1).
 const GPS_GOTCHAS = [
@@ -56,6 +57,33 @@ const COLOUR_LITERAL_DEBT = [
   "src/map/topoVectorLayers.ts",
 ];
 
+// The scheme is state, so nothing may hold a colour from before it changed
+// (mobile/DESIGN.md §1). These exports of theme.ts are painted in the scheme
+// the app STARTED in; a file that imports one does not repaint. With them
+// gone, a colour is reachable only through a hook, which `rules-of-hooks`
+// already keeps out of module scope. Guard: src/liveTheme.test.ts.
+const LAUNCH_THEME_IMPORTS = [
+  "error",
+  {
+    patterns: [
+      {
+        regex: "^(\\./|(\\.\\./)+)(src/)?theme$",
+        importNames: [
+          "theme",
+          "textRole",
+          "assetHue",
+          "placeHue",
+          "notificationHue",
+          "themeMode",
+          "activeThemeSchemeId",
+        ],
+        message:
+          "This is the scheme the app started in and does not repaint. Use useTheme(), makeStyles((theme, textRole) => …) or useHues() (mobile/DESIGN.md §1).",
+      },
+    ],
+  },
+];
+
 module.exports = defineConfig([
   expoConfig,
   {
@@ -106,6 +134,25 @@ module.exports = defineConfig([
     rules: {
       "no-restricted-syntax": ["error", ...GPS_GOTCHAS, ...COLOUR_LITERALS],
     },
+  },
+  {
+    // `no-restricted-imports` under a second name, so this ban has its own
+    // severity and does not replace the icon and kit-barrel bans above.
+    files: ["src/**/*.{ts,tsx}", "App.tsx", "index.ts"],
+    plugins: {
+      logjam: {
+        rules: { "no-launch-theme": builtinRules.get("no-restricted-imports") },
+      },
+    },
+    // WARN while screens are being converted: `npm run lint` is the list of
+    // files left. When it prints none, delete the deprecated exports from
+    // theme.ts, make this "error" and delete the block below.
+    rules: { "logjam/no-launch-theme": ["warn", LAUNCH_THEME_IMPORTS[1]] },
+  },
+  {
+    // Already converted: these never go back.
+    files: ["src/ui/**/*.{ts,tsx}", "App.tsx", "index.ts", "src/AppShell.tsx"],
+    rules: { "logjam/no-launch-theme": LAUNCH_THEME_IMPORTS },
   },
   {
     // Build-time scripts run in node, not in the app: they legitimately use

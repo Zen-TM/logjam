@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { assetHue, clampTextScale, withAlpha } from "./theme";
+import { DEFAULT_THEME_SCHEME_ID, THEME_SCHEMES } from "@logjam/shared";
+
+import { clampTextScale, huesFor, withAlpha } from "./theme";
 
 describe("withAlpha", () => {
   it("expands 3-digit and parses 6-digit hex", () => {
@@ -16,6 +18,7 @@ describe("withAlpha", () => {
   });
 
   it("accepts every asset hue", () => {
+    const { assetHue } = huesFor(THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens);
     for (const hue of Object.values(assetHue)) {
       expect(withAlpha(hue, 0.16)).toMatch(/^rgba\(\d+,\d+,\d+,0\.16\)$/);
     }

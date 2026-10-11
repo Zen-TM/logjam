@@ -17,9 +17,8 @@ import {
   fontWeight,
   radius,
   spacing,
-  textRole,
+  textRolesFor,
   textScale,
-  theme,
   touchTargetMin,
 } from "./theme";
 
@@ -28,8 +27,8 @@ import {
  * the counterpart of Logjam Web's `tokens.generated.test.ts`. A colour or a
  * step that exists on one client only is the drift this catches.
  *
- * Mutations that turn it red: give `theme` a key of its own
- * (`{ ...tokens, hero: "#000" }`), or make `spacing` `n * 4`.
+ * Mutations that turn it red: give one scheme a role of its own
+ * (`hero: "#000"`), or make `spacing` `n * 4`.
  */
 describe("theme parity with @logjam/shared", () => {
   it("exposes every colour role and nothing else", () => {
@@ -37,7 +36,6 @@ describe("theme parity with @logjam/shared", () => {
     for (const id of THEME_SCHEME_ORDER) {
       expect(Object.keys(THEME_SCHEMES[id].tokens).sort()).toEqual(roles);
     }
-    expect(Object.keys(theme).sort()).toEqual(roles);
   });
 
   it("lays out on the shared spacing steps", () => {
@@ -68,6 +66,9 @@ describe("theme parity with @logjam/shared", () => {
   // `size` in `TEXT_ROLES` without the style following, e.g. hand `title` the
   // `fontSize.lg` in `theme.ts`.
   it("draws every type role at the size and weight the shared table names", () => {
+    // Not the launch scheme: a muted role follows the scheme it is asked for.
+    const theme = THEME_SCHEMES[THEME_SCHEME_ORDER.at(-1)!].tokens;
+    const textRole = textRolesFor(theme);
     expect(Object.keys(textRole).sort()).toEqual(
       Object.keys(TEXT_ROLES).sort(),
     );
