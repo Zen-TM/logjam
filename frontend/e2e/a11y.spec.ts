@@ -804,7 +804,7 @@ test.describe("desktop", () => {
     // Opening the tray leaves focus on its button: Escape closes it from there.
     await tools.click();
     await expect(tray).toBeVisible();
-    await expectNoViolations(page, "#map");
+    await expectNoViolations(page, "[role='group'][aria-label='Tools']");
     await page.keyboard.press("Escape");
     await expect(tray).toHaveCount(0);
     await expect(tools).toBeFocused();
