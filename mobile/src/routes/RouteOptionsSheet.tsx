@@ -30,7 +30,7 @@ import {
 } from "@logjam/shared";
 
 import { assetHue, placeHue, theme } from "../theme";
-import { BottomSheet, RenameForm, Row } from "../ui";
+import { BottomSheet, closedSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useCopyPanel } from "../sharing/CopySheet";
 import { requestSync } from "../sync/syncEngine";
@@ -226,7 +226,7 @@ export function RouteOptionsSheet({
     onError,
   });
 
-  if (!route || !actions) return null;
+  if (!route || !actions) return closedSheet;
 
   const close = () => {
     setSharing(false);

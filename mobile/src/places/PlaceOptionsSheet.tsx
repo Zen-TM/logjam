@@ -32,7 +32,7 @@ import {
 } from "@logjam/shared";
 
 import { spacing, theme } from "../theme";
-import { BottomSheet, Row } from "../ui";
+import { BottomSheet, closedSheet, Row } from "../ui";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useCopyPanel } from "../sharing/CopySheet";
 import {
@@ -201,7 +201,7 @@ export function PlaceOptionsSheet({
     },
   });
 
-  if (!place) return null;
+  if (!place) return closedSheet;
 
   const close = () => {
     setSharing(false);

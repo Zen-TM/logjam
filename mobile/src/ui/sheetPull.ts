@@ -51,3 +51,34 @@ export function sheetReseats({
 }): boolean {
   return visible && !touching;
 }
+
+/**
+ * Whether the sheet keeps drawing what it drew last in place of what its
+ * owner hands it now: while it closes, when the owner has already let go of
+ * what it was showing. Guard: `sheetPull.test.ts`.
+ */
+export function sheetHolds({ visible }: { visible: boolean }): boolean {
+  return !visible;
+}
+
+/**
+ * Whether the sheet is known to be at its open position: its sizes and its
+ * offset have been reported, and the offset is the end of the scroll. The
+ * slide in waits for this. Guard: `sheetPull.test.ts`.
+ */
+export function sheetSeated({
+  content,
+  viewport,
+  y,
+}: {
+  content: number;
+  viewport: number;
+  y: number;
+}): boolean {
+  return (
+    content > 0 &&
+    viewport > 0 &&
+    Number.isFinite(y) &&
+    content - viewport - y < 1
+  );
+}

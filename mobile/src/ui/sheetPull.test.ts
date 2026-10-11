@@ -1,11 +1,13 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
   DISMISS_DISTANCE,
+  sheetHolds,
   sheetPulled,
   sheetRelease,
   sheetReseats,
+  sheetSeated,
 } from "./sheetPull";
 
 describe("sheetRelease", () => {
@@ -90,4 +92,59 @@ it("the sheet's content hands its overscroll to the sheet", () => {
     "utf8",
   );
   expect(sheet).toMatch(/\bnestedScrollEnabled\b/);
+});
+
+// An owner empties its sheet in the render that closes it (no title, no rows,
+// the keyboard on its way down), so a sheet that drew what it was handed slid
+// out as an empty shell of another height.
+describe("sheetHolds", () => {
+  it("draws what its owner hands it while open", () => {
+    expect(sheetHolds({ visible: true })).toBe(false);
+  });
+
+  // Red when `sheetHolds` returns false: a form dragged closed with the
+  // keyboard up loses the keyboard's height on the way out.
+  it("keeps what it last drew while it closes", () => {
+    expect(sheetHolds({ visible: false })).toBe(true);
+  });
+});
+
+// A component that returns null unmounts its BottomSheet, and a sheet that is
+// gone cannot slide out. Red when an owner goes back to
+// `if (!place) return null;` in place of `return closedSheet;`.
+it("no sheet owner unmounts its sheet when its subject is cleared", () => {
+  const src = new URL("../", import.meta.url);
+  const offenders = readdirSync(src, { recursive: true, encoding: "utf8" })
+    // The kit's own sheet returns null once it has slid out.
+    .filter((file) => file.endsWith("Sheet.tsx") && !file.startsWith("ui/"))
+    .filter((file) =>
+      /^\s*if \(!\w+(?: \|\| !\w+)*\) return null;$/m.test(
+        readFileSync(new URL(file, src), "utf8"),
+      ),
+    );
+  expect(offenders).toEqual([]);
+});
+
+// The sheet is put at its open position by a scroll, and the scroll cannot
+// land until the sheet's size has reached the native view. The slide in used
+// to start regardless: it ran with the sheet a screen below its place, and
+// the sheet then appeared all at once, or jumped as its size was corrected.
+describe("sheetSeated", () => {
+  const open = { content: 1500, viewport: 900, y: 600 };
+
+  it("is seated at the end of its scroll", () => {
+    expect(sheetSeated(open)).toBe(true);
+  });
+
+  // Red when `sheetSeated` stops comparing the offset with the end.
+  it("is not seated short of the end", () => {
+    expect(sheetSeated({ ...open, y: 0 })).toBe(false);
+  });
+
+  // Red when the `isFinite` condition is dropped: the offset is unknown
+  // until the first scroll event, and unknown read as seated.
+  it("is not seated before anything has been reported", () => {
+    expect(sheetSeated({ ...open, y: Number.POSITIVE_INFINITY })).toBe(false);
+    expect(sheetSeated({ content: 0, viewport: 0, y: 0 })).toBe(false);
+  });
 });
