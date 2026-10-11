@@ -19,7 +19,7 @@
 // here logs a coordinate, a tile URL, or a tile index — an upstream failure is
 // reported by status alone.
 import { loadImage, createCanvas } from "canvas";
-import { PMTiles } from "pmtiles";
+import { FetchSource, PMTiles, type Source } from "pmtiles";
 import {
   demMetresFromRgb,
   demTileKey,
@@ -100,6 +100,25 @@ async function fetchTile(
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/**
+ * An archive on the CDN, with the timeout a tile fetch has on every range it
+ * reads: the header, the directory pages and the tiles. Node's `fetch` has no
+ * timeout of its own, and a stalled connection would hang the profile.
+ */
+function timedSource(url: string): Source {
+  const inner = new FetchSource(url);
+  return {
+    getKey: () => inner.getKey(),
+    getBytes: (offset, length, _signal, etag) =>
+      inner.getBytes(
+        offset,
+        length,
+        AbortSignal.timeout(TILE_FETCH_TIMEOUT_MS),
+        etag,
+      ),
+  };
+}
+
 /** How long a source whose archive would not open is left alone. */
 const ARCHIVE_RETRY_MS = 5 * 60_000;
 const archives = new Map<string, { archive: PMTiles | null; at: number }>();
@@ -122,7 +141,7 @@ async function archiveFor(
   if (known && (known.archive || Date.now() - known.at < ARCHIVE_RETRY_MS))
     return known.archive;
   let archive: PMTiles | null = new PMTiles(
-    `${base.replace(/\/$/, "")}/${source.archivePath}`,
+    timedSource(`${base.replace(/\/$/, "")}/${source.archivePath}`),
   );
   try {
     await archive.getHeader();

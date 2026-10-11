@@ -217,6 +217,30 @@ describe("sampleElevations", () => {
     );
   });
 
+  // Mutation: open the archive from its bare URL and this test times out: a
+  // stalled CDN connection hangs the profile, because no range read is cut off.
+  it("cuts off an archive read that stalls, and falls through", async () => {
+    envOverride.TOPO_CDN_BASE_URL = "https://cdn.test";
+    // The timeout, already expired.
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation(() => AbortSignal.abort());
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (!url.startsWith("https://cdn.test"))
+        return Promise.resolve(pngResponse(terrariumTile(() => 700)));
+      // A stalled connection: it only ever ends by being aborted.
+      return init?.signal?.aborted
+        ? Promise.reject(new Error("aborted"))
+        : new Promise(() => {});
+    });
+    try {
+      const dem = await sampleDemElevations(NEARBY);
+      expect(dem.sourceIds).toEqual(["terrarium", "terrarium"]);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it("treats an archive that will not open as a source with nothing", async () => {
     envOverride.TOPO_CDN_BASE_URL = "https://cdn.test";
     fetchMock.mockImplementation(async (url: string) =>
