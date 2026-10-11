@@ -3,6 +3,7 @@
 // all derive from the same deterministic plan so they can never disagree.
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
+import { NSW_CONTOURS } from "./nswContours.js";
 
 export type RegionBbox = {
   west: number;
@@ -341,21 +342,35 @@ export function planDemDownload(
 }
 
 /**
- * MEASURED bytes per square kilometre of a clip of the statewide contours
- * (zooms 11 to 14), cut from the Katoomba and Port Hacking sheets: 4 KB on
- * the coastal plain, 16 to 17 KB across the Blue Mountains, 23 KB over the
- * Grose gorge alone. People save rugged ground, so the mean is the mountain
- * figure and the p90 the gorge.
+ * MEASURED bytes of one tile of the statewide contours at each zoom a clip
+ * holds, from single-zoom clips of the Katoomba and Port Hacking sheets. A
+ * clip is whole tiles, so a small area costs far more per square kilometre
+ * than a large one, and only a tile count says so. People save rugged ground:
+ * the p90 is the Grose gorge, the mean leans toward the mountains and away
+ * from the coastal plain, which is a third to a quarter of it.
  */
-const CONTOUR_CLIP_BYTES_PER_KM2 = { meanBytes: 16_000, p90Bytes: 23_000 };
+const CONTOUR_TILE_BYTES: Record<
+  number,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  11: { meanBytes: 110_000, p90Bytes: 147_000 },
+  12: { meanBytes: 40_000, p90Bytes: 47_000 },
+  13: { meanBytes: 70_000, p90Bytes: 84_000 },
+  14: { meanBytes: 24_000, p90Bytes: 28_000 },
+};
 
 export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
-  const [widthKm, heightKm] = regionEdgesKm(bbox);
-  const km2 = widthKm * heightKm;
-  return {
-    meanBytes: Math.round(km2 * CONTOUR_CLIP_BYTES_PER_KM2.meanBytes),
-    p90Bytes: Math.round(km2 * CONTOUR_CLIP_BYTES_PER_KM2.p90Bytes),
-  };
+  const { perZoom } = planRegionTiles(
+    bbox,
+    NSW_CONTOURS.minzoom,
+    NSW_CONTOURS.maxzoom,
+  );
+  const bytes = (key: keyof RegionSizeEstimate) =>
+    perZoom.reduce(
+      (sum, { z, count }) => sum + count * CONTOUR_TILE_BYTES[z]![key],
+      0,
+    );
+  return { meanBytes: bytes("meanBytes"), p90Bytes: bytes("p90Bytes") };
 }
 
 export interface MultiSourceRegionPlan {
