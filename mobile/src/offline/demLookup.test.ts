@@ -101,3 +101,14 @@ describe("sampleElevations (saved tiles)", () => {
     );
   });
 });
+
+// Mutation: clear only the tile cache on sign-out, and an archive opened on a
+// saved clip outlives the user, with the saved area's bounds in its header.
+it("drops every open archive when the offline cache is cleared", async () => {
+  const { demArchive } = await import("@logjam/shared");
+  const { clearOfflineDemCache } = await import("./demLookup");
+  const opened = demArchive("https://cdn.test/held.pmtiles");
+  expect(demArchive("https://cdn.test/held.pmtiles")).toBe(opened);
+  clearOfflineDemCache();
+  expect(demArchive("https://cdn.test/held.pmtiles")).not.toBe(opened);
+});

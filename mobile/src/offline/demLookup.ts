@@ -33,6 +33,7 @@
 // suppresses it entirely.
 import * as SQLite from "expo-sqlite";
 import {
+  clearDemArchives,
   demArchive,
   demTileKey,
   demTileUrl,
@@ -263,4 +264,6 @@ export async function sampleElevationsOffline(
 /** Dropped on wipe/sign-out: the cache holds terrain around the user's area. */
 export function clearOfflineDemCache(): void {
   clearDemTileCache();
+  // An open clip holds its header: the bounds of the area the user saved.
+  clearDemArchives();
 }

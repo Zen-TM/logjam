@@ -201,9 +201,9 @@ above, and needs GDAL with its Python bindings, NumPy, Pillow and the
 
 ```bash
 # One sheet, about 200 MB to download and 10 minutes to tile on 4 cores.
-python build_nsw_dem.py fetch dem/src Katoomba
-python build_nsw_dem.py tile dem/src dem/work --jobs 4
-python build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles
+python3 build_nsw_dem.py fetch dem/src Katoomba
+python3 build_nsw_dem.py tile dem/src dem/work --jobs 4
+python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles
 ```
 
 `fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip

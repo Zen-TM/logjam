@@ -5,6 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   DEM_SOURCES,
+  NSW_5M,
+  clearDemArchives,
+  demArchive,
+  readDemArchive,
   TERRARIUM,
   demCredits,
   demTileUrl,
@@ -204,5 +208,37 @@ describe("sampleDem", () => {
   it("leaves heights untouched when one source answers throughout", async () => {
     const dem = await sampleDem([at(1), at(2)], reader, [coarse]);
     expect(dem.levelled).toEqual(dem.heights);
+  });
+});
+
+describe("an open archive", () => {
+  // Mutation: keep a failed archive in the cache, and the library's memory of
+  // the failed header answers every later read without asking again.
+  it("is opened afresh after a read of it fails", async () => {
+    let online = false;
+    let asked = 0;
+    const source = {
+      getKey: () => "archive-under-test",
+      getBytes: async () => {
+        asked++;
+        if (!online) throw new Error("no connection");
+        return { data: new ArrayBuffer(16384) };
+      },
+    };
+    const first = demArchive(source);
+    await expect(
+      readDemArchive(first, NSW_5M, [{ tileX: 1, tileY: 1 }]),
+    ).rejects.toThrow("no connection");
+    const second = demArchive(source);
+    expect(second).not.toBe(first);
+    online = true;
+    const before = asked;
+    // The bytes are not an archive, so the read still fails: what matters is
+    // that the source was asked again.
+    await readDemArchive(second, NSW_5M, [{ tileX: 1, tileY: 1 }]).catch(
+      () => {},
+    );
+    expect(asked).toBeGreaterThan(before);
+    clearDemArchives();
   });
 });

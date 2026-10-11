@@ -384,19 +384,26 @@ export function planRegionForBasemaps(
   includeDemArchives = false,
 ): MultiSourceRegionPlan {
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
-  const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
-    (source) => {
-      const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
-      const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
-      return {
-        sourceId: source.id,
-        size: {
-          meanBytes: tiles.totalTiles * perTile.meanBytes,
-          p90Bytes: tiles.totalTiles * perTile.p90Bytes,
-        },
-      };
-    },
-  );
+  // The clip endpoint refuses an area over its cap, and a raster-only area
+  // may be larger than that (`checkRegionCaps`). The archive clip is a rider
+  // nobody chose, so it is left out there rather than failing the run or
+  // shrinking what a raster download may cover: the worldwide tiles are saved
+  // regardless, and the area still has heights.
+  const [widthKm, heightKm] = regionEdgesKm(bbox);
+  const clipFits = widthKm * heightKm <= MAX_REGION_AREA_KM2;
+  const demArchives = (
+    includeDemArchives && clipFits ? planDemDownload(bbox) : []
+  ).map((source) => {
+    const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
+    const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+    return {
+      sourceId: source.id,
+      size: {
+        meanBytes: tiles.totalTiles * perTile.meanBytes,
+        p90Bytes: tiles.totalTiles * perTile.p90Bytes,
+      },
+    };
+  });
 
   const perSource = [
     ...basemapIds.map((basemapId) => {

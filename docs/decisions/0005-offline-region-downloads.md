@@ -70,16 +70,20 @@ into the same size estimate, tile cap and free-space check as the basemaps, and
 enqueued as an ordinary `tile-pyramid` job whose `zMin === zMax`. It lands as a
 `dem-region` artifact — same group id as the run, so Saved shows it inside the
 area's card and deleting the area takes it — which the resolver never draws.
-A signed-in run also saves one clip of each DEM archive the area touches
-(`planDemDownload` in the same file), fetched like the vector basemap's clip and
-filed as a second `dem-region` artifact under that source's id (updated
-2026-10-11).
 Without it, elevation profiles, point heights and route gain/loss die the moment
 the phone loses signal, which is the trip the download exists for. The reader is
 `offline/demLookup.ts` (MBTiles → `demPng.ts` → the shared pixel maths), wired
 into `useElevationProfile` LOCAL FIRST: saved regions answer, and only a line
 nothing on disk covers goes to the API. That also gives a guest elevation, which
 the API path never could.
+
+- **Update 2026-10-11: a signed-in run also saves one clip of each DEM archive
+  the area touches** (`planDemDownload` in the same file), fetched like the
+  vector basemap's clip and filed as a second `dem-region` artifact under that
+  source's id. It is left out of an area larger than the clip endpoint cuts,
+  and a guest saves the worldwide tiles only. The worldwide tiles are still
+  saved with every area, which is what holds this decision up. Everything else
+  above stands.
 
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by
