@@ -33,14 +33,7 @@ import {
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import {
-  fontSize,
-  fontWeight,
-  lineHeight,
-  radius,
-  spacing,
-  makeStyles,
-} from "../theme";
+import { fontSize, lineHeight, radius, spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
@@ -211,7 +204,7 @@ function GuestExplainer({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -237,22 +230,14 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.xl,
     marginBottom: spacing(1),
   },
-  appTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.text,
-  },
+  appTitle: { ...textRole.title, color: theme.text },
   tagline: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
     textAlign: "center",
   },
   form: { gap: spacing(2) },
-  heading: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
-    color: theme.text,
-  },
+  heading: { ...textRole.metric, color: theme.text },
   body: {
     fontSize: fontSize.sm,
     color: theme.textMuted,

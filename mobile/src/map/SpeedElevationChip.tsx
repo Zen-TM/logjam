@@ -24,14 +24,7 @@ import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  withAlpha,
-  makeStyles,
-} from "../theme";
+import { fontSize, radius, spacing, withAlpha, makeStyles } from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
@@ -110,7 +103,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   );
 });
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   // Same translucent warm backing as the scale bar — these sit in one stack
   // over map imagery of any brightness and have to read as one instrument set.
   chip: {
@@ -129,10 +122,9 @@ const useStyles = makeStyles((theme) => ({
     lineHeight: LABEL_LINE,
   },
   value: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
     lineHeight: VALUE_LINE,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   // A hairline rather than a gap: two centred columns with nothing between them

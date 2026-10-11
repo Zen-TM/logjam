@@ -72,18 +72,14 @@ export function RangePills({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(1) },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.control, color: theme.text },
   valueGroup: {
     flexDirection: "row",
     alignItems: "center",

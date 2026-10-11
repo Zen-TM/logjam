@@ -6,7 +6,7 @@
 import { Text, View } from "react-native";
 import type { ElevationProfile } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 
 export function ElevationReadout({
   profile,
@@ -45,12 +45,11 @@ export function ElevationReadout({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   row: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
   value: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   range: {

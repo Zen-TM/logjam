@@ -33,14 +33,7 @@ import {
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import { getSyncStatus, requestSync } from "../sync/syncEngine";
-import {
-  fontSize,
-  fontWeight,
-  spacing,
-  makeStyles,
-  makeThemed,
-  useTheme,
-} from "../theme";
+import { fontSize, spacing, makeStyles, makeThemed, useTheme } from "../theme";
 import {
   Button,
   Hero,
@@ -257,13 +250,13 @@ function Trailing({ badge }: { badge?: React.ReactNode }) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero runs edge to edge; only the menu takes the body padding.
   menu: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
   health: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
   healthText: { flex: 1, gap: spacing(0.25) },
-  headline: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
+  headline: { ...textRole.rowTitle },
   detail: { color: theme.textMuted, fontSize: fontSize.sm },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
 }));

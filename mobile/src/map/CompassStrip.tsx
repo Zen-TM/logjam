@@ -27,15 +27,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { compassPointFor } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  textScale,
-  withAlpha,
-  makeStyles,
-} from "../theme";
+import { radius, spacing, textScale, withAlpha, makeStyles } from "../theme";
 import type { NorthReference } from "./mapPreferences";
 import { compassTicks, displayHeading } from "./compassTape";
 
@@ -124,7 +116,7 @@ export function CompassStrip({
 /** Centred on the strip by pulling it back half its own width. */
 const CENTRE_LINE_WIDTH = 2;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   frame: {
     backgroundColor: withAlpha(theme.page, 0.92),
     borderWidth: 1,
@@ -154,18 +146,16 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: withAlpha(theme.text, 0.6),
   },
   label: {
+    ...textRole.caption,
     color: theme.text,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   reference: {
+    ...textRole.caption,
     position: "absolute",
     left: spacing(0.5),
     bottom: spacing(0.25),
     color: withAlpha(theme.text, 0.7),
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
   },
   centreLine: {
     position: "absolute",

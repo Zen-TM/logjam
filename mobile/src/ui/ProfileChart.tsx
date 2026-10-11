@@ -346,13 +346,12 @@ export function ProfileChart({
 /** Centred on its x by pulling it back half its own width. */
 const SCRUB_LINE_WIDTH = 2;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(0.5) },
   readoutRow: { height: 18, justifyContent: "center" },
   readout: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   readoutHint: { color: theme.textMuted, fontSize: fontSize.xs },

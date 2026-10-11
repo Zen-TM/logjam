@@ -14,13 +14,7 @@ import {
   TERMS_URL,
   openLegalDocument,
 } from "../legalLinks";
-import {
-  fontSize,
-  fontWeight,
-  lineHeight,
-  spacing,
-  makeStyles,
-} from "../theme";
+import { fontSize, lineHeight, spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextLink } from "../ui";
 
 export function ConsentGate({
@@ -88,7 +82,7 @@ export function ConsentGate({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   content: {
     flexGrow: 1,
@@ -96,11 +90,7 @@ const useStyles = makeStyles((theme) => ({
     padding: spacing(3),
     gap: spacing(2),
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.text,
-  },
+  title: { ...textRole.title, color: theme.text },
   body: {
     fontSize: fontSize.base,
     color: theme.text,

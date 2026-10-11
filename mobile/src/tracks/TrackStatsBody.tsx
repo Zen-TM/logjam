@@ -22,7 +22,7 @@ import {
   type TrackDetail,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import {
   ProfileChart,
   StatGrid,
@@ -229,15 +229,9 @@ export function TrackStatsBody({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1.5) },
   chartBlock: { gap: spacing(0.5) },
-  chartLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  chartLabel: { ...textRole.section, color: theme.textMuted },
   pending: { color: theme.textMuted, fontSize: fontSize.sm },
 }));

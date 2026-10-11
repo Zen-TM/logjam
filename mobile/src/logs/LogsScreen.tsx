@@ -66,7 +66,6 @@ import {
 import { tripTitle } from "../api/tripTitle";
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
   withAlpha,
@@ -792,7 +791,7 @@ function EmptyPanel({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
@@ -812,12 +811,7 @@ const useStyles = makeStyles((theme) => ({
     paddingHorizontal: spacing(1.5),
     minHeight: 40,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   rail: {
     paddingLeft: spacing(2),
@@ -852,11 +846,7 @@ const useStyles = makeStyles((theme) => ({
     paddingTop: spacing(1),
     paddingBottom: spacing(0.5),
   },
-  yearLabel: {
-    color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-  },
+  yearLabel: { ...textRole.sheetTitle, color: theme.text },
   yearCount: { color: theme.textMuted, fontSize: fontSize.xs },
   rowTrailing: {
     flexDirection: "row",

@@ -44,14 +44,7 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  spacing,
-  makeStyles,
-  useTheme,
-  useHues,
-} from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   Row,
@@ -714,7 +707,7 @@ function OfflineTab({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
   // (DESIGN.md).
   rail: { paddingBottom: spacing(1.5) },
@@ -731,9 +724,8 @@ const useStyles = makeStyles((theme) => ({
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {
+    ...textRole.control,
     color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
 }));

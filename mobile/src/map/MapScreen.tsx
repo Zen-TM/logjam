@@ -110,14 +110,7 @@ import {
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
-import {
-  fontSize,
-  fontWeight,
-  spacing,
-  makeStyles,
-  useTheme,
-  useHues,
-} from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
   PlacePinsLayer,
@@ -5584,7 +5577,7 @@ function RouteNameForm({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the
   // same 44 dp the rest of the app treats as a real touch target. Solid rather
   // than translucent — it sits over the map, which can be any colour under it.
@@ -5648,9 +5641,5 @@ const useStyles = makeStyles((theme) => ({
   // Where the navigation readout sits: a Notice, centred, in the notice stack's
   // column.
   navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
-  attributionText: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
+  attributionText: { ...textRole.hint, color: theme.textMuted },
 }));

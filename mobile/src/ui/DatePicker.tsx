@@ -473,7 +473,7 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(0.5) },
   headerRow: {
     flexDirection: "row",
@@ -497,19 +497,14 @@ const useStyles = makeStyles((theme) => ({
     paddingVertical: spacing(0.5),
     borderRadius: radius.pill,
   },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.rowTitle, color: theme.text },
   viewport: { overflow: "hidden", backgroundColor: "transparent" },
   week: { flexDirection: "row" },
   weekday: {
+    ...textRole.caption,
     flex: 1,
     textAlign: "center",
     color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
     paddingBottom: spacing(0.5),
   },
   day: {

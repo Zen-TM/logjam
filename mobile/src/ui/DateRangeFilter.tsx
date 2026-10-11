@@ -69,18 +69,14 @@ function shortDate(key: string): string {
   return formatDateKey(`${key}T00:00:00.000Z`);
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   block: { gap: formRhythm.label },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.control, color: theme.text },
   value: { color: theme.textMuted, fontSize: fontSize.sm },
   // Words are text-coloured; the weight says it is set.
   valueActive: { color: theme.text, fontWeight: fontWeight.medium },

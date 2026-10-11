@@ -13,7 +13,7 @@
 // is not the place to introduce one.
 import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, makeStyles, useTheme } from "../theme";
+import { fontWeight, radius, makeStyles, useTheme } from "../theme";
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 
 export function Avatar({
@@ -35,7 +35,7 @@ export function Avatar({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   disc: {
     width: 40,
     height: 40,
@@ -44,8 +44,8 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "center",
   },
   initials: {
+    ...textRole.control,
     color: theme.onFill,
-    fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
     letterSpacing: 0.5,
   },

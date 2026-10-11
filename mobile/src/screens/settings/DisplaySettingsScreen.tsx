@@ -23,8 +23,6 @@ import { useAccountState } from "../../auth/AccountStateContext";
 import {
   TEXT_SCALES,
   chosenTextScale,
-  fontSize,
-  fontWeight,
   persistTextScale,
   setThemeSchemeId,
   useThemeSchemeId,
@@ -198,7 +196,7 @@ function SchemeCard({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   schemes: { gap: spacing(1) },
   scheme: {
     flexDirection: "row",
@@ -227,10 +225,5 @@ const useStyles = makeStyles((theme) => ({
     borderWidth: 1,
     borderColor: withAlpha(theme.text, 0.2),
   },
-  schemeName: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  schemeName: { ...textRole.rowTitle, flex: 1, color: theme.text },
 }));

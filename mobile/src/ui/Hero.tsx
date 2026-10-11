@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -120,9 +120,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     ...textRole.metric,
     color: theme.text,
   },
-  valueSuffix: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
+  valueSuffix: { ...textRole.hint, color: theme.textMuted },
 }));

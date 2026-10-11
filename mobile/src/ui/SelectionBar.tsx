@@ -4,7 +4,7 @@
 // jump (the bug the Saved screen fixed in 2026-08-24 — see its selectionBar note).
 import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 import { CHIP_RAIL_HEIGHT } from "./ChipRail";
 
@@ -84,7 +84,7 @@ export function SelectionBar({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   bar: {
     height: CHIP_RAIL_HEIGHT,
     flexDirection: "row",
@@ -93,10 +93,5 @@ const useStyles = makeStyles((theme) => ({
     paddingLeft: spacing(0.5),
     paddingRight: spacing(1.5),
   },
-  count: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  count: { ...textRole.control, flex: 1, color: theme.text },
 }));

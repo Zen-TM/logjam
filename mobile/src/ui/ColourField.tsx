@@ -2,8 +2,6 @@ import { useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   radius,
   scrim,
@@ -130,7 +128,7 @@ export function ColourField({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   field: {
     flexDirection: "row",
     alignItems: "center",
@@ -138,12 +136,7 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(1),
     minHeight: CELL,
   },
-  label: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.rowTitle, flex: 1, color: theme.text },
   trigger: {
     width: CELL,
     height: CELL,
@@ -186,11 +179,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  title: { ...textRole.rowTitle, color: theme.text },
   // Three to a row, as on Logjam Web: a single flat row of ten spends the width
   // showing nine colours nobody picked.
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center" },

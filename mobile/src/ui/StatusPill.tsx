@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, makeThemed, radius, spacing } from "../theme";
+import { makeStyles, makeThemed, radius, spacing } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { PILL_HEIGHT } from "./pill";
 
@@ -29,6 +29,7 @@ export function StatusPill({
    */
   hue?: string;
 }) {
+  const styles = useStyles();
   const TONE_TEXT = useToneText();
   const TONE_GLYPH = useToneGlyph();
   const TONE_DOT = useToneDot();
@@ -81,7 +82,7 @@ const useToneDot = makeThemed(
   }),
 );
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
@@ -92,5 +93,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
-  label: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-});
+  label: { ...textRole.caption },
+}));

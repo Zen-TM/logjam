@@ -249,6 +249,14 @@ export const TEXT_ROLES = {
     gps: { size: "lg", weight: "bold" },
     web: { size: "lg", weight: "medium" },
   },
+  /** Running text and what the user types into a field. Logjam GPS only: Logjam
+   *  Web's body is the element's own. */
+  body: { gps: { size: "base", weight: "regular" } },
+  /** The label of a pill, chip, tab or small control. Logjam GPS only. */
+  control: { gps: { size: "sm", weight: "medium" } },
+  /** A figure or note small enough to sit on the map or inside a pill. Logjam
+   *  GPS only. */
+  caption: { gps: { size: "xs", weight: "medium" } },
   /** A row's title. */
   rowTitle: {
     gps: { size: "base", weight: "medium" },

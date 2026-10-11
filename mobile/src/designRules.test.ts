@@ -125,3 +125,22 @@ describe("space is a step of the scale", () => {
     ).toEqual([]);
   }, 60_000);
 });
+
+describe("a text style is a role", () => {
+  // Mutation: delete the ObjectExpression selector from GPS_GOTCHAS.
+  it("bans a size and a weight written together", async () => {
+    const messages = await lint(
+      "export const s = { fontSize: 14, fontWeight: '500' };\n",
+      "src/screens/Probe.tsx",
+    );
+    expect(messages).toHaveLength(1);
+  }, 60_000);
+
+  it("leaves a role with its weight overridden alone", async () => {
+    const messages = await lint(
+      "const t = (r) => ({ ...r.control, fontWeight: '700' });\n",
+      "src/screens/Probe.tsx",
+    );
+    expect(messages).toEqual([]);
+  }, 60_000);
+});

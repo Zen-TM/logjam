@@ -20,7 +20,6 @@ import {
 
 import {
   fontSize,
-  fontWeight,
   radius,
   scrim,
   spacing,
@@ -620,7 +619,7 @@ function trackSummary(track: Track): string {
 
 const TILE_SIZE = 96;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   row: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   emptyHint: { color: theme.textMuted, fontSize: fontSize.sm, maxWidth: 200 },
   tileWrap: { position: "relative" },
@@ -673,11 +672,7 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(0.25),
   },
   addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
-  addTileLabel: {
-    color: theme.accent,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  addTileLabel: { ...textRole.caption, color: theme.accent },
   tileLoading: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

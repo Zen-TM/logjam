@@ -3,7 +3,6 @@ import { ActivityIndicator, Pressable, Text } from "react-native";
 import {
   controlSize,
   fontSize,
-  fontWeight,
   opacity,
   radius,
   spacing,
@@ -107,7 +106,7 @@ export function Button({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
@@ -139,6 +138,6 @@ const useStyles = makeStyles((theme) => ({
   pressed: { backgroundColor: theme.cardPressed },
   pressedFilled: { opacity: 0.85 },
   disabled: { opacity: opacity.disabled },
-  label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
+  label: { ...textRole.rowTitle },
   labelCompact: { fontSize: fontSize.sm },
 }));

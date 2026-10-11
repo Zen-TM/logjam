@@ -17,7 +17,7 @@ import {
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
@@ -223,7 +223,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -232,17 +232,12 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(2),
   },
   appTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
+    ...textRole.title,
     color: theme.text,
     textAlign: "center",
     marginBottom: spacing(2),
   },
   form: { gap: spacing(2) },
-  heading: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
-    color: theme.text,
-  },
+  heading: { ...textRole.metric, color: theme.text },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
 }));

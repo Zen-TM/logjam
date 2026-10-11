@@ -89,7 +89,6 @@ import {
 } from "../sync/useSyncQueries";
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
   makeStyles,
@@ -2785,9 +2784,9 @@ function PulseSlot({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   addButton: { alignItems: "center", gap: spacing(0.5) },
-  addReason: { color: theme.textMuted, fontSize: fontSize.sm },
+  addReason: { ...textRole.hint },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
@@ -2821,11 +2820,7 @@ const useStyles = makeStyles((theme) => ({
   },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  size: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  size: { ...textRole.caption, color: theme.textMuted },
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the
   // verbs, not a warning.

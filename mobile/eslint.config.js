@@ -29,6 +29,12 @@ const GPS_GOTCHAS = [
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
   },
   {
+    selector:
+      "ObjectExpression:has(> Property[key.name='fontSize']):has(> Property[key.name='fontWeight'])",
+    message:
+      "A text style is a role: ...textRole.<name> (body, control, caption, rowTitle, …) from makeStyles((theme, textRole) => …), never a fontSize and fontWeight written together (mobile/DESIGN.md §1, TEXT_ROLES in shared).",
+  },
+  {
     selector: `Property[key.name=/${SPACING_PROPS}/] > Literal[value!=0][raw=/^[0-9.]+$/], Property[key.name=/${SPACING_PROPS}/] > UnaryExpression > Literal`,
     message:
       "Space is a step of the scale: spacing(0.5), spacing(1), … (shared/src/designTokens.ts SPACE). A raw number, a negative or an off-scale fraction leaves it.",

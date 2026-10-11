@@ -37,7 +37,6 @@ import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
 import {
   fontSize,
-  fontWeight,
   hitSlop,
   radius,
   spacing,
@@ -338,7 +337,7 @@ export function MapSearchBar({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: {
     position: "absolute",
     left: CHROME_GAP,
@@ -412,9 +411,5 @@ const useStyles = makeStyles((theme) => ({
   },
   savedText: { flex: 1 },
   resultKind: { color: theme.textMuted, fontSize: fontSize.xs },
-  resultText: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
+  resultText: { ...textRole.hint, color: theme.text },
 }));

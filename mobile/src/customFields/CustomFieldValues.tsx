@@ -21,7 +21,7 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
   Field,
   IconButton,
@@ -217,7 +217,7 @@ function Beside({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.
@@ -234,9 +234,8 @@ const useStyles = makeStyles((theme) => ({
   tableRowLast: { borderBottomWidth: 0 },
   tableKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   tableValue: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     textAlign: "right",
     flexShrink: 1,
   },

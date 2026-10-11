@@ -89,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -1461,7 +1461,7 @@ function EmptyPanel({
   return <EmptyState title={copy.firstRunTitle} hint={copy.firstRunBody} />;
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
@@ -1483,13 +1483,7 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.page,
     paddingVertical: spacing(1),
   },
-  dayLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  dayLabel: { ...textRole.section, color: theme.textMuted },
   dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks

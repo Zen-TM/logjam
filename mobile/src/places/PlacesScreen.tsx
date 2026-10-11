@@ -73,7 +73,6 @@ import {
 import { useAccountState } from "../auth/AccountStateContext";
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
   withAlpha,
@@ -1190,7 +1189,7 @@ function EmptyPanel({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
@@ -1212,12 +1211,7 @@ const useStyles = makeStyles((theme) => ({
     paddingHorizontal: spacing(1.5),
     minHeight: 40,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   // The type rail sits directly under the hero and carries the bucket rail's
   // top padding, so the pair reads as one block rather than two stacked bars.

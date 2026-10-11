@@ -5,7 +5,7 @@
 // SHAPE, not for a recurring arrangement of existing ones).
 import { Text } from "react-native";
 
-import { fontSize, spacing, makeStyles } from "../../theme";
+import { fontSize, makeStyles } from "../../theme";
 import {
   SectionHeader,
   ChipRail,

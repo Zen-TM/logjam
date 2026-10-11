@@ -44,7 +44,6 @@ import {
 
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
   withAlpha,
@@ -219,7 +218,7 @@ export function DraftToolPanel({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   bar: {
     backgroundColor: withAlpha(theme.page, 0.94),
     borderRadius: radius.lg,
@@ -231,9 +230,8 @@ const useStyles = makeStyles((theme) => ({
   },
   readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   distance: {
+    ...textRole.sheetTitle,
     color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
     fontVariant: ["tabular-nums"],
   },
   meta: { color: theme.textMuted, fontSize: fontSize.xs, flexShrink: 1 },

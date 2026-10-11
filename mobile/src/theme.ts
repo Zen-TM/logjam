@@ -284,6 +284,8 @@ export const textRolesFor = perScheme(
           uppercase?: true;
           muted?: true;
         };
+        // The one place a size and a weight are written together.
+        // eslint-disable-next-line no-restricted-syntax
         const style: TextRoleStyle = {
           fontSize: fontSize[role.size],
           fontWeight: fontWeight[role.weight],

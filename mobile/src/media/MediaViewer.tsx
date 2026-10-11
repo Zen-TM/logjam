@@ -17,10 +17,10 @@ import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
 
 import {
   fontSize,
-  fontWeight,
   radius,
   scrim,
   spacing,
+  textRolesFor,
   withAlpha,
 } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
@@ -31,6 +31,7 @@ import { IconButton, Icon } from "../ui";
 // always wears a DARK scheme's colours, whatever the app is painted in: a
 // light scheme's ink would vanish into the backdrop.
 const photoChrome = THEME_SCHEMES.sandstone.tokens;
+const photoRole = textRolesFor(photoChrome);
 
 /**
  * Full-screen viewer for a trip's or place's attachments.
@@ -293,9 +294,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1),
   },
   counter: {
+    ...photoRole.control,
     color: photoChrome.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     backgroundColor: withAlpha(photoChrome.page, 0.6),
     borderRadius: radius.pill,
     paddingHorizontal: spacing(1.5),

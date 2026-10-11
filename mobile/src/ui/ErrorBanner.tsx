@@ -49,7 +49,7 @@ export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   banner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -65,9 +65,8 @@ const useStyles = makeStyles((theme) => ({
   message: { color: theme.text, fontSize: fontSize.sm },
   actions: { flexDirection: "row", gap: spacing(2) },
   action: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: "600",
     textDecorationLine: "underline",
   },
 }));

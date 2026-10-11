@@ -61,7 +61,6 @@ import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { AddWaySheet } from "./AddWaySheet";
 import {
   fontSize,
-  fontWeight,
   lineHeight,
   spacing,
   makeStyles,
@@ -1050,7 +1049,7 @@ function PlaceSharingSection({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
@@ -1090,9 +1089,8 @@ const useStyles = makeStyles((theme) => ({
   fieldRowLast: { borderBottomWidth: 0 },
   fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   fieldValue: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     textAlign: "right",
     flexShrink: 1,
   },
