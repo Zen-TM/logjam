@@ -1,6 +1,7 @@
-// A finished track's stored climb and descent: read from the best DEM that
-// can answer the whole line, kept with the source it came from, and replaced
-// later when a finer source can answer.
+// A finished track's stored climb and descent: read from the best DEM at each
+// point of the line, with the track's own GPS heights where no DEM answers,
+// kept with the source it came from, and replaced later when a finer source
+// can answer.
 //
 // STORED, NOT DERIVED ON READ. The Saved list, the Stats totals, the track
 // sheet and Logjam Web all show the row's two figures, so they agree by
@@ -17,7 +18,7 @@
 import { AppState } from "react-native";
 import {
   DEM_SOURCES,
-  buildElevationProfile,
+  buildTrackElevationProfile,
   climbFromProfile,
   densifyLineSegments,
   isFinerClimbSource,
@@ -68,18 +69,23 @@ const SOURCES_KEY = climbSourcesKey();
 const TRACKS_PER_PASS = 3;
 
 /**
- * The climb from the terrain SAVED ON THIS PHONE, or null where it does not
- * cover the whole line. No request: this runs at the finish tap, in a place
- * with no signal as often as not. Never throws: a track must finish whether
- * or not the terrain can be read.
+ * The climb from the terrain SAVED ON THIS PHONE. Where it covers only part
+ * of the line, `gpsHeights` (the track's own, per vertex) fill the rest and
+ * the climb is labelled GPS, so the upgrade pass still replaces it. Null when
+ * a sample is left with no height at all. No request: this runs at the finish
+ * tap, in a place with no signal as often as not. Never throws: a track must
+ * finish whether or not the terrain can be read.
  */
 export async function climbFromSavedTerrain(
   segments: readonly (readonly [number, number][])[],
+  gpsHeights?: readonly (readonly (number | null)[])[],
 ): Promise<TrackClimb | null> {
   try {
     const positions = densifyLineSegments(segments);
     return climbFromProfile(
-      buildElevationProfile(
+      buildTrackElevationProfile(
+        segments,
+        gpsHeights,
         positions,
         await sampleElevationsOffline(positions),
       ),

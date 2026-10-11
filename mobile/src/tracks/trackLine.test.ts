@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { RecordedTrackPoint } from "@logjam/shared";
 
-import { MAX_ELEVATION_VERTICES, toElevationLine } from "./trackLine";
+import {
+  MAX_ELEVATION_VERTICES,
+  toElevationHeights,
+  toElevationLine,
+} from "./trackLine";
 
 // Synthetic coords only (repo rule).
 function run(
@@ -77,5 +81,38 @@ describe("toElevationLine", () => {
       150.9 + 4999 * 0.0001,
       9,
     );
+  });
+});
+
+describe("toElevationHeights", () => {
+  const climbing = (count: number, segment: number, lonBase: number) =>
+    run(count, segment, lonBase).map((point, i) => ({
+      ...point,
+      altitudeM: 500 + i,
+    }));
+
+  // Mutation: stride the two differently and every height is paired with
+  // another vertex's position.
+  it("has one height for every vertex the line keeps", () => {
+    const points = [...climbing(5000, 0, 150.2), ...climbing(4, 1, 150.9)];
+    const line = toElevationLine(points);
+    const heights = toElevationHeights(points);
+    expect(heights.map((segment) => segment.length)).toEqual(
+      line.map((segment) => segment.length),
+    );
+    expect(heights[0]![0]).toBe(500);
+    expect(heights[0]![heights[0]!.length - 1]).toBe(500 + 4999);
+  });
+
+  it("smooths a single fix's spike out before it is kept", () => {
+    const points = climbing(5, 0, 150.2);
+    points[2] = { ...points[2]!, altitudeM: 9000 };
+    expect(
+      Math.max(...toElevationHeights(points)[0]!.map((h) => h!)),
+    ).toBeLessThan(600);
+  });
+
+  it("is null at a vertex whose fix carried no height", () => {
+    expect(toElevationHeights(run(3, 0, 150.2))).toEqual([[null, null, null]]);
   });
 });

@@ -8,12 +8,17 @@
 // reports (root privacy rules).
 
 import { haversineMeters } from "./placeGeo.js";
+import { GPS_CLIMB_SOURCE, type DemSamples } from "./demSources.js";
 import {
   ELEVATION_PROFILE_MAX_SAMPLES,
+  buildElevationProfile,
   elevationGainLoss,
+  heightsAlongLine,
   type ElevationProfile,
   type ElevationSample,
+  type SamplePosition,
 } from "./elevation.js";
+import type { RoutePoint } from "./routeValidation.js";
 
 /** A fix as delivered by the platform, before acceptance filtering. */
 export type CandidateFix = {
@@ -246,7 +251,7 @@ function movingMean(values: number[], window: number): number[] {
   });
 }
 
-function movingMedian(values: number[], window: number): number[] {
+export function movingMedian(values: number[], window: number): number[] {
   if (window <= 1) return values.slice();
   return values.map((_, index) => {
     const half = symmetricHalfWidth(index, values.length, window);
@@ -926,4 +931,113 @@ export function formatDurationMs(durationMs: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+/**
+ * A recorded track's own GPS heights as the source under every DEM: they fill
+ * the samples no DEM could answer, so a track that strays past a saved area
+ * keeps the DEM for the part inside it.
+ *
+ * `gps` holds a smoothed GPS height per sample, null where the track has
+ * none. A profile no DEM answered anywhere, or one with nothing to fill, comes
+ * back untouched.
+ *
+ * - CLIMB (`levelled`): a step with a GPS sample at either end is measured in
+ *   GPS at both ends, the way `sampleDem` measures any seam in one source, so
+ *   the offset between GPS and the DEM is never counted. GPS is first held
+ *   still until it has moved `ELEVATION_HYSTERESIS_M`: the profile is summed
+ *   at the DEM's finer threshold, which GPS wander would leak through.
+ * - CHART (`heights`): each filled stretch is GPS shifted by the offset
+ *   measured at the DEM samples either side of it, so it meets the DEM rather
+ *   than sitting a geoid's height off it.
+ */
+export function fillDemFromGps(
+  dem: DemSamples,
+  gps: readonly (number | null)[],
+): DemSamples {
+  const isFill = (i: number) => dem.heights[i] == null && gps[i] != null;
+  if (
+    !dem.heights.some((height) => height != null) ||
+    !dem.heights.some((_, i) => isFill(i))
+  )
+    return dem;
+
+  const held: (number | null)[] = [];
+  let hold: number | null = null;
+  for (const value of gps) {
+    if (
+      value != null &&
+      (hold == null || Math.abs(value - hold) >= ELEVATION_HYSTERESIS_M)
+    )
+      hold = value;
+    held.push(hold);
+  }
+
+  const mean = (values: number[]) =>
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const offsets = dem.heights.map((height, i) =>
+    height != null && gps[i] != null ? height - gps[i]! : null,
+  );
+  const known = (values: (number | null | undefined)[]) =>
+    values.filter((value): value is number => value != null);
+  const everywhere = known(offsets);
+  const heights = dem.heights.slice();
+  for (let start = 0; start < heights.length; start++) {
+    if (!isFill(start)) continue;
+    let end = start;
+    while (isFill(end + 1)) end++;
+    const beside = known([offsets[start - 1], offsets[end + 1]]);
+    const offset =
+      beside.length > 0
+        ? mean(beside)
+        : everywhere.length > 0
+          ? mean(everywhere)
+          : 0;
+    for (let i = start; i <= end; i++) heights[i] = gps[i]! + offset;
+    start = end;
+  }
+
+  const levelled: (number | null)[] = heights.map(() => null);
+  let previous = -1;
+  for (let i = 0; i < heights.length; i++) {
+    if (heights[i] == null) continue;
+    if (previous < 0) levelled[i] = heights[i]!;
+    else {
+      const inDem = !isFill(i) && !isFill(previous);
+      const step = inDem
+        ? dem.levelled[i]! - dem.levelled[previous]!
+        : held[i] != null && held[previous] != null
+          ? held[i]! - held[previous]!
+          : 0;
+      levelled[i] = levelled[previous]! + step;
+    }
+    previous = i;
+  }
+
+  return {
+    heights,
+    levelled,
+    sourceIds: dem.sourceIds.map((id, i) =>
+      isFill(i) ? GPS_CLIMB_SOURCE : (id ?? null),
+    ),
+  };
+}
+
+/**
+ * A recorded track's profile: the DEM where it answers, the track's own GPS
+ * heights where it does not. `gpsHeights` is parallel to `segments`; without
+ * it this is `buildElevationProfile`.
+ */
+export function buildTrackElevationProfile(
+  segments: readonly (readonly RoutePoint[])[],
+  gpsHeights: readonly (readonly (number | null)[])[] | null | undefined,
+  positions: readonly SamplePosition[],
+  dem: DemSamples,
+): ElevationProfile {
+  return buildElevationProfile(
+    positions,
+    gpsHeights
+      ? fillDemFromGps(dem, heightsAlongLine(segments, gpsHeights, positions))
+      : dem,
+  );
 }

@@ -15,7 +15,11 @@
 // helpers never log, and callers must keep points out of logs and error
 // messages (root privacy rules).
 
-import { DEM_SOURCES, type DemSamples } from "./demSources.js";
+import {
+  DEM_SOURCES,
+  GPS_CLIMB_SOURCE,
+  type DemSamples,
+} from "./demSources.js";
 import { haversineMeters } from "./placeGeo.js";
 import type { RoutePoint } from "./routeValidation.js";
 
@@ -69,6 +73,11 @@ export type ElevationProfile = {
    * first. Absent on a profile from an API that predates it.
    */
   demSourceIds?: string[];
+  /**
+   * True when a recorded track's own GPS heights stand in where no DEM had
+   * one (`fillDemFromGps` in trackStats.ts). Its climb is then stored as GPS.
+   */
+  filledFromGps?: boolean;
 };
 
 /** A position to sample, with its distance along the line. */
@@ -230,6 +239,55 @@ export function densifyLineSegments(
 }
 
 /**
+ * The height at each position, read off heights known at a line's vertices.
+ *
+ * `heights` is parallel to `segments`. Distances are measured the way
+ * `densifyLineSegments` measures them, so a position it placed lands between
+ * the two vertices it was placed between, and nothing is interpolated across
+ * the gap between two segments. A vertex with no height lends its
+ * neighbour's. All null when the two shapes disagree.
+ */
+export function heightsAlongLine(
+  segments: readonly (readonly RoutePoint[])[],
+  heights: readonly (readonly (number | null)[])[],
+  positions: readonly SamplePosition[],
+): (number | null)[] {
+  const none = positions.map(() => null);
+  if (
+    segments.length !== heights.length ||
+    segments.some((seg, k) => seg.length !== heights[k]!.length)
+  )
+    return none;
+  // Every kept vertex in walked order, with its distance from the start. The
+  // last vertex of one segment and the first of the next share a distance.
+  const atM: number[] = [];
+  const heightM: (number | null)[] = [];
+  let totalM = 0;
+  segments.forEach((seg, k) => {
+    if (seg.length < 2) return;
+    seg.forEach((point, i) => {
+      if (i > 0) {
+        const before = seg[i - 1]!;
+        totalM += haversineMeters(before[1], before[0], point[1], point[0]);
+      }
+      atM.push(totalM);
+      heightM.push(heights[k]![i] ?? null);
+    });
+  });
+  if (atM.length < 2) return none;
+  let j = 0;
+  return positions.map(({ distanceM }) => {
+    while (j < atM.length - 2 && atM[j + 1]! < distanceM) j++;
+    const a = heightM[j]!;
+    const b = heightM[j + 1]!;
+    if (a == null || b == null) return a ?? b;
+    const span = atM[j + 1]! - atM[j]!;
+    const t = span === 0 ? 0 : (distanceM - atM[j]!) / span;
+    return a + (b - a) * Math.min(1, Math.max(0, t));
+  });
+}
+
+/**
  * Accumulate gain and loss through a hysteresis filter: track the extreme
  * reached since the last committed turn, and commit a leg only once the swing
  * back exceeds the threshold. Without it every wobble below the data's own
@@ -327,6 +385,7 @@ export function buildElevationProfile(
     demSourceIds: DEM_SOURCES.map((source) => source.id).filter((id) =>
       used.has(id),
     ),
+    ...(used.has(GPS_CLIMB_SOURCE) ? { filledFromGps: true } : {}),
   };
 }
 
@@ -341,12 +400,13 @@ export type TrackClimb = {
 /**
  * The climb a DEM profile gives a track, or null when it cannot give one.
  *
- * All or nothing: one sample no source could answer would sum two surfaces
- * (the DEM and nothing) into one figure, so the track keeps its GPS climb.
+ * A sample with no height at all would sum a surface and nothing into one
+ * figure, so such a profile gives no climb.
  *
  * The source recorded is the COARSEST any sample came from, so a track that
  * leaves the fine DEM's footprint for a while is offered again when the fine
- * one grows to cover it. A profile that does not say (an API older than
+ * one grows to cover it. That is GPS for a profile whose gaps the track's own
+ * heights filled. A profile that does not say (an API older than
  * `demSourceIds`) is taken as the coarsest DEM for the same reason.
  */
 export function climbFromProfile(
@@ -360,6 +420,8 @@ export function climbFromProfile(
   return {
     elevationGainM: profile.gainM,
     elevationLossM: profile.lossM,
-    elevationSource: read[read.length - 1]!,
+    elevationSource: profile.filledFromGps
+      ? GPS_CLIMB_SOURCE
+      : read[read.length - 1]!,
   };
 }

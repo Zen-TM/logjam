@@ -36,8 +36,9 @@
 // to AWS's public bucket, from the user's own connection. Never log either.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  buildElevationProfile,
+  buildTrackElevationProfile,
   densifyLineSegments,
+  type DemSamples,
   type ElevationProfile,
 } from "@logjam/shared";
 
@@ -65,12 +66,22 @@ export type ElevationState = {
  * sample is missing) would otherwise throw away a partial answer AND never
  * reach the source that could have completed it. Null only when nothing
  * anywhere is known.
+ *
+ * `gpsHeights` is a recorded track's own height at each vertex. Where no
+ * source completes the profile they fill its gaps, so a track that strays
+ * past a saved area keeps the DEM for the part inside it.
  */
 async function profileFromDem(
   segments: readonly (readonly [number, number][])[],
   sources: { api: boolean; tiles: boolean },
+  gpsHeights?: readonly (readonly (number | null)[])[] | null,
 ): Promise<ElevationProfile | null> {
   const positions = densifyLineSegments(segments);
+  const buildElevationProfile = (
+    at: typeof positions,
+    dem: DemSamples,
+  ): ElevationProfile =>
+    buildTrackElevationProfile(segments, gpsHeights, at, dem);
 
   const saved = await sampleElevations(positions);
   if (saved.heights.every((value) => value != null)) {
@@ -102,7 +113,14 @@ async function profileFromDem(
 
 export function useElevationProfile(
   segments: readonly (readonly [number, number][])[],
-  { allowNetwork = true }: { allowNetwork?: boolean } = {},
+  {
+    allowNetwork = true,
+    gpsHeights = null,
+  }: {
+    allowNetwork?: boolean;
+    /** A recorded track's GPS height per vertex of `segments`, to fill gaps. */
+    gpsHeights?: readonly (readonly (number | null)[])[] | null;
+  } = {},
 ): ElevationState {
   const [profile, setProfile] = useState<ElevationProfile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -115,8 +133,8 @@ export function useElevationProfile(
   // only changes every few dozen points — serialising it per render was the
   // single largest per-tick cost here.
   const geometryKey = useMemo(
-    () => (totalPoints >= 2 ? JSON.stringify(segments) : null),
-    [segments, totalPoints],
+    () => (totalPoints >= 2 ? JSON.stringify({ segments, gpsHeights }) : null),
+    [segments, gpsHeights, totalPoints],
   );
   // Guards against a slow response for an older line landing after a newer
   // one — without it, undoing a point could leave the pre-undo profile on
@@ -135,12 +153,16 @@ export function useElevationProfile(
 
     const timer = setTimeout(() => {
       setLoading(true);
-      const segments = JSON.parse(geometryKey) as [number, number][][];
+      const { segments, gpsHeights } = JSON.parse(geometryKey) as {
+        segments: [number, number][][];
+        gpsHeights: (number | null)[][] | null;
+      };
       void (async () => {
         try {
           const built = await profileFromDem(
             segments,
             planElevationSources({ allowNetwork, isGuest }),
+            gpsHeights,
           );
           if (latestKey.current === geometryKey) setProfile(built);
         } catch {

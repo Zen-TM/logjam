@@ -21,7 +21,7 @@ import {
   type TrackDetail,
 } from "@logjam/shared";
 
-import { toElevationLine } from "./trackLine";
+import { toElevationHeights, toElevationLine } from "./trackLine";
 import { listTrackPoints } from "./tracksDb";
 import { useTrackChangeRefresh } from "./useTrackChangeRefresh";
 
@@ -50,6 +50,8 @@ export function useTrackDetail(
   loading: boolean;
   /** The track as coarse per-segment lines, for sampling the DEM along. */
   line: [number, number][][];
+  /** The GPS height at each vertex of `line`, to fill what no DEM covers. */
+  gpsHeights: (number | null)[][];
 } {
   // The SERIES is state; the detail is derived from it. `recordedMs` ticks
   // once a second on a live recording, and folding it in here rather than in
@@ -58,6 +60,7 @@ export function useTrackDetail(
   const [points, setPoints] = useState<RecordedTrackPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [line, setLine] = useState<[number, number][][]>([]);
+  const [gpsHeights, setGpsHeights] = useState<(number | null)[][]>([]);
   const linePointCount = useRef(0);
   const detail = useMemo(
     () =>
@@ -89,6 +92,7 @@ export function useTrackDetail(
       // indistinguishable from this track's.
       setPoints([]);
       setLine([]);
+      setGpsHeights([]);
       setLoading(false);
     } else {
       setLoading(true);
@@ -118,6 +122,7 @@ export function useTrackDetail(
           ) {
             linePointCount.current = points.length;
             setLine(toElevationLine(points));
+            setGpsHeights(toElevationHeights(points));
           }
           setLoading(false);
         })
@@ -138,5 +143,5 @@ export function useTrackDetail(
     };
   }, [trackId, enabled, readNonce]);
 
-  return { detail, loading, line };
+  return { detail, loading, line, gpsHeights };
 }

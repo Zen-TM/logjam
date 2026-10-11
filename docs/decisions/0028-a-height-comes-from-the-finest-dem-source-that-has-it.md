@@ -50,14 +50,18 @@ Proposal: #359.
   position; the id is only a label, and `climbFromProfile` in
   `shared/src/elevation.ts` sets it to the coarsest source any sample came
   from, so a track partly on a coarse source is offered again when a finer
-  one reaches it. Absent means GPS heights, which is also what a line with a
-  position no source can answer keeps. `upgradeTrackClimbs` in
+  one reaches it. Absent means GPS heights. A recorded track's own GPS heights
+  are the source under every DEM: `fillDemFromGps` in
+  `shared/src/trackStats.ts` fills the positions no DEM answers, measures
+  each join in GPS at both ends, and holds GPS still until it has moved
+  `ELEVATION_HYSTERESIS_M` so its wander is not summed at the DEM's
+  threshold. Such a climb is labelled `gps`. `upgradeTrackClimbs` in
   `mobile/src/tracks/trackClimb.ts` asks again on the first sync cycle after
   the finish, and after that only when the ids or `coverage` in
   `DEM_SOURCES` change; nothing polls. It reads saved terrain and
   `POST /elevation/profile`, never a public tile host, because nobody opened
   the track. Guards: `shared/src/elevation.test.ts`,
-  `mobile/src/tracks/trackClimb.test.ts`. Cost: a stored figure can be older
+  `shared/src/gpsFill.test.ts`, `mobile/src/tracks/trackClimb.test.ts`. Cost: a stored figure can be older
   than the best terrain, a phone built with a new source before the API
   serves it marks its tracks as asked, and the key sees only the declaration: an
   archive rebuilt inside an unchanged `coverage` re-asks nothing, and a
@@ -113,6 +117,11 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   (2026-10-12). Reads better beside the figure. Rejected because the label's
   one job is to say whether a finer source could still improve the figure,
   and only the coarsest one answers that.
+- **Keep a track wholly on GPS heights when any position has no DEM**
+  (2026-10-12). One surface for the whole chart, and no join to level. Built
+  and removed before merge: a track that strayed a few metres past a saved
+  area lost the DEM for all the ground inside it until the phone was next
+  online.
 - **Ask again about every unimproved track on a timer** (2026-10-12). Built
   as a seven-day wait and removed before merge: a track outside NSW would be
   sent to the API every week for good, for an answer that changes only when

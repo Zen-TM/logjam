@@ -109,7 +109,7 @@ export function RecordingSheet({
   // since the last accepted fix is counted as stopped rather than as nothing
   // (computeTrackDetail's `recordedMs`). Standing still is exactly when this
   // panel gets opened, and it is the case where the two disagree most.
-  const { detail, loading, line } = useTrackDetail(
+  const { detail, loading, line, gpsHeights } = useTrackDetail(
     activeTrack?.id ?? null,
     open,
     elapsedMs,
@@ -120,9 +120,7 @@ export function RecordingSheet({
   // running recording does not re-sample the DEM on every written batch.
   const { profile: demProfile, loading: demLoading } = useElevationProfile(
     line,
-    {
-      allowNetwork,
-    },
+    { allowNetwork, gpsHeights },
   );
 
   const handlePauseResume = useCallback(() => {

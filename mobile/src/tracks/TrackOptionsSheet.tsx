@@ -120,16 +120,14 @@ export function TrackOptionsSheet({
   // The stats read the whole series back, so they run only while that sub-mode
   // is actually open — the same `enabled` gate `useTrackDetail` exists for
   // (mobile/CLAUDE.md, Battery).
-  const { detail, loading, line } = useTrackDetail(
+  const { detail, loading, line, gpsHeights } = useTrackDetail(
     track?.id ?? null,
     visible && showingStats && track != null,
     track?.durationMs,
   );
   const { profile: demProfile, loading: demLoading } = useElevationProfile(
     line,
-    {
-      allowNetwork,
-    },
+    { allowNetwork, gpsHeights },
   );
 
   // The profile this panel has just read is the same reading the upgrade pass

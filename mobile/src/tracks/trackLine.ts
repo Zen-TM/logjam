@@ -8,7 +8,11 @@
 // already finer than the surface being read.
 //
 // PRIVACY: these are precise wilderness coordinates. Nothing here logs.
-import type { TrackSeriesPoint } from "@logjam/shared";
+import {
+  ELEVATION_SMOOTHING_WINDOW,
+  movingMedian,
+  type TrackSeriesPoint,
+} from "@logjam/shared";
 
 /**
  * Vertices kept for a DEM sample. `densifyLine` resamples to
@@ -60,6 +64,38 @@ function segmentRuns(
 export function toElevationLine(
   points: readonly TrackSeriesPoint[],
 ): [number, number][][] {
+  return strided(points).map(({ run, kept }) =>
+    kept.map((i) => [run[i]!.lon, run[i]!.lat]),
+  );
+}
+
+/**
+ * The GPS height at every vertex `toElevationLine` keeps, in the same shape:
+ * what fills the stretches no saved terrain covers (`fillDemFromGps` in
+ * shared/src/trackStats.ts). Median-smoothed over the WHOLE segment before
+ * the stride, the way the track's own GPS climb is, so a kept vertex is not
+ * one raw fix's spike. Null where the segment has no height near the vertex.
+ */
+export function toElevationHeights(
+  points: readonly TrackSeriesPoint[],
+): (number | null)[][] {
+  return strided(points).map(({ run, kept }) => {
+    const withHeight = run.flatMap((point, i) =>
+      point.altitudeM != null && Number.isFinite(point.altitudeM) ? [i] : [],
+    );
+    const smoothed = movingMedian(
+      withHeight.map((i) => run[i]!.altitudeM!),
+      ELEVATION_SMOOTHING_WINDOW,
+    );
+    const heightAt = new Map(withHeight.map((i, k) => [i, smoothed[k]!]));
+    return kept.map((i) => heightAt.get(i) ?? null);
+  });
+}
+
+/** Each segment, with the indices of the vertices the stride keeps. */
+function strided(
+  points: readonly TrackSeriesPoint[],
+): { run: TrackSeriesPoint[]; kept: number[] }[] {
   if (points.length < 2) return [];
   const runs = segmentRuns(points);
   const totalPoints = runs.reduce((count, run) => count + run.length, 0);
@@ -72,11 +108,9 @@ export function toElevationLine(
         Math.round((MAX_ELEVATION_VERTICES * run.length) / totalPoints),
       ),
     );
-    const line: [number, number][] = [];
-    for (let i = 0; i < quota; i++) {
-      const point = run[Math.round((i * (run.length - 1)) / (quota - 1))]!;
-      line.push([point.lon, point.lat]);
-    }
-    return line;
+    const kept: number[] = [];
+    for (let i = 0; i < quota; i++)
+      kept.push(Math.round((i * (run.length - 1)) / (quota - 1)));
+    return { run, kept };
   });
 }

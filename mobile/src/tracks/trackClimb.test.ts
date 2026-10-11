@@ -160,6 +160,22 @@ describe("the climb from the terrain saved on the phone", () => {
     expect(await climbFromSavedTerrain(LINE)).toBeNull();
   });
 
+  // Mutation: drop the heights on the way to the profile and a track that
+  // strays past a saved area is back to GPS figures for its whole length.
+  it("fills a hole from the track's own heights, and is then a GPS climb", async () => {
+    sampleElevationsOffline.mockImplementationOnce(async (positions) => {
+      const heights = positions.map((_, i) => (i === 1 ? null : 600 + i));
+      return {
+        heights,
+        levelled: heights,
+        sourceIds: heights.map((height) => (height == null ? null : "nsw-5m")),
+      };
+    });
+    const read = await climbFromSavedTerrain(LINE, [[640, 640]]);
+    expect(read?.elevationSource).toBe("gps");
+    expect(read?.elevationGainM).toBeGreaterThan(0);
+  });
+
   it("is nothing rather than a throw when the terrain cannot be read", async () => {
     sampleElevationsOffline.mockRejectedValueOnce(new Error("disk"));
     expect(await climbFromSavedTerrain(LINE)).toBeNull();
