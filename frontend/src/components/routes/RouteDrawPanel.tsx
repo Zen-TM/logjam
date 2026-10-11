@@ -99,8 +99,10 @@ export function RouteDrawPanel({
   onSnapModeChange,
   routeHover,
 }: RouteDrawPanelProps): React.JSX.Element {
-  const canSave = points.length >= 2 && !saving;
   const hasLine = points.length >= 2;
+  // The point count when Save was pressed on a line too short to keep: the
+  // message stays for that count and goes with the next point or undo.
+  const [shortAt, setShortAt] = useState<number | null>(null);
 
   // The line as it was when the user last paused. Profiling the live draft
   // would fire a request per click and re-render the chart mid-gesture.
@@ -202,6 +204,13 @@ export function RouteDrawPanel({
             message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
           />
         )}
+        <FieldError
+          message={
+            shortAt === points.length
+              ? "A route needs at least two points."
+              : null
+          }
+        />
 
         {/* The terrain under the line, while it is still being decided — the
             reason a canyoner re-routes a leg before saving it rather than
@@ -285,29 +294,36 @@ export function RouteDrawPanel({
             label="Undo"
             onClick={onUndo}
             disabled={!canUndo || saving}
+            disabledReason={saving ? "Saving…" : "Nothing to undo"}
           />
           <IconButton
             icon="reverse"
             label="Reverse direction"
             onClick={onReverse}
             disabled={!hasLine || saving}
+            disabledReason={saving ? "Saving…" : "Needs two points"}
           />
           <IconButton
             icon="delete"
             label="Clear all points"
             onClick={onClear}
             disabled={points.length === 0 || saving}
+            disabledReason={saving ? "Saving…" : "Nothing to clear"}
           />
           <span className={classes.spacer} />
-          <Button compact onClick={onCancel} disabled={saving}>
+          <Button
+            compact
+            onClick={onCancel}
+            disabled={saving}
+            disabledReason="Saving…"
+          >
             Cancel
           </Button>
           <Button
             compact
             variant="filled"
             icon="done"
-            onClick={onSave}
-            disabled={!canSave}
+            onClick={() => (hasLine ? onSave() : setShortAt(points.length))}
             busy={saving}
           >
             Save

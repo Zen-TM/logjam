@@ -365,6 +365,7 @@ function FriendSharingSection({
                 icon="unshare"
                 label={bulkUnshareLabel(selected.length, friend.username)}
                 disabled={busy}
+                disabledReason="Working…"
                 onClick={() => setPendingBulk("unshare")}
               />
             ) : (
@@ -374,6 +375,7 @@ function FriendSharingSection({
                   selected.filter((card) => card.removable).length,
                 )}
                 disabled={busy}
+                disabledReason="Working…"
                 onClick={() => setPendingBulk("remove")}
               />
             )}
@@ -450,6 +452,7 @@ function FriendSharingSection({
                         compact
                         variant="outline"
                         disabled={busy}
+                        disabledReason="Working…"
                         onClick={() =>
                           void run(
                             () => revoke(card, friend.id),
@@ -465,7 +468,7 @@ function FriendSharingSection({
                         kindLabel={SHARE_KIND_LABEL[card.row.entityType]}
                         itemName={card.title}
                         ownerName={friend.username}
-                        disabled={busy}
+                        disabledReason={busy ? "Working…" : undefined}
                         remove={() => revoke(card, "me")}
                         onRemoved={() => {
                           load();

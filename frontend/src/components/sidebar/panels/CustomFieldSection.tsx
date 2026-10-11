@@ -359,15 +359,10 @@ function AttributeDialog({
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={saving}
-            disabled={!label.trim()}
-            onClick={handleSave}
-          >
+          <Button variant="filled" busy={saving} onClick={handleSave}>
             {def ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
           </Button>
         </>

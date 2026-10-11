@@ -202,6 +202,7 @@ function SettingsPanel({
               title={`${notificationGroupLead(group, "Logjam Web")} ${what}`}
               checked={notifPrefs[key]}
               disabled={notifSavingKey === key}
+              disabledReason="Saving…"
               onChange={() => handleToggleNotif(key)}
             />
           ))
@@ -215,6 +216,7 @@ function SettingsPanel({
             title="Download GeoPDFs automatically when they finish generating"
             checked={autoDownloadGeoPdfs}
             disabled={autoDownloadSaving}
+            disabledReason="Saving…"
             onChange={handleToggleAutoDownload}
           />
         )}

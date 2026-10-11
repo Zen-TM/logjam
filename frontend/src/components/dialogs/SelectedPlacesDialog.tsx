@@ -11,6 +11,7 @@ import {
   Avatar,
   Button,
   Dialog,
+  FieldError,
   IconButton,
   IconTile,
   Row,
@@ -73,6 +74,8 @@ function SelectedPlacesDialog({
 }) {
   const [shareSearch, setShareSearch] = useState("");
   const [shareFriendIds, setShareFriendIds] = useState<string[]>([]);
+  // Set by pressing Share with nobody picked; hidden again by the first pick.
+  const [shareNeedsFriend, setShareNeedsFriend] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -118,7 +121,11 @@ function SelectedPlacesDialog({
   );
 
   async function handleShare() {
-    if (shareFriendIds.length === 0 || ownedPlaces.length === 0) return;
+    if (ownedPlaces.length === 0) return;
+    if (shareFriendIds.length === 0) {
+      setShareNeedsFriend(true);
+      return;
+    }
     setSharing(true);
     try {
       for (const place of ownedPlaces) {
@@ -194,12 +201,13 @@ function SelectedPlacesDialog({
                 icon="delete"
                 className={classes.deleteVerb}
                 disabled={busy}
+                disabledReason="Working…"
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 Delete {plural(ownedPlaces.length, "place")}
               </Button>
             )}
-            <Button onClick={onClose} disabled={busy}>
+            <Button onClick={onClose} disabled={busy} disabledReason="Working…">
               Close
             </Button>
           </>
@@ -292,7 +300,12 @@ function SelectedPlacesDialog({
                   </option>
                 ))}
               </Select>
-              <Button variant="outline" onClick={handleExport} disabled={busy}>
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                disabled={busy}
+                disabledReason="Working…"
+              >
                 Download
               </Button>
             </div>
@@ -332,6 +345,7 @@ function SelectedPlacesDialog({
                               icon="unshare"
                               label={`Don't share with ${friend.username}`}
                               disabled={busy}
+                              disabledReason="Working…"
                               onClick={() =>
                                 setShareFriendIds(
                                   shareFriendIds.filter(
@@ -383,13 +397,21 @@ function SelectedPlacesDialog({
                   icon="done"
                   className={classes.shareVerb}
                   busy={sharing}
-                  disabled={busy || shareFriendIds.length === 0}
+                  disabled={busy}
+                  disabledReason="Working…"
                   onClick={handleShare}
                 >
                   {shareFriendIds.length === 0
                     ? "Share"
                     : `Share with ${plural(shareFriendIds.length, "friend")}`}
                 </Button>
+                <FieldError
+                  message={
+                    shareNeedsFriend && shareFriendIds.length === 0
+                      ? "Pick a friend to share with."
+                      : null
+                  }
+                />
               </>
             )}
           </section>

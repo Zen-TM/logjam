@@ -145,11 +145,11 @@ function SignIn({
       return;
     }
     if (!consented) {
-      setLocalError("You must agree to the Terms and Privacy Policy");
+      setLocalError("Agree to the Terms of Use and Privacy Policy to sign up.");
       return;
     }
     if (!ageConfirmed) {
-      setLocalError("You must confirm you are 18 or older");
+      setLocalError("Confirm you are 18 or older to sign up.");
       return;
     }
     setSubmitting(true);
@@ -241,6 +241,7 @@ function SignIn({
           <Button
             type="button"
             disabled={resendCooldown > 0}
+            disabledReason={`Wait ${resendCooldown}s before asking again`}
             onClick={handleResendCode}
             className={classes.submit}
           >
@@ -447,7 +448,6 @@ function SignIn({
             type="submit"
             variant="filled"
             busy={submitting}
-            disabled={!consented || !ageConfirmed}
             className={classes.submit}
           >
             {submitting ? "Creating account…" : "Sign up"}

@@ -115,12 +115,13 @@
   transition: background-color var(--motion-fast);
 }
 
-.iconButton:hover:not(:disabled) {
+.iconButton:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-text) 10%, transparent);
   color: var(--color-text);
 }
 
-.iconButton:disabled {
+.iconButton:disabled,
+.iconButton[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
   cursor: default;
 }
@@ -142,7 +143,7 @@
   color: var(--color-on-inverse);
 }
 
-.iconButton.onInverse:hover:not(:disabled) {
+.iconButton.onInverse:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-on-inverse) 10%, transparent);
   color: var(--color-on-inverse);
 }
