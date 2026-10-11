@@ -83,9 +83,10 @@ renumber.
 - **Anything that can be closed has a × at its top right**: a sheet, a
   dialog, a popover, a panel beside Logjam Web's map. A pushed screen has a
   back arrow at its top left, and keeps the × if the surface under it can
-  close. A form has Cancel beside its submit. A root tab on Logjam GPS has
-  neither. Never leave only a gesture, a system button or a second press on a
-  nav icon.
+  close. A form has Cancel beside its submit; on Logjam GPS a form in a sheet
+  is left by the sheet's ×, and its footer holds only the submit. A root tab
+  on Logjam GPS has neither. Never leave only a gesture, a system button or a
+  second press on a nav icon.
 - **A tab opens at its root**, not the sub-page the user was last on.
 - **The way out undoes one layer.** A sub-view inside a sheet or dialog backs
   out to its parent, and the title names the step. Escape, the back gesture
@@ -155,7 +156,7 @@ renumber.
 - **One hue means "shared" and nothing else**: a shared place is your own
   mark with a ring.
 - **Controls over a photo are black and white on a scrim**, not theme
-  colours.
+  colours: words and glyphs on a `SCRIM` are `ON_SCRIM`.
 
 ## 8. Identity: a kind has one glyph and one hue
 

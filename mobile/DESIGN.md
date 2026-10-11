@@ -15,9 +15,9 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
   `const useStyles = makeStyles((theme, textRole) => ({ … }))` with
   `const styles = useStyles()` in the component; a colour passed as a prop is
   `useTheme().<role>`; an identity hue is `useHues()`. A function outside a
-  component takes `theme` as an argument. `radius`, `spacing(n)` (8 × n),
-  `fontSize` and `controlSize` are plain imports; a tint is
-  `withAlpha(token, a)`.
+  component takes `theme` as an argument. `radius`, `spacing(n)` (8 × n, only
+  the steps of `SPACE`), `fontSize` and `controlSize` are plain imports; a
+  tint is `withAlpha(token, a)`.
 - **A scheme change repaints the running app**, so nothing holds a colour at
   module scope (`logjam/no-launch-theme`). Text size still applies at the
   next launch, and its control says so.
@@ -30,7 +30,7 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
 - **A photo viewer's chrome is fixed**: a photo sits on black.
 
 - **A text style is a role** from `TEXT_ROLES`: `...textRole.<name>` inside
-  `makeStyles`, never a `fontSize` and `fontWeight` written by hand.
+  `makeStyles`.
 
 Radius: `md` tile or inline surface; `lg` card or row; `xl` sheet; `pill`
 anything text-shaped that is not a card; `sm` swatch.
