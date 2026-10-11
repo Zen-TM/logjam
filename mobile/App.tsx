@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  AppState,
-  Linking,
-  Platform,
-  StyleSheet,
-  Text,
-} from "react-native";
+import { Alert, AppState, Linking, Platform, Text } from "react-native";
 import Constants from "expo-constants";
 // SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
 // android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
@@ -30,7 +23,7 @@ import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { Button, LoadingState } from "./src/ui";
-import { fontSize, spacing, systemBarStyle, theme } from "./src/theme";
+import { fontSize, makeStyles, spacing, useThemeMode } from "./src/theme";
 
 // The blocked build's only way out (MAPP-001). The rule itself — Android only,
 // from app.json's package id, https so it resolves without the Play app — is
@@ -43,6 +36,10 @@ const storeUrl = storeListingUrl({
 });
 
 export default function App() {
+  const styles = useStyles();
+  // Light icons on a dark page, dark icons on a light one.
+  const systemBarStyle = useThemeMode() === "dark" ? "light" : "dark";
+
   const minVersionGate = useMinVersionGate();
   const auth = useAuth();
 
@@ -199,7 +196,7 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   blockingContainer: {
     flex: 1,
     alignItems: "center",
@@ -219,4 +216,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   authSafeArea: { flex: 1, backgroundColor: theme.page },
-});
+}));
