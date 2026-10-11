@@ -485,7 +485,7 @@ test.describe("desktop", () => {
     const sendDialog = page.locator("dialog[open]");
     await expect(
       sendDialog.getByRole("button", { name: "Send a copy" }),
-    ).toBeDisabled({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(sendDialog).toHaveCount(0);
@@ -1071,9 +1071,10 @@ test.describe("surfaces fake auth never shows", () => {
     await page.getByRole("button", { name: "Sign up", exact: true }).click();
     await expect(page.getByLabel("Confirm password")).toBeVisible();
     await expectNoViolations(page);
-    // A disabled submit is the agreement's own gate, not decoration.
+    // The way in is never disabled: pressing it says what is missing
+    // (shared/DESIGN.md §5).
     const create = page.getByRole("button", { name: "Sign up", exact: true });
-    await expect(create).toBeDisabled();
+    await expect(create).toBeEnabled();
     await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
     await page.getByRole("checkbox", { name: /18 years of age/ }).check();
     await expect(create).toBeEnabled();
@@ -1111,13 +1112,18 @@ test.describe("surfaces fake auth never shows", () => {
     await expect(page.locator("nav[aria-label='Pages']")).toHaveCount(0);
     await expectNoViolations(page);
 
-    // The tick is what arms the button, and the button is the only way on —
-    // but this case stops here: agreeing writes consent to the account.
+    // The button is the only way on and is never disabled: pressed without the
+    // tick it asks for the tick, and writes nothing. The case stops there:
+    // agreeing writes consent to the account.
     const agree = page.getByRole("button", { name: "Agree and continue" });
-    await expect(agree).toBeDisabled();
+    await expect(agree).toBeEnabled();
+    await agree.click();
+    await expect(page.getByRole("alert")).toContainText("Tick the box");
+    await expectNoViolations(page);
     await page
       .getByRole("checkbox", { name: /agree to the updated Terms/ })
       .check();
+    await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(agree).toBeEnabled();
     await expect(page.getByRole("button", { name: "Sign out" })).toBeEnabled();
   });

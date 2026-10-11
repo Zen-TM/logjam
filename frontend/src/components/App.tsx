@@ -1511,7 +1511,7 @@ function App() {
       menu: [
         {
           id: "topo",
-          label: "LiDAR topo",
+          label: "Make a LiDAR topo",
           icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
@@ -1520,7 +1520,7 @@ function App() {
         },
         {
           id: "geopdf",
-          label: "GeoPDF",
+          label: "Make a GeoPDF",
           icon: "geoPdf",
           onSelect: () => {
             setEditingGeoPdfTemplate(undefined);
@@ -1626,6 +1626,7 @@ function App() {
           placeTracks={placeTracks}
           standaloneFiles={standaloneFiles}
           standaloneFilesError={standaloneFilesError}
+          onRetryStandaloneFiles={refetchStandaloneFiles}
           onOpenWay={openWay}
           currentUserId={currentUser?.id ?? null}
           wayDetail={

@@ -76,6 +76,7 @@ import {
   TileCheckbox,
   type MenuEntry,
   type Glyph,
+  ErrorState,
   LoadingState,
 } from "../../../ui";
 import { idRange } from "./placesModel";
@@ -367,6 +368,10 @@ function NotificationsPanel({
     }
     if (destination.mapsView) onMapsViewChange(destination.mapsView);
     setActivePanel(destination.panel);
+    // Opening a topo fits the map to it, from here as from its own row: the map
+    // sits beside the page, so there is no verb for it (shared/DESIGN.md §3).
+    const footprint = n.payload.footprint as GeoJsonPolygonal | undefined;
+    if (n.type === "topo_complete" && footprint) onTopoFlyTarget(footprint);
   };
 
   // Opening a batch reads it, as opening a row does — except in the Unread
@@ -540,11 +545,6 @@ function NotificationsPanel({
     }
   };
 
-  const zoomToMap = (n: TNotification, footprint: GeoJsonPolygonal) => {
-    onTopoFlyTarget(footprint);
-    if (!n.read) void setRead([n.id], true);
-  };
-
   // ── Render ───────────────────────────────────────────────────────────
   const copy = INBOX.copy;
   const rowEntries = (n: TNotification): MenuEntry[] => {
@@ -600,25 +600,12 @@ function NotificationsPanel({
           // look like the thing to press.
           variant={action.kind === "decline" ? "outline" : "filled"}
           disabled={selecting || busyId !== null}
+          disabledReason={selecting ? "Not while selecting" : "Working…"}
           onClick={() => answer(n, target, action)}
         >
           {action.label}
         </Button>
       ));
-    }
-    const footprint = n.payload.footprint as GeoJsonPolygonal | undefined;
-    if (n.type === "topo_complete" && footprint) {
-      return (
-        <Button
-          compact
-          variant="outline"
-          icon="map"
-          disabled={selecting}
-          onClick={() => zoomToMap(n, footprint)}
-        >
-          Zoom to map
-        </Button>
-      );
     }
     const exportJobId = payloadString(n, "exportJobId");
     if (
@@ -632,6 +619,7 @@ function NotificationsPanel({
           variant="outline"
           icon="download"
           disabled={selecting}
+          disabledReason="Not while selecting"
           onClick={() =>
             void downloadJobFile(
               n,
@@ -656,6 +644,7 @@ function NotificationsPanel({
           variant="outline"
           icon="download"
           disabled={selecting}
+          disabledReason="Not while selecting"
           onClick={() =>
             void downloadJobFile(
               n,
@@ -842,16 +831,7 @@ function NotificationsPanel({
     </div>
   ) : notificationsError && live.length === 0 ? (
     emptyArea(
-      <EmptyState
-        icon="warning"
-        title={copy.loadFailed}
-        body={notificationsError}
-        actions={
-          <Button compact variant="outline" onClick={onRefetchNotifications}>
-            Try again
-          </Button>
-        }
-      />,
+      <ErrorState message={copy.loadFailed} onRetry={onRefetchNotifications} />,
     )
   ) : live.length === 0 ? (
     emptyArea(

@@ -366,11 +366,9 @@ export default function GeoPdfsPanel({
                     label={MAP_IDENTITY.geoPdf.label}
                   />
                 }
-                onOpen={
-                  job.downloadUrl
-                    ? () => downloadFile(job.downloadUrl!)
-                    : undefined
-                }
+                // A real anchor, so middle-click and "save as" work.
+                href={job.downloadUrl ?? undefined}
+                download=""
                 trailing={
                   <>
                     {job.syncRole !== "owner" && (

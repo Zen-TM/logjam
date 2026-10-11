@@ -37,7 +37,7 @@ function ConfirmDialog({
       alert
       footer={
         <>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy} disabledReason="Working…">
             Cancel
           </Button>
           <Button

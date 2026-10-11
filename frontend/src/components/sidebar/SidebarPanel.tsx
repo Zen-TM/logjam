@@ -133,6 +133,7 @@ function SidebarPanel({
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
+  onRetryStandaloneFiles,
   onOpenWay,
   wayDetail,
   drawPanel,
@@ -246,6 +247,7 @@ function SidebarPanel({
   placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
+  onRetryStandaloneFiles: () => void;
   /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
   /**
@@ -573,6 +575,7 @@ function SidebarPanel({
             placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
+            onRetryStandaloneFiles={onRetryStandaloneFiles}
             places={[...places, ...sharedPlaces]}
             sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}

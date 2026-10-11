@@ -6,7 +6,13 @@
   column-gap: var(--space-1-5);
 }
 
-.row[data-disabled] {
+.control {
+  /* The grid's own cell: the wrapper exists so a disabled row can make its
+     control `inert` without dimming or silencing the label beside it. */
+  display: contents;
+}
+
+.row[data-disabled] .control > * {
   opacity: var(--opacity-disabled);
   pointer-events: none;
 }

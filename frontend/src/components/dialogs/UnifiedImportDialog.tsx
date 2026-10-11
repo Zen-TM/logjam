@@ -1051,6 +1051,14 @@ function UnifiedImportDialog({
   }
 
   function handleMapNext() {
+    if (!canProceedFromMap) {
+      setError(
+        placeFile && !placeMapValid
+          ? "Name, latitude and longitude are required for a place list."
+          : "A place name column and a date column are required for a logbook, and each new attribute needs a name.",
+      );
+      return;
+    }
     setError(null);
     const candidates = places.map(toMatchCandidate);
 
@@ -1995,6 +2003,9 @@ function UnifiedImportDialog({
             return renderCreateForm(key);
           }}
         />
+        {error && (
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+        )}
       </div>
     );
   }
@@ -2189,11 +2200,7 @@ function UnifiedImportDialog({
           <Button onClick={guard.requestClose}>
             {onBack ? "Back" : "Cancel"}
           </Button>
-          <Button
-            variant="filled"
-            onClick={handleMapNext}
-            disabled={!canProceedFromMap}
-          >
+          <Button variant="filled" onClick={handleMapNext}>
             Next
           </Button>
         </>
@@ -2205,8 +2212,14 @@ function UnifiedImportDialog({
           <Button onClick={() => setStep("map")}>Back</Button>
           <Button
             variant="filled"
-            onClick={() => setStep("confirm")}
-            disabled={!reviewValid}
+            onClick={() => {
+              if (!reviewValid) {
+                setError("A new place below needs a name and coordinates.");
+                return;
+              }
+              setError(null);
+              setStep("confirm");
+            }}
           >
             Next
           </Button>

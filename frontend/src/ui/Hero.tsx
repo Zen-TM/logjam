@@ -63,6 +63,7 @@ export function Hero({
           label="Close"
           onClick={close}
           disabled={closeDisabled}
+          disabledReason="Wait for this to finish"
         />
       )}
     </header>

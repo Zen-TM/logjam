@@ -57,9 +57,7 @@
 }
 
 .linkName {
+  composes: twoLines from "../../../ui/TwoLines.module.css";
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--font-base);
 }
