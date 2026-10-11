@@ -1,10 +1,21 @@
 // A track file's page charts the file: both charts for a recording, no speed
 // chart for a file without times, and one download however often it is opened.
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TRACK_PROFILE_COPY, type ElevationProfile } from "@logjam/shared";
+import {
+  formatDurationMs,
+  TRACK_PROFILE_COPY,
+  type ElevationProfile,
+} from "@logjam/shared";
 
-import { createRouteHoverChannel } from "../../map/routeHover";
+import { createRouteHoverChannel, type RouteHover } from "../../map/routeHover";
+import type { Stat } from "../../../ui";
 import { clearTrackTexts } from "../../media/trackGeo";
 import TrackProfiles from "./TrackProfiles";
 
@@ -28,18 +39,20 @@ const trkpts = (timed: boolean) =>
 const gpx = (timed: boolean) =>
   `<?xml version="1.0"?><gpx version="1.1" creator="test"><trk><trkseg>${trkpts(timed)}</trkseg></trk></gpx>`;
 
-function show(mediaId: string, text: string) {
+function show(mediaId: string, text: string, stored: Stat[] = []) {
   const fetchMock = vi.fn(async () => new Response(text));
   vi.stubGlobal("fetch", fetchMock);
   const displayUrl = vi.fn(() => "https://files.test/track");
+  const routeHover = createRouteHoverChannel();
   const view = render(
     <TrackProfiles
       source={{ mediaId, filename: "walk.gpx", displayUrl }}
+      stored={stored}
       color="#F97316"
-      routeHover={createRouteHoverChannel()}
+      routeHover={routeHover}
     />,
   );
-  return { fetchMock, displayUrl, view };
+  return { fetchMock, displayUrl, view, routeHover };
 }
 
 beforeEach(() => {
@@ -96,15 +109,62 @@ describe("TrackProfiles", () => {
     expect(screen.queryByText(TRACK_PROFILE_COPY.speedTitle)).toBeNull();
   });
 
-  it("draws nothing for a file with no line", async () => {
+  it("lists the file's figures in Logjam GPS's order, the row's own kept", async () => {
+    const { view } = show("rows", gpx(true), [
+      { label: "Distance", value: "stored km" },
+      { label: "Size", value: "12 kB" },
+    ]);
+    await screen.findByText(TRACK_PROFILE_COPY.elevationTitle);
+    const labels = [...view.container.querySelectorAll("dt")].map(
+      (label) => label.textContent,
+    );
+    expect(labels).toEqual([
+      "Time",
+      "Distance",
+      "Moving",
+      "Stopped",
+      "Ascent",
+      "Descent",
+      "Avg speed",
+      "Avg moving speed",
+      "High point",
+      "Low point",
+      "Size",
+    ]);
+    // The row's distance, not the one measured from the file.
+    expect(screen.getByText("stored km")).toBeTruthy();
+    // Eleven minutes between the first fix and the last, all of it moving.
+    expect(screen.getAllByText(formatDurationMs(660_000))).toHaveLength(2);
+  });
+
+  it("marks the map where the track was at the speed cursor's time", async () => {
+    const { routeHover } = show("hover", gpx(true));
+    const chart = await screen.findByRole("img", { name: /^Speed profile: / });
+    const seen: RouteHover[] = [];
+    routeHover.subscribe((hover) => seen.push(hover));
+    // jsdom lays nothing out, so the cursor lands on the first sample: the
+    // start of the recording, which is the first fix.
+    fireEvent.pointerMove(chart, { clientX: 0 });
+    await waitFor(() =>
+      expect(seen[seen.length - 1]).toEqual({
+        position: [150.2, -33.6],
+        color: "#F97316",
+      }),
+    );
+    fireEvent.pointerLeave(chart);
+    expect(seen[seen.length - 1]).toBeNull();
+  });
+
+  it("shows only the row's figures for a file with no line", async () => {
     const { view } = show(
       "waypoints",
       `<?xml version="1.0"?><gpx version="1.1" creator="test"><wpt lat="-33.6" lon="150.2"/></gpx>`,
+      [{ label: "Size", value: "12 kB" }],
     );
     await waitFor(() =>
       expect(screen.queryByText(TRACK_PROFILE_COPY.reading)).toBeNull(),
     );
-    expect(view.container.textContent).toBe("");
+    expect(view.container.textContent).toBe("Size12 kB");
   });
 
   it("says so in our own words when the file cannot be read", async () => {

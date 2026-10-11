@@ -14,14 +14,13 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   elevationSeries,
   formatDistanceM,
-  formatDurationMs,
   formatSpeedMps,
-  PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedSeries,
   speedTimeFormatter,
   TRACK_PROFILE_COPY,
   trackHeights,
+  trackStatRows,
   type ElevationProfile,
   type TrackDetail,
 } from "@logjam/shared";
@@ -84,71 +83,12 @@ export function TrackStatsBody({
     );
   }
 
-  const durationMs = elapsedMs ?? detail.durationMs;
-  const timed = detail.movingMs != null;
   // One source for every height on the panel, and the line saying which:
-  // `trackHeights`, the rule Logjam Web's way page charts by too.
-  const {
-    dem,
-    elevation,
-    note: heightsNote,
-  } = trackHeights(detail, demProfile, demLoading ?? false);
-  const gainM = dem ? dem.gainM : detail.elevationGainM;
-  const lossM = dem ? dem.lossM : detail.elevationLossM;
-  const maxM = dem ? dem.maxM : detail.maxAltitudeM;
-  const minM = dem ? dem.minM : detail.minAltitudeM;
-
-  const stats: Stat[] = [];
-  if (timed || elapsedMs != null) {
-    stats.push({ label: "Time", value: formatDurationMs(durationMs) });
-  }
-  stats.push({ label: "Distance", value: formatDistanceM(detail.distanceM) });
-  if (detail.movingMs != null && detail.stoppedMs != null) {
-    stats.push({
-      label: PAIRED_STAT_LABELS.moving,
-      value: formatDurationMs(detail.movingMs),
-    });
-    stats.push({
-      label: PAIRED_STAT_LABELS.stopped,
-      value: formatDurationMs(detail.stoppedMs),
-    });
-  }
-  stats.push({
-    label: PAIRED_STAT_LABELS.ascent,
-    value: `↑ ${Math.round(gainM)} m`,
-  });
-  stats.push({
-    label: PAIRED_STAT_LABELS.descent,
-    value: `↓ ${Math.round(lossM)} m`,
-  });
-  if (timed) {
-    // Two speeds, because they answer different questions: the first is "how
-    // long did the day take", the second is "how fast do we walk". A trip with
-    // a long lunch has a very different pair, and one number hides that.
-    stats.push({
-      label: PAIRED_STAT_LABELS.avgSpeed,
-      value: formatSpeedMps(detail.averageSpeedMps),
-    });
-    stats.push({
-      label: PAIRED_STAT_LABELS.avgMovingSpeed,
-      value: formatSpeedMps(detail.movingSpeedMps),
-    });
-  }
-  // ONE condition for every height on the panel, deliberately. A series with a
-  // single altitude reading sets a min and a max — the same number twice — and
-  // shipped a "High point 27 m / Low point 27 m" pair directly above the line
-  // saying the track had no altitudes. A lone reading is not a height band and
-  // cannot be drawn, so it says nothing at all.
-  if (elevation && maxM != null && minM != null) {
-    stats.push({
-      label: PAIRED_STAT_LABELS.highPoint,
-      value: `${Math.round(maxM)} m`,
-    });
-    stats.push({
-      label: PAIRED_STAT_LABELS.lowPoint,
-      value: `${Math.round(minM)} m`,
-    });
-  }
+  // `trackHeights`, the rule Logjam Web's way page charts by too. The stat
+  // list is `trackStatRows`, shared with that page for the same reason.
+  const heights = trackHeights(detail, demProfile, demLoading ?? false);
+  const { elevation, note: heightsNote } = heights;
+  const stats: Stat[] = trackStatRows(detail, heights, elapsedMs);
 
   const speed = detail.speed;
   const formatClock = speed ? speedTimeFormatter(speed) : null;

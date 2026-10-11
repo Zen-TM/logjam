@@ -6,7 +6,11 @@
 // means, which heights are charted and the words around them are decided once
 // and each client only draws.
 import type { ElevationProfile } from "./elevation.js";
+import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
+  formatDistanceM,
+  formatDurationMs,
+  formatSpeedMps,
   speedClockMs,
   type SpeedProfile,
   type TrackDetail,
@@ -160,6 +164,70 @@ export function trackHeights(
           ? "Heights from GPS — loading terrain…"
           : "Heights from GPS — no terrain data here";
   return { dem, elevation, note };
+}
+
+/**
+ * A track's figures, in the order both clients list them.
+ *
+ * What is absent is as deliberate as what is present: a series with no
+ * timestamps has no honest duration or pace, so those rows are NOT LISTED
+ * rather than listed as zero. Distance and climb need no clock and are always
+ * there.
+ *
+ * Every height comes from the one surface `trackHeights` chose, so the
+ * numbers and the chart agree.
+ */
+export function trackStatRows(
+  detail: TrackDetail,
+  heights: Pick<ReturnType<typeof trackHeights>, "dem" | "elevation">,
+  /** Wall-clock elapsed, for a LIVE recording: see `recordedDurationMs`. */
+  elapsedMs?: number,
+): { label: string; value: string }[] {
+  const { dem, elevation } = heights;
+  const timed = detail.movingMs != null;
+  const gainM = dem ? dem.gainM : detail.elevationGainM;
+  const lossM = dem ? dem.lossM : detail.elevationLossM;
+  const maxM = dem ? dem.maxM : detail.maxAltitudeM;
+  const minM = dem ? dem.minM : detail.minAltitudeM;
+  const L = PAIRED_STAT_LABELS;
+
+  const rows: { label: string; value: string }[] = [];
+  if (timed || elapsedMs != null) {
+    rows.push({
+      label: "Time",
+      value: formatDurationMs(elapsedMs ?? detail.durationMs),
+    });
+  }
+  rows.push({ label: "Distance", value: formatDistanceM(detail.distanceM) });
+  if (detail.movingMs != null && detail.stoppedMs != null) {
+    rows.push({ label: L.moving, value: formatDurationMs(detail.movingMs) });
+    rows.push({ label: L.stopped, value: formatDurationMs(detail.stoppedMs) });
+  }
+  rows.push({ label: L.ascent, value: `↑ ${Math.round(gainM)} m` });
+  rows.push({ label: L.descent, value: `↓ ${Math.round(lossM)} m` });
+  if (timed) {
+    // Two speeds, because they answer different questions: the first is "how
+    // long did the day take", the second is "how fast do we walk". A trip with
+    // a long lunch has a very different pair, and one number hides that.
+    rows.push({
+      label: L.avgSpeed,
+      value: formatSpeedMps(detail.averageSpeedMps),
+    });
+    rows.push({
+      label: L.avgMovingSpeed,
+      value: formatSpeedMps(detail.movingSpeedMps),
+    });
+  }
+  // ONE condition for every height, deliberately. A series with a single
+  // altitude reading sets a min and a max — the same number twice — and
+  // shipped a "High point 27 m / Low point 27 m" pair directly above the line
+  // saying the track had no altitudes. A lone reading is not a height band and
+  // cannot be drawn, so it says nothing at all.
+  if (elevation && maxM != null && minM != null) {
+    rows.push({ label: L.highPoint, value: formatElevationM(maxM) });
+    rows.push({ label: L.lowPoint, value: formatElevationM(minM) });
+  }
+  return rows;
 }
 
 /**

@@ -594,11 +594,16 @@ export default function WayDetailPanel({
           (`e2e/a11y.spec.ts`, "a recording's page"). */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt */}
       <div className={classes.body} tabIndex={0}>
-        {stats.length > 0 && <StatGrid stats={pairedStatLayout(stats)} />}
+        {/* A file's page hands its figures to `TrackProfiles`, which lists
+            them among the ones it reads from the file. */}
+        {!trackSource && stats.length > 0 && (
+          <StatGrid stats={pairedStatLayout(stats)} />
+        )}
 
         {trackSource && (
           <TrackProfiles
             source={trackSource}
+            stored={stats}
             color={shownColour}
             routeHover={routeHover}
           />

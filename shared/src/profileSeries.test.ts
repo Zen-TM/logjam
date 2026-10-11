@@ -15,6 +15,7 @@ import {
   speedSeries,
   timeOfDayFormatter,
   trackHeights,
+  trackStatRows,
 } from "./profileSeries.js";
 
 const profile: ElevationProfile = {
@@ -179,5 +180,72 @@ describe("trackHeights", () => {
     expect(
       trackHeights({ ...bare, maxAltitudeM: null }, null, false).note,
     ).toBe("No heights for this track");
+  });
+});
+
+describe("trackStatRows", () => {
+  const timed = {
+    distanceM: 3400,
+    durationMs: 3_600_000,
+    movingMs: 3_000_000,
+    stoppedMs: 600_000,
+    averageSpeedMps: 1,
+    movingSpeedMps: 1.2,
+    elevationGainM: 26,
+    elevationLossM: 0,
+    maxAltitudeM: 38,
+    minAltitudeM: 12,
+    elevation: { ...profile, minM: 12, maxM: 38 },
+  } as TrackDetail;
+  const labels = (detail: TrackDetail, dem: ElevationProfile | null = null) =>
+    trackStatRows(detail, trackHeights(detail, dem, false)).map(
+      (row) => row.label,
+    );
+
+  it("lists a timed track's figures in the panel's order", () => {
+    expect(labels(timed)).toEqual([
+      "Time",
+      "Distance",
+      "Moving",
+      "Stopped",
+      "Ascent",
+      "Descent",
+      "Avg speed",
+      "Avg moving speed",
+      "High point",
+      "Low point",
+    ]);
+  });
+
+  it("lists no clock figure for a track without times", () => {
+    const untimed = {
+      ...timed,
+      movingMs: null,
+      stoppedMs: null,
+      averageSpeedMps: null,
+      movingSpeedMps: null,
+    } as TrackDetail;
+    expect(labels(untimed)).toEqual([
+      "Distance",
+      "Ascent",
+      "Descent",
+      "High point",
+      "Low point",
+    ]);
+  });
+
+  it("takes every height from the terrain when the chart does", () => {
+    const rows = trackStatRows(timed, trackHeights(timed, profile, false));
+    const value = (label: string) =>
+      rows.find((row) => row.label === label)?.value;
+    expect(value("Ascent")).toBe("↑ 30 m");
+    expect(value("Descent")).toBe("↓ 20 m");
+    expect(value("High point")).toBe("40 m");
+    expect(value("Low point")).toBe("10 m");
+  });
+
+  it("lists no height band for a track with nothing to chart", () => {
+    // A lone altitude reading sets a min and a max and cannot be drawn.
+    expect(labels({ ...timed, elevation: null })).not.toContain("High point");
   });
 });

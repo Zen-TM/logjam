@@ -16,6 +16,7 @@ import {
   parseVectorImport,
   toElevationLine,
   type TrackDetail,
+  type TrackSeriesPoint,
 } from "@logjam/shared";
 import { fetchTrackText } from "./trackGeo";
 
@@ -31,6 +32,7 @@ export type TrackFileSource = {
 };
 
 const NO_LINE: [number, number][][] = [];
+const NO_SERIES: TrackSeriesPoint[] = [];
 
 /**
  * Null detail = the file has no line to summarise (waypoints only).
@@ -43,14 +45,20 @@ export function trackFileDetail(
   filename: string,
   text: string,
   recordedMs?: number | null,
-): { detail: TrackDetail | null; line: [number, number][][] } {
+): {
+  detail: TrackDetail | null;
+  line: [number, number][][];
+  series: TrackSeriesPoint[];
+} {
   const series = importedFeaturesToSeries(
     parseVectorImport(filename, text).features,
   );
-  if (series.length < 2) return { detail: null, line: NO_LINE };
+  if (series.length < 2)
+    return { detail: null, line: NO_LINE, series: NO_SERIES };
   return {
     detail: computeTrackDetail(series, { recordedMs }),
     line: toElevationLine(series),
+    series,
   };
 }
 
@@ -60,6 +68,8 @@ export function useTrackFileDetail(source: TrackFileSource | null): {
   error: string | null;
   /** The track thinned to per-segment lines, for sampling the DEM along. */
   line: [number, number][][];
+  /** Every fix of the file, for finding where the track was at a time. */
+  series: TrackSeriesPoint[];
 } {
   // The last read, tagged with the file it was for, so another file's numbers
   // are never shown under this one's name.
@@ -67,6 +77,7 @@ export function useTrackFileDetail(source: TrackFileSource | null): {
     mediaId: string;
     detail: TrackDetail | null;
     line: [number, number][][];
+    series: TrackSeriesPoint[];
     error: string | null;
   } | null>(null);
 
@@ -96,6 +107,7 @@ export function useTrackFileDetail(source: TrackFileSource | null): {
           mediaId,
           detail: null,
           line: NO_LINE,
+          series: NO_SERIES,
           error: "Couldn't read that file.",
         });
       });
@@ -109,6 +121,7 @@ export function useTrackFileDetail(source: TrackFileSource | null): {
   return {
     detail: result?.detail ?? null,
     line: result?.line ?? NO_LINE,
+    series: result?.series ?? NO_SERIES,
     error: result?.error ?? null,
     loading: mediaId !== null && result === null,
   };
