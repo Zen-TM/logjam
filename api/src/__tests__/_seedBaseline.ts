@@ -19,11 +19,17 @@
 // and ECS tasks. They are orphaned by the row sweep and harmless to a rerun,
 // since nothing lists a bucket; MiniStack's volume is wiped by `make reset`.
 
-import defaultPrisma from "../services/prisma";
+import type appPrisma from "../services/prisma";
 
 /** The seed passes its own client; the suite uses the app's. */
-type Db = Pick<typeof defaultPrisma, "$queryRawUnsafe" | "$executeRawUnsafe">;
-const prisma = defaultPrisma;
+type Db = Pick<typeof appPrisma, "$queryRawUnsafe" | "$executeRawUnsafe">;
+
+// Loaded on first use, not imported: the app's client pulls in the logger and
+// with it the app's env validation, which `prisma db seed` must not run (the
+// seed has its own client and the migration-upgrade job gives it no app env).
+// Guarded by src/lib/seedBaseline.unit.test.ts.
+const appDb = async (): Promise<Db> =>
+  (await import("../services/prisma")).default;
 
 /** table -> (row key -> the whole row as jsonb text). */
 export type Snapshot = Record<string, Record<string, string>>;
@@ -40,7 +46,8 @@ interface TableDef {
   keyExpr: string;
 }
 
-async function tables(db: Db = prisma): Promise<TableDef[]> {
+async function tables(db?: Db): Promise<TableDef[]> {
+  db ??= await appDb();
   const rows = await db.$queryRawUnsafe<
     { table: string; pk: string[] | null }[]
   >(`
@@ -65,7 +72,8 @@ async function tables(db: Db = prisma): Promise<TableDef[]> {
   }));
 }
 
-export async function takeSnapshot(db: Db = prisma): Promise<Snapshot> {
+export async function takeSnapshot(db?: Db): Promise<Snapshot> {
+  db ??= await appDb();
   const snap: Snapshot = {};
   for (const { table, keyExpr } of await tables(db)) {
     const rows = await db.$queryRawUnsafe<{ k: string; h: string }[]>(
@@ -97,9 +105,8 @@ export async function saveSeedSnapshot(db: Db): Promise<void> {
 }
 
 /** null when no seed has recorded one (a database seeded before this existed). */
-export async function loadSeedSnapshot(
-  db: Db = prisma,
-): Promise<Snapshot | null> {
+export async function loadSeedSnapshot(db?: Db): Promise<Snapshot | null> {
+  db ??= await appDb();
   const rows = await db
     .$queryRawUnsafe<{ data: Snapshot }[]>(
       `SELECT data FROM ${SEED_SCHEMA}.snapshot LIMIT 1`,
@@ -147,7 +154,8 @@ export function seededDrift(base: Snapshot, now: Snapshot): Drift[] {
  *  matter and the schema does not say it, so retry the refused tables until a
  *  pass deletes nothing more. */
 export async function sweepToBaseline(base: Snapshot): Promise<void> {
-  const defs = await tables();
+  const prisma = await appDb();
+  const defs = await tables(prisma);
   let pending = defs;
   for (let pass = 0; pass < defs.length + 1 && pending.length; pass++) {
     const refused: TableDef[] = [];
@@ -187,7 +195,8 @@ export async function restoreSeeded(
   base: Snapshot,
   drift: Drift[],
 ): Promise<void> {
-  const defs = new Map((await tables()).map((d) => [d.table, d]));
+  const prisma = await appDb();
+  const defs = new Map((await tables(prisma)).map((d) => [d.table, d]));
   let pending = drift;
   while (pending.length) {
     const refused: Drift[] = [];
