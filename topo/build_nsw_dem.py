@@ -23,6 +23,7 @@ the encoded RGB instead is wrong: it is not a linear encoding per channel.
 """
 
 import argparse
+import contextlib
 import io
 import json
 import math
@@ -171,11 +172,14 @@ def fetch(src: Path, wanted: List[str]) -> None:
         print(f"[{n}/{len(sheets)}] {name}", flush=True)
         zip_path = src / f"{name}.zip"
         urllib.request.urlretrieve(SHEET_URL.format(zone=zone, sheet=name), zip_path)
-        tmp = src / f"{name}.tmp.tif"
+        # Not `*.tif`: a killed fetch leaves this behind, and `tile` reads
+        # every `*.tif` in the directory as a finished sheet.
+        tmp = src / f"{name}.tif.tmp"
         # The .asc carries no CRS: the zone is in the sheet's name only.
         gdal.Translate(
             str(tmp),
             f"/vsizip/{zip_path}/{name}.asc",
+            format="GTiff",
             outputSRS=f"EPSG:283{zone}",
             noData=NODATA,
             outputType=gdal.GDT_Float32,
@@ -301,6 +305,7 @@ def coarse_tiles(work: Path):
 def pack(work: Path, out: Path) -> None:
     if not shutil.which("pmtiles"):
         sys.exit("pack needs the `pmtiles` binary (go-pmtiles) on PATH")
+    out.parent.mkdir(parents=True, exist_ok=True)
     mbtiles = out.with_suffix(".mbtiles")
     mbtiles.unlink(missing_ok=True)
     db = sqlite3.connect(mbtiles)
@@ -312,9 +317,10 @@ def pack(work: Path, out: Path) -> None:
     # MBTiles rows are TMS: flipped from the XYZ rows used everywhere else.
     flip = "insert into tiles values (?1, ?2, (1 << ?1) - 1 - ?3, ?4)"
     for block in sorted(work.glob("*.sqlite")):
-        db.executemany(
-            flip, sqlite3.connect(block).execute("select z, x, y, data from tiles")
-        )
+        # Closed by hand: a statewide run has more blocks than a process has
+        # file descriptors, and a connection left to the collector holds one.
+        with contextlib.closing(sqlite3.connect(block)) as tiles:
+            db.executemany(flip, tiles.execute("select z, x, y, data from tiles"))
     db.executemany(flip, coarse_tiles(work))
     db.execute(
         "create unique index tile_index on tiles (zoom_level, tile_column, tile_row)"
@@ -326,6 +332,10 @@ def pack(work: Path, out: Path) -> None:
         " from tiles where zoom_level = ?",
         (ZMAX,),
     ).fetchone()
+    if x0 is None:
+        db.close()
+        mbtiles.unlink()
+        sys.exit(f"no zoom {ZMAX} tiles in {work}: run `tile` first")
     west, south = tile_lonlat(x0, (1 << ZMAX) - y0, ZMAX)
     east, north = tile_lonlat(x1 + 1, (1 << ZMAX) - 1 - y1, ZMAX)
     metadata = {
