@@ -5,6 +5,7 @@
 // Declared elsewhere and read by both, not copied here: the share rows
 // (`buildShareCards`), the bulk confirms (`unshareAllConfirm`,
 // `removeAllConfirm`) and the selection count (`shareSelectionCountLabel`).
+import { FRIEND_INVITE_TTL_DAYS } from "../friendInvite.js";
 import type { IconIdea } from "../icons.js";
 import type { ScreenContract } from "./types.js";
 
@@ -45,6 +46,20 @@ export const FRIENDS = {
     sendFailed: "Couldn't send friend request.",
     searchFailed: "Couldn't search users.",
     declined: "Request declined.",
+
+    // The invite link, under the search in the Add sheet.
+    inviteHint: `Or send a link. It makes one person your friend when they open it and sign in, and stops working after ${FRIEND_INVITE_TTL_DAYS} days.`,
+    inviteCopy: "Copy invite link",
+    inviteShare: "Share invite link",
+    inviteCopied: "Invite link copied.",
+    inviteFailed: "Couldn't make an invite link.",
+    inviteRevoke: "Turn off my links",
+    inviteRevoked: "Your invite links no longer work.",
+    inviteRevokeFailed: "Couldn't turn off your invite links.",
+    // Opening one.
+    inviteSignIn: "Sign in or create an account to accept your friend invite.",
+    inviteAccept: "Add friend",
+    inviteInvalid: "This invite link no longer works. Ask for a new one.",
   },
 } as const satisfies ScreenContract;
 
@@ -76,6 +91,34 @@ export function friendsEmptyKind(state: {
 
 export function friendAcceptedMessage(username: string): string {
   return `${username} is now a friend.`;
+}
+
+/** How many links are out, beside the button that turns them off. */
+export function friendInvitesLiveLabel(count: number): string {
+  return `${count} ${count === 1 ? "link" : "links"} not used yet.`;
+}
+
+/** What goes in the message a link is sent with. */
+export function friendInviteMessage(url: string): string {
+  return `Add me as a friend on Logjam: ${url}`;
+}
+
+/**
+ * What opening a link asks. It says what a friendship does NOT do, because
+ * that is the question someone handed a link by a canyoner will have.
+ */
+export function friendInviteConfirm(username: string): {
+  confirmTitle: string;
+  confirmBody: string;
+} {
+  return {
+    confirmTitle: `Add ${username} as a friend?`,
+    confirmBody: `${username} sent you an invite link. Friends can share places, routes and maps with each other; nothing of yours is shared until you choose to share it.`,
+  };
+}
+
+export function alreadyFriendsMessage(username: string): string {
+  return `You and ${username} are already friends.`;
 }
 
 export function friendRemovedMessage(username: string): string {

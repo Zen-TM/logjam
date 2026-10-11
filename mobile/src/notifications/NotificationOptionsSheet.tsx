@@ -27,7 +27,7 @@ import {
   type NotificationDestination,
 } from "./notificationDestination";
 import { theme, spacing } from "../theme";
-import { BottomSheet, Row } from "../ui";
+import { BottomSheet, closedSheet, Row } from "../ui";
 import {
   notificationDeleteConfirm,
   notificationLabel,
@@ -57,7 +57,7 @@ export function NotificationOptionsSheet({
   onSetRead: (notification: TNotification, read: boolean) => void;
   onDelete: (notification: TNotification) => void;
 }) {
-  if (!notification) return null;
+  if (!notification) return closedSheet;
 
   const label = notificationLabel(notification);
   const openable = notificationPlaceId(notification) !== null;
