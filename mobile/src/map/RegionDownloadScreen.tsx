@@ -405,8 +405,17 @@ export function RegionDownloadScreen({
         includesContours,
       )
     : null;
+  // The contour clip is cut by the same endpoint as the vector map's, and
+  // held to the same area cap. (A DEM archive clip is not asked for here: it
+  // is left out of an area that large, in `planRegionForBasemaps`.)
   const caps =
-    bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
+    bbox && job
+      ? checkRegionCaps(
+          bbox,
+          job.totalTiles,
+          includesVector || includesContours,
+        )
+      : null;
   const canDownload =
     selected.length > 0 &&
     bbox != null &&

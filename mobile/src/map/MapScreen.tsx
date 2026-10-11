@@ -4354,10 +4354,14 @@ export function MapScreen({
       : "Offline — no map saved for this area.";
   })();
 
-  const attributionText = [...basemapResolved, ...contoursResolved]
-    .map((r) => (r.status === "ok" ? r.attribution : null))
-    .filter(Boolean)
-    .join(" · ");
+  // Once each: offline, every saved clip of a source carries the same credit.
+  const attributionText = [
+    ...new Set(
+      [...basemapResolved, ...contoursResolved]
+        .map((r) => (r.status === "ok" ? r.attribution : null))
+        .filter(Boolean),
+    ),
+  ].join(" · ");
 
   const nswContoursStyle = useMemo(
     () => nswContourStyle(renderedBasemapId),

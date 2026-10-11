@@ -143,7 +143,21 @@ export function demArchive(archive: string | Source): PMTiles {
   return opened;
 }
 
-/** Test seam: the archives are module-scoped and would leak between tests. */
+/**
+ * Drop an archive that failed to open or read. The library remembers a failed
+ * header or directory read for the life of the object, so the same object
+ * would fail every later lookup without asking again: a phone that tapped the
+ * map once out of range would have no NSW heights until it restarted.
+ */
+export function forgetDemArchive(archive: PMTiles) {
+  for (const [key, held] of archives)
+    if (held === archive) archives.delete(key);
+}
+
+/**
+ * Every open archive, dropped. On sign-out too: an archive opened on a saved
+ * clip holds that clip's header, which carries the saved area's bounds.
+ */
 export function clearDemArchives() {
   archives.clear();
 }
@@ -159,16 +173,21 @@ export async function readDemArchive(
   tiles: readonly DemTileAddress[],
 ): Promise<Map<string, Uint8Array>> {
   const found = new Map<string, Uint8Array>();
-  await Promise.all(
-    tiles.map(async (address) => {
-      const tile = await archive.getZxy(
-        source.sampleZoom,
-        address.tileX,
-        address.tileY,
-      );
-      if (tile) found.set(demTileKey(address), new Uint8Array(tile.data));
-    }),
-  );
+  try {
+    await Promise.all(
+      tiles.map(async (address) => {
+        const tile = await archive.getZxy(
+          source.sampleZoom,
+          address.tileX,
+          address.tileY,
+        );
+        if (tile) found.set(demTileKey(address), new Uint8Array(tile.data));
+      }),
+    );
+  } catch (error) {
+    forgetDemArchive(archive);
+    throw error;
+  }
   return found;
 }
 

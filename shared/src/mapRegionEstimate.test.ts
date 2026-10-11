@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
+  MAX_REGION_AREA_KM2,
+  MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
   REGION_MIN_ZOOM,
   SOFT_WARN_TILES,
@@ -251,6 +253,35 @@ describe("planRegionForBasemaps", () => {
       withClip.contours!.p90Bytes,
     );
     expect(withClip.totalTiles).toBe(without.totalTiles);
+  });
+
+  // Mutation: plan the clip whatever the area, and a 50 x 35 km raster-only
+  // run the screen allows is refused by the clip endpoint and fails.
+  it("leaves the archive clip out of an area the clip endpoint would refuse", () => {
+    const large = { west: 150.0, south: -34.0, east: 150.54, north: -33.69 };
+    const [w, h] = regionEdgesKm(large);
+    expect(w).toBeLessThan(MAX_REGION_EDGE_KM);
+    expect(w * h).toBeGreaterThan(MAX_REGION_AREA_KM2);
+    expect(checkRegionCaps(large, 1).ok).toBe(true);
+    expect(
+      planRegionForBasemaps(large, [], 15, maxZoomFor, true).demArchives,
+    ).toEqual([]);
+  });
+
+  // Mutation: add an archive source to DEM_SOURCES without its measured tile
+  // size, and planning any area inside it throws.
+  it("has a measured tile size for every archive source", () => {
+    for (const source of DEM_SOURCES.filter((s) => s.archivePath != null)) {
+      const [west, south] = source.coverage ?? [150, -34];
+      const inside = {
+        west,
+        south,
+        east: west + 0.05,
+        north: south + 0.05,
+      };
+      const job = planRegionForBasemaps(inside, [], 15, maxZoomFor, true);
+      expect(job.demArchives.map((a) => a.sourceId)).toContain(source.id);
+    }
   });
 
   it("saves no archive for an area outside every archive's coverage", () => {
