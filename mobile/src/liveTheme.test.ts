@@ -6,11 +6,11 @@ import { huesFor } from "./theme";
 
 // The scheme is state: picking one in Settings → Display repaints the running
 // app. That only holds while nothing keeps a colour from before the change, so
-// the exports of theme.ts that are painted in the LAUNCH scheme may not be
-// imported (`logjam/no-launch-theme` in eslint.config.js).
+// theme.ts exports no colour as a module constant and the names it once used
+// for them may not be imported (`logjam/no-launch-theme` in eslint.config.js).
 //
 // Mutations that turn it red: drop a name from the rule's `importNames`; delete
-// the rule's block from eslint.config.js; make the kit's block "warn".
+// the rule's block from eslint.config.js; make it "warn".
 const RULE = "logjam/no-launch-theme";
 const LAUNCH_STATICS = [
   "theme",
@@ -43,10 +43,10 @@ describe("the launch scheme's statics", () => {
     }
   }, 60_000);
 
-  it("is an error in the kit, which is converted", async () => {
+  it("is an error, not a warning", async () => {
     const [message] = await lint(
       'import { theme } from "../theme";\n',
-      "src/ui/Probe.tsx",
+      "src/screens/Probe.tsx",
     );
     expect(message.severity).toBe(2);
   }, 60_000);

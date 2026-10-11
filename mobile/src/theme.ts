@@ -46,11 +46,7 @@ function resolveSchemeId(): ThemeSchemeId {
   return normalizeThemeSchemeId(stored) ?? DEFAULT_THEME_SCHEME_ID;
 }
 
-/** The scheme this launch STARTED in. The static exports below are painted in
- *  it and do not follow a change; they go when their last reader is converted. */
-const launchThemeSchemeId: ThemeSchemeId = resolveSchemeId();
-
-let currentThemeSchemeId = launchThemeSchemeId;
+let currentThemeSchemeId = resolveSchemeId();
 const schemeListeners = new Set<() => void>();
 const subscribeToScheme = (listener: () => void) => {
   schemeListeners.add(listener);
@@ -74,7 +70,7 @@ export function setThemeSchemeId(id: ThemeSchemeId): boolean {
   return writePref(THEME_SCHEME_PREF_KEY, id);
 }
 
-const ThemeSchemeContext = createContext<ThemeSchemeId>(launchThemeSchemeId);
+const ThemeSchemeContext = createContext<ThemeSchemeId>(currentThemeSchemeId);
 
 /** Wraps the whole app (`index.ts`), above the error boundary: everything
  *  under it repaints when the scheme changes, and nothing remounts. */
@@ -136,19 +132,6 @@ type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 export const makeStyles = <T extends NamedStyles<T> | NamedStyles<unknown>>(
   build: (theme: ThemeTokens, textRole: TextRoles) => T & NamedStyles<unknown>,
 ): (() => T) => makeThemed(build);
-
-// --- Launch-scheme statics. Each shows the scheme the app STARTED in, so a
-// file that still reads one does not repaint. Do not add a reader: the lint
-// rule `no-restricted-imports` lists them (eslint.config.js).
-
-/** @deprecated Launch scheme only: `useThemeSchemeId()`. */
-export const activeThemeSchemeId: ThemeSchemeId = launchThemeSchemeId;
-
-/** @deprecated Launch scheme only: `useTheme()`, or the `theme` argument of `makeStyles`. */
-export const theme: ThemeTokens = THEME_SCHEMES[launchThemeSchemeId].tokens;
-
-/** @deprecated Launch scheme only: `useThemeMode()`. */
-export const themeMode = THEME_SCHEMES[launchThemeSchemeId].mode;
 
 /**
  * TEXT SIZE — the user's multiplier, ON TOP OF the OS font scale.
@@ -310,8 +293,6 @@ export const textRolesFor = perScheme(
       }),
     ) as TextRoles,
 );
-/** @deprecated Launch scheme only: the second argument of `makeStyles`. */
-export const textRole = textRolesFor(theme);
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
 // Modal/sheet scrims — the only intentional black-alpha overlays. Everything
@@ -439,6 +420,3 @@ export const huesFor = perScheme((theme) => {
 
 /** `const { assetHue, placeHue } = useHues();` */
 export const useHues = () => huesFor(useTheme());
-
-/** @deprecated Launch scheme only: `useHues()` or `huesFor(theme)`. */
-export const { assetHue, placeHue, notificationHue } = huesFor(theme);

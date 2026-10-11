@@ -58,10 +58,10 @@ const COLOUR_LITERAL_DEBT = [
 ];
 
 // The scheme is state, so nothing may hold a colour from before it changed
-// (mobile/DESIGN.md §1). These exports of theme.ts are painted in the scheme
-// the app STARTED in; a file that imports one does not repaint. With them
-// gone, a colour is reachable only through a hook, which `rules-of-hooks`
-// already keeps out of module scope. Guard: src/liveTheme.test.ts.
+// (mobile/DESIGN.md §1). theme.ts once exported these as module constants,
+// painted in the scheme the app started in; this keeps them from coming back.
+// A colour is reachable only through a hook, which `rules-of-hooks` already
+// keeps out of module scope. Guard: src/liveTheme.test.ts.
 const LAUNCH_THEME_IMPORTS = [
   "error",
   {
@@ -78,7 +78,7 @@ const LAUNCH_THEME_IMPORTS = [
           "activeThemeSchemeId",
         ],
         message:
-          "This is the scheme the app started in and does not repaint. Use useTheme(), makeStyles((theme, textRole) => …) or useHues() (mobile/DESIGN.md §1).",
+          "A colour held at module scope does not repaint when the scheme changes. Use useTheme(), makeStyles((theme, textRole) => …) or useHues() (mobile/DESIGN.md §1).",
       },
     ],
   },
@@ -144,14 +144,6 @@ module.exports = defineConfig([
         rules: { "no-launch-theme": builtinRules.get("no-restricted-imports") },
       },
     },
-    // WARN while screens are being converted: `npm run lint` is the list of
-    // files left. When it prints none, delete the deprecated exports from
-    // theme.ts, make this "error" and delete the block below.
-    rules: { "logjam/no-launch-theme": ["warn", LAUNCH_THEME_IMPORTS[1]] },
-  },
-  {
-    // Already converted: these never go back.
-    files: ["src/ui/**/*.{ts,tsx}", "App.tsx", "index.ts", "src/AppShell.tsx"],
     rules: { "logjam/no-launch-theme": LAUNCH_THEME_IMPORTS },
   },
   {
