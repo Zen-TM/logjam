@@ -1877,7 +1877,7 @@ export function SavedScreen({
               />
             ))}
             <Text style={styles.downloadNote}>
-              Downloads only run while Logjam is open.
+              Downloads keep going until Logjam GPS is closed.
             </Text>
           </>
         ) : null}
@@ -2538,7 +2538,7 @@ export function SavedScreen({
             <RegionDownloadRow key={job.spec.id} job={job} />
           ))}
           <Text style={styles.downloadNote}>
-            Downloads only run while Logjam is open.
+            Downloads keep going until Logjam GPS is closed.
           </Text>
         </View>
       </BottomSheet>

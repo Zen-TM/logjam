@@ -18,10 +18,19 @@ import {
   type RegionBbox,
 } from "@logjam/shared";
 
-import { subscribeReconnect } from "../map/connectivity";
+import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui";
-import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
+import LogjamDownloadService from "../../modules/logjam-download-service/src/LogjamDownloadServiceModule";
+import {
+  BACKGROUND_WAIT_MS,
+  MAX_BACKGROUND_RESUMES,
+  downloadNotice,
+  groupRegionJobs,
+  mayResumeOnReconnect,
+  regionGroupToastText,
+} from "./regionDownloadGroups";
 import { failureDetail } from "./failureDetail";
+import { connectionWorthResuming } from "./networkPolicy";
 import {
   connectionAllows,
   runRegionDownload,
@@ -89,6 +98,50 @@ function publish(): void {
   snapshot = [...jobs];
   for (const listener of listeners) listener();
   announceSettledGroups();
+  syncDownloadService();
+}
+
+// --- Foreground service ---------------------------------------------------
+// Android freezes the process about 10 s after Logjam GPS leaves the screen
+// unless a foreground service holds it, so the queue keeps one up for exactly
+// as long as `downloadNotice` says there is something to stay up for. A build
+// without the module (iOS, tests) just downloads while the process runs.
+let backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
+let waitTimer: ReturnType<typeof setTimeout> | null = null;
+let shown: { text: string; at: number } | null = null;
+/** Also what re-arms the service's CPU lock, so it must beat its 3-minute timeout. */
+const NOTICE_REFRESH_MS = 30_000;
+
+function syncDownloadService(): void {
+  if (!LogjamDownloadService) return;
+  const notice = downloadNotice(jobs, backgroundResumesLeft);
+  if (waitTimer && !notice?.waiting) {
+    clearTimeout(waitTimer);
+    waitTimer = null;
+  }
+  if (!notice) {
+    if (shown) LogjamDownloadService.stop();
+    shown = null;
+    return;
+  }
+  // Waiting is bounded in time as well as in restarts: after this the service
+  // goes down and the job stays paused until the user is back.
+  if (notice.waiting && !waitTimer) {
+    waitTimer = setTimeout(() => {
+      waitTimer = null;
+      backgroundResumesLeft = 0;
+      syncDownloadService();
+    }, BACKGROUND_WAIT_MS);
+  }
+  const now = Date.now();
+  if (
+    shown?.text === notice.text &&
+    (notice.waiting || now - shown.at < NOTICE_REFRESH_MS)
+  ) {
+    return;
+  }
+  shown = { text: notice.text, at: now };
+  LogjamDownloadService.show("Downloading maps", notice.text, notice.percent);
 }
 
 // --- Finish toast ---------------------------------------------------------
@@ -167,16 +220,19 @@ export function useRegionDownloads(): RegionJob[] {
  */
 function resumeJobsPausedBy(
   reason: Extract<PausedReason, "background" | "connectivity">,
-): void {
+  only: (job: RegionJob) => boolean = () => true,
+): boolean {
   let changed = false;
   jobs = jobs.map((job) => {
     if (job.state.kind !== "paused" || job.state.reason !== reason) return job;
+    if (!only(job)) return job;
     changed = true;
     return { ...job, state: { kind: "queued" } as RegionJobState };
   });
-  if (!changed) return;
+  if (!changed) return false;
   publish();
   pump();
+  return true;
 }
 
 // Installed on first enqueue rather than at import: a user who never downloads
@@ -186,10 +242,33 @@ function installAutoResumeWatchers(): void {
   if (watchersInstalled) return;
   watchersInstalled = true;
   AppState.addEventListener("change", (state) => {
-    if (state === "active") resumeJobsPausedBy("background");
+    // A fresh allowance each time the app changes sides: it counts restarts
+    // within ONE stretch behind another app.
+    backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
+    if (state !== "active") {
+      syncDownloadService();
+      return;
+    }
+    resumeJobsPausedBy("background");
+    // Also the jobs that ran out of background restarts: the reconnect edge
+    // they were waiting for has already come and gone.
+    resumeJobsPausedBy("connectivity");
   });
-  // Edge-triggered (offline → online), same shape as the sync engine's.
-  subscribeReconnect(() => resumeJobsPausedBy("connectivity"));
+  // Every connectivity change, not just offline → online: Wi-Fi arriving
+  // while cellular is already up is what a Wi-Fi-only job is waiting for.
+  NetInfo.addEventListener((state) => {
+    if (!mayResumeOnReconnect(AppState.currentState, backgroundResumesLeft)) {
+      return;
+    }
+    if (
+      resumeJobsPausedBy("connectivity", (job) =>
+        connectionWorthResuming(state, job.spec.allowCellular),
+      ) &&
+      AppState.currentState !== "active"
+    ) {
+      backgroundResumesLeft -= 1;
+    }
+  });
 }
 
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
@@ -425,6 +504,7 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   tokens.clear();
   // Module state must not outlive a sign-out (see the note above).
   announcedGroups.clear();
+  backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
   publish();
 }
 
