@@ -21,6 +21,7 @@ import {
   initialBearingDegrees,
 } from "../trackStats.js";
 import type { IconIdea } from "../icons.js";
+import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 
 export const MAP_POINT = {
@@ -72,7 +73,7 @@ export const MAP_POINT_VERBS = [
     subtitle: "Live distance and bearing — nothing saved",
     on: "gps",
     reason:
-      "Logjam Web is where a trip is planned, not walked: it has no live navigation to start.",
+      "Logjam Web is used at a desk, and a browser on a desk has nowhere to navigate to. Measure from here is its stand-in: the same distance, asked once.",
   },
   {
     id: "dropMarker",
@@ -92,12 +93,12 @@ export const MAP_POINT_VERBS = [
       "Logjam GPS puts a place here from a press-and-hold, and drops a marker from this sheet.",
   },
   {
-    id: "drawRoute",
-    icon: "draw",
-    label: "Draw a route from here",
+    id: "measure",
+    icon: MAP_MEASURE_ICON,
+    label: MAP_MEASURE.copy.fromHere,
     on: "web",
     reason:
-      "On Logjam GPS the same words are on the press-and-hold sheet, which is where a thing is put on the map.",
+      "On Logjam GPS the same words are on the press-and-hold sheet, beside Navigate here.",
   },
   {
     id: "copy",

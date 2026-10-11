@@ -136,6 +136,7 @@ function SidebarPanel({
   onOpenWay,
   wayDetail,
   drawPanel,
+  measurePanel,
   currentUserId,
   onPickCoords,
   pickingCoords,
@@ -255,6 +256,7 @@ function SidebarPanel({
    */
   wayDetail: ReactNode;
   drawPanel: ReactNode;
+  measurePanel: ReactNode;
   currentUserId: string | null;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
@@ -561,6 +563,7 @@ function SidebarPanel({
         )}
         {activePanel === "way-detail" && wayDetail}
         {activePanel === "way-draw" && drawPanel}
+        {activePanel === "measure" && measurePanel}
         {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
