@@ -105,12 +105,15 @@
   color: var(--color-text-muted);
 }
 
+/* Wraps, and a user's own title stops at two lines (shared/DESIGN.md §9). */
 .optionLabel {
   flex: 1;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .optionMeta {
