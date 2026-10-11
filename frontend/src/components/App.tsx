@@ -81,6 +81,9 @@ import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
+import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
+import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
+import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import {
   buildWays,
   wayFromRoute,
@@ -201,6 +204,11 @@ function App() {
   );
 
   const [showAdd, setShowAdd] = useState(false);
+  // "Add a place here" from the map: the form opens on this spot.
+  const [addPlaceAt, setAddPlaceAt] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // True when the unified importer was opened from the onboarding wizard, so its
@@ -239,6 +247,11 @@ function App() {
   // A verb a ROW asked for, run once the way's page mounts — how a row offers
   // Share, Rename and Delete without hosting a second copy of each form.
   const [pendingWayVerb, setPendingWayVerb] = useState<WayVerbId | null>(null);
+  // "Log a trip" on a track: the form opens over the map, from here, so the
+  // row's ⋯, the page's ⋯ and a line on the map all reach the same one.
+  const [logTripFromTrack, setLogTripFromTrack] = useState<TripLogTrack | null>(
+    null,
+  );
   // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md).
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
@@ -304,6 +317,19 @@ function App() {
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
   const [selectingGeoPdfExtent, setSelectingGeoPdfExtent] = useState(false);
+  // The base layer the GeoPDF will be printed from, handed over when the area is
+  // framed: the map shows it for as long as the framing lasts, and the user's
+  // own stored layer (`activeLayerId`) is never written (`mapLayerFor`).
+  const [geoPdfFramingLayer, setGeoPdfFramingLayer] = useState<string | null>(
+    null,
+  );
+  // What the map actually draws: the user's layer, except while a GeoPDF's area
+  // is framed on the base layer it will be printed from.
+  const mapLayerId = mapLayerFor(activeLayerId, {
+    active: selectingGeoPdfExtent,
+    layerId: geoPdfFramingLayer,
+  });
+
   const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
   const [geoPdfPaperDimensions, setGeoPdfPaperDimensions] = useState<{
     w: number;
@@ -686,8 +712,9 @@ function App() {
 
   // The overlay's count is the SAME list the Ways page builds — including its
   // de-duplication of a file that both endpoints return — so the number on the
-  // layer row and the number in the page's heading cannot drift.
-  const wayCount = useMemo(
+  // layer row and the number in the page's heading cannot drift. A line pressed
+  // on the map is looked up in it too, so a line opens the page its row does.
+  const allWays = useMemo(
     () =>
       buildWays({
         routes,
@@ -695,9 +722,10 @@ function App() {
         placeTracks,
         currentUserId: currentUser?.id ?? null,
         sharedPlaceIds,
-      }).length,
+      }),
     [routes, standaloneFiles, placeTracks, currentUser?.id, sharedPlaceIds],
   );
+  const wayCount = allWays.length;
 
   // A place list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
@@ -1421,6 +1449,9 @@ function App() {
     setGeoPdfPaperDimensions({ w: 210, h: 297 });
     setGeoPdfInitialExtent(bounds);
     setGeoPdfInitialScale(undefined);
+    // No dialog has chosen yet: it will open on the layer it seeds from the
+    // map's, so that is the one the frame is drawn on.
+    setGeoPdfFramingLayer(seedBaseLayer(activeLayerId));
     setActivePanel(null);
     setSelectingGeoPdfExtent(true);
   };
@@ -1511,7 +1542,9 @@ function App() {
           setEditingGeoPdfTemplate(undefined);
           setInitialGeoPdfTemplateId(null);
         }}
-        onSelectOnMap={(aspect, paperDims, extent, scale) => {
+        onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
+          // The latest pick, every visit: the map follows the dialog.
+          setGeoPdfFramingLayer(baseLayerId ?? null);
           setGeoPdfPaperAspect(aspect);
           setGeoPdfPaperDimensions(paperDims);
           setGeoPdfInitialExtent(extent);
@@ -1594,6 +1627,7 @@ function App() {
                   setSelectedPlaceID(placeId);
                   setActivePanel("place-detail");
                 }}
+                onLogTrip={setLogTripFromTrack}
                 onDeleteFile={handleDeleteStandaloneFile}
                 routeHover={routeHover}
               />
@@ -1750,6 +1784,22 @@ function App() {
                 wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
               );
           }}
+          onAddPlaceAt={(point) => {
+            setAddPlaceAt(point);
+            setShowAdd(true);
+          }}
+          onDrawRouteFrom={(point) => {
+            startDrawingRoute();
+            // The point is the route's first vertex, as a press on the map
+            // there would have made it.
+            routeDraft.addAnchor([point.longitude, point.latitude]);
+          }}
+          selectTrack={(mediaId) => {
+            const way = allWays.find(
+              (each) => each.kind !== "route" && each.id === mediaId,
+            );
+            if (way) openWay(way);
+          }}
           drawingRoute={drawingRoute}
           drawColor={drawColor ?? undefined}
           drawPoints={routeDraft.points}
@@ -1794,7 +1844,7 @@ function App() {
           }}
           topoLayers={mapTopoLayers}
           vectorStyle={vectorStyle}
-          activeLayerId={activeLayerId}
+          activeLayerId={mapLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
           geoPdfPaperAspect={geoPdfPaperAspect}
           geoPdfPaperDimensions={geoPdfPaperDimensions}
@@ -1925,6 +1975,27 @@ function App() {
         onStartEmpty={() => setShowOnboarding(false)}
       />
 
+      {/* The trip form, opened from a track's "Log a trip". Mounted only while
+          it is open, so every open starts from the track it was asked for. */}
+      {logTripFromTrack && (
+        <TripLogDialog
+          open={!pickingCoords}
+          onClose={() => setLogTripFromTrack(null)}
+          onSaved={() => {
+            setLogTripFromTrack(null);
+            refetchAfterTripWrite();
+            refetchCurrentUser();
+          }}
+          places={places}
+          fromTrack={logTripFromTrack}
+          customFieldDefs={customFieldDefs}
+          onCustomFieldDefsChange={setCustomFieldDefs}
+          existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+          onPickCoords={startPickingCoords}
+          onPlaceCreated={refetch}
+        />
+      )}
+
       {/* Unified file importer (places + logbooks) */}
       <UnifiedImportDialog
         open={showUnifiedImport && !pickingCoords}
@@ -1956,7 +2027,11 @@ function App() {
       <PlaceDialog
         place={null}
         open={showAdd && !pickingCoords}
-        onClose={() => setShowAdd(false)}
+        initialCoords={addPlaceAt}
+        onClose={() => {
+          setShowAdd(false);
+          setAddPlaceAt(null);
+        }}
         onSaved={refetch}
         onPickCoords={startPickingCoords}
         onCancelPickCoords={cancelPickingCoords}

@@ -32,12 +32,6 @@
   cursor: default;
 }
 
-/* Sized to the picker, not to the Layers list the kit's Popover is sized for. */
-.popover {
-  width: max-content;
-  padding: var(--space-1-5);
-}
-
 .picker {
   display: flex;
   flex-direction: column;

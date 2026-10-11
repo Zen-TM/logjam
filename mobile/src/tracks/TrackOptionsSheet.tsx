@@ -17,6 +17,8 @@ import {
   messageFromError,
   TRACK_COLORS,
   trackColorName,
+  wayVerbIcon,
+  wayVerbLabel,
   type TrackPass,
 } from "@logjam/shared";
 
@@ -27,6 +29,7 @@ import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { type Track } from "./tracksDb";
+import type { TripTrackSource } from "./tripTrackSource";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
@@ -41,6 +44,7 @@ export function TrackOptionsSheet({
   onShowOnMap,
   passes,
   onContinueRecording,
+  onLogTrip,
   onInfo,
   onError,
   allowNetwork = true,
@@ -67,6 +71,12 @@ export function TrackOptionsSheet({
    * recording mode afterwards.
    */
   onContinueRecording: (track: Track) => void;
+  /**
+   * Open the trip form with this track in it. The caller's, as a place's
+   * "Log a trip here" is: the form is a sheet of its own, so this one closes
+   * and the screen opens that one. Required, so a surface cannot forget it.
+   */
+  onLogTrip: (track: TripTrackSource) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** False in "Simulating offline mode" — the stats sub-mode then reads
@@ -287,6 +297,20 @@ export function TrackOptionsSheet({
                   },
                   (err: unknown) => console.error(err),
                 );
+              }}
+            />
+          ) : null}
+          {/* The same verb, word and glyph as the web's, first among the verbs
+              after the one that goes to the line. */}
+          {actions.logTrip ? (
+            <Row
+              title={wayVerbLabel("logTrip", "gps")}
+              icon={wayVerbIcon("logTrip")}
+              hue={assetHue.track}
+              disabled={busy}
+              onPress={() => {
+                close();
+                if (actions.logTrip) onLogTrip(actions.logTrip);
               }}
             />
           ) : null}

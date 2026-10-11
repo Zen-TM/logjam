@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
 
+import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
 import {
   PRIVACY_POLICY_URL,
@@ -21,7 +22,7 @@ export function ConsentGate({
   onSignOut,
 }: {
   onConsented: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +75,7 @@ export function ConsentGate({
       />
       {error ? <ErrorBanner message={error} onRetry={agree} /> : null}
       <Button label="Agree and continue" onPress={agree} loading={submitting} />
-      <Button label="Sign out" variant="ghost" onPress={onSignOut} />
+      <Button label="Sign out" variant="ghost" onPress={() => onSignOut()} />
     </ScrollView>
   );
 }
