@@ -7,6 +7,7 @@ import {
   sheetPulled,
   sheetRelease,
   sheetReseats,
+  sheetSeated,
 } from "./sheetPull";
 
 describe("sheetRelease", () => {
@@ -122,4 +123,28 @@ it("no sheet owner unmounts its sheet when its subject is cleared", () => {
       ),
     );
   expect(offenders).toEqual([]);
+});
+
+// The sheet is put at its open position by a scroll, and the scroll cannot
+// land until the sheet's size has reached the native view. The slide in used
+// to start regardless: it ran with the sheet a screen below its place, and
+// the sheet then appeared all at once, or jumped as its size was corrected.
+describe("sheetSeated", () => {
+  const open = { content: 1500, viewport: 900, y: 600 };
+
+  it("is seated at the end of its scroll", () => {
+    expect(sheetSeated(open)).toBe(true);
+  });
+
+  // Red when `sheetSeated` stops comparing the offset with the end.
+  it("is not seated short of the end", () => {
+    expect(sheetSeated({ ...open, y: 0 })).toBe(false);
+  });
+
+  // Red when the `isFinite` condition is dropped: the offset is unknown
+  // until the first scroll event, and unknown read as seated.
+  it("is not seated before anything has been reported", () => {
+    expect(sheetSeated({ ...open, y: Number.POSITIVE_INFINITY })).toBe(false);
+    expect(sheetSeated({ content: 0, viewport: 0, y: 0 })).toBe(false);
+  });
 });

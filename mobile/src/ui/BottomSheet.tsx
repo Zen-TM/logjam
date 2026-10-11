@@ -28,6 +28,7 @@ import {
   sheetPulled,
   sheetRelease,
   sheetReseats,
+  sheetSeated,
 } from "./sheetPull";
 
 // Slide-up modal sheet with a handle + title, capped at 80% height and
@@ -73,7 +74,12 @@ import {
 // behind BOTH system bars, and the sheet carries the bottom inset in its own
 // padding — so its surface runs to the physical bottom edge instead of
 // stopping on the tab bar's colour.
-const SHEET_TRAVEL = Dimensions.get("window").height;
+//
+// The modal covers the whole SCREEN, bars included, so that is the height the
+// spacer starts at. It started at the window's, which is shorter by the bars
+// where the system keeps them out of the window, and the correction arrived
+// in the middle of the slide in.
+const SHEET_TRAVEL = Dimensions.get("screen").height;
 // How long the sheet must lie still, untouched, before it springs back or
 // closes. A fling keeps reporting scroll, so it is never cut short.
 const SETTLE_MS = 80;
@@ -237,15 +243,16 @@ export function BottomSheet({
   if (visible && !mounted) setMounted(true);
   const notifyClosed = useEffectEvent(() => onClosed?.());
   const [progress] = useState(() => new Animated.Value(0));
-  // The modal's own height: the spacer above the sheet is exactly this tall,
-  // so the sheet can be dragged fully off the bottom edge.
+  // The modal's own height: the spacer above the sheet is at least this
+  // tall, so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
   const outerRef = useRef<ScrollView>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
   // that is from its end. `touching`: a finger is dragging it. `dragged`: a
   // finger has, since it last settled. `closing`: the drag has asked to close
   // and the owner has not answered yet; springing back meanwhile would fight
-  // the slide out.
+  // the slide out. `seated`: it has been seen at its open position since it
+  // mounted, which the slide in waits for.
   const pull = useRef({
     content: 0,
     viewport: 0,
@@ -254,6 +261,7 @@ export function BottomSheet({
     touching: false,
     dragged: false,
     closing: false,
+    seated: false,
   });
   // How far the drag has taken the sheet down, before the lift.
   const rawPull = () =>
@@ -311,7 +319,34 @@ export function BottomSheet({
     if (settleTimer.current != null) clearTimeout(settleTimer.current);
     settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
   };
+  const [slideIn] = useState(
+    () => () =>
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(),
+  );
+  // Asked whenever the offset or the size is reported: either can be the
+  // last to arrive.
+  const seat = () => {
+    if (pull.current.seated || !sheetSeated(pull.current)) return;
+    pull.current.seated = true;
+    if (visible) slideIn();
+  };
+  // The jump to the end does nothing until the sheet's size has reached the
+  // native view, a frame or more after it is reported here, so it is repeated
+  // until it lands. Left to the settle, the sheet was scrolled into place
+  // with an animation nobody could see before it slid in.
+  const chase = (frames: number) => {
+    requestAnimationFrame(() => {
+      if (pull.current.seated || frames === 0) return;
+      outerRef.current?.scrollToEnd({ animated: false });
+      chase(frames - 1);
+    });
+  };
   const moved = useEffectEvent(() => {
+    seat();
     const now = pulled();
     const sinking = now > pull.current.last;
     pull.current.last = now;
@@ -332,7 +367,11 @@ export function BottomSheet({
   // last opening then hears nothing, which left the release rule reading the
   // offsets of the previous drag.
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted) {
+      pull.current.seated = false;
+      pull.current.content = 0;
+      return;
+    }
     const outer = scroll.outerY.addListener(({ value }) => {
       pull.current.y = value;
       moved();
@@ -359,11 +398,11 @@ export function BottomSheet({
       viewport.current = { ...viewport.current, y: 0 };
       for (const value of scroll.values) value.setValue(0);
       outerRef.current?.scrollToEnd({ animated: false });
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
+      // A sheet that has just mounted is a screen below its place until its
+      // size reaches the native scroll view and the jump to the end lands
+      // (`moved`). Sliding in before that slid nothing: the sheet appeared
+      // all at once when the jump landed.
+      if (pull.current.seated) slideIn();
       return;
     }
     Animated.timing(progress, {
@@ -375,11 +414,17 @@ export function BottomSheet({
       setMounted(false);
       notifyClosed();
     });
-  }, [progress, scroll, visible]);
+  }, [progress, scroll, slideIn, visible]);
 
   useEffect(() => {
     settleRef.current = () => {
       if (!visible || pull.current.touching || pull.current.closing) return;
+      // The jump to the end reported nothing (it was there already): the
+      // sheet must not wait for ever behind an invisible backdrop.
+      if (!pull.current.seated && pull.current.content > 0) {
+        pull.current.seated = true;
+        slideIn();
+      }
       const outcome = sheetRelease({
         pulled: pulled(),
         dragged: pull.current.dragged,
@@ -475,7 +520,9 @@ export function BottomSheet({
         onLayout={(event) => {
           const { height } = event.nativeEvent.layout;
           pull.current.viewport = height;
-          if (height !== viewportHeight) setViewportHeight(height);
+          // The layout comes back in single precision: an exact compare
+          // re-rendered every sheet once for a millionth of a point.
+          if (Math.abs(height - viewportHeight) >= 1) setViewportHeight(height);
           settleSoon();
         }}
         // The rest position is the END of the scroll, and that moves whenever
@@ -485,9 +532,11 @@ export function BottomSheet({
         // finishes the job.
         onContentSizeChange={(_width, height) => {
           pull.current.content = height;
+          seat();
           if (!sheetReseats({ visible, touching: pull.current.touching }))
             return;
           outerRef.current?.scrollToEnd({ animated: false });
+          chase(30);
           settleSoon();
         }}
         onScroll={scroll.onOuterScroll}
@@ -505,7 +554,7 @@ export function BottomSheet({
             not operable by either — this labelled Pressable is, and it is the
             only announced way out of a sheet apart from the OS back gesture. */}
         <Pressable
-          style={{ height: viewportHeight }}
+          style={{ height: Math.max(SHEET_TRAVEL, viewportHeight) }}
           accessibilityRole="button"
           accessibilityLabel={`Close ${title}`}
           onPress={onClose}
