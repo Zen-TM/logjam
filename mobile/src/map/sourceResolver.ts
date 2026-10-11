@@ -16,6 +16,7 @@
 // beyond the bounds MapLibre needs.
 import {
   BASEMAP_CATALOG,
+  NSW_CONTOURS,
   type BasemapCatalogEntry,
   type TopoLayerFormat,
   type TopoLayerKey,
@@ -40,6 +41,8 @@ export type LogicalLayerRef =
       remoteUrl: string | null;
       attribution?: string;
     }
+  /** The statewide contour lines (shared nswContours.ts). */
+  | { kind: "nsw-contours" }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -75,6 +78,8 @@ export interface MapArtifact {
   kind:
     | "basemap-region"
     | "dem-region"
+    /** A clip of the statewide contours, saved with the basemap they draw on. */
+    | "contours-region"
     | "topo-overlay"
     | "geopdf-import"
     | "vector-import";
@@ -289,6 +294,37 @@ function resolveTopoOverlay(
   ];
 }
 
+/** Like the vector basemap: the CDN's archive online, saved clips offline. */
+function resolveNswContours(ctx: ResolveContext): ResolvedTileSource[] {
+  const logicalId = NSW_CONTOURS.id;
+  if (ctx.connectivity === "online") {
+    const url = `pmtiles://${ctx.cdnBaseUrl}/${NSW_CONTOURS.archivePath}`;
+    return [
+      {
+        status: "ok",
+        key: `${logicalId}:remote:${hashKey(url)}`,
+        sourceType: "vector",
+        url,
+        attribution: NSW_CONTOURS.credit,
+        origin: "remote",
+      },
+    ];
+  }
+  const regions = ctx.artifacts.filter((a) => a.kind === "contours-region");
+  if (regions.length === 0) {
+    return [
+      {
+        status: "unavailable",
+        key: logicalId,
+        reason: "offline-not-downloaded",
+      },
+    ];
+  }
+  return regions.map((r) =>
+    localArtifactSource(r, logicalId, NSW_CONTOURS.credit),
+  );
+}
+
 function resolveImport(
   ref: Extract<LogicalLayerRef, { kind: "geopdf-import" | "vector-import" }>,
   ctx: ResolveContext,
@@ -351,6 +387,8 @@ export function resolveMapSource(
       return resolveBasemap(ref.basemapId, ctx);
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
+    case "nsw-contours":
+      return resolveNswContours(ctx);
     case "geopdf-import":
     case "vector-import":
       return resolveImport(ref, ctx);

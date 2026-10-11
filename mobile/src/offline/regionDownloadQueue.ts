@@ -49,6 +49,8 @@ export type RegionTaskSpec =
       basemapId: string;
       /** Set when the clip is of a DEM archive: shared demSources.ts. */
       demSourceId?: string;
+      /** Set when the clip is of the statewide contours: shared nswContours.ts. */
+      contours?: boolean;
       label: string;
       groupId: string;
       groupLabel: string;
@@ -310,6 +312,7 @@ async function runProtomapsClip(
         bbox: spec.bbox,
         zMax: spec.zMax,
         demSourceId: spec.demSourceId,
+        contours: spec.contours,
       },
       (progress) =>
         onProgress({
@@ -339,8 +342,13 @@ async function runProtomapsClip(
     // to cut from — see api/src/routes/basemap.ts.)
     // A DEM archive the server does not have (503) is not this run's failure:
     // the worldwide tiles are saved regardless, so the area still has heights.
+    // Nor is a missing contour archive: the basemap it is drawn over is saved.
     // The job leaves the queue as if it had never been planned.
-    if (spec.demSourceId && err instanceof ApiError && err.status === 503) {
+    if (
+      (spec.demSourceId || spec.contours) &&
+      err instanceof ApiError &&
+      err.status === 503
+    ) {
       return { status: "cancelled" };
     }
     if (err instanceof ApiError && err.status >= 500) {

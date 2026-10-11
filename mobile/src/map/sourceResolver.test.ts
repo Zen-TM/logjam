@@ -339,3 +339,35 @@ describe("basemapsCoveringViewport", () => {
     ).toEqual([]);
   });
 });
+
+describe("statewide contours", () => {
+  it("online: the CDN's archive", () => {
+    const [r] = resolveMapSource({ kind: "nsw-contours" }, ctx());
+    expect(r).toMatchObject({
+      status: "ok",
+      sourceType: "vector",
+      url: `pmtiles://${CDN}/master/contours/nsw-10m.pmtiles`,
+    });
+  });
+
+  // Mutation: match saved clips by `basemap-region` and the vector basemap's
+  // own clip is drawn as contours (and the reverse in snapRegion.ts).
+  it("offline: only the contour clips saved, never a basemap's", () => {
+    const saved = [
+      artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
+      artifact({ id: "b", kind: "basemap-region", logicalKey: "protomaps" }),
+    ];
+    const resolved = resolveMapSource(
+      { kind: "nsw-contours" },
+      ctx({ connectivity: "offline", artifacts: saved }),
+    );
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]).toMatchObject({ status: "ok", origin: "local" });
+    expect(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        ctx({ connectivity: "offline" }),
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
+  });
+});

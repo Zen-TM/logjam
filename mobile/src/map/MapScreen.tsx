@@ -84,6 +84,7 @@ import {
   type IconIdea,
   type SnapMode,
   type TrackPass,
+  drawsNswContours,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -200,7 +201,9 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
+  readContoursOverImagery,
   setBasemapPreference,
+  setContoursOverImagery,
 } from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
@@ -858,6 +861,13 @@ export function MapScreen({
     setBasemapId(next);
     setBasemapPreference(next);
   }, []);
+  const [contoursOverImagery, setContoursOverImageryState] = useState(
+    readContoursOverImagery,
+  );
+  const chooseContoursOverImagery = useCallback((on: boolean) => {
+    setContoursOverImageryState(on);
+    setContoursOverImagery(on);
+  }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
@@ -1352,6 +1362,17 @@ export function MapScreen({
     () =>
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
+  );
+  // The statewide contours, where this basemap takes them (shared
+  // nswContours.ts). Offline they are whatever clips were saved with it.
+  const contoursResolved = useMemo(
+    () =>
+      drawsNswContours(renderedBasemapId, contoursOverImagery)
+        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+            (r) => r.status === "ok",
+          )
+        : [],
+    [renderedBasemapId, contoursOverImagery, ctx],
   );
 
   /**
@@ -4330,12 +4351,13 @@ export function MapScreen({
       : "Offline — no map saved for this area.";
   })();
 
-  const attributionText = basemapResolved
+  const attributionText = [...basemapResolved, ...contoursResolved]
     .map((r) => (r.status === "ok" ? r.attribution : null))
     .filter(Boolean)
     .join(" · ");
 
-  // The ground band, bottom to top: topo overlays, GeoPDFs, vector imports.
+  // The ground band, bottom to top: the statewide contours, topo overlays,
+  // GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4351,6 +4373,9 @@ export function MapScreen({
     ).filter((r) => r.status === "ok"),
   }));
   const groundIds = [
+    ...contoursResolved.flatMap((r) =>
+      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, vectorStyle),
+    ),
     ...overlayMounts.flatMap(({ ref, resolved }) =>
       resolved.flatMap((r) =>
         ref.format === "vector"
@@ -4525,6 +4550,20 @@ export function MapScreen({
             />
           </GeoJSONSource>
         ) : null}
+
+        {/* The statewide contours: a topo area's contour layers, on the
+            statewide archive (or the clips saved from it). */}
+        {contoursResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <TopoVectorOverlay
+              kind="contours"
+              idPrefix={`nsw-contours-${r.key}`}
+              sourceID={sourceIdFor(r.key)}
+              beforeIds={groundBefore}
+              vectorStyle={vectorStyle}
+            />
+          </ResolvedSource>
+        ))}
 
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
             the full contour/feature layer stack styled by the user's
@@ -5385,6 +5424,8 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={chooseContoursOverImagery}
         artifacts={artifacts}
         overlays={overlayList}
         enabledOverlays={enabledOverlays}

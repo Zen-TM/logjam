@@ -41,13 +41,16 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
+  drawsNswContours,
   NSW_5M,
+  NSW_CONTOURS,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
 } from "@logjam/shared";
 
 import { config } from "../config";
+import { readContoursOverImagery } from "./basemapPreference";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
 import { fontSize, spacing, theme } from "../theme";
@@ -150,6 +153,7 @@ function regionLabelFor(basemapId: string): string {
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
   if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
+  if (basemapId === NSW_CONTOURS.id) return "Contours";
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }
@@ -235,6 +239,7 @@ export function RegionDownloadScreen({
   // refuse is worse than no chip. The note under the rail says why, and where
   // to change it — which a greyed chip could not.
   const isGuest = useAccountState().accountState === "guest";
+  const [contoursOverImagery] = useState(readContoursOverImagery);
   const downloadable = isGuest
     ? DOWNLOADABLE.filter((id) => id !== "protomaps")
     : DOWNLOADABLE;
@@ -374,6 +379,11 @@ export function RegionDownloadScreen({
 
   const pyramidIds = selected.filter(isRasterPyramid);
   const includesVector = selected.includes("protomaps");
+  // Saved with any map that draws them, so it looks the same out of range.
+  // A guest has none: the clip endpoint needs a signed-in user.
+  const includesContours =
+    !isGuest &&
+    selected.some((id) => drawsNswContours(id, contoursOverImagery));
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
     ? planRegionForBasemaps(
@@ -441,6 +451,22 @@ export function RegionDownloadScreen({
           zMax: detailZoom,
           allowCellular,
         })),
+        ...(includesContours
+          ? [
+              {
+                taskKind: "http-file" as const,
+                id: uuid(),
+                basemapId: NSW_CONTOURS.id,
+                contours: true,
+                label: regionLabelFor(NSW_CONTOURS.id),
+                groupId,
+                groupLabel,
+                bbox,
+                zMax: NSW_CONTOURS.maxzoom,
+                allowCellular,
+              },
+            ]
+          : []),
         ...(includesVector
           ? [
               {
@@ -458,7 +484,7 @@ export function RegionDownloadScreen({
           : []),
       ]);
     },
-    [bbox, detailZoom, includesVector, job],
+    [bbox, detailZoom, includesContours, includesVector, job],
   );
 
   const handleSave = useCallback(() => {

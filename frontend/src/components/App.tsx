@@ -94,6 +94,8 @@ import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
+  NSW_CONTOURS,
+  drawsNswContours,
 } from "@logjam/shared";
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -102,6 +104,20 @@ import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
+
+/**
+ * The statewide contours as one entry of the Map's topo layer list. The id has
+ * no dash and contains "contours": the Map reads both (it splits a layer id at
+ * the first dash, and styles an entry as contours by that word).
+ * Same origin, like the vector basemap: `/master/*` is served by the web
+ * distribution and proxied in dev.
+ */
+const NSW_CONTOURS_ENTRY = {
+  id: "nswcontours",
+  pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
+  format: "vector" as const,
+  attribution: NSW_CONTOURS.creditHtml,
+};
 
 function App() {
   const toast = useToast();
@@ -179,6 +195,11 @@ function App() {
   const activeLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
     ? storedLayerId
     : "protomaps";
+
+  const [contoursOverImagery, setContoursOverImagery] = useStoredState(
+    "logjam.contoursOverImagery",
+    false,
+  );
 
   const [showAdd, setShowAdd] = useState(false);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
@@ -440,11 +461,24 @@ function App() {
     completedTopoJobs,
   ]);
 
+  // The statewide contours ride the same list, underneath every topo area's
+  // own layers, so the Map draws and styles them with the code it has.
+  const mapTopoLayers = useMemo(
+    () =>
+      drawsNswContours(activeLayerId, contoursOverImagery)
+        ? [NSW_CONTOURS_ENTRY, ...combinedTopoLayers]
+        : combinedTopoLayers,
+    [activeLayerId, contoursOverImagery, combinedTopoLayers],
+  );
+
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
   // user once — silently missing layers were the LAYERS-1 finding.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
+      // Not a topo area's layer, and nothing the user switched on: the map is
+      // simply drawn without contours.
+      if (entryId === NSW_CONTOURS_ENTRY.id) return;
       setUnavailableTopoEntryIds((prev) => {
         if (prev.has(entryId)) return prev;
         const next = new Set(prev);
@@ -1759,7 +1793,7 @@ function App() {
             setSelectingTopoBbox(false);
             setShowTopo(true);
           }}
-          topoLayers={combinedTopoLayers}
+          topoLayers={mapTopoLayers}
           vectorStyle={vectorStyle}
           activeLayerId={activeLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
@@ -1829,6 +1863,8 @@ function App() {
         baseLayers={BASE_LAYERS}
         activeLayerId={activeLayerId}
         onActiveLayerChange={setActiveLayerId}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={setContoursOverImagery}
         mapView={mapCenter}
       />
 

@@ -10,6 +10,8 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { apiFetch, getAuthedRequestHeaders } from "../api/apiFetch";
 import { config } from "../config";
+import { NSW_CONTOURS } from "@logjam/shared";
+
 import type { MapArtifact } from "../map/sourceResolver";
 import { insertArtifact, deleteArtifact } from "./registryDb";
 import { assertSpaceFor } from "./freeSpace";
@@ -59,18 +61,22 @@ export async function downloadProtomapsRegion(
      * clip to the one zoom that source is read at, whatever `zMax` says.
      */
     demSourceId?: string;
+    /** Set to clip the statewide contour archive instead of the basemap. */
+    contours?: boolean;
   },
   onProgress?: (progress: RegionDownloadProgress) => void,
 ): Promise<MapArtifact> {
-  const { bbox, id, demSourceId } = spec;
+  const { bbox, id, demSourceId, contours } = spec;
   const maxzoom = spec.zMax;
   const clip = await apiFetch<RegionClipResponse>("/basemap/region-clip", {
     method: "POST",
     body: demSourceId
       ? { ...bbox, demSourceId }
-      : maxzoom != null
-        ? { ...bbox, maxzoom }
-        : bbox,
+      : contours
+        ? { ...bbox, contours: true }
+        : maxzoom != null
+          ? { ...bbox, maxzoom }
+          : bbox,
   });
 
   // The server has now told us exactly how big this is (up to 80 MB), and this
@@ -118,16 +124,20 @@ export async function downloadProtomapsRegion(
       id,
       // A DEM clip is filed under its source id, which is what the sampler
       // looks saved files up by (offline/demLookup.ts).
-      kind: demSourceId ? "dem-region" : "basemap-region",
-      logicalKey: demSourceId ?? "protomaps",
+      kind: demSourceId
+        ? "dem-region"
+        : contours
+          ? "contours-region"
+          : "basemap-region",
+      logicalKey: demSourceId ?? (contours ? NSW_CONTOURS.id : "protomaps"),
       format: "pmtiles",
       sourceType: demSourceId ? "raster" : "vector",
       // Registry stores the scheme-less absolute path; the resolver prefixes
       // pmtiles://file:// itself.
       path: fileUri.replace(/^file:\/\//, ""),
       bbox: [bbox.west, bbox.south, bbox.east, bbox.north],
-      minzoom: 0,
-      maxzoom: Math.min(maxzoom ?? 15, 15),
+      minzoom: contours ? NSW_CONTOURS.minzoom : 0,
+      maxzoom: contours ? NSW_CONTOURS.maxzoom : Math.min(maxzoom ?? 15, 15),
       sizeBytes: clip.sizeBytes,
       downloadedAt: new Date().toISOString(),
       label: spec.label,
