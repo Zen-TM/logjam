@@ -727,6 +727,8 @@ router.delete(
       prisma.friendship.deleteMany({
         where: { OR: [{ requesterId: user.id }, { addresseeId: user.id }] },
       }),
+      // Unspent invite links die with the account that issued them.
+      prisma.friendInvite.deleteMany({ where: { inviterId: user.id } }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
       prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
