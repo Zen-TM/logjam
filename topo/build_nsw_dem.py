@@ -5,7 +5,7 @@ build_nsw_dem.py
 One-off build of the `nsw-5m` DEM archive from the NSW Spatial Services 5 m
 DEM sheets: terrarium PNG tiles, 256 px, zoom 8 to 15, heights rounded to a
 quarter of a metre, in one PMTiles file.
-docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md
+docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md
 
     build_nsw_dem.py fetch SRC [Sheet ...]     # no sheet named = all 343
     build_nsw_dem.py tile  SRC WORK [--jobs N]
