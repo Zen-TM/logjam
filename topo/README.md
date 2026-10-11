@@ -210,6 +210,17 @@ python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2
 what is already done, so a stopped run carries on where it left off. The
 format and why: [ADR 0030](../docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md).
 
+Contours of the same sheets, as vector tiles for the vector basemap (10 m
+lines, the 50 m ones from zoom 11 and the rest from zoom 14):
+
+```bash
+python3 build_nsw_dem.py contours dem/src dem/contours-work dem/contours-nsw.pmtiles \
+  --extracted "October 2026"
+```
+
+A stopped contour run also carries on: each sheet's lines are kept whole or
+not at all.
+
 ### The statewide build
 
 All 343 sheets, once. Why Logjam hosts its own copy, and what the licence

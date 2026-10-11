@@ -89,5 +89,28 @@ class TestBlocks(unittest.TestCase):
         self.assertEqual(len(blocks), 6)
 
 
+class TestContourSchema(unittest.TestCase):
+    # Both clients pick out major lines with `elev % 50 == 0` and read the
+    # `contours` source layer. Mutation: change CONTOUR_MAJOR_M or
+    # CONTOUR_LAYER here alone and the archive carries lines neither client
+    # draws bold, or a layer neither client reads.
+    def test_layer_and_major_interval_are_the_ones_both_clients_read(self):
+        from build_nsw_dem import CONTOUR_INTERVAL_M, CONTOUR_LAYER, CONTOUR_MAJOR_M
+
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        for path, layer in (
+            ("mobile/src/map/topoVectorLayers.ts", f'sourceLayer: "{CONTOUR_LAYER}"'),
+            (
+                "frontend/src/components/map/Map.tsx",
+                f'"source-layer": "{CONTOUR_LAYER}"',
+            ),
+        ):
+            with open(os.path.join(root, path)) as f:
+                client = f.read()
+            self.assertIn(f'["get", "elev"]], {CONTOUR_MAJOR_M}]', client, path)
+            self.assertIn(layer, client, path)
+        self.assertEqual(CONTOUR_MAJOR_M % CONTOUR_INTERVAL_M, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
