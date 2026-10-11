@@ -32,7 +32,7 @@
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   formatDistanceM,
   routeLengthM,
@@ -47,8 +47,9 @@ import {
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
@@ -103,6 +104,9 @@ export function DraftToolPanel({
    */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { profile, loading } = useElevationProfile([points], { allowNetwork });
   const hasLine = points.length >= 2;
 
@@ -215,7 +219,7 @@ export function DraftToolPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   bar: {
     backgroundColor: withAlpha(theme.page, 0.94),
     borderRadius: radius.lg,
@@ -243,4 +247,4 @@ const styles = StyleSheet.create({
   },
   group: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   spacer: { flex: 1 },
-});
+}));

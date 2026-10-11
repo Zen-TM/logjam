@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
@@ -13,7 +13,14 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+} from "../theme";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -116,6 +123,9 @@ export function TripEditSheet({
    */
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const editing = trip != null;
   const [mode, setMode] = useState<Mode>("form");
   const [dateKey, setDateKey] = useState(todayDateKey);
@@ -276,10 +286,10 @@ export function TripEditSheet({
     return vocabulary.map((type) => ({
       value: type,
       label: tripTypeLabel(type),
-      hue: tripTypeMeta(type).hue,
-      icon: tripTypeMeta(type).icon,
+      hue: tripTypeMeta(type, theme).hue,
+      icon: tripTypeMeta(type, theme).icon,
     }));
-  }, [customTypes, existingTypes, types]);
+  }, [customTypes, existingTypes, types, theme]);
 
   const toggleType = useCallback((type: string) => {
     setTypes((current) =>
@@ -726,6 +736,9 @@ function PlacePicker({
   onSearch: (next: string) => void;
   onToggle: (place: MirrorPlace) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const selectedIds = new Set(selected.map((link) => link.id));
   const query = search.trim().toLowerCase();
   const matches = places.filter(
@@ -791,7 +804,7 @@ function PlacePicker({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   pickerBody: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   searchWrap: {
@@ -811,4 +824,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.regular,
   },
-});
+}));

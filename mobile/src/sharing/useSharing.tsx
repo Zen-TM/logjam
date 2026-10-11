@@ -32,7 +32,7 @@ import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
 import { Avatar, ErrorBanner, IconButton, Row } from "../ui";
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 
 /**
  * The three endpoints, for whichever kind this is.
@@ -197,6 +197,8 @@ export function RecipientRows({
   sharing: Sharing;
   recipients?: ShareRecipient[];
 }) {
+  const theme = useTheme();
+
   return (
     <>
       {recipients.map((recipient) => (

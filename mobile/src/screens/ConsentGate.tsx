@@ -3,7 +3,7 @@
 // is true for the fetched current user; the server rejects any consentVersion
 // other than CURRENT_CONSENT_VERSION.
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
 
@@ -14,7 +14,13 @@ import {
   TERMS_URL,
   openLegalDocument,
 } from "../legalLinks";
-import { fontSize, fontWeight, lineHeight, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  lineHeight,
+  spacing,
+  makeStyles,
+} from "../theme";
 import { Button, ErrorBanner, TextLink } from "../ui";
 
 export function ConsentGate({
@@ -24,6 +30,8 @@ export function ConsentGate({
   onConsented: () => void;
   onSignOut: SignOutHandler;
 }) {
+  const styles = useStyles();
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // No nav header on the gates, so the status-bar/camera inset is ours to clear.
@@ -80,7 +88,7 @@ export function ConsentGate({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   content: {
     flexGrow: 1,
@@ -98,4 +106,4 @@ const styles = StyleSheet.create({
     color: theme.text,
     lineHeight: lineHeight.body,
   },
-});
+}));

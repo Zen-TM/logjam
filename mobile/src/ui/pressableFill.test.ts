@@ -15,7 +15,7 @@ const source = (name: string) =>
 describe("a status pill has no fill", () => {
   it("draws no background and no border", () => {
     const styles = source("StatusPill.tsx").slice(
-      source("StatusPill.tsx").indexOf("StyleSheet.create"),
+      source("StatusPill.tsx").indexOf("makeStyles("),
     );
     // The dot is the one filled thing in it, and it is passed inline.
     expect(styles).not.toMatch(/(backgroundColor|borderWidth|borderColor)\s*:/);

@@ -33,8 +33,9 @@ import {
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
 import {
@@ -136,6 +137,8 @@ const Columns = memo(
     min: number;
     span: number;
   }) {
+    const styles = useStyles();
+
     return columns.map((column, index) => (
       // Non-interactive so the TOUCH lands on the container: locationX is
       // measured against whichever view received it, and a 16px-wide column
@@ -179,6 +182,9 @@ export function ProfileChart({
   hint: string;
   accessibilityLabel: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { min, max } = series;
   const [width, setWidth] = useState(0);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
@@ -337,7 +343,7 @@ export function ProfileChart({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   wrap: { gap: spacing(0.5) },
   readoutRow: { height: 18, justifyContent: "center" },
   readout: {
@@ -368,4 +374,4 @@ const styles = StyleSheet.create({
     backgroundColor: theme.text,
   },
   fade: { ...StyleSheet.absoluteFill, top: "55%" },
-});
+}));

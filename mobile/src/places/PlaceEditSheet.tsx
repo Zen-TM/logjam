@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   defsForType,
@@ -11,7 +11,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
 import {
@@ -108,6 +108,9 @@ export function PlaceEditSheet({
   resuming?: boolean;
   onSaved: (message: string) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const editing = place != null;
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
@@ -672,9 +675,9 @@ function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((entry, index) => entry === b[index]);
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   hint: { color: theme.textMuted, fontSize: fontSize.sm, flex: 1 },
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
   fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
-});
+}));

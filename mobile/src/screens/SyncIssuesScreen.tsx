@@ -42,10 +42,10 @@
 // deliberately refuses to render latitude/longitude, which a place create op
 // carries (§11 — a list is what ends up in a screenshot).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
 import {
   BottomSheet,
   Hero,
@@ -117,6 +117,9 @@ export function SyncIssuesScreen({
   onOpenPlace: (placeId: string) => void;
   onOpenTrip: (trip: MirrorTrip) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [parked, setParked] = useState<ParkedOp[]>([]);
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
   // Not an outbox row: the server sent something this app version can't apply,
@@ -675,6 +678,9 @@ function StuckMenu({
   onSendRest: (op: ParkedOp) => void;
   onDiscard: (op: ParkedOp) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const advice = opAdvice(op);
   const changes = opChanges(op);
   const target = opTarget(op);
@@ -776,6 +782,9 @@ function LostMenu({
   onKeepBoth: (entry: ShelfEntry) => void;
   onForget: (entry: ShelfEntry) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // The other device's value is absent when it CLEARED the field — there is no
   // "Kept" to show, and a block reading "(empty)" was three lines of chrome
   // around nothing.
@@ -864,6 +873,8 @@ const IssueRow = memo(function IssueRow({
   selecting: boolean;
   selected: boolean;
 }) {
+  const theme = useTheme();
+
   const openOrToggle = () => (selecting ? onToggle(item) : onMenu(item));
   // The ⋯ and the checkbox share one 40pt box, so entering the mode cannot
   // resize a row and shift the list under the finger that started it (DESIGN.md).
@@ -908,6 +919,8 @@ const IssueRow = memo(function IssueRow({
 });
 
 function EmptyPanel() {
+  const styles = useStyles();
+
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>Nothing to sort out</Text>
@@ -918,7 +931,7 @@ function EmptyPanel() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
@@ -954,4 +967,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: spacing(2),
   },
-});
+}));

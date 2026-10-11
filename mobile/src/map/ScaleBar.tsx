@@ -9,9 +9,9 @@
 // screen's state would re-reconcile every layer, source and badge on the screen
 // at 60 Hz; this way the only thing that re-renders is the bar.
 import { forwardRef, useImperativeHandle, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, radius, spacing, makeStyles } from "../theme";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
 export type ScaleBarHandle = {
@@ -41,6 +41,8 @@ export const ScaleBar = forwardRef<
     maxWidth: number;
   }
 >(function ScaleBar({ latitude, zoom, maxWidth }, ref) {
+  const styles = useStyles();
+
   const [camera, setCamera] = useState({ latitude, zoom });
 
   useImperativeHandle(ref, () => ({
@@ -70,7 +72,7 @@ export const ScaleBar = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // Translucent warm backing: the bar sits over map imagery that can be any
   // brightness, and hairlines over topo raster are otherwise unreadable.
   root: {
@@ -98,4 +100,4 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 1,
     borderBottomRightRadius: 1,
   },
-});
+}));

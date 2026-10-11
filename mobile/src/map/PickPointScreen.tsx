@@ -49,7 +49,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BASEMAP_CATALOG } from "@logjam/shared";
 
 import { config } from "../config";
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  scrim,
+  spacing,
+  makeStyles,
+  useTheme,
+} from "../theme";
 import { Button } from "../ui";
 import {
   useMirrorPlaces,
@@ -64,7 +72,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
@@ -119,6 +127,9 @@ export function PickPointScreen({
   onCancel: () => void;
   onConfirm: (point: PickedPoint) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is only honoured on the first render, and
   // re-reading the module store mid-session would move a map the user is
@@ -138,9 +149,9 @@ export function PickPointScreen({
     : (lastCamera?.zoom ?? DEFAULT_ZOOM);
 
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
 
   // Saved regions count here exactly as they do on the map: a picker that only
@@ -353,7 +364,7 @@ function noop() {}
 /** Stable empty list — a fresh `[]` per render defeats RoutesLayer's memo. */
 const EMPTY_ROUTES: never[] = [];
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   basemaps: {
     position: "absolute",
@@ -396,4 +407,4 @@ const styles = StyleSheet.create({
     backgroundColor: theme.page,
   },
   action: { flex: 1 },
-});
+}));

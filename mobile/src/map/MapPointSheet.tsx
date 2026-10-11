@@ -12,7 +12,7 @@
 // The list rule is unaffected, and nothing here is logged or persisted: the
 // point lives in the map screen's state until the sheet is dismissed.
 import { useMemo } from "react";
-import { Clipboard, StyleSheet, Text, View } from "react-native";
+import { Clipboard, Text, View } from "react-native";
 import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
@@ -23,7 +23,7 @@ import {
   type MapPointVerbId,
 } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { useElevationProfile } from "./useElevationProfile";
 
@@ -94,6 +94,8 @@ function PointDetail({
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
 }) {
+  const styles = useStyles();
+
   // The elevation endpoint profiles a LINE, and the shortest legal one is two
   // points (MIN_ROUTE_POINTS). A degenerate line would divide by zero in
   // densifyLine, so the second point is nudged east by ~1 m — well inside the
@@ -165,7 +167,7 @@ function PointDetail({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: spacing(1) },
   note: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+}));

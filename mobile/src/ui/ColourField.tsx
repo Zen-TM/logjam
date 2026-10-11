@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
 
 import {
   fontSize,
@@ -8,8 +8,9 @@ import {
   radius,
   scrim,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -54,6 +55,9 @@ export function ColourField({
   hideLabel?: boolean;
   disabled?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [open, setOpen] = useState(false);
   const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
   return (
@@ -126,7 +130,7 @@ export function ColourField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   field: {
     flexDirection: "row",
     alignItems: "center",
@@ -200,4 +204,4 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   cellChosen: { borderColor: theme.accent },
-});
+}));

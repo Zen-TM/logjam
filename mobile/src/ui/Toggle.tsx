@@ -1,6 +1,6 @@
 import { Switch } from "react-native";
 
-import { opacity, theme } from "../theme";
+import { opacity, useTheme } from "../theme";
 
 // Themed on/off switch — the standard visibility/enable control across the
 // layer sheet (overlays, imports, tracks, GeoPDFs) and settings. Wraps RN's
@@ -18,6 +18,8 @@ export function Toggle({
   disabled?: boolean;
   accessibilityLabel: string;
 }) {
+  const theme = useTheme();
+
   return (
     <Switch
       value={checked}

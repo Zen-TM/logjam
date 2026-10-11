@@ -8,7 +8,7 @@
 // Local storage is untouched by that distinction: guest mutations still write
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import {
   DarkTheme,
@@ -35,11 +35,11 @@ import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import {
-  activeThemeSchemeId,
-  persistThemeSchemeId,
+  makeThemed,
+  setThemeSchemeId,
   spacing,
-  theme,
-  themeMode,
+  useTheme,
+  useThemeMode,
   withAlpha,
 } from "./theme";
 import { MapScreen } from "./map/MapScreen";
@@ -88,19 +88,25 @@ function alertFinishRouteFirst(): void {
   );
 }
 
-const baseNavigationTheme = themeMode === "dark" ? DarkTheme : DefaultTheme;
-const navigationTheme = {
-  ...baseNavigationTheme,
-  colors: {
-    ...baseNavigationTheme.colors,
-    primary: theme.accent,
-    background: theme.page,
-    card: theme.card,
-    text: theme.text,
-    border: theme.line,
-    notification: theme.accent,
-  },
-};
+function useNavigationTheme() {
+  const theme = useTheme();
+  const base = useThemeMode() === "dark" ? DarkTheme : DefaultTheme;
+  return useMemo(
+    () => ({
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: theme.accent,
+        background: theme.page,
+        card: theme.card,
+        text: theme.text,
+        border: theme.line,
+        notification: theme.accent,
+      },
+    }),
+    [base, theme],
+  );
+}
 
 type MapStackParams = {
   // `focus` = "show on map" from Saved, or the resolved extent of a trip's
@@ -279,13 +285,17 @@ function placeFocus(place: { latitude: number; longitude: number }) {
   };
 }
 
-const stackScreenOptions = {
-  headerStyle: { backgroundColor: theme.card },
-  headerTintColor: theme.text,
-  contentStyle: { backgroundColor: theme.page },
-} as const;
+const useStackScreenOptions = makeThemed(
+  (theme) =>
+    ({
+      headerStyle: { backgroundColor: theme.card },
+      headerTintColor: theme.text,
+      contentStyle: { backgroundColor: theme.page },
+    }) as const,
+);
 
 function MapStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <MapStack.Navigator screenOptions={stackScreenOptions}>
       <MapStack.Screen name="MapView" options={{ headerShown: false }}>
@@ -436,6 +446,7 @@ function MapStackNav() {
 }
 
 function SavedStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <SavedStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header: SavedScreen leads with its own Hero. */}
@@ -554,6 +565,7 @@ function SavedStackNav() {
 }
 
 function PlacesStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <PlacesStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header on any of these: each screen leads with its own
@@ -676,6 +688,7 @@ function PlacesStackNav() {
 }
 
 function TripsStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
       {/* Logs and trip detail both carry their own Hero, so the native
@@ -784,6 +797,10 @@ export function AppShell({
   onLinkAccount: () => void;
   onSignOut: SignOutHandler;
 }) {
+  const theme = useTheme();
+  const navigationTheme = useNavigationTheme();
+  const stackScreenOptions = useStackScreenOptions();
+
   const isGuest = accountState === "guest";
   const userQuery = useApiQuery(
     fetchCurrentUser,
@@ -831,17 +848,13 @@ export function AppShell({
     return registerTopoAutoDownload();
   }, [isGuest]);
 
-  // Mirror the account's theme choice onto this device, so a scheme picked in the
-  // browser (or on another phone) is what this app opens in next launch. The
-  // device copy is what `theme.ts` reads at module-eval time; see DESIGN.md.
+  // Take the account's theme choice, so a scheme picked in the browser (or on
+  // another phone) is the one this app is painted in. Keyed on the ACCOUNT's
+  // value only: a scheme just picked on this phone must not be undone by the
+  // copy this query fetched before the pick.
   useEffect(() => {
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
-    if (
-      isThemeSchemeId(accountScheme) &&
-      accountScheme !== activeThemeSchemeId
-    ) {
-      persistThemeSchemeId(accountScheme);
-    }
+    if (isThemeSchemeId(accountScheme)) setThemeSchemeId(accountScheme);
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
 
   useEffect(() => {

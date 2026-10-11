@@ -1,6 +1,6 @@
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import { Button } from "./Button";
 
 // Full-screen data states (MOBILE_DESIGN_BRIEF §8: loading / empty / error are
@@ -9,6 +9,9 @@ import { Button } from "./Button";
 // `label` says what is loading ("Loading your places…"), as on Logjam Web: a
 // load that names itself is a load a screen reader can announce.
 export function LoadingState({ label }: { label?: string }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View
       style={styles.container}
@@ -23,6 +26,8 @@ export function LoadingState({ label }: { label?: string }) {
 }
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
@@ -38,6 +43,8 @@ export function ErrorState({
   message: string;
   onRetry?: () => void;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{message}</Text>
@@ -48,7 +55,7 @@ export function ErrorState({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   container: {
     flex: 1,
     alignItems: "center",
@@ -63,4 +70,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   hint: { fontSize: fontSize.sm, color: theme.textMuted, textAlign: "center" },
-});
+}));

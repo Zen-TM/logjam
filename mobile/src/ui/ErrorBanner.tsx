@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
 
 type ErrorBannerProps = {
@@ -14,6 +14,9 @@ type ErrorBannerProps = {
 // pass output of messageFromError). The warning is the edge and the glyph; the
 // words are `text`.
 export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.banner} accessibilityRole="alert">
       <Icon idea="warning" size={16} color={theme.warning} />
@@ -46,7 +49,7 @@ export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   banner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -67,4 +70,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textDecorationLine: "underline",
   },
-});
+}));

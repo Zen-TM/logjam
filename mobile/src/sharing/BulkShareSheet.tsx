@@ -18,7 +18,7 @@ import { useMemo } from "react";
 
 import { usePendingCreateIds } from "../sync/useSyncQueries";
 import { BottomSheet, IconButton } from "../ui";
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 import { useShareRowProps, useSharePanel } from "./SharePanel";
 import {
   bulkShareOutcomeMessage,
@@ -47,6 +47,8 @@ export function BulkShareButton({
   online: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+
   const { disabled } = useShareRowProps(online);
   return (
     <IconButton

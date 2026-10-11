@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import {
   fontSize,
@@ -7,8 +7,9 @@ import {
   opacity,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
@@ -61,6 +62,9 @@ export function Chip({
   starred?: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const tint = hue ?? theme.accent;
   return (
     <Pressable
@@ -121,7 +125,7 @@ export function Chip({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
@@ -171,4 +175,4 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
   badgeTextActive: { color: theme.onFill },
-});
+}));

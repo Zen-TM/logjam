@@ -18,7 +18,7 @@ import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
-import { assetHue, spacing, theme } from "../theme";
+import { spacing, useTheme, useHues } from "../theme";
 import { BottomSheet, closedSheet, ColourField, RenameForm, Row } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
@@ -55,6 +55,9 @@ export function ImportOptionsSheet({
    *  elevation only from tiles already on the phone. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [attaching, setAttaching] = useState(false);
