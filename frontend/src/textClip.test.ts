@@ -21,10 +21,6 @@ const ALLOWED: { file: string; reason: string }[] = [
       "the active filter's summary, not a name: the field opens to show it whole",
   },
   {
-    file: "components/map/Map.module.css",
-    reason: "MapLibre's attribution control, whose markup is not ours",
-  },
-  {
     file: "components/map/MapSearchBox.module.css",
     reason: "a place name in a result: wraps with the map chrome's own pass",
   },

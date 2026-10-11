@@ -104,28 +104,11 @@
   cursor: default;
 }
 
-/* Sized to the palette, not to the panel. The kit's Popover is 372px wide
-   because its usual tenant is the Layers list; that made a block of ten
-   swatches a strip as wide as the panel again, which is the shape this was
-   meant to stop. `max-content` lets the 3-wide grid decide. */
-.swatchPopover {
-  width: max-content;
-  padding: var(--space-1-5);
-}
-
 .swatches {
   min-width: 0;
   margin: 0;
   padding: 0;
   border: none;
-}
-
-/* The field label's style: sentence case, muted. */
-.legend {
-  margin-bottom: var(--space-0-5);
-  padding: 0;
-  font-size: var(--font-sm);
-  color: var(--color-text-muted);
 }
 
 /* Three across, so ten colours make a block taller than it is wide rather than

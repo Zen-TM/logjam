@@ -14,10 +14,13 @@
 import { useMemo } from "react";
 import { Clipboard, StyleSheet, Text, View } from "react-native";
 import {
-  compassPointFor,
-  formatDistanceM,
-  haversineMeters,
-  initialBearingDegrees,
+  MAP_POINT,
+  MAP_POINT_NO_FIX_NOTE,
+  mapPointFacts,
+  mapPointPosition,
+  mapPointVerbs,
+  type MapPointCoord,
+  type MapPointVerbId,
 } from "@logjam/shared";
 
 import { fontSize, spacing, theme } from "../theme";
@@ -25,7 +28,7 @@ import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { useElevationProfile } from "./useElevationProfile";
 
 /** A bare lat/lng, as the map hands one back from a tap. */
-export type MapPoint = { latitude: number; longitude: number };
+export type MapPoint = MapPointCoord;
 
 export function MapPointSheet({
   point,
@@ -51,7 +54,11 @@ export function MapPointSheet({
   allowNetwork?: boolean;
 }) {
   return (
-    <BottomSheet visible={point !== null} onClose={onClose} title="This point">
+    <BottomSheet
+      visible={point !== null}
+      onClose={onClose}
+      title={MAP_POINT.title}
+    >
       {/* Mounted only with a point, so the elevation request inside is tied to
           the sheet being open rather than firing for a stale coordinate every
           time the map re-renders. */}
@@ -105,80 +112,55 @@ function PointDetail({
   });
   const elevationM = profile?.samples[0]?.elevationM ?? null;
 
-  const distanceM = userCoord
-    ? haversineMeters(
-        userCoord[1],
-        userCoord[0],
-        point.latitude,
-        point.longitude,
-      )
-    : null;
-  const bearingDeg = userCoord
-    ? initialBearingDegrees(
-        userCoord[1],
-        userCoord[0],
-        point.latitude,
-        point.longitude,
-      )
-    : null;
-
-  const position = `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+  const position = mapPointPosition(point);
   const copyPosition = () => {
     Clipboard.setString(position);
-    onInfo("Coordinates copied.");
+    onInfo(MAP_POINT.copy.coordinatesCopied);
   };
-  const stats: Stat[] = [
-    { label: "Position", value: position, span: true, onCopy: copyPosition },
-    {
-      label: "Elevation",
-      value:
-        elevationM != null
-          ? `${Math.round(elevationM)} m`
-          : loading
-            ? "Checking…"
-            : // Says which of the reasons it is, because "—" on a screen you
-              // opened in a gorge reads as a bug rather than as the DEM being
-              // a network away. No longer ever "Needs an account": the tiles
-              // are public, so a guest with signal gets a height like anyone.
-              "Needs a connection",
-    },
-    ...(distanceM != null && bearingDeg != null
-      ? [
-          { label: "Distance", value: formatDistanceM(distanceM) },
-          {
-            label: "Bearing",
-            value: `${compassPointFor(bearingDeg)} ${Math.round(bearingDeg)}°`,
-          },
-        ]
-      : []),
-  ];
+  const stats: Stat[] = mapPointFacts({
+    point,
+    elevation:
+      elevationM != null
+        ? { state: "known", metres: elevationM }
+        : loading
+          ? { state: "checking" }
+          : // No longer ever "Needs an account": the tiles are public, so a
+            // guest with signal gets a height like anyone.
+            { state: "unavailable" },
+    from: userCoord
+      ? { latitude: userCoord[1], longitude: userCoord[0] }
+      : null,
+  }).map((fact) => ({
+    label: fact.label,
+    value: fact.value,
+    ...(fact.span ? { span: true } : {}),
+    ...(fact.copyable ? { onCopy: copyPosition } : {}),
+  }));
+
+  // What each verb does here. Declared once with its words in the contract.
+  const run: Partial<Record<MapPointVerbId, () => void>> = {
+    navigate: () => onNavigate(point),
+    dropMarker: () => onDropMarker(point),
+  };
 
   return (
     <View style={styles.body}>
       <StatGrid stats={stats} />
       {userCoord == null ? (
-        <Text style={styles.note}>
-          Tap the locate button to see the distance.
-        </Text>
+        <Text style={styles.note}>{MAP_POINT_NO_FIX_NOTE.gps}</Text>
       ) : null}
-      <Row
-        icon="navigateTo"
-        title="Navigate to this point"
-        subtitle="Live distance and bearing — nothing saved"
-        onPress={() => {
-          onNavigate(point);
-          onClose();
-        }}
-      />
-      <Row
-        icon="flag"
-        title="Drop a marker here"
-        subtitle="Saved, and synced"
-        onPress={() => {
-          onDropMarker(point);
-          onClose();
-        }}
-      />
+      {mapPointVerbs("gps").map((verb) => (
+        <Row
+          key={verb.id}
+          icon={verb.icon}
+          title={verb.label}
+          subtitle={verb.subtitle ?? undefined}
+          onPress={() => {
+            run[verb.id]?.();
+            onClose();
+          }}
+        />
+      ))}
     </View>
   );
 }

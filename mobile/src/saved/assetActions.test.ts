@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 // `vi.mock` is hoisted above these by the transform, so the descriptor still
 // loads against the stubs below.
 import {
+  remoteTrackActions,
   routeActions,
   trackActions,
   vectorImportActions,
@@ -40,6 +41,7 @@ vi.mock("../sync/mediaUpload", () => ({
   renameStandaloneMediaLocal: vi.fn(),
 }));
 vi.mock("../sync/mirrorStore", () => ({ getMediaById: vi.fn() }));
+vi.mock("../sync/mediaCache", () => ({ ensureDisplayCached: vi.fn() }));
 // Both reach expo-file-system, whose Flow sources vitest cannot parse — the
 // same wall shareRowSubtitle.ts and map/elevationSources.ts were split out to
 // stay behind.
@@ -298,6 +300,44 @@ describe("the share / send-a-copy verb matrix", () => {
     // is never linked, a route made from it is.
     expect(trackActions(track(3)).attachToPlace).toBeUndefined();
     expect(trackActions(track(3)).createRouteFrom).toBeDefined();
+  });
+
+  // "Log a trip" attaches the recording as a GPX, which needs a line to write.
+  // Parity with Logjam Web, whose wayActions.test.ts checks the same verb on a
+  // track's row and page. Mutation: offer it on every track.
+  it("offers Log a trip on a recording with a line, and not on a dot", () => {
+    expect(trackActions(track(3)).logTrip).toMatchObject({
+      name: "Kanangra",
+      needsConnection: false,
+    });
+    expect(trackActions(track(2)).logTrip).toBeDefined();
+    expect(trackActions(track(1)).logTrip).toBeUndefined();
+    expect(trackActions(track(0)).logTrip).toBeUndefined();
+  });
+
+  // A recording made on another device is in the account as a file, and goes
+  // into a trip like one made here; with its bytes off the phone it needs a
+  // connection to attach. Mutation: drop `logTrip` from `remoteTrackActions`.
+  it("offers Log a trip on a recording made elsewhere, and says when it needs a connection", () => {
+    const file = (localDisplayPath: string | null) =>
+      ({
+        id: "m1",
+        filename: "Creek.gpx",
+        displayName: "Creek",
+        mediaType: "application/gpx+xml",
+        origin: "track",
+        metadata: { startedAt: "2026-03-14T20:30:00.000Z" },
+        localDisplayPath,
+      }) as unknown as Parameters<typeof remoteTrackActions>[0];
+    expect(remoteTrackActions(file(null)).logTrip).toMatchObject({
+      name: "Creek",
+      startedAt: "2026-03-14T20:30:00.000Z",
+      needsConnection: true,
+    });
+    expect(
+      remoteTrackActions(file("file:///cache/m1.display")).logTrip
+        ?.needsConnection,
+    ).toBe(false);
   });
 
   it("offers setColor on trackActions and updates track color", async () => {

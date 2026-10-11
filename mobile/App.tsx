@@ -19,7 +19,14 @@ import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { storeListingUrl } from "./src/version";
 import { mountsAppShell, useAuth } from "./src/auth/useAuth";
-import { countUnsyncedChanges } from "./src/sync/syncDb";
+import { requestSync } from "./src/sync/syncEngine";
+import { isReachableNow } from "./src/map/connectivity";
+import { countSignOutLosses } from "./src/offline/signOutCounts";
+import {
+  signOutConfirm,
+  signOutConfirmBody,
+  type SignOutConfirm,
+} from "./src/offline/signOutConfirm";
 import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
@@ -41,6 +48,53 @@ const storeUrl = storeListingUrl({
   os: Platform.OS,
   androidPackage: Constants.expoConfig?.android?.package,
 });
+
+type SignOutChoice = "cancel" | "syncFirst" | "signOut";
+
+function askSignOut(confirm: SignOutConfirm): Promise<SignOutChoice> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      confirm.title,
+      signOutConfirmBody(confirm),
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => resolve("cancel"),
+        },
+        ...(confirm.canSyncFirst
+          ? [{ text: "Sync first", onPress: () => resolve("syncFirst") }]
+          : []),
+        {
+          text: "Sign out",
+          style: "destructive" as const,
+          onPress: () => resolve("signOut"),
+        },
+      ],
+      { cancelable: true, onDismiss: () => resolve("cancel") },
+    );
+  });
+}
+
+/**
+ * True when the user has settled it: nothing to lose, or they chose Sign out.
+ * "Sync first" runs a sync and asks again with the counts as they now are.
+ */
+async function confirmSignOut(): Promise<boolean> {
+  for (;;) {
+    const confirm = signOutConfirm(
+      await countSignOutLosses(),
+      await isReachableNow(),
+    );
+    if (!confirm) return true;
+    const choice = await askSignOut(confirm);
+    if (choice === "syncFirst") {
+      await requestSync().catch(console.error);
+      continue;
+    }
+    return choice === "signOut";
+  }
+}
 
 export default function App() {
   const minVersionGate = useMinVersionGate();
@@ -139,32 +193,12 @@ export default function App() {
             <AppShell
               accountState={auth.accountState}
               onLinkAccount={auth.linkAccount}
-              onSignOut={async () => {
-                // Sign-out wipes the sync mirror AND the outbox (stage8 §9), plus
-                // the offline registry and every downloaded file — unflushed local
-                // changes die with it, so block on a confirmation when any exist.
-                const unsynced = await countUnsyncedChanges();
-                if (unsynced > 0) {
-                  const confirmed = await new Promise<boolean>((resolve) => {
-                    Alert.alert(
-                      "Unsynced changes",
-                      `You have ${unsynced} unsynced change${unsynced === 1 ? "" : "s"} that will be lost. Sign out anyway?`,
-                      [
-                        {
-                          text: "Cancel",
-                          style: "cancel",
-                          onPress: () => resolve(false),
-                        },
-                        {
-                          text: "Sign out",
-                          style: "destructive",
-                          onPress: () => resolve(true),
-                        },
-                      ],
-                      { cancelable: true, onDismiss: () => resolve(false) },
-                    );
-                  });
-                  if (!confirmed) return;
+              onSignOut={async (options) => {
+                // Sign-out wipes this phone's data, and what the account does
+                // not have goes with it: ask once, saying what goes and what
+                // stays (offline/wipedStores.ts declares what that can be).
+                if (!options?.accountDeleted && !(await confirmSignOut())) {
+                  return;
                 }
                 // Unregister the push token BEFORE tokens are cleared (the DELETE
                 // needs an authenticated request); best-effort inside.
