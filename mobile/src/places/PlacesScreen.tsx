@@ -110,6 +110,7 @@ import {
   type MeterSegment,
   type ChipOption,
   type ToastMessage,
+  EmptyState,
 } from "../ui";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
@@ -1161,32 +1162,31 @@ function EmptyPanel({
   onAdd: () => void;
   onClear: () => void;
 }) {
-  const theme = useTheme();
-  const styles = useStyles();
-
   // Without an account there is no web list to import from and nothing will
   // ever sync — promising both would be the first thing a new guest reads.
   const guest = useAccountState().accountState === "guest";
   const state = placesEmptyState(kind, { platform: "gps", guest });
   return (
-    <View style={styles.empty}>
-      <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
-      <Text style={styles.emptyTitle}>{state.title}</Text>
-      <Text style={styles.emptyBody}>{state.body}</Text>
-      {state.action === "clear" ? (
-        <Button
-          label={copy.clearFilters}
-          variant="outlineAccent"
-          onPress={onClear}
-        />
-      ) : state.action === "add" ? (
-        <Button
-          label={PLACES_ADD.copy.add}
-          icon={PLACES_ADD_ICON.add}
-          onPress={onAdd}
-        />
-      ) : null}
-    </View>
+    <EmptyState
+      icon={state.icon}
+      title={state.title}
+      hint={state.body}
+      action={
+        state.action === "clear"
+          ? {
+              label: copy.clearFilters,
+              variant: "outlineAccent",
+              onPress: onClear,
+            }
+          : state.action === "add"
+            ? {
+                label: PLACES_ADD.copy.add,
+                icon: PLACES_ADD_ICON.add,
+                onPress: onAdd,
+              }
+            : undefined
+      }
+    />
   );
 }
 
@@ -1263,24 +1263,4 @@ const useStyles = makeStyles((theme) => ({
   quality: { color: theme.textMuted, fontSize: fontSize.xs },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(5),
-    paddingHorizontal: spacing(2),
-    backgroundColor: theme.card,
-    borderWidth: 1,
-    borderColor: theme.line,
-    borderRadius: radius.lg,
-  },
-  emptyTitle: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyBody: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
 }));

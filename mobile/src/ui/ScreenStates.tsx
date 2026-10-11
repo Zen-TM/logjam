@@ -1,7 +1,9 @@
+import type { ComponentProps } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
-import { fontSize, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, withAlpha } from "../theme";
 import { Button } from "./Button";
+import { Icon, type Glyph } from "./Icon";
 
 // Full-screen data states (MOBILE_DESIGN_BRIEF §8: loading / empty / error are
 // mandatory on every data surface).
@@ -25,13 +27,42 @@ export function LoadingState({ label }: { label?: string }) {
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+/**
+ * What an empty list says and the way in (shared/DESIGN.md §11): a glyph, what
+ * would be here, and the one button that fills it (or clears the filter that
+ * emptied it). `disabledReason` is drawn under a disabled action. Every list
+ * uses this; a screen never draws its own (`designRules.test.ts`).
+ */
+export function EmptyState({
+  title,
+  hint,
+  icon,
+  action,
+}: {
+  title: string;
+  hint?: string;
+  icon?: Glyph;
+  action?: Pick<
+    ComponentProps<typeof Button>,
+    "label" | "onPress" | "icon" | "variant" | "disabledReason"
+  >;
+}) {
+  const theme = useTheme();
   const styles = useStyles();
 
   return (
     <View style={styles.container}>
+      {icon ? (
+        <Icon idea={icon} size={28} color={withAlpha(theme.accent, 0.8)} />
+      ) : null}
       <Text style={styles.title}>{title}</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {action ? (
+        <Button {...action} disabled={action.disabledReason != null} />
+      ) : null}
+      {action?.disabledReason ? (
+        <Text style={styles.hint}>{action.disabledReason}</Text>
+      ) : null}
     </View>
   );
 }
@@ -55,7 +86,7 @@ export function ErrorState({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   container: {
     flex: 1,
     alignItems: "center",
@@ -64,10 +95,6 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(2),
     backgroundColor: theme.page,
   },
-  title: {
-    fontSize: fontSize.base,
-    color: theme.text,
-    textAlign: "center",
-  },
-  hint: { fontSize: fontSize.sm, color: theme.textMuted, textAlign: "center" },
+  title: { ...textRole.rowTitle, color: theme.text, textAlign: "center" },
+  hint: { ...textRole.hint, textAlign: "center" },
 }));

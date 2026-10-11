@@ -101,6 +101,7 @@ import {
   type ChipOption,
   type ToastMessage,
   Icon,
+  EmptyState,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -767,28 +768,27 @@ function EmptyPanel({
   onLogTrip: () => void;
   onClear: () => void;
 }) {
-  const theme = useTheme();
-  const styles = useStyles();
-
   return (
-    <View style={styles.empty}>
-      <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
-      <Text style={styles.emptyTitle}>{state.title}</Text>
-      <Text style={styles.emptyBody}>{state.body}</Text>
-      {state.action === "add" ? (
-        <Button
-          label={TRIPS_ADD.copy.add}
-          icon={TRIPS_ADD_ICON.add}
-          onPress={onLogTrip}
-        />
-      ) : filtering || state.action === "clear" ? (
-        <Button
-          label={TRIPS_LIST.copy.clearFilters}
-          variant="outlineAccent"
-          onPress={onClear}
-        />
-      ) : null}
-    </View>
+    <EmptyState
+      icon={state.icon}
+      title={state.title}
+      hint={state.body}
+      action={
+        state.action === "add"
+          ? {
+              label: TRIPS_ADD.copy.add,
+              icon: TRIPS_ADD_ICON.add,
+              onPress: onLogTrip,
+            }
+          : filtering || state.action === "clear"
+            ? {
+                label: TRIPS_LIST.copy.clearFilters,
+                variant: "outlineAccent",
+                onPress: onClear,
+              }
+            : undefined
+      }
+    />
   );
 }
 
@@ -875,24 +875,4 @@ const useStyles = makeStyles((theme) => ({
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },
   presets: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(5),
-    paddingHorizontal: spacing(2),
-    backgroundColor: theme.card,
-    borderWidth: 1,
-    borderColor: theme.line,
-    borderRadius: radius.lg,
-  },
-  emptyTitle: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyBody: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
 }));

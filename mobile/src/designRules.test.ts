@@ -78,3 +78,16 @@ describe("a colour on the map is a token", () => {
     expect(messages).toHaveLength(1);
   }, 60_000);
 });
+
+describe("an empty list is the kit's EmptyState", () => {
+  // A screen that draws its own glyph, line and button drifts from every other
+  // one. Mutation: give any screen a style named `empty` or `emptyTitle`.
+  it("has no screen styled its own", () => {
+    const OWN = /^\s*empty(Title)?:/m;
+    const offenders = sources(SRC)
+      .filter((path) => !relative(SRC, path).startsWith("ui/"))
+      .filter((path) => OWN.test(readFileSync(path, "utf8")))
+      .map((path) => relative(SRC, path));
+    expect(offenders).toEqual([]);
+  });
+});

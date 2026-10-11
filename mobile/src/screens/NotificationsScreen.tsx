@@ -1432,38 +1432,33 @@ function EmptyPanel({
   searching: boolean;
   onShowAll: () => void;
 }) {
-  const styles = useStyles();
-
   const copy = INBOX.copy;
   if (searching) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noMatchTitle}</Text>
-        <Text style={styles.emptyHint}>{copy.noMatchBody}</Text>
-        <Button label={copy.clearSearch} variant="ghost" onPress={onShowAll} />
-      </View>
+      <EmptyState
+        title={copy.noMatchTitle}
+        hint={copy.noMatchBody}
+        action={{
+          label: copy.clearSearch,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
   if (bucket !== "all") {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>
-          {bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
-        </Text>
-        <Button
-          label={copy.showEverything}
-          variant="ghost"
-          onPress={onShowAll}
-        />
-      </View>
+      <EmptyState
+        title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        action={{
+          label: copy.showEverything,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-    </View>
-  );
+  return <EmptyState title={copy.firstRunTitle} hint={copy.firstRunBody} />;
 }
 
 const useStyles = makeStyles((theme) => ({
@@ -1532,13 +1527,5 @@ const useStyles = makeStyles((theme) => ({
     fontSize: fontSize.xs,
     textAlign: "center",
     paddingTop: spacing(0.75),
-  },
-  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
   },
 }));

@@ -117,6 +117,7 @@ import {
   type ChipOption,
   type ToastMessage,
   Icon,
+  EmptyState,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
@@ -2616,8 +2617,6 @@ function EmptyPanel({
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
   searching: boolean;
 }) {
-  const styles = useStyles();
-
   // An empty panel is where someone works out whether a feature is missing or
   // merely unused — so for the two account-backed categories it must say which.
   const isGuest = useAccountState().accountState === "guest";
@@ -2664,11 +2663,20 @@ function EmptyPanel({
       }
     : copy[filter];
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyHint}>{hint}</Text>
-      {action ? <SavedAddButton action={action} /> : null}
-    </View>
+    <EmptyState
+      title={title}
+      hint={hint}
+      action={
+        action
+          ? {
+              label: action.label,
+              icon: "add",
+              onPress: action.onPress,
+              disabledReason: action.disabledReason,
+            }
+          : undefined
+      }
+    />
   );
 }
 
@@ -2827,22 +2835,5 @@ const useStyles = makeStyles((theme) => ({
     color: theme.textMuted,
     fontSize: fontSize.xs,
     paddingHorizontal: spacing(0.5),
-  },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(4),
-    paddingHorizontal: spacing(2),
-  },
-  emptyTitle: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    maxWidth: 300,
   },
 }));
