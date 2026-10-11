@@ -1,7 +1,7 @@
 // Ways: every line the user has — routes they drew, tracks they recorded, files
 // they imported, and the tracks on places friends shared with them.
 //
-// The page answers "what lines have I got?" (docs/ux-principles.md §2). One pinned rail
+// The page answers "what lines have I got?" (shared/DESIGN.md §2). One pinned rail
 // narrows it by kind, using Logjam GPS's own vocabulary (`CATEGORY_META` in
 // mobile/src/saved/savedKeys.ts); what each kind IS is `waysModel.ts`.
 //
@@ -55,7 +55,7 @@ import classes from "./RoutesPanel.module.css";
 const ANY_KIND = "any";
 
 /** A kind's glyph and hue, from `ASSET_HUES` — the same identity Logjam GPS
- *  gives it on its Saved tab (docs/ux-principles.md §8). */
+ *  gives it on its Saved tab (shared/DESIGN.md §8). */
 const KIND_IDENTITY: Record<WayKind, { icon: Glyph; hue: string }> = {
   route: { icon: "route", hue: "var(--hue-route)" },
   track: { icon: "track", hue: "var(--hue-track)" },
@@ -182,7 +182,7 @@ export default function RoutesPanel({
     [searched, kind],
   );
   // Counts apply every axis but the rail's own, so a chip answers "how many
-  // would I get if I pressed this" (docs/ux-principles.md §8).
+  // would I get if I pressed this" (shared/DESIGN.md §8).
   const counts = useMemo(() => wayKindCounts(searched), [searched]);
 
   const closeSearch = () => {

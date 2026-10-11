@@ -11,7 +11,7 @@
 }
 
 /* The same card a list row wears: the surface a step darker than the dialog,
-   a hairline, the large radius (DESIGN.md §3). */
+   a hairline, the large radius (DESIGN.md). */
 .item {
   display: flex;
   flex-direction: column;

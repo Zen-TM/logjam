@@ -407,7 +407,7 @@ export function usePlaceTracks(enabled: boolean) {
   const [tracks, setTracks] = useState<PlaceTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
   // True once the first fetch settles. An empty list before then is not "no
-  // tracks" (docs/ux-principles.md §11), and Ways says so rather than flashing its
+  // tracks" (shared/DESIGN.md §11), and Ways says so rather than flashing its
   // first-run screen at every user.
   const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1437,6 +1437,13 @@ export function renameMedia(
   });
 }
 
+export function recolourMedia(id: string, color: string): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}`, {
+    method: "PATCH",
+    body: { color },
+  });
+}
+
 export function getMediaDownloadUrls(ids: string[]): Promise<{
   items: { id: string; displayUrl: string; thumbnailUrl: string | null }[];
 }> {
@@ -1543,6 +1550,36 @@ export function declineFriendRequest(friendshipId: string): Promise<void> {
 
 export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
+}
+
+// Invite links (api/src/routes/friendInvites.ts). The token only ever travels
+// in a request body.
+export function createFriendInvite(): Promise<{ token: string }> {
+  return apiFetch("/friends/invites", { method: "POST" });
+}
+
+export function getFriendInvites(): Promise<{ id: string }[]> {
+  return apiFetch("/friends/invites");
+}
+
+export function revokeFriendInvites(): Promise<void> {
+  return apiFetch<void>("/friends/invites", { method: "DELETE" });
+}
+
+export function previewFriendInvite(
+  token: string,
+): Promise<{ inviter: { username: string }; alreadyFriends: boolean }> {
+  return apiFetch("/friends/invites/preview", {
+    method: "POST",
+    body: { token },
+  });
+}
+
+export function redeemFriendInvite(token: string): Promise<TFriend> {
+  return apiFetch<TFriend>("/friends/invites/redeem", {
+    method: "POST",
+    body: { token },
+  });
 }
 
 export function useFriends(enabled: boolean) {

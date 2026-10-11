@@ -1,7 +1,7 @@
 // The auth forms BEHIND the landing screen: sign up / confirm code / forgot
 // password. Sign-in itself is on the landing screen (`LandingScreen.tsx`) — it
 // is the first thing a fresh install sees, not a tap away — so there is no
-// sign-in form here; a second copy of it is exactly the drift DESIGN.md §5's
+// sign-in form here; a second copy of it is exactly the drift DESIGN.md's
 // "one form per entity" rule exists to stop.
 //
 // State machine lives in useAuth (port of web useAuth.ts); this renders the
@@ -90,7 +90,7 @@ function SignUpForm({ auth }: { auth: Auth }) {
         textContentType="newPassword"
       />
       {/* A server refusal (username taken, weak password), directly above
-          the submit it belongs to — never at the top of the form (docs/ux-principles.md §11). */}
+          the submit it belongs to — never at the top of the form (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Create account" onPress={submit} loading={submitting} />
       <TextLink label="Have an account? Sign in" onPress={auth.goToSignIn} />

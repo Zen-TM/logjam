@@ -2,7 +2,7 @@
    a thing that moves every frame must not touch the canvas: `setData` on a
    GeoJSON source invalidates it and MapLibre repaints the whole map, measured
    at 72ms per pointer move against 16ms for the same drag without it — the
-   cost of dragging over dead panel (DESIGN.md §6).
+   cost of dragging over dead panel (DESIGN.md).
 
    The line's OWN colour inside a white ring: on this map colour is what says
    which line you are looking at, so a dot in the accent would be the one colour
@@ -152,12 +152,6 @@
   left: calc(var(--map-inset-left) + (100% - var(--map-inset-left)) / 2);
   transform: translateX(-50%);
   z-index: 2;
-  padding: 8px 16px;
-  border-radius: var(--radius-pill);
-  background: var(--color-page);
-  color: var(--color-text);
-  font-size: var(--font-sm);
-  box-shadow: var(--shadow-float);
   pointer-events: none;
 }
 
@@ -186,23 +180,9 @@
   gap: 8px;
 }
 
-/* Ink on the accent: the text colour on the accent failed AA. */
-.geoPdfButton {
-  min-height: 44px;
-  padding: 0 20px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  color: var(--color-on-fill);
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
+/* Kit buttons, floating over the map: the shadow is the one look added. */
+.geoPdfConfirmBar > * {
   box-shadow: var(--shadow-float);
-  cursor: pointer;
-}
-
-.geoPdfButton:hover {
-  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
 }
 
 /* Draggable vertex handle for the route draw/edit tool. Larger than the

@@ -162,7 +162,7 @@ export function activeTripFilterCount(criteria: TripFilterCriteria): number {
 /**
  * The order a trip list runs in. A logbook is chronological — the question is
  * only which end you start from — so this is two options and not a sort menu.
- * `newest` is the default everywhere and the one DESIGN.md §5 mandates for the
+ * `newest` is the default everywhere and the one DESIGN.md mandates for the
  * resting list; `oldest` is for reading a season forwards.
  */
 export type TripSortKey = "newest" | "oldest";

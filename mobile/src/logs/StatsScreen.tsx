@@ -1,6 +1,6 @@
 // Logbook stats — the retrospective half of the Logs tab.
 //
-// THE ONE QUESTION (docs/ux-principles.md §2): "am I getting out, and is it going
+// THE ONE QUESTION (shared/DESIGN.md §2): "am I getting out, and is it going
 // anywhere?" Logs itself already answers "what have I done?" with a count, a
 // spark and the list, so this screen must not lead with a trip count — it leads
 // with DAYS OUT, which is the number the list cannot give you, and the sections

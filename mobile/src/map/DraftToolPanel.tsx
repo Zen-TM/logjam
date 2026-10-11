@@ -2,7 +2,7 @@
 //
 // ONE panel, because the two tools are one interaction: the same anchors, the
 // same drag/delete handles, the same snapping. They differ at the EXIT and in
-// the ink (docs/ux-principles.md §11) — measure has no Save and draws dotted — and a second
+// the ink (shared/DESIGN.md §11) — measure has no Save and draws dotted — and a second
 // component would have been a second place for the shared 90 % to rot.
 //
 // A TOOLBAR, not a card. While a tool is armed it takes the SEARCH PILL'S SLOT
@@ -50,7 +50,7 @@ import {
   theme,
   withAlpha,
 } from "../theme";
-import { Button, IconButton, ColourField } from "../ui";
+import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
@@ -132,9 +132,9 @@ export function DraftToolPanel({
       ) : null}
 
       {atCap ? (
-        <Text style={styles.note}>
-          Maximum of {MAX_ROUTE_POINTS} points reached.
-        </Text>
+        <FieldError
+          message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+        />
       ) : null}
 
       <SnapPicker
@@ -234,7 +234,6 @@ const styles = StyleSheet.create({
   },
   meta: { color: theme.textMuted, fontSize: fontSize.xs, flexShrink: 1 },
   editing: { color: theme.textMuted, fontSize: fontSize.xs },
-  note: { color: theme.warning, fontSize: fontSize.xs },
   actions: {
     flexDirection: "row",
     alignItems: "center",

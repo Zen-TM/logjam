@@ -1,7 +1,10 @@
+import NetInfo from "@react-native-community/netinfo";
 import { describe, expect, it, vi } from "vitest";
 import { readPref } from "../prefsDb";
 import {
+  canRunNow,
   connectionAllowsMetered,
+  connectionWorthResuming,
   isExpensive,
   isMeteredAllowed,
   meteredness,
@@ -9,7 +12,7 @@ import {
 
 // The rule under test is pure; its module's two native neighbours are not.
 vi.mock("@react-native-community/netinfo", () => ({
-  default: { fetch: vi.fn() },
+  default: { fetch: vi.fn(), refresh: vi.fn() },
 }));
 vi.mock("../prefsDb", () => ({ readPref: vi.fn(), writePref: vi.fn() }));
 
@@ -62,6 +65,55 @@ describe("connectionAllowsMetered", () => {
     expect(
       connectionAllowsMetered({ isConnected: true, type: "ethernet" }, false),
     ).toBe(true);
+  });
+});
+
+// Seen on the emulator: after airplane mode, cellular comes back four seconds
+// before Wi-Fi. Resuming on "online again" restarted a Wi-Fi-only download on
+// cellular, which paused it again, and the Wi-Fi that followed was no edge at
+// all, so the download waited for good.
+// Mutation: drop the `connectionAllowsMetered` term and the first line goes
+// red; accept an unknown reachability and the last does.
+describe("connectionWorthResuming", () => {
+  const reachable = (state: object) => ({
+    ...state,
+    isInternetReachable: true,
+  });
+
+  it("is not cellular for a Wi-Fi-only job, and is the Wi-Fi after it", () => {
+    expect(connectionWorthResuming(reachable(cellular), false)).toBe(false);
+    expect(connectionWorthResuming(reachable(wifi), false)).toBe(true);
+    expect(connectionWorthResuming(reachable(cellular), true)).toBe(true);
+  });
+
+  it("waits until the platform says the internet is there", () => {
+    expect(connectionWorthResuming(reachable(offline), true)).toBe(false);
+    expect(
+      connectionWorthResuming({ ...wifi, isInternetReachable: null }, false),
+    ).toBe(false);
+  });
+});
+
+// NetInfo.fetch() answers from the last state it was SENT. Android sends none
+// when it lifts the network block it puts on an app behind another app, and
+// the state sent under that block calls Wi-Fi metered, so back in front a
+// Wi-Fi-only job read "mobile data" on Wi-Fi until the next real change.
+// Seen on the Android 15 emulator with region downloads.
+// Mutation: read `NetInfo.fetch()` again and the first test goes red.
+describe("canRunNow", () => {
+  it("asks the platform now, not the last state NetInfo was sent", async () => {
+    vi.mocked(readPref).mockReturnValue(null);
+    vi.mocked(NetInfo.fetch).mockResolvedValue(hotspot as never);
+    vi.mocked(NetInfo.refresh).mockResolvedValue(wifi as never);
+    expect(await canRunNow("geoPdfDownload")).toBe(true);
+    expect(NetInfo.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the state cannot be read", async () => {
+    vi.mocked(NetInfo.refresh).mockRejectedValue(new Error("no module"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await canRunNow("sync")).toBe(false);
+    logged.mockRestore();
   });
 });
 

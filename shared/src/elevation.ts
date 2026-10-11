@@ -1,8 +1,8 @@
 // Elevation profiles for drawn routes and the measure tool.
 //
 // The pure half lives here. The sampling itself has two readers, agreeing by
-// construction because both address tiles through `demTiles.ts`:
-// api/src/services/elevation.ts fetches them (the online path, one warm cache
+// construction because both sample through `sampleDem` in `demSources.ts`:
+// api/src/services/elevation.ts fetches tiles (the online path, one warm cache
 // for web and mobile), and mobile/src/offline/demLookup.ts reads them out of a
 // downloaded region, so heights survive going offline.
 //
@@ -15,6 +15,7 @@
 // helpers never log, and callers must keep points out of logs and error
 // messages (root privacy rules).
 
+import { DEM_SOURCES, type DemSamples } from "./demSources.js";
 import { haversineMeters } from "./placeGeo.js";
 import type { RoutePoint } from "./routeValidation.js";
 
@@ -63,6 +64,11 @@ export type ElevationProfile = {
   /** Null when the DEM covered no sample at all. */
   minM: number | null;
   maxM: number | null;
+  /**
+   * The DEM sources the heights were read from (`demSources.ts`), finest
+   * first. Absent on a profile from an API that predates it.
+   */
+  demSourceIds?: string[];
 };
 
 /** A position to sample, with its distance along the line. */
@@ -283,32 +289,43 @@ export function elevationGainLoss(
   return { gainM, lossM };
 }
 
-/** Assemble a profile from sample positions and the heights read for them. */
+/**
+ * Assemble a profile from sample positions and the heights read for them.
+ *
+ * The chart shows the heights as read; gain and loss are summed from the
+ * levelled series, so a join between two DEM sources is never counted as climb.
+ */
 export function buildElevationProfile(
   positions: readonly SamplePosition[],
-  elevations: readonly (number | null)[],
+  dem: DemSamples | readonly (number | null)[],
 ): ElevationProfile {
-  if (positions.length !== elevations.length) {
+  const { heights, levelled, sourceIds }: DemSamples =
+    "heights" in dem
+      ? dem
+      : { heights: [...dem], levelled: [...dem], sourceIds: [] };
+  if (positions.length !== heights.length) {
     // Fail loudly: a misaligned pair would silently attribute heights to the
     // wrong distances, producing a plausible-looking but wrong profile.
     throw new Error("elevation sample count does not match position count");
   }
   const samples = positions.map((position, i) => ({
     distanceM: position.distanceM,
-    elevationM: elevations[i] ?? null,
+    elevationM: heights[i] ?? null,
   }));
-  const known = samples
-    .map((s) => s.elevationM)
-    .filter((value): value is number => value != null);
+  const known = heights.filter((value): value is number => value != null);
   const { gainM, lossM } = elevationGainLoss(
-    samples.map((s) => s.elevationM),
+    levelled,
     DEM_ELEVATION_HYSTERESIS_M,
   );
+  const used = new Set(sourceIds);
   return {
     samples,
     gainM,
     lossM,
     minM: known.length > 0 ? Math.min(...known) : null,
     maxM: known.length > 0 ? Math.max(...known) : null,
+    demSourceIds: DEM_SOURCES.map((source) => source.id).filter((id) =>
+      used.has(id),
+    ),
   };
 }

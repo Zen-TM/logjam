@@ -1039,6 +1039,7 @@ function TripLogDialog({
             <SearchField
               label="Search your places"
               value={placeSearch}
+              // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
               autoFocus
               onChange={(event) => {
                 setPlaceSearch(event.target.value);

@@ -117,6 +117,8 @@ export default function LayersPopover({
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
   mapView,
   onImportFile,
 }: {
@@ -146,6 +148,8 @@ export default function LayersPopover({
   baseLayers: readonly BaseLayer[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
@@ -222,12 +226,30 @@ export default function LayersPopover({
               () => ReactNode
             > = {
               basemap: () => (
-                <BasemapGallery
-                  layers={baseLayers}
-                  activeLayerId={activeLayerId}
-                  onChange={onActiveLayerChange}
-                  mapView={mapView}
-                />
+                <>
+                  <BasemapGallery
+                    layers={baseLayers}
+                    activeLayerId={activeLayerId}
+                    onChange={onActiveLayerChange}
+                    mapView={mapView}
+                  />
+                  {/* Imagery has no contours of its own; the vector basemap
+                      always draws them (shared nswContours.ts). */}
+                  {activeLayerId === "six-imagery" && (
+                    <div className={classes.body}>
+                      <Row
+                        title="Contours"
+                        trailing={
+                          <Toggle
+                            checked={contoursOverImagery}
+                            onChange={onContoursOverImageryChange}
+                            label="Show contours"
+                          />
+                        }
+                      />
+                    </div>
+                  )}
+                </>
               ),
               overlays: () => (
                 <div className={classes.body}>
@@ -393,7 +415,7 @@ function BasemapGallery({
   return (
     <div
       role="radiogroup"
-      aria-label="Basemap"
+      aria-label="Map"
       tabIndex={-1}
       className={classes.gallery}
       onKeyDown={onKeyDown}

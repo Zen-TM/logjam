@@ -6,18 +6,20 @@
 // derived from it (`assetHue`, `placeHue`, and the ~45 files whose
 // `StyleSheet.create` reads these tokens) is a module constant snapshotted at
 // import time. That is also why a change applies at the next launch rather
-// than repainting the running app: see `persistThemeSchemeId` and DESIGN.md §12.
+// than repainting the running app: see `persistThemeSchemeId` and DESIGN.md.
 import {
   ASSET_HUES,
   CONTROL,
   DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
+  FORM_RHYTHM,
   normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
   SPACE_UNIT,
+  TEXT_ROLES,
   THEME_SCHEMES,
   TOUCH_TARGET_MIN,
   type ThemeSchemeId,
@@ -76,7 +78,7 @@ export function persistThemeSchemeId(id: ThemeSchemeId): boolean {
  *
  * Applied at launch, exactly like the scheme and for the same reason: these
  * numbers are snapshotted by every `StyleSheet.create` in the app at import
- * time (DESIGN.md §1).
+ * time (DESIGN.md).
  */
 export const TEXT_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
 export type TextScale = (typeof TEXT_SCALES)[number];
@@ -173,6 +175,9 @@ export const fontSize = {
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: number): number => n * SPACE_UNIT;
 
+/** A form's label, field and section gaps (`FORM_RHYTHM` in `@logjam/shared`). */
+export const formRhythm = FORM_RHYTHM;
+
 /** A disabled control's dim, the same number on both clients. */
 export const opacity = OPACITY;
 
@@ -190,6 +195,32 @@ export const fontWeight = {
   medium: weight(FONT_WEIGHT.medium),
   bold: weight(FONT_WEIGHT.bold),
 } as const;
+
+/** One of `TEXT_ROLES`' styles, spread into a text style: `...textRole.title`. */
+type TextRoleStyle = {
+  fontSize: number;
+  fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
+  textTransform?: "uppercase";
+  color?: string;
+};
+export const textRole = Object.fromEntries(
+  Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
+    if (!("gps" in spec)) return [];
+    const role = spec.gps as {
+      size: keyof typeof fontSize;
+      weight: keyof typeof fontWeight;
+      uppercase?: true;
+      muted?: true;
+    };
+    const style: TextRoleStyle = {
+      fontSize: fontSize[role.size],
+      fontWeight: fontWeight[role.weight],
+      ...(role.uppercase ? { textTransform: "uppercase" } : {}),
+      ...(role.muted ? { color: theme.textMuted } : {}),
+    };
+    return [[name, style]];
+  }),
+) as { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
 // Modal/sheet scrims — the only intentional black-alpha overlays. Everything
@@ -255,7 +286,7 @@ export type AssetHue = keyof typeof assetHue;
 /**
  * Place status identity for the Places screen — the same hue on a row's icon
  * tile and on its filter chip, exactly as `assetHue` works for saved assets
- * (docs/ux-principles.md §8). Scheme-independent for the same reason: a place you have run
+ * (shared/DESIGN.md §8). Scheme-independent for the same reason: a place you have run
  * is what it is regardless of the user's theme.
  */
 export const placeHue = {
@@ -266,7 +297,7 @@ export const placeHue = {
 } as const;
 
 /**
- * Inbox identity — BORROWED, not invented (docs/ux-principles.md §8). A notification is
+ * Inbox identity — BORROWED, not invented (shared/DESIGN.md §8). A notification is
  * always about something that lives somewhere else in the app, so it wears that
  * thing's hue: a topo notification is the same eucalypt as a topo overlay in
  * Saved, a place-share is the same heath as a shared place on the Places

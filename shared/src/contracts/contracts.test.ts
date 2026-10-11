@@ -57,6 +57,7 @@ import {
   placesEmptyState,
   placesFilterNote,
   placesHeroTitle,
+  placeTypeHasTab,
   placeVerbIds,
   placeVerbs,
   SCREEN_CONTRACTS,
@@ -67,6 +68,8 @@ import {
   tripsFilterNote,
   tripsHeroTitle,
   tripVerbs,
+  NEW_TYPE_ATTRIBUTES,
+  stepAfterPlaceTypeSave,
 } from "./index.js";
 
 describe("every screen contract", () => {
@@ -163,6 +166,15 @@ describe("the places list", () => {
     expect(placesHeroTitle(0)).toBe("No places yet");
     expect(placesHeroTitle(1)).toBe("1 place");
     expect(placesHeroTitle(37)).toBe("37 places");
+  });
+
+  // "I added a type and no tab appeared": a type the user made is on the rail
+  // from the moment it exists. Mutation: `places > 0` alone.
+  it("gives a type the user made a tab before it holds a place", () => {
+    expect(placeTypeHasTab({ builtIn: false, places: 0 })).toBe(true);
+    expect(placeTypeHasTab({ builtIn: false, places: 4 })).toBe(true);
+    expect(placeTypeHasTab({ builtIn: true, places: 0 })).toBe(false);
+    expect(placeTypeHasTab({ builtIn: true, places: 1 })).toBe(true);
   });
 
   it("announces hidden filters, then a sort that is not the default", () => {
@@ -516,6 +528,14 @@ describe("settings", () => {
     expect(drawsYoursHeading(2, 3)).toBe(true);
     expect(drawsYoursHeading(0, 3)).toBe(false);
     expect(drawsYoursHeading(2, 0)).toBe(false);
+  });
+
+  // Red when adding a type goes back to the list (`return "list"` for both):
+  // the new type's attributes are then a separate trip through Settings.
+  it("leads a new place type into its attributes, and a changed one back", () => {
+    expect(stepAfterPlaceTypeSave(true)).toBe("attributes");
+    expect(stepAfterPlaceTypeSave(false)).toBe("list");
+    expect(NEW_TYPE_ATTRIBUTES.done).toBe("Done");
   });
 
   it("says what deleting a type or an attribute costs", () => {

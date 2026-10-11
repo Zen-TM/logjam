@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import {
@@ -39,11 +40,14 @@ async function uploadTrack(
   placeId: string,
   headers: Record<string, string>,
   filename = "route.gpx",
+  /** Client-minted id, as Logjam GPS sends. */
+  mediaId?: string,
 ) {
   const presign = await request(API_URL)
     .post("/media/presign")
     .set(headers)
     .send({
+      ...(mediaId && { mediaId }),
       linkedType: "place",
       linkedId: placeId,
       filename,
@@ -87,6 +91,40 @@ describe("place tracks (fake auth)", () => {
       const { confirm } = await uploadTrack(placeId, as(ALICE_SUB));
       expect(confirm!.status).toBe(201);
       expect(confirm!.body.color).toMatch(/^#[0-9a-f]{6}$/);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
+  it("answers a replayed presign for the place's own track with the track, not a 409", async () => {
+    // Logjam GPS re-runs presign when the reply to its confirm was lost. The
+    // track it uploaded now fills the place's one slot, and being refused over
+    // its own file parked the upload as a sync issue. Mutation: check the
+    // track slot before the replay lookup in POST /media/presign.
+    const placeId = await createPlace(as(ALICE_SUB));
+    const mediaId = randomUUID();
+    try {
+      const first = await uploadTrack(
+        placeId,
+        as(ALICE_SUB),
+        "route.gpx",
+        mediaId,
+      );
+      expect(first.confirm!.status).toBe(201);
+
+      const replay = await request(API_URL)
+        .post("/media/presign")
+        .set(as(ALICE_SUB))
+        .send({
+          mediaId,
+          linkedType: "place",
+          linkedId: placeId,
+          filename: "route.gpx",
+          mediaType: "application/gpx+xml",
+          sizeBytes: GPX_BYTES.length,
+        });
+      expect(replay.status).toBe(200);
+      expect(replay.body.id).toBe(mediaId);
     } finally {
       await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
     }

@@ -167,6 +167,18 @@ describe("buildCustomFieldDef", () => {
     expect((result as { error: string }).error).toContain("already exists");
   });
 
+  // A key is minted from the first label and survives a rename. Mutation:
+  // drop the label comparison from `buildCustomFieldDef`.
+  it("rejects a label another definition was renamed to", () => {
+    const result = buildCustomFieldDef(
+      { label: " depth ", type: "integer", bounded: false, min: "", max: "" },
+      [{ key: "how_deep", label: "Depth", type: "integer" }],
+    );
+    expect((result as { error: string }).error).toBe(
+      'You already have an attribute called "depth".',
+    );
+  });
+
   it("builds bounded integer field", () => {
     const result = buildCustomFieldDef(
       { label: "Rating", type: "integer", bounded: true, min: "1", max: "5" },

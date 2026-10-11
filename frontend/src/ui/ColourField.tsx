@@ -32,7 +32,7 @@ import classes from "./ColourField.module.css";
  * Inside: a saturation/brightness plane, a hue strip and an opacity strip, each a
  * `role="slider"` the arrow keys move (Shift for bigger steps), and the value as
  * text for pasting one in. Changes apply as they are made — this is for styling
- * something live on the map — and a press outside closes it (DESIGN.md §4).
+ * something live on the map — and a press outside closes it (DESIGN.md).
  */
 function FreeColourField({
   label,
@@ -164,7 +164,7 @@ function FreeColourField({
  *
  * The colour's NAME is the trigger's accessible name ("Colour: Teal") and not
  * text beside the swatch: the swatch already shows the colour, and a reader who
- * cannot see it hears the name (DESIGN.md §6).
+ * cannot see it hears the name (DESIGN.md).
  *
  * The palette keeps its native radios, so the group is one tab stop and the
  * arrow keys move the choice; the popover only changes where they are. It is

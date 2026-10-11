@@ -24,6 +24,7 @@ import {
   placeMatchesSearch,
   placesCountLabel,
   placesEmptyKind,
+  placeTypeHasTab,
   placesEmptyState,
   placesFilterNote,
   placeSortLabel,
@@ -289,11 +290,16 @@ function PlacesPanel({
     return { any: withoutType.length, byType: counts };
   }, [matching, filters]);
 
-  // Membership over the whole collection: a type with no places is not offered,
-  // but a chip does not come and go as the user types.
-  const typesWithPlaces = useMemo(() => {
+  // Membership over the whole collection (`placeTypeHasTab`): a chip does not
+  // come and go as the user types.
+  const railTypes = useMemo(() => {
     const present = new Set(collection.map(({ place }) => place.placeTypeId));
-    return placeTypes.filter((type) => present.has(type.id));
+    return placeTypes.filter((type) =>
+      placeTypeHasTab({
+        builtIn: type.isSystem,
+        places: present.has(type.id) ? 1 : 0,
+      }),
+    );
   }, [collection, placeTypes]);
 
   const sheetCount = sheetFilterCount(filters);
@@ -617,7 +623,7 @@ function PlacesPanel({
           label={copy.typeRail}
           options={[
             { value: ANY_TYPE, label: copy.anyType, count: typeCounts.any },
-            ...typesWithPlaces.map((type) => {
+            ...railTypes.map((type) => {
               const count = typeCounts.byType.get(type.id) ?? 0;
               return {
                 value: type.id,

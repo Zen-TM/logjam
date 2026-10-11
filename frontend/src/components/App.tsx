@@ -18,7 +18,7 @@ import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import type { TBbox } from "./map/Map";
+import { NSW_CONTOURS_ENTRY_ID, type TBbox } from "./map/Map";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -88,12 +88,15 @@ import {
 } from "./sidebar/panels/waysModel";
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
+import FriendInviteDialog from "./dialogs/FriendInviteDialog";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
+  NSW_CONTOURS,
+  drawsNswContours,
 } from "@logjam/shared";
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -102,6 +105,18 @@ import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
+
+/**
+ * The statewide contours as one entry of the Map's topo layer list.
+ * Same origin, like the vector basemap: `/master/*` is served by the web
+ * distribution and proxied in dev.
+ */
+const NSW_CONTOURS_ENTRY = {
+  id: NSW_CONTOURS_ENTRY_ID,
+  pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
+  format: "vector" as const,
+  attribution: NSW_CONTOURS.creditHtml,
+};
 
 function App() {
   const toast = useToast();
@@ -147,7 +162,7 @@ function App() {
     null,
   );
   // The trip whose page is open. A trip is READ on a page like a place and a
-  // way (DESIGN.md §4), so it needs the same one piece of state.
+  // way (DESIGN.md), so it needs the same one piece of state.
   const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
     null,
   );
@@ -179,6 +194,11 @@ function App() {
   const activeLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
     ? storedLayerId
     : "protomaps";
+
+  const [contoursOverImagery, setContoursOverImagery] = useStoredState(
+    "logjam.contoursOverImagery",
+    false,
+  );
 
   const [showAdd, setShowAdd] = useState(false);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
@@ -219,7 +239,7 @@ function App() {
   // A verb a ROW asked for, run once the way's page mounts — how a row offers
   // Share, Rename and Delete without hosting a second copy of each form.
   const [pendingWayVerb, setPendingWayVerb] = useState<WayVerbId | null>(null);
-  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md §6).
+  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md).
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
   const [flyToBounds, setFlyToBounds] = useState<
@@ -228,7 +248,7 @@ function App() {
   // Where along a line the elevation-profile cursor sits, so the chart and the
   // map point at the same place. NOT state: it changes many times a second, and
   // as state every move re-rendered App, the map and the panel before the dot
-  // could move (DESIGN.md §6 — `map/routeHover.ts` carries the full reasoning).
+  // could move (DESIGN.md — `map/routeHover.ts` carries the full reasoning).
   const routeHover = useMemo(() => createRouteHoverChannel(), []);
 
   // Coordinate picking mode for PlaceDialog
@@ -270,7 +290,7 @@ function App() {
     CompletedTopoJob[]
   >([]);
   // True once the first fetch settles, either way: an empty list before then is
-  // not "no topos yet" (docs/ux-principles.md §11).
+  // not "no topos yet" (shared/DESIGN.md §11).
   const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
@@ -440,11 +460,24 @@ function App() {
     completedTopoJobs,
   ]);
 
+  // The statewide contours ride the same list, underneath every topo area's
+  // own layers, so the Map draws and styles them with the code it has.
+  const mapTopoLayers = useMemo(
+    () =>
+      drawsNswContours(activeLayerId, contoursOverImagery)
+        ? [NSW_CONTOURS_ENTRY, ...combinedTopoLayers]
+        : combinedTopoLayers,
+    [activeLayerId, contoursOverImagery, combinedTopoLayers],
+  );
+
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
   // user once — silently missing layers were the LAYERS-1 finding.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
+      // Not a topo area's layer, and nothing the user switched on: the map is
+      // simply drawn without contours.
+      if (entryId === NSW_CONTOURS_ENTRY.id) return;
       setUnavailableTopoEntryIds((prev) => {
         if (prev.has(entryId)) return prev;
         const next = new Set(prev);
@@ -641,7 +674,7 @@ function App() {
 
   // Ways is built from three fetches, so it has nothing to say until all three
   // have settled — one still in flight would show a short list as if it were
-  // the whole list (docs/ux-principles.md §11).
+  // the whole list (shared/DESIGN.md §11).
   const waysLoaded = routesLoaded && standaloneFilesLoaded && placeTracksLoaded;
 
   /** The places shared WITH the user. What tells a route shared on its own from
@@ -1553,6 +1586,9 @@ function App() {
                 onChanged={() => {
                   refetchRoutes();
                   refetchStandaloneFiles();
+                  // A file linked to a place is drawn by the place-tracks layer
+                  // too, from its own copy of the colour.
+                  refetchPlaceTracks();
                 }}
                 onOpenPlace={(placeId) => {
                   setSelectedPlaceID(placeId);
@@ -1756,7 +1792,7 @@ function App() {
             setSelectingTopoBbox(false);
             setShowTopo(true);
           }}
-          topoLayers={combinedTopoLayers}
+          topoLayers={mapTopoLayers}
           vectorStyle={vectorStyle}
           activeLayerId={activeLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
@@ -1826,8 +1862,12 @@ function App() {
         baseLayers={BASE_LAYERS}
         activeLayerId={activeLayerId}
         onActiveLayerChange={setActiveLayerId}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={setContoursOverImagery}
         mapView={mapCenter}
       />
+
+      <FriendInviteDialog enabled={loadsUserData} onFriended={refetchFriends} />
 
       <ConfirmDialog
         open={cancelRouteGuard.guardOpen}

@@ -40,7 +40,7 @@ type ListPage = "placeTypes" | "tripAttributes" | "placeAttributes";
 /**
  * Settings — how the app behaves, and the lists the user keeps.
  *
- * NO HERO (docs/ux-principles.md §2): there is nothing to headline. A hero whose only
+ * NO HERO (shared/DESIGN.md §2): there is nothing to headline. A hero whose only
  * content is the word "Settings" is exactly the pattern the hero rule replaces,
  * and Logjam GPS's settings screen makes the same call.
  *
@@ -157,6 +157,8 @@ function SettingsPanel({
         types={placeTypes}
         loading={!currentUser}
         onTypesChange={onPlaceTypesChange}
+        placeDefs={placeCustomFieldDefs}
+        onPlaceDefsChange={onPlaceCustomFieldDefsChange}
         onBack={() => setPage(null)}
       />
     );

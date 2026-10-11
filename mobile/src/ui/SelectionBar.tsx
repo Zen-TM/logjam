@@ -26,7 +26,7 @@ export function SelectionBar({
    * One more group verb, sitting between select-all and delete — an
    * `IconButton`, sized like the two it stands among. Two exist: the inbox's
    * read/unread toggle, and bulk share on Places and Saved. The bar stays a
-   * fixed set of slots rather than an arbitrary toolbar: DESIGN.md §5 admits
+   * fixed set of slots rather than an arbitrary toolbar: DESIGN.md admits
    * only verbs that are BETTER in bulk than one at a time, and a bar that grows
    * a row per screen is how that rule stops being checkable.
    *

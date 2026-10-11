@@ -30,10 +30,10 @@
 
 .title {
   padding: var(--space-0-5) var(--space-1) var(--space-0-5);
-  font-size: var(--font-xs);
-  font-weight: 600;
+  font-size: var(--text-section-size);
+  font-weight: var(--text-section-weight);
   letter-spacing: 1px;
-  text-transform: uppercase;
+  text-transform: var(--text-section-transform);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;

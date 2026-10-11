@@ -46,6 +46,7 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BASEMAP_CATALOG } from "@logjam/shared";
 
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
@@ -299,7 +300,7 @@ export function PickPointScreen({
           <Pressable
             key={id}
             accessibilityRole="button"
-            accessibilityLabel={`Use the ${id} basemap`}
+            accessibilityLabel={`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? "this map"}`}
             accessibilityState={{ selected: id === basemapId }}
             style={[styles.thumb, id === basemapId && styles.thumbActive]}
             onPress={() => setBasemapId(id)}
@@ -336,7 +337,7 @@ export function PickPointScreen({
             icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
-            // disabled one saying why (DESIGN.md §5), which is what the hint
+            // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
             onPress={() => picked && onConfirm(picked)}

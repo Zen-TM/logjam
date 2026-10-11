@@ -46,7 +46,7 @@
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
    only on the page colour, and an outline button also sits on cards (a row's
-   Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md §1). */
+   Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md). */
 .outline {
   border-color: var(--color-accent);
   color: var(--color-text);

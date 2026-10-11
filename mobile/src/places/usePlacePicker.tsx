@@ -7,7 +7,7 @@
 // near-copies of a place picker is how one of them ends up with a different
 // filter or a different warning. It returns `{ header, body }` — the shape
 // `useSharePanel` established — so the sheet that owns the verb renders it as a
-// SUB-MODE and never stacks a second sheet (DESIGN.md §4).
+// SUB-MODE and never stacks a second sheet (DESIGN.md).
 //
 // Reads places from the MIRROR, so it works with no signal: the link is an
 // outbox op like any other edit. Only places the user OWNS are offered — the

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { radius, spacing, textRole, theme } from "../theme";
 import { Icon } from "./Icon";
 
 export type Stat = {
@@ -88,19 +88,12 @@ const styles = StyleSheet.create({
   readOnly: { backgroundColor: "transparent", borderColor: "transparent" },
   span: { flexBasis: "100%" },
   pressed: { backgroundColor: theme.cardPressed },
-  label: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  label: { ...textRole.section, letterSpacing: 0.8 },
   valueRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing(1) },
   value: {
     flexShrink: 1,
+    ...textRole.statValue,
     color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
   },
   // Pushed to the cell's right edge; the bottom nudge sits it on the value's
   // baseline rather than on the bottom of its line box.

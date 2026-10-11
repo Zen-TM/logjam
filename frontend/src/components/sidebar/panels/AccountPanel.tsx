@@ -47,7 +47,7 @@ function percentUsed(used: number, quota: number): number {
 }
 
 /**
- * Account — "who am I here, and what am I using of it?" (docs/ux-principles.md §2).
+ * Account — "who am I here, and what am I using of it?" (shared/DESIGN.md §2).
  *
  * The two quota meters ARE the question, so they lead. Everything else is the
  * sign-in identity and the two irreversible things: signing out and deleting
@@ -320,7 +320,7 @@ function UsernameForm({
 
   async function save() {
     const trimmed = value.trim();
-    // Empty is a requirement, reported on submit (docs/ux-principles.md §11); unchanged is
+    // Empty is a requirement, reported on submit (shared/DESIGN.md §11); unchanged is
     // not an error at all, just nothing to do.
     if (!trimmed) {
       setError("Enter a username.");

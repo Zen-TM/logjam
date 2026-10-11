@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   basemapsCoveringViewport,
+  hasSavedImageryContours,
   resolveMapSource,
   hashKey,
   type BasemapId,
@@ -337,5 +338,59 @@ describe("basemapsCoveringViewport", () => {
         CANDIDATES,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("statewide contours", () => {
+  it("online: the CDN's archive", () => {
+    const [r] = resolveMapSource({ kind: "nsw-contours" }, ctx());
+    expect(r).toMatchObject({
+      status: "ok",
+      sourceType: "vector",
+      url: `pmtiles://${CDN}/master/contours/nsw-10m.pmtiles`,
+    });
+  });
+
+  // Mutation: match saved clips by `basemap-region` and the vector basemap's
+  // own clip is drawn as contours (and the reverse in snapRegion.ts).
+  it("offline: only the contour clips saved, never a basemap's", () => {
+    const saved = [
+      artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
+      artifact({ id: "b", kind: "basemap-region", logicalKey: "protomaps" }),
+    ];
+    const resolved = resolveMapSource(
+      { kind: "nsw-contours" },
+      ctx({ connectivity: "offline", artifacts: saved }),
+    );
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]).toMatchObject({ status: "ok", origin: "local" });
+    expect(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        ctx({ connectivity: "offline" }),
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
+  });
+});
+
+describe("hasSavedImageryContours", () => {
+  const imagery = (groupId: string) =>
+    artifact({
+      id: `i-${groupId}`,
+      kind: "basemap-region",
+      logicalKey: "six-imagery",
+      groupId,
+    });
+  const contours = (groupId: string) =>
+    artifact({ id: `c-${groupId}`, kind: "contours-region", groupId });
+
+  // Mutation: test for a contour clip anywhere, and the switch is offered
+  // offline when the only contours saved are with a vector area, where
+  // switching it on over imagery draws nothing.
+  it("needs both in the same saved area", () => {
+    expect(hasSavedImageryContours([imagery("a"), contours("a")])).toBe(true);
+    expect(hasSavedImageryContours([imagery("a"), contours("b")])).toBe(false);
+    expect(hasSavedImageryContours([imagery("a")])).toBe(false);
+    expect(hasSavedImageryContours([])).toBe(false);
   });
 });

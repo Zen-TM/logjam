@@ -19,6 +19,7 @@ import {
   Chip,
   DatePicker,
   DateRangeFilter,
+  FormStack,
   SectionHeader,
   SwitchRow,
 } from "../ui";
@@ -227,19 +228,18 @@ export function LogsFilterSheet(props: Props) {
           swapping the sheet's CHILDREN for the short picker collapses the
           scroll content, and RN clamps the offset to 0 — so coming back from a
           date threw the user to the top of a long sheet. */}
-      <View style={styles.body}>
+      <FormStack>
         {contractSectionKeys(TRIPS_FILTER_SHEET, "gps").map((key) => (
           <Fragment key={key}>
             {FILTER_SHEET_SECTIONS[key]({ ...props, pickDate: setBound })}
           </Fragment>
         ))}
-      </View>
+      </FormStack>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { gap: spacing(1) },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },

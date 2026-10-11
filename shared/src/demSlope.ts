@@ -15,10 +15,12 @@
 // PRIVACY: positions here are precise wilderness coordinates. Nothing logs.
 
 import {
-  DEM_TILE_SIZE,
-  DEM_TILE_ZOOM,
-  demTileCoordinates,
-} from "./demTiles.js";
+  NSW_5M,
+  sampleDem,
+  type DemSource,
+  type DemTileReader,
+} from "./demSources.js";
+import { DEM_TILE_SIZE, demTileCoordinates } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
 
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
@@ -30,10 +32,17 @@ export type DemSlopeWindow = {
   cellM: number;
 };
 
-/** The 3×3 block of DEM pixels centred on the pixel a position falls in. */
-export function demSlopeWindow(lon: number, lat: number): DemSlopeWindow {
-  const pixelsAcross = 2 ** DEM_TILE_ZOOM * DEM_TILE_SIZE;
-  const tile = demTileCoordinates(lon, lat, DEM_TILE_ZOOM);
+/**
+ * The 3×3 block of DEM pixels centred on the pixel a position falls in, at
+ * the zoom a source is read at.
+ */
+export function demSlopeWindow(
+  lon: number,
+  lat: number,
+  zoom: number,
+): DemSlopeWindow {
+  const pixelsAcross = 2 ** zoom * DEM_TILE_SIZE;
+  const tile = demTileCoordinates(lon, lat, zoom);
   const centreX = Math.floor(tile.x * DEM_TILE_SIZE) + 0.5;
   const centreY = Math.floor(tile.y * DEM_TILE_SIZE) + 0.5;
 
@@ -71,4 +80,28 @@ export function slopeDegrees(
   const eastward = (ne! + 2 * e! + se! - (nw! + 2 * w! + sw!)) / (8 * cellM);
   const southward = (sw! + 2 * s! + se! - (nw! + 2 * n! + ne!)) / (8 * cellM);
   return (Math.atan(Math.hypot(eastward, southward)) * 180) / Math.PI;
+}
+
+/**
+ * The slope at a position, or null where it cannot be told honestly.
+ *
+ * Read from ONE source and never down the usual list: all nine heights must
+ * come from the same surface, and the worldwide 30 m tiles were measured too
+ * coarse for a point slope (within 5° of a 5 m survey at 57 % of points, a
+ * median of 34° on ground of 60° or steeper), where the NSW 5 m source is
+ * within 5° at 98 %. So outside NSW, or where a saved area lacks a tile, the
+ * answer is null and no slope is shown. `demSlope.test.ts` holds this.
+ *
+ * At zoom 15 the window is about 12 m across: a drop or slot narrower than
+ * that is averaged away.
+ */
+export async function demSlopeAt(
+  lon: number,
+  lat: number,
+  readTiles: DemTileReader,
+  source: DemSource = NSW_5M,
+): Promise<number | null> {
+  const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
+  const { heights } = await sampleDem(positions, readTiles, [source]);
+  return slopeDegrees(heights, cellM);
 }

@@ -10,14 +10,17 @@ import {
   parseSyncDeltaTripRow,
   parseSyncDeltaPlaceLinkRow,
   selectFlushBatch,
+  shouldGiveUpOnSyncOp,
   SYNC_PROTOCOL,
   SYNC_PUSH_MAX_OPS,
+  tallySyncFailure,
   type OutboxEntry,
   type SyncPushOpResult,
   type SyncPushResponse,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import { isNoResponse, isTransferCut } from "../api/noResponse";
 import {
   loadOutboxRows,
   loadOutboxRowsFor,
@@ -28,6 +31,7 @@ import {
   runMediaCreateOp,
   runMediaDeleteOp,
   runMediaLinkOp,
+  runMediaRecolourOp,
   runMediaRenameOp,
   type MediaOpRow,
   type MediaOpOutcome,
@@ -36,13 +40,22 @@ import { upsertPlace, upsertPlaceLink, upsertTrip } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 /**
- * After this many rejections a push op is parked for the user even if the
- * server's answer looked temporary. Same backstop, and the same number, as
- * `MEDIA_MAX_ATTEMPTS` below: something failing this often is not going to
- * start working, and an op retried forever is one the user is never told
- * about.
+ * An op's last error record, which is also where its failure tally lives
+ * (`tallySyncFailure`): the count and its starting instant ride in
+ * `error_json` beside the code, so they last exactly as long as the op stays
+ * unsent and a manual Retry, which clears the column, starts them again.
+ *
+ * NOT `attempts`. That column counts SENDS, including every one that timed
+ * out, and capping on it parked whatever was queued after a minute of bad
+ * signal: the retry ladder starts at one second.
  */
-const PUSH_MAX_ATTEMPTS = 5;
+function lastError(row: { error_json: string | null }): unknown {
+  try {
+    return row.error_json ? JSON.parse(row.error_json) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** What one flush pass left behind, for the engine to act on. */
 export type FlushSummary = {
@@ -149,7 +162,7 @@ async function sendBatch(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
         JSON.stringify({
           code: status,
-          message: "The server rejected this change. Retry or discard it.",
+          message: "Couldn't send this change. Try again or discard it.",
         }),
         seqs[0],
       );
@@ -204,13 +217,11 @@ async function applyOpResult(
       await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
 
       if (result.status === "appliedWithConflict" && result.conflicts?.length) {
-        // Server over-reports by contract (DESIGN.md §4) — drop receipts whose
+        // Server over-reports by contract (DESIGN.md) — drop receipts whose
         // serverValue matches the base this edit was made against.
         const base = row.base_fields_json
           ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
           : {};
-        const real = filterSelfConflicts(result.conflicts, base);
-        const at = new Date().toISOString();
         // `shelved_json` is what the USER wrote and `server_json` is what won
         // — the Sync Issues screen renders them as "Discarded" and "Kept".
         // Both columns used to be filled from serverValue, so the user was
@@ -219,6 +230,21 @@ async function applyOpResult(
         const ownFields = row.fields_json
           ? (JSON.parse(row.fields_json) as Record<string, unknown>)
           : {};
+        // A value one of this row's still-queued edits writes is this phone's
+        // too: when a batch holding two edits to one field is replayed after
+        // a lost reply, the first is told it replaced the second
+        // (flush.test.ts). That edit is about to write the value again.
+        const later = (await loadOutboxRowsFor(row.entity, row.entity_id)).map(
+          (queued) =>
+            queued.fields_json
+              ? (JSON.parse(queued.fields_json) as Record<string, unknown>)
+              : {},
+        );
+        const real = later.reduce(
+          (kept, fields) => filterSelfConflicts(kept, base, fields),
+          filterSelfConflicts(result.conflicts, base, ownFields),
+        );
+        const at = new Date().toISOString();
         // The server's own confirmed row is the name's source, and this is the
         // only moment it is guaranteed to be in hand: the mirror row can be
         // deleted later, taking with it the only answer to "which place was
@@ -258,22 +284,21 @@ async function applyOpResult(
       // could have pressed itself, and teaching them that the screen is full
       // of things that fix themselves. What reaches the user is what a retry
       // cannot fix: a refusal about the request (400/409/…), a row deleted
-      // under the edit, or an op that has now failed PUSH_MAX_ATTEMPTS times
-      // however temporary each failure claimed to be.
-      // `row` was read BEFORE `sendBatch` bumped the counter, so the attempt
-      // that just failed is `row.attempts + 1` — the same off-by-one the media
-      // path spells out below.
-      const attempts = row.attempts + 1;
+      // under the edit, or an op the server has kept refusing for a day
+      // (`shouldGiveUpOnSyncOp`), however temporary each refusal claimed to be.
+      const now = new Date();
+      const tally =
+        !isGone && isTransientSyncError(error.code)
+          ? tallySyncFailure(lastError(row), now)
+          : null;
       const retryable =
-        !isGone &&
-        isTransientSyncError(error.code) &&
-        attempts < PUSH_MAX_ATTEMPTS;
+        tally !== null && !shouldGiveUpOnSyncOp(tally, true, now);
       await db.runAsync(
         "UPDATE outbox SET state = ?, error_json = ? WHERE seq = ?",
         // Edit-on-deleted (§6 delete-wins): park as deadRemote so the UI
         // offers "recreate"; other terminal rejections park blocked.
         isGone ? "deadRemote" : retryable ? "retrying" : "blocked",
-        JSON.stringify(error),
+        JSON.stringify(retryable ? { ...error, ...tally } : error),
         row.seq,
       );
       return false;
@@ -346,17 +371,6 @@ async function applyConfirmedRow(
 // dependency): a still-queued or blocked place/trip create for the same
 // linkedId would send the upload into a guaranteed 404.
 
-/**
- * After this many failed attempts a media op is parked rather than retried.
- *
- * Not every permanent failure carries an HTTP status — a filesystem error on a
- * reclaimed cache file has none at all — so status classification alone can
- * never be complete. The counter is the backstop: anything that fails this
- * often is not going to succeed, and belongs in front of the user instead of
- * in a five-minute retry loop forever.
- */
-const MEDIA_MAX_ATTEMPTS = 5;
-
 async function countRetrying(
   db: Awaited<ReturnType<typeof getSyncDb>>,
 ): Promise<number> {
@@ -368,8 +382,11 @@ async function countRetrying(
 
 async function flushMediaOps(): Promise<boolean> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<MediaOpRow & { op: string }>(
-    `SELECT seq, entity_id, op, fields_json, media_phase, attempts FROM outbox
+  const rows = await db.getAllAsync<
+    MediaOpRow & { op: string; error_json: string | null }
+  >(
+    `SELECT seq, entity_id, op, fields_json, media_phase, attempts, error_json
+     FROM outbox
      WHERE entity = 'media' AND state = 'queued' ORDER BY seq ASC`,
   );
   let progressed = false;
@@ -396,21 +413,49 @@ async function flushMediaOps(): Promise<boolean> {
       // next pass hit the same op first and threw again, and because the op
       // never parked it never appeared in Sync Issues either.
       firstError ??= err;
-      const attempts = row.attempts + 1;
-      if (attempts >= MEDIA_MAX_ATTEMPTS) {
+      // No answer at all (a timeout, a reset connection) is the link's
+      // failure, not this op's: it goes back in the queue uncounted, however
+      // often it happens. Guard: "never parks an upload over …" in
+      // flush.test.ts.
+      if (isNoResponse(err)) {
+        await db.runAsync(
+          "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
+          row.seq,
+        );
+        // An unanswered API call is the link being down for every op behind
+        // this one too, and each would spend its own timeout before the cycle
+        // reached the delta pull. Only a transfer that died partway goes on:
+        // that is about one file, and stopping for it would let a large video
+        // block every photo queued after it. Guard: "stops the pass when the
+        // API gives no answer" in flush.test.ts.
+        if (!isTransferCut(err)) break;
+        continue;
+      }
+      // Everything else is counted, because not every permanent failure
+      // carries a status a runner could park on — a filesystem error has none
+      // at all — and an op that fails forever must reach the user eventually.
+      // A status the server may answer differently next time (a 503 mid-
+      // deploy) additionally has to have lasted a day.
+      const status = (err as { status?: unknown }).status;
+      const transient =
+        typeof status === "number" && isTransientSyncError(status);
+      const now = new Date();
+      const tally = tallySyncFailure(lastError(row), now);
+      if (shouldGiveUpOnSyncOp(tally, transient, now)) {
         await db.runAsync(
           "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
           JSON.stringify({
-            code: 0,
+            code: transient ? status : 0,
             message:
-              "This upload keeps failing on this phone. Retry or discard it.",
+              "This upload keeps failing on this phone. Try again or discard it.",
           }),
           row.seq,
         );
         mirrorTouched = true;
       } else {
         await db.runAsync(
-          "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
+          "UPDATE outbox SET state = 'queued', error_json = ? WHERE seq = ? AND state = 'inflight'",
+          JSON.stringify({ code: transient ? status : 0, ...tally }),
           row.seq,
         );
       }
@@ -419,7 +464,8 @@ async function flushMediaOps(): Promise<boolean> {
 
   if (mirrorTouched) notifyMirrorChanged();
   // The cycle still failed — the engine's backoff is what retries a genuinely
-  // transient outage — but every op got its turn first.
+  // transient outage — but every op got its turn first, unless the link is
+  // down.
   if (firstError) throw firstError;
   return progressed;
 }
@@ -435,6 +481,8 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
       return runMediaDeleteOp(row);
     case "rename":
       return runMediaRenameOp(row);
+    case "recolour":
+      return runMediaRecolourOp(row);
     case "link":
       return runMediaLinkOp(row);
     default:

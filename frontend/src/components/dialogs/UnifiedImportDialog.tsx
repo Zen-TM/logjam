@@ -445,11 +445,11 @@ function UnifiedImportDialog({
 
   const [step, setStep] = useState<Step>("map");
   // Merge settings are a SUB-VIEW of the confirm step, not a block that grows
-  // inside it (DESIGN.md §4): they are a long errand done once, and the accordion they
+  // inside it (DESIGN.md): they are a long errand done once, and the accordion they
   // replace opened closed, which is how the confirm step came to talk about
   // settings before it said what it was about to import.
   const [showingMergeSettings, setShowingMergeSettings] = useState(false);
-  // Undo destroys what the import just made, and nothing brings it back (DESIGN.md §5).
+  // Undo destroys what the import just made, and nothing brings it back (DESIGN.md).
   const [confirmingUndo, setConfirmingUndo] = useState(false);
   const [importing, setImporting] = useState(false);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
@@ -1598,7 +1598,7 @@ function UnifiedImportDialog({
 
   /** The file, and which kind the importer is treating it as. The kind is a
    *  two-option rail rather than a pair of toggle buttons: it is one value
-   *  chosen from a closed set, which is what a chip rail is for (DESIGN.md §1). */
+   *  chosen from a closed set, which is what a chip rail is for (DESIGN.md). */
   function renderFileChip(loaded: LoadedFile, which: "place" | "triplog") {
     return (
       <div className={classes.fileChip}>
@@ -1817,7 +1817,7 @@ function UnifiedImportDialog({
                         }))
                       }
                     >
-                      <option value="name">Place Name</option>
+                      <option value="name">Place name</option>
                       <option value="date">Date</option>
                       <option value="notes">Notes</option>
                       <option value="type">Type</option>
@@ -2151,7 +2151,7 @@ function UnifiedImportDialog({
           <p className={classes.lede} role="status">
             Importing…
           </p>
-          {/* No total to count against — a sweep, not a value (DESIGN.md §1). */}
+          {/* No total to count against — a sweep, not a value (DESIGN.md). */}
           <ProgressBar label="Importing" />
         </div>
       );

@@ -13,14 +13,14 @@ function sources(dir: string): string[] {
 }
 
 // Uppercase is for a heading, a stat caption or the hero's eyebrow: never for
-// the label of a field or a control (docs/ux-principles.md §2; `fieldLabel`).
-// The files below are the whole list of places allowed to set it. Red when a
-// new file sets `textTransform: "uppercase"`: a field label there would read as
-// a second section heading. To see it: add that style to `ui/TextField.tsx`.
+// the label of a field or a control (shared/DESIGN.md §2; `fieldLabel`).
+// `theme.ts` draws it once, as the `section` type role that SectionHeader, Hero
+// and StatGrid spread; the files below it are the rest of the places allowed to
+// set it. Red when a new file sets `textTransform: "uppercase"`: a field label
+// there would read as a second section heading. To see it: add that style to
+// `ui/TextField.tsx`.
 const MAY_SHOUT = [
-  "ui/SectionHeader.tsx",
-  "ui/Hero.tsx",
-  "ui/StatGrid.tsx",
+  "theme.ts",
   "screens/NotificationsScreen.tsx", // the day heading
   "routes/RouteStatsBody.tsx", // chart caption
   "tracks/TrackStatsBody.tsx",

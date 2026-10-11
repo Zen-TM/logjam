@@ -10,13 +10,15 @@
 //    label.** A link inside a `<label>` toggles the control it labels, so
 //    reading the terms used to tick (or untick) the box that says you agree
 //    with them.
-//  - **The error goes directly above the button it belongs to** (docs/ux-principles.md §11), never at
+//  - **The error goes directly above the button it belongs to** (shared/DESIGN.md §11), never at
 //    the top of the form, and a field's own complaint goes under the field.
 import { useState, useEffect } from "react";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
+import { FRIENDS } from "@logjam/shared";
+import { pendingFriendInvite } from "../pendingFriendInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import {
@@ -366,6 +368,11 @@ function SignIn({
       <div className={classes.container}>
         <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
+          {pendingFriendInvite() && (
+            <p className={classes.successBanner} role="status">
+              {FRIENDS.copy.inviteSignIn}
+            </p>
+          )}
           <TextField
             label="Name"
             value={name}
@@ -464,6 +471,11 @@ function SignIn({
     <div className={classes.container}>
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
+        {pendingFriendInvite() && (
+          <p className={classes.successBanner} role="status">
+            {FRIENDS.copy.inviteSignIn}
+          </p>
+        )}
         {resetSuccess && (
           <p className={classes.successBanner} role="status">
             Password reset — please sign in.

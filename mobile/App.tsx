@@ -29,8 +29,7 @@ import { AppShell } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
-import { LoadingState } from "./src/ui/ScreenStates";
-import { Button } from "./src/ui/Button";
+import { Button, LoadingState } from "./src/ui";
 import { fontSize, spacing, systemBarStyle, theme } from "./src/theme";
 
 // The blocked build's only way out (MAPP-001). The rule itself — Android only,

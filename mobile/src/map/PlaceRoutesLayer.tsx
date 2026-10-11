@@ -18,6 +18,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import { TRACK_MIME_TYPES, parseVectorImport, MAP_INK } from "@logjam/shared";
 
+import { ROUTES_FLOOR } from "./layerOrder";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { useMirrorPlaceTracks } from "../sync/useSyncQueries";
 
@@ -32,7 +33,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
   onStatus,
 }: {
   /** Drawn/unavailable counts, so the map can say when it is showing less than
-   *  everything (docs/ux-principles.md §11: a map that hides things says so). */
+   *  everything (shared/DESIGN.md §11: a map that hides things says so). */
   onStatus: (status: PlaceRoutesStatus) => void;
 }) {
   const tracks = useMirrorPlaceTracks(TRACK_MIME_TYPES);
@@ -99,6 +100,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         key="place-routes-casing"
         type="line"
         id="place-routes-casing"
+        beforeId={ROUTES_FLOOR}
         style={{
           lineColor: MAP_INK.casing,
           lineWidth: 5,
@@ -111,6 +113,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         key="place-routes-line"
         type="line"
         id="place-routes-line"
+        beforeId={ROUTES_FLOOR}
         style={{
           lineColor: ["get", "routeColor"] as unknown as string,
           lineWidth: 2.5,
@@ -123,6 +126,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         key="place-routes-points"
         type="circle"
         id="place-routes-points"
+        beforeId={ROUTES_FLOOR}
         filter={["==", ["geometry-type"], "Point"] as never}
         style={{
           circleRadius: 3.5,

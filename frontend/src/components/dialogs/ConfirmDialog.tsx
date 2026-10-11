@@ -3,7 +3,7 @@ import { Button, Dialog } from "../../ui";
 
 /**
  * The confirm every destructive or irreversible verb raises, on the kit
- * `Dialog`. `message` says what goes and what stays (DESIGN.md §5). Cancel
+ * `Dialog`. `message` says what goes and what stays (DESIGN.md). Cancel
  * first, then the verb on the right: a warning fill for the default `error`,
  * the accent fill for a confirm that loses nothing (Rename, Fetch from
  * RopeWiki). While `busy`, both buttons wait and nothing dismisses it.

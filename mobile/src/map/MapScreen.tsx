@@ -62,7 +62,7 @@ import {
 } from "expo-sensors";
 import {
   SYSTEM_PLACE_TYPE_IDS,
-  DEM_ATTRIBUTION,
+  demCredits,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
@@ -83,6 +83,9 @@ import {
   snapSegment,
   type IconIdea,
   type SnapMode,
+  type TrackPass,
+  drawsNswContours,
+  nswContourStyle,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -199,7 +202,9 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
+  readContoursOverImagery,
   setBasemapPreference,
+  setContoursOverImagery,
 } from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
@@ -264,7 +269,10 @@ import {
   setRecordingMapFocusBoost,
   startTrackRecording,
 } from "../tracks/trackRecorder";
-import { TrackMapLayers } from "../tracks/TrackMapLayers";
+import {
+  TrackMapLayers,
+  type TrackPressHandler,
+} from "../tracks/TrackMapLayers";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
@@ -283,10 +291,7 @@ import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import {
-  ProtomapsLayers,
-  protomapsLayerCount,
-} from "./basemap/ProtomapsLayers";
+import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
@@ -306,12 +311,12 @@ import {
   type ResolveContext,
 } from "./sourceResolver";
 import {
+  topoOverlayCredits,
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
   type CompletedOverlaysResponse,
   type TopoOverlayRef,
 } from "./topoOverlays";
-import { buildTopoVectorLayerDefs } from "./topoVectorLayers";
 import {
   MAX_PINCH_ZOOM,
   useMapPinchGesture,
@@ -323,7 +328,12 @@ import {
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
-import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
+import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import {
+  TopoIconImages,
+  TopoVectorOverlay,
+  topoVectorLayerIds,
+} from "./TopoVectorOverlay";
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
 // file:// assets once installed (stage 4a §8.3), remote host as the
@@ -491,6 +501,8 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
+
+const OFFLINE_MASK_LAYER = "offline-mask-fill";
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -852,10 +864,17 @@ export function MapScreen({
     setBasemapId(next);
     setBasemapPreference(next);
   }, []);
+  const [contoursOverImagery, setContoursOverImageryState] = useState(
+    readContoursOverImagery,
+  );
+  const chooseContoursOverImagery = useCallback((on: boolean) => {
+    setContoursOverImageryState(on);
+    setContoursOverImagery(on);
+  }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
-  // sheet has actually closed (never two sheets at once — DESIGN.md §4).
+  // sheet has actually closed (never two sheets at once — DESIGN.md).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
@@ -865,7 +884,7 @@ export function MapScreen({
   const toastNonce = useRef(0);
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
-  // route draw confirms and saves) and the ink (docs/ux-principles.md §11).
+  // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
   const measureDraft = useRouteDraft();
   const routeDraft = useRouteDraft();
   const measuring = measureDraft.active;
@@ -938,7 +957,7 @@ export function MapScreen({
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
-  // the stats a sub-mode one row in (DESIGN.md §5: the same object offers the
+  // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
@@ -1347,6 +1366,17 @@ export function MapScreen({
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
   );
+  // The statewide contours, where this basemap takes them (shared
+  // nswContours.ts). Offline they are whatever clips were saved with it.
+  const contoursResolved = useMemo(
+    () =>
+      drawsNswContours(renderedBasemapId, contoursOverImagery)
+        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+            (r) => r.status === "ok",
+          )
+        : [],
+    [renderedBasemapId, contoursOverImagery, ctx],
+  );
 
   /**
    * Basemaps OTHER than the current one that have downloaded tiles covering
@@ -1401,31 +1431,6 @@ export function MapScreen({
     );
   }, [basemapResolved]);
 
-  // How many layers the basemap band actually occupies. NOT always one: an
-  // offline basemap mounts one raster layer PER downloaded region, and they all
-  // ask for layerIndex 1, so each insert pushes the previous one up. Assuming a
-  // single layer put the offline mask underneath a region's raster — which
-  // looked exactly like the mask half-rendering, red to that region's east
-  // edge and nothing west of it.
-  // Both branches scale with the number of resolved sources for the same
-  // reason. The vector branch used a per-flavor CONSTANT, so with two saved
-  // Protomaps regions the band is ~140 layers deep and the mask landed at 71
-  // — inside the second region's stack, with ~70 basemap layers drawn over
-  // the top of it. That is the half-rendered mask this comment warns about,
-  // still live on the vector path.
-  const resolvedSourceCount = Math.max(
-    1,
-    basemapResolved.filter((r) => r.status === "ok").length,
-  );
-  const basemapLayerCount =
-    renderedBasemapId === "protomaps"
-      ? protomapsLayerCount(PROTOMAPS_FLAVOR) * resolvedSourceCount
-      : resolvedSourceCount;
-
-  const maskLayerIndex = 1 + basemapLayerCount;
-  // First free layerIndex above the basemap band and the mask's own slot.
-  const overlayBaseIndex = maskLayerIndex + (offlineMask ? 1 : 0);
-
   // Union the online overlay list with downloaded artifacts, so saved overlays
   // list + render even on a cold offline launch (the online fetch has no
   // persistence and returns nothing then).
@@ -1447,23 +1452,6 @@ export function MapScreen({
         : [],
     [mergedOverlays, enabledOverlays, mutedAreas, showOverlays],
   );
-
-  // Contiguous layerIndex allocation above the basemap band: raster overlays
-  // take one slot, vector overlays exactly as many slots as their layer defs —
-  // no gaps, so no index ever exceeds the mounted layer count. `nextIndex` is
-  // where the next band (vector imports) starts.
-  const overlayRenderPlan = useMemo(() => {
-    let next = overlayBaseIndex;
-    const plans: { ref: (typeof overlayRefs)[number]; start: number }[] = [];
-    for (const ref of overlayRefs) {
-      plans.push({ ref, start: next });
-      next +=
-        ref.format === "vector"
-          ? buildTopoVectorLayerDefs(overlayKind(ref), vectorStyle).length
-          : 1;
-    }
-    return { plans, nextIndex: next };
-  }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
   // "Show only these on the map" — the Places screen's filter, opt-in, handed
   // over as a set of ids (never a bbox; nothing persisted). Until that screen
@@ -1898,7 +1886,7 @@ export function MapScreen({
       // whichever tool won the race.
       if (tool === "measure") {
         // Leaving measure bins its points without asking — a measurement is a
-        // question you asked once, not an asset (docs/ux-principles.md §11).
+        // question you asked once, not an asset (shared/DESIGN.md §11).
         if (measureDraft.active) {
           measureDraft.close();
           return;
@@ -2056,7 +2044,7 @@ export function MapScreen({
       const props = event.nativeEvent.features[0]?.properties;
       // The OPTIONS sheet, not the detail screen: the same six verbs the
       // Places list offers, with "Open place" first because that is what this
-      // tap used to do (DESIGN.md §5). Held as an id so an edit made from
+      // tap used to do (DESIGN.md). Held as an id so an edit made from
       // inside the sheet re-renders it rather than showing a stale copy.
       if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
@@ -2066,11 +2054,11 @@ export function MapScreen({
   const optionsPlace =
     (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
-   *  options sheet closes before one opens (DESIGN.md §4). */
+   *  options sheet closes before one opens (DESIGN.md). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
 
-  /** A recorded line's own verbs, from the map (DESIGN.md §5: the same object
+  /** A recorded line's own verbs, from the map (DESIGN.md: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
    *  sub-mode one row in. Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
@@ -2082,8 +2070,10 @@ export function MapScreen({
    * a visibility flip made inside the sheet re-renders it.
    */
   const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
-  const handleTrackPress = useCallback(
-    (track: Track, coordinates?: { latitude: number; longitude: number }) => {
+  /** When the track in the options sheet was at the spot tapped to open it. */
+  const [optionsTrackPasses, setOptionsTrackPasses] = useState<TrackPass[]>([]);
+  const handleTrackPress = useCallback<TrackPressHandler>(
+    (track, coordinates, passes) => {
       // Same rule as a place pin: the line swallows the press before the map
       // sees it, so while a tool is collecting points it has to place the point
       // itself — otherwise tapping near a track does nothing and reads as
@@ -2094,6 +2084,7 @@ export function MapScreen({
         }
         return;
       }
+      setOptionsTrackPasses(passes ?? []);
       setOptionsTrackId(track.id);
     },
     [addToolPoint, collectingPoints],
@@ -2428,7 +2419,7 @@ export function MapScreen({
 
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
-  // and a subtitle (DESIGN.md §4).
+  // and a subtitle (DESIGN.md).
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
@@ -2503,11 +2494,7 @@ export function MapScreen({
             fitCameraToBbox(outcome.record.bbox);
           }
         } else {
-          const record = await importVectorSource(
-            url,
-            syntheticNameFor(kind),
-            imports.length,
-          );
+          const record = await importVectorSource(url, syntheticNameFor(kind));
           fitCameraToBbox(record.bbox);
         }
       } catch (err) {
@@ -2520,7 +2507,7 @@ export function MapScreen({
         );
       }
     },
-    [imports.length, fitCameraToBbox],
+    [fitCameraToBbox],
   );
   const onIncomingUrl = useEffectEvent(handleIncomingUrl);
   useEffect(() => {
@@ -3401,7 +3388,7 @@ export function MapScreen({
     sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
       allowNetwork: !offlineOnlyRef.current,
     })
-      .then(([elevationM]) => {
+      .then(({ heights: [elevationM] }) => {
         if (seq !== readoutSeq.current || elevationM == null) return;
         publishLiveReadout({
           speedMps,
@@ -3848,7 +3835,7 @@ export function MapScreen({
   /**
    * Start measuring from a spot. Same shape as `startRouteDrawAt` — and the
    * same seeding reason — differing only in which of the two point tools opens,
-   * because they are one implementation (DESIGN.md §3).
+   * because they are one implementation (DESIGN.md).
    */
   const startMeasureAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
@@ -3906,7 +3893,7 @@ export function MapScreen({
         case "place":
           // Straight to the form: with no sheet open there is no Modal to
           // collide with, so this is the one branch that skips the park-and-
-          // reopen dance the sheet needs (DESIGN.md §4).
+          // reopen dance the sheet needs (DESIGN.md).
           setAddPlaceAt(point);
           return;
         default:
@@ -4249,7 +4236,7 @@ export function MapScreen({
       ],
       // The layer's own report of what it could not draw. Present only while it
       // is on AND something is missing: a map drawing less than it says has to
-      // say so (docs/ux-principles.md §11).
+      // say so (shared/DESIGN.md §11).
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
           ? `${routesStatus.unavailable} not downloaded yet`
@@ -4367,10 +4354,60 @@ export function MapScreen({
       : "Offline — no map saved for this area.";
   })();
 
-  const attributionText = basemapResolved
-    .map((r) => (r.status === "ok" ? r.attribution : null))
-    .filter(Boolean)
-    .join(" · ");
+  // Once each: offline, every saved clip of a source carries the same credit.
+  const attributionText = [
+    ...new Set(
+      [...basemapResolved, ...contoursResolved]
+        .map((r) => (r.status === "ok" ? r.attribution : null))
+        .filter(Boolean),
+    ),
+  ].join(" · ");
+
+  const nswContoursStyle = useMemo(
+    () => nswContourStyle(renderedBasemapId),
+    [renderedBasemapId],
+  );
+
+  // The ground band, bottom to top: the statewide contours, topo overlays,
+  // GeoPDFs, vector imports.
+  // Listed by id and anchored layer-to-layer under the saved routes, NOT by
+  // index: a layer switched on after the place pins mounted must still land
+  // under them (layerOrder.ts).
+  const overlayMounts = overlayRefs.map((ref) => ({
+    ref,
+    resolved: resolveMapSource(ref, ctx).filter((r) => r.status === "ok"),
+  }));
+  const geoPdfMounts = readyGeoPdfImports.map((geoPdf) => ({
+    geoPdf,
+    resolved: resolveMapSource(
+      { kind: "geopdf-import", importId: geoPdf.id },
+      ctx,
+    ).filter((r) => r.status === "ok"),
+  }));
+  const groundIds = [
+    ...contoursResolved.flatMap((r) =>
+      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
+    ),
+    // Above the statewide contours, which belong to the basemap: a saved
+    // contour clip is whole tiles and runs past the edge of the saved area.
+    ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
+    ...overlayMounts.flatMap(({ ref, resolved }) =>
+      resolved.flatMap((r) =>
+        ref.format === "vector"
+          ? topoVectorLayerIds(overlayKind(ref), `topo-${r.key}`, vectorStyle)
+          : [`topo-layer-${r.key}`],
+      ),
+    ),
+    ...geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
+      resolved.map(() => `geopdf-layer-${geoPdf.id}`),
+    ),
+    ...visibleImports.flatMap((i) => [
+      `import-fill-${i.id}`,
+      `import-line-${i.id}`,
+      `import-point-${i.id}`,
+    ]),
+  ];
+  const groundBefore = chainBeforeIds(groundIds, ROUTES_FLOOR);
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
@@ -4515,136 +4552,137 @@ export function MapScreen({
         )}
 
         {/* The edge of what this phone actually holds. Above the basemap band
-            and below everything else, so place pins, tracks and imports stay
+            and the statewide contours, and below everything else, so place pins, tracks and imports stay
             visible over the blanked ground. */}
         {offlineMask ? (
           <GeoJSONSource id="offline-mask" data={offlineMask}>
             <Layer
               key="offline-mask-fill"
               type="fill"
-              id="offline-mask-fill"
-              layerIndex={maskLayerIndex}
+              id={OFFLINE_MASK_LAYER}
+              beforeId={groundBefore[OFFLINE_MASK_LAYER]}
               style={{ fillColor: theme.page, fillOpacity: 1 }}
             />
           </GeoJSONSource>
         ) : null}
 
+        {/* The statewide contours: a topo area's contour layers, on the
+            statewide archive (or the clips saved from it). */}
+        {contoursResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <TopoVectorOverlay
+              kind="contours"
+              idPrefix={`nsw-contours-${r.key}`}
+              sourceID={sourceIdFor(r.key)}
+              beforeIds={groundBefore}
+              vectorStyle={nswContoursStyle}
+            />
+          </ResolvedSource>
+        ))}
+
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
             the full contour/feature layer stack styled by the user's
             server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
-        {overlayRenderPlan.plans.flatMap(({ ref, start }) =>
-          resolveMapSource(ref, ctx).map((resolved) =>
-            resolved.status === "ok" ? (
-              <ResolvedSource key={resolved.key} resolved={resolved}>
-                {ref.format === "vector" ? (
-                  <TopoVectorOverlay
-                    kind={overlayKind(ref)}
-                    idPrefix={`topo-${resolved.key}`}
-                    sourceID={sourceIdFor(resolved.key)}
-                    startIndex={start}
-                    vectorStyle={vectorStyle}
-                  />
-                ) : (
-                  <Layer
-                    key={`topo-layer-${resolved.key}`}
-                    type="raster"
-                    id={`topo-layer-${resolved.key}`}
-                    layerIndex={start}
-                    style={{ rasterOpacity: 0.8 }}
-                  />
-                )}
-              </ResolvedSource>
-            ) : null,
-          ),
+        {overlayMounts.flatMap(({ ref, resolved }) =>
+          resolved.map((r) => (
+            <ResolvedSource key={r.key} resolved={r}>
+              {ref.format === "vector" ? (
+                <TopoVectorOverlay
+                  kind={overlayKind(ref)}
+                  idPrefix={`topo-${r.key}`}
+                  sourceID={sourceIdFor(r.key)}
+                  beforeIds={groundBefore}
+                  vectorStyle={vectorStyle}
+                />
+              ) : (
+                <Layer
+                  key={`topo-layer-${r.key}`}
+                  type="raster"
+                  id={`topo-layer-${r.key}`}
+                  beforeId={groundBefore[`topo-layer-${r.key}`]}
+                  style={{ rasterOpacity: 0.8 }}
+                />
+              )}
+            </ResolvedSource>
+          )),
         )}
 
         {/* GeoPDF imports (Stage 6): device-tiled MBTiles rendered through
             the resolver's local-artifact path — one translucent RasterLayer
             per ready import, above the overlay band. */}
-        {readyGeoPdfImports.map((geoPdf, geoPdfPosition) =>
-          resolveMapSource(
-            { kind: "geopdf-import", importId: geoPdf.id },
-            ctx,
-          ).map((resolved) =>
-            resolved.status === "ok" ? (
-              <ResolvedSource key={resolved.key} resolved={resolved}>
-                <Layer
-                  key={`geopdf-layer-${geoPdf.id}`}
-                  type="raster"
-                  id={`geopdf-layer-${geoPdf.id}`}
-                  layerIndex={overlayRenderPlan.nextIndex + geoPdfPosition}
-                  // FULL, not `geoPdf.opacity`. Nothing writes that column
-                  // since the layers sheet lost its opacity rail, so reading it
-                  // only meant imports made before that change stayed
-                  // permanently washed out with no control to fix them. A
-                  // future opacity control re-wires this line and the default
-                  // in importPipeline together.
-                  style={{ rasterOpacity: 1 }}
-                />
-              </ResolvedSource>
-            ) : null,
-          ),
+        {geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
+          resolved.map((r) => (
+            <ResolvedSource key={r.key} resolved={r}>
+              <Layer
+                key={`geopdf-layer-${geoPdf.id}`}
+                type="raster"
+                id={`geopdf-layer-${geoPdf.id}`}
+                beforeId={groundBefore[`geopdf-layer-${geoPdf.id}`]}
+                // FULL, not `geoPdf.opacity`. Nothing writes that column
+                // since the layers sheet lost its opacity rail, so reading it
+                // only meant imports made before that change stayed
+                // permanently washed out with no control to fix them. A
+                // future opacity control re-wires this line and the default
+                // in importPipeline together.
+                style={{ rasterOpacity: 1 }}
+              />
+            </ResolvedSource>
+          )),
         )}
 
         {/* Vector imports (Stage 5): device-local GeoJSON from user files,
-            pinned above the overlay band, below the place layers. Each
+            above the overlay band, below the place layers. Each
             import is one GeoJSONSource read straight off disk. */}
-        {visibleImports.map((imported, importPosition) => {
-          const base =
-            overlayRenderPlan.nextIndex +
-            readyGeoPdfImports.length +
-            importPosition * 3;
-          return (
-            <GeoJSONSource
-              key={imported.id}
-              id={`import-${imported.id}`}
-              data={`file://${imported.path}`}
-              onPress={(event) => handleImportPress(imported.id, event)}
-            >
-              <Layer
-                key={`import-fill-${imported.id}`}
-                type="fill"
-                id={`import-fill-${imported.id}`}
-                layerIndex={base}
-                filter={["==", "$type", "Polygon"] as never}
-                style={{ fillColor: imported.color, fillOpacity: 0.2 }}
-              />
-              <Layer
-                key={`import-line-${imported.id}`}
-                type="line"
-                id={`import-line-${imported.id}`}
-                layerIndex={base + 1}
-                filter={
-                  [
-                    "any",
-                    ["==", "$type", "LineString"],
-                    ["==", "$type", "Polygon"],
-                  ] as never
-                }
-                style={{
-                  lineColor: imported.color,
-                  lineWidth: 3,
-                  lineOpacity: 0.9,
-                  lineJoin: "round",
-                  lineCap: "round",
-                }}
-              />
-              <Layer
-                key={`import-point-${imported.id}`}
-                type="circle"
-                id={`import-point-${imported.id}`}
-                layerIndex={base + 2}
-                filter={["==", "$type", "Point"] as never}
-                style={{
-                  circleRadius: 5,
-                  circleColor: imported.color,
-                  circleStrokeColor: "#ffffff",
-                  circleStrokeWidth: 1.5,
-                }}
-              />
-            </GeoJSONSource>
-          );
-        })}
+        {visibleImports.map((imported) => (
+          <GeoJSONSource
+            key={imported.id}
+            id={`import-${imported.id}`}
+            data={`file://${imported.path}`}
+            onPress={(event) => handleImportPress(imported.id, event)}
+          >
+            <Layer
+              key={`import-fill-${imported.id}`}
+              type="fill"
+              id={`import-fill-${imported.id}`}
+              beforeId={groundBefore[`import-fill-${imported.id}`]}
+              filter={["==", "$type", "Polygon"] as never}
+              style={{ fillColor: imported.color, fillOpacity: 0.2 }}
+            />
+            <Layer
+              key={`import-line-${imported.id}`}
+              type="line"
+              id={`import-line-${imported.id}`}
+              beforeId={groundBefore[`import-line-${imported.id}`]}
+              filter={
+                [
+                  "any",
+                  ["==", "$type", "LineString"],
+                  ["==", "$type", "Polygon"],
+                ] as never
+              }
+              style={{
+                lineColor: imported.color,
+                lineWidth: 3,
+                lineOpacity: 0.9,
+                lineJoin: "round",
+                lineCap: "round",
+              }}
+            />
+            <Layer
+              key={`import-point-${imported.id}`}
+              type="circle"
+              id={`import-point-${imported.id}`}
+              beforeId={groundBefore[`import-point-${imported.id}`]}
+              filter={["==", "$type", "Point"] as never}
+              style={{
+                circleRadius: 5,
+                circleColor: imported.color,
+                circleStrokeColor: "#ffffff",
+                circleStrokeWidth: 1.5,
+              }}
+            />
+          </GeoJSONSource>
+        ))}
 
         {/* Every place route at once (layers sheet → Layers → Place routes).
             Mirror-backed, so it draws with no signal for any file this phone
@@ -4687,6 +4725,7 @@ export function MapScreen({
               key="nav-line-layer"
               type="line"
               id="nav-line-layer"
+              beforeId={PIN_FLOOR}
               style={{
                 lineColor: "#4285F4",
                 lineWidth: 2,
@@ -5183,11 +5222,22 @@ export function MapScreen({
             ones that aren't currently drawn — their licences permit that with
             credit, so the credit lives here rather than nowhere. */}
         <Text style={styles.attributionText}>{BASEMAP_THUMB_CREDIT}</Text>
+        {/* The LiDAR-derived overlays on screen, credited with the same lines
+            Logjam Web's attribution control shows (shared/geoPdfBaseLayers). */}
+        {topoOverlayCredits(overlayRefs).map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
         {/* Elevation is derived from a DIFFERENT source than whatever basemap
             is drawn — every height in the app (point readout, route profile,
             gain/loss) comes from it, online or off, so its credit is
             unconditional rather than tied to the active layer. */}
-        <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
+        {demCredits().map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
       </BottomSheet>
 
       {/* Tap: "what's there?" — the question that comes before the long
@@ -5274,7 +5324,7 @@ export function MapScreen({
         </View>
       </BottomSheet>
 
-      {/* ONE form for both modes (DESIGN.md §5): a long-press drops a new
+      {/* ONE form for both modes (DESIGN.md): a long-press drops a new
           place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
@@ -5326,7 +5376,7 @@ export function MapScreen({
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
-          in (DESIGN.md §5). No "Show on map" row here — the user is looking at
+          in (DESIGN.md). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
       <RouteOptionsSheet
         route={optionsRoute}
@@ -5362,6 +5412,7 @@ export function MapScreen({
       <TrackOptionsSheet
         track={tracks.find((track) => track.id === optionsTrackId) ?? null}
         visible={optionsTrackId !== null}
+        passes={optionsTrackPasses}
         onClose={() => setOptionsTrackId(null)}
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
@@ -5388,6 +5439,8 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={chooseContoursOverImagery}
         artifacts={artifacts}
         overlays={overlayList}
         enabledOverlays={enabledOverlays}
@@ -5436,7 +5489,7 @@ function RouteNameForm({
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState(initialName);
-  // Empty-name requirement shows on SUBMIT, not while typing (docs/ux-principles.md §11);
+  // Empty-name requirement shows on SUBMIT, not while typing (shared/DESIGN.md §11);
   // clears as soon as the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
