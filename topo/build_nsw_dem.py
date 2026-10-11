@@ -371,6 +371,9 @@ CONTOUR_INTERVAL_M = 10
 CONTOUR_MAJOR_M = 50  # the clients style `elev % 50 == 0` as a major line
 # 50 m lines from z11, the rest from z13; a client overzooms past z14.
 CONTOUR_ZOOMS = {"major": (11, 14), "minor": (13, 14)}
+# The source layer both clients read: `sourceLayer: "contours"` (Logjam GPS)
+# and `"source-layer": "contours"` (Logjam Web).
+CONTOUR_LAYER = "contours"
 
 
 def run(*command: str) -> None:
@@ -391,15 +394,19 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
     if not shutil.which("pmtiles"):
         sys.exit("contours needs the `pmtiles` binary (go-pmtiles) on PATH")
     work.mkdir(parents=True, exist_ok=True)
-    lines = work / "contours.gpkg"
+    out.parent.mkdir(parents=True, exist_ok=True)
     for sheet in sorted(src.glob("*.tif")):
-        done = work / f"{sheet.stem}.contoured"
-        if done.exists():
+        # One file per sheet, renamed into place when whole: a run killed
+        # part-way redoes that sheet instead of adding its lines twice.
+        lines = work / f"{sheet.stem}.lines.gpkg"
+        if lines.exists():
             continue
         print(sheet.stem, flush=True)
         smooth = work / f"{sheet.stem}.10m.tif"
-        raw = work / f"{sheet.stem}.gpkg"
+        raw = work / f"{sheet.stem}.raw.gpkg"
+        part = work / f"{sheet.stem}.lines.part"
         raw.unlink(missing_ok=True)
+        part.unlink(missing_ok=True)
         # Averaged to 10 m first: contours of the raw 5 m grid are knobbly,
         # and every wiggle is a vertex a phone has to store and draw.
         run(
@@ -413,24 +420,46 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
         )
         for name, test in (("major", "="), ("minor", "<>")):
             run(
-                *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(lines)],
+                *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(part)],
                 *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
                 "select elev, geom from cont where cast(elev as integer)"
                 f" % {CONTOUR_MAJOR_M} {test} 0",
             )
         smooth.unlink()
         raw.unlink()
-        done.touch()
+        part.rename(lines)
+
+    # Every sheet's two layers as one, without copying them: an OGR virtual
+    # dataset that reads the per-sheet files in place.
+    sheets = sorted(work.glob("*.lines.gpkg"))
+    union = work / "contours.vrt"
+    union.write_text(
+        "<OGRVRTDataSource>"
+        + "".join(
+            f'<OGRVRTUnionLayer name="{name}">'
+            + "".join(
+                f'<OGRVRTLayer name="{name}"><SrcDataSource>{sheet.resolve()}'
+                f"</SrcDataSource><SrcLayer>{name}</SrcLayer></OGRVRTLayer>"
+                for sheet in sheets
+            )
+            + "</OGRVRTUnionLayer>"
+            for name in CONTOUR_ZOOMS
+        )
+        + "</OGRVRTDataSource>"
+    )
 
     mbtiles = out.with_suffix(".mbtiles")
     mbtiles.unlink(missing_ok=True)
     conf = {
-        name: {"target_name": "contours", "minzoom": zmin, "maxzoom": zmax}
+        name: {"target_name": CONTOUR_LAYER, "minzoom": zmin, "maxzoom": zmax}
         for name, (zmin, zmax) in CONTOUR_ZOOMS.items()
     }
+    zmin = min(z for z, _ in CONTOUR_ZOOMS.values())
+    zmax = max(z for _, z in CONTOUR_ZOOMS.values())
     run(
-        *["ogr2ogr", "-q", "-f", "MVT", str(mbtiles), str(lines)],
-        *["-dsco", "FORMAT=MBTILES", "-dsco", "MINZOOM=11", "-dsco", "MAXZOOM=14"],
+        *["ogr2ogr", "-q", "-f", "MVT", str(mbtiles), str(union)],
+        *["-dsco", "FORMAT=MBTILES"],
+        *["-dsco", f"MINZOOM={zmin}", "-dsco", f"MAXZOOM={zmax}"],
         *["-dsco", f"CONF={json.dumps(conf)}"],
         "-dsco",
         "DESCRIPTION=Contours derived from the NSW 5 m Digital Elevation Model,"

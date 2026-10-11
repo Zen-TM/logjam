@@ -206,17 +206,20 @@ python3 build_nsw_dem.py tile dem/src dem/work --jobs 4
 python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles --extracted "October 2026"
 ```
 
+`fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
+what is already done, so a stopped run carries on where it left off. The
+format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
+
 Contours of the same sheets, as vector tiles for the vector basemap (10 m
 lines, the 50 m ones from zoom 11 and the rest from zoom 13):
 
 ```bash
-python build_nsw_dem.py contours dem/src dem/contours-work dem/contours-nsw.pmtiles \
+python3 build_nsw_dem.py contours dem/src dem/contours-work dem/contours-nsw.pmtiles \
   --extracted "October 2026"
 ```
 
-`fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
-what is already done, so a stopped run carries on where it left off. The
-format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
+A stopped contour run also carries on: each sheet's lines are kept whole or
+not at all.
 
 ### The statewide build
 
