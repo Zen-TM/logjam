@@ -21,7 +21,7 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
 import {
   Field,
   IconButton,
@@ -95,6 +95,8 @@ export function CustomFieldValueInputs({
  * attribute is a CARD; a recorded one is a table row" in mobile/CLAUDE.md.
  */
 export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
+  const styles = useStyles();
+
   return (
     <View>
       {rows.map(([key, label, value, type], index) => (
@@ -128,6 +130,8 @@ function CustomFieldValueInput({
   /** Drawn beside the CONTROL, centred on it — not beside the label above it. */
   trailing?: React.ReactNode;
 }) {
+  const theme = useTheme();
+
   const label = customFieldDisplayLabel(def);
   // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
   // places have gaps, and a picker with no way back to blank turns "I don't
@@ -202,6 +206,8 @@ function Beside({
   trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   if (!trailing) return <>{children}</>;
   return (
     <View style={styles.beside}>
@@ -211,7 +217,7 @@ function Beside({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.
@@ -234,4 +240,4 @@ const styles = StyleSheet.create({
     textAlign: "right",
     flexShrink: 1,
   },
-});
+}));

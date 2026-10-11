@@ -11,9 +11,9 @@
 //
 // PRIVACY: usernames only. There is no avatar image anywhere in Logjam and this
 // is not the place to introduce one.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, theme } from "../theme";
+import { fontSize, fontWeight, radius, makeStyles, useTheme } from "../theme";
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 
 export function Avatar({
@@ -24,6 +24,9 @@ export function Avatar({
   /** Ticked in a multi-select: the disc becomes the checkbox. */
   selected?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const hue = selected ? theme.accent : friendAvatarHue(username);
   return (
     <View style={[styles.disc, { backgroundColor: hue }]}>
@@ -32,7 +35,7 @@ export function Avatar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   disc: {
     width: 40,
     height: 40,
@@ -46,4 +49,4 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     letterSpacing: 0.5,
   },
-});
+}));

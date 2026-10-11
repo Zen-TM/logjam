@@ -35,7 +35,7 @@
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   contractSectionKeys,
@@ -44,7 +44,14 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+} from "../theme";
 import {
   BottomSheet,
   Row,
@@ -178,6 +185,8 @@ export function MapLayersSheet({
   /** The overlays list ends with the way to add one: the existing importer. */
   onImportFile: () => void;
 }) {
+  const styles = useStyles();
+
   const [tab, setTab] = useState<Tab>("basemap");
   const online = connectivity === "online";
 
@@ -255,6 +264,9 @@ function BasemapTab({
   offersContours: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.body}>
       {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
@@ -318,6 +330,9 @@ function BasemapTab({
  * the user can see on the map behind the sheet (DESIGN.md).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const expandable = (entry.children?.length ?? 0) > 0;
 
@@ -415,6 +430,10 @@ function LayersTab({
   onShowOverlaysChange: (next: boolean) => void;
   onImportFile: () => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const expandable = overlays.length > 0;
 
@@ -529,6 +548,8 @@ function TopoOverlayList({
   mutedAreas: ReadonlySet<string>;
   onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
 }) {
+  const { assetHue } = useHues();
+
   // Both groupings keep first-seen order, which is the order MapScreen composed
   // the jobs in (newest area first, TOPO_LAYERS order within one).
   const byLayer = useMemo(() => {
@@ -607,6 +628,8 @@ function ItemRow({
   visible: boolean;
   onVisibility: () => void;
 }) {
+  const styles = useStyles();
+
   return (
     <SwitchRow
       leading={<View style={[styles.dot, { backgroundColor: hue }]} />}
@@ -636,6 +659,10 @@ function OfflineTab({
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const savedRegions = artifacts.filter(
     (artifact) => artifact.kind === "basemap-region",
   );
@@ -687,7 +714,7 @@ function OfflineTab({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
   // (DESIGN.md).
   rail: { paddingBottom: spacing(1.5) },
@@ -709,4 +736,4 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
-});
+}));

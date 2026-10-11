@@ -30,7 +30,6 @@ import { useCallback, useState } from "react";
 import {
   Alert,
   Pressable,
-  StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
@@ -49,7 +48,7 @@ import {
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
@@ -87,6 +86,8 @@ export function PlaceTypeList({
   types: MirrorPlaceType[];
   onEdit: (type: MirrorPlaceType) => void;
 }) {
+  const styles = useStyles();
+
   // BUILT-INS LAST, the same way the attribute list orders itself: the user's
   // own types are the half with verbs on them, and the three that ship with the
   // app are a footnote to that. Note this is the EDITOR's order only — the
@@ -149,6 +150,9 @@ export function usePlaceTypeForm({
    *  the sheet stays up, and its new title is the confirmation. */
   onAdded: (type: NewPlaceType) => void;
 }): { body: ReactNode; footer: ReactNode } {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
@@ -423,7 +427,7 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
 
 const GRID_GAP = spacing(1);
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   list: { gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
@@ -437,4 +441,4 @@ const styles = StyleSheet.create({
   },
   cellChosen: { borderWidth: 2, borderColor: theme.accent },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+}));

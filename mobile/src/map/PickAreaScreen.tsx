@@ -47,7 +47,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
-import { spacing, theme } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import { Button, Notice } from "../ui";
 import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -55,7 +55,7 @@ import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
@@ -107,6 +107,8 @@ export function PickAreaScreen({
   onCancel: () => void;
   onConfirm: (area: RegionBbox) => void;
 }) {
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is honoured on the first render only, and
   // re-reading the module store mid-session would move a map the user is
@@ -122,9 +124,9 @@ export function PickAreaScreen({
   const [viewport, setViewport] = useState<FrameViewport | null>(null);
 
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
 
   // Saved regions count here as they do everywhere else: a picker that needed
@@ -330,7 +332,7 @@ export function PickAreaScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
   // was dark on dark in Daylight).
@@ -352,4 +354,4 @@ const styles = StyleSheet.create({
     backgroundColor: theme.page,
   },
   action: { flex: 1 },
-});
+}));

@@ -1,12 +1,12 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import {
   fontSize,
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
 } from "../theme";
 
 export type MeterSegment = {
@@ -39,6 +39,8 @@ export function Meter({
   total?: number;
   legend?: boolean;
 }) {
+  const styles = useStyles();
+
   const present = segments.filter((segment) => segment.value > 0);
   const sum = present.reduce((acc, segment) => acc + segment.value, 0);
   const basis = total != null && total > sum ? total : sum;
@@ -77,7 +79,7 @@ export function Meter({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   wrap: { gap: spacing(1.25) },
   track: {
     flexDirection: "row",
@@ -101,4 +103,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
   },
-});
+}));

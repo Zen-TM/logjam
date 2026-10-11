@@ -42,7 +42,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -86,8 +85,9 @@ import {
   lineHeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -201,6 +201,8 @@ export function useSharePanel({
   footer: React.ReactNode | null;
   sharing: ReturnType<typeof useSharing>;
 } {
+  const styles = useStyles();
+
   const isCopy = target?.kind === "copy";
   const bulkPlan = target?.kind === "bulk" ? target.plan : null;
 
@@ -712,6 +714,9 @@ function FriendRows({
   /** What to say when there is nobody to offer. Per-surface wording. */
   emptyText: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (friends === null) {
     return <ActivityIndicator color={theme.accent} style={styles.spinner} />;
   }
@@ -783,6 +788,9 @@ function PromiseBanner({
   tone: "share" | "copy";
   text: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const hue = tone === "copy" ? theme.warning : theme.accent;
   return (
     <View
@@ -807,6 +815,8 @@ function PromiseBanner({
 
 /** The reason, in place of the panel. DESIGN.md — never a blank space. */
 function ClosedDoor({ text }: { text: string }) {
+  const styles = useStyles();
+
   return <Text style={styles.muted}>{text}</Text>;
 }
 
@@ -819,6 +829,9 @@ function SearchField({
   onChangeText: (next: string) => void;
   disabled: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.search}>
       <Icon idea="search" size={18} color={theme.textMuted} />
@@ -847,7 +860,7 @@ function SearchField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: spacing(1) },
   footerStack: { gap: spacing(1.5) },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
@@ -884,4 +897,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     paddingVertical: spacing(1),
   },
-});
+}));

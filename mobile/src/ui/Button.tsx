@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Pressable, Text } from "react-native";
 
 import {
   controlSize,
@@ -7,8 +7,9 @@ import {
   opacity,
   radius,
   spacing,
-  theme,
   touchTargetMin,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
@@ -56,6 +57,9 @@ export function Button({
   compact = false,
   grow = false,
 }: ButtonProps) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const inactive = disabled || loading;
   // Words are never an intent colour: an outline button's label is the text
   // colour and its EDGE is the accent, as on Logjam Web.
@@ -103,7 +107,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
@@ -137,4 +141,4 @@ const styles = StyleSheet.create({
   disabled: { opacity: opacity.disabled },
   label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
   labelCompact: { fontSize: fontSize.sm },
-});
+}));

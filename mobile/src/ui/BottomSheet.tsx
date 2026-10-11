@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { radius, scrim, spacing, textRole, theme } from "../theme";
+import { radius, scrim, spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 import {
   DISMISS_DISTANCE,
@@ -178,6 +178,9 @@ export function BottomSheet({
   header?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollLock = useMemo(
@@ -685,7 +688,7 @@ export function BottomSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   header: { paddingBottom: spacing(1) },
   scrollArea: { flexShrink: 1, overflow: "hidden" },
   scrollHold: { flexShrink: 1 },
@@ -730,7 +733,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.line,
   },
-});
+}));
 
 /**
  * What an owner returns while it has nothing to show, in place of null. It

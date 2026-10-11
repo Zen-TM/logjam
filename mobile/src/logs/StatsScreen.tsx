@@ -29,7 +29,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -66,7 +66,14 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import { useTracks } from "../tracks/useTracks";
-import { fontSize, fontWeight, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  spacing,
+  withAlpha,
+  makeStyles,
+  useTheme,
+} from "../theme";
 import {
   ActivitySpark,
   Chip,
@@ -93,6 +100,8 @@ export function StatsScreen({
   onBack: () => void;
   onOpenActivity: (activity: string) => void;
 }) {
+  const styles = useStyles();
+
   const tripsQuery = useMirrorTrips();
   const placesQuery = useMirrorPlaces();
   const placeTypesQuery = useMirrorPlaceTypes();
@@ -269,6 +278,8 @@ function Spark({
   range: LogbookRange;
   activity: string | null;
 }) {
+  const styles = useStyles();
+
   const { buckets } = statsSpark(stats, range);
   const { busiest, lines } = statsCadence(stats, activity);
 
@@ -294,6 +305,8 @@ function Headline({
   /** True when a range pill narrower than "All time" is selected. */
   bounded: boolean;
 }) {
+  const styles = useStyles();
+
   // Every label says what it counts (`statsHeadline` has the reasons).
   return (
     <View style={styles.block}>
@@ -309,6 +322,9 @@ function Activities({
   stats: LogbookStats;
   onOpenActivity: (activity: string) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (stats.activityTallies.length === 0) return null;
   const multiTagged = activityTalliesOverlap(stats);
   return (
@@ -317,6 +333,7 @@ function Activities({
       {stats.activityTallies.map((tally) => {
         const meta = tripTypeMeta(
           tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
+          theme,
         );
         return (
           <Row
@@ -346,6 +363,8 @@ function Activities({
  * The row reads "29 of 31", so the header only has to name the verb.
  */
 function PlacesVisited({ stats }: { stats: LogbookStats }) {
+  const styles = useStyles();
+
   if (stats.completion.length === 0) return null;
   return (
     <View style={styles.section}>
@@ -413,6 +432,8 @@ function OnFoot({
   }[];
   range: LogbookRange;
 }) {
+  const styles = useStyles();
+
   // A recording with no distance has nothing to say — an armed-and-cancelled
   // recorder would otherwise render a grid of zeros, the same reason
   // `TrackStatsBody` omits a cell rather than showing 0.
@@ -473,6 +494,8 @@ function AttributeSections({
   stats: LogbookStats;
   tripOnly?: boolean;
 }) {
+  const styles = useStyles();
+
   const groups = tripOnly ? [] : stats.placeFieldStats;
   const underActivities = stats.tripFieldsUnderActivities;
   if (
@@ -557,6 +580,8 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
  *  read as disconnected from the words explaining it — this puts the word that
  *  names it in the same breath, and lets the subtitle be about something else. */
 function RowMetric({ value, suffix }: { value: string; suffix: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.metric}>
       <Text style={styles.rowValue}>{value}</Text>
@@ -565,7 +590,7 @@ function RowMetric({ value, suffix }: { value: string; suffix: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   // `ScreenScroll` gaps its own direct children; a section wrapping several
   // rows has to repeat that or its rows sit flush against each other.
@@ -608,4 +633,4 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.text, 0.08),
   },
   meterFill: { borderRadius: 4 },
-});
+}));

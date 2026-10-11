@@ -1,10 +1,8 @@
 // Settings → Display: the two things that change how the whole app looks.
 //
-// Both apply at the NEXT LAUNCH, and both say so. `theme` and `fontSize` are
-// module constants snapshotted by ~45 `StyleSheet.create` calls at import time,
-// so repainting a running app means a provider plus a style factory in every one
-// of those files — a large diff across every screen already built, for a
-// preference people set once (DESIGN.md).
+// The theme repaints the running app the moment it is picked. The text size
+// applies at the NEXT LAUNCH and says so: `fontSize` is a module constant every
+// style reads (DESIGN.md).
 //
 // The theme is the one preference here with an account copy: it is a single
 // scalar with no merge hazard, and a scheme picked in a browser is what this
@@ -13,30 +11,29 @@
 //
 // PRIVACY: nothing here touches user data.
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import {
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
-  isThemeSchemeId,
   type ThemeSchemeId,
 } from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
-import { fetchCurrentUser, useApiQuery } from "../../api/queries";
 import { useAccountState } from "../../auth/AccountStateContext";
 import {
   TEXT_SCALES,
-  activeThemeSchemeId,
   chosenTextScale,
   fontSize,
   fontWeight,
   persistTextScale,
-  persistThemeSchemeId,
+  setThemeSchemeId,
+  useThemeSchemeId,
   radius,
   spacing,
-  theme,
   withAlpha,
   type TextScale,
+  makeStyles,
+  useTheme,
 } from "../../theme";
 import type { TUser } from "../../api/types";
 import {
@@ -46,7 +43,7 @@ import {
   type ToastMessage,
   Icon,
 } from "../../ui";
-import { ChoiceGroup, Hint } from "./settingsKit";
+import { ChoiceGroup } from "./settingsKit";
 
 /** Chip labels for the multiplier. The number is the honest label here — a
  *  vocabulary ("Small / Medium / Large") hides that 1.0 is the OS's own size. */
@@ -59,12 +56,9 @@ const TEXT_SCALE_LABELS: Record<TextScale, string> = {
 };
 
 export function DisplaySettingsScreen() {
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
-  const userQuery = useApiQuery(
-    fetchCurrentUser,
-    "Couldn't load your settings.",
-    accountState !== "guest",
-  );
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
     (text: string, tone: ToastMessage["tone"] = "info") => {
@@ -73,29 +67,18 @@ export function DisplaySettingsScreen() {
     [],
   );
 
-  const user = userQuery.data;
-
-  // `chosenSchemeId` is what the user has SELECTED; `activeThemeSchemeId` is
-  // what this launch is painted in. They differ after a change here — and also
-  // after a change made in the browser since this app last started — which is
-  // exactly when the "next time you open Logjam" note is true.
-  const [chosenSchemeId, setChosenSchemeId] =
-    useState<ThemeSchemeId>(activeThemeSchemeId);
-  const accountScheme = user?.uiPreferences?.themeSchemeId;
-  const accountSchemeKey = JSON.stringify([user?.id, accountScheme]);
-  const [seededFor, setSeededFor] = useState<string | null>(null);
-  if (accountSchemeKey !== seededFor) {
-    setSeededFor(accountSchemeKey);
-    if (isThemeSchemeId(accountScheme)) setChosenSchemeId(accountScheme);
-  }
+  const schemeId = useThemeSchemeId();
 
   const chooseScheme = useCallback(
     (id: ThemeSchemeId) => {
-      setChosenSchemeId(id);
-      // Device first: this is what makes the app open in the right colours with
-      // no signal, and it must not depend on the request below.
-      if (!persistThemeSchemeId(id)) {
-        notify("This phone wouldn't store that theme.", "error");
+      // Device first: this repaints the app and is what makes it open in the
+      // right colours with no signal, and it must not depend on the request
+      // below.
+      if (!setThemeSchemeId(id)) {
+        notify(
+          "This phone wouldn't store that theme, so it lasts until Logjam GPS closes.",
+          "error",
+        );
         return;
       }
       // A guest has no account copy to mirror it to, and the device copy above
@@ -138,14 +121,11 @@ export function DisplaySettingsScreen() {
             <SchemeCard
               key={id}
               schemeId={id}
-              selected={id === chosenSchemeId}
+              selected={id === schemeId}
               onPress={() => chooseScheme(id)}
             />
           ))}
         </View>
-        {chosenSchemeId !== activeThemeSchemeId ? (
-          <Hint text="Applies next time you open Logjam." />
-        ) : null}
 
         <ChoiceGroup
           label="Text size"
@@ -155,8 +135,7 @@ export function DisplaySettingsScreen() {
           }))}
           value={String(textScale)}
           onChange={(next) => chooseTextScale(Number(next) as TextScale)}
-          // Only when there is something waiting: the same note the theme
-          // above carries, for the same reason.
+          // Only when there is something waiting.
           hint={
             textScale === chosenTextScale
               ? undefined
@@ -185,6 +164,9 @@ function SchemeCard({
   selected: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const scheme = THEME_SCHEMES[schemeId];
   return (
     <Pressable
@@ -216,7 +198,7 @@ function SchemeCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   schemes: { gap: spacing(1) },
   scheme: {
     flexDirection: "row",
@@ -251,4 +233,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
-});
+}));

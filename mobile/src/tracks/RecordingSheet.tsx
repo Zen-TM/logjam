@@ -17,7 +17,7 @@ import { Alert, AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import { useElevationProfile } from "../map/useElevationProfile";
-import { spacing, theme } from "../theme";
+import { spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   closedSheet,
@@ -53,6 +53,8 @@ export function RecordingSheet({
    *  already on the phone, and nothing goes out. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+
   const recording = activeTrack?.state === "recording";
   const open = visible && activeTrack != null;
 

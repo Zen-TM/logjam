@@ -2,6 +2,7 @@
 const { defineConfig } = require("eslint/config");
 const expoConfig = require("eslint-config-expo/flat");
 const globals = require("globals");
+const { builtinRules } = require("eslint/use-at-your-own-risk");
 
 // Gotchas of Logjam GPS that a selector can hold (mobile/DESIGN.md §4, §1).
 const GPS_GOTCHAS = [
@@ -56,6 +57,33 @@ const COLOUR_LITERAL_DEBT = [
   "src/map/topoVectorLayers.ts",
 ];
 
+// The scheme is state, so nothing may hold a colour from before it changed
+// (mobile/DESIGN.md §1). theme.ts once exported these as module constants,
+// painted in the scheme the app started in; this keeps them from coming back.
+// A colour is reachable only through a hook, which `rules-of-hooks` already
+// keeps out of module scope. Guard: src/liveTheme.test.ts.
+const LAUNCH_THEME_IMPORTS = [
+  "error",
+  {
+    patterns: [
+      {
+        regex: "^(\\./|(\\.\\./)+)(src/)?theme$",
+        importNames: [
+          "theme",
+          "textRole",
+          "assetHue",
+          "placeHue",
+          "notificationHue",
+          "themeMode",
+          "activeThemeSchemeId",
+        ],
+        message:
+          "A colour held at module scope does not repaint when the scheme changes. Use useTheme(), makeStyles((theme, textRole) => …) or useHues() (mobile/DESIGN.md §1).",
+      },
+    ],
+  },
+];
+
 module.exports = defineConfig([
   expoConfig,
   {
@@ -106,6 +134,17 @@ module.exports = defineConfig([
     rules: {
       "no-restricted-syntax": ["error", ...GPS_GOTCHAS, ...COLOUR_LITERALS],
     },
+  },
+  {
+    // `no-restricted-imports` under a second name, so this ban has its own
+    // severity and does not replace the icon and kit-barrel bans above.
+    files: ["src/**/*.{ts,tsx}", "App.tsx", "index.ts"],
+    plugins: {
+      logjam: {
+        rules: { "no-launch-theme": builtinRules.get("no-restricted-imports") },
+      },
+    },
+    rules: { "logjam/no-launch-theme": LAUNCH_THEME_IMPORTS },
   },
   {
     // Build-time scripts run in node, not in the app: they legitimately use

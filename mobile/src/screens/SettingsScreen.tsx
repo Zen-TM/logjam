@@ -25,7 +25,7 @@
 //
 // PRIVACY: nothing here reads place data.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   contractSectionKeys,
@@ -57,7 +57,7 @@ import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
-import { fontSize, theme } from "../theme";
+import { fontSize, makeStyles, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -109,6 +109,9 @@ export function SettingsScreen({
 }: {
   onOpenPage: (page: SettingsPage) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -361,6 +364,6 @@ function sheetTitle(sheet: SheetMode): string {
 const ownCount = (defs: ScopedCustomFieldDef[]) =>
   defs.filter((def) => !isSystemFieldDef(def)).length;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   version: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));
