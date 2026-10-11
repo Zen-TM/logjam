@@ -856,7 +856,7 @@ function TripLogDialog({
   // this single path and cannot both fire for one interaction.
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || !date) return;
+    if (saving) return;
     void handleSave();
   }
 
@@ -1016,7 +1016,11 @@ function TripLogDialog({
                   edit mode the object is the *changes*, not the trip: "Discard
                   trip" on a saved trip would read as "delete it from my
                   logbook". */}
-              <Button onClick={guard.requestClose} disabled={saving}>
+              <Button
+                onClick={guard.requestClose}
+                disabled={saving}
+                disabledReason="Saving…"
+              >
                 {tripLog ? "Discard changes" : "Discard trip"}
               </Button>
               {/* type="submit" with no onClick — handleSubmit is the only save
@@ -1026,7 +1030,6 @@ function TripLogDialog({
                 form={formId}
                 variant="filled"
                 busy={saving}
-                disabled={!date}
               >
                 {tripLog ? "Save changes" : "Log trip"}
               </Button>

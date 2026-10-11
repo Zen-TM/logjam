@@ -143,7 +143,6 @@ export default function VegetationSettings({ value, onChange }: Props) {
             compact
             variant="outline"
             className={styles.resetButton}
-            disabled={!value.weightsEnabled}
             onClick={() => patch({ formationWeights: { ...DEFAULT_WEIGHTS } })}
           >
             Reset to defaults

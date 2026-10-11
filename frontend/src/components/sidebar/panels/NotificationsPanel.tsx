@@ -600,6 +600,7 @@ function NotificationsPanel({
           // look like the thing to press.
           variant={action.kind === "decline" ? "outline" : "filled"}
           disabled={selecting || busyId !== null}
+          disabledReason={selecting ? "Not while selecting" : "Working…"}
           onClick={() => answer(n, target, action)}
         >
           {action.label}
@@ -614,6 +615,7 @@ function NotificationsPanel({
           variant="outline"
           icon="map"
           disabled={selecting}
+          disabledReason="Not while selecting"
           onClick={() => zoomToMap(n, footprint)}
         >
           Zoom to map
@@ -632,6 +634,7 @@ function NotificationsPanel({
           variant="outline"
           icon="download"
           disabled={selecting}
+          disabledReason="Not while selecting"
           onClick={() =>
             void downloadJobFile(
               n,
@@ -656,6 +659,7 @@ function NotificationsPanel({
           variant="outline"
           icon="download"
           disabled={selecting}
+          disabledReason="Not while selecting"
           onClick={() =>
             void downloadJobFile(
               n,

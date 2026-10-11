@@ -701,6 +701,7 @@ function PlaceDetailPanel({
               variant={index === primaryVerbs.length - 1 ? "filled" : "outline"}
               icon={verb.icon}
               disabled={busy}
+              disabledReason="Working…"
               onClick={() => verbRunners[verb.id]()}
             >
               {verb.label}

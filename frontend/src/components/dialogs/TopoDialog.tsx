@@ -168,6 +168,7 @@ export default function TopoDialog({
   const [topoName, setTopoName] = useState("");
   const [topoNameTouched, setTopoNameTouched] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [saveAsError, setSaveAsError] = useState<string | null>(null);
   const [creditsUsed, setCreditsUsed] = useState<number | null>(null);
   const [creditsQuota, setCreditsQuota] = useState<number | null>(null);
   const [creditsResetAt, setCreditsResetAt] = useState<string | null>(null);
@@ -279,7 +280,14 @@ export default function TopoDialog({
 
   async function handleSaveAsTemplate() {
     const name = saveAsName.trim();
-    if (!name) return;
+    if (!name) {
+      setSaveAsError("Name this template first.");
+      return;
+    }
+    if (settingsInvalid) {
+      setSaveAsError("A setting needs fixing before this can be saved.");
+      return;
+    }
     try {
       const created = await apiFetch<TopoTemplate>("/topo-templates", {
         method: "POST",
@@ -424,7 +432,18 @@ export default function TopoDialog({
   }
 
   async function handleSubmit() {
-    if (!file || !stats) return;
+    if (!file || !stats) {
+      setError("Choose your LiDAR ZIP first.");
+      return;
+    }
+    // validationError is already in the banner above the form.
+    if (validationError) return;
+    if (settingsInvalid) {
+      setError(
+        "A setting needs fixing. Open “How this topo is drawn” to see which.",
+      );
+      return;
+    }
     setError(null);
 
     if (
@@ -559,12 +578,15 @@ export default function TopoDialog({
                       value={saveAsName}
                       // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                       autoFocus
-                      onChange={(event) => setSaveAsName(event.target.value)}
+                      error={saveAsError}
+                      onChange={(event) => {
+                        setSaveAsName(event.target.value);
+                        setSaveAsError(null);
+                      }}
                     />
                     <Button
                       variant="filled"
                       compact
-                      disabled={!saveAsName.trim() || settingsInvalid}
                       onClick={handleSaveAsTemplate}
                     >
                       Save
@@ -574,6 +596,7 @@ export default function TopoDialog({
                       onClick={() => {
                         setShowSaveAs(false);
                         setSaveAsName("");
+                        setSaveAsError(null);
                       }}
                     >
                       Cancel
@@ -610,21 +633,7 @@ export default function TopoDialog({
           ) : (
             <>
               <Button onClick={guard.requestClose}>Cancel</Button>
-              <Button
-                variant="filled"
-                onClick={handleSubmit}
-                disabled={
-                  !file ||
-                  validating ||
-                  !stats ||
-                  !!validationError ||
-                  settingsInvalid ||
-                  (creditsUsed !== null &&
-                    creditsQuota !== null &&
-                    jobCredits !== null &&
-                    creditsUsed + jobCredits > creditsQuota)
-                }
-              >
+              <Button variant="filled" onClick={handleSubmit} busy={validating}>
                 Make it
               </Button>
             </>

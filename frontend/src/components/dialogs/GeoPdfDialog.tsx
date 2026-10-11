@@ -267,6 +267,8 @@ function GeoPdfDialog({
 
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
+  // Under whichever template-name field is showing; only one is at a time.
+  const [nameError, setNameError] = useState<string | null>(null);
 
   // Set when the dialog closes for "Select on map": that close is a round trip,
   // so the close keeps state and the per-session init guards instead of
@@ -643,7 +645,10 @@ function GeoPdfDialog({
   );
 
   const handleSaveTemplate = useCallback(async () => {
-    if (!templateName.trim()) return;
+    if (!templateName.trim()) {
+      setNameError("Name this template first.");
+      return;
+    }
     const config = buildTemplateConfig();
     setError(null);
     try {
@@ -665,7 +670,10 @@ function GeoPdfDialog({
   }, [templateName, buildTemplateConfig, toast]);
 
   const handleSaveTemplateMode = useCallback(async () => {
-    if (!editTemplateName.trim()) return;
+    if (!editTemplateName.trim()) {
+      setNameError("Name this template first.");
+      return;
+    }
     const config = buildTemplateConfig();
     setError(null);
     try {
@@ -696,7 +704,30 @@ function GeoPdfDialog({
     toast,
   ]);
 
+  const extentValid =
+    extentState.north > extentState.south &&
+    extentState.east > extentState.west &&
+    extentState.scale > 0;
+
+  // Inline validation of the raw extent/scale inputs (GEOPDF-1). A field left
+  // in an invalid state (non-numeric, out of range, North not above South,
+  // East not right of West) shows a FieldError and blocks Generate — the old
+  // behaviour silently discarded the input while still displaying it.
+  const extentInputErrors = extentFieldErrors(
+    { n: rawN, s: rawS, e: rawE, w: rawW },
+    extentState,
+  );
+  const scaleInputError = scaleFieldError(rawScale);
+
   const handleGenerate = useCallback(async () => {
+    if (
+      !extentValid ||
+      hasExtentFieldError(extentInputErrors) ||
+      scaleInputError !== null
+    ) {
+      setError("A field below needs fixing first.");
+      return;
+    }
     setGenerating(true);
     setError(null);
     const config: GeoPdfConfig = {
@@ -782,6 +813,9 @@ function GeoPdfDialog({
     onJobQueued,
     toast,
     onClose,
+    extentValid,
+    extentInputErrors,
+    scaleInputError,
   ]);
 
   const toggleOverlay = useCallback((name: string) => {
@@ -793,21 +827,6 @@ function GeoPdfDialog({
     });
     setDirty(true);
   }, []);
-
-  const extentValid =
-    extentState.north > extentState.south &&
-    extentState.east > extentState.west &&
-    extentState.scale > 0;
-
-  // Inline validation of the raw extent/scale inputs (GEOPDF-1). A field left
-  // in an invalid state (non-numeric, out of range, North not above South,
-  // East not right of West) shows a FieldError and blocks Generate — the old
-  // behaviour silently discarded the input while still displaying it.
-  const extentInputErrors = extentFieldErrors(
-    { n: rawN, s: rawS, e: rawE, w: rawW },
-    extentState,
-  );
-  const scaleInputError = scaleFieldError(rawScale);
 
   // Esc / backdrop / X / Cancel route through this so a dirty form prompts
   // before discarding. "Select on map" bypasses it entirely (it calls
@@ -842,15 +861,17 @@ function GeoPdfDialog({
               id={formId}
               onSubmit={(event) => {
                 event.preventDefault();
-                if (editTemplateName.trim()) void handleSaveTemplateMode();
+                void handleSaveTemplateMode();
               }}
             >
               <TextField
                 label="Template name"
                 value={editTemplateName}
+                error={nameError}
                 data-autofocus
                 onChange={(event) => {
                   setEditTemplateName(event.target.value);
+                  setNameError(null);
                   markDirty();
                 }}
               />
@@ -865,19 +886,16 @@ function GeoPdfDialog({
                     className={classes.templateField}
                     placeholder="Name this template"
                     value={templateName}
+                    error={nameError}
                     // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                     autoFocus
                     onChange={(event) => {
                       setTemplateName(event.target.value);
+                      setNameError(null);
                       markDirty();
                     }}
                   />
-                  <Button
-                    variant="filled"
-                    compact
-                    disabled={!templateName.trim()}
-                    onClick={handleSaveTemplate}
-                  >
+                  <Button variant="filled" compact onClick={handleSaveTemplate}>
                     Save
                   </Button>
                   <Button
@@ -885,6 +903,7 @@ function GeoPdfDialog({
                     onClick={() => {
                       setShowSaveTemplate(false);
                       setTemplateName("");
+                      setNameError(null);
                     }}
                   >
                     Cancel
@@ -924,16 +943,15 @@ function GeoPdfDialog({
         }
         footer={
           <>
-            <Button onClick={guard.requestClose} disabled={generating}>
+            <Button
+              onClick={guard.requestClose}
+              disabled={generating}
+              disabledReason="Making your GeoPDF…"
+            >
               Cancel
             </Button>
             {templateMode ? (
-              <Button
-                type="submit"
-                form={formId}
-                variant="filled"
-                disabled={!editTemplateName.trim()}
-              >
+              <Button type="submit" form={formId} variant="filled">
                 Save
               </Button>
             ) : (
@@ -941,12 +959,6 @@ function GeoPdfDialog({
                 variant="filled"
                 busy={generating}
                 onClick={handleGenerate}
-                disabled={
-                  generating ||
-                  !extentValid ||
-                  hasExtentFieldError(extentInputErrors) ||
-                  scaleInputError !== null
-                }
               >
                 Make it
               </Button>

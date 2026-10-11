@@ -1,4 +1,5 @@
 import { useId } from "react";
+import type { Disablable } from "./Button";
 import classes from "./Toggle.module.css";
 
 /** An on/off switch. A real `role="switch"` button, so Space and Enter work
@@ -46,8 +47,9 @@ export function Toggle({
  * title and described by the explanation, which is also the keyboard path. A
  * press on the rest of the row flips it too.
  *
- * `disabled` dims it and stops it answering; `description` then carries the
- * reason ("Needs an account"), which the switch reads out as its description.
+ * `disabled` dims it and stops it answering, and comes with a
+ * `disabledReason` ("Needs an account") that replaces the description and is
+ * read out as the switch's description.
  */
 export function SwitchRow({
   title,
@@ -55,13 +57,16 @@ export function SwitchRow({
   checked,
   onChange,
   disabled,
+  disabledReason,
 }: {
   title: string;
   description?: string;
   checked: boolean;
   onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
+} & Disablable) {
+  // A disabled switch says why, in the place its description reads from, so a
+  // screen reader hears the reason with the switch (shared/DESIGN.md §5).
+  const words = disabled && disabledReason ? disabledReason : description;
   const titleId = useId();
   const descriptionId = useId();
   return (
@@ -81,9 +86,9 @@ export function SwitchRow({
         <span id={titleId} className={classes.title}>
           {title}
         </span>
-        {description && (
+        {words && (
           <span id={descriptionId} className={classes.description}>
-            {description}
+            {words}
           </span>
         )}
       </div>
@@ -91,7 +96,7 @@ export function SwitchRow({
         checked={checked}
         onChange={onChange}
         labelledBy={titleId}
-        describedBy={description ? descriptionId : undefined}
+        describedBy={words ? descriptionId : undefined}
         disabled={disabled}
       />
     </div>
