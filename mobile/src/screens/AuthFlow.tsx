@@ -12,18 +12,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
 export function AuthFlow({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -46,6 +47,8 @@ export function AuthFlow({ auth }: { auth: Auth }) {
 }
 
 function SignUpForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -99,6 +102,8 @@ function SignUpForm({ auth }: { auth: Auth }) {
 }
 
 function ConfirmSignUpForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -149,6 +154,8 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
 }
 
 function ForgotPasswordForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -177,6 +184,8 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
 }
 
 function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -214,7 +223,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -236,4 +245,4 @@ const styles = StyleSheet.create({
     color: theme.text,
   },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
-});
+}));

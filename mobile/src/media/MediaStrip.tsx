@@ -24,8 +24,9 @@ import {
   radius,
   scrim,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
@@ -156,6 +157,9 @@ export function MediaStrip({
    */
   onAddWay?: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -547,6 +551,9 @@ function AttachmentTile({
   onPress: () => void;
   onLongPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const category = mediaCategory(item.mediaType);
   const hasThumb = category !== null && categoryHasThumbnail(category);
   const tint = item.color ?? theme.neutral;
@@ -613,7 +620,7 @@ function trackSummary(track: Track): string {
 
 const TILE_SIZE = 96;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   row: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   emptyHint: { color: theme.textMuted, fontSize: fontSize.sm, maxWidth: 200 },
   tileWrap: { position: "relative" },
@@ -692,4 +699,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     textAlign: "center",
   },
-});
+}));

@@ -28,7 +28,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -40,13 +39,15 @@ import {
   lineHeight,
   radius,
   spacing,
-  theme,
+  makeStyles,
 } from "../theme";
 import { Button, ErrorBanner, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
 export function LandingScreen({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   // A guest LINKING an account is the only visitor with somewhere else to go,
   // so they get "Back"; everyone else can still go on without an account.
   // Not `auth.state === "chooser"`: this screen renders for `signIn` too, and
@@ -104,6 +105,8 @@ function SignInPanel({
   offersGuest: boolean;
   onExplainGuest: () => void;
 }) {
+  const styles = useStyles();
+
   const [email, setEmail] = useState(auth.pendingUsername);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -174,6 +177,8 @@ function GuestExplainer({
   /** Returns false when the choice could not be stored (auth.error says why). */
   onContinue: () => boolean;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.form}>
       <Text style={styles.heading}>Without an account</Text>
@@ -206,7 +211,7 @@ function GuestExplainer({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -254,4 +259,4 @@ const styles = StyleSheet.create({
     lineHeight: lineHeight.body,
   },
   secondary: { gap: spacing(0.5) },
-});
+}));

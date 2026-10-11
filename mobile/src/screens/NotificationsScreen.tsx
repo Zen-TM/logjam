@@ -36,14 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -96,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -255,6 +248,9 @@ export function NotificationsScreen({
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("inbox", accountState),
@@ -891,7 +887,7 @@ export function NotificationsScreen({
         </Text>
       </View>
     ),
-    [batches],
+    [batches, styles],
   );
 
   // UNREAD + READ CAN EXCEED ALL, and that is correct rather than a rounding
@@ -1166,6 +1162,9 @@ const NotificationRow = memo(function NotificationRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (batch) {
     return (
       <BatchRow
@@ -1322,6 +1321,9 @@ const BatchRow = memo(function BatchRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const meta = notificationMeta(batch.representative, theme);
   const pending = batchPendingFileSends(batch);
   const subtitle = [
@@ -1430,6 +1432,8 @@ function EmptyPanel({
   searching: boolean;
   onShowAll: () => void;
 }) {
+  const styles = useStyles();
+
   const copy = INBOX.copy;
   if (searching) {
     return (
@@ -1462,7 +1466,7 @@ function EmptyPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
@@ -1537,4 +1541,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: spacing(2),
   },
-});
+}));

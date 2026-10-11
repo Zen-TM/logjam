@@ -41,7 +41,8 @@ import {
   hitSlop,
   radius,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
@@ -106,6 +107,9 @@ export function MapSearchBar({
   onSelectPlace: (latitude: number, longitude: number) => void;
   onSelectSaved: (item: SavedSearchItem) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   // Tagged with the query it answers, so a short or still-pending query reads
@@ -334,7 +338,7 @@ export function MapSearchBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: {
     position: "absolute",
     left: CHROME_GAP,
@@ -413,4 +417,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
   },
-});
+}));

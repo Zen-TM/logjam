@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
@@ -16,7 +16,7 @@ import {
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import {
   countFieldValues,
@@ -95,6 +95,8 @@ export function CustomFieldList({
    *  than the whole list (one type's attributes). */
   emptyHint?: string;
 }) {
+  const styles = useStyles();
+
   const noun = ENTITY_NOUN[entity];
   // BUILT-INS LAST. The list is two things stacked: what the user made, and
   // what the app ships. Theirs is the half they came here to change, so it
@@ -187,6 +189,9 @@ export function useCustomFieldForm({
   onSaved: (defs: ScopedCustomFieldDef[], message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const noun = ENTITY_NOUN[entity];
   const placeTypes = useMirrorPlaceTypes();
   const trips = useMirrorTrips();
@@ -591,11 +596,11 @@ function typeLabel(type: TripLogCustomFieldType): string {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   list: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },
-});
+}));

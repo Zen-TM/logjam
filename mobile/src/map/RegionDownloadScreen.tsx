@@ -52,7 +52,7 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -204,6 +204,8 @@ export function RegionDownloadScreen({
   initialCenter?: [number, number];
   initialZoom?: number;
 }) {
+  const styles = useStyles();
+
   // Read once: `initialViewState` below is only honoured on the first render,
   // and re-reading a module store mid-session would move the frame the user is
   // already dragging.
@@ -784,7 +786,7 @@ export function RegionDownloadScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
   hero: { zIndex: 1 },
@@ -846,4 +848,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
   },
   detailCaption: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

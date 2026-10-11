@@ -13,7 +13,7 @@
 // states WHAT KINDS of data are held and names no place and no coordinate
 // (shared/DESIGN.md §13).
 import { useCallback, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 
 import {
   isAppLockEnabled,
@@ -27,7 +27,7 @@ import {
   savesCapturesToGallery,
   setSaveCapturesToGallery,
 } from "../../media/galleryPreference";
-import { fontSize, lineHeight, spacing, theme } from "../../theme";
+import { fontSize, lineHeight, spacing, makeStyles } from "../../theme";
 import {
   ScreenScroll,
   SectionHeader,
@@ -37,6 +37,8 @@ import {
 import { PreferenceRow } from "./settingsKit";
 
 export function PrivacySettingsScreen() {
+  const styles = useStyles();
+
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
     (text: string, tone: ToastMessage["tone"] = "info") => {
@@ -146,11 +148,11 @@ export function PrivacySettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   note: {
     color: theme.textMuted,
     fontSize: fontSize.sm,
     lineHeight: lineHeight.body,
     marginBottom: spacing(2),
   },
-});
+}));

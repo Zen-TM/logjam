@@ -32,7 +32,6 @@ import {
   FlatList,
   Keyboard,
   RefreshControl,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -73,13 +72,14 @@ import {
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
-  placeHue,
   fontSize,
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
+  useHues,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
@@ -126,7 +126,7 @@ import {
   setPlaceMapFilterEnabled,
   usePlaceMapFilter,
 } from "./placeMapFilter";
-import { PLACE_STATUS_META } from "./placeMeta";
+import { placeStatusMeta } from "./placeMeta";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
 const { copy } = PLACES_LIST;
@@ -168,6 +168,10 @@ export function PlacesScreen({
    */
   onPickArea: () => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const pendingCount = usePendingSyncCount();
@@ -591,9 +595,9 @@ export function PlacesScreen({
       { value: "all", label: copy.allStatuses, count: withoutBucket.length },
       ...PLACE_STATUS_ORDER.map((status) => ({
         value: status,
-        label: PLACE_STATUS_META[status].label,
-        icon: PLACE_STATUS_META[status].icon,
-        hue: PLACE_STATUS_META[status].hue,
+        label: placeStatusMeta(theme)[status].label,
+        icon: placeStatusMeta(theme)[status].icon,
+        hue: placeStatusMeta(theme)[status].hue,
         count: bucketCounts[status],
         // A bucket the other axes have emptied stays in place but isn't a tap
         // into a dead end. Never removed: a rail that reshuffles under the
@@ -601,7 +605,7 @@ export function PlacesScreen({
         disabled: bucketCounts[status] === 0 && bucket !== status,
       })),
     ],
-    [bucket, bucketCounts, withoutBucket.length],
+    [bucket, bucketCounts, withoutBucket.length, theme],
   );
 
   const heroSegments: MeterSegment[] = useMemo(
@@ -625,7 +629,7 @@ export function PlacesScreen({
         display: String(totals.shared),
       },
     ],
-    [totals],
+    [totals, placeHue],
   );
 
   // The trip form's type vocabulary, so logging from here offers the same
@@ -1087,7 +1091,10 @@ const PlaceRow = memo(function PlaceRow({
   deletable: boolean;
   onToggle: () => void;
 }) {
-  const meta = PLACE_STATUS_META[status];
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = placeStatusMeta(theme)[status];
   const quality = qualityLabel(numericFieldValue(place.fieldValues, "quality"));
   // The glyph stays the STATUS one — that is what the rail filters on, and the
   // map is where a type is a colour. What the row owes a mixed list is the
@@ -1154,6 +1161,9 @@ function EmptyPanel({
   onAdd: () => void;
   onClear: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // Without an account there is no web list to import from and nothing will
   // ever sync — promising both would be the first thing a new guest reads.
   const guest = useAccountState().accountState === "guest";
@@ -1180,7 +1190,7 @@ function EmptyPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
@@ -1273,4 +1283,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: "center",
   },
-});
+}));

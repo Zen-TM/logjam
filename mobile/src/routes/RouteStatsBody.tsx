@@ -14,7 +14,7 @@
 // Elevation is fetched on demand and is simply absent offline (see
 // useElevationProfile) — the distance is always right, which is the number
 // being looked for most of the time.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   formatDistanceM,
   PAIRED_STAT_LABELS,
@@ -22,7 +22,7 @@ import {
   routeLengthM,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
 import { ProfileChart, StatGrid, elevationSeries } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -38,6 +38,8 @@ export function RouteStatsBody({
    */
   allowNetwork?: boolean;
 }) {
+  const styles = useStyles();
+
   const { profile, loading } = useElevationProfile([route.points], {
     allowNetwork,
   });
@@ -95,7 +97,7 @@ export function RouteStatsBody({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   chartLabel: {
     color: theme.textMuted,
     fontSize: fontSize.xs,
@@ -110,4 +112,4 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   pending: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+}));

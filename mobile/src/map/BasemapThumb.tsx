@@ -27,10 +27,10 @@
 // the map's attribution sheet, which lists the preview sources alongside the
 // active basemap's own attribution. Do not add a source here whose terms don't
 // allow keeping a copy of its tiles.
-import { Image, StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
 
 import { Icon } from "../ui";
-import { assetHue, radius, withAlpha } from "../theme";
+import { radius, withAlpha, makeStyles, useHues, huesFor } from "../theme";
 import type { BasemapId } from "./sourceResolver";
 
 // The `require()` is what makes Metro bundle the file; a release build then
@@ -81,6 +81,9 @@ export const BASEMAP_THUMB_CREDIT =
   "Preview tiles: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).";
 
 export function BasemapThumb({ basemapId }: { basemapId: BasemapId }) {
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const thumb = THUMBS[basemapId];
   if (thumb === undefined) {
     return (
@@ -98,15 +101,15 @@ export function BasemapThumb({ basemapId }: { basemapId: BasemapId }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   tile: {
     width: 44,
     height: 44,
     borderRadius: radius.md,
     // A hairline keeps a pale imagery tile from bleeding into the card.
     borderWidth: 1,
-    borderColor: withAlpha(assetHue.region, 0.35),
-    backgroundColor: withAlpha(assetHue.region, 0.16),
+    borderColor: withAlpha(huesFor(theme).assetHue.region, 0.35),
+    backgroundColor: withAlpha(huesFor(theme).assetHue.region, 0.16),
   },
   glyphTile: { alignItems: "center", justifyContent: "center" },
-});
+}));

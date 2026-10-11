@@ -33,8 +33,8 @@ import {
   radius,
   spacing,
   textScale,
-  theme,
   withAlpha,
+  makeStyles,
 } from "../theme";
 import type { NorthReference } from "./mapPreferences";
 import { compassTicks, displayHeading } from "./compassTape";
@@ -79,6 +79,8 @@ export function CompassStrip({
    */
   reference?: NorthReference;
 }) {
+  const styles = useStyles();
+
   if (heading == null || width <= 0) return null;
   // Applied once, here, to the whole tape: shifting the heading shifts every
   // tick and label with it, which is what makes the centre line read the
@@ -119,7 +121,7 @@ export function CompassStrip({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   frame: {
     backgroundColor: withAlpha(theme.page, 0.92),
     borderWidth: 1,
@@ -171,4 +173,4 @@ const styles = StyleSheet.create({
     marginLeft: -1,
     backgroundColor: theme.accent,
   },
-});
+}));
