@@ -120,7 +120,7 @@ describe("caps", () => {
     const bbox: RegionBbox = {
       west: 150.0,
       south: -33.9,
-      east: 150.45,
+      east: 150.43,
       north: -33.55,
     };
     const plan = planRegionTiles(bbox, 8, 16);
@@ -128,6 +128,20 @@ describe("caps", () => {
     expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({
       ok: false,
       reason: "too-many-tiles",
+    });
+  });
+
+  // Mutation: apply the area limit only when a clip is in the run, and a
+  // 50 x 35 km raster-only area is offered, then refused by the clip endpoint
+  // for the DEM archive that rides along with it.
+  it("rejects an area over MAX_REGION_AREA_KM2 whatever is being saved", () => {
+    const bbox = { west: 150.0, south: -34.0, east: 150.54, north: -33.69 };
+    const [w, h] = regionEdgesKm(bbox);
+    expect(Math.max(w, h)).toBeLessThan(MAX_REGION_EDGE_KM);
+    expect(w * h).toBeGreaterThan(MAX_REGION_AREA_KM2);
+    expect(checkRegionCaps(bbox, 1)).toEqual({
+      ok: false,
+      reason: "area-too-large",
     });
   });
 
@@ -228,19 +242,6 @@ describe("planRegionForBasemaps", () => {
     // tiles the politeness cap counts.
     expect(job.p90Bytes).toBeGreaterThan(worldwide.p90Bytes);
     expect(job.totalTiles).toBe(worldwide.totalTiles);
-  });
-
-  // Mutation: plan the clip whatever the area, and a 50 x 35 km raster-only
-  // run the screen allows is refused by the clip endpoint and fails.
-  it("leaves the archive clip out of an area the clip endpoint would refuse", () => {
-    const large = { west: 150.0, south: -34.0, east: 150.54, north: -33.69 };
-    const [w, h] = regionEdgesKm(large);
-    expect(w).toBeLessThan(MAX_REGION_EDGE_KM);
-    expect(w * h).toBeGreaterThan(MAX_REGION_AREA_KM2);
-    expect(checkRegionCaps(large, 1).ok).toBe(true);
-    expect(
-      planRegionForBasemaps(large, [], 15, maxZoomFor, true).demArchives,
-    ).toEqual([]);
   });
 
   // Mutation: add an archive source to DEM_SOURCES without its measured tile

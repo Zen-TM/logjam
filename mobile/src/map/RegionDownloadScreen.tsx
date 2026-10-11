@@ -385,8 +385,7 @@ export function RegionDownloadScreen({
         !isGuest,
       )
     : null;
-  const caps =
-    bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
+  const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
   const canDownload =
     selected.length > 0 &&
     bbox != null &&
