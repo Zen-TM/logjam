@@ -61,7 +61,6 @@ import {
   Hero,
   Notice,
   ChipRail,
-  SwitchRow,
   TextField,
 } from "../ui";
 import {
@@ -185,11 +184,6 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  */
 const PANEL_HEIGHT = 208;
 const PANEL_HEIGHT_GUEST = 250;
-/**
- * The Contours row and its gap. The panel grows by this only while a chosen
- * map draws contours, which changes on a chip tap, never under a drag.
- */
-const CONTOURS_ROW_HEIGHT = 58;
 
 /** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
 const PROTOMAPS_FLAVOR = "light" as const;
@@ -244,8 +238,6 @@ export function RegionDownloadScreen({
   // refuse is worse than no chip. The note under the rail says why, and where
   // to change it — which a greyed chip could not.
   const isGuest = useAccountState().accountState === "guest";
-  // An add-on to the maps that draw contours, on until switched off.
-  const [saveContours, setSaveContours] = useState(true);
   const downloadable = isGuest
     ? DOWNLOADABLE.filter((id) => id !== "protomaps")
     : DOWNLOADABLE;
@@ -385,13 +377,12 @@ export function RegionDownloadScreen({
 
   const pyramidIds = selected.filter(isRasterPyramid);
   const includesVector = selected.includes("protomaps");
-  // Offered with any map contours can be drawn on (the vector basemap, and
-  // imagery). It asks whether to DOWNLOAD them, which is not the map's switch
-  // for showing them over imagery, so it does not follow that one. A guest
+  // Saved with any map contours can be drawn on (the vector basemap, and
+  // imagery), unasked: at most about 19 MB on the largest mountain area, and
+  // a switch for it was one more thing to get wrong before a trip. A guest
   // has none: the clip endpoint needs a signed-in user.
-  const offersContours =
+  const includesContours =
     !isGuest && selected.some((id) => drawsNswContours(id, true));
-  const includesContours = offersContours && saveContours;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
     ? planRegionForBasemaps(
@@ -691,13 +682,7 @@ export function RegionDownloadScreen({
         </View>
       </View>
 
-      <View
-        style={[
-          styles.panel,
-          isGuest && styles.panelGuest,
-          offersContours && styles.panelContours,
-        ]}
-      >
+      <View style={[styles.panel, isGuest && styles.panelGuest]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -759,20 +744,6 @@ export function RegionDownloadScreen({
               onChange={(next) => setDetailZoom(Number(next))}
             />
           </Field>
-
-          {offersContours ? (
-            <SwitchRow
-              title="Contours"
-              description={
-                job?.contours
-                  ? `≈ ${formatBytes(job.contours.meanBytes)}`
-                  : undefined
-              }
-              style={styles.contoursRow}
-              checked={saveContours}
-              onChange={setSaveContours}
-            />
-          ) : null}
 
           {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
@@ -868,8 +839,6 @@ const styles = StyleSheet.create({
     borderTopColor: theme.line,
   },
   panelGuest: { height: PANEL_HEIGHT_GUEST },
-  panelContours: { height: PANEL_HEIGHT + CONTOURS_ROW_HEIGHT },
-  contoursRow: { minHeight: 48, paddingVertical: spacing(0.5) },
   panelBody: {
     flex: 1,
     paddingHorizontal: spacing(2),
