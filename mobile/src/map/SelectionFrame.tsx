@@ -17,7 +17,7 @@ import { MAP_INK } from "@logjam/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
-import { radius, theme, withAlpha } from "../theme";
+import { radius, withAlpha, makeStyles } from "../theme";
 import { moveFrameEdge, type FrameEdge, type FrameInsets } from "./regionFrame";
 
 /** Touch height of a handle; the visible bar is much thinner. */
@@ -34,6 +34,8 @@ export function SelectionFrame({
   size: { width: number; height: number };
   onChange: (next: FrameInsets) => void;
 }) {
+  const styles = useStyles();
+
   // Destructured: `size` is a fresh object on some renders, and the memo below
   // must not rebuild for that.
   const { width, height } = size;
@@ -243,7 +245,7 @@ export function SelectionFrame({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // Deliberately a black scrim, like the sheet scrims: the dimmed area is
   // "not this", and a scheme tint over a map reads as a colour cast. The four
   // panels never overlap, so the alpha composites exactly once everywhere —
@@ -285,4 +287,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: withAlpha(MAP_INK.label, 0.6),
   },
-});
+}));

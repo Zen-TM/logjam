@@ -33,7 +33,7 @@ import {
   arrowSegmentFeatures,
   routeArrowStyle,
 } from "./routeArrowStyle";
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 
 /**
  * Anchor sizes and fills.
@@ -93,7 +93,7 @@ export function RouteDraftLayer({
   draft,
   dotted,
   degreesPerDp,
-  color = theme.accent,
+  color,
   selectedIndex = null,
   onAnchorDrag,
   onAnchorDragEnd,
@@ -128,6 +128,9 @@ export function RouteDraftLayer({
    */
   onDragActiveChange?: (dragging: boolean) => void;
 }) {
+  const theme = useTheme();
+  color ??= theme.accent;
+
   /**
    * The anchor being dragged, held HERE rather than in the screen's state.
    *

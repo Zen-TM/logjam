@@ -29,7 +29,6 @@ import {
   BackHandler,
   Linking,
   Pressable,
-  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -110,7 +109,14 @@ import {
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+} from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
   PlacePinsLayer,
@@ -834,6 +840,10 @@ export function MapScreen({
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
@@ -4111,7 +4121,7 @@ export function MapScreen({
         resolveBbox: vectorImportActions(imported).resolveBbox,
       })),
     ],
-    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports],
+    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports, assetHue],
   );
 
   /**
@@ -5488,6 +5498,8 @@ function RouteNameForm({
   saving: boolean;
   onSubmit: (name: string) => void;
 }) {
+  const styles = useStyles();
+
   const [draft, setDraft] = useState(initialName);
   // Empty-name requirement shows on SUBMIT, not while typing (shared/DESIGN.md §11);
   // clears as soon as the field is edited.
@@ -5557,7 +5569,7 @@ function RouteNameForm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // The selected point's delete button: circular, warning-coloured, and the
   // same 44 dp the rest of the app treats as a real touch target. Solid rather
   // than translucent — it sits over the map, which can be any colour under it.
@@ -5626,4 +5638,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
   },
-});
+}));

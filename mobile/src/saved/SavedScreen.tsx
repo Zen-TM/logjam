@@ -86,12 +86,13 @@ import {
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import {
-  assetHue,
   fontSize,
   fontWeight,
   radius,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
+  useHues,
 } from "../theme";
 import {
   BottomSheet,
@@ -463,6 +464,10 @@ export function SavedScreen({
    */
   initialFilter?: { category: Category; nonce: number };
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   // Both of these come off the user's web account, so a guest has neither.
@@ -2571,6 +2576,8 @@ function EmptyPanel({
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
   searching: boolean;
 }) {
+  const styles = useStyles();
+
   // An empty panel is where someone works out whether a feature is missing or
   // merely unused — so for the two account-backed categories it must say which.
   const isGuest = useAccountState().accountState === "guest";
@@ -2649,6 +2656,8 @@ function SavedListEnd({
 
 /** The tab's one add button, with its reason when it cannot run just now. */
 function SavedAddButton({ action }: { action: SavedAction }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.addButton}>
       <Button
@@ -2702,6 +2711,8 @@ function PulseSlot({
   onMeasure: (y: number) => void;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   if (!active) return <>{children}</>;
   return (
     <View onLayout={(event) => onMeasure(event.nativeEvent.layout.y)}>
@@ -2726,7 +2737,7 @@ function PulseSlot({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   addButton: { alignItems: "center", gap: spacing(0.5) },
   addReason: { color: theme.textMuted, fontSize: fontSize.sm },
   // Matches `Row`'s own card radius, so the tint stops where the card does
@@ -2794,4 +2805,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 300,
   },
-});
+}));
