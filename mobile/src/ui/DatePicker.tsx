@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  PanResponder,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
 import {
   fontSize,
@@ -14,8 +7,9 @@ import {
   hitSlop,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import {
   addMonths,
@@ -66,6 +60,8 @@ export function DatePicker({
   value: string | null;
   onChange: (key: string) => void;
 }) {
+  const styles = useStyles();
+
   const today = todayDateKey();
   const currentYear = Number(today.slice(0, 4));
   const [visibleMonth, setVisibleMonth] = useState<YearMonth>(() =>
@@ -296,6 +292,8 @@ function DayCell({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+
   const label = (
     <Text
       style={[
@@ -360,6 +358,8 @@ function YearCell({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+
   const label = (
     <Text
       style={[
@@ -415,6 +415,9 @@ function Header({
   labelAccessibility: string;
   expanded: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.headerRow}>
       <Pressable
@@ -470,7 +473,7 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   wrap: { gap: spacing(0.5) },
   headerRow: {
     flexDirection: "row",
@@ -562,4 +565,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   yearText: { color: theme.text, fontSize: fontSize.sm },
-});
+}));

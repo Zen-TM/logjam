@@ -2,9 +2,9 @@
 // Cancel / count / select-all / destroy, fixed to CHIP_RAIL_HEIGHT so the
 // rail's height cannot differ between the two states and the list below does not
 // jump (the bug the Saved screen fixed in 2026-08-24 — see its selectionBar note).
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 import { CHIP_RAIL_HEIGHT } from "./ChipRail";
 
@@ -52,6 +52,9 @@ export function SelectionBar({
   /** Screen-reader label for it — REQUIRED to change with the icon. */
   deleteLabel?: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.bar}>
       <IconButton
@@ -81,7 +84,7 @@ export function SelectionBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   bar: {
     height: CHIP_RAIL_HEIGHT,
     flexDirection: "row",
@@ -96,4 +99,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
-});
+}));

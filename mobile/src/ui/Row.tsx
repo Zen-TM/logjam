@@ -1,19 +1,13 @@
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { Pressable, Text, View, type ViewStyle } from "react-native";
 
 import {
   hitSlop,
   opacity,
   radius,
   spacing,
-  textRole,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
@@ -107,6 +101,9 @@ export function Row({
   subtitleNumberOfLines?: number;
   style?: ViewStyle | ViewStyle[];
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const tint = hue ?? theme.accent;
   const lead =
     leading ??
@@ -191,7 +188,7 @@ export function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   row: {
     // Column + centred: with no footer this lays out exactly as the old
     // flex-row card did (one full-width child, vertically centred when the
@@ -240,4 +237,4 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.text, 0.1),
   },
   progressFill: { height: 3, borderRadius: radius.pill },
-});
+}));

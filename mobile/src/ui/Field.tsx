@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { formRhythm, opacity, textRole } from "../theme";
+import { formRhythm, opacity, makeStyles } from "../theme";
 import { FieldError } from "./FieldError";
 import { fieldLabel } from "./fieldLabel";
 
@@ -32,15 +32,17 @@ export function Field({
   disabled?: boolean;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={[styles.field, disabled && styles.disabled]}>
       {aside != null ? (
         <View style={styles.head}>
-          <Text style={fieldLabel}>{label}</Text>
+          <Text style={styles.label}>{label}</Text>
           {aside}
         </View>
       ) : (
-        <Text style={fieldLabel}>{label}</Text>
+        <Text style={styles.label}>{label}</Text>
       )}
       {children}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
@@ -51,10 +53,13 @@ export function Field({
 
 /** A form's fields, one `formRhythm.field` apart. */
 export function FormStack({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
+
   return <View style={styles.stack}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
+  label: fieldLabel(textRole),
   field: { gap: formRhythm.label },
   stack: { gap: formRhythm.field },
   disabled: { opacity: opacity.disabled },
@@ -65,4 +70,4 @@ const styles = StyleSheet.create({
     gap: formRhythm.field,
   },
   hint: textRole.hint,
-});
+}));
