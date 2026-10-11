@@ -9,9 +9,13 @@ import {
 function fakeMap(lng: number, lat: number) {
   const sources = new Map<string, unknown>();
   return {
-    getCenter: () => ({ lng, lat }),
+    getCenter: () => ({
+      wrap: () => ({ lng: ((((lng + 180) % 360) + 360) % 360) - 180, lat }),
+    }),
     getSource: (id: string) => sources.get(id),
     addSource: vi.fn((id: string, source: unknown) => {
+      // As MapLibre does.
+      if (sources.has(id)) throw new Error(`Source "${id}" already exists.`);
       sources.set(id, source);
     }),
   } as unknown as Parameters<typeof terrainSourceFor>[0] & {
@@ -60,5 +64,28 @@ describe("terrainSourceFor", () => {
       await terrainSourceFor(fakeMap(115.86, -31.95), open, "https://web.test"),
     ).toBe(WORLDWIDE_TERRAIN_SOURCE);
     expect(open).not.toHaveBeenCalled();
+  });
+
+  // Mutation: read the centre unwrapped and a map panned once around the
+  // world draws NSW from the worldwide tiles.
+  it("uses the NSW archive over NSW after a pan around the world", async () => {
+    const map = fakeMap(KATOOMBA[0] + 360, KATOOMBA[1]);
+    expect(await terrainSourceFor(map, vi.fn(opens), "https://web.test")).toBe(
+      NSW_TERRAIN_SOURCE,
+    );
+  });
+
+  // Mutation: drop the second look for the source, and two calls that wait on
+  // the same open both add it: MapLibre throws on the second.
+  it("adds the source once when two calls wait on the archive together", async () => {
+    const map = fakeMap(...KATOOMBA);
+    const slow = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+    await expect(
+      Promise.all([
+        terrainSourceFor(map, slow, "https://web.test"),
+        terrainSourceFor(map, slow, "https://web.test"),
+      ]),
+    ).resolves.toEqual([NSW_TERRAIN_SOURCE, NSW_TERRAIN_SOURCE]);
+    expect(map.addSource).toHaveBeenCalledTimes(1);
   });
 });

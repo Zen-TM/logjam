@@ -3016,13 +3016,15 @@ function Map({
   }, []);
 
   // Toggle 3d Terrain
-  // Choosing the terrain source is asynchronous; this is whether 3D is still
-  // wanted when the answer arrives.
-  const wants3DRef = useRef(false);
+  // Choosing the terrain source is asynchronous, and the answer applies only
+  // if no toggle has happened since it was asked for. A count, not a flag: off
+  // then on again looks the same to a flag, and an answer from the first "on"
+  // would replace the terrain the second one chose somewhere else.
+  const terrainToggleRef = useRef(0);
   const toggleTerrain = () => {
     const map = mapRef.current;
     if (!map) return;
-    wants3DRef.current = !is3D;
+    const toggle = ++terrainToggleRef.current;
     if (is3D) {
       // Turning off — nothing to wait for, flatten immediately
       map.setTerrain(null);
@@ -3050,7 +3052,9 @@ function Map({
         },
         window.location.origin,
       ).then((source) => {
-        if (!wants3DRef.current) return;
+        // The second test: the map may have been removed while this waited.
+        if (toggle !== terrainToggleRef.current || mapRef.current !== map)
+          return;
         // Turning on — wait for the terrain tiles to actually load before tilting
         map.setTerrain({ source, exaggeration: 1.5 });
         map.once("idle", () => {

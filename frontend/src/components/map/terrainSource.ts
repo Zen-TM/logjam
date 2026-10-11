@@ -22,7 +22,9 @@ export async function terrainSourceFor(
   openArchive: (url: string) => Promise<unknown>,
   origin: string,
 ): Promise<string> {
-  const { lng, lat } = map.getCenter();
+  // Wrapped: after a pan around the world the centre's longitude is a turn
+  // or more away from the one the coverage is written in.
+  const { lng, lat } = map.getCenter().wrap();
   const [west, south, east, north] = NSW_5M.coverage;
   if (lng < west || lng > east || lat < south || lat > north)
     return WORLDWIDE_TERRAIN_SOURCE;
@@ -35,6 +37,8 @@ export async function terrainSourceFor(
   } catch {
     return WORLDWIDE_TERRAIN_SOURCE;
   }
+  // Asked again: a second call may have added it while this one waited.
+  if (map.getSource(NSW_TERRAIN_SOURCE)) return NSW_TERRAIN_SOURCE;
   map.addSource(NSW_TERRAIN_SOURCE, {
     type: "raster-dem",
     url: `pmtiles://${url}`,
