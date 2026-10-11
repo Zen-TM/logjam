@@ -37,14 +37,19 @@ import { seedId, cid } from "./seedIds";
 // the last point of its own line, and the Wollangambe recording's bbox did not
 // contain its line at all.
 
-/** When the two seeded recordings ran: stated once, for the row and the file. */
+/**
+ * When the two seeded recordings ran: stated once, for the row and the file.
+ * Short on purpose. Both lines are about a kilometre, and a longer span is a
+ * pace under `MOVING_SPEED_THRESHOLD_MPS`, which the stats engine reads as
+ * standing still: the speed chart would be a flat zero.
+ */
 const WOLLANGAMBE_RECORDED = {
   startedAt: "2026-08-02T22:05:00.000Z",
-  endedAt: "2026-08-02T23:35:00.000Z",
+  endedAt: "2026-08-02T22:30:00.000Z",
 };
 const BELL_CREEK_RECORDED = {
   startedAt: "2026-05-16T23:40:00.000Z",
-  endedAt: "2026-05-17T00:40:00.000Z",
+  endedAt: "2026-05-17T00:05:00.000Z",
 };
 
 type SeededFile = {
@@ -1682,7 +1687,7 @@ async function main() {
         metadata: {
           bbox: wollangambeFile.bbox,
           distanceM: wollangambeFile.distanceM,
-          durationMs: 5_400_000,
+          durationMs: 1_500_000,
           elevationGainM: 95,
           elevationLossM: 130,
           pointCount: wollangambeFile.positionCount,
@@ -1728,7 +1733,7 @@ async function main() {
         metadata: {
           bbox: bellCreekFile.bbox,
           distanceM: bellCreekFile.distanceM,
-          durationMs: 3_600_000,
+          durationMs: 1_500_000,
           elevationGainM: 70,
           elevationLossM: 95,
           pointCount: bellCreekFile.positionCount,

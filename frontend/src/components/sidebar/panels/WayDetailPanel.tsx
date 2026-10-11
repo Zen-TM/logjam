@@ -589,7 +589,11 @@ export default function WayDetailPanel({
         }
       />
 
-      <div className={classes.body}>
+      {/* Focusable because it scrolls: a track's charts make the page taller
+          than a phone's sheet, and a keyboard must be able to scroll to them
+          (`e2e/a11y.spec.ts`, "a recording's page"). */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt */}
+      <div className={classes.body} tabIndex={0}>
         {stats.length > 0 && <StatGrid stats={pairedStatLayout(stats)} />}
 
         {trackSource && (
