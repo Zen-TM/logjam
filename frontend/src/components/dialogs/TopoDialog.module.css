@@ -201,12 +201,6 @@
   color: var(--color-text-muted);
 }
 
-.stepWarning {
-  margin: 0;
-  font-size: var(--font-sm);
-  color: var(--color-warning);
-}
-
 .stepControls {
   display: flex;
   align-items: center;

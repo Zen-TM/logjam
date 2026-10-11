@@ -13,12 +13,18 @@
 // scrolls away leaves the drag handle as the only exit — which means DISCARD
 // (DESIGN.md).
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Alert, AppState, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import { useElevationProfile } from "../map/useElevationProfile";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { BottomSheet, Button, IconButton } from "../ui";
+import { spacing, theme } from "../theme";
+import {
+  BottomSheet,
+  closedSheet,
+  Button,
+  FieldError,
+  IconButton,
+} from "../ui";
 import { confirmFinishRecording } from "./finishRecordingPrompt";
 import { TrackStatsBody } from "./TrackStatsBody";
 import {
@@ -180,7 +186,7 @@ export function RecordingSheet({
     );
   }, [activeTrack, onClose]);
 
-  if (!activeTrack) return null;
+  if (!activeTrack) return closedSheet;
 
   return (
     <BottomSheet
@@ -209,10 +215,7 @@ export function RecordingSheet({
     >
       <View style={styles.body}>
         {writeFailing ? (
-          <Text style={styles.writeWarning}>
-            Points aren&apos;t being saved — this phone&apos;s storage is full
-            or can&apos;t be written to. Finish, then free up space.
-          </Text>
+          <FieldError message="Points aren't being saved — this phone's storage is full or can't be written to. Finish, then free up space." />
         ) : null}
         <TrackStatsBody
           detail={detail}
@@ -228,11 +231,6 @@ export function RecordingSheet({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1.5) },
-  writeWarning: {
-    color: theme.warning,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
   actions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   spacer: { flex: 1 },
 });
