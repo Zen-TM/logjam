@@ -2,7 +2,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { copySay, copyViolations, userFacingStrings } from "@logjam/shared";
+import {
+  copySay,
+  copyViolations,
+  MAP_MEASURE,
+  MAP_MEASURE_START_NOTE,
+  MAP_SNAP_OPTIONS,
+  mapMeasureVerbs,
+  userFacingStrings,
+} from "@logjam/shared";
 
 // The words a user reads on Logjam GPS keep the copy rules of
 // shared/DESIGN.md §12 (`COPY_RULES` in @logjam/shared): no "Retry", "the app",
@@ -109,6 +117,31 @@ describe("copy on Logjam GPS", () => {
             ),
       ),
     );
+    expect(offenders).toEqual([]);
+  });
+
+  // The measure tool's words are declared once, in @logjam/shared
+  // (`MAP_MEASURE`, `MAP_SNAP_OPTIONS`), and read from there. Mutation: write
+  // "Measure distance" back as a literal in `map/MapToolGroup.tsx`.
+  it("reads the measure tool's words from the contract", () => {
+    const declared = [
+      MAP_MEASURE.title,
+      MAP_MEASURE.copy.snap,
+      MAP_MEASURE.copy.readingTerrain,
+      MAP_MEASURE.copy.fromHere,
+      MAP_MEASURE_START_NOTE.gps,
+      ...mapMeasureVerbs("gps").map((verb) => verb.label),
+      ...MAP_SNAP_OPTIONS.map((option) => option.label),
+    ].filter((text) => text.length >= 7);
+    const offenders = sources(SRC).flatMap((path) => {
+      const source = readFileSync(path, "utf8");
+      return declared
+        .filter(
+          (text) =>
+            source.includes(`"${text}"`) || source.includes(`>${text}<`),
+        )
+        .map((text) => `${relative(SRC, path)} writes "${text}"`);
+    });
     expect(offenders).toEqual([]);
   });
 });

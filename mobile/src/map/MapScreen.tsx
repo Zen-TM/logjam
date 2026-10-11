@@ -86,6 +86,7 @@ import {
   drawsNswContours,
   nswContourStyle,
   MAP_INK,
+  MAP_MEASURE,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -5324,7 +5325,7 @@ export function MapScreen({
           />
           <Row
             icon="measure"
-            title="Measure from here"
+            title={MAP_MEASURE.copy.fromHere}
             onPress={() => {
               const point = longPressPoint;
               setLongPressPoint(null);

@@ -15,6 +15,7 @@ import {
   formatDistanceM,
   formatDurationMs,
   formatSpeedMps,
+  MAP_MEASURE,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedClockMs,
@@ -201,7 +202,7 @@ export function TrackStatsBody({
       ) : (
         <Text style={styles.pending}>
           {demLoading
-            ? "Reading the terrain…"
+            ? MAP_MEASURE.copy.readingTerrain
             : detail.maxAltitudeM == null
               ? "No heights for this track"
               : "Not enough height readings to chart"}

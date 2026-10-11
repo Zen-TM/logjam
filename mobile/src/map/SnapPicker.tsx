@@ -7,16 +7,9 @@
 //
 // It lives in the tool it changes, not in the layers sheet, because it governs
 // what the next tap does.
-import type { SnapMode } from "@logjam/shared";
+import { MAP_MEASURE, MAP_SNAP_OPTIONS, type SnapMode } from "@logjam/shared";
 
 import { ChipRail, Field } from "../ui";
-
-const OPTIONS: { value: SnapMode; label: string }[] = [
-  { value: "off", label: "Off" },
-  { value: "trails", label: "Trails" },
-  { value: "waterways", label: "Creeks" },
-  { value: "both", label: "Both" },
-];
 
 export function SnapPicker({
   mode,
@@ -28,9 +21,9 @@ export function SnapPicker({
   disabled?: boolean;
 }) {
   return (
-    <Field label="Snap to">
+    <Field label={MAP_MEASURE.copy.snap}>
       <ChipRail
-        options={OPTIONS.map((option) => ({ ...option, disabled }))}
+        options={MAP_SNAP_OPTIONS.map((option) => ({ ...option, disabled }))}
         value={mode}
         onChange={onChange}
       />

@@ -17,6 +17,7 @@
 import { Text, View } from "react-native";
 import {
   formatDistanceM,
+  MAP_MEASURE,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   routeLengthM,
@@ -89,7 +90,7 @@ export function RouteStatsBody({
       ) : (
         <Text style={styles.pending}>
           {loading
-            ? "Reading the terrain…"
+            ? MAP_MEASURE.copy.readingTerrain
             : "Elevation needs a connection; distance always shows."}
         </Text>
       )}

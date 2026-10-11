@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, View } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
-import type { IconIdea } from "@logjam/shared";
+import { MAP_MEASURE, MAP_MEASURE_ICON, type IconIdea } from "@logjam/shared";
 
 import { makeStyles, useTheme } from "../theme";
 import { Icon } from "../ui";
@@ -23,7 +23,7 @@ import { Icon } from "../ui";
 export type MapTool = "measure" | "route";
 
 const TOOLS: { id: MapTool; label: string; icon: IconIdea }[] = [
-  { id: "measure", label: "Measure distance", icon: "measure" },
+  { id: "measure", label: MAP_MEASURE.title, icon: MAP_MEASURE_ICON },
   { id: "route", label: "Draw a route", icon: "draw" },
 ];
 

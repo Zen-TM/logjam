@@ -95,11 +95,7 @@ export function MeasurePanel({
       </div>
 
       <footer className={classes.actions}>
-        <SnapSelect
-          label={copy.snap}
-          value={snapMode}
-          onChange={onSnapModeChange}
-        />
+        <SnapSelect value={snapMode} onChange={onSnapModeChange} />
         <div className={classes.buttons}>
           {mapMeasureVerbs("web").map((verb) =>
             verb.id === "clear" ? (
