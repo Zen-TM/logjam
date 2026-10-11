@@ -35,6 +35,7 @@
 // failure to delete is worth surfacing, so per-store failures are collected and
 // returned rather than swallowed — but one failing store never prevents the
 // others from being cleared.
+import { OfflineManager } from "@maplibre/maplibre-react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { invalidateCurrentUser } from "../api/apiFetch";
@@ -105,8 +106,11 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // 13 tile rows survived a full sign-out byte-for-byte). `resetDatabase`
   // deletes the whole mbgl store, ambient cache and any pack alike; this app
   // keeps no MapLibre packs of its own (regions are our MBTiles files).
+  //
+  // A static import on purpose: in a dev build every `import()` is a fetch
+  // from Metro, so this step failed whenever the dev server was unreachable
+  // (release bundles resolve it in-process). Sign-out must not depend on it.
   try {
-    const { OfflineManager } = await import("@maplibre/maplibre-react-native");
     await OfflineManager.resetDatabase();
   } catch (err) {
     console.error(err);

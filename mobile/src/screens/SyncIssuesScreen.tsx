@@ -45,7 +45,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Hero,
@@ -96,7 +96,7 @@ import {
   shelfSubtitle,
   shelfTitle,
 } from "./syncIssueDisplay";
-import { relativeTime } from "./syncHealth";
+import { relativeTime, syncIssuesTitle } from "./syncHealth";
 
 type Issue =
   | { kind: "stuck"; key: string; op: ParkedOp }
@@ -527,7 +527,7 @@ export function SyncIssuesScreen({
     <View style={styles.root}>
       <Hero
         eyebrow="Account sync issues"
-        title={total > 0 ? "Some changes need you" : "Everything's synced"}
+        title={syncIssuesTitle(total)}
         onBack={onBack}
         value={total === 1 ? "1 change" : `${total} changes`}
       />
@@ -945,7 +945,7 @@ const styles = StyleSheet.create({
   menuValue: { color: theme.text, fontSize: fontSize.base },
   // The line the rejection is about, so two changes over one complaint stop
   // being a guessing game.
-  menuValueRejected: { color: theme.warning },
+  menuValueRejected: { fontWeight: fontWeight.bold },
   empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
   emptyTitle: { color: theme.text, fontSize: fontSize.base },
   emptyHint: {

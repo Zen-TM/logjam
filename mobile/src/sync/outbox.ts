@@ -538,8 +538,14 @@ export async function createPlaceTypeLocal(draft: {
   // Append after the user's own types. System types hold 0-2 and sort first by
   // their null owner, so a user's first type starting at 3 keeps the two orders
   // agreeing without the client having to know how many built-ins there are.
+  // "The user's own" is "not a built-in id", never "has an owner": a type made
+  // here has no owner until it syncs, so two made offline shared a position.
+  const systemIds = Object.values(SYSTEM_PLACE_TYPE_IDS);
   const last = await db.getFirstAsync<{ position: number }>(
-    "SELECT position FROM place_types WHERE owner_id IS NOT NULL ORDER BY position DESC LIMIT 1",
+    `SELECT position FROM place_types
+      WHERE id NOT IN (${systemIds.map(() => "?").join(", ")})
+      ORDER BY position DESC LIMIT 1`,
+    ...systemIds,
   );
   const position = last ? last.position + 1 : SYSTEM_PLACE_TYPE_COUNT;
   const fields = {

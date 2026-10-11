@@ -58,7 +58,11 @@ import {
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import type { BasemapId, MapArtifact } from "./sourceResolver";
+import {
+  hasSavedImageryContours,
+  type BasemapId,
+  type MapArtifact,
+} from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -130,6 +134,8 @@ export function MapLayersSheet({
   connectivity,
   basemapId,
   onBasemapChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
   artifacts,
   layers,
   overlays,
@@ -150,6 +156,8 @@ export function MapLayersSheet({
   connectivity: Connectivity;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -180,6 +188,11 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={onContoursOverImageryChange}
+        // Offline they come only from saved clips, so the switch is offered
+        // only when some saved area has them with imagery.
+        offersContours={online || hasSavedImageryContours(artifacts)}
         online={online}
       />
     ),
@@ -230,10 +243,16 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
+  offersContours,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
+  offersContours: boolean;
   online: boolean;
 }) {
   return (
@@ -250,29 +269,43 @@ function BasemapTab({
         const unavailable = !online && !entry.offlineCapable;
         const active = basemapId === id;
         return (
-          <Row
-            key={entry.id}
-            leading={<BasemapThumb basemapId={id} />}
-            title={entry.name}
-            // Name + sample tile only. The blurbs were a sentence each on six
-            // rows the user scrolls past every time, and the thumbnail already
-            // says what the map looks like far better than the words did. The
-            // subtitle now carries STATE and nothing else — which is why the
-            // one that survives is the offline reason (DESIGN.md).
-            subtitle={unavailable ? "Needs a connection" : undefined}
-            disabled={unavailable}
-            onPress={() => onBasemapChange(id)}
-            // No "Showing" pill: the selection is a state of the row, not a
-            // label on it. A filled check on an accent-lit card says it at a
-            // glance, and a downloaded-region pill used to say "Offline" for a
-            // basemap of which one small area is on the phone.
-            right={
-              active ? (
-                <Icon idea="success" size={22} color={theme.accent} />
-              ) : null
-            }
-            selected={active}
-          />
+          <Fragment key={entry.id}>
+            <Row
+              leading={<BasemapThumb basemapId={id} />}
+              title={entry.name}
+              // Name + sample tile only. The blurbs were a sentence each on six
+              // rows the user scrolls past every time, and the thumbnail already
+              // says what the map looks like far better than the words did. The
+              // subtitle now carries STATE and nothing else — which is why the
+              // one that survives is the offline reason (DESIGN.md).
+              subtitle={unavailable ? "Needs a connection" : undefined}
+              disabled={unavailable}
+              onPress={() => onBasemapChange(id)}
+              // No "Showing" pill: the selection is a state of the row, not a
+              // label on it. A filled check on an accent-lit card says it at a
+              // glance, and a downloaded-region pill used to say "Offline" for a
+              // basemap of which one small area is on the phone.
+              right={
+                active ? (
+                  <Icon idea="success" size={22} color={theme.accent} />
+                ) : null
+              }
+              selected={active}
+            />
+            {/* Imagery has no contours of its own; the vector basemap always
+              draws them (shared nswContours.ts). */}
+            {active && id === "six-imagery" && offersContours ? (
+              <SwitchRow
+                title="Contours"
+                description={
+                  online ? undefined : "Only in saved areas that include them"
+                }
+                style={styles.itemRow}
+                checked={contoursOverImagery}
+                onChange={onContoursOverImageryChange}
+              />
+            ) : null}
+          </Fragment>
         );
       })}
     </View>

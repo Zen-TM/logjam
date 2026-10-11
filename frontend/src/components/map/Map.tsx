@@ -9,7 +9,7 @@ import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 // which Vite's bundling breaks. vite.config.ts emits the worker and the shared
 // chunk it imports under a content-hashed path and exposes its URL here.
 setWorkerUrl(maplibreWorkerUrl);
-import { Protocol } from "pmtiles";
+import { PMTiles, Protocol } from "pmtiles";
 import {
   INK,
   MAP_INK,
@@ -17,7 +17,10 @@ import {
   SHARED_PLACE_COLOR,
   type MapPointCoord,
   type RegionBbox,
+  contourLabelHalo,
+  nswContourStyle,
 } from "@logjam/shared";
+import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import type { PlaceHighlight } from "./placeHighlight";
@@ -95,7 +98,7 @@ import {
   isPlaceDoneByViewer,
   type TPlaceType,
 } from "../../placeUtils";
-import { fetchTrackGeoJSON } from "../media/trackGeo";
+import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -109,8 +112,7 @@ import {
   rgbaCssFromHex,
   contourWidthStops,
   featureLineWidthStops,
-  DEM_ATTRIBUTION_HTML,
-  DEM_TILE_URL_TEMPLATE,
+  TERRARIUM,
   isValidLatitude,
   isValidLongitude,
   type OsmFeatureKey,
@@ -251,6 +253,22 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * Light flavor only: the web app has no dark theme (index.css carries a single
  * prefers-color-scheme rule that inverts icons, nothing more).
  */
+/**
+ * The entry of `topoLayers` that is the statewide contours, not a topo area's
+ * layer. No dash, and it contains "contours": this file splits a layer id at
+ * its first dash and styles an entry as contours by that word.
+ */
+export const NSW_CONTOURS_ENTRY_ID = "nswcontours";
+
+/** The statewide contours have their own fixed look (shared nswContours.ts). */
+function paintStyleFor(
+  entryId: string,
+  style: VectorStyleSettings,
+  basemapId: string,
+): VectorStyleSettings {
+  return entryId === NSW_CONTOURS_ENTRY_ID ? nswContourStyle(basemapId) : style;
+}
+
 function addProtomapsBasemap(
   map: maplibregl.Map,
   visibility: "visible" | "none",
@@ -430,7 +448,8 @@ function applyVectorPaint(
       | "line-width"
       | "fill-color"
       | "fill-outline-color"
-      | "text-color",
+      | "text-color"
+      | "text-halo-color",
     value: string | number | maplibregl.ExpressionSpecification,
   ): void => {
     if (map.getLayer(lid)) map.setPaintProperty(lid, prop, value as never);
@@ -467,6 +486,11 @@ function applyVectorPaint(
       `topo-${entryId}-labels`,
       "text-color",
       rgbaCss(vs.contours.majorColour),
+    );
+    setPaint(
+      `topo-${entryId}-labels`,
+      "text-halo-color",
+      contourLabelHalo(vs.contours.majorColour),
     );
     setLabelSize(`topo-${entryId}-labels`);
     return;
@@ -1113,13 +1137,13 @@ function Map({
       });
 
       // 3D Terrain - Soruce DEM for 3d Terrain
-      map.addSource("3d-terrain-dem", {
+      map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
-        // Same tile set, same credit, as the elevation profiles and the
-        // mobile offline DEM — one definition in shared/src/demTiles.ts.
-        tiles: [DEM_TILE_URL_TEMPLATE],
+        // The worldwide source in shared/src/demSources.ts. The NSW one is
+        // added when 3D is switched on over NSW: see terrainSource.ts.
+        tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
-        attribution: DEM_ATTRIBUTION_HTML,
+        attribution: TERRARIUM.creditHtml,
       });
 
       // Owned place GeoJSON source (starts empty)
@@ -1694,10 +1718,10 @@ function Map({
       const cache = trackGeoCacheRef.current;
       const collections = await Promise.all(
         entries.map((entry) => {
-          // Keyed by id AND stamp: a standalone file LINKED to a place appears
-          // in both lists with different stamps, and one cache entry per key
-          // keeps each layer's features stamped for its own layer.
-          const cacheKey = `${entry.mediaId}|${JSON.stringify(entry.stamp)}`;
+          // Keyed by id, colour AND stamp: a standalone file LINKED to a place
+          // appears in both lists with different stamps, and one cache entry
+          // per key keeps each layer's features stamped for its own layer.
+          const cacheKey = trackGeoCacheKey(entry);
           let cached = cache[cacheKey];
           // Discard a cached entry whose presigned URL has rotated so the fresh
           // URL retries; same-URL failures stay cached (LAYERS-2).
@@ -2862,7 +2886,12 @@ function Map({
     // Paint freshly created (or rebuilt) layers with the current style so they
     // never flash a default colour before the paint effect runs.
     for (const { id } of layers) {
-      applyVectorPaint(map, id, id.includes("contours"), vs);
+      applyVectorPaint(
+        map,
+        id,
+        id.includes("contours"),
+        paintStyleFor(id, vs, activeLayerIdRef.current),
+      );
     }
 
     // Reorder: ensure layers appear in the order specified by topoLayers array.
@@ -2902,9 +2931,14 @@ function Map({
     const map = mapRef.current;
     const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
     for (const { id } of topoLayers ?? []) {
-      applyVectorPaint(map, id, id.includes("contours"), vs);
+      applyVectorPaint(
+        map,
+        id,
+        id.includes("contours"),
+        paintStyleFor(id, vs, activeLayerId),
+      );
     }
-  }, [topoLayers, vectorStyle, mapLoaded]);
+  }, [topoLayers, vectorStyle, mapLoaded, activeLayerId]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3201,9 +3235,15 @@ function Map({
   }, []);
 
   // Toggle 3d Terrain
+  // Choosing the terrain source is asynchronous, and the answer applies only
+  // if no toggle has happened since it was asked for. A count, not a flag: off
+  // then on again looks the same to a flag, and an answer from the first "on"
+  // would replace the terrain the second one chose somewhere else.
+  const terrainToggleRef = useRef(0);
   const toggleTerrain = () => {
     const map = mapRef.current;
     if (!map) return;
+    const toggle = ++terrainToggleRef.current;
     if (is3D) {
       // Turning off — nothing to wait for, flatten immediately
       map.setTerrain(null);
@@ -3221,10 +3261,24 @@ function Map({
       }
       map.setMaxPitch(60);
       map.touchPitch.enable();
-      // Turning on — wait for the terrain tiles to actually load before tilting
-      map.setTerrain({ source: "3d-terrain-dem", exaggeration: 1.5 });
-      map.once("idle", () => {
-        map.easeTo({ pitch: 30, duration: 1200 });
+      void terrainSourceFor(
+        map,
+        async (url) => {
+          const archive = new PMTiles(url);
+          await archive.getHeader();
+          // Hand the opened archive to the protocol, so it is not opened twice.
+          pmtilesProtocol.add(archive);
+        },
+        window.location.origin,
+      ).then((source) => {
+        // The second test: the map may have been removed while this waited.
+        if (toggle !== terrainToggleRef.current || mapRef.current !== map)
+          return;
+        // Turning on — wait for the terrain tiles to actually load before tilting
+        map.setTerrain({ source, exaggeration: 1.5 });
+        map.once("idle", () => {
+          map.easeTo({ pitch: 30, duration: 1200 });
+        });
       });
     }
 

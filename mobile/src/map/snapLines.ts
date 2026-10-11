@@ -50,7 +50,7 @@ function archiveUrl(): string {
  * header, a directory page, one tile), so the base64 round-trip is not worth
  * optimising away.
  */
-function fileSource(path: string): SnapArchive {
+export function fileSource(path: string): SnapArchive {
   const uri = `file://${path}`;
   return {
     getKey: () => uri,

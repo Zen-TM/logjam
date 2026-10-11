@@ -436,6 +436,7 @@ export function TripEditSheet({
   ]);
 
   const fieldForm = useCustomFieldForm({
+    open: mode === "fieldForm",
     entity: "tripLog",
     defs: customFieldDefs,
     editing: editingField,

@@ -62,7 +62,7 @@ import {
 } from "expo-sensors";
 import {
   SYSTEM_PLACE_TYPE_IDS,
-  DEM_ATTRIBUTION,
+  demCredits,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
@@ -84,6 +84,8 @@ import {
   type IconIdea,
   type SnapMode,
   type TrackPass,
+  drawsNswContours,
+  nswContourStyle,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -200,7 +202,9 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
+  readContoursOverImagery,
   setBasemapPreference,
+  setContoursOverImagery,
 } from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
@@ -499,6 +503,8 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
+
+const OFFLINE_MASK_LAYER = "offline-mask-fill";
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -859,6 +865,13 @@ export function MapScreen({
   const chooseBasemap = useCallback((next: BasemapId) => {
     setBasemapId(next);
     setBasemapPreference(next);
+  }, []);
+  const [contoursOverImagery, setContoursOverImageryState] = useState(
+    readContoursOverImagery,
+  );
+  const chooseContoursOverImagery = useCallback((on: boolean) => {
+    setContoursOverImageryState(on);
+    setContoursOverImagery(on);
   }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
@@ -1354,6 +1367,17 @@ export function MapScreen({
     () =>
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
+  );
+  // The statewide contours, where this basemap takes them (shared
+  // nswContours.ts). Offline they are whatever clips were saved with it.
+  const contoursResolved = useMemo(
+    () =>
+      drawsNswContours(renderedBasemapId, contoursOverImagery)
+        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+            (r) => r.status === "ok",
+          )
+        : [],
+    [renderedBasemapId, contoursOverImagery, ctx],
   );
 
   /**
@@ -3370,7 +3394,7 @@ export function MapScreen({
     sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
       allowNetwork: !offlineOnlyRef.current,
     })
-      .then(([elevationM]) => {
+      .then(({ heights: [elevationM] }) => {
         if (seq !== readoutSeq.current || elevationM == null) return;
         publishLiveReadout({
           speedMps,
@@ -4336,12 +4360,22 @@ export function MapScreen({
       : "Offline — no map saved for this area.";
   })();
 
-  const attributionText = basemapResolved
-    .map((r) => (r.status === "ok" ? r.attribution : null))
-    .filter(Boolean)
-    .join(" · ");
+  // Once each: offline, every saved clip of a source carries the same credit.
+  const attributionText = [
+    ...new Set(
+      [...basemapResolved, ...contoursResolved]
+        .map((r) => (r.status === "ok" ? r.attribution : null))
+        .filter(Boolean),
+    ),
+  ].join(" · ");
 
-  // The ground band, bottom to top: topo overlays, GeoPDFs, vector imports.
+  const nswContoursStyle = useMemo(
+    () => nswContourStyle(renderedBasemapId),
+    [renderedBasemapId],
+  );
+
+  // The ground band, bottom to top: the statewide contours, topo overlays,
+  // GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4357,6 +4391,12 @@ export function MapScreen({
     ).filter((r) => r.status === "ok"),
   }));
   const groundIds = [
+    ...contoursResolved.flatMap((r) =>
+      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
+    ),
+    // Above the statewide contours, which belong to the basemap: a saved
+    // contour clip is whole tiles and runs past the edge of the saved area.
+    ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
     ...overlayMounts.flatMap(({ ref, resolved }) =>
       resolved.flatMap((r) =>
         ref.format === "vector"
@@ -4518,19 +4558,33 @@ export function MapScreen({
         )}
 
         {/* The edge of what this phone actually holds. Above the basemap band
-            and below everything else, so place pins, tracks and imports stay
+            and the statewide contours, and below everything else, so place pins, tracks and imports stay
             visible over the blanked ground. */}
         {offlineMask ? (
           <GeoJSONSource id="offline-mask" data={offlineMask}>
             <Layer
               key="offline-mask-fill"
               type="fill"
-              id="offline-mask-fill"
-              beforeId={groundIds[0] ?? ROUTES_FLOOR}
+              id={OFFLINE_MASK_LAYER}
+              beforeId={groundBefore[OFFLINE_MASK_LAYER]}
               style={{ fillColor: theme.page, fillOpacity: 1 }}
             />
           </GeoJSONSource>
         ) : null}
+
+        {/* The statewide contours: a topo area's contour layers, on the
+            statewide archive (or the clips saved from it). */}
+        {contoursResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <TopoVectorOverlay
+              kind="contours"
+              idPrefix={`nsw-contours-${r.key}`}
+              sourceID={sourceIdFor(r.key)}
+              beforeIds={groundBefore}
+              vectorStyle={nswContoursStyle}
+            />
+          </ResolvedSource>
+        ))}
 
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
             the full contour/feature layer stack styled by the user's
@@ -5185,7 +5239,11 @@ export function MapScreen({
             is drawn — every height in the app (point readout, route profile,
             gain/loss) comes from it, online or off, so its credit is
             unconditional rather than tied to the active layer. */}
-        <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
+        {demCredits().map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
       </BottomSheet>
 
       {/* Tap: "what's there?" — the question that comes before the long
@@ -5394,6 +5452,8 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={chooseContoursOverImagery}
         artifacts={artifacts}
         overlays={overlayList}
         enabledOverlays={enabledOverlays}

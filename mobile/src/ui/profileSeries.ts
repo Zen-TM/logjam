@@ -86,3 +86,21 @@ export function timeOfDayFormatter(
       minute: "2-digit",
     });
 }
+
+/**
+ * Whether two series draw the same picture.
+ *
+ * A live recording rebuilds its series on every 1 Hz tick of the clock — new
+ * arrays, same numbers whenever no fix landed in between (the elevation
+ * profile never moves with the clock) — and the chart is hundreds of Views, so
+ * the tick must be able to tell "new object" from "new data".
+ */
+export function sameSeries(a: ProfileSeries, b: ProfileSeries): boolean {
+  if (a === b) return true;
+  if (a.min !== b.min || a.max !== b.max) return false;
+  if (a.points.length !== b.points.length) return false;
+  return a.points.every((point, i) => {
+    const other = b.points[i]!;
+    return point.x === other.x && point.value === other.value;
+  });
+}

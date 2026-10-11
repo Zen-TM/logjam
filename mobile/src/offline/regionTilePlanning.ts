@@ -5,7 +5,7 @@
 //
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
-import type { RegionBbox, RegionTilePlan } from "@logjam/shared";
+import { type RegionBbox, type RegionTilePlan } from "@logjam/shared";
 
 import { hashKey } from "../map/sourceResolver";
 
@@ -59,6 +59,20 @@ export function tileUrlFrom(
     .replace("{x}", String(x));
 }
 
+/**
+ * Does the vector map come with this area?
+ *
+ * It rides along with every region a signed-in user saves, as the DEM does:
+ * it is a few megabytes, and without it the Vector map is blank out there and
+ * the route and measure tools stop snapping to tracks. A guest cannot have it
+ * (the clip is cut by an authed API call). No area is larger than the clip
+ * endpoint cuts: `checkRegionCaps` refuses it for everyone.
+ * Guard: `regionTilePlanning.test.ts` ("vectorClipFor").
+ */
+export function vectorClipFor(isGuest: boolean): "include" | "none" {
+  return isGuest ? "none" : "include";
+}
+
 export type TileVerdict = "ok" | "gap" | "backoff" | "retry";
 
 /**
@@ -89,4 +103,24 @@ export function classifyTileResponse(
  */
 export function deadTileBudget(totalTiles: number): number {
   return Math.max(10, Math.floor(totalTiles * 0.01));
+}
+
+/**
+ * What a tile that has used up its retries means.
+ *
+ * A download keeps running when the app leaves the foreground, for as long as
+ * Android lets the process run. The one thing that can go wrong back there is
+ * the OS withholding the network from a process that is still alive, and that
+ * is not the provider failing: the job parks (the queue re-queues it on the
+ * next foreground edge) instead of spending its dead-tile budget on it.
+ * With no connection at all it is neither: the job waits for the connection,
+ * which the queue bounds behind another app (`mayResumeOnReconnect`).
+ * Guard: `regionTilePlanning.test.ts` ("exhaustedTileOutcome").
+ */
+export function exhaustedTileOutcome(
+  appState: string,
+  online: boolean,
+): "dead" | "park" | "offline" {
+  if (!online) return "offline";
+  return appState === "active" ? "dead" : "park";
 }

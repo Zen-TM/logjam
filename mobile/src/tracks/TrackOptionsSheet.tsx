@@ -23,7 +23,7 @@ import {
 } from "@logjam/shared";
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row, ColourField } from "../ui";
+import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -175,7 +175,7 @@ export function TrackOptionsSheet({
     onError,
   });
 
-  if (!track || !actions) return null;
+  if (!track || !actions) return closedSheet;
 
   const close = () => {
     setRenaming(false);

@@ -40,14 +40,15 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 - **What leaves the device carries ids, not place data:** push payloads and
   crash reports (through `src/sentry/scrubEvent.ts`) never carry a place's
-  name, coordinates or fields, and a region-of-interest bbox never reaches the
-  server. [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md)
+  name, coordinates or fields, and a region-of-interest bbox reaches the
+  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0029](../docs/decisions/0029-vector-map-with-every-signed-in-region.md)
 - **A new dependency can add Android permissions:** block each with
   `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a
   retry, poll or timer arms only in the foreground, and a sensor runs only
   while the screen that shows it is focused. The backgrounded recorder only
-  appends points; any other background work needs the maintainer's sign-off. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
+  appends points and a map download the user started keeps running; any other
+  background work needs the maintainer's sign-off. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
 
 ## Builds and verify
 

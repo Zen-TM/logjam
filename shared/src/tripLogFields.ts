@@ -1,6 +1,6 @@
 // `isReservedFieldKey` only — placeTypes.ts imports this module for a TYPE,
 // which is erased, so this edge does not close a runtime cycle.
-import { isReservedFieldKey } from "./placeTypes.js";
+import { isReservedFieldKey, nameKey } from "./placeTypes.js";
 
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
@@ -402,6 +402,13 @@ export function buildCustomFieldDef(
   const key = makeCustomFieldKey(label);
   if (existingDefs.some((d) => d.key === key)) {
     return { error: `A field with the key "${key}" already exists.` };
+  }
+  // The key is minted from the FIRST label and survives a rename, so a key
+  // check alone lets a new "Depth" in beside one that was renamed to "Depth".
+  if (existingDefs.some((d) => nameKey(d.label) === nameKey(label))) {
+    return {
+      error: `You already have an ${ATTRIBUTE_NOUN.one} called "${label}".`,
+    };
   }
 
   const isNumeric = draft.type === "integer" || draft.type === "float";

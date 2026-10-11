@@ -59,7 +59,7 @@
 }
 
 .errorList {
-  color: var(--color-warning);
+  color: var(--color-text);
 }
 
 /* Non-fatal coercion notices — advisory, so muted rather than warning-red. */

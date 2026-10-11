@@ -57,6 +57,8 @@ import {
   placeDeleteConfirm,
   placesCountLabel,
   placesEmptyKind,
+  placeTypeHasTab,
+  isSystemPlaceTypeId,
   listSelectionLabel,
   placesEmptyState,
   placesFilterNote,
@@ -115,7 +117,8 @@ import { PlaceEditSheet } from "./PlaceEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
 import { setAreaPickerStart, takePickedArea } from "../map/pickedArea";
 import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
-import { usePlaceTypeForm } from "./PlaceTypesEditor";
+import { usePlaceTypeForm, type NewPlaceType } from "./PlaceTypesEditor";
+import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { PlaceFilterSheet } from "./PlaceFilterSheet";
 import {
@@ -191,8 +194,9 @@ export function PlacesScreen({
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
   const [sheet, setSheet] = useState<
-    "filters" | "bulkShare" | "placeTypeForm" | null
+    "filters" | "bulkShare" | "placeTypeForm" | "typeAttributes" | null
   >(null);
+  const [addedType, setAddedType] = useState<NewPlaceType | null>(null);
   const mapFilter = usePlaceMapFilter();
   const [menuPlaceId, setMenuPlaceId] = useState<string | null>(null);
   /** The sheet owns its own share sub-mode and forgets it on close. */
@@ -460,10 +464,9 @@ export function PlacesScreen({
   // permanent control, because "which kind of place am I looking at" is the
   // question people arrive with (§5.4).
   //
-  // MEMBERSHIP is decided over the whole collection, not the filtered view: a
-  // type with no places at all never appears (a canyoner should not be offered
-  // a Campsite tab they have never used), but a tab does NOT come and go as the
-  // user types — the bucket rail's rule, for the same reason.
+  // MEMBERSHIP is `placeTypeHasTab`, decided over the whole collection, not
+  // the filtered view: a tab does NOT come and go as the user types — the
+  // bucket rail's rule, for the same reason.
   const typeTotals = useMemo(() => {
     const counts = new Map<string, number>();
     for (const place of places) {
@@ -502,7 +505,12 @@ export function PlacesScreen({
     () => [
       { value: ALL_TYPES, label: copy.anyType, count: withoutType.length },
       ...placeTypes
-        .filter((type) => (typeTotals.get(type.id) ?? 0) > 0)
+        .filter((type) =>
+          placeTypeHasTab({
+            builtIn: isSystemPlaceTypeId(type.id),
+            places: typeTotals.get(type.id) ?? 0,
+          }),
+        )
         .map((type) => ({
           value: type.id,
           label: type.name,
@@ -564,8 +572,17 @@ export function PlacesScreen({
   }, []);
 
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet === "placeTypeForm",
     editing: null,
     onSaved: info,
+    onDone: () => setSheet(null),
+    onAdded: (type) => {
+      setAddedType(type);
+      setSheet("typeAttributes");
+    },
+  });
+  const typeAttributes = useTypeAttributesStep({
+    type: sheet === "typeAttributes" ? addedType : null,
     onDone: () => setSheet(null),
   });
 
@@ -967,14 +984,26 @@ export function PlacesScreen({
 
       {/* Making a type without leaving the tab that made you want one. The
           same form Settings uses, so the two cannot drift; only ADD is offered
-          here — editing and deleting a type belong with the list of them. */}
+          here — editing and deleting a type belong with the list of them. The
+          new type's attributes follow in the same sheet. */}
       <BottomSheet
-        visible={sheet === "placeTypeForm"}
-        onClose={() => setSheet(null)}
-        title="New place type"
-        footer={placeTypeForm.footer}
+        visible={sheet === "placeTypeForm" || sheet === "typeAttributes"}
+        onClose={
+          sheet === "typeAttributes"
+            ? typeAttributes.onClose
+            : () => setSheet(null)
+        }
+        title={
+          sheet === "typeAttributes" ? typeAttributes.title : "New place type"
+        }
+        onBack={sheet === "typeAttributes" ? typeAttributes.onBack : undefined}
+        footer={
+          sheet === "typeAttributes"
+            ? typeAttributes.footer
+            : placeTypeForm.footer
+        }
       >
-        {placeTypeForm.body}
+        {sheet === "typeAttributes" ? typeAttributes.body : placeTypeForm.body}
       </BottomSheet>
 
       <PlaceFilterSheet
