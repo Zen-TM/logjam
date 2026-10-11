@@ -28,6 +28,7 @@ import {
   SearchField,
   Toggle,
   Icon,
+  InfoTip,
   type Glyph,
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
@@ -724,14 +725,7 @@ function LayerOrder({
                 <span className={classes.listName}>
                   {label}
                   {description && (
-                    <span
-                      className={classes.info}
-                      title={description}
-                      role="img"
-                      aria-label={description}
-                    >
-                      <Icon idea="info" size={14} aria-hidden />
-                    </span>
+                    <InfoTip label={label} content={description} />
                   )}
                 </span>
                 {unavailable.has(name) && (

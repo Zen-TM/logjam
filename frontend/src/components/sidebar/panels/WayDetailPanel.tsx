@@ -42,6 +42,7 @@ import {
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   wayVerbIcon,
+  MAP_MEASURE,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -612,7 +613,7 @@ export default function WayDetailPanel({
         {route && (
           <section className={classes.section}>
             {profileLoading && (
-              <p className={classes.note}>Reading the terrain…</p>
+              <p className={classes.note}>{MAP_MEASURE.copy.readingTerrain}</p>
             )}
             {profileError && <p className={classes.note}>{profileError}</p>}
             {profile && (
@@ -677,6 +678,7 @@ export default function WayDetailPanel({
                   compact
                   icon="unlink"
                   disabled={busy}
+                  disabledReason="Working…"
                   onClick={handleUnlink}
                 >
                   Unlink
@@ -861,8 +863,20 @@ function RenameWayDialog({
 }) {
   const current = mediaDisplayName(file);
   const [name, setName] = useState(current);
-  const trimmed = name.trim();
-  const canSave = trimmed.length > 0 && trimmed !== current;
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      setError("File name is required");
+      return;
+    }
+    if (trimmed === current) {
+      onClose();
+      return;
+    }
+    onSave(trimmed);
+  }
 
   return (
     <Dialog
@@ -872,15 +886,10 @@ function RenameWayDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={busy}
-            disabled={!canSave}
-            onClick={() => onSave(trimmed)}
-          >
+          <Button variant="filled" busy={busy} onClick={save}>
             Save
           </Button>
         </>
@@ -889,11 +898,15 @@ function RenameWayDialog({
       <TextField
         label="File name"
         value={name}
-        onChange={(event) => setName(event.target.value)}
+        error={error}
+        onChange={(event) => {
+          setName(event.target.value);
+          setError(null);
+        }}
         onKeyDown={(event) => {
-          if (event.key !== "Enter" || !canSave) return;
+          if (event.key !== "Enter") return;
           event.preventDefault();
-          onSave(trimmed);
+          save();
         }}
         data-autofocus
       />

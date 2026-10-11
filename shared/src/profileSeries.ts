@@ -5,6 +5,7 @@
 // track (Logjam GPS's stats panel, Logjam Web's way page): what each axis
 // means, which heights are charted and the words around them are decided once
 // and each client only draws.
+import { MAP_MEASURE } from "./contracts/mapMeasure.js";
 import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
@@ -152,7 +153,7 @@ export function trackHeights(
   const elevation = dem ?? detail.elevation;
   const note = !elevation
     ? demLoading
-      ? "Reading the terrain…"
+      ? MAP_MEASURE.copy.readingTerrain
       : detail.maxAltitudeM == null
         ? "No heights for this track"
         : "Not enough height readings to chart"

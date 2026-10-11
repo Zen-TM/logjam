@@ -26,7 +26,7 @@ export default function RemoveSharedButton({
   className,
   title,
   children,
-  disabled = false,
+  disabledReason,
   remove,
   onRemoved,
 }: {
@@ -39,7 +39,8 @@ export default function RemoveSharedButton({
   className?: string;
   title?: string;
   children?: ReactNode;
-  disabled?: boolean;
+  /** Why the button is off while the surface is busy with something else. */
+  disabledReason?: string;
   /** The revoke itself — `unsharePlaceWith(id, "me")` or its `/shares` twin. */
   remove: () => Promise<unknown>;
   /** Re-pull whatever list this row came from; the row is gone now. */
@@ -66,6 +67,7 @@ export default function RemoveSharedButton({
   }
 
   const label = title ?? `Remove this shared ${kindLabel}`;
+  const off = busy ? "Removing…" : disabledReason;
 
   return (
     <>
@@ -79,7 +81,7 @@ export default function RemoveSharedButton({
           type="button"
           className={className}
           title={label}
-          disabled={disabled || busy}
+          disabled={Boolean(off)}
           onClick={() => setConfirming(true)}
         >
           {children ?? (
@@ -94,7 +96,8 @@ export default function RemoveSharedButton({
           variant="outline"
           icon="unshare"
           title={label}
-          disabled={disabled || busy}
+          disabled={Boolean(off)}
+          disabledReason={off ?? ""}
           onClick={() => setConfirming(true)}
         >
           {children ?? "Remove"}

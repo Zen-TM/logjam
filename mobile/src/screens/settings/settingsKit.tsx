@@ -3,9 +3,9 @@
 // these are compositions of `Row`, `Toggle` and `ChipRail` that only
 // mean anything on a preferences page (DESIGN.md — add a kit file for a new
 // SHAPE, not for a recurring arrangement of existing ones).
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 
-import { fontSize, spacing, theme } from "../../theme";
+import { fontSize, makeStyles } from "../../theme";
 import {
   SectionHeader,
   ChipRail,
@@ -109,13 +109,11 @@ export function ChoiceGroup<T extends string>({
 
 /** A note under a control. Muted, small, and never a substitute for a clear label. */
 export function Hint({ text }: { text: string }) {
+  const styles = useStyles();
+
   return <Text style={styles.hint}>{text}</Text>;
 }
 
-const styles = StyleSheet.create({
-  hint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    marginTop: spacing(-0.5),
-  },
-});
+const useStyles = makeStyles((theme) => ({
+  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+}));

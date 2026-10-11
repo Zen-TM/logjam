@@ -79,6 +79,7 @@ import {
 } from "../consent";
 import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
+import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
 import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
@@ -100,8 +101,10 @@ import {
   pickNextTrackColor,
   NSW_CONTOURS,
   drawsNswContours,
+  MAP_MEASURE,
+  MAP_MEASURE_ICON,
 } from "@logjam/shared";
-import type { OverlaySource } from "@logjam/shared";
+import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
 import { useThemePreferences } from "../themePreferences";
@@ -233,6 +236,12 @@ function App() {
   const [drawingRoute, setDrawingRoute] = useState(false);
   const [drawColor, setDrawColor] = useState<string | null>(null);
   const routeDraft = useRouteDraft();
+  // The measure tool is armed exactly while its page is open, and borrows the
+  // route tool's draft: only one of the two holds the map's clicks at a time.
+  const measuring = activePanel === "measure";
+  // What to do once the route tool has been left, if its discard confirm is
+  // what stands in the way (arming the measure tool over a draft with points).
+  const afterRouteCancel = useRef<(() => void) | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
@@ -1256,6 +1265,8 @@ function App() {
         ? "way-detail"
         : "ways",
     );
+    afterRouteCancel.current?.();
+    afterRouteCancel.current = null;
   };
 
   // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
@@ -1357,6 +1368,23 @@ function App() {
     setActivePanel("way-draw");
   };
 
+  /**
+   * Arm the measure tool, from `from` when a point asked for it. A measurement
+   * is not kept, so arming it over another measurement asks nothing; over a
+   * route being drawn it goes through that tool's own discard confirm first,
+   * as it does on Logjam GPS.
+   */
+  const startMeasuring = (from?: MapPointCoord) => {
+    const arm = () => {
+      routeDraft.reset();
+      if (from) routeDraft.addAnchor([from.longitude, from.latitude]);
+      setActivePanel("measure");
+    };
+    if (!drawingRoute) return arm();
+    afterRouteCancel.current = arm;
+    cancelRouteGuard.requestClose();
+  };
+
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
     // Anchors come back with the route, so a snapped line reopens with the
@@ -1456,9 +1484,14 @@ function App() {
     setSelectingGeoPdfExtent(true);
   };
 
-  // Verbs that START on the map. Each opens an existing flow; there is no web
-  // measure tool, so none is offered.
+  // Verbs that START on the map, in Logjam GPS's order for the two it has.
   const mapTools: MapTool[] = [
+    {
+      id: "measure",
+      label: MAP_MEASURE.title,
+      icon: MAP_MEASURE_ICON,
+      onSelect: () => startMeasuring(),
+    },
     {
       id: "route",
       label: "Draw a route",
@@ -1478,7 +1511,7 @@ function App() {
       menu: [
         {
           id: "topo",
-          label: "LiDAR topo",
+          label: "Make a LiDAR topo",
           icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
@@ -1487,7 +1520,7 @@ function App() {
         },
         {
           id: "geopdf",
-          label: "GeoPDF",
+          label: "Make a GeoPDF",
           icon: "geoPdf",
           onSelect: () => {
             setEditingGeoPdfTemplate(undefined);
@@ -1593,6 +1626,7 @@ function App() {
           placeTracks={placeTracks}
           standaloneFiles={standaloneFiles}
           standaloneFilesError={standaloneFilesError}
+          onRetryStandaloneFiles={refetchStandaloneFiles}
           onOpenWay={openWay}
           currentUserId={currentUser?.id ?? null}
           wayDetail={
@@ -1664,6 +1698,21 @@ function App() {
                 }}
                 onCancel={cancelRouteGuard.requestClose}
                 saving={savingRoute}
+                snapMode={snapMode}
+                onSnapModeChange={setSnapMode}
+              />
+            ) : null
+          }
+          measurePanel={
+            measuring ? (
+              <MeasurePanel
+                points={routeDraft.points}
+                anchorCount={routeDraft.draft.anchors.length}
+                canUndo={routeDraft.canUndo}
+                atCap={routeDraft.atCap}
+                onUndo={routeDraft.undo}
+                onClear={() => routeDraft.reset()}
+                onClose={() => setActivePanel(null)}
                 snapMode={snapMode}
                 onSnapModeChange={setSnapMode}
               />
@@ -1792,20 +1841,19 @@ function App() {
             setAddPlaceAt(point);
             setShowAdd(true);
           }}
-          onDrawRouteFrom={(point) => {
-            startDrawingRoute();
-            // The point is the route's first vertex, as a press on the map
-            // there would have made it.
-            routeDraft.addAnchor([point.longitude, point.latitude]);
-          }}
+          // The point is the measurement's first, as a press on the map there
+          // would have made it.
+          onMeasureFrom={startMeasuring}
           selectTrack={(mediaId) => {
             const way = allWays.find(
               (each) => each.kind !== "route" && each.id === mediaId,
             );
             if (way) openWay(way);
           }}
-          drawingRoute={drawingRoute}
-          drawColor={drawColor ?? undefined}
+          drawingRoute={drawingRoute || measuring}
+          measuring={measuring}
+          // A measurement has no colour of its own: it draws in the accent.
+          drawColor={measuring ? undefined : (drawColor ?? undefined)}
           drawPoints={routeDraft.points}
           drawAnchorIndices={routeDraft.anchorIndices}
           draft={routeDraft.draft}
@@ -1936,7 +1984,11 @@ function App() {
         confirmLabel="Discard"
         confirmColor="error"
         onConfirm={cancelRouteGuard.confirmDiscard}
-        onClose={cancelRouteGuard.cancelDiscard}
+        onClose={() => {
+          // Keeping the route also drops whatever was waiting on its discard.
+          afterRouteCancel.current = null;
+          cancelRouteGuard.cancelDiscard();
+        }}
       />
 
       <ConfirmDialog

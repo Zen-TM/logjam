@@ -64,11 +64,18 @@ describe("tokens.generated.css", () => {
       ...Object.keys(RADIUS).map((n) => `--radius-${n}`),
       ...Object.keys(FONT.web).map((n) => `--font-${n}`),
       ...Object.keys(FONT_WEIGHT).map((n) => `--font-weight-${n}`),
-      ...Object.entries(TEXT_ROLES).flatMap(([n, role]) => [
-        `--text-${kebab(n)}-size`,
-        `--text-${kebab(n)}-weight`,
-        ...("uppercase" in role.web ? [`--text-${kebab(n)}-transform`] : []),
-      ]),
+      // A role with no `web` spec is Logjam GPS's alone.
+      ...Object.entries(TEXT_ROLES).flatMap(([n, role]) =>
+        "web" in role
+          ? [
+              `--text-${kebab(n)}-size`,
+              `--text-${kebab(n)}-weight`,
+              ...("uppercase" in role.web
+                ? [`--text-${kebab(n)}-transform`]
+                : []),
+            ]
+          : [],
+      ),
       ...Object.keys(CONTROL.web).map((n) => `--control-${n}`),
       ...Object.keys(MOTION).map((n) => `--motion-${n}`),
       ...Object.keys(OPACITY).map((n) => `--opacity-${n}`),

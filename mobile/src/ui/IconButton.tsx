@@ -1,12 +1,21 @@
 import { Pressable, StyleSheet } from "react-native";
 
-import { hitSlop, opacity, radius, theme, withAlpha } from "../theme";
+import {
+  hitSlop,
+  opacity,
+  radius,
+  withAlpha,
+  makeThemed,
+  useTheme,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 // An intent colour as a glyph on a wash of itself falls under 3:1 on
 // Daylight's paper, so a filled button draws its glyph in the text colour and
 // the wash alone carries the intent, as on Logjam Web.
-const INTENTS = new Set([theme.accent, theme.warning, theme.success]);
+const useIntents = makeThemed(
+  (theme) => new Set([theme.accent, theme.warning, theme.success]),
+);
 
 // Single-glyph tappable — row overflow menus, sheet dismiss, inline delete.
 // 40pt square (56pt with `hitSlop`, over the 48pt target), with an
@@ -17,7 +26,7 @@ export function IconButton({
   icon,
   onPress,
   accessibilityLabel,
-  color = theme.textMuted,
+  color,
   disabled = false,
   filled = false,
   size = 20,
@@ -30,6 +39,10 @@ export function IconButton({
   filled?: boolean;
   size?: number;
 }) {
+  const theme = useTheme();
+  const INTENTS = useIntents();
+  color ??= theme.textMuted;
+
   return (
     <Pressable
       accessibilityRole="button"

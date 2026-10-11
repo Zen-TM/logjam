@@ -32,7 +32,6 @@ import {
   FlatList,
   Keyboard,
   RefreshControl,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -73,13 +72,15 @@ import {
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
-  placeHue,
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
+  useHues,
+  controlSize,
+  opacity,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
@@ -110,6 +111,7 @@ import {
   type MeterSegment,
   type ChipOption,
   type ToastMessage,
+  EmptyState,
 } from "../ui";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
@@ -126,7 +128,7 @@ import {
   setPlaceMapFilterEnabled,
   usePlaceMapFilter,
 } from "./placeMapFilter";
-import { PLACE_STATUS_META } from "./placeMeta";
+import { placeStatusMeta } from "./placeMeta";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
 const { copy } = PLACES_LIST;
@@ -168,6 +170,10 @@ export function PlacesScreen({
    */
   onPickArea: () => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const pendingCount = usePendingSyncCount();
@@ -591,9 +597,9 @@ export function PlacesScreen({
       { value: "all", label: copy.allStatuses, count: withoutBucket.length },
       ...PLACE_STATUS_ORDER.map((status) => ({
         value: status,
-        label: PLACE_STATUS_META[status].label,
-        icon: PLACE_STATUS_META[status].icon,
-        hue: PLACE_STATUS_META[status].hue,
+        label: placeStatusMeta(theme)[status].label,
+        icon: placeStatusMeta(theme)[status].icon,
+        hue: placeStatusMeta(theme)[status].hue,
         count: bucketCounts[status],
         // A bucket the other axes have emptied stays in place but isn't a tap
         // into a dead end. Never removed: a rail that reshuffles under the
@@ -601,7 +607,7 @@ export function PlacesScreen({
         disabled: bucketCounts[status] === 0 && bucket !== status,
       })),
     ],
-    [bucket, bucketCounts, withoutBucket.length],
+    [bucket, bucketCounts, withoutBucket.length, theme],
   );
 
   const heroSegments: MeterSegment[] = useMemo(
@@ -625,7 +631,7 @@ export function PlacesScreen({
         display: String(totals.shared),
       },
     ],
-    [totals],
+    [totals, placeHue],
   );
 
   // The trip form's type vocabulary, so logging from here offers the same
@@ -1087,7 +1093,10 @@ const PlaceRow = memo(function PlaceRow({
   deletable: boolean;
   onToggle: () => void;
 }) {
-  const meta = PLACE_STATUS_META[status];
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = placeStatusMeta(theme)[status];
   const quality = qualityLabel(numericFieldValue(place.fieldValues, "quality"));
   // The glyph stays the STATUS one — that is what the rail filters on, and the
   // map is where a type is a colour. What the row owes a mixed list is the
@@ -1159,28 +1168,30 @@ function EmptyPanel({
   const guest = useAccountState().accountState === "guest";
   const state = placesEmptyState(kind, { platform: "gps", guest });
   return (
-    <View style={styles.empty}>
-      <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
-      <Text style={styles.emptyTitle}>{state.title}</Text>
-      <Text style={styles.emptyBody}>{state.body}</Text>
-      {state.action === "clear" ? (
-        <Button
-          label={copy.clearFilters}
-          variant="outlineAccent"
-          onPress={onClear}
-        />
-      ) : state.action === "add" ? (
-        <Button
-          label={PLACES_ADD.copy.add}
-          icon={PLACES_ADD_ICON.add}
-          onPress={onAdd}
-        />
-      ) : null}
-    </View>
+    <EmptyState
+      icon={state.icon}
+      title={state.title}
+      hint={state.body}
+      action={
+        state.action === "clear"
+          ? {
+              label: copy.clearFilters,
+              variant: "outlineAccent",
+              onPress: onClear,
+            }
+          : state.action === "add"
+            ? {
+                label: PLACES_ADD.copy.add,
+                icon: PLACES_ADD_ICON.add,
+                onPress: onAdd,
+              }
+            : undefined
+      }
+    />
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
@@ -1200,20 +1211,15 @@ const styles = StyleSheet.create({
     borderColor: withAlpha(theme.accent, 0.4),
     backgroundColor: withAlpha(theme.page, 0.5),
     paddingHorizontal: spacing(1.5),
-    minHeight: 40,
+    minHeight: controlSize.md,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   // The type rail sits directly under the hero and carries the bucket rail's
   // top padding, so the pair reads as one block rather than two stacked bars.
   typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },
   // Dimmed, not gone: see the comment at the render site.
-  railInert: { opacity: 0.4 },
+  railInert: { opacity: opacity.disabled },
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),
@@ -1240,7 +1246,7 @@ const styles = StyleSheet.create({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
@@ -1253,24 +1259,4 @@ const styles = StyleSheet.create({
   quality: { color: theme.textMuted, fontSize: fontSize.xs },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(5),
-    paddingHorizontal: spacing(2),
-    backgroundColor: theme.card,
-    borderWidth: 1,
-    borderColor: theme.line,
-    borderRadius: radius.lg,
-  },
-  emptyTitle: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyBody: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
-});
+}));

@@ -234,11 +234,20 @@
    painted circle underneath it so it stays grabbable on a trackpad; the
    painted circle is what the user actually sees. */
 .routeVertexHandle {
-  width: 18px;
-  height: 18px;
+  width: var(--control-sm);
+  height: var(--control-sm);
   border-radius: var(--radius-full, 50%);
   background: transparent;
   cursor: grab;
+}
+
+/* A finger's target, not a mouse's (shared/DESIGN.md §1): `--control-sm` grows
+   with the pointer but stops short of it. */
+@media (pointer: coarse) {
+  .routeVertexHandle {
+    width: var(--control-lg);
+    height: var(--control-lg);
+  }
 }
 
 .routeVertexHandle:active {

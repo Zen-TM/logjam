@@ -1,6 +1,6 @@
 import { StyleSheet, View } from "react-native";
 
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 import { Icon } from "./Icon";
 
 /**
@@ -23,6 +23,8 @@ export function SelectionMark({
   selected: boolean;
   selectable?: boolean;
 }) {
+  const theme = useTheme();
+
   return (
     <View style={styles.box}>
       {selectable ? (

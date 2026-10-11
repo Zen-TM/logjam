@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { TextInput, View, type TextInputProps } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
 import { Field } from "./Field";
 
 type TextFieldProps = {
@@ -53,6 +53,9 @@ export function TextField({
   accessory,
   ...inputProps
 }: TextFieldProps) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // `editable={false}` is a DISABLED field, not a live one that silently
   // ignores taps — same convention as `Row`'s and `IconButton`'s `disabled`
   // (dim, don't hide; `Field` dims). Undeclared `editable` (the common case)
@@ -97,13 +100,13 @@ export function TextField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   input: {
     borderWidth: 1,
     borderColor: theme.lineStrong,
     backgroundColor: theme.field,
     borderRadius: radius.md,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(1.5),
     fontSize: fontSize.base,
     color: theme.text,
@@ -114,4 +117,4 @@ const styles = StyleSheet.create({
   inputFocused: { borderColor: theme.accent },
   // Findable while scrolling a long form, not only once the line under it is read.
   inputError: { borderColor: theme.warning },
-});
+}));

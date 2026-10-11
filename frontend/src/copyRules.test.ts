@@ -43,6 +43,59 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
   },
 ];
 
+/**
+ * The words a JSX child expression can put on screen: `{a ? "x" : \`y ${n}\`}`.
+ * `userFacingStrings` reads JSX text and the string props that carry words; a
+ * string reaching the screen as a child expression's branch was outside that
+ * net (a `tile` count sat there), so it is read here.
+ */
+function childExpressionStrings(
+  path: string,
+  text: string,
+): { line: number; text: string }[] {
+  const file = ts.createSourceFile(
+    path,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const found: { line: number; text: string }[] = [];
+  const leaves = (node: ts.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+      found.push({
+        line: file.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+        text: node.text,
+      });
+    else if (ts.isTemplateExpression(node))
+      found.push({
+        line: file.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+        text:
+          node.head.text +
+          node.templateSpans.map((span) => span.literal.text).join(""),
+      });
+    else if (ts.isParenthesizedExpression(node)) leaves(node.expression);
+    else if (ts.isConditionalExpression(node)) {
+      leaves(node.whenTrue);
+      leaves(node.whenFalse);
+    } else if (ts.isBinaryExpression(node)) {
+      leaves(node.left);
+      leaves(node.right);
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isJsxExpression(node) &&
+      node.expression &&
+      (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))
+    )
+      leaves(node.expression);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
+}
+
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -54,6 +107,14 @@ function sources(dir: string): string[] {
 }
 
 describe("copy on Logjam Web", () => {
+  it("reads a string that is a JSX child expression's branch", () => {
+    const [first] = childExpressionStrings(
+      "x.tsx",
+      'export const a = <p>{n ? `${n} tiles` : ""}</p>;',
+    );
+    expect(first.text).toContain("tiles");
+  });
+
   it("reads the strings of the net — a silent zero would pass forever", () => {
     const [first] = userFacingStrings(
       ts,
@@ -80,6 +141,21 @@ describe("copy on Logjam Web", () => {
                 `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
             ),
       ),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("breaks no copy rule in a child expression either", () => {
+    const offenders = sources(SRC).flatMap((path) =>
+      path.endsWith(".tsx")
+        ? childExpressionStrings(path, readFileSync(path, "utf8")).flatMap(
+            ({ line, text }) =>
+              copyViolations(text).map(
+                (id) =>
+                  `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
+              ),
+          )
+        : [],
     );
     expect(offenders).toEqual([]);
   });

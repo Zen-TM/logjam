@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
@@ -16,7 +16,7 @@ import {
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import {
   countFieldValues,
@@ -30,6 +30,7 @@ import {
   ChipPicker,
   ErrorBanner,
   Field,
+  FieldError,
   FormStack,
   Row,
   SectionHeader,
@@ -95,6 +96,8 @@ export function CustomFieldList({
    *  than the whole list (one type's attributes). */
   emptyHint?: string;
 }) {
+  const styles = useStyles();
+
   const noun = ENTITY_NOUN[entity];
   // BUILT-INS LAST. The list is two things stacked: what the user made, and
   // what the app ships. Theirs is the half they came here to change, so it
@@ -187,6 +190,9 @@ export function useCustomFieldForm({
   onSaved: (defs: ScopedCustomFieldDef[], message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const noun = ENTITY_NOUN[entity];
   const placeTypes = useMirrorPlaceTypes();
   const trips = useMirrorTrips();
@@ -234,6 +240,7 @@ export function useCustomFieldForm({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [boundsError, setBoundsError] = useState<string | null>(null);
   const [scopeError, setScopeError] = useState<string | null>(null);
   // A save the local write refused, or a failed delete — this form stays open
   // either way, so it reports in its own banner above the footer's buttons
@@ -244,6 +251,7 @@ export function useCustomFieldForm({
 
   const save = useCallback(async () => {
     setError(null);
+    setBoundsError(null);
     setScopeError(null);
     setFormError(null);
     // Same builder the web uses, so the key slug and the validation rules can't
@@ -253,7 +261,8 @@ export function useCustomFieldForm({
       defs.filter((def) => def.key !== editing?.key),
     );
     if ("error" in built) {
-      setError(built.error);
+      // Under the control it is about: a bad range is not the name's problem.
+      (built.field === "bounds" ? setBoundsError : setError)(built.error);
       return;
     }
     // A field that is on no type and not on all of them appears on NO form — it
@@ -426,7 +435,10 @@ export function useCustomFieldForm({
                 <TextField
                   label="Min"
                   value={min}
-                  onChangeText={(next) => patch({ min: next })}
+                  onChangeText={(next) => {
+                    patch({ min: next });
+                    setBoundsError(null);
+                  }}
                   keyboardType={
                     type === "integer" ? "number-pad" : "decimal-pad"
                   }
@@ -436,7 +448,10 @@ export function useCustomFieldForm({
                 <TextField
                   label="Max"
                   value={max}
-                  onChangeText={(next) => patch({ max: next })}
+                  onChangeText={(next) => {
+                    patch({ max: next });
+                    setBoundsError(null);
+                  }}
                   keyboardType={
                     type === "integer" ? "number-pad" : "decimal-pad"
                   }
@@ -444,6 +459,7 @@ export function useCustomFieldForm({
               </View>
             </View>
           ) : null}
+          {bounded ? <FieldError message={boundsError} /> : null}
         </FormStack>
       ) : null}
 
@@ -513,25 +529,18 @@ export function useCustomFieldForm({
     </FormStack>
   );
 
-  // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
-  // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (shared/DESIGN.md §11).
+  // The sheet's × (and the back arrow) leave the form; the footer holds only
+  // the commit (shared/DESIGN.md §3). The banner sits above it, never at the
+  // top of the form (§11).
   const footer = (
     <FormStack>
       {formError ? <ErrorBanner message={formError} /> : null}
-      <View style={styles.actions}>
-        <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-        </View>
-        <View style={styles.action}>
-          <Button
-            label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
-            icon="done"
-            loading={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      </View>
+      <Button
+        label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
+        icon="done"
+        loading={saving}
+        onPress={() => void save()}
+      />
     </FormStack>
   );
 
@@ -591,11 +600,9 @@ function typeLabel(type: TripLogCustomFieldType): string {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   list: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-  actions: { flexDirection: "row", gap: spacing(1) },
-  action: { flex: 1 },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },
-});
+}));

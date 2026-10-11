@@ -10,7 +10,7 @@
 // timestamps (an imported GPX without `<time>`) has no honest duration, pace
 // or speed profile, so those cells are NOT RENDERED rather than rendered as
 // zero. Distance and climb need no clock and are always there.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   elevationSeries,
   formatDistanceM,
@@ -25,7 +25,7 @@ import {
   type TrackDetail,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import { ProfileChart, StatGrid, type Stat } from "../ui";
 
 export function TrackStatsBody({
@@ -73,6 +73,8 @@ export function TrackStatsBody({
   demProfile?: ElevationProfile | null;
   demLoading?: boolean;
 }) {
+  const styles = useStyles();
+
   if (!detail) {
     return (
       <Text style={styles.pending}>
@@ -140,15 +142,9 @@ export function TrackStatsBody({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1.5) },
   chartBlock: { gap: spacing(0.5) },
-  chartLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  chartLabel: { ...textRole.section, color: theme.textMuted },
   pending: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+}));

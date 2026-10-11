@@ -34,7 +34,70 @@ export const MAP_INK = {
   label: "#F7F3EC",
   /** The halo behind a map label, and the casing that sets a line off any basemap. */
   casing: "#4E4944",
+  /** The ring round a point mark, which separates it from any basemap. */
+  ring: "#FFFFFF",
+  /** The light halo behind a LiDAR topo's own label colour. */
+  labelHalo: "rgba(255,255,255,0.8)",
 } as const;
+
+/**
+ * The location marker's colour options.
+ *
+ * Not a scheme colour and not an `ASSET_HUES` kind: a preference the user sets
+ * for legibility against the ground they actually walk on — a blue arrow over
+ * blue water is the complaint this exists to answer. Scheme-independent for
+ * the same reason the asset hues are: the marker sits on a basemap, not on a
+ * scheme surface.
+ *
+ * Every entry is mid-light and saturated enough to hold up on aerial imagery,
+ * which is the busiest basemap here. The arrow keeps a white halo whatever is
+ * picked (see MapScreen), so none of these has to carry its own contrast.
+ */
+export const MARKER_COLORS = {
+  /** The original — the blue every mapping app trained the user on. */
+  blue: "#4285F4",
+  /** Warning-tape amber. Reads over water, scrub and imagery alike. */
+  amber: "#F5A524",
+  /** Signal red. The one people pick to find themselves fast. */
+  red: "#F2635F",
+  /** Fluoro green — a colour bushland does not contain. */
+  green: "#4ADE80",
+  /** Heath flower, as on the Places rail. */
+  violet: "#C77DD6",
+  /** No hue at all, for anyone who finds a coloured arrow noisy. */
+  white: "#FFFFFF",
+} as const;
+
+export type MarkerColorId = keyof typeof MARKER_COLORS;
+
+export const MARKER_COLOR_ORDER: readonly MarkerColorId[] = [
+  "blue",
+  "amber",
+  "red",
+  "green",
+  "violet",
+  "white",
+];
+
+/**
+ * The black veils: `light` under a bottom sheet, `heavy` behind chrome drawn
+ * over the map, `photo` behind a full-resolution photo (judged against black,
+ * so no scheme tint). The only black-alpha overlays; everything else derives
+ * from the scheme.
+ */
+export const SCRIM = {
+  light: "rgba(0,0,0,0.5)",
+  heavy: "rgba(0,0,0,0.6)",
+  photo: "rgba(0,0,0,0.92)",
+} as const;
+
+/**
+ * Words and glyphs drawn on a `SCRIM`. White in every scheme: the veil is
+ * black whatever the scheme, so a scheme's dark `text` on it is near-zero
+ * contrast. `scripts/wcag-contrast.mjs` measures it on `SCRIM.heavy` over a
+ * white map.
+ */
+export const ON_SCRIM = "#FFFFFF";
 
 /**
  * Per-kind identity hues for map material and the things you draw on it.
@@ -93,10 +156,13 @@ export const RADIUS = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 /**
  * Spacing steps (8 × n), named by n. The one scale both clients lay out with:
  * Logjam GPS's `spacing(n)`, Logjam Web's `--space-<n>` (`--space-1-5` is 12).
- * A value off these steps is a decision to leave the system, and needs saying.
+ * 2 is a hairline gap inside one object (a label over its figure); 6 is not a
+ * step: inside one object take 4, between objects 8. Logjam GPS's `spacing()`
+ * takes only a `SpaceStep`, so an off-scale value does not typecheck.
  */
 export const SPACE_UNIT = 8;
 export const SPACE = {
+  "0.25": 2,
   "0.5": 4,
   "1": 8,
   "1.5": 12,
@@ -105,6 +171,11 @@ export const SPACE = {
   "4": 32,
   "6": 48,
 } as const;
+
+/** A key of `SPACE` as the number `spacing(n)` is called with. */
+export type SpaceStep = {
+  [K in keyof typeof SPACE]: K extends `${infer N extends number}` ? N : never;
+}[keyof typeof SPACE];
 
 /**
  * The rhythm of a form, in px: how far a label sits from its control, one field
@@ -178,6 +249,14 @@ export const TEXT_ROLES = {
     gps: { size: "lg", weight: "bold" },
     web: { size: "lg", weight: "medium" },
   },
+  /** Running text and what the user types into a field. Logjam GPS only: Logjam
+   *  Web's body is the element's own. */
+  body: { gps: { size: "base", weight: "regular" } },
+  /** The label of a pill, chip, tab or small control. Logjam GPS only. */
+  control: { gps: { size: "sm", weight: "medium" } },
+  /** A figure or note small enough to sit on the map or inside a pill. Logjam
+   *  GPS only. */
+  caption: { gps: { size: "xs", weight: "medium" } },
   /** A row's title. */
   rowTitle: {
     gps: { size: "base", weight: "medium" },

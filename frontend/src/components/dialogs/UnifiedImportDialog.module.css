@@ -80,14 +80,12 @@
 }
 
 .fileName {
+  composes: twoLines from "../../ui/TwoLines.module.css";
   flex: 1;
   min-width: 0;
   font-size: var(--font-sm);
   font-weight: 600;
   color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The column map: the file's header on the left, what it becomes on the right.
@@ -122,14 +120,12 @@
 /* The header as it is written in the file, in a monospace so a trailing space
    or a case difference is visible. */
 .sourceHeader {
+  composes: twoLines from "../../ui/TwoLines.module.css";
   flex: 1;
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--font-sm);
   color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .roleSelect {

@@ -11,8 +11,8 @@ import { MAP_INK } from "@logjam/shared";
 import { memo, useMemo } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
-import { theme } from "../theme";
 import type { MirrorRoute } from "../sync/mirrorStore";
+import { useTheme } from "../theme";
 import {
   ARROW_LAYER_FILTER,
   ROUTE_ARROW_MIN_ZOOM,
@@ -32,10 +32,6 @@ import { stopSourcePress } from "./sourcePress";
  */
 export const SAVED_ROUTE_MIN_ZOOM = 10;
 
-/** Colour for a route whose server-assigned palette entry hasn't arrived yet
- * (drawn offline, create still queued). */
-const UNSYNCED_ROUTE_COLOR = theme.accent;
-
 export const RoutesLayer = memo(function RoutesLayer({
   routes,
   /** Hidden while its geometry is being edited — the draft layer draws it. */
@@ -48,6 +44,10 @@ export const RoutesLayer = memo(function RoutesLayer({
    *  map's taps. */
   onPressRoute?: (routeId: string) => void;
 }) {
+  // The colour of a route whose server-assigned palette entry hasn't arrived
+  // yet (drawn offline, create still queued). It is baked into the features
+  // below, so it is a dependency of them.
+  const unsyncedRouteColor = useTheme().accent;
   const shape = useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
@@ -58,7 +58,7 @@ export const RoutesLayer = memo(function RoutesLayer({
         .flatMap((route) => {
           const properties = {
             routeId: route.id,
-            routeColor: route.color ?? UNSYNCED_ROUTE_COLOR,
+            routeColor: route.color ?? unsyncedRouteColor,
           };
           return [
             {
@@ -77,7 +77,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           ];
         }),
     }),
-    [routes, hiddenRouteId],
+    [routes, hiddenRouteId, unsyncedRouteColor],
   );
 
   // Always mounted — never `return null` when empty. A conditionally-mounted

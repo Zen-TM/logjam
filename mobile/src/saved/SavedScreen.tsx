@@ -88,12 +88,13 @@ import {
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import {
-  assetHue,
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
+  useHues,
+  opacity,
 } from "../theme";
 import {
   BottomSheet,
@@ -116,6 +117,7 @@ import {
   type ChipOption,
   type ToastMessage,
   Icon,
+  EmptyState,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
@@ -469,6 +471,10 @@ export function SavedScreen({
    */
   initialFilter?: { category: Category; nonce: number };
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   // Both of these come off the user's web account, so a guest has neither.
@@ -2657,11 +2663,20 @@ function EmptyPanel({
       }
     : copy[filter];
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyHint}>{hint}</Text>
-      {action ? <SavedAddButton action={action} /> : null}
-    </View>
+    <EmptyState
+      title={title}
+      hint={hint}
+      action={
+        action
+          ? {
+              label: action.label,
+              icon: "add",
+              onPress: action.onPress,
+              disabledReason: action.disabledReason,
+            }
+          : undefined
+      }
+    />
   );
 }
 
@@ -2689,6 +2704,8 @@ function SavedListEnd({
 
 /** The tab's one add button, with its reason when it cannot run just now. */
 function SavedAddButton({ action }: { action: SavedAction }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.addButton}>
       <Button
@@ -2742,6 +2759,8 @@ function PulseSlot({
   onMeasure: (y: number) => void;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   if (!active) return <>{children}</>;
   return (
     <View onLayout={(event) => onMeasure(event.nativeEvent.layout.y)}>
@@ -2766,9 +2785,9 @@ function PulseSlot({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   addButton: { alignItems: "center", gap: spacing(0.5) },
-  addReason: { color: theme.textMuted, fontSize: fontSize.sm },
+  addReason: { ...textRole.hint },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
@@ -2784,7 +2803,7 @@ const styles = StyleSheet.create({
   // Dims the tag rail while selecting, same treatment as TextField's own
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
-  railInert: { opacity: 0.45 },
+  railInert: { opacity: opacity.disabled },
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),
@@ -2798,15 +2817,11 @@ const styles = StyleSheet.create({
   rowActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  size: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  size: { ...textRole.caption, color: theme.textMuted },
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the
   // verbs, not a warning.
@@ -2817,21 +2832,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     paddingHorizontal: spacing(0.5),
   },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(4),
-    paddingHorizontal: spacing(2),
-  },
-  emptyTitle: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    maxWidth: 300,
-  },
-});
+}));

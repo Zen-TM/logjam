@@ -307,7 +307,7 @@ function FriendsPanel({
                       <Button
                         compact
                         variant="filled"
-                        disabled={busyId === request.id}
+                        busy={busyId === request.id}
                         onClick={() =>
                           void runAction(
                             request.id,
@@ -323,6 +323,7 @@ function FriendsPanel({
                         compact
                         variant="outline"
                         disabled={busyId === request.id}
+                        disabledReason="Replying…"
                         onClick={() =>
                           void runAction(
                             request.id,
@@ -556,6 +557,7 @@ function AddFriendDialog({
                     variant="outline"
                     busy={sendingId === user.id}
                     disabled={sendingId !== null}
+                    disabledReason="Sending…"
                     onClick={() => void handleSend(user)}
                   >
                     {copy.add}
@@ -644,7 +646,12 @@ function InviteLink({ open }: { open: boolean }) {
       {live > 0 && (
         <p className={classes.note}>
           {friendInvitesLiveLabel(live)}{" "}
-          <Button compact disabled={busy} onClick={() => void handleRevoke()}>
+          <Button
+            compact
+            disabled={busy}
+            disabledReason="Working…"
+            onClick={() => void handleRevoke()}
+          >
             {copy.inviteRevoke}
           </Button>
         </p>

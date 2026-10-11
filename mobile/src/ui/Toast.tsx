@@ -1,14 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import {
-  Animated,
-  PanResponder,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
@@ -42,6 +35,9 @@ export function Toast({
   message: ToastMessage | null;
   onDismissed: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [opacity] = useState(() => new Animated.Value(0));
   const [lift] = useState(() => new Animated.Value(12));
   const [slide] = useState(() => new Animated.Value(0));
@@ -147,7 +143,7 @@ export function Toast({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   dock: {
     position: "absolute",
     left: spacing(2),
@@ -161,7 +157,7 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
     maxWidth: "100%",
   },
@@ -170,10 +166,5 @@ const styles = StyleSheet.create({
   toastInfo: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   toastError: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   close: { marginLeft: spacing(0.5) },
-  text: {
-    flexShrink: 1,
-    color: theme.onInverse,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-});
+  text: { ...textRole.control, flexShrink: 1, color: theme.onInverse },
+}));

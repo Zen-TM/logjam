@@ -39,7 +39,7 @@ export default function MapPointPopover({
   from,
   onClose,
   onAddPlace,
-  onDrawRoute,
+  onMeasure,
 }: {
   map: maplibregl.Map;
   point: MapPointCoord;
@@ -47,7 +47,7 @@ export default function MapPointPopover({
   from: MapPointCoord | null;
   onClose: () => void;
   onAddPlace: (point: MapPointCoord) => void;
-  onDrawRoute: (point: MapPointCoord) => void;
+  onMeasure: (point: MapPointCoord) => void;
 }) {
   const toast = useToast();
   // On narrow web the tab bar owns the bottom of the screen, and a panel below
@@ -103,11 +103,11 @@ export default function MapPointPopover({
   };
 
   const run: Record<
-    Extract<MapPointVerbId, "addPlace" | "drawRoute" | "copy">,
+    Extract<MapPointVerbId, "addPlace" | "measure" | "copy">,
     () => void
   > = {
     addPlace: () => onAddPlace(point),
-    drawRoute: () => onDrawRoute(point),
+    measure: () => onMeasure(point),
     copy: () => {
       void navigator.clipboard
         .writeText(

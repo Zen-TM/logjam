@@ -36,14 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -96,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -255,6 +248,9 @@ export function NotificationsScreen({
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("inbox", accountState),
@@ -891,7 +887,7 @@ export function NotificationsScreen({
         </Text>
       </View>
     ),
-    [batches],
+    [batches, styles],
   );
 
   // UNREAD + READ CAN EXCEED ALL, and that is correct rather than a rounding
@@ -1166,6 +1162,9 @@ const NotificationRow = memo(function NotificationRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (batch) {
     return (
       <BatchRow
@@ -1184,7 +1183,7 @@ const NotificationRow = memo(function NotificationRow({
     );
   }
   const label = notificationLabel(item);
-  const meta = notificationMeta(item);
+  const meta = notificationMeta(item, theme);
   const target = notificationActions(item);
   const subtitle = [label.warning, formatTime(item.createdAt)]
     .filter(Boolean)
@@ -1322,7 +1321,10 @@ const BatchRow = memo(function BatchRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
-  const meta = notificationMeta(batch.representative);
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = notificationMeta(batch.representative, theme);
   const pending = batchPendingFileSends(batch);
   const subtitle = [
     batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
@@ -1433,36 +1435,33 @@ function EmptyPanel({
   const copy = INBOX.copy;
   if (searching) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noMatchTitle}</Text>
-        <Text style={styles.emptyHint}>{copy.noMatchBody}</Text>
-        <Button label={copy.clearSearch} variant="ghost" onPress={onShowAll} />
-      </View>
+      <EmptyState
+        title={copy.noMatchTitle}
+        hint={copy.noMatchBody}
+        action={{
+          label: copy.clearSearch,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
   if (bucket !== "all") {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>
-          {bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
-        </Text>
-        <Button
-          label={copy.showEverything}
-          variant="ghost"
-          onPress={onShowAll}
-        />
-      </View>
+      <EmptyState
+        title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        action={{
+          label: copy.showEverything,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-    </View>
-  );
+  return <EmptyState title={copy.firstRunTitle} hint={copy.firstRunBody} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
@@ -1482,15 +1481,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: theme.page,
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(1),
   },
-  dayLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  dayLabel: { ...textRole.section, color: theme.textMuted },
   dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks
@@ -1518,7 +1511,7 @@ const styles = StyleSheet.create({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
@@ -1527,14 +1520,6 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     fontSize: fontSize.xs,
     textAlign: "center",
-    paddingTop: spacing(0.75),
+    paddingTop: spacing(0.5),
   },
-  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
-});
+}));

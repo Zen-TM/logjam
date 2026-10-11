@@ -1,7 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, spacing, textRole, theme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -47,6 +47,9 @@ export function Hero({
   onBack?: () => void;
   children?: React.ReactNode;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.hero, { paddingTop: insets.top + spacing(1.5) }]}>
@@ -82,7 +85,7 @@ export function Hero({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   hero: {
     // No fill: it sits on the page and a hairline separates it from the list,
     // as Logjam Web's hero does. Its old fill, a step lighter than the card,
@@ -117,9 +120,5 @@ const styles = StyleSheet.create({
     ...textRole.metric,
     color: theme.text,
   },
-  valueSuffix: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
-});
+  valueSuffix: { ...textRole.hint, color: theme.textMuted },
+}));

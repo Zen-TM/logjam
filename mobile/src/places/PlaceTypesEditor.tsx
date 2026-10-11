@@ -30,7 +30,6 @@ import { useCallback, useState } from "react";
 import {
   Alert,
   Pressable,
-  StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
@@ -49,7 +48,7 @@ import {
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
@@ -87,6 +86,8 @@ export function PlaceTypeList({
   types: MirrorPlaceType[];
   onEdit: (type: MirrorPlaceType) => void;
 }) {
+  const styles = useStyles();
+
   // BUILT-INS LAST, the same way the attribute list orders itself: the user's
   // own types are the half with verbs on them, and the three that ship with the
   // app are a footnote to that. Note this is the EDITOR's order only — the
@@ -149,6 +150,9 @@ export function usePlaceTypeForm({
    *  the sheet stays up, and its new title is the confirmation. */
   onAdded: (type: NewPlaceType) => void;
 }): { body: ReactNode; footer: ReactNode } {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
@@ -353,19 +357,12 @@ export function usePlaceTypeForm({
           places-in-use check itself failing) — the banner sits directly above
           Save, same as every other form (shared/DESIGN.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
-      <View style={styles.actions}>
-        <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-        </View>
-        <View style={styles.action}>
-          <Button
-            label={editing ? "Save" : "Add type"}
-            icon="done"
-            loading={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      </View>
+      <Button
+        label={editing ? "Save" : "Add type"}
+        icon="done"
+        loading={saving}
+        onPress={() => void save()}
+      />
     </FormStack>
   );
 
@@ -423,18 +420,19 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
 
 const GRID_GAP = spacing(1);
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   list: { gap: spacing(1) },
-  actions: { flexDirection: "row", gap: spacing(1) },
-  action: { flex: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
+  // A chosen cell changes its edge's colour, never its width: Fabric drops a
+  // rounded card's children when a border width changes (mobile/DESIGN.md §7).
   cell: {
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: theme.line,
+    borderWidth: 2,
+    borderColor: "transparent",
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
-  cellChosen: { borderWidth: 2, borderColor: theme.accent },
+  cellChosen: { borderColor: theme.accent },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+}));

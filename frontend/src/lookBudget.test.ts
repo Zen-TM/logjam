@@ -40,7 +40,7 @@ const BUDGET: Record<string, number> = {
   "components/map/MapChrome.module.css": 4,
   "components/map/MapSearchBox.module.css": 10,
   "components/media/Lightbox.module.css": 5,
-  "components/media/MediaGallery.module.css": 13,
+  "components/media/MediaGallery.module.css": 8,
   "components/media/MediaUpload.module.css": 4,
   "components/media/PlaceSlideshow.module.css": 11,
   "components/sidebar/BottomSheet.module.css": 5,

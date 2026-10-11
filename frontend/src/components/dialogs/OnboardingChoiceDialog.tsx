@@ -77,6 +77,7 @@ function OnboardingChoiceDialog({
           variant={loaded ? "filled" : "plain"}
           onClick={onStartEmpty}
           disabled={loading}
+          disabledReason="Loading the place database…"
         >
           {loaded ? "Done" : "Start empty"}
         </Button>
