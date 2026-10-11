@@ -40,6 +40,7 @@ import type { WayItem, WayKind } from "./waysModel";
 export type WayVerbId =
   | "open"
   | "openPlace"
+  | "logTrip"
   | "edit"
   | "copy"
   | "copyAndRemove"
@@ -113,6 +114,10 @@ export function wayVerbs(
   // already looking at it.
   if (surface === "row") verbs.push(verb("open"));
   if (way.placeId) verbs.push(verb("openPlace"));
+  // A recorded track only, and the owner's: it is attached to the trip as a
+  // copy of the file, which is the owner's to take. An import is somebody
+  // else's walk with no start of its own, and a route is a plan, not a day out.
+  if (owned && way.kind === "track") verbs.push(verb("logTrip"));
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
   // Taking your own copy of someone else's route. `POST /routes/:id/copy` has

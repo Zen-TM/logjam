@@ -126,6 +126,19 @@
   outline: none;
 }
 
+/* Sized by its contents: the colour pickers. The default is 372px because the
+   Layers list is the usual tenant, and a block of swatches in that width is a
+   strip of dead space with the × far from them. The × sits in the corner and
+   the contents keep their own margin. */
+.fit {
+  width: max-content;
+  padding: 0 var(--space-1-5) var(--space-1-5);
+}
+
+.fit .bar {
+  margin-inline: calc(-1 * var(--space-1-5));
+}
+
 /* The way out: a × at the top right, above the content, so it never covers it. */
 .bar {
   display: flex;

@@ -17,6 +17,7 @@ import {
   type NavigationContainerRef,
 } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
+import type { SignOutHandler } from "./offline/signOutConfirm";
 import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -781,7 +782,7 @@ export function AppShell({
 }: {
   accountState: AccountState;
   onLinkAccount: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
 }) {
   const isGuest = accountState === "guest";
   const userQuery = useApiQuery(

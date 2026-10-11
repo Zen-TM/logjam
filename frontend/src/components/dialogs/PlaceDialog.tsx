@@ -93,6 +93,7 @@ function PlaceDialog({
   onCustomFieldDefsChange,
   placeTypes,
   onMediaChanged,
+  initialCoords = null,
 }: {
   place: TPlace | null;
   open: boolean;
@@ -111,6 +112,9 @@ function PlaceDialog({
   // Called after a media/track upload or delete so the opener (place detail
   // panel) can refresh its slideshow/track without waiting for a Save.
   onMediaChanged?: () => void;
+  /** Create mode only: the spot the form opens on ("Add a place here"), so the
+   *  coordinates are already in and the user names it. */
+  initialCoords?: { latitude: number; longitude: number } | null;
 }) {
   const isEdit = place != null;
 
@@ -251,8 +255,10 @@ function PlaceDialog({
     } else {
       initialName = "";
       initialAltNames = "";
-      initialLatitude = "";
-      initialLongitude = "";
+      initialLatitude = initialCoords ? initialCoords.latitude.toFixed(6) : "";
+      initialLongitude = initialCoords
+        ? initialCoords.longitude.toFixed(6)
+        : "";
       initialNotes = "";
       initialSources = [];
       initialFieldValues = {};
