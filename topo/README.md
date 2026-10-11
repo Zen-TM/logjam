@@ -211,7 +211,7 @@ what is already done, so a stopped run carries on where it left off. The
 format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
 
 Contours of the same sheets, as vector tiles for the vector basemap (10 m
-lines, the 50 m ones from zoom 11 and the rest from zoom 13):
+lines, the 50 m ones from zoom 11 and the rest from zoom 14):
 
 ```bash
 python3 build_nsw_dem.py contours dem/src dem/contours-work dem/contours-nsw.pmtiles \

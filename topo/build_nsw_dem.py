@@ -369,8 +369,9 @@ def pack(work: Path, out: Path, extracted: str) -> None:
 
 CONTOUR_INTERVAL_M = 10
 CONTOUR_MAJOR_M = 50  # the clients style `elev % 50 == 0` as a major line
-# 50 m lines from z11, the rest from z13; a client overzooms past z14.
-CONTOUR_ZOOMS = {"major": (11, 14), "minor": (13, 14)}
+# 50 m lines from z11 and the rest from z14, the zooms both clients draw them
+# at (the pattern a topo area's own contours have); a client overzooms past z14.
+CONTOUR_ZOOMS = {"major": (11, 14), "minor": (14, 14)}
 # The source layer both clients read: `sourceLayer: "contours"` (Logjam GPS)
 # and `"source-layer": "contours"` (Logjam Web).
 CONTOUR_LAYER = "contours"
