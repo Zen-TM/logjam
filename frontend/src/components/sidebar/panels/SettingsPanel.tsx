@@ -157,6 +157,8 @@ function SettingsPanel({
         types={placeTypes}
         loading={!currentUser}
         onTypesChange={onPlaceTypesChange}
+        placeDefs={placeCustomFieldDefs}
+        onPlaceDefsChange={onPlaceCustomFieldDefsChange}
         onBack={() => setPage(null)}
       />
     );

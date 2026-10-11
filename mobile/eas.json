@@ -22,6 +22,7 @@
       "environment": "preview",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.logjamnsw.com",
+        "EXPO_PUBLIC_WEB_URL": "https://logjamnsw.com",
         "EXPO_PUBLIC_AUTH_MODE": "cognito",
         "EXPO_PUBLIC_TOPO_CDN_BASE_URL": "https://logjamnsw.com",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"

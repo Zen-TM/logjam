@@ -86,10 +86,14 @@ export function CustomFieldList({
   entity,
   defs,
   onEdit,
+  emptyHint,
 }: {
   entity: CustomFieldEntity;
   defs: ScopedCustomFieldDef[];
   onEdit: (def: ScopedCustomFieldDef) => void;
+  /** Said while the user has none of their own here, for a host showing less
+   *  than the whole list (one type's attributes). */
+  emptyHint?: string;
 }) {
   const noun = ENTITY_NOUN[entity];
   // BUILT-INS LAST. The list is two things stacked: what the user made, and
@@ -102,7 +106,9 @@ export function CustomFieldList({
   return (
     <View style={styles.list}>
       {own.length === 0 ? (
-        <Text style={styles.hint}>{attributesEmptyHint(noun.one)}</Text>
+        <Text style={styles.hint}>
+          {emptyHint ?? attributesEmptyHint(noun.one)}
+        </Text>
       ) : null}
       {drawsYoursHeading(own.length, builtIn.length) ? (
         <SectionHeader title={listCopy.yours} count={own.length} />

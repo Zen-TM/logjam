@@ -68,6 +68,8 @@ import {
   tripsFilterNote,
   tripsHeroTitle,
   tripVerbs,
+  NEW_TYPE_ATTRIBUTES,
+  stepAfterPlaceTypeSave,
 } from "./index.js";
 
 describe("every screen contract", () => {
@@ -526,6 +528,14 @@ describe("settings", () => {
     expect(drawsYoursHeading(2, 3)).toBe(true);
     expect(drawsYoursHeading(0, 3)).toBe(false);
     expect(drawsYoursHeading(2, 0)).toBe(false);
+  });
+
+  // Red when adding a type goes back to the list (`return "list"` for both):
+  // the new type's attributes are then a separate trip through Settings.
+  it("leads a new place type into its attributes, and a changed one back", () => {
+    expect(stepAfterPlaceTypeSave(true)).toBe("attributes");
+    expect(stepAfterPlaceTypeSave(false)).toBe("list");
+    expect(NEW_TYPE_ATTRIBUTES.done).toBe("Done");
   });
 
   it("says what deleting a type or an attribute costs", () => {
