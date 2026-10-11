@@ -118,10 +118,15 @@ async function fetchDemTile(
   tileX: number,
   tileY: number,
 ): Promise<Float32Array | null> {
+  // An archive source is not read on the phone yet: it has nothing, so the
+  // position falls through to the next source.
+  const { urlTemplate } = source;
+  if (urlTemplate == null) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TILE_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(demTileUrl(source, tileX, tileY), {
+    const url = demTileUrl({ ...source, urlTemplate }, tileX, tileY);
+    const response = await fetch(url, {
       signal: controller.signal,
     });
     if (!response.ok) return null;
