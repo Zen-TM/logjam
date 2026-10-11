@@ -8,7 +8,7 @@
 //
 // A source is either a public XYZ tile set (`urlTemplate`) or a PMTiles archive
 // Logjam builds and serves itself (`archivePath`).
-// docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md
+// docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md
 //
 // PRIVACY: positions here are precise wilderness coordinates and a tile index
 // is a coarse location. Nothing in this file logs, and no reader may.
