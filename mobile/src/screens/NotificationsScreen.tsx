@@ -1184,7 +1184,7 @@ const NotificationRow = memo(function NotificationRow({
     );
   }
   const label = notificationLabel(item);
-  const meta = notificationMeta(item);
+  const meta = notificationMeta(item, theme);
   const target = notificationActions(item);
   const subtitle = [label.warning, formatTime(item.createdAt)]
     .filter(Boolean)
@@ -1322,7 +1322,7 @@ const BatchRow = memo(function BatchRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
-  const meta = notificationMeta(batch.representative);
+  const meta = notificationMeta(batch.representative, theme);
   const pending = batchPendingFileSends(batch);
   const subtitle = [
     batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,

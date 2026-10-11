@@ -64,7 +64,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
@@ -138,9 +138,9 @@ export function PickPointScreen({
     : (lastCamera?.zoom ?? DEFAULT_ZOOM);
 
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
 
   // Saved regions count here exactly as they do on the map: a picker that only

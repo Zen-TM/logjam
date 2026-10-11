@@ -292,7 +292,7 @@ import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
   ANCHOR_DROP_SELECT_MS,
@@ -849,9 +849,9 @@ export function MapScreen({
   // style. Post-install launches resolve in ~ms; install failure falls back
   // to the remote asset host (online-only labels).
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
   // Whether the Map (and therefore the camera) is mounted at all — the same
   // condition as the render gate at the bottom of this component. Anything that

@@ -55,7 +55,7 @@ import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
@@ -122,9 +122,9 @@ export function PickAreaScreen({
   const [viewport, setViewport] = useState<FrameViewport | null>(null);
 
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
 
   // Saved regions count here as they do everywhere else: a picker that needed

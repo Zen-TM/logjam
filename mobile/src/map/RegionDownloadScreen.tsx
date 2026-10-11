@@ -74,7 +74,7 @@ import { vectorClipFor } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { nextRegionName } from "./regionName";
@@ -213,9 +213,9 @@ export function RegionDownloadScreen({
   const startCenter = initialCenter ?? lastCamera?.center ?? DEFAULT_CENTER;
   const startZoom = initialZoom ?? lastCamera?.zoom ?? DEFAULT_ZOOM;
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
   const mapRef = useRef<MapRef>(null);
 
