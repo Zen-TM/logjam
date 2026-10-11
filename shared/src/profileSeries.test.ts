@@ -6,14 +6,16 @@
 // 3.4 km walk that gap was 14%, and the chart ran to 4.0 km beside a stat card
 // reading 3.4 — which reads as one of them being broken.
 import { describe, expect, it } from "vitest";
-import type { ElevationProfile } from "@logjam/shared";
+import type { ElevationProfile } from "./elevation.js";
+import type { TrackDetail } from "./trackStats.js";
 
 import {
   elevationSeries,
   sameSeries,
   speedSeries,
   timeOfDayFormatter,
-} from "./profileSeries";
+  trackHeights,
+} from "./profileSeries.js";
 
 const profile: ElevationProfile = {
   samples: [
@@ -123,5 +125,59 @@ describe("sameSeries", () => {
       });
     expect(sameSeries(speed(1000), speed(1000))).toBe(true);
     expect(sameSeries(speed(1000), speed(2000))).toBe(false);
+  });
+});
+
+describe("trackHeights", () => {
+  const gps: ElevationProfile = { ...profile, minM: 12, maxM: 38 };
+  const detail = {
+    elevation: gps,
+    maxAltitudeM: 38,
+    minAltitudeM: 12,
+  } as TrackDetail;
+
+  it("charts the terrain when it answered the whole line", () => {
+    const heights = trackHeights(detail, profile, false);
+    expect(heights.elevation).toBe(profile);
+    expect(heights.dem).toBe(profile);
+    expect(heights.note).toBe("Heights from terrain data");
+  });
+
+  it("falls back to GPS for the whole panel when one sample is uncovered", () => {
+    const holed: ElevationProfile = {
+      ...profile,
+      samples: [
+        profile.samples[0]!,
+        { distanceM: 2000, elevationM: null },
+        profile.samples[2]!,
+      ],
+    };
+    const heights = trackHeights(detail, holed, false);
+    expect(heights.elevation).toBe(gps);
+    expect(heights.dem).toBeNull();
+    expect(heights.note).toBe("Terrain data incomplete — heights from GPS");
+  });
+
+  it("says GPS is a stand-in while the terrain loads, and when it never comes", () => {
+    expect(trackHeights(detail, null, true).note).toBe(
+      "Heights from GPS — loading terrain…",
+    );
+    expect(trackHeights(detail, null, false).note).toBe(
+      "Heights from GPS — no terrain data here",
+    );
+  });
+
+  it("says why there is no chart when neither source has a line", () => {
+    const bare = { ...detail, elevation: null } as TrackDetail;
+    expect(trackHeights(bare, null, true)).toMatchObject({
+      elevation: null,
+      note: "Reading the terrain…",
+    });
+    expect(trackHeights(bare, null, false).note).toBe(
+      "Not enough height readings to chart",
+    );
+    expect(
+      trackHeights({ ...bare, maxAltitudeM: null }, null, false).note,
+    ).toBe("No heights for this track");
   });
 });

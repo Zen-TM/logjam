@@ -20,6 +20,9 @@
 // governs reads as a footnote to it (operator, 2026-09-17).
 import { useEffect, useMemo, useState } from "react";
 import {
+  elevationSeries,
+  formatElevationM,
+  TRACK_PROFILE_COPY,
   densifyLine,
   formatDistanceM,
   routeLengthM,
@@ -38,11 +41,11 @@ import {
   SectionHeader,
   Select,
   StatGrid,
+  ProfileChart,
   ColourField,
   FieldError,
   type Stat,
 } from "../../ui";
-import ElevationProfile from "./ElevationProfile";
 import type { RouteHoverChannel } from "../map/routeHover";
 import classes from "./RouteDrawPanel.module.css";
 
@@ -217,12 +220,13 @@ export function RouteDrawPanel({
                   </p>
                 )}
                 <SectionHeader title="Elevation vs distance" />
-                <ElevationProfile
-                  samples={profile.samples}
-                  minM={profile.minM}
-                  maxM={profile.maxM}
+                <ProfileChart
+                  series={elevationSeries(profile)}
+                  formatValue={formatElevationM}
+                  formatX={formatDistanceM}
+                  label={TRACK_PROFILE_COPY.elevationLabel}
                   color={color ?? "currentColor"}
-                  onHoverSampleChange={(index) => {
+                  onHoverPointChange={(index) => {
                     const position =
                       index == null ? null : samplePositions[index];
                     routeHover.set(

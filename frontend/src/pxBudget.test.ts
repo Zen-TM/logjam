@@ -54,7 +54,6 @@ const BUDGET: Record<string, number> = {
   "components/media/Lightbox.module.css": 1,
   "components/media/MediaGallery.module.css": 7,
   "components/media/PlaceSlideshow.module.css": 9,
-  "components/routes/ElevationProfile.module.css": 6,
   "components/routes/RouteDrawPanel.module.css": 5,
   "components/sidebar/BottomSheet.module.css": 6,
   "components/sidebar/NavRail.module.css": 21,

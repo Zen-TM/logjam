@@ -12,25 +12,22 @@
 // zero. Distance and climb need no clock and are always there.
 import { StyleSheet, Text, View } from "react-native";
 import {
+  elevationSeries,
   formatDistanceM,
   formatDurationMs,
   formatSpeedMps,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
-  speedClockMs,
+  speedSeries,
+  speedTimeFormatter,
+  TRACK_PROFILE_COPY,
+  trackHeights,
   type ElevationProfile,
   type TrackDetail,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import {
-  ProfileChart,
-  StatGrid,
-  elevationSeries,
-  speedSeries,
-  timeOfDayFormatter,
-  type Stat,
-} from "../ui";
+import { ProfileChart, StatGrid, type Stat } from "../ui";
 
 export function TrackStatsBody({
   detail,
@@ -81,7 +78,7 @@ export function TrackStatsBody({
     return (
       <Text style={styles.pending}>
         {loading
-          ? "Reading the track…"
+          ? TRACK_PROFILE_COPY.reading
           : (emptyMessage ?? "No points recorded yet.")}
       </Text>
     );
@@ -89,15 +86,13 @@ export function TrackStatsBody({
 
   const durationMs = elapsedMs ?? detail.durationMs;
   const timed = detail.movingMs != null;
-  // One source for every height on the panel — DEM only when it has no gaps.
-  // A DEM with even one uncovered sample would draw a hole in a chart the
-  // reader can't tell from the terrain, so a partial DEM falls back to GPS for
-  // the whole section rather than mixing two surfaces.
-  const demComplete =
-    demProfile != null &&
-    demProfile.samples.every((sample) => sample.elevationM != null);
-  const dem = demComplete ? demProfile : null;
-  const elevation = dem ?? detail.elevation;
+  // One source for every height on the panel, and the line saying which:
+  // `trackHeights`, the rule Logjam Web's way page charts by too.
+  const {
+    dem,
+    elevation,
+    note: heightsNote,
+  } = trackHeights(detail, demProfile, demLoading ?? false);
   const gainM = dem ? dem.gainM : detail.elevationGainM;
   const lossM = dem ? dem.lossM : detail.elevationLossM;
   const maxM = dem ? dem.maxM : detail.maxAltitudeM;
@@ -156,12 +151,7 @@ export function TrackStatsBody({
   }
 
   const speed = detail.speed;
-  const formatClock = speed
-    ? timeOfDayFormatter(
-        speedClockMs(speed, 0),
-        speedClockMs(speed, speed.samples[speed.samples.length - 1]!.atMs),
-      )
-    : null;
+  const formatClock = speed ? speedTimeFormatter(speed) : null;
 
   return (
     <View style={styles.body}>
@@ -171,55 +161,38 @@ export function TrackStatsBody({
 
       {elevation ? (
         <View style={styles.chartBlock}>
-          {/* Names BOTH axes. "Elevation" alone left the horizontal one to be
-              inferred, and a reader who assumes it is time reads the whole
-              chart wrong — a long flat section is a plateau, not a rest. */}
-          <Text style={styles.chartLabel}>Elevation vs distance</Text>
+          <Text style={styles.chartLabel}>
+            {TRACK_PROFILE_COPY.elevationTitle}
+          </Text>
           <ProfileChart
             series={elevationSeries(elevation, detail.distanceM)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
             hint="Press or drag for heights."
-            accessibilityLabel="Elevation profile"
+            accessibilityLabel={TRACK_PROFILE_COPY.elevationLabel}
           />
           {/* Which surface these heights came from. Said out loud because the
               two can differ by a lot — a DEM cannot see inside a slot narrower
               than its ~19 m grid, and GPS altitude cannot see a hill smaller
               than its own noise. A number with no provenance gets trusted. */}
-          <Text style={styles.pending}>
-            {demComplete
-              ? "Heights from terrain data"
-              : demProfile
-                ? "Terrain data incomplete — heights from this phone's GPS"
-                : demLoading
-                  ? "Heights from GPS — loading terrain…"
-                  : "Heights from GPS — no terrain data here"}
-          </Text>
+          <Text style={styles.pending}>{heightsNote}</Text>
         </View>
       ) : (
-        <Text style={styles.pending}>
-          {demLoading
-            ? "Reading the terrain…"
-            : detail.maxAltitudeM == null
-              ? "No heights for this track"
-              : "Not enough height readings to chart"}
-        </Text>
+        <Text style={styles.pending}>{heightsNote}</Text>
       )}
 
       {speed && formatClock ? (
         <View style={styles.chartBlock}>
-          {/* And the speed chart's is TIME, not distance — the one place the
-              two charts differ, and the reason each says which. */}
-          <Text style={styles.chartLabel}>Speed vs time</Text>
+          <Text style={styles.chartLabel}>{TRACK_PROFILE_COPY.speedTitle}</Text>
           <ProfileChart
             series={speedSeries(speed)}
             formatValue={formatSpeedMps}
             // The speed series runs on a CLOCK, not a tape measure — its x is
             // time into the recording (see SpeedSample), read out as the time
             // of day it was: "where were we at 2 pm" is the question asked.
-            formatX={(atMs) => formatClock(speedClockMs(speed, atMs))}
+            formatX={formatClock}
             hint="Press or drag for speeds."
-            accessibilityLabel="Speed profile"
+            accessibilityLabel={TRACK_PROFILE_COPY.speedLabel}
           />
         </View>
       ) : null}

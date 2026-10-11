@@ -17,11 +17,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   computeTrackDetail,
+  toElevationLine,
   type RecordedTrackPoint,
   type TrackDetail,
 } from "@logjam/shared";
 
-import { toElevationLine } from "./trackLine";
 import { listTrackPoints } from "./tracksDb";
 import { useTrackChangeRefresh } from "./useTrackChangeRefresh";
 

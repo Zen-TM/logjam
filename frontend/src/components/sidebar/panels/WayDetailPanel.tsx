@@ -6,11 +6,11 @@
 //
 // What each kind can say for itself differs, and the page says only what it
 // knows. A ROUTE carries its geometry inline, so it gets measured figures and a
-// real elevation profile. A FILE's geometry is an object in S3 this page has
-// not downloaded, so it reports the stats its own row already carries — a
-// recording's distance, climb and descent were computed by the recorder and are
-// better than anything re-derived here anyway. Neither guesses: a figure that
-// is not known is absent rather than zero.
+// real elevation profile. A FILE's figures are the stats its own row already
+// carries — a recording's distance, climb and descent were computed by the
+// recorder — and its charts are drawn from the file itself, downloaded when
+// the page opens (`TrackProfiles`). Neither guesses: a figure that is not
+// known is absent rather than zero.
 //
 // Which verbs appear, and which controls are inline rather than in the ⋯, is
 // `wayActions.ts` — not this file's judgement.
@@ -24,8 +24,10 @@ import {
 import {
   removeShareConfirm,
   densifyLine,
+  elevationSeries,
   formatBytes,
   formatDistanceM,
+  formatElevationM,
   routeLengthM,
   exportFilename,
   mediaDisplayName,
@@ -35,6 +37,7 @@ import {
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
   TRACK_COLORS,
+  TRACK_PROFILE_COPY,
   type StandaloneFile,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
@@ -56,6 +59,7 @@ import {
   type TRoute,
   type TPlace,
   type TFriend,
+  type PlaceTrack,
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
@@ -63,7 +67,6 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import SendCopyDialog from "../../dialogs/SendCopyDialog";
 import PlacePicker from "../../common/PlacePicker";
-import ElevationProfile from "../../routes/ElevationProfile";
 import type { RouteHoverChannel } from "../../map/routeHover";
 import {
   Button,
@@ -72,6 +75,7 @@ import {
   Menu,
   SectionHeader,
   StatGrid,
+  ProfileChart,
   ColourField,
   TextField,
   Dialog,
@@ -82,6 +86,7 @@ import {
 import type { TripLogTrack } from "../../dialogs/TripLogDialog";
 import { wayProperties, wayVerbs, type WayVerbId } from "./wayActions";
 import type { WayItem } from "./waysModel";
+import TrackProfiles from "./TrackProfiles";
 import classes from "./WayDetailPanel.module.css";
 
 const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
@@ -115,6 +120,7 @@ export default function WayDetailPanel({
   way,
   route,
   file,
+  placeTrack,
   initialVerb,
   onVerbConsumed,
   friends,
@@ -138,6 +144,9 @@ export default function WayDetailPanel({
    *  place is not among them, so the page shows what the row knows and no
    *  write controls. */
   file: StandaloneFile | null;
+  /** Set when the way is a file the map draws as a place's track, a friend's
+   *  included: the download the map already has is what its charts read. */
+  placeTrack: PlaceTrack | null;
   /**
    * A verb a ROW asked for, run once this page mounts. It is how one verb list
    * serves both surfaces: a row shows Share, Rename and Delete without hosting
@@ -220,6 +229,24 @@ export default function WayDetailPanel({
   );
   // Closing the panel mid-hover would otherwise strand the map marker.
   useEffect(() => () => routeHover.set(null), [routeHover]);
+
+  // A file's charts are read from the file. The user's own is downloaded
+  // from a URL minted for it; a track on a friend's place has only the URL the
+  // map draws it from, so without one there are no charts.
+  const trackFile = route ? null : (file ?? placeTrack);
+  const trackSource = trackFile && {
+    mediaId: way.id,
+    filename: trackFile.filename,
+    displayUrl: async () => {
+      if (placeTrack) return placeTrack.displayUrl;
+      const { items } = await getMediaDownloadUrls([way.id]);
+      const url = items[0]?.displayUrl;
+      if (!url) throw new Error("The file could not be fetched.");
+      return url;
+    },
+    recordedMs:
+      trackFile.origin === "track" ? trackFile.metadata.durationMs : null,
+  };
 
   const owned = !way.shared;
   // WHICH PLACE, from the live row rather than from `way`.
@@ -565,9 +592,14 @@ export default function WayDetailPanel({
       <div className={classes.body}>
         {stats.length > 0 && <StatGrid stats={pairedStatLayout(stats)} />}
 
-        {/* Only a route has its geometry here to profile. A recording's climb
-            and descent are in the figures above, measured by the recorder that
-            walked it — better than anything re-derived from a simplified line. */}
+        {trackSource && (
+          <TrackProfiles
+            source={trackSource}
+            color={shownColour}
+            routeHover={routeHover}
+          />
+        )}
+
         {route && (
           <section className={classes.section}>
             {profileLoading && (
@@ -587,12 +619,13 @@ export default function WayDetailPanel({
                     This IS the section's heading — a second "Elevation" above it
                     said the same thing twice (operator, 2026-09-17). */}
                 <SectionHeader title="Elevation vs distance" />
-                <ElevationProfile
-                  samples={profile.samples}
-                  minM={profile.minM}
-                  maxM={profile.maxM}
+                <ProfileChart
+                  series={elevationSeries(profile)}
+                  formatValue={formatElevationM}
+                  formatX={formatDistanceM}
+                  label={TRACK_PROFILE_COPY.elevationLabel}
                   color={shownColour ?? "currentColor"}
-                  onHoverSampleChange={handleHoverSample}
+                  onHoverPointChange={handleHoverSample}
                 />
                 <p className={classes.attribution}>{profile.attribution}</p>
               </>

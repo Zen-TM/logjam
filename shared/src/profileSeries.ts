@@ -1,11 +1,16 @@
 // The pure shape of a profile chart: the series builders, with no component
 // and no React Native in sight.
 //
-// Split out of ProfileChart.tsx so they can be tested in plain node — the
-// component cannot be imported into a test without a renderer, and the axis
-// reconciliation below is exactly the kind of arithmetic that should have a
-// check on it.
-import type { ElevationProfile, SpeedProfile } from "@logjam/shared";
+// Here rather than in either client because both draw the same two charts of a
+// track (Logjam GPS's stats panel, Logjam Web's way page): what each axis
+// means, which heights are charted and the words around them are decided once
+// and each client only draws.
+import type { ElevationProfile } from "./elevation.js";
+import {
+  speedClockMs,
+  type SpeedProfile,
+  type TrackDetail,
+} from "./trackStats.js";
 
 export type ProfilePoint = { x: number; value: number | null };
 
@@ -55,6 +60,11 @@ export function elevationSeries(
   };
 }
 
+/** A height as the charts and their readouts print it. */
+export function formatElevationM(elevationM: number): string {
+  return `${Math.round(elevationM)} m`;
+}
+
 /** A recorded speed series over TIME, scaled from a standstill up. */
 export function speedSeries(profile: SpeedProfile): ProfileSeries {
   return {
@@ -85,6 +95,71 @@ export function timeOfDayFormatter(
       hour: "numeric",
       minute: "2-digit",
     });
+}
+
+/** Reads a speed sample's `atMs` as the time of day it was. */
+export function speedTimeFormatter(
+  speed: SpeedProfile,
+): (atMs: number) => string {
+  const format = timeOfDayFormatter(
+    speedClockMs(speed, 0),
+    speedClockMs(speed, speed.samples[speed.samples.length - 1]!.atMs),
+  );
+  return (atMs) => format(speedClockMs(speed, atMs));
+}
+
+/**
+ * The words around a track's two charts. Each title names BOTH axes: the
+ * elevation chart runs on distance and the speed chart on time, and a reader
+ * who assumes otherwise reads a plateau as a rest.
+ */
+export const TRACK_PROFILE_COPY = {
+  reading: "Reading the track…",
+  elevationTitle: "Elevation vs distance",
+  elevationLabel: "Elevation profile",
+  speedTitle: "Speed vs time",
+  speedLabel: "Speed profile",
+} as const;
+
+/**
+ * Which heights a track's panel shows, and the line that says where they came
+ * from.
+ *
+ * The DEM is preferred over the track's own GPS altitudes, but only when it
+ * answered EVERY sample: one uncovered sample would draw a hole the reader
+ * cannot tell from the terrain, so a partial DEM falls back to GPS for the
+ * whole panel rather than mixing two surfaces. `dem` is that complete profile
+ * or null; `elevation` is what to chart, null when neither source can draw a
+ * line, and `note` then says why.
+ */
+export function trackHeights(
+  detail: TrackDetail,
+  demProfile: ElevationProfile | null | undefined,
+  demLoading: boolean,
+): {
+  dem: ElevationProfile | null;
+  elevation: ElevationProfile | null;
+  note: string;
+} {
+  const complete =
+    demProfile != null &&
+    demProfile.samples.every((sample) => sample.elevationM != null);
+  const dem = complete ? demProfile : null;
+  const elevation = dem ?? detail.elevation;
+  const note = !elevation
+    ? demLoading
+      ? "Reading the terrain…"
+      : detail.maxAltitudeM == null
+        ? "No heights for this track"
+        : "Not enough height readings to chart"
+    : dem
+      ? "Heights from terrain data"
+      : demProfile
+        ? "Terrain data incomplete — heights from GPS"
+        : demLoading
+          ? "Heights from GPS — loading terrain…"
+          : "Heights from GPS — no terrain data here";
+  return { dem, elevation, note };
 }
 
 /**

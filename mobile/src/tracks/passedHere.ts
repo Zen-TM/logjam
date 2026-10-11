@@ -1,8 +1,5 @@
 // The one line a track's sheet says about the spot that was tapped to open it.
-import type { TrackPass } from "@logjam/shared";
-
-// Not the kit barrel: it pulls in React Native, and this file is tested in node.
-import { timeOfDayFormatter } from "../ui/profileSeries";
+import { timeOfDayFormatter, type TrackPass } from "@logjam/shared";
 
 /** A visit shorter than this is a walk past: one time says it. */
 const STOP_MS = 5 * 60_000;

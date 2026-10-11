@@ -1,13 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import { computeTrackDetail, type ImportedFeature } from "@logjam/shared";
+import { describe, expect, it } from "vitest";
 
-import { importedFeaturesToSeries } from "./importedTrackSeries";
-
-// The module reaches for the filesystem in its OTHER export; the conversion
-// under test is pure.
-vi.mock("expo-file-system/legacy", () => ({
-  readAsStringAsync: vi.fn(),
-}));
+import { importedFeaturesToSeries } from "./importedTrackSeries.js";
+import { computeTrackDetail } from "./trackStats.js";
+import type { ImportedFeature } from "./vectorImport.js";
 
 // Synthetic coords only (repo rule): 150.2–150.3 E, −33.6–−33.7 S.
 function line(

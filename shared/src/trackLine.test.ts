@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { RecordedTrackPoint } from "@logjam/shared";
+import type { RecordedTrackPoint } from "./trackStats.js";
 
-import { MAX_ELEVATION_VERTICES, toElevationLine } from "./trackLine";
+import { MAX_ELEVATION_VERTICES, toElevationLine } from "./trackLine.js";
 
 // Synthetic coords only (repo rule).
 function run(

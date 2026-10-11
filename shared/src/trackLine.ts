@@ -8,7 +8,7 @@
 // already finer than the surface being read.
 //
 // PRIVACY: these are precise wilderness coordinates. Nothing here logs.
-import type { TrackSeriesPoint } from "@logjam/shared";
+import type { TrackSeriesPoint } from "./trackStats.js";
 
 /**
  * Vertices kept for a DEM sample. `densifyLine` resamples to
