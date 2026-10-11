@@ -225,8 +225,8 @@ Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM:
 | Result | 16.9 GB, 1,027,356 tiles |
 | Disk | 96 GB in use when `pack` finished; allow 150 GB |
 
-A worker needs about 2 GB of RAM. Any machine with GDAL, Python and `pmtiles`
-does: nothing here touches AWS until the archive is published.
+Any machine with GDAL, Python and `pmtiles` does: nothing here touches AWS
+until the archive is published.
 
 ```bash
 python3 build_nsw_dem.py fetch dem/src
