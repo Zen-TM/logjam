@@ -59,6 +59,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
         label="Azimuth (°)"
         tooltip="Where the sun sits, in degrees, clockwise from north. 315° is what most maps use."
         disabled={value.multidirectional}
+        disabledReason="Multidirectional shading ignores the sun's position."
       >
         <LiveNumberField
           label="Azimuth (°)"
@@ -75,6 +76,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
         label="Altitude (°)"
         tooltip="How high the sun sits above the horizontal."
         disabled={value.multidirectional}
+        disabledReason="Multidirectional shading ignores the sun's position."
       >
         <LiveNumberField
           label="Altitude (°)"

@@ -674,7 +674,7 @@ export default function TopoDialog({
             </p>
             <p className={classes.workingDetail}>
               {stats?.tileCount
-                ? `${stats.tileCount} tile${stats.tileCount > 1 ? "s" : ""} queued. `
+                ? `${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""} queued. `
                 : ""}
               We'll let you know when it's ready. You can close this.
             </p>
@@ -865,7 +865,7 @@ function ZipSummary({
   const rows: ([string, string] | null)[] = [
     ["Survey", stats.surveyNames.join(", ") || "—"],
     ["Mode", stats.modeLabel],
-    ["Tiles", String(stats.tileCount)],
+    ["Areas", String(stats.tileCount)],
     stats.lazCount > 0
       ? [
           "Point clouds",

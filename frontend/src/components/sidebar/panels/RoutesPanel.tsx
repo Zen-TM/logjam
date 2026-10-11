@@ -37,7 +37,7 @@ import {
   StatusPill,
   type MenuEntry,
   type Glyph,
-  ErrorBanner,
+  ErrorState,
   LoadingState,
 } from "../../../ui";
 import { wayVerbs, type WayVerbId } from "./wayActions";
@@ -97,6 +97,7 @@ export default function RoutesPanel({
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
+  onRetryStandaloneFiles,
   places,
   sharedPlaces,
   onStartDrawingRoute,
@@ -114,6 +115,7 @@ export default function RoutesPanel({
   placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
+  onRetryStandaloneFiles: () => void;
   /** Owned + shared, for naming the place a way belongs to. */
   places: TPlace[];
   /** The places shared WITH the user — what tells a route shared on its own
@@ -459,7 +461,10 @@ export default function RoutesPanel({
       {rails}
       {standaloneFilesError && (
         <div className={classes.banner}>
-          <ErrorBanner message={standaloneFilesError} />
+          <ErrorState
+            message={standaloneFilesError}
+            onRetry={onRetryStandaloneFiles}
+          />
         </div>
       )}
       {list}

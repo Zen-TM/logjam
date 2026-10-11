@@ -1422,7 +1422,10 @@ export function useStandaloneFiles(enabled: boolean) {
     };
   }, [enabled, fetchCount]);
 
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+  const refetch = useCallback(() => {
+    setError(null);
+    setFetchCount((n) => n + 1);
+  }, []);
 
   return { files, loaded, error, refetch };
 }

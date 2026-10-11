@@ -988,6 +988,7 @@ function GeoPdfDialog({
             <SettingsRow
               label="Orientation"
               disabled={extentState.paperSize === "custom"}
+              disabledReason="A custom ratio sets its own shape."
             >
               <ChipRail
                 label="Orientation"
