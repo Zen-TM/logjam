@@ -18,3 +18,17 @@ export function markNoResponse<T>(err: T): T {
 export function isNoResponse(err: unknown): boolean {
   return typeof err === "object" && err !== null && unanswered.has(err);
 }
+
+// The one unanswered request that says nothing about the API: a transfer to
+// storage that died partway. The link carried the calls before it, so the
+// media pass goes on to the next upload instead of stopping (flush.ts).
+const cutTransfers = new WeakSet<object>();
+
+export function markTransferCut<T>(err: T): T {
+  if (typeof err === "object" && err !== null) cutTransfers.add(err);
+  return markNoResponse(err);
+}
+
+export function isTransferCut(err: unknown): boolean {
+  return typeof err === "object" && err !== null && cutTransfers.has(err);
+}

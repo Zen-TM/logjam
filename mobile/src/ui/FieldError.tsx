@@ -1,12 +1,12 @@
 import { useContext, useEffect, useRef } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import { SheetErrorReveal } from "./BottomSheet";
 import { Icon } from "./Icon";
 
 /**
- * The one inline validation line (docs/ux-principles.md §11, "Form errors"): directly under
+ * The one inline validation line (shared/DESIGN.md §11, "Form errors"): directly under
  * the control it is about: the words in `text` and a warning glyph before them,
  * because words are never an intent colour (UX §7). `TextField` and `ChipPicker`
  * render it from their `error` prop; any other control puts one under itself.
@@ -19,6 +19,9 @@ import { Icon } from "./Icon";
  * context when one isn't.
  */
 export function FieldError({ message }: { message?: string | null }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const ref = useRef<View>(null);
   const reveal = useContext(SheetErrorReveal);
   const shown = Boolean(message);
@@ -40,8 +43,8 @@ export function FieldError({ message }: { message?: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
-  line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.75) },
+const useStyles = makeStyles((theme) => ({
+  line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.5) },
   // The glyph sits on the first line of the text, whatever the text size.
   error: { flex: 1, fontSize: fontSize.sm, color: theme.text },
-});
+}));

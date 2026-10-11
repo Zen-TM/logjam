@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { INK } from "./designTokens.js";
+import { FONT, INK, TEXT_ROLES } from "./designTokens.js";
 import { THEME_SCHEMES, THEME_SCHEME_ORDER } from "./themeSchemes.js";
 import { kebab, webTokensCss } from "./webTokens.js";
 
@@ -44,9 +44,26 @@ describe("webTokensCss", () => {
     );
     expect(root.get("--color-on-fill")).toBe(INK.toLowerCase());
     expect(root.get("--space-1-5")).toBe("12px");
+    expect(root.get("--form-field")).toBe("12px");
     expect(root.get("--font-sm")).toBe("0.8125rem");
     expect(root.get("--control-lg")).toBe("36px");
     expect(root.get("--motion-fast")).toBe("150ms");
+  });
+
+  // A role points at the scale's own property, so a size is written once.
+  // Mutation that turns it red: emit `--text-title-size` from `FONT.gps`.
+  it("points every type role at the font scale", () => {
+    const root = blockOf(css, ":root");
+    for (const [name, spec] of Object.entries(TEXT_ROLES)) {
+      if (!("web" in spec)) continue;
+      expect(spec.web.size in FONT.web).toBe(true);
+      expect(root.get(`--text-${kebab(name)}-size`)).toBe(
+        `var(--font-${spec.web.size})`,
+      );
+      expect(root.get(`--text-${kebab(name)}-weight`)).toBe(
+        `var(--font-weight-${spec.web.weight})`,
+      );
+    }
   });
 
   it("gives a coarse pointer the touch control sizes", () => {

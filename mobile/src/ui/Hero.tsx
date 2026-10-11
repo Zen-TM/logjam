@@ -1,7 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -47,6 +47,9 @@ export function Hero({
   onBack?: () => void;
   children?: React.ReactNode;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.hero, { paddingTop: insets.top + spacing(1.5) }]}>
@@ -82,7 +85,7 @@ export function Hero({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   hero: {
     // No fill: it sits on the page and a hairline separates it from the list,
     // as Logjam Web's hero does. Its old fill, a step lighter than the card,
@@ -94,10 +97,7 @@ const styles = StyleSheet.create({
     gap: spacing(1),
   },
   eyebrow: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
+    ...textRole.section,
     letterSpacing: 1,
   },
   // The back button sits on the eyebrow line and hangs into the horizontal
@@ -110,21 +110,15 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   title: {
     flex: 1,
+    ...textRole.title,
     color: theme.text,
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
   },
   // The metric is supporting information, not the point of the screen: one
   // step above body text, not a billboard. `fontSize.display` is reserved for
   // a screen whose whole purpose IS the number.
   value: {
+    ...textRole.metric,
     color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
   },
-  valueSuffix: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
-});
+  valueSuffix: { ...textRole.hint, color: theme.textMuted },
+}));

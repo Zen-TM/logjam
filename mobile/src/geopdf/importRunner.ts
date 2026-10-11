@@ -21,12 +21,13 @@
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
-import type { ToastMessage } from "../ui/Toast";
+import type { ToastMessage } from "../ui";
 import type { GeoPdfImportState } from "./geoPdfImportsDb";
 import type { GeoPdfImportEstimate } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
 
 import {
   GEOPDF_ERRORS,
+  geoPdfErrorCode,
   type GeoPdfCancelToken,
   type GeoPdfImportOutcome,
   type GeoPdfProgress,
@@ -250,11 +251,10 @@ export async function runGeoPdfImport(
     return outcome;
   } catch (err) {
     console.error(err);
-    const code = (err as { code?: string }).code;
+    // Words are ours, never the exception's message: it can carry a file name.
+    const code = geoPdfErrorCode(err);
     emitToast(
-      (code && GEOPDF_ERRORS[code]) ||
-        (err instanceof Error && err.message) ||
-        "Couldn't import that PDF.",
+      (code && GEOPDF_ERRORS[code]) || "Couldn't import that PDF.",
       "error",
     );
     return null;

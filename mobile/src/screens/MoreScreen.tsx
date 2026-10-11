@@ -3,7 +3,7 @@
 //
 // A hub is a menu, and a menu is not very interesting. What makes this screen
 // worth opening is the ONE question it can answer that no other screen owns:
-// "is my work safe?" (DESIGN.md §8). Every other tab is about places, trips or
+// "is my work safe?" (DESIGN.md). Every other tab is about places, trips or
 // maps; this is the only place that can be about the app itself, so the hero is
 // the sync answer in a sentence and the menu sits under it.
 //
@@ -20,7 +20,7 @@
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -33,7 +33,7 @@ import {
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import { getSyncStatus, requestSync } from "../sync/syncEngine";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, makeThemed, useTheme } from "../theme";
 import {
   Button,
   Hero,
@@ -45,16 +45,18 @@ import {
   type Glyph,
   type ToastMessage,
 } from "../ui";
-import { syncHealth, type SyncTone } from "./syncHealth";
+import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
 // third state hue, because waiting is not a problem.
-const TONE_STYLE: Record<SyncTone, { icon: Glyph; color: string }> = {
-  ok: { icon: "success", color: theme.accent },
-  pending: { icon: "pending", color: theme.textMuted },
-  problem: { icon: "warning", color: theme.warning },
-};
+const useToneStyle = makeThemed(
+  (theme): Record<SyncTone, { icon: Glyph; color: string }> => ({
+    ok: { icon: "success", color: theme.accent },
+    pending: { icon: "pending", color: theme.textMuted },
+    problem: { icon: "warning", color: theme.warning },
+  }),
+);
 
 export function MoreScreen({
   unreadCount,
@@ -71,6 +73,9 @@ export function MoreScreen({
   onOpenSyncIssues: () => void;
   onOpenSettings: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState, linkAccount } = useAccountState();
   const isGuest = accountState === "guest";
   // Best-effort: the hub is fully usable without it (offline, or a failed
@@ -93,8 +98,10 @@ export function MoreScreen({
     pendingCount,
     issueCount,
     errorKind: syncStatus.errorKind,
+    waitingSince: syncStatus.waitingSince,
     accountState,
   });
+  const TONE_STYLE = useToneStyle();
   const tone = TONE_STYLE[health.tone];
 
   // The hero's "Sync now" says how it went. A failure already has its words (the
@@ -108,11 +115,11 @@ export function MoreScreen({
   const user = userQuery.data;
 
   return (
-    // Hero pinned, menu scrolls (DESIGN.md §2) — the menu is short today, but the rule is
+    // Hero pinned, menu scrolls (DESIGN.md) — the menu is short today, but the rule is
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
       <Hero
-        eyebrow={isGuest ? "Logjam" : user ? "Signed in as" : "Logjam"}
+        eyebrow={isGuest ? "Logjam GPS" : user ? "Signed in as" : "Logjam GPS"}
         title={isGuest ? "No account" : (user?.username ?? "Your account")}
         actions={
           // "Sync now" is meaningless without an account, so the hero's one
@@ -178,7 +185,7 @@ export function MoreScreen({
           title="Friends"
           // Managing friendships needs an account and a connection; say which
           // in place of a subtitle rather than letting the screen fail after
-          // the tap (DESIGN.md §8).
+          // the tap (DESIGN.md).
           onPress={onOpenFriends}
           {...capabilityRowProps("friends", accountState, online)}
           right={<Trailing />}
@@ -189,13 +196,7 @@ export function MoreScreen({
             icon="warning"
             hue={issueCount > 0 ? theme.warning : undefined}
             title="Account sync issues"
-            subtitle={
-              issueCount > 0
-                ? issueCount === 1
-                  ? "1 change needs you"
-                  : `${issueCount} changes need you`
-                : "Everything's synced"
-            }
+            subtitle={syncIssuesSubtitle(issueCount)}
             onPress={onOpenSyncIssues}
             right={
               <Trailing
@@ -238,6 +239,9 @@ export function MoreScreen({
 
 /** Optional badge, then the chevron — the §5 trailing order. */
 function Trailing({ badge }: { badge?: React.ReactNode }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.trailing}>
       {badge}
@@ -246,13 +250,13 @@ function Trailing({ badge }: { badge?: React.ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero runs edge to edge; only the menu takes the body padding.
   menu: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
   health: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
   healthText: { flex: 1, gap: spacing(0.25) },
-  headline: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
+  headline: { ...textRole.rowTitle },
   detail: { color: theme.textMuted, fontSize: fontSize.sm },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-});
+}));

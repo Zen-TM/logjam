@@ -36,6 +36,7 @@ model User {
   placeTypes              PlaceType[]
   receivedFriendships     Friendship[]        @relation("addressee")
   sentFriendships         Friendship[]        @relation("requester")
+  friendInvites           FriendInvite[]
   media                   Media[]
   notifications           Notification[]
   topoJobs                TopoJob[]
@@ -163,6 +164,10 @@ model PlaceType {
   /// this has to hold. Postgres treats NULLs as distinct in a unique index and
   /// Prisma emits a plain UNIQUE, which would let a re-run migration insert a
   /// second global "Canyon"; the migration adds NULLS NOT DISTINCT by raw SQL.
+  ///
+  /// A second unique index, on the name as a person reads it (trimmed, spaces
+  /// collapsed, case ignored), is raw SQL only: Prisma cannot declare an
+  /// index on an expression. See 20261010120000_place_type_name_unique_as_read.
   @@unique([ownerId, name])
   @@index([ownerId, updatedAt])
   @@map("place_types")
@@ -369,6 +374,21 @@ model Friendship {
   @@unique([requesterId, addresseeId])
   @@index([addresseeId])
   @@map("friendships")
+}
+
+// A link that makes whoever opens it, signed in, a friend of `inviter`.
+// Single use: the row is deleted when it is spent, and revoking is the same
+// delete. Only the token's hash is kept (lib/friendInviteToken.ts).
+model FriendInvite {
+  id        String   @id @default(uuid())
+  inviterId String   @map("inviter_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  inviter   User     @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([inviterId])
+  @@map("friend_invites")
 }
 
 model PlaceShare {

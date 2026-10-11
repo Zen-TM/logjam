@@ -27,14 +27,14 @@
 // three of the five have not chosen a file yet at that point, and confirming a
 // deletion the user can still back out of is how a file goes missing.
 //
-// Each list is a SUB-MODE of this sheet, never a second sheet (DESIGN.md §4),
+// Each list is a SUB-MODE of this sheet, never a second sheet (DESIGN.md),
 // and every sub-mode resets on the sheet's OPEN edge, because the place screen
 // closes it from outside.
 //
 // PRIVACY: nothing here logs a filename, a place name or a coordinate; the
 // error paths carry our own copy.
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import {
   formatDistanceM,
@@ -42,7 +42,7 @@ import {
   routeLengthM,
 } from "@logjam/shared";
 
-import { assetHue, fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
 import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
 import { importVectorSource } from "../imports/vectorImports";
@@ -84,6 +84,10 @@ export function AddWaySheet({
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [mode, setMode] = useState<Mode>("sources");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -92,7 +96,7 @@ export function AddWaySheet({
   /**
    * Work deferred until this sheet has fully closed. A system picker launched
    * from inside an open Modal can never attach its own window, and its promise
-   * simply never settles — the button looks dead (DESIGN.md §5).
+   * simply never settles — the button looks dead (DESIGN.md).
    */
   const [pending, setPending] = useState<null | (() => Promise<void>)>(null);
 
@@ -222,15 +226,11 @@ export function AddWaySheet({
     // replaced here, and can be put on another place later. The old path
     // uploaded place-only media that existed nowhere the user could see.
     fill("file", async () => {
-      const record = await importVectorSource(
-        asset.uri,
-        asset.name,
-        imports?.length ?? 0,
-      );
+      const record = await importVectorSource(asset.uri, asset.name);
       await linkStandaloneMediaLocal(record.id, placeId);
       return "Route file linked to this place.";
     });
-  }, [placeId, fill, imports, onError]);
+  }, [placeId, fill, onError]);
 
   const drawnRoutes = (routes.data ?? [])
     // A route shared with you belongs to someone else; the API refuses the
@@ -241,7 +241,7 @@ export function AddWaySheet({
       return !needle || route.name.toLowerCase().includes(needle);
     });
 
-  // A verb that can only refuse is absent (DESIGN.md §5): an import with no
+  // A verb that can only refuse is absent (DESIGN.md): an import with no
   // .gpx/.kml original, and a recording too short to make a route from, both
   // withhold their descriptor, so neither reaches this list.
   const attachableImports = (imports ?? []).filter(
@@ -327,7 +327,7 @@ export function AddWaySheet({
             icon="track"
             hue={assetHue.track}
             title="Use a recorded track"
-            subtitle="A track you recorded in Logjam"
+            subtitle="A track you recorded in Logjam GPS"
             disabled={busy}
             onPress={() => setMode("tracks")}
           />
@@ -470,8 +470,8 @@ function trackSummary(track: Track): string {
   return `${distance} · ${duration}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

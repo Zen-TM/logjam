@@ -72,9 +72,9 @@ describe("SwitchRow is one switch whose whole row is the target", () => {
     render(
       <SwitchRow
         title="Sync"
-        description="Needs an account"
         checked
         disabled
+        disabledReason="Needs an account"
         onChange={onChange}
       />,
     );
@@ -121,23 +121,19 @@ describe("Button says why it is disabled", () => {
     ).toBe("Needs a connection");
   });
 
-  it("is natively disabled when it has no reason, and while busy", () => {
+  it("is natively disabled while busy, whatever reason it carries", () => {
     render(
       <>
-        <Button disabled>Plain</Button>
-        <Button busy disabledReason="ignored">
+        <Button busy>Working</Button>
+        <Button busy disabled disabledReason="ignored">
           Busy
         </Button>
       </>,
     );
-    expect(
-      (screen.getByRole("button", { name: "Plain" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    expect(
-      (screen.getByRole("button", { name: "Busy" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    for (const name of ["Working", "Busy"])
+      expect(
+        (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+      ).toBe(true);
   });
 });
 

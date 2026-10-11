@@ -10,32 +10,31 @@ import {
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import {
   categoryHasThumbnail,
   mediaCategory,
-  trackPointsToGpx,
   type MediaCategory,
 } from "@logjam/shared";
 
 import {
   fontSize,
-  fontWeight,
   radius,
+  ON_SCRIM,
   scrim,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
+import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { scratchFileUri } from "../offline/localStores";
 import { savesCapturesToGallery } from "./galleryPreference";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
-import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
+import { listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader, Icon, type Glyph } from "../ui";
 import { MediaViewer } from "./MediaViewer";
 
@@ -158,6 +157,9 @@ export function MediaStrip({
    */
   onAddWay?: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -225,7 +227,7 @@ export function MediaStrip({
             askAgainMessage:
               "Allow photo library access to attach photos and videos.",
             settingsMessage:
-              "Photo access was previously denied. Enable it for Logjam in system settings.",
+              "Photo access was previously denied. Enable it for Logjam GPS in system settings.",
             canAskAgain: permission.canAskAgain,
           });
           return;
@@ -258,7 +260,7 @@ export function MediaStrip({
               title: "Camera permission needed",
               askAgainMessage: "Allow camera access to take a photo here.",
               settingsMessage:
-                "The camera was previously denied. Enable it for Logjam in system settings.",
+                "The camera was previously denied. Enable it for Logjam GPS in system settings.",
               canAskAgain: permission.canAskAgain,
             });
             return;
@@ -299,41 +301,17 @@ export function MediaStrip({
     await attach({ uri: asset.uri, mimeType, fileName: asset.name });
   }, [attach, fail]);
 
-  const attachRecordedTrack = useCallback(
+  const attachTrack = useCallback(
     async (track: Track) => {
       setBusy(true);
-      // A GPX of a recorded track is the densest coordinate artefact this app
-      // produces — a timestamped trace of a whole descent. It is scratch: it
-      // exists only until `attachMediaLocal` has copied it into media-cache/,
-      // so it goes in the wiped scratch dir AND is deleted here (the GeoPDF
-      // pipeline's contract, which this path never had).
-      let scratch: string | null = null;
       try {
-        const points = await listTrackPoints(track.id);
-        if (points.length < 2) {
+        if (!(await attachRecordedTrack(linkedType, linkedId, track))) {
           fail("That track has too few points to attach.");
-          return;
         }
-        // Written out as GPX, the shape both clients already read: the
-        // attachment shows on the web trip and on the map, and the file is one
-        // the user can open anywhere. The local recording is left untouched.
-        const gpx = trackPointsToGpx(track.name, points);
-        scratch = await scratchFileUri(`${track.id}.gpx`);
-        await FileSystem.writeAsStringAsync(scratch, gpx);
-        await attachMediaLocal(linkedType, linkedId, {
-          uri: scratch,
-          mimeType: "application/gpx+xml",
-          fileName: `${track.name}.gpx`,
-        });
       } catch (err) {
         console.error(err);
         fail("That track couldn't be attached.");
       } finally {
-        if (scratch) {
-          await FileSystem.deleteAsync(scratch, { idempotent: true }).catch(
-            console.error,
-          );
-        }
         setBusy(false);
       }
     },
@@ -508,7 +486,7 @@ export function MediaStrip({
                 <Row
                   icon="track"
                   title="Attach a recorded track"
-                  subtitle="A track you recorded in Logjam"
+                  subtitle="A track you recorded in Logjam GPS"
                   onPress={() => setSourceMode("tracks")}
                 />
               </>
@@ -536,7 +514,7 @@ export function MediaStrip({
                     hue={track.color}
                     title={track.name}
                     subtitle={trackSummary(track)}
-                    onPress={() => void attachRecordedTrack(track)}
+                    onPress={() => void attachTrack(track)}
                   />
                 ))}
               </>
@@ -573,6 +551,9 @@ function AttachmentTile({
   onPress: () => void;
   onLongPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const category = mediaCategory(item.mediaType);
   const hasThumb = category !== null && categoryHasThumbnail(category);
   const tint = item.color ?? theme.neutral;
@@ -605,7 +586,7 @@ function AttachmentTile({
       )}
       {category === "video" ? (
         <View style={styles.playBadge}>
-          <Icon idea="play" size={12} color={theme.text} />
+          <Icon idea="play" size={12} color={ON_SCRIM} />
         </View>
       ) : null}
       {item.syncState === "pendingUpload" ? (
@@ -639,7 +620,7 @@ function trackSummary(track: Track): string {
 
 const TILE_SIZE = 96;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   row: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   emptyHint: { color: theme.textMuted, fontSize: fontSize.sm, maxWidth: 200 },
   tileWrap: { position: "relative" },
@@ -647,7 +628,7 @@ const styles = StyleSheet.create({
     width: TILE_SIZE,
     height: TILE_SIZE,
     borderRadius: radius.lg,
-    backgroundColor: theme.cardPressed,
+    backgroundColor: theme.card,
   },
   glyphTile: {
     alignItems: "center",
@@ -673,13 +654,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: scrim.light,
+    backgroundColor: scrim.heavy,
     paddingVertical: spacing(0.25),
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },
+  // Words on a scrim are white in every scheme (shared/DESIGN.md §7).
   pendingBadgeText: {
-    color: theme.text,
+    color: ON_SCRIM,
     fontSize: fontSize.xs,
     textAlign: "center",
   },
@@ -692,11 +674,7 @@ const styles = StyleSheet.create({
     gap: spacing(0.25),
   },
   addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
-  addTileLabel: {
-    color: theme.accent,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  addTileLabel: { ...textRole.caption, color: theme.accent },
   tileLoading: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
@@ -718,4 +696,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     textAlign: "center",
   },
-});
+}));

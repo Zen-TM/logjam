@@ -74,7 +74,7 @@
  * Accent clears 4.5:1 on the page (4.55) and fails it on a card in all four
  * schemes (3.63–4.05), and it sits at 1.2:1 against the muted sentence it lives
  * in — so colour alone would not identify it either (1.4.1), which is what the
- * underline is for. Measured: scripts/wcag-contrast.mjs, DESIGN.md §10. */
+ * underline is for. Measured: scripts/wcag-contrast.mjs, DESIGN.md. */
 .legal a {
   color: var(--color-text);
   text-decoration: underline;

@@ -19,3 +19,16 @@
   white-space: normal;
   box-shadow: var(--shadow-float);
 }
+
+/* The 8px between a control and its tip is part of the tip for the pointer, so
+   a slow hand crossing it never leaves both (WCAG 1.4.13, hoverable). A popover
+   clips its overflow by default, which would clip this too. */
+.tip {
+  overflow: visible;
+}
+
+.tip::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--space-1));
+}

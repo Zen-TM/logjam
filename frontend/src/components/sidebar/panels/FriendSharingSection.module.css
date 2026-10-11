@@ -1,5 +1,5 @@
 /* The per-friend sharing audit, inside the Friends page: hero and rail pinned,
-   only the list scrolls (DESIGN.md §2). */
+   only the list scrolls (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;

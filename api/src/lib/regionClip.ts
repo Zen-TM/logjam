@@ -8,7 +8,9 @@
 // never appear in URLs, filenames, error messages, or persisted storage.
 import { randomUUID } from "crypto";
 import {
+  DEM_SOURCES,
   MAX_REGION_AREA_KM2,
+  NSW_CONTOURS,
   regionEdgesKm,
   type RegionBbox,
 } from "@logjam/shared";
@@ -31,6 +33,14 @@ export const CLIP_TOKEN_TTL_MS = 120_000;
 export type RegionClipRequest = {
   bbox: RegionBbox;
   maxzoom: number;
+  /** Shallowest zoom kept; the archive's own when absent. */
+  minzoom?: number;
+  /**
+   * Set when the clip is of a DEM or contour archive, not the basemap. Its
+   * zooms are pinned to the ones its reader uses, so a saved area never holds
+   * a depth nothing reads.
+   */
+  archive?: { id: string; archivePath: string };
 };
 
 export type RegionClipValidation =
@@ -91,6 +101,34 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
     maxzoom = b.maxzoom;
   }
 
+  if (b.demSourceId !== undefined) {
+    const dem = DEM_SOURCES.find((source) => source.id === b.demSourceId);
+    if (!dem || dem.archivePath == null) {
+      return { ok: false, error: "Unknown elevation source" };
+    }
+    return {
+      ok: true,
+      value: {
+        bbox,
+        minzoom: dem.sampleZoom,
+        maxzoom: dem.sampleZoom,
+        archive: { id: dem.id, archivePath: dem.archivePath },
+      },
+    };
+  }
+
+  if (b.contours === true) {
+    return {
+      ok: true,
+      value: {
+        bbox,
+        minzoom: NSW_CONTOURS.minzoom,
+        maxzoom: NSW_CONTOURS.maxzoom,
+        archive: NSW_CONTOURS,
+      },
+    };
+  }
+
   return { ok: true, value: { bbox, maxzoom } };
 }
 
@@ -107,6 +145,7 @@ export function pmtilesExtractArgs(
   bboxArg: string,
   maxzoom: number,
   awsRegion: string,
+  minzoom?: number,
 ): string[] {
   const s3 = /^s3:\/\/([^/]+)\/(.+)$/.exec(archiveUri);
   return [
@@ -118,6 +157,7 @@ export function pmtilesExtractArgs(
     ...(s3 ? [`--bucket=s3://${s3[1]}?region=${awsRegion}`] : []),
     `--bbox=${bboxArg}`,
     `--maxzoom=${maxzoom}`,
+    ...(minzoom != null ? [`--minzoom=${minzoom}`] : []),
   ];
 }
 

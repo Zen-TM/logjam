@@ -16,7 +16,7 @@
 //     A provider request must be a plain HTTP client, in both senses.
 //   - a 403 or 429 stops the whole job immediately rather than retrying into it
 //
-// The ToS gate (DESIGN.md §2) was cleared by the operator for the three NSW SIX rasters,
+// The ToS gate (DESIGN.md) was cleared by the operator for the three NSW SIX rasters,
 // whose CC licence permits redistribution; `offlineCapable` in the shared basemap
 // catalog stays the single source of which sources may be downloaded at all.
 import { AppState } from "react-native";
@@ -25,10 +25,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import {
   BASEMAP_CATALOG,
-  DEM_ATTRIBUTION,
   DEM_SOURCE_ID,
-  DEM_TILE_URL_TEMPLATE,
   REGION_MIN_ZOOM,
+  TERRARIUM,
   planRegionTiles,
   type DownloadableTileSourceId,
   type RegionBbox,
@@ -41,6 +40,7 @@ import { insertArtifact, setArtifactSize } from "./registryDb";
 import {
   classifyTileResponse,
   deadTileBudget,
+  exhaustedTileOutcome,
   regionPlanHash,
   regionTileSequence,
   tileUrlFrom,
@@ -195,7 +195,11 @@ class TokenBucket {
 export async function connectionAllows(
   allowCellular: boolean,
 ): Promise<boolean> {
-  const state = await NetInfo.fetch();
+  // refresh(), not fetch(): fetch() answers from the last state NetInfo was
+  // sent, and the one sent while Android had the app's network blocked behind
+  // another app calls Wi-Fi metered. Back in front that left a download
+  // "waiting for Wi-Fi" on Wi-Fi for good (seen on the Android 15 emulator).
+  const state = await NetInfo.refresh();
   if (state.isConnected !== true) return false;
   return connectionAllowsMetered(state, allowCellular);
 }
@@ -216,8 +220,8 @@ function tileSourceFor(sourceId: DownloadableTileSourceId): {
 } {
   if (sourceId === DEM_SOURCE_ID) {
     return {
-      urlTemplate: DEM_TILE_URL_TEMPLATE,
-      attribution: DEM_ATTRIBUTION,
+      urlTemplate: TERRARIUM.urlTemplate,
+      attribution: TERRARIUM.credit,
       kind: "dem-region",
     };
   }
@@ -406,13 +410,6 @@ export async function runRegionDownload(
           halt.stop = { kind: "paused", reason: "connectivity" };
           return;
         }
-        if (AppState.currentState !== "active") {
-          // Foreground-only in v1 (§5.6): OS background budgets make a tile loop
-          // flaky, and the file is a lossless checkpoint, so parking is cheap.
-          halt.stop = { kind: "paused", reason: "background" };
-          return;
-        }
-
         let attempt = 0;
         for (;;) {
           await bucket.take();
@@ -437,6 +434,17 @@ export async function runRegionDownload(
           }
           attempt += 1;
           if (attempt >= MAX_TILE_ATTEMPTS) {
+            const outcome = exhaustedTileOutcome(
+              AppState.currentState,
+              await connectionAllows(spec.allowCellular),
+            );
+            if (outcome !== "dead") {
+              halt.stop = {
+                kind: "paused",
+                reason: outcome === "park" ? "background" : "connectivity",
+              };
+              return;
+            }
             dead += 1;
             if (dead > deadTileBudget(plan.totalTiles)) {
               halt.stop = { kind: "failed", code: "provider-errors" };
@@ -481,7 +489,7 @@ export async function runRegionDownload(
 
     // The real cost on disk, not this session's byte counter — a resumed job
     // only counted the tiles IT fetched, and Saved reports storage from this
-    // number (docs/ux-principles.md §11: report the true cost of a thing).
+    // number (shared/DESIGN.md §11: report the true cost of a thing).
     //
     // Read TWICE, because right now the file is still in WAL and almost all of
     // its bytes are in the `-wal` sidecar: this first stat is a placeholder so

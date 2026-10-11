@@ -50,6 +50,16 @@ export function subscribeReconnect(onReconnect: () => void): () => void {
   });
 }
 
+/**
+ * Whether the phone calls itself online right now, by the same reading as
+ * `useConnectivity`. Answers from the state NetInfo already holds: nothing is
+ * sent and nothing is armed.
+ */
+export async function isReachableNow(): Promise<boolean> {
+  const state = await NetInfo.fetch();
+  return state.isConnected === true && state.isInternetReachable !== false;
+}
+
 export function useConnectivity(forcedOffline = false): Connectivity {
   const [online, setOnline] = useState(true);
   const stableTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

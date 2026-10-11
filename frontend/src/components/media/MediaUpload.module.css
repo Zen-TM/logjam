@@ -62,9 +62,3 @@
     transform: rotate(360deg);
   }
 }
-
-.error {
-  font-size: var(--font-xs);
-  color: var(--color-warning);
-  word-break: break-word;
-}

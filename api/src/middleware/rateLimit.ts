@@ -87,6 +87,26 @@ export const friendsSearchLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// Minting a friend invite link. A person hands out a few; this bounds how many
+// rows one account can leave in friend_invites (they expire in days).
+export const friendInviteCreateLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+// Previewing and spending a link. The token is 256 random bits, so this is not
+// what stops guessing; it stops one account hammering the lookup.
+export const friendInviteRedeemLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const ropeWikiHeavyLimiter = rateLimit({
   windowMs: 5 * 60_000,
   max: 5,
@@ -95,10 +115,19 @@ export const ropeWikiHeavyLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
-// Protomaps region clips cost real S3 range-read work per call (stage4a §7.1).
+// Protomaps region clips. One clip is a `pmtiles extract` reading byte ranges
+// of the archive from S3 (under a second against a local copy; not timed in
+// prod, where the route kills it at 25 s), a temporary file of 1 to 7 MB in the bush and 80 MB at the very most, deleted
+// within two minutes, and that many bytes sent back. Cheap, so the limit is
+// set by the honest case, not the cost: Logjam GPS asks for one clip with
+// every area a signed-in user saves, and nobody frames, names and saves an
+// area a minute for an hour. It stays a limit because the worst case is not
+// free: 60 clips of 80 MB is about 5 GB of egress an hour per account.
+// Guard: `rateLimit.unit.test.ts` ("regionClipLimiter").
+export const REGION_CLIPS_PER_HOUR = 60;
 export const regionClipLimiter = rateLimit({
   windowMs: 60 * 60_000,
-  max: 10,
+  max: REGION_CLIPS_PER_HOUR,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,

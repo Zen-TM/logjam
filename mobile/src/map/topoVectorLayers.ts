@@ -11,9 +11,11 @@ import {
   OSM_POINT_FEATURE_KEYS,
   OSM_POINT_ICON,
   OSM_POINT_ICON_NATURAL_PX,
+  contourLabelHalo,
   contourWidthStops,
   featureLineWidthStops,
   iconTargetPx,
+  MAP_INK,
   rgbaCssFromHex,
   type OsmFeatureKey,
   type VectorStyleSettings,
@@ -113,7 +115,7 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         // along wiggly runs at low zoom (web parity, see Map.tsx).
         textMaxAngle: 150,
         textColor: rgbaCssFromHex(vs.contours.majorColour),
-        textHaloColor: "rgba(255, 255, 255, 0.8)",
+        textHaloColor: contourLabelHalo(vs.contours.majorColour),
         textHaloWidth: 1.5,
       },
     },
@@ -211,7 +213,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         symbolPlacement: "line",
         textMaxAngle: 60,
         textColor: rgbaCssFromHex(feat(key).colour),
-        textHaloColor: "rgba(255,255,255,0.8)",
+        textHaloColor: MAP_INK.labelHalo,
         textHaloWidth: 1.5,
       },
     });
@@ -269,7 +271,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         textOffset: [0, 0.8],
         textOptional: true,
         textColor: rgbaCssFromHex(feat(key).colour),
-        textHaloColor: "rgba(255,255,255,0.85)",
+        textHaloColor: MAP_INK.labelHalo,
         textHaloWidth: 1.5,
       },
     });

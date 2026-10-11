@@ -34,7 +34,70 @@ export const MAP_INK = {
   label: "#F7F3EC",
   /** The halo behind a map label, and the casing that sets a line off any basemap. */
   casing: "#4E4944",
+  /** The ring round a point mark, which separates it from any basemap. */
+  ring: "#FFFFFF",
+  /** The light halo behind a LiDAR topo's own label colour. */
+  labelHalo: "rgba(255,255,255,0.8)",
 } as const;
+
+/**
+ * The location marker's colour options.
+ *
+ * Not a scheme colour and not an `ASSET_HUES` kind: a preference the user sets
+ * for legibility against the ground they actually walk on — a blue arrow over
+ * blue water is the complaint this exists to answer. Scheme-independent for
+ * the same reason the asset hues are: the marker sits on a basemap, not on a
+ * scheme surface.
+ *
+ * Every entry is mid-light and saturated enough to hold up on aerial imagery,
+ * which is the busiest basemap here. The arrow keeps a white halo whatever is
+ * picked (see MapScreen), so none of these has to carry its own contrast.
+ */
+export const MARKER_COLORS = {
+  /** The original — the blue every mapping app trained the user on. */
+  blue: "#4285F4",
+  /** Warning-tape amber. Reads over water, scrub and imagery alike. */
+  amber: "#F5A524",
+  /** Signal red. The one people pick to find themselves fast. */
+  red: "#F2635F",
+  /** Fluoro green — a colour bushland does not contain. */
+  green: "#4ADE80",
+  /** Heath flower, as on the Places rail. */
+  violet: "#C77DD6",
+  /** No hue at all, for anyone who finds a coloured arrow noisy. */
+  white: "#FFFFFF",
+} as const;
+
+export type MarkerColorId = keyof typeof MARKER_COLORS;
+
+export const MARKER_COLOR_ORDER: readonly MarkerColorId[] = [
+  "blue",
+  "amber",
+  "red",
+  "green",
+  "violet",
+  "white",
+];
+
+/**
+ * The black veils: `light` under a bottom sheet, `heavy` behind chrome drawn
+ * over the map, `photo` behind a full-resolution photo (judged against black,
+ * so no scheme tint). The only black-alpha overlays; everything else derives
+ * from the scheme.
+ */
+export const SCRIM = {
+  light: "rgba(0,0,0,0.5)",
+  heavy: "rgba(0,0,0,0.6)",
+  photo: "rgba(0,0,0,0.92)",
+} as const;
+
+/**
+ * Words and glyphs drawn on a `SCRIM`. White in every scheme: the veil is
+ * black whatever the scheme, so a scheme's dark `text` on it is near-zero
+ * contrast. `scripts/wcag-contrast.mjs` measures it on `SCRIM.heavy` over a
+ * white map.
+ */
+export const ON_SCRIM = "#FFFFFF";
 
 /**
  * Per-kind identity hues for map material and the things you draw on it.
@@ -93,10 +156,13 @@ export const RADIUS = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 /**
  * Spacing steps (8 × n), named by n. The one scale both clients lay out with:
  * Logjam GPS's `spacing(n)`, Logjam Web's `--space-<n>` (`--space-1-5` is 12).
- * A value off these steps is a decision to leave the system, and needs saying.
+ * 2 is a hairline gap inside one object (a label over its figure); 6 is not a
+ * step: inside one object take 4, between objects 8. Logjam GPS's `spacing()`
+ * takes only a `SpaceStep`, so an off-scale value does not typecheck.
  */
 export const SPACE_UNIT = 8;
 export const SPACE = {
+  "0.25": 2,
   "0.5": 4,
   "1": 8,
   "1.5": 12,
@@ -104,6 +170,28 @@ export const SPACE = {
   "3": 24,
   "4": 32,
   "6": 48,
+} as const;
+
+/** A key of `SPACE` as the number `spacing(n)` is called with. */
+export type SpaceStep = {
+  [K in keyof typeof SPACE]: K extends `${infer N extends number}` ? N : never;
+}[keyof typeof SPACE];
+
+/**
+ * The rhythm of a form, in px: how far a label sits from its control, one field
+ * from the next, and a section heading from what is above it. Both clients lay
+ * a form out with these three and no others (Logjam GPS's `Field`/`FormStack`
+ * and `SectionHeader`, Logjam Web's `--form-*` properties), so a control never
+ * sits a label's distance from the chips above it. Guard: `FORM_RHYTHM` in
+ * `designTokens.test.ts` holds the order label < field < section.
+ */
+export const FORM_RHYTHM = {
+  /** A label, a hint or an error to the control it is about. */
+  label: SPACE["0.5"],
+  /** One field (label, control, hint, error) to the next. */
+  field: SPACE["1.5"],
+  /** The space above a section heading, which divides two groups of fields. */
+  section: SPACE["2"],
 } as const;
 
 /**
@@ -119,6 +207,82 @@ export const FONT = {
 
 /** Type weights, the same on both media. */
 export const FONT_WEIGHT = { regular: 400, medium: 600, bold: 700 } as const;
+
+/**
+ * Type roles: which size and weight each kind of text takes, by client. A role
+ * names a size from `FONT` and a weight from `FONT_WEIGHT`, so the scale stays
+ * the one list of numbers; Logjam GPS reads them as `textRole.<name>` (theme.ts)
+ * and Logjam Web as `--text-<name>-size|weight|transform` (webTokens.ts). A
+ * client that does not draw a role has no entry for it. Colour is the screen's
+ * choice among `text` and `textMuted` (`muted` marks the roles that are always
+ * the second), never a role's.
+ */
+type TextRoleStyle<Size extends string> = {
+  size: Size;
+  weight: keyof typeof FONT_WEIGHT;
+  /** A section heading; shared/DESIGN.md §2. */
+  uppercase?: true;
+  muted?: true;
+};
+type TextRoleSpec = {
+  gps?: TextRoleStyle<keyof typeof FONT.gps>;
+  web?: TextRoleStyle<keyof typeof FONT.web>;
+};
+export const TEXT_ROLES = {
+  /** A screen's or a page's own title. */
+  title: {
+    gps: { size: "xl", weight: "bold" },
+    web: { size: "xl", weight: "bold" },
+  },
+  /** A sheet's, dialog's or side sheet's title. */
+  sheetTitle: {
+    gps: { size: "lg", weight: "bold" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** The one figure a hero carries. */
+  metric: {
+    gps: { size: "lg", weight: "medium" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** A figure in a grid of stats. */
+  statValue: {
+    gps: { size: "lg", weight: "bold" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** Running text and what the user types into a field. Logjam GPS only: Logjam
+   *  Web's body is the element's own. */
+  body: { gps: { size: "base", weight: "regular" } },
+  /** The label of a pill, chip, tab or small control. Logjam GPS only. */
+  control: { gps: { size: "sm", weight: "medium" } },
+  /** A figure or note small enough to sit on the map or inside a pill. Logjam
+   *  GPS only. */
+  caption: { gps: { size: "xs", weight: "medium" } },
+  /** A row's title. */
+  rowTitle: {
+    gps: { size: "base", weight: "medium" },
+    web: { size: "base", weight: "medium" },
+  },
+  /** What a row says under its title. */
+  subtitle: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "sm", weight: "regular", muted: true },
+  },
+  /** The label of a field or a control: sentence case, never a heading. */
+  label: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "sm", weight: "regular", muted: true },
+  },
+  /** A line under a control saying what it means. */
+  hint: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "xs", weight: "regular", muted: true },
+  },
+  /** A section heading or a stat caption: the only capitals. */
+  section: {
+    gps: { size: "xs", weight: "medium", uppercase: true, muted: true },
+    web: { size: "xs", weight: "medium", uppercase: true, muted: true },
+  },
+} as const satisfies Record<string, TextRoleSpec>;
 
 /**
  * Control heights in px, by pointer: `lg` buttons and text fields, `md`

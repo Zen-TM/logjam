@@ -10,7 +10,7 @@
 import { Alert, StyleSheet, View } from "react-native";
 
 import { formatBytes } from "../format";
-import { assetHue, spacing, theme } from "../theme";
+import { spacing, useTheme, useHues } from "../theme";
 import { Button, Row } from "../ui";
 import {
   cancelRegionDownload,
@@ -21,6 +21,9 @@ import {
 import { canPause, isRetryableFailure } from "./regionJobStatus";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+
   const { progress, state, spec } = job;
 
   const subtitle = (() => {
@@ -57,7 +60,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "connectivity":
           return "Paused — waiting for Wi-Fi";
         case "background":
-          return "Paused — Logjam has to stay open to download";
+          return "Paused — the maps stopped loading";
         case "provider-backoff":
           return "Paused — the map service is busy";
         default:

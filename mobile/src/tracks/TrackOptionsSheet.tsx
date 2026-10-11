@@ -5,26 +5,35 @@
 // ONE component for both, same shape and same reason as RouteOptionsSheet: the
 // actions have one definition in saved/assetActions.ts, and a track reached
 // from the map must not be a lesser object than one reached from Saved
-// (DESIGN.md §5). Rename, Send a copy and the stats are sub-modes of THIS
+// (DESIGN.md). Rename, Send a copy and the stats are sub-modes of THIS
 // sheet rather than second sheets (§6: never open a second sheet — swap the
 // content), so no caller can be the surface that forgot one.
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
+import { Alert, Text, View } from "react-native";
+import {
+  messageFromError,
+  TRACK_COLORS,
+  trackColorName,
+  wayVerbIcon,
+  wayVerbLabel,
+  type TrackPass,
+} from "@logjam/shared";
 
-import { assetHue, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row, ColourField } from "../ui";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { type Track } from "./tracksDb";
+import type { TripTrackSource } from "./tripTrackSource";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
+import { passedHereText } from "./passedHere";
 import { TrackStatsBody } from "./TrackStatsBody";
 import { useTrackDetail } from "./useTrackDetail";
 
@@ -33,7 +42,9 @@ export function TrackOptionsSheet({
   visible,
   onClose,
   onShowOnMap,
+  passes,
   onContinueRecording,
+  onLogTrip,
   onInfo,
   onError,
   allowNetwork = true,
@@ -44,23 +55,38 @@ export function TrackOptionsSheet({
   /**
    * Fly the map to this track. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md §5: "View on map" is the one row the two surfaces differ by).
+   * (DESIGN.md: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
   /**
+   * When this track was at the spot tapped to open the sheet. Map-only, for
+   * the same reason: Saved opens a track without pointing at any part of it.
+   */
+  passes?: readonly TrackPass[];
+  /**
    * Pick this recording back up. Owned by the MAP rather than by this sheet
    * because starting a recorder needs the location permission prompt, which
-   * cannot be raised from an open sheet (DESIGN.md §5 — the bug that made
+   * cannot be raised from an open sheet (DESIGN.md — the bug that made
    * "Take photo" look dead), and because the map is what has to enter
    * recording mode afterwards.
    */
   onContinueRecording: (track: Track) => void;
+  /**
+   * Open the trip form with this track in it. The caller's, as a place's
+   * "Log a trip here" is: the form is a sheet of its own, so this one closes
+   * and the screen opens that one. Required, so a surface cannot forget it.
+   */
+  onLogTrip: (track: TripTrackSource) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** False in "Simulating offline mode" — the stats sub-mode then reads
    *  elevation only from tiles already on the phone. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -104,6 +130,14 @@ export function TrackOptionsSheet({
     },
   );
 
+  const passedHere =
+    passes && track
+      ? passedHereText(passes, {
+          startMs: Date.parse(track.startedAt),
+          endMs: Date.parse(track.endedAt ?? track.updatedAt),
+        })
+      : null;
+
   const shareRowProps = useShareRowProps(online);
   const actions = track ? trackActions(track) : null;
   // THE sharing panel, in its "send a copy" mode — the same component every
@@ -145,7 +179,7 @@ export function TrackOptionsSheet({
     onError,
   });
 
-  if (!track || !actions) return null;
+  if (!track || !actions) return closedSheet;
 
   const close = () => {
     setRenaming(false);
@@ -175,7 +209,7 @@ export function TrackOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §4 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = renaming
     ? () => setRenaming(false)
     : sending
@@ -189,7 +223,7 @@ export function TrackOptionsSheet({
   return (
     <BottomSheet
       visible={visible}
-      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §4).
+      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md).
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the track's own name: it is the same subject,
       // seen as numbers.
@@ -251,6 +285,7 @@ export function TrackOptionsSheet({
         </View>
       ) : (
         <View style={styles.body}>
+          {passedHere ? <Text style={styles.note}>{passedHere}</Text> : null}
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
@@ -269,6 +304,20 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
+          {/* The same verb, word and glyph as the web's, first among the verbs
+              after the one that goes to the line. */}
+          {actions.logTrip ? (
+            <Row
+              title={wayVerbLabel("logTrip", "gps")}
+              icon={wayVerbIcon("logTrip")}
+              hue={assetHue.track}
+              disabled={busy}
+              onPress={() => {
+                close();
+                if (actions.logTrip) onLogTrip(actions.logTrip);
+              }}
+            />
+          ) : null}
           <ColourField
             label="Colour"
             palette={TRACK_COLORS}
@@ -282,7 +331,7 @@ export function TrackOptionsSheet({
             }}
           />
           {/* What this track IS, one tap in — a tapped line opens the verbs
-              now, and the numbers are behind this row (DESIGN.md §5). */}
+              now, and the numbers are behind this row (DESIGN.md). */}
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"
@@ -398,6 +447,7 @@ export function TrackOptionsSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: spacing(1) },
-});
+  note: { color: theme.textMuted, fontSize: fontSize.sm },
+}));

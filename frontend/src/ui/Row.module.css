@@ -170,13 +170,13 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
-  font-size: var(--font-base);
-  font-weight: 600;
+  font-size: var(--text-row-title-size);
+  font-weight: var(--text-row-title-weight);
   color: var(--color-text);
 }
 
 .subtitle {
-  font-size: var(--font-sm);
+  font-size: var(--text-subtitle-size);
   color: var(--color-text-muted);
 }
 

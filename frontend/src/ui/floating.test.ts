@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { floatingPosition } from "./floating";
 
@@ -54,5 +57,28 @@ describe("floatingPosition", () => {
     expect(
       floatingPosition(box(10, 980), size, viewport, "bottom-start"),
     ).toEqual({ top: 58, left: 792 });
+  });
+});
+
+// WCAG 1.4.13 (hoverable): the tooltip's `::before` covers the gap
+// `floatingPosition` leaves (8px = `--space-1`), so a slow pointer crossing it
+// is off both the control nor the tip. Browser-checked: without it
+// the tip closed when the crossing took over 150ms.
+// Mutation that turns it red: delete the `.tip::before` rule in Tooltip.module.css.
+describe("Tooltip bridges its gap", () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "Tooltip.module.css"),
+    "utf8",
+  );
+
+  it("pads the tip by the gap on every side, and does not clip it", () => {
+    expect(css).toMatch(
+      /\.tip::before\s*{[^}]*inset:\s*calc\(-1 \* var\(--space-1\)\)/,
+    );
+    expect(css).toMatch(/\.tip\s*{\s*overflow:\s*visible/);
+    expect(
+      floatingPosition(box(100, 100), size, viewport, "bottom-start").top -
+        box(100, 100).bottom,
+    ).toBe(8);
   });
 });

@@ -46,7 +46,7 @@
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
    only on the page colour, and an outline button also sits on cards (a row's
-   Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md §1). */
+   Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md). */
 .outline {
   border-color: var(--color-accent);
   color: var(--color-text);
@@ -115,12 +115,13 @@
   transition: background-color var(--motion-fast);
 }
 
-.iconButton:hover:not(:disabled) {
+.iconButton:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-text) 10%, transparent);
   color: var(--color-text);
 }
 
-.iconButton:disabled {
+.iconButton:disabled,
+.iconButton[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
   cursor: default;
 }
@@ -142,7 +143,7 @@
   color: var(--color-on-inverse);
 }
 
-.iconButton.onInverse:hover:not(:disabled) {
+.iconButton.onInverse:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-on-inverse) 10%, transparent);
   color: var(--color-on-inverse);
 }

@@ -2,7 +2,7 @@
 //
 // ONE panel, because the two tools are one interaction: the same anchors, the
 // same drag/delete handles, the same snapping. They differ at the EXIT and in
-// the ink (docs/ux-principles.md §11) — measure has no Save and draws dotted — and a second
+// the ink (shared/DESIGN.md §11) — measure has no Save and draws dotted — and a second
 // component would have been a second place for the shared 90 % to rot.
 //
 // A TOOLBAR, not a card. While a tool is armed it takes the SEARCH PILL'S SLOT
@@ -32,10 +32,15 @@
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   formatDistanceM,
   routeLengthM,
+  mapMeasurePointsLabel,
+  mapMeasureVerbs,
+  type MapMeasureVerb,
+  type MapMeasureVerbId,
+  MAP_MEASURE_START_NOTE,
   MAX_ROUTE_POINTS,
   TRACK_COLORS,
   trackColorName,
@@ -44,16 +49,19 @@ import {
 
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
-import { Button, IconButton, ColourField } from "../ui";
+import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
+const VERBS = Object.fromEntries(
+  mapMeasureVerbs("gps").map((verb) => [verb.id, verb]),
+) as Record<MapMeasureVerbId, MapMeasureVerb>;
 
 export function DraftToolPanel({
   tool,
@@ -103,6 +111,9 @@ export function DraftToolPanel({
    */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { profile, loading } = useElevationProfile([points], { allowNetwork });
   const hasLine = points.length >= 2;
 
@@ -117,9 +128,9 @@ export function DraftToolPanel({
         <Text style={styles.meta} numberOfLines={1}>
           {anchorCount === 0
             ? tool === "measure"
-              ? "Tap the map to measure"
+              ? MAP_MEASURE_START_NOTE.gps
               : "Tap the map to start"
-            : `${anchorCount} point${anchorCount === 1 ? "" : "s"}`}
+            : mapMeasurePointsLabel(anchorCount)}
         </Text>
         <View style={styles.spacer} />
         <ElevationReadout profile={profile} loading={loading} />
@@ -132,9 +143,9 @@ export function DraftToolPanel({
       ) : null}
 
       {atCap ? (
-        <Text style={styles.note}>
-          Maximum of {MAX_ROUTE_POINTS} points reached.
-        </Text>
+        <FieldError
+          message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+        />
       ) : null}
 
       <SnapPicker
@@ -151,12 +162,12 @@ export function DraftToolPanel({
         <View style={styles.group}>
           <IconButton
             icon="undo"
-            accessibilityLabel="Undo the last change"
+            accessibilityLabel={VERBS.undo.label}
             disabled={!canUndo || saving}
             onPress={onUndo}
           />
           <Button
-            label="Clear"
+            label={VERBS.clear.label}
             variant="outlineAccent"
             compact
             disabled={points.length === 0 || saving}
@@ -194,7 +205,7 @@ export function DraftToolPanel({
             color={theme.warning}
             accessibilityLabel={
               tool === "measure"
-                ? "Clear the measurement and close the tool"
+                ? VERBS.leave.label
                 : "Discard this route and close the tool"
             }
             disabled={saving}
@@ -215,7 +226,7 @@ export function DraftToolPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   bar: {
     backgroundColor: withAlpha(theme.page, 0.94),
     borderRadius: radius.lg,
@@ -223,25 +234,23 @@ const styles = StyleSheet.create({
     borderColor: withAlpha(theme.accent, 0.4),
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(1),
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   distance: {
+    ...textRole.sheetTitle,
     color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
     fontVariant: ["tabular-nums"],
   },
   meta: { color: theme.textMuted, fontSize: fontSize.xs, flexShrink: 1 },
   editing: { color: theme.textMuted, fontSize: fontSize.xs },
-  note: { color: theme.warning, fontSize: fontSize.xs },
   actions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "wrap",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
-  group: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  group: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   spacer: { flex: 1 },
-});
+}));

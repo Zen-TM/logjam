@@ -38,6 +38,8 @@ import {
   type StandaloneFile,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
+  wayVerbIcon,
+  MAP_MEASURE,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -49,6 +51,7 @@ import {
   ownerUsername,
   shareEntityWith,
   unshareEntityWith,
+  recolourMedia,
   renameMedia,
   sendCopyOfMedia,
   type TRoute,
@@ -77,12 +80,14 @@ import {
   type Stat,
   type Glyph,
 } from "../../../ui";
+import type { TripLogTrack } from "../../dialogs/TripLogDialog";
 import { wayProperties, wayVerbs, type WayVerbId } from "./wayActions";
 import type { WayItem } from "./waysModel";
 import classes from "./WayDetailPanel.module.css";
 
 const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   openPlace: "place",
+  logTrip: wayVerbIcon("logTrip"),
   edit: "edit",
   copy: "copy",
   copyAndRemove: "moveCopy",
@@ -122,6 +127,7 @@ export default function WayDetailPanel({
   onCopied,
   onChanged,
   onOpenPlace,
+  onLogTrip,
   onDeleteFile,
   routeHover,
 }: {
@@ -137,7 +143,7 @@ export default function WayDetailPanel({
    * A verb a ROW asked for, run once this page mounts. It is how one verb list
    * serves both surfaces: a row shows Share, Rename and Delete without hosting
    * a second copy of each form (wayActions.ts). CONSUMED, never counted — a
-   * request that stays set fires again on every re-render (DESIGN.md §6).
+   * request that stays set fires again on every re-render (DESIGN.md).
    */
   initialVerb: WayVerbId | null;
   onVerbConsumed: () => void;
@@ -156,6 +162,9 @@ export default function WayDetailPanel({
   onCopied: (copy: TRoute) => void;
   onChanged: () => void;
   onOpenPlace: (placeId: string) => void;
+  /** Open the trip form with this track in it. The form is App's, as the
+   *  place pages' is theirs: a dialog over the map, not part of this page. */
+  onLogTrip: (track: TripLogTrack) => void;
   onDeleteFile: (file: StandaloneFile) => Promise<void>;
   /** Where along a route the elevation cursor sits, so the map marks it. A
    *  channel rather than a callback into App state: it changes many times a
@@ -383,6 +392,17 @@ export default function WayDetailPanel({
       case "openPlace":
         if (way.placeId) onOpenPlace(way.placeId);
         return;
+      case "logTrip":
+        if (file) {
+          onLogTrip({
+            mediaId: file.id,
+            filename: file.filename,
+            startedAt: file.metadata.startedAt ?? null,
+            // Only a place the user owns: a trip links nobody else's.
+            placeId: linkedPlace?.id ?? null,
+          });
+        }
+        return;
       case "edit":
         if (route) onEdit(route);
         return;
@@ -552,7 +572,7 @@ export default function WayDetailPanel({
         {route && (
           <section className={classes.section}>
             {profileLoading && (
-              <p className={classes.note}>Reading the terrain…</p>
+              <p className={classes.note}>{MAP_MEASURE.copy.readingTerrain}</p>
             )}
             {profileError && <p className={classes.note}>{profileError}</p>}
             {profile && (
@@ -582,9 +602,7 @@ export default function WayDetailPanel({
         )}
 
         {/* ── Properties: changed in place, never in the ⋯ (wayActions.ts) ── */}
-        {/* Route-only: a file's colour is set by whatever made the file, and
-            the API has no way to change it (wayActions.ts). */}
-        {properties.colour && route && (
+        {properties.colour && (route || file) && (
           <section className={classes.section}>
             <ColourField
               label="Colour"
@@ -597,7 +615,10 @@ export default function WayDetailPanel({
               onChange={(next) => {
                 setPendingColour(next);
                 void run(
-                  () => updateRoute(route.id, { color: next }),
+                  () =>
+                    route
+                      ? updateRoute(route.id, { color: next })
+                      : recolourMedia(file!.id, next),
                   "Couldn't change the colour.",
                 );
               }}
@@ -615,6 +636,7 @@ export default function WayDetailPanel({
                   compact
                   icon="unlink"
                   disabled={busy}
+                  disabledReason="Working…"
                   onClick={handleUnlink}
                 >
                   Unlink
@@ -785,7 +807,7 @@ export default function WayDetailPanel({
 }
 
 /** Renaming a file, as a form with a Cancel — never a live field that commits
- *  on blur (DESIGN.md §3). */
+ *  on blur (DESIGN.md). */
 function RenameWayDialog({
   file,
   busy,
@@ -799,8 +821,20 @@ function RenameWayDialog({
 }) {
   const current = mediaDisplayName(file);
   const [name, setName] = useState(current);
-  const trimmed = name.trim();
-  const canSave = trimmed.length > 0 && trimmed !== current;
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      setError("File name is required");
+      return;
+    }
+    if (trimmed === current) {
+      onClose();
+      return;
+    }
+    onSave(trimmed);
+  }
 
   return (
     <Dialog
@@ -810,15 +844,10 @@ function RenameWayDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={busy}
-            disabled={!canSave}
-            onClick={() => onSave(trimmed)}
-          >
+          <Button variant="filled" busy={busy} onClick={save}>
             Save
           </Button>
         </>
@@ -827,11 +856,15 @@ function RenameWayDialog({
       <TextField
         label="File name"
         value={name}
-        onChange={(event) => setName(event.target.value)}
+        error={error}
+        onChange={(event) => {
+          setName(event.target.value);
+          setError(null);
+        }}
         onKeyDown={(event) => {
-          if (event.key !== "Enter" || !canSave) return;
+          if (event.key !== "Enter") return;
           event.preventDefault();
-          onSave(trimmed);
+          save();
         }}
         data-autofocus
       />

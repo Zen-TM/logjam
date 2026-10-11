@@ -32,11 +32,6 @@
   color: var(--color-text);
 }
 
-.typeGlyph {
-  color: var(--tile-hue, var(--color-accent));
-  flex-shrink: 0;
-}
-
 .pills {
   display: flex;
   flex-wrap: wrap;
@@ -108,7 +103,7 @@
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--color-accent);
+  color: var(--color-text);
   cursor: pointer;
   text-decoration: underline;
 }

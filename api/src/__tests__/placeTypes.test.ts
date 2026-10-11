@@ -1,4 +1,5 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import request from "supertest";
 
 import { throttleWrites } from "./_rateLimitGate";
@@ -440,6 +441,110 @@ describe("place type lifecycle", () => {
     // Copy reconciliation matches an incoming type BY NAME, so two types with
     // one name would make that match ambiguous.
     expect(again.status).toBe(409);
+  });
+
+  // The database's unique index is exact, so "cave" beside "Cave" used to be
+  // two tabs with one name. Mutation: drop `settlePlaceTypeName` from
+  // `createPlaceType`.
+  it("refuses a name that only differs in case or spacing", async () => {
+    const stamp = Date.now();
+    await makeType(ALICE_SUB, `Rock Pool ${stamp}`);
+    const again = await write(() =>
+      request(API_URL)
+        .post("/place-types")
+        .set(as(ALICE_SUB))
+        .send({
+          name: `  rock   pool ${stamp} `,
+          iconKey: "map-pin",
+          color: PLACE_TYPE_COLORS[1],
+        }),
+    );
+    expect(again.status).toBe(409);
+    expect(again.body.error).toMatch(/already have/);
+  });
+
+  it("refuses a built-in's name", async () => {
+    const res = await write(() =>
+      request(API_URL).post("/place-types").set(as(ALICE_SUB)).send({
+        name: "canyon",
+        iconKey: "map-pin",
+        color: PLACE_TYPE_COLORS[1],
+      }),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a rename onto another type's name, and allows recasing its own", async () => {
+    const stamp = Date.now();
+    await makeType(ALICE_SUB, `Lookout ${stamp}`);
+    const id = await makeType(ALICE_SUB, `Peak ${stamp}`);
+    const clash = await write(() =>
+      request(API_URL)
+        .patch(`/place-types/${id}`)
+        .set(as(ALICE_SUB))
+        .send({ name: `LOOKOUT ${stamp}` }),
+    );
+    expect(clash.status).toBe(409);
+    const recase = await write(() =>
+      request(API_URL)
+        .patch(`/place-types/${id}`)
+        .set(as(ALICE_SUB))
+        .send({ name: `PEAK ${stamp}` }),
+    );
+    expect(recase.status).toBe(200);
+    expect(recase.body.name).toBe(`PEAK ${stamp}`);
+  });
+
+  // The push twin KEEPS the type under the next free name instead: it was made
+  // with no signal, and a refused create can only be discarded on the phone,
+  // which discards every place made of that type. Mutation: pass "refuse" from
+  // `applyPlaceTypeOp`.
+  it("renames a pushed type whose name is taken, on create and on rename", async () => {
+    const stamp = Date.now();
+    const name = `Cave ${stamp}`;
+    await makeType(ALICE_SUB, name);
+    const push = (ops: unknown[]) =>
+      write(() =>
+        request(API_URL)
+          .post("/sync/push")
+          .set(as(ALICE_SUB))
+          .set({ "x-logjam-client": "mobile/0.1.0-test" })
+          .send({ protocol: 1, ops }),
+      );
+
+    const id = randomUUID();
+    created.push(id);
+    const create = await push([
+      {
+        opId: randomUUID(),
+        entity: "placeType",
+        op: "create",
+        id,
+        fields: {
+          name: name.toLowerCase(),
+          iconKey: "map-pin",
+          color: PLACE_TYPE_COLORS[1],
+        },
+      },
+    ]);
+    expect(create.status, JSON.stringify(create.body)).toBe(200);
+    expect(create.body.results[0].status).toBe("applied");
+    expect(create.body.results[0].row.name).toBe(`${name.toLowerCase()} (2)`);
+
+    const other = await makeType(ALICE_SUB, `Grotto ${stamp}`);
+    const rename = await push([
+      {
+        opId: randomUUID(),
+        entity: "placeType",
+        op: "update",
+        id: other,
+        fields: { name },
+      },
+    ]);
+    expect(rename.body.results[0].status, JSON.stringify(rename.body)).toBe(
+      "applied",
+    );
+    expect(rename.body.results[0].row.name).toBe(`${name} (3)`);
   });
 
   it("lets two DIFFERENT users each have a type of the same name", async () => {

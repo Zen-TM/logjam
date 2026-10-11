@@ -461,3 +461,46 @@ describe("a built-in definition is not the account's to change", () => {
     expect([...created, ...updated]).toEqual([]);
   });
 });
+
+// A definition made on this phone has no owner id until the server sends the
+// row back: the local INSERT has no column value for it. Reading that NULL as
+// "built-in" made a field the user had just added impossible to edit or delete
+// until the next pull, and for a guest for ever. The save reported success and
+// wrote nothing. Mutation: `row.ownerId === null` alone as the built-in test.
+describe("a definition made on this phone, not yet synced", () => {
+  const unsynced: ScopedCustomFieldDef = { ...water, ownerId: null };
+
+  it("is renamed and rescoped by a whole-list save", async () => {
+    defRows = [row(unsynced, "place", 0)];
+    await saveFieldDefs("place", [
+      {
+        ...unsynced,
+        label: "Water",
+        appliesToAllTypes: false,
+        placeTypeIds: ["type-cave"],
+      },
+    ]);
+    expect(updated).toEqual([
+      {
+        id: "row-water",
+        fields: {
+          label: "Water",
+          appliesToAllTypes: false,
+          placeTypeIds: ["type-cave"],
+        },
+      },
+    ]);
+  });
+
+  it("is deleted by a whole-list save that omits it", async () => {
+    defRows = [row(unsynced, "place", 0)];
+    await saveFieldDefs("place", []);
+    expect(deleted).toEqual(["row-water"]);
+  });
+
+  it("can be deleted on its own", async () => {
+    defRows = [row(unsynced, "place", 0)];
+    await expect(removeFieldDef("place", "water")).resolves.toBe(0);
+    expect(deleted).toEqual(["row-water"]);
+  });
+});

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@logjam/shared";
+import { ApiError, SYNC_GIVE_UP_AFTER_MS } from "@logjam/shared";
+
+import { markNoResponse } from "../api/noResponse";
 
 // Two lifecycle bugs, both of which only appear when a cycle FAILS:
 //
@@ -33,7 +35,12 @@ vi.mock("react-native", () => ({
     },
   },
 }));
-vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
+/** What the phone says about its own link. */
+let reachable = true;
+vi.mock("../map/connectivity", () => ({
+  subscribeReconnect: () => () => {},
+  isReachableNow: () => Promise.resolve(reachable),
+}));
 // Who the server says is signed in. `null` = /users/me fails (offline).
 let serverUserId: string | null = "user-1";
 let mirrorClears = 0;
@@ -48,8 +55,10 @@ vi.mock("../offline/networkPolicy", () => ({
 }));
 // The flush reports what it left behind; a pass with nothing retrying is the
 // ordinary case and the one these tests are about.
+let flushError: unknown = null;
 vi.mock("./flush", () => ({
-  flushOutbox: () => Promise.resolve({ retrying: 0 }),
+  flushOutbox: () =>
+    flushError ? Promise.reject(flushError) : Promise.resolve({ retrying: 0 }),
 }));
 vi.mock("./mediaCache", () => ({
   syncThumbnailCache: () => Promise.resolve(),
@@ -91,18 +100,26 @@ vi.mock("./syncDb", () => ({
   },
 }));
 
-const { APPLY_FAILED_KEY, getSyncStatus, registerSyncTriggers, requestSync } =
-  await import("./syncEngine");
+const {
+  APPLY_FAILED_KEY,
+  UNANSWERED_KEY,
+  getSyncStatus,
+  registerSyncTriggers,
+  requestSync,
+} = await import("./syncEngine");
 
 /** Let the engine's promise chain settle without waiting on real timers. */
 async function settle(): Promise<void> {
-  for (let i = 0; i < 12; i += 1) await Promise.resolve();
+  for (let i = 0; i < 24; i += 1) await Promise.resolve();
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
   appState.currentState = "active";
   pullError = null;
+  flushError = null;
+  reachable = true;
+  delete stateWrites[UNANSWERED_KEY];
   pulls = 0;
   delete stateWrites[APPLY_FAILED_KEY];
   serverUserId = "user-1";
@@ -198,6 +215,83 @@ describe("failure classification", () => {
     await settle();
     expect(getSyncStatus().state).toBe("idle");
     expect(stateWrites[APPLY_FAILED_KEY]).toBeUndefined();
+    stop();
+  });
+});
+
+// An op that only ever gets no answer is never parked (flush.ts), so the
+// status line is the one place that can say the queue has stopped moving. The
+// clock it runs on is time this phone called itself online with Logjam GPS in
+// front of someone: a week in a canyon is not a fault to report.
+describe("changes waiting with no answer", () => {
+  const DAY_AND_A_BIT = SYNC_GIVE_UP_AFTER_MS + 30 * 60_000;
+
+  it("says so after a day of unanswered sends, online and in the foreground", async () => {
+    vi.setSystemTime(new Date("2026-10-06T02:00:00.000Z"));
+    const stop = registerSyncTriggers();
+    flushError = markNoResponse(new TypeError("Network request failed"));
+    await requestSync();
+    await vi.advanceTimersByTimeAsync(SYNC_GIVE_UP_AFTER_MS - 60 * 60_000);
+    expect(getSyncStatus().waitingSince).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(90 * 60_000);
+    expect(getSyncStatus().waitingSince).toBe("2026-10-06T02:00:00.000Z");
+    stop();
+  });
+
+  it("does not count time the phone called itself offline", async () => {
+    // Mutation: drop the `isReachableNow` check in noteUnanswered.
+    reachable = false;
+    const stop = registerSyncTriggers();
+    flushError = markNoResponse(new TypeError("Network request failed"));
+    await requestSync();
+    await vi.advanceTimersByTimeAsync(DAY_AND_A_BIT);
+    expect(getSyncStatus().waitingSince).toBeNull();
+    stop();
+  });
+
+  it("does not count time behind a dark screen", async () => {
+    // No ladder runs in the background (ADR 0013), so the next failure comes
+    // a day later, from the foreground edge. Mutation: add the whole gap
+    // between two failures instead of capping it.
+    const stop = registerSyncTriggers();
+    flushError = markNoResponse(new TypeError("Network request failed"));
+    appState.currentState = "background";
+    await requestSync();
+    await vi.advanceTimersByTimeAsync(DAY_AND_A_BIT);
+    appState.currentState = "active";
+    await requestSync();
+    await settle();
+    expect(getSyncStatus().waitingSince).toBeNull();
+    stop();
+  });
+
+  it("does not count a failure the server answered", async () => {
+    // An answered refusal has its own road to the user: the per-op tally.
+    const stop = registerSyncTriggers();
+    flushError = new ApiError(503, "/sync/push", "POST");
+    await requestSync();
+    await vi.advanceTimersByTimeAsync(DAY_AND_A_BIT);
+    expect(getSyncStatus().waitingSince).toBeNull();
+    stop();
+  });
+
+  it("keeps the count across a restart, and drops it at the first answer", async () => {
+    stateWrites[UNANSWERED_KEY] = JSON.stringify({
+      ms: SYNC_GIVE_UP_AFTER_MS,
+      since: "2026-10-06T02:00:00.000Z",
+    });
+    const stop = registerSyncTriggers();
+    flushError = markNoResponse(new TypeError("Network request failed"));
+    await requestSync();
+    await settle();
+    expect(getSyncStatus().waitingSince).toBe("2026-10-06T02:00:00.000Z");
+
+    flushError = null;
+    await requestSync();
+    await settle();
+    expect(getSyncStatus().waitingSince).toBeNull();
+    expect(stateWrites[UNANSWERED_KEY]).toBeUndefined();
     stop();
   });
 });

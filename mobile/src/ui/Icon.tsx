@@ -3,7 +3,7 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { ICONS, type IconIdea } from "@logjam/shared";
 import type { StyleProp, TextStyle } from "react-native";
 
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 
 type FeatherName = ComponentProps<typeof Feather>["name"];
 type MciName = ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -37,7 +37,7 @@ export type Glyph = IconIdea | { picked: FeatherName };
 export function Icon({
   idea,
   size = 20,
-  color = theme.text,
+  color,
   label,
   style,
 }: {
@@ -47,6 +47,9 @@ export function Icon({
   label?: string;
   style?: StyleProp<TextStyle>;
 }) {
+  const theme = useTheme();
+  color ??= theme.text;
+
   const a11y = label
     ? {
         accessible: true,

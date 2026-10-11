@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SYNC_GIVE_UP_AFTER_MS } from "@logjam/shared";
 
-import { markNoResponse } from "../api/noResponse";
+import { markNoResponse, markTransferCut } from "../api/noResponse";
 
 // Two head-of-line failures the flush engine used to have, both invisible to
 // the rest of the suite because they only appear when an op FAILS:
@@ -292,7 +292,7 @@ describe("who owns a rejection", () => {
   });
 
   it("still parks an edit whose row was deleted, however the code classifies", async () => {
-    // 404 on an update is delete-wins (DESIGN.md §4), not a flaky server.
+    // 404 on an update is delete-wins (DESIGN.md), not a flaky server.
     rows = [pushRow(1)];
     rejections.set("op-1", { code: 404, message: "not found" });
 
@@ -524,6 +524,54 @@ describe("media pass", () => {
     expect(mediaRuns).toEqual([1, 2, 3]);
     expect(rows.map((row) => row.seq)).toEqual([1]);
   });
+
+  it.each(NO_ANSWER)(
+    "stops the pass when the API gives no answer: %s",
+    async (_, make) => {
+      // On a dead link every queued upload used to spend its own 15 s timeout
+      // before the cycle reached the delta pull. The first unanswered API call
+      // says the link is down for all of them. Mutation: `continue` instead
+      // of `break` after the requeue in flushMediaOps.
+      rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
+      mediaErrors.set(1, make());
+
+      await expect(flushOutbox()).rejects.toBeDefined();
+
+      expect(mediaRuns).toEqual([1]);
+      expect(rows.map((row) => row.state)).toEqual([
+        "queued",
+        "queued",
+        "queued",
+      ]);
+      expect(rows.map((row) => row.attempts)).toEqual([1, 0, 0]);
+    },
+  );
+
+  it("gives the other uploads their turn after one dies mid-transfer", async () => {
+    // A transfer that dies says something about that file on this link (a
+    // large video on one bar), not that the API is unreachable: stopping
+    // here would let it block every small photo queued behind it.
+    rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
+    mediaErrors.set(1, markTransferCut(new Error("upload task failed")));
+
+    await expect(flushOutbox()).rejects.toBeDefined();
+
+    expect(mediaRuns).toEqual([1, 2, 3]);
+    expect(rows.map((row) => row.seq)).toEqual([1]);
+    expect(rows[0].error_json).toBeNull();
+  });
+
+  it.each(GATEWAY_STATUSES)(
+    "gives the other uploads their turn after one is answered %i",
+    async (status) => {
+      rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
+      mediaErrors.set(1, httpError(status));
+
+      await expect(flushOutbox()).rejects.toBeDefined();
+
+      expect(mediaRuns).toEqual([1, 2, 3]);
+    },
+  );
 
   it.each(NO_ANSWER)("never parks an upload over %s", async (_, make) => {
     // What the field trip hit: the retry ladder starts at one second, so a
