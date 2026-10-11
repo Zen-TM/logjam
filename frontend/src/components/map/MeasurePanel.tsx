@@ -55,12 +55,16 @@ export function MeasurePanel({
 
   const verbs: Record<
     MapMeasureVerbId,
-    { run: () => void; disabled: boolean }
+    { run: () => void; disabled: boolean; reason: string }
   > = {
-    undo: { run: onUndo, disabled: !canUndo },
-    clear: { run: onClear, disabled: points.length === 0 },
+    undo: { run: onUndo, disabled: !canUndo, reason: "Nothing to undo" },
+    clear: {
+      run: onClear,
+      disabled: points.length === 0,
+      reason: "No points to clear",
+    },
     // Logjam GPS's way out; here it is the hero's ×.
-    leave: { run: onClose, disabled: false },
+    leave: { run: onClose, disabled: false, reason: "" },
   };
 
   return (
@@ -104,7 +108,7 @@ export function MeasurePanel({
                 compact
                 onClick={verbs[verb.id].run}
                 disabled={verbs[verb.id].disabled}
-                disabledReason="No points to clear"
+                disabledReason={verbs[verb.id].reason}
               >
                 {verb.label}
               </Button>
