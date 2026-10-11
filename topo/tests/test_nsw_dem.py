@@ -40,6 +40,8 @@ class TestEncodeTerrarium(unittest.TestCase):
         out = decode(encode_terrarium(heights, np.ones_like(heights, bool)))
         np.testing.assert_array_equal(out, heights)
 
+    # Mutation: skip the rounding, or change ROUNDING_M, and tiles grow by a
+    # fifth to a third for digits finer than the data (docs/decisions/0029).
     def test_rounds_to_a_quarter_of_a_metre(self):
         heights = np.array([[100.1, 100.13, 100.4]], np.float32)
         out = decode(encode_terrarium(heights, np.ones_like(heights, bool)))
