@@ -58,7 +58,11 @@ import {
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import type { BasemapId, MapArtifact } from "./sourceResolver";
+import {
+  hasSavedImageryContours,
+  type BasemapId,
+  type MapArtifact,
+} from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -186,6 +190,9 @@ export function MapLayersSheet({
         onBasemapChange={onBasemapChange}
         contoursOverImagery={contoursOverImagery}
         onContoursOverImageryChange={onContoursOverImageryChange}
+        // Offline they come only from saved clips, so the switch is offered
+        // only when some saved area has them with imagery.
+        offersContours={online || hasSavedImageryContours(artifacts)}
         online={online}
       />
     ),
@@ -238,12 +245,14 @@ function BasemapTab({
   onBasemapChange,
   contoursOverImagery,
   onContoursOverImageryChange,
+  offersContours,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
   contoursOverImagery: boolean;
   onContoursOverImageryChange: (on: boolean) => void;
+  offersContours: boolean;
   online: boolean;
 }) {
   return (
@@ -285,9 +294,12 @@ function BasemapTab({
             />
             {/* Imagery has no contours of its own; the vector basemap always
               draws them (shared nswContours.ts). */}
-            {active && id === "six-imagery" ? (
+            {active && id === "six-imagery" && offersContours ? (
               <SwitchRow
                 title="Contours"
+                description={
+                  online ? undefined : "Only in saved areas that include them"
+                }
                 style={styles.itemRow}
                 checked={contoursOverImagery}
                 onChange={onContoursOverImageryChange}

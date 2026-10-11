@@ -247,7 +247,7 @@ export function RegionDownloadScreen({
   const isGuest = useAccountState().accountState === "guest";
   const [contoursOverImagery] = useState(readContoursOverImagery);
   // An add-on to the maps that draw contours, on until switched off.
-  const [saveContours, setSaveContours] = useState(true);
+  const [contoursChoice, setContoursChoice] = useState<boolean | null>(null);
   const downloadable = isGuest
     ? DOWNLOADABLE.filter((id) => id !== "protomaps")
     : DOWNLOADABLE;
@@ -390,7 +390,11 @@ export function RegionDownloadScreen({
   // Offered with any map that draws them, so it can look the same out of
   // range. A guest has none: the clip endpoint needs a signed-in user.
   const offersContours =
-    !isGuest &&
+    !isGuest && selected.some((id) => drawsNswContours(id, true));
+  // Until the user says: on when a chosen map draws them as the map screen
+  // is set now, so imagery alone starts where its own Contours switch is.
+  const saveContours =
+    contoursChoice ??
     selected.some((id) => drawsNswContours(id, contoursOverImagery));
   const includesContours = offersContours && saveContours;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
@@ -781,7 +785,7 @@ export function RegionDownloadScreen({
               }
               style={styles.contoursRow}
               checked={saveContours}
-              onChange={setSaveContours}
+              onChange={setContoursChoice}
             />
           ) : null}
 

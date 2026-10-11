@@ -378,6 +378,27 @@ export function basemapsCoveringViewport(
   );
 }
 
+/**
+ * Whether any saved area holds both imagery and a contour clip: offline, the
+ * only place contours can be drawn over imagery, so the only time offering to
+ * is honest.
+ */
+export function hasSavedImageryContours(
+  artifacts: readonly MapArtifact[],
+): boolean {
+  const withContours = new Set(
+    artifacts
+      .filter((a) => a.kind === "contours-region" && a.groupId != null)
+      .map((a) => a.groupId),
+  );
+  return artifacts.some(
+    (a) =>
+      a.kind === "basemap-region" &&
+      a.logicalKey === "six-imagery" &&
+      withContours.has(a.groupId),
+  );
+}
+
 export function resolveMapSource(
   ref: LogicalLayerRef,
   ctx: ResolveContext,

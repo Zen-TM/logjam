@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   basemapsCoveringViewport,
+  hasSavedImageryContours,
   resolveMapSource,
   hashKey,
   type BasemapId,
@@ -369,5 +370,27 @@ describe("statewide contours", () => {
         ctx({ connectivity: "offline" }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
+  });
+});
+
+describe("hasSavedImageryContours", () => {
+  const imagery = (groupId: string) =>
+    artifact({
+      id: `i-${groupId}`,
+      kind: "basemap-region",
+      logicalKey: "six-imagery",
+      groupId,
+    });
+  const contours = (groupId: string) =>
+    artifact({ id: `c-${groupId}`, kind: "contours-region", groupId });
+
+  // Mutation: test for a contour clip anywhere, and the switch is offered
+  // offline when the only contours saved are with a vector area, where
+  // switching it on over imagery draws nothing.
+  it("needs both in the same saved area", () => {
+    expect(hasSavedImageryContours([imagery("a"), contours("a")])).toBe(true);
+    expect(hasSavedImageryContours([imagery("a"), contours("b")])).toBe(false);
+    expect(hasSavedImageryContours([imagery("a")])).toBe(false);
+    expect(hasSavedImageryContours([])).toBe(false);
   });
 });

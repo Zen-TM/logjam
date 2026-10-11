@@ -355,7 +355,7 @@ const CONTOUR_TILE_BYTES: Record<
 > = {
   11: { meanBytes: 110_000, p90Bytes: 147_000 },
   12: { meanBytes: 40_000, p90Bytes: 47_000 },
-  13: { meanBytes: 70_000, p90Bytes: 84_000 },
+  13: { meanBytes: 15_000, p90Bytes: 18_000 },
   14: { meanBytes: 24_000, p90Bytes: 28_000 },
 };
 

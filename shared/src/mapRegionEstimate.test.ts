@@ -243,9 +243,9 @@ describe("planRegionForBasemaps", () => {
       true,
     );
     expect(without.contours).toBeNull();
-    // A real clip of 10 km of the Grose gorge is 2.3 MB.
-    expect(withClip.contours!.meanBytes).toBeGreaterThan(1_500_000);
-    expect(withClip.contours!.p90Bytes).toBeLessThan(4_000_000);
+    // A real clip of 10 km of the Grose gorge is 1.7 MB.
+    expect(withClip.contours!.meanBytes).toBeGreaterThan(1_200_000);
+    expect(withClip.contours!.p90Bytes).toBeLessThan(2_500_000);
     expect(withClip.meanBytes - without.meanBytes).toBe(
       withClip.contours!.meanBytes,
     );
