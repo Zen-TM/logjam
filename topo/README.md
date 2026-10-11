@@ -208,7 +208,7 @@ python3 build_nsw_dem.py pack dem/work dem/nsw-5m.pmtiles
 
 `fetch` with no sheet named downloads all 343 (65 GB). `fetch` and `tile` skip
 what is already done, so a stopped run carries on where it left off. The
-format and why: [ADR 0029](../docs/decisions/0029-dem-tiles-are-terrarium-png-in-pmtiles.md).
+format and why: [ADR 0030](../docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md).
 
 ---
 
