@@ -59,8 +59,10 @@ Proposal: #359.
   the track. Guards: `shared/src/elevation.test.ts`,
   `mobile/src/tracks/trackClimb.test.ts`. Cost: a stored figure can be older
   than the best terrain, a phone built with a new source before the API
-  serves it marks its tracks as asked, and an archive rebuilt inside an
-  unchanged `coverage` re-asks nothing. Everything else above stands.
+  serves it marks its tracks as asked, and the key sees only the declaration: an
+  archive rebuilt inside an unchanged `coverage` re-asks nothing, and a
+  source with no declared footprint (a LiDAR job's DEM) must change the key
+  itself when it gains ground. Everything else above stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS

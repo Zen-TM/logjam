@@ -94,8 +94,12 @@ vi.mock("./tracksDb", () => ({
 }));
 
 const { setOfflineOnly } = await import("../offline/offlineOnlyMode");
-const { climbFromSavedTerrain, storeTrackClimb, upgradeTrackClimbs } =
-  await import("./trackClimb");
+const {
+  climbFromSavedTerrain,
+  climbSourcesKey,
+  storeTrackClimb,
+  upgradeTrackClimbs,
+} = await import("./trackClimb");
 
 const LINE: [number, number][][] = [
   [
@@ -195,6 +199,29 @@ describe("storing a climb on a finished track", () => {
     rows = [track({ mediaId: null })];
     expect(await storeTrackClimb("track-1", climb("terrarium"))).toBe(true);
     expect(reclimbStandaloneMediaLocal).not.toHaveBeenCalled();
+  });
+});
+
+describe("the key a 'nothing finer' answer is filed under", () => {
+  const nsw = { id: "nsw-5m", coverage: [141, -37.5, 153.7, -28] as const };
+  const world = { id: "terrarium", coverage: null };
+  const key = climbSourcesKey([nsw, world]);
+
+  // Mutation: key on the ids alone and a source whose footprint grows is
+  // never asked about again; key on nothing and no upgrade is ever noticed.
+  it.each([
+    ["a source is added", [{ id: "vic-10m", coverage: null }, nsw, world]],
+    [
+      "a source's footprint grows",
+      [{ ...nsw, coverage: [140, -38, 154, -28] as const }, world],
+    ],
+    ["the precedence changes", [world, nsw]],
+  ])("changes when %s", (_what, sources) => {
+    expect(climbSourcesKey(sources)).not.toBe(key);
+  });
+
+  it("is the same for the same declaration, so nothing is asked twice", () => {
+    expect(climbSourcesKey([{ ...nsw }, { ...world }])).toBe(key);
   });
 });
 

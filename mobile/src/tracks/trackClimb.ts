@@ -21,6 +21,7 @@ import {
   climbFromProfile,
   densifyLineSegments,
   isFinerClimbSource,
+  type DemSource,
   type ElevationProfile,
   type TrackClimb,
 } from "@logjam/shared";
@@ -44,13 +45,19 @@ import {
  * climb for is asked about again only when this changes: a source added, or
  * one whose footprint grew. Nothing polls.
  *
- * ponytail: the declaration, not the archive behind it. A rebuilt archive
- * that fills holes inside an unchanged `coverage` re-asks nothing; give the
- * source a build number here if that ever happens.
+ * ponytail: the declaration, not what is behind it. Two changes it cannot
+ * see: an archive rebuilt to fill holes inside an unchanged `coverage`, and a
+ * source whose footprint is not declared at all (a DEM built per account at
+ * run time). Whatever adds the second must change this key when its footprint
+ * does, or have the API report a coverage version to compare instead.
+ * `trackClimb.test.ts` holds what the key does see.
  */
-const SOURCES_KEY = JSON.stringify(
-  DEM_SOURCES.map((source) => [source.id, source.coverage]),
-);
+export function climbSourcesKey(
+  sources: readonly Pick<DemSource, "id" | "coverage">[] = DEM_SOURCES,
+): string {
+  return JSON.stringify(sources.map((source) => [source.id, source.coverage]));
+}
+const SOURCES_KEY = climbSourcesKey();
 
 /**
  * Tracks one pass reads. Each is a full read of a series and maybe a request,
