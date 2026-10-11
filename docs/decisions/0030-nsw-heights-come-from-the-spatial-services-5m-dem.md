@@ -37,8 +37,9 @@ Property ... remains unchanged, maintained and preserved".
 - **All of the state**, not only the rugged or forested parts.
 - **The credit** is shown wherever a height from it is shown, and names the
   publisher, that the data is derived, the licence, and the month the sheets
-  were downloaded. The same text is in the archive's metadata. It is
-  `NSW_5M.credit`; the build takes the month as `--extracted`.
+  were downloaded. In Logjam it is `NSW_5M.credit`. The archive's metadata
+  carries the same four things, in the build's own words; the build takes the
+  month as `--extracted`.
 - **A rebuild** replaces the whole archive and updates the month in the credit
   in the same change.
 
