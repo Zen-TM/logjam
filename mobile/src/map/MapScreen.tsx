@@ -4360,8 +4360,8 @@ export function MapScreen({
     .join(" · ");
 
   const nswContoursStyle = useMemo(
-    () => nswContourStyle(vectorStyle, renderedBasemapId),
-    [vectorStyle, renderedBasemapId],
+    () => nswContourStyle(renderedBasemapId),
+    [renderedBasemapId],
   );
 
   // The ground band, bottom to top: the statewide contours, topo overlays,
@@ -4382,7 +4382,7 @@ export function MapScreen({
   }));
   const groundIds = [
     ...contoursResolved.flatMap((r) =>
-      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, vectorStyle),
+      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
     ),
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.

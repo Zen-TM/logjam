@@ -4,6 +4,10 @@
 // `topo/build_nsw_dem.py contours`, in the schema a topo area's own contour
 // layer has, so both clients style it with the code they already have.
 import { NSW_5M } from "./demSources.js";
+import {
+  VECTOR_STYLE_DEFAULTS,
+  type VectorStyleSettings,
+} from "./topoSettings.js";
 
 export const NSW_CONTOURS = {
   /** A saved clip is filed under this, beside the basemap it is drawn with. */
@@ -37,15 +41,18 @@ export function drawsNswContours(
 const OVER_IMAGERY = { majorColour: "#ffffffe6", minorColour: "#ffffff8c" };
 
 /**
- * The style the statewide contours are drawn in over a basemap: the user's
- * own topo style, with light lines over imagery.
+ * The style the statewide contours are drawn in: a fixed look, the brown of a
+ * paper map, with light lines over imagery. Deliberately NOT the user's topo
+ * style: that belongs to the LiDAR contours of a topo area, a different thing,
+ * and restyling one should not restyle the other.
  */
-export function nswContourStyle<
-  T extends { contours: { majorColour: string; minorColour: string } },
->(style: T, basemapId: string): T {
+export function nswContourStyle(basemapId: string): VectorStyleSettings {
   return basemapId === "six-imagery"
-    ? { ...style, contours: { ...style.contours, ...OVER_IMAGERY } }
-    : style;
+    ? {
+        ...VECTOR_STYLE_DEFAULTS,
+        contours: { ...VECTOR_STYLE_DEFAULTS.contours, ...OVER_IMAGERY },
+      }
+    : VECTOR_STYLE_DEFAULTS;
 }
 
 /**

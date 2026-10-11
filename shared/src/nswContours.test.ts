@@ -35,16 +35,14 @@ describe("drawsNswContours", () => {
 });
 
 describe("nswContourStyle", () => {
-  it("keeps the user's colours on the vector basemap", () => {
-    expect(nswContourStyle(VECTOR_STYLE_DEFAULTS, "protomaps")).toBe(
-      VECTOR_STYLE_DEFAULTS,
-    );
+  it("is the default topo look on the vector basemap", () => {
+    expect(nswContourStyle("protomaps")).toBe(VECTOR_STYLE_DEFAULTS);
   });
 
-  // Mutation: return the style untouched over imagery, and the default brown
-  // lines and their white-haloed labels are lost on dark ground.
+  // Mutation: return the same style over imagery, and the brown lines and
+  // their white-haloed labels are lost on dark ground.
   it("draws light lines, with a dark label halo, over imagery", () => {
-    const style = nswContourStyle(VECTOR_STYLE_DEFAULTS, "six-imagery");
+    const style = nswContourStyle("six-imagery");
     expect(style.contours.majorColour).toMatch(/^#ffffff/);
     expect(style.contours.majorWidthM).toBe(
       VECTOR_STYLE_DEFAULTS.contours.majorWidthM,

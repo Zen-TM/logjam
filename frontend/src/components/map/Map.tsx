@@ -257,15 +257,13 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  */
 export const NSW_CONTOURS_ENTRY_ID = "nswcontours";
 
-/** The statewide contours take light lines over imagery (shared nswContours.ts). */
-function paintStyleFor<T extends Parameters<typeof nswContourStyle>[0]>(
+/** The statewide contours have their own fixed look (shared nswContours.ts). */
+function paintStyleFor(
   entryId: string,
-  style: T,
+  style: VectorStyleSettings,
   basemapId: string,
-): T {
-  return entryId === NSW_CONTOURS_ENTRY_ID
-    ? nswContourStyle(style, basemapId)
-    : style;
+): VectorStyleSettings {
+  return entryId === NSW_CONTOURS_ENTRY_ID ? nswContourStyle(basemapId) : style;
 }
 
 function addProtomapsBasemap(
