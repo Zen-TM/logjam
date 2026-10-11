@@ -450,9 +450,9 @@ export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
       : job,
   );
   publish();
-  void import("./registryDb").then((registry) =>
-    registry.renameArtifactGroup(groupId, groupLabel),
-  );
+  void import("./registryDb")
+    .then((registry) => registry.renameArtifactGroup(groupId, groupLabel))
+    .catch((err) => console.error(err));
 }
 
 /** Stop for now; the partial MBTiles keeps every tile already fetched. */
@@ -476,7 +476,7 @@ export function cancelRegionDownload(id: string): void {
   }
   jobs = jobs.filter((job) => job.spec.id !== id);
   publish();
-  void deleteAbandonedRegion(id);
+  deleteAbandonedRegion(id).catch((err) => console.error(err));
 }
 
 /**
