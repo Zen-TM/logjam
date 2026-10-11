@@ -46,9 +46,17 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BASEMAP_CATALOG, MAP_INK } from "@logjam/shared";
 
 import { config } from "../config";
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import {
+  ON_SCRIM,
+  radius,
+  scrim,
+  spacing,
+  makeStyles,
+  useTheme,
+} from "../theme";
 import { Button } from "../ui";
 import {
   useMirrorPlaces,
@@ -63,12 +71,13 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import { RoutesLayer } from "./RoutesLayer";
+import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import {
   resolveMapSource,
   type BasemapId,
@@ -117,6 +126,9 @@ export function PickPointScreen({
   onCancel: () => void;
   onConfirm: (point: PickedPoint) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is only honoured on the first render, and
   // re-reading the module store mid-session would move a map the user is
@@ -136,9 +148,9 @@ export function PickPointScreen({
     : (lastCamera?.zoom ?? DEFAULT_ZOOM);
 
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
 
   // Saved regions count here exactly as they do on the map: a picker that only
@@ -283,7 +295,7 @@ export function PickPointScreen({
               style={{
                 circleRadius: 8,
                 circleColor: theme.accent,
-                circleStrokeColor: "#ffffff",
+                circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 3,
               }}
             />
@@ -298,7 +310,7 @@ export function PickPointScreen({
           <Pressable
             key={id}
             accessibilityRole="button"
-            accessibilityLabel={`Use the ${id} basemap`}
+            accessibilityLabel={`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? "this map"}`}
             accessibilityState={{ selected: id === basemapId }}
             style={[styles.thumb, id === basemapId && styles.thumbActive]}
             onPress={() => setBasemapId(id)}
@@ -307,6 +319,8 @@ export function PickPointScreen({
           </Pressable>
         ))}
       </View>
+
+      <MapBackButton top={insets.top + spacing(2)} onPress={onCancel} />
 
       <View
         style={[styles.hint, { top: insets.top + spacing(2) }]}
@@ -330,10 +344,10 @@ export function PickPointScreen({
         <View style={styles.action}>
           <Button
             label="Use this point"
-            icon="check"
+            icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
-            // disabled one saying why (DESIGN.md §7), which is what the hint
+            // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
             onPress={() => picked && onConfirm(picked)}
@@ -349,8 +363,8 @@ function noop() {}
 /** Stable empty list — a fresh `[]` per render defeats RoutesLayer's memo. */
 const EMPTY_ROUTES: never[] = [];
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+const useStyles = makeStyles((theme, textRole) => ({
+  root: { flex: 1, backgroundColor: theme.page },
   basemaps: {
     position: "absolute",
     right: spacing(2),
@@ -366,19 +380,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   thumbActive: { borderColor: theme.accent },
+  // After the back button, which owns the top left.
   hint: {
     position: "absolute",
-    left: spacing(2),
+    left: MAP_BACK_SPACE,
     backgroundColor: scrim.heavy,
     borderRadius: radius.md,
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1),
   },
-  hintText: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  // On a scrim, so white in every scheme (shared/DESIGN.md §7).
+  hintText: { ...textRole.hint, color: ON_SCRIM },
   actions: {
     position: "absolute",
     left: 0,
@@ -388,7 +400,7 @@ const styles = StyleSheet.create({
     gap: spacing(1.5),
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   action: { flex: 1 },
-});
+}));

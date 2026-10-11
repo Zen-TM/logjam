@@ -16,9 +16,10 @@
 // (see regionFrame.ts).
 //
 // PRIVACY: the framed bbox exists in component state and goes to the provider as
-// tile coordinates only. Nothing about the area reaches the Logjam API — the
-// tile-pyramid path never calls it (mobile/CLAUDE.md: region-of-interest bboxes
-// stay off the server).
+// tile coordinates only. The one place it reaches the Logjam API is the body of
+// the vector clip request, which every signed-in save now makes
+// (offline/regionDownloads.ts; the API redacts it from logs and keeps the clip
+// 120 s). A guest's save makes no Logjam request at all.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -41,6 +42,8 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
+  NSW_5M,
+  NSW_CONTOURS,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
@@ -49,22 +52,15 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  surface,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 import {
   BottomSheet,
   Button,
   Chip,
-  HeroHeader,
-  SectionHeader,
-  SegmentedControl,
+  Field,
+  Hero,
+  Notice,
+  ChipRail,
   TextField,
 } from "../ui";
 import {
@@ -74,11 +70,11 @@ import {
 } from "../offline/regionDownloadQueue";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
+import { vectorClipFor } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
-import { BASEMAP_META } from "./basemapMeta";
+import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { nextRegionName } from "./regionName";
@@ -99,21 +95,15 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * The three NSW SIX rasters are here because their CC licence permits
  * redistribution (operator-verified); the OSM-family sources are NOT, and are
  * absent rather than disabled — an affordance that exists only to refuse is
- * worse than no affordance. `protomaps` is our own self-hosted vector basemap and
- * arrives as one clip file rather than a tile pyramid (see the queue's two task
- * kinds), which is why it is priced differently below.
+ * worse than no affordance.
+ *
+ * `protomaps`, our own vector basemap, is not a choice here: it comes with
+ * every area a signed-in user saves (`vectorClipFor`). It is a few megabytes
+ * against tens for one raster, and the route and measure tools snap to it, so
+ * leaving it optional meant a tool that quietly stopped working in the field.
  */
-type SelectableId = OfflineBasemapId | "protomaps";
-const DOWNLOADABLE: SelectableId[] = [
-  "six-topo",
-  "six-base",
-  "six-imagery",
-  "protomaps",
-];
-
-function isRasterPyramid(id: SelectableId): id is OfflineBasemapId {
-  return id !== "protomaps";
-}
+type SelectableId = OfflineBasemapId;
+const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
 
 /**
  * Chip labels, not the catalog's picker names: "SIX Maps Base Map" on a chip
@@ -124,7 +114,6 @@ const DOWNLOAD_CHIP_LABEL: Record<SelectableId, string> = {
   "six-topo": "Topo",
   "six-base": "Base Map",
   "six-imagery": "Imagery",
-  protomaps: "Vector",
 };
 
 /**
@@ -156,6 +145,8 @@ function regionLabelFor(basemapId: string): string {
   // The DEM is not a map in the catalog and is not one to the user either —
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
+  if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
+  if (basemapId === NSW_CONTOURS.id) return "Contours";
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }
@@ -177,16 +168,14 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  * the map-layer chips, the detail rail, the Save button — is always the same
  * shape, so the panel does not scroll.
  *
- * A guest gets one extra line explaining why there is no vector chip. That is
- * decided before the screen mounts and cannot change while it is open, so it is
- * a second constant rather than a reason to make the panel elastic.
+ * That includes the one line under the chips saying whether the detailed map
+ * comes with the area: it is always one line, whatever it says.
  *
  * ponytail: fixed pixels, so a very large OS font setting will clip the last
- * row rather than scroll it. Measure and raise these two numbers if that turns
+ * row rather than scroll it. Measure and raise this number if that turns
  * up in the field; making the panel scrollable again just hides the Save button.
  */
-const PANEL_HEIGHT = 208;
-const PANEL_HEIGHT_GUEST = 250;
+const PANEL_HEIGHT = 250;
 
 /** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
 const PROTOMAPS_FLAVOR = "light" as const;
@@ -215,6 +204,8 @@ export function RegionDownloadScreen({
   initialCenter?: [number, number];
   initialZoom?: number;
 }) {
+  const styles = useStyles();
+
   // Read once: `initialViewState` below is only honoured on the first render,
   // and re-reading a module store mid-session would move the frame the user is
   // already dragging.
@@ -224,9 +215,9 @@ export function RegionDownloadScreen({
   const startCenter = initialCenter ?? lastCamera?.center ?? DEFAULT_CENTER;
   const startZoom = initialZoom ?? lastCamera?.zoom ?? DEFAULT_ZOOM;
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
   const mapRef = useRef<MapRef>(null);
 
@@ -236,19 +227,19 @@ export function RegionDownloadScreen({
   // the provider with no Logjam request at all (regionTileDownload.ts) and work
   // exactly as they do for anyone else.
   //
-  // Dropped from the list rather than shown disabled, following this screen's
-  // existing rule for the unlicensed OSM sources: a chip that exists only to
-  // refuse is worse than no chip. The note under the rail says why, and where
-  // to change it — which a greyed chip could not.
+  // Everyone else gets it with every area, unasked (`vectorClipFor`); the
+  // note under the chips says which of the two this is.
   const isGuest = useAccountState().accountState === "guest";
-  const downloadable = isGuest
-    ? DOWNLOADABLE.filter((id) => id !== "protomaps")
-    : DOWNLOADABLE;
+  const downloadable = DOWNLOADABLE;
 
   const [selected, setSelected] = useState<SelectableId[]>(() =>
     downloadable.includes(startBasemapId as SelectableId)
       ? [startBasemapId as SelectableId]
-      : ["six-topo"],
+      : // Arriving from the Vector map, signed in: that map is coming anyway,
+        // so nothing else is picked for them.
+        startBasemapId === "protomaps" && !isGuest
+        ? []
+        : ["six-topo"],
   );
   const [detailZoom, setDetailZoom] = useState(DEFAULT_DETAIL_ZOOM);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -288,13 +279,13 @@ export function RegionDownloadScreen({
   // The default is the vector basemap: it is the detailed one, and it is what
   // the map screen draws. A guest cannot have it (the clip is an authed API
   // call), so their default is the topo raster.
-  const defaultPreview: SelectableId = isGuest ? "six-topo" : "protomaps";
-  const [preview, setPreview] = useState<SelectableId>(() =>
+  const defaultPreview: BasemapId = isGuest ? "six-topo" : "protomaps";
+  const [preview, setPreview] = useState<BasemapId>(() =>
     downloadable.includes(startBasemapId as SelectableId)
-      ? (startBasemapId as SelectableId)
+      ? startBasemapId
       : defaultPreview,
   );
-  const previewBasemap: BasemapId = selected.includes(preview)
+  const previewBasemap: BasemapId = (selected as BasemapId[]).includes(preview)
     ? preview
     : defaultPreview;
   const previewResolved = useMemo(
@@ -378,19 +369,30 @@ export function RegionDownloadScreen({
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
-  const pyramidIds = selected.filter(isRasterPyramid);
-  const includesVector = selected.includes("protomaps");
+  const pyramidIds = selected;
+  const vectorClip = bbox ? vectorClipFor(isGuest) : "none";
+  const includesVector = vectorClip === "include";
+  // The contours ride with the vector map they are always drawn on, unasked:
+  // at most about 19 MB on the largest mountain area. So they follow its rule
+  // (docs/decisions/0029): every signed-in save has them, a guest's has none.
+  const includesContours = includesVector;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
-    ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
+    ? planRegionForBasemaps(
+        bbox,
+        pyramidIds,
+        detailZoom,
+        catalogMaxZoom,
+        // The clip endpoint needs a signed-in user, as the vector map does.
+        !isGuest,
+        includesContours,
+      )
     : null;
-  const caps =
-    bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
-  const canDownload =
-    selected.length > 0 &&
-    bbox != null &&
-    caps?.ok === true &&
-    (job == null || job.totalTiles > 0 || includesVector);
+  const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
+  // The vector map alone is a download worth making, so no raster need be
+  // picked; with nothing picked and no vector map there is nothing to save.
+  const mapCount = selected.length + (includesVector ? 1 : 0);
+  const canDownload = mapCount > 0 && bbox != null && caps?.ok === true;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
@@ -404,9 +406,9 @@ export function RegionDownloadScreen({
       .map((source) => source.zMax) ?? [];
   const deepestZoom =
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
-  const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
+  const vectorOnly = pyramidIds.length === 0;
 
-  // ONE warning, over the map (DESIGN.md §7). The three cap reasons
+  // ONE warning, over the map (DESIGN.md). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
   // user and all have the same ways out, so they are one chip — three
   // sentences in a hero band cost more map than they ever bought.
@@ -428,6 +430,34 @@ export function RegionDownloadScreen({
           zMax: source.zMax,
           allowCellular,
         })),
+        ...job.demArchives.map(({ sourceId }) => ({
+          taskKind: "http-file" as const,
+          id: uuid(),
+          basemapId: sourceId,
+          demSourceId: sourceId,
+          label: regionLabelFor(sourceId),
+          groupId,
+          groupLabel,
+          bbox,
+          zMax: detailZoom,
+          allowCellular,
+        })),
+        ...(includesContours
+          ? [
+              {
+                taskKind: "http-file" as const,
+                id: uuid(),
+                basemapId: NSW_CONTOURS.id,
+                contours: true,
+                label: regionLabelFor(NSW_CONTOURS.id),
+                groupId,
+                groupLabel,
+                bbox,
+                zMax: NSW_CONTOURS.maxzoom,
+                allowCellular,
+              },
+            ]
+          : []),
         ...(includesVector
           ? [
               {
@@ -438,14 +468,17 @@ export function RegionDownloadScreen({
                 groupId,
                 groupLabel,
                 bbox,
-                zMax: Math.min(detailZoom, catalogMaxZoom("protomaps")),
+                // Always the archive's full detail, whatever the rail says:
+                // the rail prices rasters, and a full-detail clip is a few
+                // megabytes (measured: 1–7 MB for 5–40 km of bush).
+                zMax: catalogMaxZoom("protomaps"),
                 allowCellular,
               },
             ]
           : []),
       ]);
     },
-    [bbox, detailZoom, includesVector, job],
+    [bbox, includesContours, includesVector, job],
   );
 
   const handleSave = useCallback(() => {
@@ -535,7 +568,7 @@ export function RegionDownloadScreen({
   }, [naming]);
 
   // Focused on the next frame, not with `autoFocus` — the field mounts inside
-  // an animating Modal, whose window is not focusable yet (DESIGN.md §6).
+  // an animating Modal, whose window is not focusable yet (DESIGN.md).
   const isNaming = naming != null;
   useEffect(() => {
     if (!isNaming) return;
@@ -548,7 +581,7 @@ export function RegionDownloadScreen({
       {/* Wrapped only to lift it above the map, which now slides up under its
           rounded bottom corners. */}
       <View style={styles.hero}>
-        <HeroHeader
+        <Hero
           onBack={onBack}
           eyebrow="Offline maps"
           title="Save maps offline"
@@ -564,11 +597,6 @@ export function RegionDownloadScreen({
           }
           secondaryValue={
             job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"
-          }
-          valueSuffix={
-            job && job.totalTiles === 0 && includesVector
-              ? "size shown once download starts"
-              : undefined
           }
         />
       </View>
@@ -634,19 +662,17 @@ export function RegionDownloadScreen({
             cap reasons it carried were one message wearing three hats. */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
-            <Text style={styles.mapWarningText}>
+            <Notice icon="warning" tone="warning">
               Too large — reduce the area or detail, or pick fewer maps.
-            </Text>
+            </Notice>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
-          <Text style={styles.mapHintText}>
-            Move the map · drag edges to resize
-          </Text>
+          <Notice>Move the map · drag edges to resize</Notice>
         </View>
       </View>
 
-      <View style={[styles.panel, isGuest && styles.panelGuest]}>
+      <View style={styles.panel}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -659,7 +685,7 @@ export function RegionDownloadScreen({
               <Chip
                 key={id}
                 label={DOWNLOAD_CHIP_LABEL[id]}
-                icon={BASEMAP_META[id as BasemapId].icon}
+                icon="map"
                 active={active}
                 onPress={() => {
                   setSelected((current) =>
@@ -677,27 +703,28 @@ export function RegionDownloadScreen({
           })}
         </ScrollView>
 
-        {isGuest ? (
-          <Text style={styles.guestSourceNote}>
-            The detailed map needs an account. These download without one.
-          </Text>
-        ) : null}
+        <Text style={styles.sourceNote}>
+          {isGuest
+            ? "The detailed map needs an account. These download without one."
+            : "The detailed map is saved with every area."}
+        </Text>
 
         <View style={styles.panelBody}>
-          <View style={styles.detailBlock}>
-            <View style={styles.detailHeader}>
-              <SectionHeader label="Detail" />
+          <Field
+            label="Detail"
+            aside={
               <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
                   at any zoom, and the detail level only caps how much of the
                   archive comes with you. */}
                 {vectorOnly
-                  ? `z${deepestZoom} · sharp at any zoom`
+                  ? "Detailed map only · sharp at any zoom"
                   : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
               </Text>
-            </View>
-            <SegmentedControl
+            }
+          >
+            <ChipRail
               scroll
               options={DETAIL_ZOOMS.map((zoom) => ({
                 value: String(zoom),
@@ -706,18 +733,14 @@ export function RegionDownloadScreen({
               value={String(detailZoom)}
               onChange={(next) => setDetailZoom(Number(next))}
             />
-          </View>
+          </Field>
 
           {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
           <Button
-            label={
-              selected.length > 1
-                ? `Save ${selected.length} maps`
-                : "Save this area"
-            }
-            icon="download"
+            label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
+            icon="saveOffline"
             onPress={handleSave}
             disabled={!canDownload || busy}
           />
@@ -736,7 +759,7 @@ export function RegionDownloadScreen({
           onStarted();
         }}
         title="Name this area"
-        footer={<Button label="Done" icon="check" onPress={closeNaming} />}
+        footer={<Button label="Done" icon="done" onPress={closeNaming} />}
       >
         <View style={styles.namingBody}>
           <TextField
@@ -755,7 +778,7 @@ export function RegionDownloadScreen({
           {/* The honesty the progress screen's back-press warning used to
               carry, in the one place every download now passes through. */}
           <Text style={styles.namingNote}>
-            Downloads pause when the app is closed. Watch them in Saved.
+            Downloads pause when Logjam GPS is closed. Watch them in Saved.
           </Text>
         </View>
       </BottomSheet>
@@ -763,8 +786,8 @@ export function RegionDownloadScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+const useStyles = makeStyles((theme) => ({
+  root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
   hero: { zIndex: 1 },
   mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
@@ -774,15 +797,6 @@ const styles = StyleSheet.create({
     right: spacing(2),
     bottom: spacing(1),
     alignItems: "center",
-  },
-  mapHintText: {
-    color: theme.textPrimary,
-    fontSize: fontSize.xs,
-    backgroundColor: withAlpha(theme.primary, 0.85),
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
-    overflow: "hidden",
   },
   // The one warning, at the TOP of the map — same overlay treatment as the
   // hint along the bottom, in the warning colour. Over the map rather than in
@@ -799,46 +813,29 @@ const styles = StyleSheet.create({
     top: HERO_OVERLAP + spacing(1),
     alignItems: "center",
   },
-  // Outlined in the warning colour over a wash of it, rather than the page
-  // colour: over a map, a pill painted in the page's own brown reads as a gap
-  // in the map. The border is what holds it together at two lines.
-  mapWarningText: {
-    color: theme.warning,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textAlign: "center",
-    backgroundColor: withAlpha(theme.warning, 0.16),
-    borderWidth: 1,
-    borderColor: theme.warning,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-    overflow: "hidden",
-  },
   namingBody: { gap: spacing(1.5) },
   namingNote: { color: theme.textMuted, fontSize: fontSize.sm },
   panel: {
     height: PANEL_HEIGHT,
-    backgroundColor: theme.primary,
-    paddingTop: spacing(1.25),
+    backgroundColor: theme.page,
+    paddingTop: spacing(1),
     paddingBottom: spacing(1.5),
     gap: spacing(1),
     borderTopWidth: 1,
-    borderTopColor: surface.border,
+    borderTopColor: theme.line,
   },
-  panelGuest: { height: PANEL_HEIGHT_GUEST },
   panelBody: {
     flex: 1,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(1),
-    gap: spacing(1.25),
+    gap: spacing(1),
   },
   // Horizontally scrolling, like the detail rail: four chips wrapped onto a
   // second line and took the height straight out of the map.
   // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
-  guestSourceNote: {
+  sourceNote: {
     color: theme.textMuted,
     fontSize: fontSize.sm,
     paddingHorizontal: spacing(2),
@@ -850,11 +847,5 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailBlock: { gap: spacing(0.75) },
-  detailHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   detailCaption: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

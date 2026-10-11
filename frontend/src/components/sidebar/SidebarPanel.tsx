@@ -31,6 +31,7 @@ import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
+import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
@@ -40,6 +41,7 @@ import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
 import TripDetailPanel from "./panels/TripDetailPanel";
 import { placesBounds } from "./panels/placesModel";
+import type { WebPlaceVerbId } from "./panels/placeVerbMenu";
 import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
@@ -86,7 +88,6 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
-  onFlyToPlace,
   // GeoPDFs
   onOpenGeoPdf,
   onOpenGeoPdfWithTemplate,
@@ -132,9 +133,11 @@ function SidebarPanel({
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
+  onRetryStandaloneFiles,
   onOpenWay,
   wayDetail,
   drawPanel,
+  measurePanel,
   currentUserId,
   onPickCoords,
   pickingCoords,
@@ -189,7 +192,6 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
-  onFlyToPlace: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -245,6 +247,7 @@ function SidebarPanel({
   placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
+  onRetryStandaloneFiles: () => void;
   /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
   /**
@@ -255,6 +258,7 @@ function SidebarPanel({
    */
   wayDetail: ReactNode;
   drawPanel: ReactNode;
+  measurePanel: ReactNode;
   currentUserId: string | null;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
@@ -302,6 +306,11 @@ function SidebarPanel({
   // change, unless a map-pick flow is the one driving the sheet to peek (that
   // collapse is intentional — leave it alone).
   const [shownPanel, setShownPanel] = useState(activePanel);
+  // A verb pressed on a place's row that its page has to run (a form, a
+  // confirm). Consumed, not counted, like `openFiltersRequested`.
+  const [placeVerbRequest, setPlaceVerbRequest] = useState<{
+    id: WebPlaceVerbId;
+  } | null>(null);
   if (activePanel !== shownPanel) {
     setShownPanel(activePanel);
     if (!collapseToPeek) {
@@ -346,7 +355,7 @@ function SidebarPanel({
       : PANEL_TITLES[activePanel];
 
   // A page with two views draws its switch under its own hero, so the hero
-  // stays the page's first line (DESIGN.md §2).
+  // stays the page's first line (DESIGN.md).
   const logsViewRail = (
     <ChipRail
       label="Logs view"
@@ -364,8 +373,9 @@ function SidebarPanel({
     />
   );
 
+  // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
-    <>
+    <PanelCloseContext.Provider value={onClose}>
       <div className={classes.panelBody}>
         {activePanel === "places" && (
           <PlacesPanel
@@ -386,12 +396,12 @@ function SidebarPanel({
             openFiltersRequested={openFiltersRequested}
             onOpenFiltersConsumed={onOpenFiltersConsumed}
             onFiltersOpenChange={onFiltersOpenChange}
-            onFlyToPlace={onFlyToPlace}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onHoverPlace={onHoverPlace}
             onMakeMap={onMakeMap}
             onSharePlaces={onSharePlaces}
+            onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
           />
         )}
@@ -525,14 +535,14 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
             onBack={() => setActivePanel("places")}
-            onClose={onClose}
-            onFlyToPlace={onFlyToPlace}
             onOpenTrip={openTripDetail}
             onMakeMap={(target, kind) => {
               const bounds = placesBounds([target]);
               if (bounds) onMakeMap(bounds, kind);
             }}
             onSharePlace={(id) => onSharePlaces([id])}
+            verbRequest={placeVerbRequest}
+            onVerbRequestConsumed={() => setPlaceVerbRequest(null)}
             onAfterDelete={() => setActivePanel("places")}
           />
         )}
@@ -544,7 +554,6 @@ function SidebarPanel({
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
             onBack={() => setActivePanel("logs")}
-            onClose={onClose}
             onOpenPlace={openPlaceDetail}
             onRefetchTripLogs={onRefetchTripLogs}
             onRefetchPlaces={onRefetch}
@@ -556,6 +565,7 @@ function SidebarPanel({
         )}
         {activePanel === "way-detail" && wayDetail}
         {activePanel === "way-draw" && drawPanel}
+        {activePanel === "measure" && measurePanel}
         {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
@@ -565,6 +575,7 @@ function SidebarPanel({
             placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
+            onRetryStandaloneFiles={onRetryStandaloneFiles}
             places={[...places, ...sharedPlaces]}
             sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}
@@ -574,7 +585,7 @@ function SidebarPanel({
           />
         )}
       </div>
-    </>
+    </PanelCloseContext.Provider>
   );
 
   if (isMobile) {

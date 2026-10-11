@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 vi.mock("../services/prisma", () => ({
   default: {
-    topoJob: { updateMany: vi.fn(), findMany: vi.fn() },
+    topoJob: { updateMany: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
     topoExportJob: { updateMany: vi.fn(), findMany: vi.fn() },
     geoPdfJob: { updateMany: vi.fn(), findMany: vi.fn() },
     notification: { create: vi.fn(), createMany: vi.fn() },
@@ -32,6 +32,7 @@ import prisma from "../services/prisma";
 import { ecs, s3 } from "../services/awsClients";
 import {
   reapStuckTopoJobs,
+  sweepAbandonedTopoUploads,
   expireCompletedExports,
   expireCompletedGeoPdfJobs,
   progressStallDeadline,
@@ -322,6 +323,26 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     expect(processingUpdate.where.id).toBe("job-overdue");
     expect(processingUpdate.where.status).toBe("processing");
     expect(processingUpdate.data.status).toBe("failed");
+  });
+
+  it("deletes the input ZIP of a reaped job, only for the sweep that won the flip", async () => {
+    const dead = new Date(
+      NOW.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS - 1,
+    );
+    stageByStatus(jobFindMany, {
+      pending: [
+        { id: "won", userId: "u", name: null, updatedAt: dead },
+        { id: "lost", userId: "u", name: null, updatedAt: dead },
+      ],
+    });
+    jobUpdateMany.mockImplementation(async (a: { where: { id: string } }) => ({
+      count: a.where.id === "won" ? 1 : 0,
+    }));
+
+    await reapStuckTopoJobs(NOW);
+
+    const keys = s3Send.mock.calls.map(([cmd]) => cmd.input.Key);
+    expect(keys).toEqual(["inputs/won/upload.zip"]);
   });
 
   it("issues StopTask only for reaped jobs that have a task ARN", async () => {
@@ -1178,5 +1199,36 @@ describe("queueAutoExports", () => {
     expect(count).toBe(0);
     expect(launchExport).not.toHaveBeenCalled();
     expect(notificationCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("sweepAbandonedTopoUploads", () => {
+  const deleteMany = (prisma as unknown as { topoJob: { deleteMany: Mock } })
+    .topoJob.deleteMany;
+
+  it("deletes the ZIP then the uploading row, guarded on status, for rows older than a day", async () => {
+    jobFindMany.mockResolvedValue([{ id: "stale" }]);
+    deleteMany.mockReset().mockResolvedValue({ count: 1 });
+
+    expect(await sweepAbandonedTopoUploads(NOW)).toBe(1);
+
+    const where = jobFindMany.mock.calls[0][0].where;
+    expect(where.status).toBe("uploading");
+    expect(where.createdAt.lt).toEqual(
+      new Date(NOW.getTime() - 24 * 60 * 60 * 1000),
+    );
+    expect(s3Send.mock.calls[0][0].input.Key).toBe("inputs/stale/upload.zip");
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: "stale", status: "uploading" },
+    });
+  });
+
+  it("keeps the row when the S3 delete fails", async () => {
+    jobFindMany.mockResolvedValue([{ id: "stale" }]);
+    deleteMany.mockReset();
+    s3Send.mockRejectedValue(new Error("s3 down"));
+
+    expect(await sweepAbandonedTopoUploads(NOW)).toBe(0);
+    expect(deleteMany).not.toHaveBeenCalled();
   });
 });

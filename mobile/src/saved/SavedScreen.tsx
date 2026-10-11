@@ -5,7 +5,7 @@
 // full display/management split.
 //
 // LAYOUT (the reference implementation of mobile/DESIGN.md):
-//   HeroHeader — storage headline + a CapacityBar breaking it down by asset
+//   Hero — storage headline + a Meter breaking it down by asset
 //     kind. One "Add" affordance opens the acquisition sheet, so the screen
 //     body is purely what is already here.
 //   Filter rail — categories with tallies; "All" is a flat size-descending
@@ -19,7 +19,9 @@
 //     search field stays put, disabled — and offers the group verbs (select
 //     all, delete).
 // Not-yet-downloaded topo overlays are the one non-on-device list: they live
-// under the LiDAR Topos filter below the saved ones, never in "All".
+// under the LiDAR Topos filter below the saved ones, never in "All". Region
+// downloads in flight or unfinished are partly on device, so they show under
+// both Regions and All.
 //
 // This screen mounts the same registry/hooks MapScreen does
 // (useMapArtifacts, useGeoPdfImports, useVectorImports, useTracks); each
@@ -44,18 +46,21 @@ import {
   View,
 } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
+  NSW_5M,
   TOPO_LAYERS,
   formatDistanceM,
   mediaDisplayName,
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  wayVerbIcon,
+  wayVerbLabel,
+  type IconIdea,
   type SharableEntityType,
   type TopoLayerFormat,
   type TopoLayerName,
@@ -83,32 +88,36 @@ import {
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import {
-  assetHue,
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
+  useHues,
+  opacity,
 } from "../theme";
 import {
   BottomSheet,
   Button,
-  CapacityBar,
-  HeroHeader,
+  Meter,
+  Hero,
   IconButton,
+  ListEnd,
   RenameForm,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SelectionMark,
   StatusPill,
   SyncStatusPills,
   TextField,
   Toast,
-  type CapacitySegment,
-  type SegmentOption,
+  type MeterSegment,
+  type ChipOption,
   type ToastMessage,
+  Icon,
+  EmptyState,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
@@ -124,6 +133,7 @@ import {
   useGeoPdfImportRun,
 } from "../geopdf/importRunner";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
+import { showsGeoPdfRunCard } from "./geoPdfRunCard";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -145,6 +155,10 @@ import {
 } from "../offline/artifactGroups";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import {
+  groupUnfinishedRegions,
+  type UnfinishedRegionGroup,
+} from "../offline/unfinishedRegionGroups";
+import {
   deleteRegionFile,
   listUnfinishedRegions,
   type UnfinishedRegion,
@@ -156,6 +170,7 @@ import {
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
+import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
   geoPdfActions,
@@ -170,7 +185,8 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
-import type { Bbox } from "./bboxOfPoints";
+import type { TripTrackSource } from "../tracks/tripTrackSource";
+import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
@@ -188,15 +204,17 @@ function formatDay(iso: string): string {
 /** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */
 function basemapName(logicalKey: string): string {
   return (
-    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Basemap"
+    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Map"
   );
 }
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
 function regionMemberName(artifact: MapArtifact): string {
-  return artifact.kind === "dem-region"
-    ? "Elevation data"
-    : basemapName(artifact.logicalKey);
+  if (artifact.kind === "contours-region") return "Contours";
+  if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
+  return artifact.logicalKey === NSW_5M.id
+    ? "Elevation data, NSW 5 m"
+    : "Elevation data";
 }
 
 /** A topo-overlay artifact's logicalKey is `<jobId>/<layer>`. */
@@ -233,25 +251,18 @@ const CATEGORY_META: Record<
   {
     label: string;
     plural: string;
-    icon:
-      | "map"
-      | "layers"
-      | "file-text"
-      | "file-plus"
-      | "activity"
-      | "edit-3"
-      | "flag";
+    icon: IconIdea;
   }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
-  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "layers" },
-  geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "file-text" },
+  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "lidar" },
+  geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
   // Routes you drew, as opposed to files you brought in. Kept a separate
   // category rather than folded into "import": a route is editable in place and
   // an import is an opaque file, and a list that mixes them would need to
   // explain which rows can be edited. (Both sync now — that used to be the
   // other half of the distinction, and is not any more.)
-  route: { label: "Route", plural: "Routes", icon: "edit-3" },
+  route: { label: "Route", plural: "Routes", icon: "route" },
   // Marked points. Like routes they are records rather than files, and they are
   // the one kind here that can be SEARCHED and filtered by tag — see the
   // waypoint filter rail below.
@@ -260,8 +271,8 @@ const CATEGORY_META: Record<
   // points and polygons as readily as lines. "Files" alone was rejected as too
   // vague — everything in this tab is a file — so the distinguishing word is
   // the one that survives.
-  import: { label: "Import", plural: "Imports", icon: "file-plus" },
-  track: { label: "Track", plural: "Tracks", icon: "activity" },
+  import: { label: "Import", plural: "Imports", icon: "importedFile" },
+  track: { label: "Track", plural: "Tracks", icon: "track" },
 };
 
 // Reading order for the filter rail, the capacity meter and the "add to this
@@ -316,7 +327,7 @@ type SavedItem = {
    */
   syncEntityId?: string | null;
   /** Recovery/primary inline action shown left of the overflow button. */
-  inlineAction?: { icon: "refresh-cw"; label: string; onPress: () => void };
+  inlineAction?: { icon: "refresh"; label: string; onPress: () => void };
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
   /**
@@ -376,6 +387,8 @@ type SavedItem = {
    * revocable view of a row, this one gives away a copy for good.
    */
   sendCopy?: NonNullable<AssetActions["sendCopy"]>;
+  /** A track that can go into a new trip — see `AssetActions.logTrip`. */
+  logTrip?: AssetActions["logTrip"];
   /** What the row's search matches against — lowercased, and wider than the
    *  visible title. */
   search?: { haystack: string };
@@ -392,6 +405,7 @@ export function SavedScreen({
   onOpenPlace,
   initialFilter,
   initialHighlight,
+  initialImport,
 }: {
   /**
    * One row to point at on arrival, from a notification's "View in Saved". The
@@ -404,6 +418,8 @@ export function SavedScreen({
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
+  /** The nonce of a request to open the file picker on arrival (the map's "Import a file"). */
+  initialImport?: number;
   onOpenMap: (
     bbox?: Bbox,
     basemapId?: BasemapId,
@@ -426,7 +442,7 @@ export function SavedScreen({
   /**
    * Pick a finished recording back up. Handed to the MAP rather than done here:
    * arming the recorder needs the location prompt, which cannot be raised from
-   * an open sheet (DESIGN.md §7), and the map is what has to end up in
+   * an open sheet (DESIGN.md), and the map is what has to end up in
    * recording mode.
    */
   onContinueRecording: (trackId: string) => void;
@@ -455,6 +471,10 @@ export function SavedScreen({
    */
   initialFilter?: { category: Category; nonce: number };
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   // Both of these come off the user's web account, so a guest has neither.
@@ -475,6 +495,11 @@ export function SavedScreen({
   // rename, account list). Transient and out of the layout — a banner in the
   // list reflows content under the user's thumb and then lingers unowned.
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  // The recording whose "Log a trip" was pressed: the trip form opens over the
+  // sheet that closed to hand it over.
+  const [loggingTrack, setLoggingTrack] = useState<TripTrackSource | null>(
+    null,
+  );
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -632,7 +657,10 @@ export function SavedScreen({
   // what the area cost, and deleting the area has to take it with it. It is not
   // one of the "maps", though — see `basemapMembers`.
   const regionArtifacts = artifacts.filter(
-    (a) => a.kind === "basemap-region" || a.kind === "dem-region",
+    (a) =>
+      a.kind === "basemap-region" ||
+      a.kind === "dem-region" ||
+      a.kind === "contours-region",
   );
 
   // A region download in flight, as one card per run at the top of the Regions
@@ -663,9 +691,11 @@ export function SavedScreen({
   }, [queuedIds]);
   useEffect(refreshOrphans, [refreshOrphans]);
 
-  const resumeOrphan = useCallback((region: UnfinishedRegion) => {
-    enqueueRegionDownloads([
-      {
+  const orphanGroups = groupUnfinishedRegions(orphans);
+
+  const resumeOrphan = useCallback((group: UnfinishedRegionGroup) => {
+    enqueueRegionDownloads(
+      group.regions.map((region) => ({
         taskKind: "tile-pyramid",
         id: region.id,
         basemapId: region.basemapId,
@@ -683,12 +713,13 @@ export function SavedScreen({
         zMin: region.zMin,
         zMax: region.zMax,
         allowCellular: false,
-      },
-    ]);
-    setOrphans((current) => current.filter((row) => row.id !== region.id));
+      })),
+    );
+    const resumed = new Set(group.regions.map((region) => region.id));
+    setOrphans((current) => current.filter((row) => !resumed.has(row.id)));
   }, []);
 
-  const discardOrphan = useCallback((region: UnfinishedRegion) => {
+  const discardOrphan = useCallback((group: UnfinishedRegionGroup) => {
     Alert.alert(
       "Discard this download?",
       "The download so far will be deleted from this phone.",
@@ -698,10 +729,9 @@ export function SavedScreen({
           text: "Discard",
           style: "destructive",
           onPress: () => {
-            void deleteRegionFile(region.id);
-            setOrphans((current) =>
-              current.filter((row) => row.id !== region.id),
-            );
+            const gone = new Set(group.regions.map((region) => region.id));
+            for (const id of gone) void deleteRegionFile(id);
+            setOrphans((current) => current.filter((row) => !gone.has(row.id)));
           },
         },
       ],
@@ -711,6 +741,9 @@ export function SavedScreen({
   // the card's ⋯ sheet rather than expanded under it: four states' worth of
   // copy and up to three buttons per job is a panel, and unfolding it would
   // push the saved regions off the screen while the user watches.
+  // Unfinished areas are on the device (their bytes count against it), so All
+  // lists them with Regions rather than hiding them from the inventory.
+  const showsDownloads = filter === "region" || filter === "all";
   const [downloadSheetId, setDownloadSheetId] = useState<string | null>(null);
   const downloadSheetGroup =
     downloadGroups.find((group) => group.groupId === downloadSheetId) ?? null;
@@ -751,6 +784,7 @@ export function SavedScreen({
     .map((job) => ({
       jobId: job.jobId,
       label: job.name ?? `Topo ${job.jobId.slice(0, 8)}`,
+      bbox: bboxOfFootprint(job.footprint),
       // A synthetic job (built from what is on disk when the account list is
       // unreachable) carries no URL, so there is nothing to offer.
       missing: job.layers.filter(
@@ -853,7 +887,7 @@ export function SavedScreen({
         category: "import",
         fraction: null,
       });
-      const outcome = await importVectorFileFromPicker(imports.length);
+      const outcome = await importVectorFileFromPicker();
       if (outcome.status === "imported") {
         info("File imported.");
         // Land on the tab holding what was just added, so the new row is
@@ -868,7 +902,7 @@ export function SavedScreen({
       setImportBusy(false);
       setActiveOp(null);
     }
-  }, [fail, imports.length, info, refreshFreeSpace]);
+  }, [fail, info, refreshFreeSpace]);
 
   // --- GeoPDF imports ---
   const { geoPdfImports } = useGeoPdfImports();
@@ -880,6 +914,16 @@ export function SavedScreen({
   // the import buttons out while a run is up, wherever it was started from.
   const importRun = useGeoPdfImportRun();
   const geoPdfBusy = importRun !== null;
+
+  // The map's "Import a file" row lands here and opens the picker once per
+  // request (its nonce), the same entry the tab's own Import button runs.
+  const handledImportRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (initialImport === undefined) return;
+    if (handledImportRequest.current === initialImport) return;
+    handledImportRequest.current = initialImport;
+    void handleImportFile();
+  }, [handleImportFile, initialImport]);
 
   // The list is only refreshed by registry notifications, which fire before the
   // artifact's size is known; a finished import changes what the capacity meter
@@ -973,9 +1017,9 @@ export function SavedScreen({
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
-      // when they picked two.
+      // when they picked two. Nor are the contours, drawn with one of them.
       const basemapMembers = group.members.filter(
-        (a) => a.kind !== "dem-region",
+        (a) => a.kind === "basemap-region",
       );
       rows.push({
         key: savedRegionKey(group.key),
@@ -1029,7 +1073,7 @@ export function SavedScreen({
         // no `syncRole`, which is the normal state on a cold offline launch,
         // and hiding the verb there made sharing the one thing that vanished
         // when the signal did. It is present and DIMMED instead, with the
-        // reason in its subtitle (DESIGN.md §10).
+        // reason in its subtitle (DESIGN.md).
         ...(job?.syncRole === "shared"
           ? {
               sharedWithYou: true as const,
@@ -1058,8 +1102,9 @@ export function SavedScreen({
               },
             }
           : { share: { entityType: "topoJob" as const, entityId: group.key } }),
-        locatable: group.bbox != null,
-        resolveBbox: async () => group.bbox,
+        // The saved layers' own extent, else the job's footprint from the account.
+        locatable: (group.bbox ?? bboxOfFootprint(job?.footprint)) != null,
+        resolveBbox: async () => group.bbox ?? bboxOfFootprint(job?.footprint),
         // Topo artifacts carry no groupId (they are written a layer at a time
         // by the overlay downloader), so the group rename writes each row's
         // own display label. Display only, as everywhere else.
@@ -1122,7 +1167,7 @@ export function SavedScreen({
         ...(geoPdf.state !== "ready" && !geoPdfBusy
           ? {
               inlineAction: {
-                icon: "refresh-cw" as const,
+                icon: "refresh" as const,
                 label: "Resume this import",
                 onPress: () => handleResumeGeoPdf(geoPdf.id, geoPdf.label),
               },
@@ -1262,21 +1307,21 @@ export function SavedScreen({
   };
   for (const item of items) counts[item.category] += 1;
 
-  const segments: CapacitySegment[] = CATEGORY_ORDER.map((category) => {
+  const segments: MeterSegment[] = CATEGORY_ORDER.map((category) => {
     const bytes = items
       .filter((item) => item.category === category)
       .reduce((sum, item) => sum + item.sizeBytes, 0);
     return {
       label: CATEGORY_META[category].plural,
       value: bytes,
-      color: assetHue[category],
+      hue: assetHue[category],
       display: formatBytes(bytes),
     };
   });
 
   const usedBytes = segments.reduce((sum, segment) => sum + segment.value, 0);
 
-  const filterOptions: SegmentOption<Category | "all">[] = [
+  const filterOptions: ChipOption<Category | "all">[] = [
     { value: "all", label: "All", count: items.length },
     ...CATEGORY_ORDER.map((category) => ({
       value: category,
@@ -1294,14 +1339,21 @@ export function SavedScreen({
    * you are standing on would be an affordance that only refuses (DESIGN.md
    * §7).
    */
-  const emptyAction = ((): { label: string; onPress: () => void } | null => {
+  const emptyAction = ((): {
+    label: string;
+    onPress: () => void;
+    /** Present when it could apply but not now: the button is dimmed and says why. */
+    disabledReason?: string;
+  } | null => {
     switch (filter) {
       case "all":
         return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
       case "region":
-        return online
-          ? { label: "Download a region", onPress: onDownloadRegion }
-          : null;
+        return {
+          label: "Download a region",
+          onPress: onDownloadRegion,
+          ...(online ? {} : { disabledReason: "Needs a connection" }),
+        };
       case "overlay":
         return null;
       case "geoPdf":
@@ -1567,9 +1619,37 @@ export function SavedScreen({
     [fail, onOpenMap],
   );
 
+  /**
+   * A tap on a card: open the thing. Everything saved lives on the map, so that
+   * is "Show on map"; one with no place to show falls back to its ⋯ sheet
+   * rather than pressing to nothing.
+   */
+  const openItem = useCallback(
+    (item: SavedItem) => {
+      if (item.locatable) showOnMap(item);
+      else openItemSheet(item.key);
+    },
+    [openItemSheet, showOnMap],
+  );
+
+  /** A topo that is on the account but not the phone: fit to its footprint, layers on. */
+  const showJobOnMap = useCallback(
+    (job: { jobId: string; bbox: Bbox | null }) => {
+      if (!job.bbox) {
+        fail("This one has no saved location to show.");
+        return;
+      }
+      onOpenMap(job.bbox, undefined, {
+        category: "overlay",
+        key: savedOverlayKey(job.jobId),
+      });
+    },
+    [fail, onOpenMap],
+  );
+
   const menuItem = items.find((item) => item.key === menuItemKey) ?? null;
   // A route's overflow is the SAME sheet the map shows, so the two surfaces
-  // cannot offer different verbs for the same object (DESIGN.md §7) — rename,
+  // cannot offer different verbs for the same object (DESIGN.md) — rename,
   // sharing and the stats are all sub-modes of that sheet, so there is nothing
   // left for this screen to hand back to.
   const menuRoute =
@@ -1579,7 +1659,7 @@ export function SavedScreen({
   const showRouteSheet = menuRoute !== null;
   // A recorded track and an imported file each open the SAME sheet the map
   // opens when their line is tapped, so the two surfaces cannot offer different
-  // verbs for one object (DESIGN.md §7). Only the kinds with no map tap surface
+  // verbs for one object (DESIGN.md). Only the kinds with no map tap surface
   // at all — regions, LiDAR overlays, GeoPDFs, waypoints — still go through the
   // generic sheet below.
   const menuTrack =
@@ -1640,28 +1720,28 @@ export function SavedScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Saved for offline use"
         title="On this device"
         value={formatBytes(usedBytes)}
         valueSuffix={
           freeBytes != null ? `used · ${formatBytes(freeBytes)} free` : "used"
         }
-        action={
+        actions={
           <Button
             label="Add"
-            icon="plus"
+            icon="add"
             compact
             onPress={() => setAddSheetOpen(true)}
           />
         }
       >
-        <CapacityBar segments={segments} />
+        <Meter segments={segments} />
         {/* Offline is a normal state here — everything already on the device
             still works — so it sits beside what is still waiting to leave
             rather than reading as an error. */}
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
 
       {/* While picking, the contextual bar TAKES ONLY THE SEGMENTED CONTROL'S
           slot (item 15) — it used to replace the whole rail, search field and
@@ -1693,7 +1773,7 @@ export function SavedScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             options={filterOptions}
             value={filter}
             onChange={selectFilter}
@@ -1743,7 +1823,7 @@ export function SavedScreen({
                 ? `${Math.round(activeOp.fraction * 100)}%`
                 : "Working…"
             }
-            icon="download-cloud"
+            icon="saveOffline"
             hue={assetHue[activeOp.category]}
             progress={activeOp.fraction ?? 0}
           />
@@ -1753,7 +1833,7 @@ export function SavedScreen({
             Separate from `activeOp` above rather than folded into it: this one
             is not owned by this screen, so it must survive the screen
             unmounting and be here again when the user comes back. */}
-        {importRun ? (
+        {importRun && showsGeoPdfRunCard(filter) ? (
           <Row
             title={importRun.label}
             subtitle={[
@@ -1770,12 +1850,12 @@ export function SavedScreen({
             ]
               .filter(Boolean)
               .join(" · ")}
-            icon="file-text"
+            icon="geoPdf"
             hue={assetHue.geoPdf}
             progress={importRun.fraction ?? 0}
             right={
               <IconButton
-                icon="x"
+                icon="close"
                 // Honest about which half of the run this reaches: the token is
                 // read between rasteriser batches, so during the front phases
                 // there is nothing yet for it to interrupt.
@@ -1788,10 +1868,8 @@ export function SavedScreen({
         ) : null}
 
         {/* Downloading regions, one card per run, at the top of the Regions
-            filter and nowhere else — "All" is an inventory of what is actually
-            on the device, and these are not there yet. Same rule the GeoPDF
-            import card follows. */}
-        {filter === "region" && downloadGroups.length > 0 ? (
+            and All filters. Same shape as the GeoPDF import card. */}
+        {showsDownloads && downloadGroups.length > 0 ? (
           <>
             {downloadGroups.map((group) => (
               <Row
@@ -1802,18 +1880,18 @@ export function SavedScreen({
                     ? `${countOf(group.unfinished, "map")} didn't finish`
                     : `${group.ready} of ${countOf(group.mapCount, "map")} saved`
                 }
-                icon="download-cloud"
+                icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
                 progress={group.fraction}
                 right={
                   <View style={styles.rowActions}>
                     <IconButton
-                      icon="x"
+                      icon="close"
                       accessibilityLabel="Stop saving these maps"
                       onPress={() => confirmStopGroup(group)}
                     />
                     <IconButton
-                      icon="more-vertical"
+                      icon="overflow"
                       accessibilityLabel={`Maps in ${group.label || "this download"}`}
                       onPress={() => setDownloadSheetId(group.groupId)}
                     />
@@ -1822,19 +1900,19 @@ export function SavedScreen({
               />
             ))}
             <Text style={styles.downloadNote}>
-              Downloads only run while Logjam is open.
+              Downloads keep going until Logjam GPS is closed.
             </Text>
           </>
         ) : null}
 
-        {filter === "region" && orphans.length > 0 ? (
+        {showsDownloads && orphans.length > 0 ? (
           <>
-            {orphans.map((region) => (
+            {orphanGroups.map((group) => (
               <Row
-                key={region.id}
-                title={region.groupLabel ?? region.label}
-                subtitle={`Didn't finish · ${region.tilesStored.toLocaleString()} tiles already saved`}
-                icon="download-cloud"
+                key={group.groupId}
+                title={group.label}
+                subtitle="Didn't finish · some map data is already saved"
+                icon="saveOffline"
                 hue={theme.warning}
                 right={
                   <View style={styles.rowActions}>
@@ -1842,13 +1920,13 @@ export function SavedScreen({
                       label="Resume"
                       variant="outlineAccent"
                       compact
-                      onPress={() => resumeOrphan(region)}
+                      onPress={() => resumeOrphan(group)}
                     />
                     <IconButton
-                      icon="trash-2"
+                      icon="delete"
                       color={theme.warning}
-                      accessibilityLabel={`Discard the unfinished download ${region.label}`}
-                      onPress={() => discardOrphan(region)}
+                      accessibilityLabel={`Discard the unfinished download ${group.label}`}
+                      onPress={() => discardOrphan(group)}
                     />
                   </View>
                 }
@@ -1859,8 +1937,9 @@ export function SavedScreen({
 
         {visibleItems.length === 0 &&
         !activeOp &&
-        !importRun &&
-        (filter !== "region" || downloadGroups.length === 0) ? (
+        !(importRun && showsGeoPdfRunCard(filter)) &&
+        (!showsDownloads ||
+          (downloadGroups.length === 0 && orphans.length === 0)) ? (
           <EmptyPanel
             filter={filter}
             online={online}
@@ -1895,11 +1974,13 @@ export function SavedScreen({
                 // account-gated row gets — rather than offered and then refused.
                 disabled={selecting && !item.delete}
                 // Press and hold starts a selection anywhere; once one is running a
-                // plain tap toggles. Outside the mode a row still has no onPress —
-                // its verbs live in the ⋯ sheet, and a whole-row tap that did one
-                // of them would be a mis-tap waiting to happen (DESIGN.md §7).
+                // plain tap toggles. Outside the mode a tap OPENS the thing: every
+                // kind here lives on the map, so that is "Show on map" (the card
+                // never presses to nothing). The rest of its verbs are in the ⋯.
                 onLongPress={() => selectItem(item)}
-                onPress={selecting ? () => selectItem(item) : undefined}
+                onPress={
+                  selecting ? () => selectItem(item) : () => openItem(item)
+                }
                 /* ONE trailing slot for both modes, and every child of it keeps its
                place when the mode changes. Selecting used to render a slot of
                its own holding only the size and a 22px circle: the pill and the
@@ -1938,13 +2019,11 @@ export function SavedScreen({
                     screen-reader label and on the sharing sheet behind ⋯.
                     Muted, not accent: this is information, not a state to fix. */}
                     {item.sharedWithCount ? (
-                      <Feather
-                        name="users"
+                      <Icon
+                        idea="friends"
                         size={15}
                         color={theme.textMuted}
-                        accessibilityLabel={sharedWithLabel(
-                          item.sharedWithCount,
-                        )}
+                        label={sharedWithLabel(item.sharedWithCount)}
                       />
                     ) : null}
                     {/* Backed up. A glyph rather than a pill: it is on most rows
@@ -1955,11 +2034,11 @@ export function SavedScreen({
                     glyphs, so the column it sits in is the same on every row;
                     the share glyph appearing on some rows must not push it. */}
                     {item.backedUp ? (
-                      <Feather
-                        name="cloud"
+                      <Icon
+                        idea="sync"
                         size={15}
                         color={theme.success}
-                        accessibilityLabel="Backed up to your account"
+                        label="Backed up to your account"
                       />
                     ) : null}
                     {item.inlineAction ? (
@@ -1985,7 +2064,7 @@ export function SavedScreen({
                       />
                     ) : (
                       <IconButton
-                        icon="more-vertical"
+                        icon="overflow"
                         accessibilityLabel={`Actions for ${item.title}`}
                         onPress={() => openItemSheet(item.key)}
                       />
@@ -2001,13 +2080,13 @@ export function SavedScreen({
             failure is only worth reporting inside the filter that needs it. */}
         {filter === "overlay" && overlaysQuery.error ? (
           <Row
-            title="Couldn't reach the server"
+            title="Couldn't reach Logjam"
             subtitle="Your saved overlays still work offline."
-            icon="cloud-off"
+            icon="offline"
             hue={theme.warning}
             right={
               <IconButton
-                icon="refresh-cw"
+                icon="refresh"
                 accessibilityLabel="Try loading your overlays again"
                 color={theme.accent}
                 onPress={overlaysQuery.refetch}
@@ -2021,7 +2100,7 @@ export function SavedScreen({
             stays an inventory of what is actually here. */}
         {filter === "overlay" && downloadableJobs.length > 0 ? (
           <>
-            <SectionHeader label="Available to download" />
+            <SectionHeader title="Available to download" />
             {downloadableJobs.map((job) => (
               // The same key a downloaded topo's row carries, so a "LiDAR map
               // ready" notification points at the job whichever side of the
@@ -2034,6 +2113,7 @@ export function SavedScreen({
               >
                 <Row
                   title={job.label}
+                  onPress={() => showJobOnMap(job)}
                   // "Not on this device" restated the section header it sits
                   // under; the layer count does not.
                   subtitle={
@@ -2041,11 +2121,11 @@ export function SavedScreen({
                       ? countOf(job.missing.length, "layer")
                       : "Connect to download"
                   }
-                  icon="layers"
+                  icon="lidar"
                   hue={assetHue.overlay}
                   right={
                     <IconButton
-                      icon="download"
+                      icon="saveOffline"
                       accessibilityLabel={`Save ${job.label} for offline use`}
                       color={theme.accent}
                       disabled={!lidarReady || overlayBusyKey != null}
@@ -2062,7 +2142,7 @@ export function SavedScreen({
         accountJobs != null &&
         accountJobs.length > 0 ? (
           <>
-            <SectionHeader label="In your Logjam account" />
+            <SectionHeader title="In your Logjam account" />
             {accountJobs.map((job) => (
               // Keyed by the JOB id, which is what a "GeoPDF ready"
               // notification carries. Once imported the row is a local import
@@ -2076,12 +2156,19 @@ export function SavedScreen({
               >
                 <Row
                   title={job.title ?? "Untitled GeoPDF"}
+                  // Its home is the map but it is not on the phone: the one
+                  // obvious job is bringing it here, as its button does.
+                  onPress={
+                    geoPdfBusy
+                      ? undefined
+                      : () => handleImportAccountGeoPdf(job)
+                  }
                   subtitle={
                     job.resultBytes != null
                       ? formatBytes(job.resultBytes)
                       : undefined
                   }
-                  icon="file-text"
+                  icon="geoPdf"
                   hue={assetHue.geoPdf}
                   right={
                     <IconButton
@@ -2097,6 +2184,13 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
+
+        {/* The list ends with the button its empty state offers (the same one),
+            so adding is where the eye ends up after scrolling to the bottom. */}
+        <SavedListEnd
+          show={visibleItems.length > 0 && !searching}
+          action={emptyAction}
+        />
       </ScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
@@ -2137,7 +2231,7 @@ export function SavedScreen({
           />
           <Row
             title="Import a GeoPDF file"
-            icon="file-text"
+            icon="geoPdf"
             hue={assetHue.geoPdf}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2150,7 +2244,7 @@ export function SavedScreen({
                 ? "Loading your GeoPDFs…"
                 : "GeoPDFs from my account"
             }
-            icon="cloud"
+            icon="sync"
             hue={assetHue.geoPdf}
             {...capabilityRowProps("accountGeoPdf", accountState, online)}
             onPress={
@@ -2168,7 +2262,7 @@ export function SavedScreen({
               basemap download. */}
           <Row
             title="LiDAR topos from my account"
-            icon="layers"
+            icon="lidar"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
             onPress={
@@ -2185,10 +2279,10 @@ export function SavedScreen({
               onto this device", and a user who has never drawn a route has no
               reason to know the pen lives on the map. Both hand over to the
               map: arming either needs the location prompt, which cannot be
-              raised from an open sheet (DESIGN.md §7). */}
+              raised from an open sheet (DESIGN.md). */}
           <Row
             title="Record a track"
-            icon="activity"
+            icon="track"
             hue={assetHue.track}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2197,7 +2291,7 @@ export function SavedScreen({
           />
           <Row
             title="Draw a route"
-            icon="edit-3"
+            icon="draw"
             hue={assetHue.route}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2206,7 +2300,7 @@ export function SavedScreen({
           />
           <Row
             title="Import GPX, KML or GeoJSON"
-            icon="file-plus"
+            icon="importedFile"
             hue={assetHue.import}
             onPress={
               importBusy
@@ -2245,7 +2339,7 @@ export function SavedScreen({
             : undefined
         }
         // The send button is pinned rather than sitting under the friend list
-        // (DESIGN.md §6): a confirm that scrolls away leaves the drag handle as
+        // (DESIGN.md): a confirm that scrolls away leaves the drag handle as
         // the only exit, and the handle means discard.
         footer={menuMode === "sendCopy" ? sharePanel.footer : undefined}
       >
@@ -2272,12 +2366,34 @@ export function SavedScreen({
               {menuItem.locatable ? (
                 <Row
                   title="Show on map"
-                  icon="map-pin"
+                  icon="place"
                   hue={assetHue[menuItem.category]}
                   onPress={() => {
                     const target = menuItem;
                     closeItemSheet();
                     showOnMap(target);
+                  }}
+                />
+              ) : null}
+              {/* A track in the account that was recorded elsewhere: the same
+                  verb, word and glyph as a recording made here, first after
+                  the one that goes to the line. Its file is fetched once if
+                  it is not on this phone, so offline it says why it waits. */}
+              {menuItem.logTrip ? (
+                <Row
+                  title={wayVerbLabel("logTrip", "gps")}
+                  icon={wayVerbIcon("logTrip")}
+                  hue={assetHue[menuItem.category]}
+                  subtitle={
+                    menuItem.logTrip.needsConnection && !online
+                      ? "Needs a connection"
+                      : undefined
+                  }
+                  disabled={menuItem.logTrip.needsConnection && !online}
+                  onPress={() => {
+                    const source = menuItem.logTrip;
+                    closeItemSheet();
+                    if (source) setLoggingTrack(source);
                   }}
                 />
               ) : null}
@@ -2288,8 +2404,8 @@ export function SavedScreen({
               {menuItem.share ? (
                 <Row
                   title="Share"
-                  icon="share-2"
-                  hue={theme.bonus1}
+                  icon="shareFriend"
+                  hue={theme.neutral}
                   {...shareRowProps}
                   onPress={() => setMenuMode("share")}
                 />
@@ -2304,7 +2420,7 @@ export function SavedScreen({
                 <Row
                   title="Send a copy"
                   icon="send"
-                  hue={theme.bonus1}
+                  hue={theme.neutral}
                   {...shareRowProps}
                   onPress={() => setMenuMode("sendCopy")}
                 />
@@ -2315,8 +2431,8 @@ export function SavedScreen({
               {menuItem.rename ? (
                 <Row
                   title="Rename"
-                  icon="edit-2"
-                  hue={theme.bonus1}
+                  icon="edit"
+                  hue={theme.neutral}
                   onPress={() => setMenuMode("rename")}
                 />
               ) : null}
@@ -2331,7 +2447,7 @@ export function SavedScreen({
                       ? "Delete all from device"
                       : "Delete from device"
                   }
-                  icon="trash-2"
+                  icon="delete"
                   hue={theme.warning}
                   onPress={() => {
                     const target = menuItem;
@@ -2350,7 +2466,7 @@ export function SavedScreen({
               {menuItem.removeShare ? (
                 <Row
                   title="Remove from my account"
-                  icon="x-circle"
+                  icon="unshare"
                   hue={theme.warning}
                   {...shareRowProps}
                   onPress={() => {
@@ -2365,7 +2481,7 @@ export function SavedScreen({
                   delete, so one map can go without losing the rest. */}
               {menuItem.members && menuItem.members.length > 1 ? (
                 <>
-                  <SectionHeader label="Includes" />
+                  <SectionHeader title="Includes" />
                   {menuItem.members.map((member) => (
                     <Row
                       key={member.id}
@@ -2378,7 +2494,7 @@ export function SavedScreen({
                             {formatBytes(member.sizeBytes)}
                           </Text>
                           <IconButton
-                            icon="trash-2"
+                            icon="delete"
                             accessibilityLabel={`Delete ${member.title} from device`}
                             color={theme.warning}
                             onPress={() => {
@@ -2399,7 +2515,7 @@ export function SavedScreen({
 
       {/* Tracks and imports open the SAME sheet the map opens on their line —
           one verb list per kind, and the only row this surface adds is "Show on
-          map" (DESIGN.md §7). Both hand their bbox straight to `onOpenMap` with
+          map" (DESIGN.md). Both hand their bbox straight to `onOpenMap` with
           this row's reveal, rather than going back through `showOnMap`, which
           would resolve the same extent a second time. */}
       <TrackOptionsSheet
@@ -2415,8 +2531,15 @@ export function SavedScreen({
           }
         }}
         onContinueRecording={(track) => onContinueRecording(track.id)}
+        onLogTrip={setLoggingTrack}
         onInfo={info}
         onError={fail}
+      />
+
+      <LogTripFromTrackSheet
+        track={loggingTrack}
+        onClose={() => setLoggingTrack(null)}
+        onSaved={info}
       />
 
       <ImportOptionsSheet
@@ -2467,7 +2590,7 @@ export function SavedScreen({
             <RegionDownloadRow key={job.spec.id} job={job} />
           ))}
           <Text style={styles.downloadNote}>
-            Downloads only run while Logjam is open.
+            Downloads keep going until Logjam GPS is closed.
           </Text>
         </View>
       </BottomSheet>
@@ -2488,7 +2611,7 @@ function EmptyPanel({
   filter: Category | "all";
   online: boolean;
   /** The one thing that fills this tab, or null where the tab is already it. */
-  action: { label: string; onPress: () => void } | null;
+  action: SavedAction | null;
   /** The tab has rows, but a search/tag narrowed all of them out — a
    *  different message from the tab genuinely holding nothing (item 8), same
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
@@ -2507,7 +2630,7 @@ function EmptyPanel({
       hint: "Places need maps that work with no signal. Save a region before you leave town.",
     },
     region: {
-      title: "No offline basemap",
+      title: "No offline map",
       hint: "Without a saved region the map is blank once you lose signal.",
     },
     overlay: {
@@ -2540,16 +2663,60 @@ function EmptyPanel({
       }
     : copy[filter];
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyHint}>{hint}</Text>
-      {action ? (
-        <Button
-          label={action.label}
-          icon="plus"
-          compact
-          onPress={action.onPress}
-        />
+    <EmptyState
+      title={title}
+      hint={hint}
+      action={
+        action
+          ? {
+              label: action.label,
+              icon: "add",
+              onPress: action.onPress,
+              disabledReason: action.disabledReason,
+            }
+          : undefined
+      }
+    />
+  );
+}
+
+type SavedAction = {
+  label: string;
+  onPress: () => void;
+  disabledReason?: string;
+};
+
+/** The end of a non-empty tab: the add button its empty state offers. */
+function SavedListEnd({
+  show,
+  action,
+}: {
+  show: boolean;
+  action: SavedAction | null;
+}) {
+  if (!show || !action) return null;
+  return (
+    <ListEnd>
+      <SavedAddButton action={action} />
+    </ListEnd>
+  );
+}
+
+/** The tab's one add button, with its reason when it cannot run just now. */
+function SavedAddButton({ action }: { action: SavedAction }) {
+  const styles = useStyles();
+
+  return (
+    <View style={styles.addButton}>
+      <Button
+        label={action.label}
+        icon="add"
+        compact
+        disabled={action.disabledReason != null}
+        onPress={action.onPress}
+      />
+      {action.disabledReason ? (
+        <Text style={styles.addReason}>{action.disabledReason}</Text>
       ) : null}
     </View>
   );
@@ -2558,7 +2725,7 @@ function EmptyPanel({
 /**
  * The Share sub-mode of the per-item sheet: who has this item, and who else
  * could. Sits beside the place detail screen's Shared-with section on the same
- * `useSharing` hook, so "what does unsharing mean" is worded once (DESIGN.md §7).
+ * `useSharing` hook, so "what does unsharing mean" is worded once (DESIGN.md).
  *
  * Mounted only while the sub-mode is open, which is what makes the hook's load
  * fire on open rather than for every row in the list.
@@ -2592,6 +2759,8 @@ function PulseSlot({
   onMeasure: (y: number) => void;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   if (!active) return <>{children}</>;
   return (
     <View onLayout={(event) => onMeasure(event.nativeEvent.layout.y)}>
@@ -2616,7 +2785,9 @@ function PulseSlot({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
+  addButton: { alignItems: "center", gap: spacing(0.5) },
+  addReason: { ...textRole.hint },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
@@ -2624,7 +2795,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accent,
     borderRadius: radius.lg,
   },
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   // Breathing room on both seams: category chips/selection bar → search
   // label, and search input → tag chips. Without it the controls read as one
   // dense block.
@@ -2632,7 +2803,7 @@ const styles = StyleSheet.create({
   // Dims the tag rail while selecting, same treatment as TextField's own
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
-  railInert: { opacity: 0.45 },
+  railInert: { opacity: opacity.disabled },
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),
@@ -2646,15 +2817,11 @@ const styles = StyleSheet.create({
   rowActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  size: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  size: { ...textRole.caption, color: theme.textMuted },
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the
   // verbs, not a warning.
@@ -2665,21 +2832,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     paddingHorizontal: spacing(0.5),
   },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(4),
-    paddingHorizontal: spacing(2),
-  },
-  emptyTitle: {
-    color: theme.textPrimary,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    maxWidth: 300,
-  },
-});
+}));

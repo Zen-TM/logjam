@@ -9,5 +9,5 @@
 .warning {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }

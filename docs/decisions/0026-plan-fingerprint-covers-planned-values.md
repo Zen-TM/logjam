@@ -89,6 +89,16 @@ as below. In full:
   address matching `.github_actions_apply` and the workflow refuses it.
   `.github/workflows/terraform-drift.yml` plans `main` nightly with
   `-detailed-exitcode`, and exit 2 opens or updates one issue.
+- **Update 2026-10-03: `PLAN_FINGERPRINT_KEY` is an Environment secret.** The
+  PR's plan jobs now run in the `terraform-plan` Environment
+  ([0027](0027-pr-plans-run-after-the-maintainer-approves.md)), so the reason
+  the key was a repository secret, and the reason "An Environment secret" is
+  rejected below, no longer hold. It is a secret of `terraform-plan` (the PR
+  plans) and of `prod` (the apply), the same value in both, and never a
+  repository secret: `terraform-plan.yml`'s `scope` job fails if it is one.
+  Only a run the maintainer approved can read it, so the Negative
+  consequence that anyone who can push a branch reaches it no longer applies.
+  A rotation still invalidates open PRs' comments. Everything else above stands.
 
 Guard: `infra/scripts/plan-summary.test.mjs`, run in
 `.github/workflows/terraform-ci.yml`. Beside 0024's checks it covers: a

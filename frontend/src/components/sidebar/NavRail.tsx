@@ -1,5 +1,4 @@
 import { Fragment, type Ref } from "react";
-import { Ellipsis, Map as MapIcon, type LucideIcon } from "lucide-react";
 import type { PanelId } from "./panels";
 import {
   partitionNavItems,
@@ -10,14 +9,14 @@ import {
 } from "./navItems";
 import { useIsMobile } from "../../useIsMobile";
 import BrandMark from "../brand/BrandMark";
-import { Menu } from "../../ui";
+import { Menu, Icon, type Glyph } from "../../ui";
 import classes from "./NavRail.module.css";
 
 /** One destination: an icon in a pill over its label. The active page fills the
  *  pill with the accent — the only filled thing on the rail. */
 function NavButton({
   label,
-  Icon,
+  icon,
   active,
   count,
   onClick,
@@ -25,7 +24,7 @@ function NavButton({
   ...rest
 }: {
   label: string;
-  Icon: LucideIcon;
+  icon: Glyph;
   active: boolean;
   count: number;
   onClick: () => void;
@@ -42,7 +41,7 @@ function NavButton({
       {...rest}
     >
       <span className={classes.pill}>
-        <Icon size={22} aria-hidden />
+        <Icon idea={icon} size={22} />
       </span>
       <span className={classes.label}>{label}</span>
       {count > 0 && (
@@ -79,7 +78,7 @@ function NavRail({
     <Fragment key={item.id}>
       <NavButton
         label={item.label}
-        Icon={item.Icon}
+        icon={item.icon}
         active={activePanel === item.id}
         aria-current={activePanel === item.id ? "page" : undefined}
         count={badgeCounts[item.id] ?? 0}
@@ -105,7 +104,7 @@ function NavRail({
     <nav className={classes.tabs} aria-label="Pages">
       <NavButton
         label="Map"
-        Icon={MapIcon}
+        icon="map"
         active={activePanel === null}
         aria-current={activePanel === null ? "page" : undefined}
         count={0}
@@ -122,7 +121,7 @@ function NavRail({
             item.label,
             badgeCounts[item.id] ?? 0,
           ),
-          icon: item.Icon,
+          icon: item.icon,
           badge: badgeCounts[item.id],
           onSelect: () => toggle(item.id),
         }))}
@@ -130,7 +129,7 @@ function NavRail({
           <NavButton
             {...props}
             label="More"
-            Icon={Ellipsis}
+            icon="moreTab"
             active={isPanelInMore(moreItems, activePanel)}
             count={moreCount}
           />

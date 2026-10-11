@@ -1,27 +1,32 @@
 import type { CSSProperties, ReactNode } from "react";
-import { CircleAlert, CircleCheck, X, type LucideIcon } from "lucide-react";
-import { IconButton } from "./Button";
+import { Button, IconButton } from "./Button";
 import classes from "./Feedback.module.css";
+import { Icon, type Glyph } from "./Icon";
 
 /**
  * A state, as a word: "Queued", "Failed", "Shared". Not a control, so never
- * pressable, and never a `Chip`, which is one. Logjam GPS's four tones:
- * `accent` done or ready (the accent fill, the ink label), `outline` a neutral
- * state, `warning` needs the user, `muted` quiet and not a problem (paused).
- * An `icon` makes the state readable at a glance.
+ * pressable, and never a `Chip`, which is one: it has NO fill and no edge
+ * (filled is interactive, UX §4). Four tones: `accent` done or ready (a dot
+ * in the accent), `outline` a neutral state, `warning` needs the user (a dot
+ * in the warning), `muted` quiet and not a problem (paused). An `icon` makes
+ * the state readable at a glance and stands in for the dot.
  */
 export function StatusPill({
   label,
   tone = "outline",
-  icon: Icon,
+  icon,
 }: {
   label: string;
   tone?: "accent" | "outline" | "warning" | "muted";
-  icon?: LucideIcon;
+  icon?: Glyph;
 }) {
   return (
-    <span className={classes.pill} data-tone={tone}>
-      {Icon && <Icon size={12} aria-hidden />}
+    <span
+      className={classes.pill}
+      data-tone={tone}
+      data-glyph={icon ? "" : undefined}
+    >
+      {icon && <Icon idea={icon} size={12} />}
       {label}
     </span>
   );
@@ -69,22 +74,62 @@ export function ProgressBar({
  * be here and offers the way to get it.
  */
 export function EmptyState({
-  icon: Icon,
+  icon,
   title,
   body,
   actions,
 }: {
-  icon: LucideIcon;
+  icon: Glyph;
   title: string;
   body?: string;
   actions?: ReactNode;
 }) {
   return (
     <div className={classes.empty}>
-      <Icon size={24} aria-hidden className={classes.emptyGlyph} />
+      <Icon idea={icon} size={24} className={classes.emptyGlyph} />
       <p className={classes.emptyTitle}>{title}</p>
       {body && <p className={classes.emptyBody}>{body}</p>}
       {actions && <div className={classes.emptyActions}>{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * A load in flight (UX §11: loading is not empty). A spinner and a line saying
+ * what is loading ("Loading your places…"), centred and muted; Logjam GPS's
+ * `LoadingState` is the same. It is a status, so a screen reader hears it.
+ */
+export function LoadingState({ label = "Loading…" }: { label?: string }) {
+  return (
+    <p className={classes.state} role="status">
+      <Icon idea="loading" size={16} className={classes.spinner} />
+      {label}
+    </p>
+  );
+}
+
+/**
+ * A load that failed (UX §11: neither empty nor loading). Says it failed, in
+ * our words, with Try again where trying again can help.
+ */
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className={classes.errorState} role="alert">
+      <p className={classes.state}>
+        <Icon idea="warning" size={16} className={classes.errorGlyph} />
+        {message}
+      </p>
+      {onRetry && (
+        <Button variant="outline" compact onClick={onRetry}>
+          Try again
+        </Button>
+      )}
     </div>
   );
 }
@@ -105,7 +150,11 @@ export function SelectionBar({
 }) {
   return (
     <div role="group" aria-label="Selection" className={classes.selectionBar}>
-      <IconButton icon={X} label="Clear selection (Esc)" onClick={onClear} />
+      <IconButton
+        icon="close"
+        label="Clear selection (Esc)"
+        onClick={onClear}
+      />
       <span className={classes.selectionCount} aria-live="polite">
         {countLabel}
       </span>
@@ -126,18 +175,18 @@ export function Toast({
   severity: ToastSeverity;
   onDismiss: () => void;
 }) {
-  const Icon = severity === "error" ? CircleAlert : CircleCheck;
+  const icon = severity === "error" ? "warning" : "success";
   return (
     <div
       className={classes.toast}
       role={severity === "error" ? "alert" : "status"}
     >
-      <Icon size={16} aria-hidden className={classes.toastGlyph} />
+      <Icon idea={icon} size={16} className={classes.toastGlyph} />
       <span className={classes.toastText}>{message}</span>
       <IconButton
-        icon={X}
+        icon="close"
         label="Dismiss"
-        tone="onFill"
+        tone="onInverse"
         size={14}
         round
         onClick={onDismiss}

@@ -17,7 +17,7 @@
 // to gate with; the gate passes through rather than bricking the app — the
 // data is exactly as protected as everything else on an unlocked device.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, StyleSheet, Text } from "react-native";
+import { AppState, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
 
@@ -26,7 +26,7 @@ import {
   isAppLockEnabled,
   onAppLockPreferenceChanged,
 } from "./appLockPreference";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
 // fires background/active AppState churn on the host activity. Any relock
@@ -46,6 +46,8 @@ const DEV_LOCK_DISABLED =
   __DEV__ && process.env.EXPO_PUBLIC_DISABLE_APP_LOCK === "1";
 
 export function AppLockGate({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
+
   // The user's own switch (Settings → This phone) is the whole condition. Read
   // synchronously so the gate's very first render already knows — an async read
   // would flash the lock screen at someone who has it off. Turning it OFF costs
@@ -116,7 +118,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         return;
       }
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock Logjam",
+        promptMessage: "Unlock Logjam GPS",
       });
       if (result.success) {
         lastUnlockAt.current = Date.now();
@@ -188,23 +190,19 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   container: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: spacing(2),
     padding: spacing(3),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
-  },
+  title: { ...textRole.title, color: theme.text },
   line: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
     textAlign: "center",
   },
-});
+}));

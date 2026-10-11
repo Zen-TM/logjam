@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Check, MapPin, Minus, Plus, Trash2, Users } from "lucide-react";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import { noFriendsMessage, type TripLogCustomFieldDef } from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
 import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
@@ -12,12 +11,14 @@ import {
   Avatar,
   Button,
   Dialog,
+  FieldError,
   IconButton,
   IconTile,
   Row,
   SearchField,
   SectionHeader,
   Select,
+  Icon,
 } from "../../ui";
 import classes from "./SelectedPlacesDialog.module.css";
 
@@ -73,6 +74,8 @@ function SelectedPlacesDialog({
 }) {
   const [shareSearch, setShareSearch] = useState("");
   const [shareFriendIds, setShareFriendIds] = useState<string[]>([]);
+  // Set by pressing Share with nobody picked; hidden again by the first pick.
+  const [shareNeedsFriend, setShareNeedsFriend] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -118,7 +121,11 @@ function SelectedPlacesDialog({
   );
 
   async function handleShare() {
-    if (shareFriendIds.length === 0 || ownedPlaces.length === 0) return;
+    if (ownedPlaces.length === 0) return;
+    if (shareFriendIds.length === 0) {
+      setShareNeedsFriend(true);
+      return;
+    }
     setSharing(true);
     try {
       for (const place of ownedPlaces) {
@@ -191,15 +198,16 @@ function SelectedPlacesDialog({
             {ownedPlaces.length > 0 && (
               <Button
                 variant="danger"
-                icon={Trash2}
+                icon="delete"
                 className={classes.deleteVerb}
                 disabled={busy}
+                disabledReason="Working…"
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 Delete {plural(ownedPlaces.length, "place")}
               </Button>
             )}
-            <Button onClick={onClose} disabled={busy}>
+            <Button onClick={onClose} disabled={busy} disabledReason="Working…">
               Close
             </Button>
           </>
@@ -219,10 +227,10 @@ function SelectedPlacesDialog({
                 key={place.id}
                 leading={
                   <IconTile
-                    icon={MapPin}
+                    icon="place"
                     hue={
                       ownedPlaceIds.has(place.id)
-                        ? "var(--theme-accent)"
+                        ? "var(--color-accent)"
                         : "var(--hue-shared)"
                     }
                   />
@@ -233,7 +241,7 @@ function SelectedPlacesDialog({
                 }
                 trailing={
                   <IconButton
-                    icon={Minus}
+                    icon="remove"
                     label={`Take ${place.name} out of the selection`}
                     onClick={() => onRemovePlace(place.id)}
                   />
@@ -259,7 +267,7 @@ function SelectedPlacesDialog({
             {placeSearchResults.map((place) => (
               <Row
                 key={place.id}
-                leading={<IconTile icon={Plus} hue="var(--theme-bonus-1)" />}
+                leading={<IconTile icon="add" hue="var(--color-neutral)" />}
                 title={place.name}
                 subtitle={
                   place.altNames.length > 0
@@ -292,7 +300,12 @@ function SelectedPlacesDialog({
                   </option>
                 ))}
               </Select>
-              <Button variant="outline" onClick={handleExport} disabled={busy}>
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                disabled={busy}
+                disabledReason="Working…"
+              >
                 Download
               </Button>
             </div>
@@ -305,10 +318,7 @@ function SelectedPlacesDialog({
                 Sharing is for your own places, and none of these are yours.
               </p>
             ) : friends.length === 0 ? (
-              <p className={classes.note}>
-                Sharing is between friends. Add one on the Friends page, then
-                come back.
-              </p>
+              <p className={classes.note}>{noFriendsMessage("share").body}</p>
             ) : (
               <>
                 {/* What the press will do, before the press. */}
@@ -332,9 +342,10 @@ function SelectedPlacesDialog({
                           title={friend.username}
                           trailing={
                             <IconButton
-                              icon={Minus}
+                              icon="unshare"
                               label={`Don't share with ${friend.username}`}
                               disabled={busy}
+                              disabledReason="Working…"
                               onClick={() =>
                                 setShareFriendIds(
                                   shareFriendIds.filter(
@@ -375,7 +386,7 @@ function SelectedPlacesDialog({
                       }}
                       trailing={
                         <span className={classes.addMark} data-mark aria-hidden>
-                          <Plus size={16} />
+                          <Icon idea="add" size={16} />
                         </span>
                       }
                     />
@@ -383,23 +394,32 @@ function SelectedPlacesDialog({
                 )}
                 <Button
                   variant="filled"
-                  icon={Check}
+                  icon="done"
                   className={classes.shareVerb}
                   busy={sharing}
-                  disabled={busy || shareFriendIds.length === 0}
+                  disabled={busy}
+                  disabledReason="Working…"
                   onClick={handleShare}
                 >
                   {shareFriendIds.length === 0
                     ? "Share"
                     : `Share with ${plural(shareFriendIds.length, "friend")}`}
                 </Button>
+                <FieldError
+                  message={
+                    shareNeedsFriend && shareFriendIds.length === 0
+                      ? "Pick a friend to share with."
+                      : null
+                  }
+                />
               </>
             )}
           </section>
 
           {friends.length === 0 && ownedPlaces.length > 0 && (
             <p className={classes.note} role="note">
-              <Users size={14} aria-hidden /> Sharing needs a friend.
+              <Icon idea="friends" size={14} aria-hidden /> Sharing needs a
+              friend.
             </p>
           )}
         </div>

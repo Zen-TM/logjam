@@ -9,9 +9,9 @@
 // screen's state would re-reconcile every layer, source and badge on the screen
 // at 60 Hz; this way the only thing that re-renders is the bar.
 import { forwardRef, useImperativeHandle, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { fontSize, radius, spacing, makeStyles, withAlpha } from "../theme";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
 export type ScaleBarHandle = {
@@ -41,6 +41,8 @@ export const ScaleBar = forwardRef<
     maxWidth: number;
   }
 >(function ScaleBar({ latitude, zoom, maxWidth }, ref) {
+  const styles = useStyles();
+
   const [camera, setCamera] = useState({ latitude, zoom });
 
   useImperativeHandle(ref, () => ({
@@ -70,32 +72,28 @@ export const ScaleBar = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // Translucent warm backing: the bar sits over map imagery that can be any
   // brightness, and hairlines over topo raster are otherwise unreadable.
   root: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
-    backgroundColor: `${theme.primary}CC`,
+    backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
-    paddingHorizontal: spacing(0.75),
+    paddingHorizontal: spacing(1),
     paddingTop: spacing(0.25),
     paddingBottom: spacing(0.5),
     gap: spacing(0.25),
   },
-  label: {
-    color: theme.textPrimary,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.caption, color: theme.text },
   // Capped rule: bottom edge plus down-turned ends.
   rule: {
     height: 6,
-    borderColor: theme.textPrimary,
+    borderColor: theme.text,
     borderLeftWidth: 2,
     borderRightWidth: 2,
     borderBottomWidth: 2,
     borderBottomLeftRadius: 1,
     borderBottomRightRadius: 1,
   },
-});
+}));

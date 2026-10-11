@@ -9,9 +9,11 @@
 // fetches, and offline regions render labels with zero network — the Stage 4a
 // requirement. The remote host is only the fallback while installing on first
 // launch or if the install fails. No user data rides these requests either way.
+import { useMemo } from "react";
+import type { ThemeTokens } from "@logjam/shared";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
 
-import { theme } from "../../theme";
+import { useTheme } from "../../theme";
 
 export const BASEMAP_ASSETS_REMOTE_BASE =
   "https://protomaps.github.io/basemaps-assets";
@@ -21,6 +23,7 @@ export type ProtomapsFlavor = "light" | "dark";
 export function buildShellStyle(
   localAssetsBaseUrl: string | null,
   flavor: ProtomapsFlavor,
+  theme: ThemeTokens,
 ): StyleSpecification {
   const base = (localAssetsBaseUrl ?? BASEMAP_ASSETS_REMOTE_BASE).replace(
     /\/+$/,
@@ -37,10 +40,26 @@ export function buildShellStyle(
       {
         id: "background",
         type: "background",
-        paint: { "background-color": theme.primary },
+        paint: { "background-color": theme.page },
       },
     ],
     glyphs: `${base}/fonts/{fontstack}/{range}.pbf`,
     sprite: `${base}/sprites/v4/${flavor}`,
   };
+}
+
+/**
+ * The shell style in the scheme the app is painted in. A scheme change hands
+ * the map a new style object, which reloads it: the background is the one
+ * colour the map cannot take as a layer prop.
+ */
+export function useShellStyle(
+  localAssetsBaseUrl: string | null,
+  flavor: ProtomapsFlavor,
+): StyleSpecification {
+  const theme = useTheme();
+  return useMemo(
+    () => buildShellStyle(localAssetsBaseUrl, flavor, theme),
+    [localAssetsBaseUrl, flavor, theme],
+  );
 }

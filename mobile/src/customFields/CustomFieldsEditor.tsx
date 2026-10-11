@@ -1,18 +1,22 @@
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
+  attributeDeleteConfirm,
+  attributesEmptyHint,
   CUSTOM_FIELD_TYPES,
   distinctTripTypes,
+  drawsYoursHeading,
   isSystemFieldDef,
+  SETTINGS_LIST,
   TRIP_TYPE_SUGGESTIONS,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import {
   countFieldValues,
@@ -25,12 +29,18 @@ import {
   Button,
   ChipPicker,
   ErrorBanner,
+  Field,
+  FieldError,
+  FormStack,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  Toggle,
+  SwitchRow,
 } from "../ui";
+import { fieldFormKey, seedDraft, type FieldDraft } from "./fieldDraft";
+
+const listCopy = SETTINGS_LIST.copy;
 
 /**
  * Manage the user's own custom field definitions — the mobile counterpart of the
@@ -77,63 +87,65 @@ export function CustomFieldList({
   entity,
   defs,
   onEdit,
+  emptyHint,
 }: {
   entity: CustomFieldEntity;
   defs: ScopedCustomFieldDef[];
   onEdit: (def: ScopedCustomFieldDef) => void;
+  /** Said while the user has none of their own here, for a host showing less
+   *  than the whole list (one type's attributes). */
+  emptyHint?: string;
 }) {
+  const styles = useStyles();
+
   const noun = ENTITY_NOUN[entity];
   // BUILT-INS LAST. The list is two things stacked: what the user made, and
   // what the app ships. Theirs is the half they came here to change, so it
   // reads first — and the built-ins, which carry no verbs at all, stop
   // interrupting it. `position` (the order they arranged) still decides within
   // each half, which is why this is a stable partition and not a sort key.
-  const ordered = [
-    ...defs.filter((def) => !isSystemFieldDef(def)),
-    ...defs.filter(isSystemFieldDef),
-  ];
+  const own = defs.filter((def) => !isSystemFieldDef(def));
+  const builtIn = defs.filter(isSystemFieldDef);
   return (
-    <View style={styles.body}>
-      {ordered.length === 0 ? (
+    <View style={styles.list}>
+      {own.length === 0 ? (
         <Text style={styles.hint}>
-          Add your own {ATTRIBUTE_NOUN.one} to record on every {noun.one} — e.g.
-          water level or party size.
+          {emptyHint ?? attributesEmptyHint(noun.one)}
         </Text>
-      ) : (
-        <>
-          <SectionHeader
-            label={`${ordered.length} ${ordered.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`}
-          />
-          {ordered.map((def) =>
-            // A BUILT-IN gets no verbs, the same way a system place type does:
-            // it belongs to no account, the server refuses a rename and a
-            // delete, and the phone's half of a delete (strip the value off
-            // every place carrying the key) would run first and for real.
-            // A row with no action reads as a fact; a row that fails reads as
-            // a bug.
-            isSystemFieldDef(def) ? (
-              <Row
-                key={defRowKey(def)}
-                icon="lock"
-                // The BARE label, not `customFieldDisplayLabel`: that appends
-                // the range, and the subtitle one line down already says
-                // "Integer · 1–7". Printing the bounds twice on one row made
-                // the list read as a form rather than an inventory.
-                title={def.label}
-                subtitle={`Built in · ${fieldSummary(def)}`}
-              />
-            ) : (
-              <Row
-                key={defRowKey(def)}
-                icon="tag"
-                title={def.label}
-                subtitle={fieldSummary(def)}
-                onPress={() => onEdit(def)}
-              />
-            ),
-          )}
-        </>
-      )}
+      ) : null}
+      {drawsYoursHeading(own.length, builtIn.length) ? (
+        <SectionHeader title={listCopy.yours} count={own.length} />
+      ) : null}
+      {own.map((def) => (
+        <Row
+          key={defRowKey(def)}
+          icon="tag"
+          title={def.label}
+          subtitle={fieldSummary(def)}
+          onPress={() => onEdit(def)}
+        />
+      ))}
+      {builtIn.length > 0 ? (
+        <SectionHeader title={listCopy.builtIn} count={builtIn.length} />
+      ) : null}
+      {builtIn.map((def) => (
+        // A BUILT-IN gets no verbs, the same way a system place type does:
+        // it belongs to no account, the server refuses a rename and a
+        // delete, and the phone's half of a delete (strip the value off
+        // every place carrying the key) would run first and for real.
+        // A row with no action reads as a fact; a row that fails reads as
+        // a bug.
+        <Row
+          key={defRowKey(def)}
+          icon="private"
+          // The BARE label, not `customFieldDisplayLabel`: that appends
+          // the range, and the subtitle one line down already says
+          // "Integer · 1–7". Printing the bounds twice on one row made
+          // the list read as a form rather than an inventory.
+          title={def.label}
+          subtitle={fieldSummary(def)}
+        />
+      ))}
     </View>
   );
 }
@@ -150,6 +162,7 @@ export function CustomFieldList({
  * needing to know about the other.
  */
 export function useCustomFieldForm({
+  open,
   entity,
   defs,
   editing,
@@ -157,6 +170,9 @@ export function useCustomFieldForm({
   onSaved,
   onDone,
 }: {
+  /** Whether the host is showing the form: each open starts a fresh draft
+   *  (`fieldFormKey`). */
+  open: boolean;
   entity: CustomFieldEntity;
   defs: ScopedCustomFieldDef[];
   /** null = adding a new field. */
@@ -174,6 +190,9 @@ export function useCustomFieldForm({
   onSaved: (defs: ScopedCustomFieldDef[], message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const noun = ENTITY_NOUN[entity];
   const placeTypes = useMirrorPlaceTypes();
   const trips = useMirrorTrips();
@@ -183,7 +202,7 @@ export function useCustomFieldForm({
   // component it replaced it is not unmounted between opens — nine separate
   // `useState` initialisers would each keep the PREVIOUS field's value, and the
   // user would open "Water level" and find "Gate code" in the box.
-  const formKey = editing?.key ?? "__new__";
+  const formKey = fieldFormKey(open, editing, initialTypeId);
   const [draft, setDraft] = useState<FieldDraft>(() =>
     seedDraft(entity, editing, initialTypeId),
   );
@@ -221,16 +240,18 @@ export function useCustomFieldForm({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [boundsError, setBoundsError] = useState<string | null>(null);
   const [scopeError, setScopeError] = useState<string | null>(null);
   // A save the local write refused, or a failed delete — this form stays open
   // either way, so it reports in its own banner above the footer's buttons
-  // rather than a toast (DESIGN.md §8).
+  // rather than a toast (shared/DESIGN.md §11).
   const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
 
   const save = useCallback(async () => {
     setError(null);
+    setBoundsError(null);
     setScopeError(null);
     setFormError(null);
     // Same builder the web uses, so the key slug and the validation rules can't
@@ -240,7 +261,8 @@ export function useCustomFieldForm({
       defs.filter((def) => def.key !== editing?.key),
     );
     if ("error" in built) {
-      setError(built.error);
+      // Under the control it is about: a bad range is not the name's problem.
+      (built.field === "bounds" ? setBoundsError : setError)(built.error);
       return;
     }
     // A field that is on no type and not on all of them appears on NO form — it
@@ -324,35 +346,34 @@ export function useCustomFieldForm({
     // from 12 trips" is the part of the consequence the user can't see.
     countFieldValues(entity, key)
       .then((affected) => {
-        Alert.alert(
-          `Delete “${editing.label}”?`,
-          affected === 0
-            ? `No ${noun.many} use this ${ATTRIBUTE_NOUN.one} yet. This can't be undone.`
-            : `This clears the value from ${affected} ${affected === 1 ? noun.one : noun.many}. This can't be undone.`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Delete",
-              style: "destructive",
-              onPress: () => {
-                removeFieldDef(entity, key)
-                  .then((removed) => {
-                    onSaved(
-                      defs.filter((def) => def.key !== key),
-                      removed === 0
-                        ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
-                        : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
-                    );
-                    onDone();
-                  })
-                  .catch((err: unknown) => {
-                    console.error(err);
-                    setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
-                  });
-              },
-            },
-          ],
+        const { confirmTitle, confirmBody } = attributeDeleteConfirm(
+          editing.label,
+          affected,
+          noun,
         );
+        Alert.alert(confirmTitle, confirmBody, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: listCopy.deleteAttribute,
+            style: "destructive",
+            onPress: () => {
+              removeFieldDef(entity, key)
+                .then((removed) => {
+                  onSaved(
+                    defs.filter((def) => def.key !== key),
+                    removed === 0
+                      ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
+                      : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
+                  );
+                  onDone();
+                })
+                .catch((err: unknown) => {
+                  console.error(err);
+                  setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
+                });
+            },
+          },
+        ]);
       })
       .catch((err: unknown) => {
         console.error(err);
@@ -363,7 +384,7 @@ export function useCustomFieldForm({
   }, [defs, editing, entity, noun, onDone, onSaved]);
 
   const body = (
-    <View style={styles.body}>
+    <FormStack>
       <TextField
         label={`${capitalize(ATTRIBUTE_NOUN.one)} name`}
         value={label}
@@ -379,9 +400,11 @@ export function useCustomFieldForm({
           a min and a max are properties of a NUMBER, and standing them apart
           under a heading of their own put them next to the place-type picker,
           which is the other thing on this screen called a "type". */}
-      <View style={styles.typeBlock}>
-        <SectionHeader label={`What it holds`} />
-        <SegmentedControl
+      <Field
+        label="What it holds"
+        hint={editing ? "Existing values are kept." : undefined}
+      >
+        <ChipRail
           options={CUSTOM_FIELD_TYPES.map((entry) => ({
             value: entry.value,
             label: entry.label,
@@ -389,57 +412,56 @@ export function useCustomFieldForm({
           value={type}
           onChange={(next) => patch({ type: next })}
         />
-        {editing ? (
-          <Text style={styles.hint}>Existing values are kept.</Text>
-        ) : null}
         {/* Range is offered only for numbers, because that is the only place it
             means anything — and it is what makes the web's range slider work,
             and the phone's stop rail. */}
-        {numeric ? (
-          <>
-            <Row
-              icon="sliders"
-              title="Limit to a range"
-              subtitle={
-                bounded
-                  ? "Values must be between the min and max you set"
-                  : "Any number"
-              }
-              right={
-                <Toggle
-                  value={bounded}
-                  onValueChange={(next) => patch({ bounded: next })}
-                  accessibilityLabel="Limit to a range"
+      </Field>
+      {numeric ? (
+        <FormStack>
+          <SwitchRow
+            icon="filter"
+            title="Limit to a range"
+            description={
+              bounded
+                ? "Values must be between the min and max you set"
+                : "Any number"
+            }
+            checked={bounded}
+            onChange={(next) => patch({ bounded: next })}
+          />
+          {bounded ? (
+            <View style={styles.boundsRow}>
+              <View style={styles.bound}>
+                <TextField
+                  label="Min"
+                  value={min}
+                  onChangeText={(next) => {
+                    patch({ min: next });
+                    setBoundsError(null);
+                  }}
+                  keyboardType={
+                    type === "integer" ? "number-pad" : "decimal-pad"
+                  }
                 />
-              }
-            />
-            {bounded ? (
-              <View style={styles.boundsRow}>
-                <View style={styles.bound}>
-                  <TextField
-                    label="Min"
-                    value={min}
-                    onChangeText={(next) => patch({ min: next })}
-                    keyboardType={
-                      type === "integer" ? "number-pad" : "decimal-pad"
-                    }
-                  />
-                </View>
-                <View style={styles.bound}>
-                  <TextField
-                    label="Max"
-                    value={max}
-                    onChangeText={(next) => patch({ max: next })}
-                    keyboardType={
-                      type === "integer" ? "number-pad" : "decimal-pad"
-                    }
-                  />
-                </View>
               </View>
-            ) : null}
-          </>
-        ) : null}
-      </View>
+              <View style={styles.bound}>
+                <TextField
+                  label="Max"
+                  value={max}
+                  onChangeText={(next) => {
+                    patch({ max: next });
+                    setBoundsError(null);
+                  }}
+                  keyboardType={
+                    type === "integer" ? "number-pad" : "decimal-pad"
+                  }
+                />
+              </View>
+            </View>
+          ) : null}
+          {bounded ? <FieldError message={boundsError} /> : null}
+        </FormStack>
+      ) : null}
 
       {/* WHERE IT APPEARS. "All" is a chip in the same row rather than a toggle
           above it: it is one more answer to the one question this control asks,
@@ -455,82 +477,71 @@ export function useCustomFieldForm({
       {/* A TRIP field is asked by the trip's own tags, so its chips are trip
           types and "Other" adds one — a field can be set up for an activity
           before its first trip. */}
-      <View style={styles.typeBlock}>
-        <ChipPicker
-          label={entity === "place" ? "Place types" : "Trip types"}
-          options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
-          selected={
-            appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds
+      <ChipPicker
+        label={entity === "place" ? "Place types" : "Trip types"}
+        options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
+        selected={appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds}
+        disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
+        error={scopeError}
+        onToggle={(value) => {
+          setScopeError(null);
+          if (value === ALL_TYPES_CHIP) {
+            patch({ appliesToAll: !appliesToAll });
+            return;
           }
-          disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
-          error={scopeError}
-          onToggle={(value) => {
-            setScopeError(null);
-            if (value === ALL_TYPES_CHIP) {
-              patch({ appliesToAll: !appliesToAll });
-              return;
-            }
-            patch({
-              typeIds: typeIds.includes(value)
-                ? typeIds.filter((existing) => existing !== value)
-                : [...typeIds, value],
-            });
-          }}
-          onAdd={
-            entity === "place"
-              ? undefined
-              : (added) => {
-                  // An existing spelling wins, as it does on the trip form: the
-                  // API refuses case-variant duplicates.
-                  const value =
-                    allScopeValues.find(
-                      (existing) =>
-                        existing.toLowerCase() === added.toLowerCase(),
-                    ) ?? added;
-                  setScopeError(null);
-                  patch({
-                    appliesToAll: false,
-                    typeIds: typeIds.includes(value)
-                      ? typeIds
-                      : [...typeIds, value],
-                  });
-                }
-          }
-          addPlaceholder="Other"
-        />
-      </View>
+          patch({
+            typeIds: typeIds.includes(value)
+              ? typeIds.filter((existing) => existing !== value)
+              : [...typeIds, value],
+          });
+        }}
+        onAdd={
+          entity === "place"
+            ? undefined
+            : (added) => {
+                // An existing spelling wins, as it does on the trip form: the
+                // API refuses case-variant duplicates.
+                const value =
+                  allScopeValues.find(
+                    (existing) =>
+                      existing.toLowerCase() === added.toLowerCase(),
+                  ) ?? added;
+                setScopeError(null);
+                patch({
+                  appliesToAll: false,
+                  typeIds: typeIds.includes(value)
+                    ? typeIds
+                    : [...typeIds, value],
+                });
+              }
+        }
+        addPlaceholder="Other"
+      />
 
       {editing ? (
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
-          title={`Delete ${ATTRIBUTE_NOUN.one}`}
+          title={listCopy.deleteAttribute}
           onPress={confirmDelete}
         />
       ) : null}
-    </View>
+    </FormStack>
   );
 
-  // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
-  // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (DESIGN.md §8).
+  // The sheet's × (and the back arrow) leave the form; the footer holds only
+  // the commit (shared/DESIGN.md §3). The banner sits above it, never at the
+  // top of the form (§11).
   const footer = (
-    <View style={styles.footerStack}>
+    <FormStack>
       {formError ? <ErrorBanner message={formError} /> : null}
-      <View style={styles.actions}>
-        <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-        </View>
-        <View style={styles.action}>
-          <Button
-            label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
-            icon="check"
-            loading={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      </View>
-    </View>
+      <Button
+        label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
+        icon="done"
+        loading={saving}
+        onPress={() => void save()}
+      />
+    </FormStack>
   );
 
   return { body, footer };
@@ -539,18 +550,6 @@ export function useCustomFieldForm({
 /** The "all types" chip's value. Not a place type id — every real id is a
  *  UUID — and not a plausible trip tag. */
 const ALL_TYPES_CHIP = "__all__";
-
-/** Everything the form holds while it is being filled in. */
-type FieldDraft = {
-  label: string;
-  type: TripLogCustomFieldType;
-  bounded: boolean;
-  min: string;
-  max: string;
-  appliesToAll: boolean;
-  /** Place type ids for a place field, trip types (tags) for a trip field. */
-  typeIds: string[];
-};
 
 /** First spelling of each tag wins; later case variants are dropped. */
 function dedupeCaseInsensitive(values: readonly string[]): string[] {
@@ -578,32 +577,6 @@ function defRowKey(def: ScopedCustomFieldDef): string {
   return `${def.ownerId ?? "system"}:${def.key}`;
 }
 
-/** The draft a given definition opens with. A NEW field opened from a place's
- *  own form starts scoped to that type — the user asked for it while filling in
- *  a canyon — and from Settings starts on all of them, where the answer is
- *  genuinely theirs to make. */
-function seedDraft(
-  entity: CustomFieldEntity,
-  editing: ScopedCustomFieldDef | null,
-  initialTypeId: string | undefined,
-): FieldDraft {
-  return {
-    label: editing?.label ?? "",
-    type: editing?.type ?? "string",
-    bounded: editing?.min != null,
-    min: editing?.min != null ? String(editing.min) : "",
-    max: editing?.max != null ? String(editing.max) : "",
-    appliesToAll: editing ? editing.appliesToAllTypes : initialTypeId == null,
-    typeIds: editing
-      ? entity === "place"
-        ? editing.placeTypeIds
-        : editing.tripTypes
-      : initialTypeId != null
-        ? [initialTypeId]
-        : [],
-  };
-}
-
 function capitalize(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
@@ -627,13 +600,9 @@ function typeLabel(type: TripLogCustomFieldType): string {
   );
 }
 
-const styles = StyleSheet.create({
-  body: { gap: spacing(1) },
-  footerStack: { gap: spacing(1) },
-  actions: { flexDirection: "row", gap: spacing(1) },
-  action: { flex: 1 },
-  typeBlock: { gap: spacing(0.5) },
+const useStyles = makeStyles((theme) => ({
+  list: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },
-});
+}));

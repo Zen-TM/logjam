@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import classes from "./Stats.module.css";
 
 export type SparkBucket = {
@@ -79,6 +80,10 @@ export type Stat = {
    * 2026-09-17).
    */
   span?: boolean;
+  /** Makes the cell copy its value on press, and draws a copy glyph beside the
+   *  value so the press can be found. The cell is on the card colour only then:
+   *  the fill means "press me" (UX §4), a read-out sits on the page. */
+  onCopy?: () => void;
 };
 
 /** Headline numbers in a two-column grid, each a label over its value. A
@@ -93,7 +98,21 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
           data-span={stat.span || undefined}
         >
           <dt className={classes.statLabel}>{stat.label}</dt>
-          <dd className={classes.statValue}>{stat.value}</dd>
+          <dd className={classes.statValue}>
+            {stat.onCopy ? (
+              <button
+                type="button"
+                className={classes.copy}
+                onClick={stat.onCopy}
+                aria-label={`${stat.label}: ${stat.value}. Copy`}
+              >
+                <span>{stat.value}</span>
+                <Icon idea="copy" size={14} />
+              </button>
+            ) : (
+              stat.value
+            )}
+          </dd>
         </div>
       ))}
     </dl>

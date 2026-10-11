@@ -17,9 +17,8 @@ import {
   ARROW_FEATURE_KIND,
   ROUTE_ARROW_ICON_SIZE,
   ROUTE_ARROW_IMAGE,
+  MAP_INK,
 } from "@logjam/shared";
-
-import { theme } from "../theme";
 
 // Re-exported so this module stays the one import for a layer that draws
 // arrows, rather than every call site reaching into two packages.
@@ -61,7 +60,7 @@ export function routeArrowStyle(
     iconImage: ROUTE_ARROW_IMAGE,
     iconSize: ROUTE_ARROW_ICON_SIZE,
     iconColor: color,
-    iconHaloColor: theme.primary,
+    iconHaloColor: MAP_INK.casing,
     iconHaloWidth: 1,
     iconAllowOverlap: true,
     iconIgnorePlacement: true,

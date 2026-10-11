@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { FRIENDS, INBOX, PLACES_LIST, TRIPS_LIST } from "@logjam/shared";
 import {
   partitionNavItems,
   aggregateBadgeCount,
@@ -103,5 +104,19 @@ describe("labelWithBadge", () => {
   it("names the count so the visual badge can be hidden from assistive tech", () => {
     expect(labelWithBadge("Inbox", 3)).toBe("Inbox, 3 unread");
     expect(labelWithBadge("Inbox", 0)).toBe("Inbox");
+  });
+});
+
+// Logjam Web's panel title is the panel's name, never a count its chips already
+// show. Red when a contract's `title` drifts from the rail's word for it (or a
+// panel goes back to `placesHeroTitle(n)`).
+describe("a panel's title is the nav rail's word", () => {
+  it.each([
+    ["places", PLACES_LIST.title],
+    ["logs", TRIPS_LIST.title],
+    ["friends", FRIENDS.title],
+    ["inbox", INBOX.title],
+  ] as const)("%s", (id, title) => {
+    expect(ALL_ITEMS.find((item) => item.id === id)?.label).toBe(title);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isThemeSchemeId,
+  normalizeThemeSchemeId,
   isNotificationPreferences,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
@@ -22,6 +23,36 @@ describe("isThemeSchemeId", () => {
     expect(isThemeSchemeId(42)).toBe(false);
     // Must not be fooled by inherited Object prototype props.
     expect(isThemeSchemeId("toString")).toBe(false);
+  });
+});
+
+describe("retired scheme ids", () => {
+  // Red when Ironbark's alias is dropped: an account that chose it would fall
+  // back to Sandstone instead of the scheme its cool grey became.
+  it("a stored ironbark becomes scribblyGum, and daylight becomes ghostGum", () => {
+    expect(normalizeThemeSchemeId("ironbark")).toBe("scribblyGum");
+    expect(normalizeThemeSchemeId("daylight")).toBe("ghostGum");
+    expect(
+      normalizeUserUiPreferences({ themeSchemeId: "ironbark" }).themeSchemeId,
+    ).toBe("scribblyGum");
+    expect(
+      normalizeUserUiPreferences({ themeSchemeId: "daylight" }).themeSchemeId,
+    ).toBe("ghostGum");
+  });
+  it("is not a scheme to pick", () => {
+    expect(isThemeSchemeId("ironbark")).toBe(false);
+    expect(THEME_SCHEME_ORDER).not.toContain("ironbark");
+    expect(THEME_SCHEME_ORDER).toEqual([
+      "sandstone",
+      "basalt",
+      "scribblyGum",
+      "ghostGum",
+    ]);
+  });
+  it("still refuses an id that never was one", () => {
+    expect(normalizeThemeSchemeId("granite")).toBeNull();
+    expect(normalizeThemeSchemeId("toString")).toBeNull();
+    expect(normalizeThemeSchemeId(undefined)).toBeNull();
   });
 });
 

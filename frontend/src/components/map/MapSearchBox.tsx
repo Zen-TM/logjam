@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { MapPin, Search, Users, Globe } from "lucide-react";
 import { geocode, type GeocodeResult } from "@logjam/shared";
 import type { TPlace } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MapSearchBox.module.css";
+import { Icon } from "../../ui";
 
 const PLACE_RESULTS = 5;
 /** The geocoder wants a few characters to say anything useful. */
@@ -142,7 +142,7 @@ export default function MapSearchBox({
   return (
     <div className={classes.root}>
       <div className={classes.field}>
-        <Search size={18} aria-hidden className={classes.glyph} />
+        <Icon idea="search" size={18} aria-hidden className={classes.glyph} />
         <input
           ref={inputRef}
           className={classes.input}
@@ -202,12 +202,12 @@ export default function MapSearchBox({
             className={classes.list}
           >
             {options.map((option, index) => {
-              const Icon =
+              const icon =
                 option.kind === "place"
                   ? option.shared
-                    ? Users
-                    : MapPin
-                  : Globe;
+                    ? "friends"
+                    : "place"
+                  : "map";
               const label =
                 option.kind === "place"
                   ? option.place.name
@@ -228,7 +228,7 @@ export default function MapSearchBox({
                     choose(option);
                   }}
                 >
-                  <Icon size={16} aria-hidden className={classes.optionGlyph} />
+                  <Icon idea={icon} size={16} className={classes.optionGlyph} />
                   <span className={classes.optionLabel}>{label}</span>
                   {option.kind === "place" && option.shared && (
                     <span className={classes.optionMeta}>Shared</span>

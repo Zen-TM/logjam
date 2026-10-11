@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   defsForType,
@@ -12,7 +11,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
 import {
@@ -28,21 +27,24 @@ import {
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import { placeTypeGlyph } from "./placeTypeIcon";
 import {
   BottomSheet,
   Button,
   DatePicker,
   ErrorBanner,
+  Field,
+  FormStack,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  type SegmentOption,
+  type ChipOption,
+  Icon,
 } from "../ui";
 
 /**
- * Add or edit a place — one sheet for both (DESIGN.md §7). The fields are
+ * Add or edit a place — one sheet for both (DESIGN.md). The fields are
  * identical; only the title, the submit label and whether coordinates arrive
  * pre-filled differ.
  *
@@ -51,11 +53,11 @@ import {
  *
  * Coordinates are typed, or seeded by the caller from a point pressed on the map
  * (`initialCoords`). They are never captured from GPS *here*: a permission window
- * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made "Take
+ * cannot be raised from an open sheet (DESIGN.md — the bug that made "Take
  * photo" look dead), so any future fix-based entry belongs in the caller too.
  *
  * The user's own fields are edited here too, and their definitions are reached
- * through a MODE of this sheet, exactly as on `TripEditSheet` (DESIGN.md §6 —
+ * through a MODE of this sheet, exactly as on `TripEditSheet` (DESIGN.md —
  * never a second modal). A date-typed field needs the picker, which is the
  * other mode.
  *
@@ -63,7 +65,7 @@ import {
  * They live in component state and leave only through the outbox's authed push;
  * nothing here is logged, and the failure copy is ours rather than the error's.
  */
-/** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md §6). */
+/** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md). */
 type Mode = "form" | "date" | "fields" | "fieldForm";
 
 export function PlaceEditSheet({
@@ -106,6 +108,9 @@ export function PlaceEditSheet({
   resuming?: boolean;
   onSaved: (message: string) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const editing = place != null;
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
@@ -115,7 +120,7 @@ export function PlaceEditSheet({
   const [placeTypeId, setPlaceTypeId] = useState<string>(
     SYSTEM_PLACE_TYPE_IDS.canyon,
   );
-  // Attributed to their own control (DESIGN.md §8): the name check and
+  // Attributed to their own control (shared/DESIGN.md §11): the name check and
   // `validatePlacePayload`'s coordinate messages ("Latitude must be…",
   // "Longitude must be…") each go under the field they're about. Everything
   // else — a field-value range, a save the outbox rejected — belongs to no
@@ -202,12 +207,12 @@ export function PlaceEditSheet({
 
   /** Every type is offered here, including the empty ones — the list hides a
    *  type with no places, but you have to be able to make the first one. */
-  const typeOptions: SegmentOption<string>[] = useMemo(
+  const typeOptions: ChipOption<string>[] = useMemo(
     () =>
       (placeTypes.data ?? []).map((type) => ({
         value: type.id,
         label: type.name,
-        icon: placeTypeFeatherIcon(type.iconKey),
+        icon: placeTypeGlyph(type.iconKey),
         hue: type.color,
       })),
     [placeTypes.data],
@@ -349,7 +354,7 @@ export function PlaceEditSheet({
     } catch (err) {
       console.error(err);
       // The sheet is still open here — onClose() only runs on success — so a
-      // toast would render under it and never be seen (DESIGN.md §8). The
+      // toast would render under it and never be seen (shared/DESIGN.md §11). The
       // banner above Save is what reports it.
       setFormError("Couldn't save this place.");
     } finally {
@@ -367,6 +372,7 @@ export function PlaceEditSheet({
   ]);
 
   const fieldForm = useCustomFieldForm({
+    open: mode === "fieldForm",
     entity: "place",
     defs: customFieldDefs,
     editing: editingField,
@@ -415,19 +421,19 @@ export function PlaceEditSheet({
       }
       footer={
         mode === "form" ? (
-          <View style={styles.footer}>
+          <FormStack>
             {/* Not attributable to one control (a field-value range, a save
                 the outbox rejected) — directly above Save, never at the top
                 of the form where it can sit out of sight of the button
-                (DESIGN.md §8). */}
+                (shared/DESIGN.md §11). */}
             {formError ? <ErrorBanner message={formError} /> : null}
             <Button
               label={editing ? "Save changes" : "Add place"}
-              icon="check"
+              icon="done"
               loading={saving}
               onPress={() => void save()}
             />
-          </View>
+          </FormStack>
         ) : mode === "fieldForm" ? (
           fieldForm.footer
         ) : mode === "fields" ? (
@@ -436,19 +442,19 @@ export function PlaceEditSheet({
           // there.
           <Button
             label={ATTRIBUTE_NOUN.add}
-            icon="plus"
+            icon="add"
             onPress={() => {
               setEditingField(null);
               setMode("fieldForm");
             }}
           />
         ) : (
-          <Button label="Done" icon="check" onPress={() => setMode("form")} />
+          <Button label="Done" icon="done" onPress={() => setMode("form")} />
         )
       }
     >
       {mode === "date" && dateFieldKey ? (
-        <View style={styles.modeBody}>
+        <FormStack>
           <DatePicker
             value={fieldValues[dateFieldKey] || null}
             onChange={(key) =>
@@ -460,7 +466,7 @@ export function PlaceEditSheet({
           {fieldValues[dateFieldKey] ? (
             <Button
               label="Clear date"
-              icon="x"
+              icon="close"
               variant="ghost"
               onPress={() => {
                 setFieldValues((current) => ({
@@ -471,7 +477,7 @@ export function PlaceEditSheet({
               }}
             />
           ) : null}
-        </View>
+        </FormStack>
       ) : null}
 
       {mode === "fields" ? (
@@ -488,7 +494,7 @@ export function PlaceEditSheet({
       {mode === "fieldForm" ? fieldForm.body : null}
 
       {mode !== "form" ? null : (
-        <View style={styles.form}>
+        <FormStack>
           {/* TYPE FIRST, because everything below it depends on the answer: the
             fields the form asks for, the colour of the pin, the tab it lands
             under. A rail rather than a wizard step — the form reshapes under
@@ -500,15 +506,14 @@ export function PlaceEditSheet({
             delete-and-recreate would lose them. Values the new type has no
             field for are kept and offered back (§2.6), never dropped. */}
           {typeOptions.length > 1 ? (
-            <View style={styles.field}>
-              <SectionHeader label="Type" />
-              <SegmentedControl
+            <Field label="Type">
+              <ChipRail
                 scroll
                 options={typeOptions}
                 value={placeTypeId}
                 onChange={setPlaceTypeId}
               />
-            </View>
+            </Field>
           ) : null}
 
           <TextField
@@ -521,20 +526,15 @@ export function PlaceEditSheet({
             error={nameError}
             autoCapitalize="words"
           />
-          <View style={styles.field}>
-            <TextField
-              label="Also known as"
-              value={altNames}
-              onChangeText={setAltNames}
-              autoCapitalize="words"
-            />
-            <Text style={styles.hint}>
-              Separate alternative names with commas — they&rsquo;re searchable
-              too.
-            </Text>
-          </View>
+          <TextField
+            label="Also known as"
+            value={altNames}
+            onChangeText={setAltNames}
+            autoCapitalize="words"
+            hint="Separate alternative names with commas — they’re searchable too."
+          />
 
-          <SectionHeader label="Position" />
+          <SectionHeader title="Position" />
           <View style={styles.coordRow}>
             <View style={styles.coordField}>
               <TextField
@@ -568,7 +568,7 @@ export function PlaceEditSheet({
           {onPickOnMap ? (
             <Button
               label="Select on map"
-              icon="map-pin"
+              icon="place"
               variant="outlineAccent"
               onPress={() =>
                 onPickOnMap(
@@ -581,7 +581,7 @@ export function PlaceEditSheet({
           ) : null}
           {!editing && initialCoords ? (
             <View style={styles.fixNote}>
-              <Feather name="map-pin" size={14} color={theme.accent} />
+              <Icon idea="place" size={14} color={theme.accent} />
               <Text style={styles.hint}>
                 Filled in from the point you pressed.
               </Text>
@@ -590,26 +590,21 @@ export function PlaceEditSheet({
 
           {/* No SectionHeader: the field's own label already says "Notes", and
             the pair printed it twice. */}
-          <View style={styles.field}>
-            <TextField
-              label="Notes"
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              autoCapitalize="sentences"
-            />
-            <Text style={styles.hint}>
-              Visible to anyone you share the place with. Per-trip notes stay
-              private.
-            </Text>
-          </View>
+          <TextField
+            label="Notes"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            autoCapitalize="sentences"
+            hint="Visible to anyone you share the place with. Per-trip notes stay private."
+          />
 
           {/* Named for the TYPE, not for the user: on a Campsite these are
             Capacity and Is-a-cave, which are ours, not theirs. Absent when the
             type has none rather than standing over nothing. */}
           {typeFieldDefs.length > 0 ? (
             <SectionHeader
-              label={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+              title={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
             />
           ) : null}
           <CustomFieldValueInputs
@@ -626,19 +621,17 @@ export function PlaceEditSheet({
           {/* Definitions are local rows written through the outbox, so this door
             is open with no account and no signal, for everyone. */}
           <Row
-            icon="sliders"
+            icon="tag"
             title={`Your place ${ATTRIBUTE_NOUN.many}`}
             subtitle={
               typeFieldDefs.length === 0
                 ? "Add your own — permits, access notes, anything."
                 : `${typeFieldDefs.length} on this type`
             }
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />
-        </View>
+        </FormStack>
       )}
     </BottomSheet>
   );
@@ -682,13 +675,9 @@ function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((entry, index) => entry === b[index]);
 }
 
-const styles = StyleSheet.create({
-  form: { gap: spacing(1.5) },
-  footer: { gap: spacing(1.5) },
-  modeBody: { gap: spacing(2) },
-  field: { gap: spacing(0.5) },
+const useStyles = makeStyles((theme) => ({
   hint: { color: theme.textMuted, fontSize: fontSize.sm, flex: 1 },
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
-  fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
-});
+  fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+}));

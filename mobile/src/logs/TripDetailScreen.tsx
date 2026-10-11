@@ -9,16 +9,17 @@
 // PRIVACY: everything here (place names, notes, photos) is already on the
 // device in the mirror. Nothing is logged, and photos leave only through the
 // outbox's authed upload.
-import { useCallback, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Fragment, useCallback, useRef, useState, type ReactNode } from "react";
+import { ScrollView, Text, View } from "react-native";
 import {
-  ATTRIBUTE_NOUN,
   attributeRows,
+  contractSectionKeys,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
   messageFromError,
+  TRIP_PAGE,
+  type SectionKeysOn,
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
@@ -27,7 +28,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { fontSize, lineHeight, spacing, theme } from "../theme";
+import { fontSize, lineHeight, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
   useMirrorPlaces,
@@ -36,15 +37,17 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import {
-  HeroHeader,
+  Hero,
   IconButton,
   Row,
   SectionHeader,
   StatusPill,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import { TripEditSheet } from "./TripEditSheet";
+import { TripOptionsSheet } from "./TripOptionsSheet";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
 export function TripDetailScreen({
@@ -60,6 +63,9 @@ export function TripDetailScreen({
    *  here, first) — nothing is drawn on the map. */
   onFocusOnMap: (bbox: [number, number, number, number]) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const live = useMirrorTrip(trip.id);
   const current = live.data ?? trip;
   const media = useMirrorMedia("tripLog", trip.id);
@@ -72,6 +78,7 @@ export function TripDetailScreen({
   const { defs: fieldDefs } = useFieldDefs("tripLog");
 
   const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
   const notify = useCallback((text: string, tone: "info" | "error") => {
@@ -79,7 +86,7 @@ export function TripDetailScreen({
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
 
-  const meta = tripTypeMeta(primaryTripType(current.types));
+  const meta = tripTypeMeta(primaryTripType(current.types), theme);
   const attachments = media.data ?? [];
   const photoCount = attachments.filter((item) => {
     const category = mediaCategory(item.mediaType);
@@ -90,97 +97,82 @@ export function TripDetailScreen({
   ).length;
   const customFields = attributeRows(fieldDefs, current.customFields);
 
-  return (
-    <View style={styles.screen}>
-      <HeroHeader
-        eyebrow={formatTripDate(current.date)}
-        title={tripTitle(current)}
-        titleNumberOfLines={2}
-        onBack={onBack}
-        action={
-          <IconButton
-            icon="edit-2"
-            accessibilityLabel="Edit trip"
-            color={theme.accent}
-            filled
-            onPress={() => setEditing(true)}
-          />
-        }
-      >
-        <View style={styles.typeRow}>
-          {current.types.length > 0 ? (
-            current.types.map((type) => (
-              <StatusPill
-                key={type}
-                label={tripTypeLabel(type)}
-                icon={tripTypeMeta(type).icon}
-                hue={tripTypeMeta(type).hue}
-              />
-            ))
-          ) : (
-            <StatusPill label="No type set" icon={meta.icon} hue={meta.hue} />
-          )}
-        </View>
-      </HeroHeader>
+  const copy = TRIP_PAGE.copy;
 
-      <ScrollView contentContainerStyle={styles.body}>
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`TRIP_PAGE`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof TRIP_PAGE, "gps">,
+    () => ReactNode
+  > = {
+    // The Hero's own content, pinned above the scroll: the date is its eyebrow.
+    hero: () => (
+      <View style={styles.typeRow}>
+        {current.types.length > 0 ? (
+          current.types.map((type) => (
+            <StatusPill
+              key={type}
+              label={tripTypeLabel(type)}
+              icon={tripTypeMeta(type, theme).icon}
+              hue={tripTypeMeta(type, theme).hue}
+            />
+          ))
+        ) : (
+          <StatusPill label={copy.noType} icon={meta.icon} hue={meta.hue} />
+        )}
+      </View>
+    ),
+
+    places: () => (
+      <>
         <SectionHeader
-          label={
-            current.places.length === 1
-              ? "Place"
-              : `Places · ${current.places.length}`
-          }
+          title={copy.places}
+          count={current.places.length || undefined}
         />
         {current.places.length === 0 ? (
-          <Text style={styles.muted}>
-            No places linked. Edit the trip to add one.
-          </Text>
+          <Text style={styles.muted}>{copy.placesEmpty}</Text>
         ) : (
           current.places.map((place) => (
             <Row
               key={place.id}
-              icon="map-pin"
+              icon="place"
               hue={theme.accent}
               title={place.name}
               right={
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={theme.textMuted}
-                />
+                <Icon idea="disclosure" size={20} color={theme.textMuted} />
               }
               onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))
         )}
+      </>
+    ),
 
-        <SectionHeader
-          label={
-            photoCount === 0
-              ? "Photos & videos"
-              : `Photos & videos · ${photoCount}`
-          }
-        />
+    photos: () => (
+      <>
+        <SectionHeader title={copy.photos} count={photoCount || undefined} />
         <MediaStrip
           kind="media"
           online={online}
           linkedType="tripLog"
           linkedId={current.id}
           media={attachments}
-          emptyHint="No photos or videos yet."
+          emptyHint={copy.photosEmpty}
           onFailed={(text) => notify(text, "error")}
         />
+      </>
+    ),
 
-        <SectionHeader
-          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
-        />
+    routes: () => (
+      <>
+        <SectionHeader title={copy.routes} count={routeCount || undefined} />
         <MediaStrip
           kind="track"
           online={online}
           linkedType="tripLog"
           linkedId={current.id}
           media={attachments}
-          emptyHint="Add a route, a file or a recording."
+          emptyHint={copy.routesEmpty}
           onFailed={(text) => notify(text, "error")}
           onShowRoute={(item) => {
             resolveRouteAttachmentBbox({
@@ -200,23 +192,67 @@ export function TripDetailScreen({
               });
           }}
         />
+      </>
+    ),
 
-        <SectionHeader label="Notes" />
+    notes: () => (
+      <>
+        <SectionHeader title={copy.notes} />
         {current.notes ? (
           <Text style={styles.notes}>{current.notes}</Text>
         ) : (
-          <Text style={styles.muted}>No notes</Text>
+          <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
+      </>
+    ),
 
-        {customFields.length > 0 ? (
-          <>
-            {/* "Trip attributes", the way a place's section is "Canyon
-                attributes" — "Your attributes" did not say whose. */}
-            <SectionHeader label={`Trip ${ATTRIBUTE_NOUN.many}`} />
-            <AttributeTable rows={customFields} />
-          </>
-        ) : null}
+    attributes: () =>
+      customFields.length > 0 ? (
+        <>
+          <SectionHeader title={copy.attributes} />
+          <AttributeTable rows={customFields} />
+        </>
+      ) : null,
+  };
+
+  return (
+    <View style={styles.screen}>
+      <Hero
+        eyebrow={formatTripDate(current.date)}
+        title={tripTitle(current)}
+        titleNumberOfLines={2}
+        onBack={onBack}
+        actions={
+          <IconButton
+            icon="overflow"
+            accessibilityLabel={`Actions for ${tripTitle(current)}`}
+            color={theme.accent}
+            filled
+            onPress={() => setMenuOpen(true)}
+          />
+        }
+      >
+        {sections.hero()}
+      </Hero>
+
+      <ScrollView contentContainerStyle={styles.body}>
+        {contractSectionKeys(TRIP_PAGE, "gps")
+          .filter((key) => key !== "hero")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
       </ScrollView>
+
+      {/* THE PAGE'S VERBS: the sheet a row in the logbook opens too. */}
+      <TripOptionsSheet
+        trip={menuOpen ? current : null}
+        surface="page"
+        onClose={() => setMenuOpen(false)}
+        onEdit={() => setEditing(true)}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+        onGone={onBack}
+      />
 
       <TripEditSheet
         online={online}
@@ -233,9 +269,9 @@ export function TripDetailScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
-  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+const useStyles = makeStyles((theme) => ({
+  screen: { flex: 1, backgroundColor: theme.page },
+  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(4),
@@ -243,8 +279,8 @@ const styles = StyleSheet.create({
   },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
   notes: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
   },
-});
+}));

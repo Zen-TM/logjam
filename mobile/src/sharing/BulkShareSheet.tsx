@@ -6,19 +6,19 @@
 // both promise banners, the confirm, the upload queue's progress and the
 // sentence afterwards — is decided once, below the two screens rather than
 // inside each of them. That is the same rule `assetActions.ts` and
-// `SharePanel.tsx` already hold the single-item verbs to (DESIGN.md §7); a bulk
+// `SharePanel.tsx` already hold the single-item verbs to (DESIGN.md); a bulk
 // share is a bigger promise made about more rows at once, so it is the last
 // place two surfaces should get to word things their own way.
 //
 // It is a component rather than another hook because, unlike the single-item
 // panel, it has no parent sheet to be a sub-mode OF: a multi-selection is not
 // an item, so there is no item sheet already open. It owns its own
-// `BottomSheet` and the panel's footer goes in the pinned slot (DESIGN.md §6).
+// `BottomSheet` and the panel's footer goes in the pinned slot (DESIGN.md).
 import { useMemo } from "react";
 
 import { usePendingCreateIds } from "../sync/useSyncQueries";
 import { BottomSheet, IconButton } from "../ui";
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 import { useShareRowProps, useSharePanel } from "./SharePanel";
 import {
   bulkShareOutcomeMessage,
@@ -36,7 +36,7 @@ import {
  * every selection that is all shares.
  *
  * It stays TAPPABLE when sharing is unavailable, and only dims. The panel it
- * opens already states the reason in place of its body (DESIGN.md §10) — a
+ * opens already states the reason in place of its body (DESIGN.md) — a
  * dead glyph could only be a mystery, and this is the bar's newest button, so
  * it is the one a user is most likely to go looking for and not find.
  */
@@ -47,10 +47,12 @@ export function BulkShareButton({
   online: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+
   const { disabled } = useShareRowProps(online);
   return (
     <IconButton
-      icon="share-2"
+      icon="shareFriend"
       accessibilityLabel="Share the selected items"
       color={disabled ? theme.textMuted : theme.accent}
       onPress={onPress}

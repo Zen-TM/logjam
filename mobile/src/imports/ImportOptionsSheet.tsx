@@ -5,7 +5,7 @@
 // ONE component for both, on the model of TrackOptionsSheet and for the same
 // reason: the actions have a single definition in saved/assetActions.ts, and an
 // import reached from the map must not be a lesser object than one reached from
-// Saved (DESIGN.md §7). Until this existed the map offered NOTHING at all — an
+// Saved (DESIGN.md). Until this existed the map offered NOTHING at all — an
 // imported line was the one drawn thing on the map that could not be tapped.
 //
 // Rename, Send a copy and the stats are sub-modes of THIS sheet rather than
@@ -16,10 +16,10 @@
 // looking at the file you tapped.
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
-import { assetHue, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row } from "../ui";
+import { spacing, useTheme, useHues } from "../theme";
+import { BottomSheet, closedSheet, ColourField, RenameForm, Row } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -45,7 +45,7 @@ export function ImportOptionsSheet({
   onClose: () => void;
   /**
    * Fly the map to this import. Saved-only — the map surface omits it, because
-   * the user got here by tapping the file's own features (DESIGN.md §7:
+   * the user got here by tapping the file's own features (DESIGN.md:
    * "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
@@ -55,6 +55,9 @@ export function ImportOptionsSheet({
    *  elevation only from tiles already on the phone. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -126,7 +129,7 @@ export function ImportOptionsSheet({
     onError,
   });
 
-  if (!imported || !actions) return null;
+  if (!imported || !actions) return closedSheet;
 
   const close = () => {
     setRenaming(false);
@@ -156,7 +159,7 @@ export function ImportOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §6 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = renaming
     ? () => setRenaming(false)
     : sending
@@ -228,11 +231,25 @@ export function ImportOptionsSheet({
         </View>
       ) : (
         <View style={styles.body}>
+          {actions.setColor ? (
+            <ColourField
+              label="Colour"
+              palette={TRACK_COLORS}
+              value={imported.color}
+              nameOf={trackColorName}
+              onChange={(swatch) => {
+                actions.setColor?.(swatch).catch((err: unknown) => {
+                  console.error(err);
+                  onError(messageFromError(err, "Couldn't update the colour."));
+                });
+              }}
+            />
+          ) : null}
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.import}
               disabled={busy}
               onPress={() => {
@@ -249,7 +266,7 @@ export function ImportOptionsSheet({
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.import}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -271,8 +288,8 @@ export function ImportOptionsSheet({
             <Row
               key={option.title}
               title={option.title}
-              icon="download"
-              hue={theme.bonus1}
+              icon="export"
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => save(option)}
             />
@@ -284,7 +301,7 @@ export function ImportOptionsSheet({
             <Row
               title="Send a copy"
               icon="send"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSending((open) => !open)}
@@ -293,8 +310,8 @@ export function ImportOptionsSheet({
           {actions.rename ? (
             <Row
               title="Rename"
-              icon="edit-2"
-              hue={theme.bonus1}
+              icon="edit"
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => setRenaming(true)}
             />
@@ -304,7 +321,7 @@ export function ImportOptionsSheet({
           {actions.delete ? (
             <Row
               title="Delete from device"
-              icon="trash-2"
+              icon="delete"
               hue={theme.warning}
               disabled={busy}
               onPress={() => {

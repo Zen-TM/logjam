@@ -5,9 +5,8 @@ import {
 } from "../consent";
 import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
-import { ErrorBanner } from "./feedback/ErrorBanner";
 import BrandMark from "./brand/BrandMark";
-import { Button, Checkbox } from "../ui";
+import { Button, Checkbox, ErrorBanner } from "../ui";
 import classes from "./ConsentGate.module.css";
 
 /**
@@ -33,6 +32,10 @@ function ConsentGate({
   const [error, setError] = useState<string | null>(null);
 
   async function handleAgree(): Promise<void> {
+    if (!agreed) {
+      setError("Tick the box to agree to the updated terms.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -75,14 +78,21 @@ function ConsentGate({
         <Checkbox
           label="I agree to the updated Terms and acknowledge the Privacy Policy."
           checked={agreed}
-          onChange={setAgreed}
+          onChange={(next) => {
+            setAgreed(next);
+            setError(null);
+          }}
         />
-        {error && <ErrorBanner message={error} onRetry={handleAgree} />}
+        {error && (
+          <ErrorBanner
+            message={error}
+            onRetry={agreed ? handleAgree : undefined}
+          />
+        )}
         <Button
           variant="filled"
           className={classes.action}
           onClick={handleAgree}
-          disabled={!agreed}
           busy={submitting}
         >
           Agree and continue
@@ -91,6 +101,7 @@ function ConsentGate({
           className={classes.action}
           onClick={onSignOut}
           disabled={submitting}
+          disabledReason="Recording your agreement…"
         >
           Sign out
         </Button>

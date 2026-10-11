@@ -20,9 +20,11 @@ import {
   type PressEventWithFeatures,
 } from "@maplibre/maplibre-react-native";
 
-import { SHARED_PLACE_COLOR, SYSTEM_PLACE_TYPES } from "@logjam/shared";
-
-import { theme } from "../theme";
+import {
+  SHARED_PLACE_COLOR,
+  SYSTEM_PLACE_TYPES,
+  MAP_INK,
+} from "@logjam/shared";
 
 /**
  * The ink, exported because rows and chips elsewhere match the map.
@@ -58,8 +60,9 @@ const LABEL_STYLE = {
   textField: PLACE_LABEL_EXPR as unknown as string,
   textFont: ["Noto Sans Medium"],
   textSize: 12,
-  textColor: theme.textPrimary,
-  textHaloColor: theme.bonus2,
+  // Drawn on the basemap, not the page, so fixed whatever the scheme.
+  textColor: MAP_INK.label,
+  textHaloColor: MAP_INK.casing,
   textHaloWidth: 1,
   textAnchor: "top" as const,
   textOffset: [0, 0.8],
@@ -140,7 +143,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           style={{
             circleRadius: 6,
             circleColor: ["get", "color"] as unknown as string,
-            circleStrokeColor: "#ffffff",
+            circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
           }}
         />
@@ -179,7 +182,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleColor: ["get", "color"] as unknown as string,
             // White, not a colour: an owned pin's ring is a separator against
             // the map, not a second piece of information.
-            circleStrokeColor: "#ffffff",
+            circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
           }}
         />

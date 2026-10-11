@@ -29,7 +29,6 @@ import {
   BackHandler,
   Linking,
   Pressable,
-  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -50,7 +49,6 @@ import {
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
 } from "@maplibre/maplibre-react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -63,7 +61,7 @@ import {
 } from "expo-sensors";
 import {
   SYSTEM_PLACE_TYPE_IDS,
-  DEM_ATTRIBUTION,
+  demCredits,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
@@ -75,12 +73,20 @@ import {
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
+  MAP_OVERLAY_REFINEMENTS,
+  MAP_OVERLAYS,
   messageFromError,
   pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
   nearestSegment,
   snapSegment,
+  type IconIdea,
   type SnapMode,
+  type TrackPass,
+  drawsNswContours,
+  nswContourStyle,
+  MAP_INK,
+  MAP_MEASURE,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -106,14 +112,12 @@ import {
 } from "../sync/useSyncQueries";
 import { config } from "../config";
 import {
-  assetHue,
-  fontSize,
-  fontWeight,
-  radius,
-  scrim,
+  slopTo,
   spacing,
-  theme,
-  withAlpha,
+  makeStyles,
+  touchTargetMin,
+  useTheme,
+  useHues,
 } from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
@@ -184,6 +188,7 @@ import {
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import {
+  MARKER_COLORS,
   isNorthUpLocked,
   isScaleBarEnabled,
   isSpeedElevationEnabled,
@@ -206,7 +211,9 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
+  readContoursOverImagery,
   setBasemapPreference,
+  setContoursOverImagery,
 } from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
@@ -220,12 +227,17 @@ import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
-import { BottomSheet } from "../ui/BottomSheet";
-import { Button } from "../ui/Button";
-import { TextField } from "../ui/TextField";
-import { IconButton } from "../ui/IconButton";
-import { Row } from "../ui/Row";
-import { Toast, type ToastMessage } from "../ui/Toast";
+import {
+  BottomSheet,
+  Button,
+  Icon,
+  IconButton,
+  Notice,
+  Row,
+  TextField,
+  Toast,
+  type ToastMessage,
+} from "../ui";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
@@ -266,8 +278,13 @@ import {
   setRecordingMapFocusBoost,
   startTrackRecording,
 } from "../tracks/trackRecorder";
-import { TrackMapLayers } from "../tracks/TrackMapLayers";
+import {
+  TrackMapLayers,
+  type TrackPressHandler,
+} from "../tracks/TrackMapLayers";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
+import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
+import type { TripTrackSource } from "../tracks/tripTrackSource";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
 import { RecordingSheet } from "../tracks/RecordingSheet";
@@ -285,11 +302,8 @@ import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import {
-  ProtomapsLayers,
-  protomapsLayerCount,
-} from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
   ANCHOR_DROP_SELECT_MS,
@@ -308,12 +322,12 @@ import {
   type ResolveContext,
 } from "./sourceResolver";
 import {
+  topoOverlayCredits,
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
   type CompletedOverlaysResponse,
   type TopoOverlayRef,
 } from "./topoOverlays";
-import { buildTopoVectorLayerDefs } from "./topoVectorLayers";
 import {
   MAX_PINCH_ZOOM,
   useMapPinchGesture,
@@ -325,7 +339,12 @@ import {
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
-import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
+import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import {
+  TopoIconImages,
+  TopoVectorOverlay,
+  topoVectorLayerIds,
+} from "./TopoVectorOverlay";
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
 // file:// assets once installed (stage 4a §8.3), remote host as the
@@ -407,7 +426,7 @@ async function currentHeading(): Promise<number | null> {
 }
 
 /** Gap between the stacked instruments, and the same value their container uses. */
-const INSTRUMENT_GAP = spacing(0.75);
+const INSTRUMENT_GAP = spacing(1);
 
 /**
  * How long to wait for a `rotation` reading before deciding the device has no
@@ -478,12 +497,11 @@ const GPS_TOAST_MIN_GAP_MS = 300_000;
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
 
-const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> =
-  {
-    off: "navigation",
-    follow: "crosshair",
-    "course-up": "compass",
-  };
+const LOCATE_ICON: Record<FollowMode, IconIdea> = {
+  off: "locate",
+  follow: "following",
+  "course-up": "compass",
+};
 
 const LOCATE_LABEL: Record<FollowMode, string> = {
   off: "Show where I am",
@@ -494,6 +512,8 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
+
+const OFFLINE_MASK_LAYER = "offline-mask-fill";
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -753,6 +773,7 @@ const LiveCompassStrip = memo(function LiveCompassStrip({
 export function MapScreen({
   onOpenPlace,
   onOpenSaved,
+  onImportFile,
   onSaveMapsOffline,
   onPickPoint,
   focus,
@@ -774,6 +795,8 @@ export function MapScreen({
   }) => void;
   // Opens the Saved tab on one category, from the layer sheet's regions row.
   onOpenSaved?: (category: "region") => void;
+  /** The layers sheet's "Import a file": Saved, with the file picker open. */
+  onImportFile?: () => void;
   /**
    * Open the full-screen point picker for the place form, starting on
    * `from` when the form already holds a coordinate. The answer comes back
@@ -822,6 +845,10 @@ export function MapScreen({
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
@@ -837,9 +864,9 @@ export function MapScreen({
   // style. Post-install launches resolve in ~ms; install failure falls back
   // to the remote asset host (online-only labels).
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
   // Whether the Map (and therefore the camera) is mounted at all — the same
   // condition as the render gate at the bottom of this component. Anything that
@@ -852,10 +879,17 @@ export function MapScreen({
     setBasemapId(next);
     setBasemapPreference(next);
   }, []);
+  const [contoursOverImagery, setContoursOverImageryState] = useState(
+    readContoursOverImagery,
+  );
+  const chooseContoursOverImagery = useCallback((on: boolean) => {
+    setContoursOverImageryState(on);
+    setContoursOverImagery(on);
+  }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
-  // sheet has actually closed (never two sheets at once — DESIGN.md §6).
+  // sheet has actually closed (never two sheets at once — DESIGN.md).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
@@ -865,7 +899,7 @@ export function MapScreen({
   const toastNonce = useRef(0);
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
-  // route draw confirms and saves) and the ink (DESIGN.md §8).
+  // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
   const measureDraft = useRouteDraft();
   const routeDraft = useRouteDraft();
   const measuring = measureDraft.active;
@@ -938,7 +972,7 @@ export function MapScreen({
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
-  // the stats a sub-mode one row in (DESIGN.md §7: the same object offers the
+  // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
@@ -1347,6 +1381,17 @@ export function MapScreen({
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
   );
+  // The statewide contours, where this basemap takes them (shared
+  // nswContours.ts). Offline they are whatever clips were saved with it.
+  const contoursResolved = useMemo(
+    () =>
+      drawsNswContours(renderedBasemapId, contoursOverImagery)
+        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+            (r) => r.status === "ok",
+          )
+        : [],
+    [renderedBasemapId, contoursOverImagery, ctx],
+  );
 
   /**
    * Basemaps OTHER than the current one that have downloaded tiles covering
@@ -1401,31 +1446,6 @@ export function MapScreen({
     );
   }, [basemapResolved]);
 
-  // How many layers the basemap band actually occupies. NOT always one: an
-  // offline basemap mounts one raster layer PER downloaded region, and they all
-  // ask for layerIndex 1, so each insert pushes the previous one up. Assuming a
-  // single layer put the offline mask underneath a region's raster — which
-  // looked exactly like the mask half-rendering, red to that region's east
-  // edge and nothing west of it.
-  // Both branches scale with the number of resolved sources for the same
-  // reason. The vector branch used a per-flavor CONSTANT, so with two saved
-  // Protomaps regions the band is ~140 layers deep and the mask landed at 71
-  // — inside the second region's stack, with ~70 basemap layers drawn over
-  // the top of it. That is the half-rendered mask this comment warns about,
-  // still live on the vector path.
-  const resolvedSourceCount = Math.max(
-    1,
-    basemapResolved.filter((r) => r.status === "ok").length,
-  );
-  const basemapLayerCount =
-    renderedBasemapId === "protomaps"
-      ? protomapsLayerCount(PROTOMAPS_FLAVOR) * resolvedSourceCount
-      : resolvedSourceCount;
-
-  const maskLayerIndex = 1 + basemapLayerCount;
-  // First free layerIndex above the basemap band and the mask's own slot.
-  const overlayBaseIndex = maskLayerIndex + (offlineMask ? 1 : 0);
-
   // Union the online overlay list with downloaded artifacts, so saved overlays
   // list + render even on a cold offline launch (the online fetch has no
   // persistence and returns nothing then).
@@ -1447,23 +1467,6 @@ export function MapScreen({
         : [],
     [mergedOverlays, enabledOverlays, mutedAreas, showOverlays],
   );
-
-  // Contiguous layerIndex allocation above the basemap band: raster overlays
-  // take one slot, vector overlays exactly as many slots as their layer defs —
-  // no gaps, so no index ever exceeds the mounted layer count. `nextIndex` is
-  // where the next band (vector imports) starts.
-  const overlayRenderPlan = useMemo(() => {
-    let next = overlayBaseIndex;
-    const plans: { ref: (typeof overlayRefs)[number]; start: number }[] = [];
-    for (const ref of overlayRefs) {
-      plans.push({ ref, start: next });
-      next +=
-        ref.format === "vector"
-          ? buildTopoVectorLayerDefs(overlayKind(ref), vectorStyle).length
-          : 1;
-    }
-    return { plans, nextIndex: next };
-  }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
   // "Show only these on the map" — the Places screen's filter, opt-in, handed
   // over as a set of ids (never a bbox; nothing persisted). Until that screen
@@ -1898,7 +1901,7 @@ export function MapScreen({
       // whichever tool won the race.
       if (tool === "measure") {
         // Leaving measure bins its points without asking — a measurement is a
-        // question you asked once, not an asset (DESIGN.md §8).
+        // question you asked once, not an asset (shared/DESIGN.md §11).
         if (measureDraft.active) {
           measureDraft.close();
           return;
@@ -2056,7 +2059,7 @@ export function MapScreen({
       const props = event.nativeEvent.features[0]?.properties;
       // The OPTIONS sheet, not the detail screen: the same six verbs the
       // Places list offers, with "Open place" first because that is what this
-      // tap used to do (DESIGN.md §7). Held as an id so an edit made from
+      // tap used to do (DESIGN.md). Held as an id so an edit made from
       // inside the sheet re-renders it rather than showing a stale copy.
       if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
@@ -2066,11 +2069,15 @@ export function MapScreen({
   const optionsPlace =
     (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
-   *  options sheet closes before one opens (DESIGN.md §6). */
+   *  options sheet closes before one opens (DESIGN.md). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
+  // The recording whose "Log a trip" was pressed.
+  const [loggingTrack, setLoggingTrack] = useState<TripTrackSource | null>(
+    null,
+  );
 
-  /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
+  /** A recorded line's own verbs, from the map (DESIGN.md: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
    *  sub-mode one row in. Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
@@ -2082,8 +2089,10 @@ export function MapScreen({
    * a visibility flip made inside the sheet re-renders it.
    */
   const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
-  const handleTrackPress = useCallback(
-    (track: Track, coordinates?: { latitude: number; longitude: number }) => {
+  /** When the track in the options sheet was at the spot tapped to open it. */
+  const [optionsTrackPasses, setOptionsTrackPasses] = useState<TrackPass[]>([]);
+  const handleTrackPress = useCallback<TrackPressHandler>(
+    (track, coordinates, passes) => {
       // Same rule as a place pin: the line swallows the press before the map
       // sees it, so while a tool is collecting points it has to place the point
       // itself — otherwise tapping near a track does nothing and reads as
@@ -2094,6 +2103,7 @@ export function MapScreen({
         }
         return;
       }
+      setOptionsTrackPasses(passes ?? []);
       setOptionsTrackId(track.id);
     },
     [addToolPoint, collectingPoints],
@@ -2428,7 +2438,7 @@ export function MapScreen({
 
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
-  // and a subtitle (DESIGN.md §6).
+  // and a subtitle (DESIGN.md).
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
@@ -2483,7 +2493,7 @@ export function MapScreen({
         if (kind === null) {
           Alert.alert(
             "Can't open this file",
-            "Logjam can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+            "Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
           );
           return;
         }
@@ -2503,11 +2513,7 @@ export function MapScreen({
             fitCameraToBbox(outcome.record.bbox);
           }
         } else {
-          const record = await importVectorSource(
-            url,
-            syntheticNameFor(kind),
-            imports.length,
-          );
+          const record = await importVectorSource(url, syntheticNameFor(kind));
           fitCameraToBbox(record.bbox);
         }
       } catch (err) {
@@ -2520,7 +2526,7 @@ export function MapScreen({
         );
       }
     },
-    [imports.length, fitCameraToBbox],
+    [fitCameraToBbox],
   );
   const onIncomingUrl = useEffectEvent(handleIncomingUrl);
   useEffect(() => {
@@ -3401,7 +3407,7 @@ export function MapScreen({
     sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
       allowNetwork: !offlineOnlyRef.current,
     })
-      .then(([elevationM]) => {
+      .then(({ heights: [elevationM] }) => {
         if (seq !== readoutSeq.current || elevationM == null) return;
         publishLiveReadout({
           speedMps,
@@ -3848,7 +3854,7 @@ export function MapScreen({
   /**
    * Start measuring from a spot. Same shape as `startRouteDrawAt` — and the
    * same seeding reason — differing only in which of the two point tools opens,
-   * because they are one implementation (DESIGN.md §2).
+   * because they are one implementation (DESIGN.md).
    */
   const startMeasureAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
@@ -3906,7 +3912,7 @@ export function MapScreen({
         case "place":
           // Straight to the form: with no sheet open there is no Modal to
           // collide with, so this is the one branch that skips the park-and-
-          // reopen dance the sheet needs (DESIGN.md §6).
+          // reopen dance the sheet needs (DESIGN.md).
           setAddPlaceAt(point);
           return;
         default:
@@ -4081,7 +4087,7 @@ export function MapScreen({
     () => [
       ...ownedPlaces.map((place) => ({
         key: `place:${place.id}`,
-        icon: "map-pin" as const,
+        icon: "place" as const,
         hue: OWNED_PLACE_COLOR,
         title: place.name,
         kindLabel: "Place",
@@ -4091,7 +4097,7 @@ export function MapScreen({
       })),
       ...sharedPlaces.map((place) => ({
         key: `place:${place.id}`,
-        icon: "share-2" as const,
+        icon: "friends" as const,
         hue: SHARED_PLACE_COLOR,
         title: place.name,
         kindLabel: "Shared place",
@@ -4101,7 +4107,7 @@ export function MapScreen({
       })),
       ...savedTracks.map((track) => ({
         key: `track:${track.id}`,
-        icon: "activity" as const,
+        icon: "track" as const,
         hue: assetHue.track,
         title: track.name,
         kindLabel: "Track",
@@ -4109,7 +4115,7 @@ export function MapScreen({
       })),
       ...(routes.data ?? []).map((route) => ({
         key: `route:${route.id}`,
-        icon: "edit-3" as const,
+        icon: "route" as const,
         hue: assetHue.route,
         title: route.name,
         kindLabel: "Route",
@@ -4117,14 +4123,14 @@ export function MapScreen({
       })),
       ...imports.map((imported) => ({
         key: `import:${imported.id}`,
-        icon: "file-plus" as const,
+        icon: "importedFile" as const,
         hue: assetHue.import,
         title: imported.name,
         kindLabel: "Imported file",
         resolveBbox: vectorImportActions(imported).resolveBbox,
       })),
     ],
-    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports],
+    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports, assetHue],
   );
 
   /**
@@ -4139,7 +4145,7 @@ export function MapScreen({
   const layerToggles: LayerToggleEntry[] = [
     {
       key: "places",
-      icon: "map-pin",
+      icon: "place",
       hue: OWNED_PLACE_COLOR,
       // "PLACES", not "My places", and the count is every place on the phone:
       // the children under it are TYPES, and a type governs a shared campsite
@@ -4147,7 +4153,7 @@ export function MapScreen({
       // campsites). Hanging them under an ownership row said the opposite of
       // what the code does, and its count disagreed with the children's by the
       // number of shared places.
-      title: "Places",
+      title: MAP_OVERLAYS.copy.places,
       count: ownedPlaces.length + sharedPlaces.length,
       value: showPlaces,
       onChange: setShowPlaces,
@@ -4155,90 +4161,111 @@ export function MapScreen({
       // campsites". A type with no places is left out — the list has to stay
       // short enough to read at a trailhead, and a switch for nothing is a
       // switch that does nothing.
-      children: (placeTypes.data ?? [])
-        .map((type) => ({
-          type,
-          count: placesByType[type.id] ?? 0,
-        }))
-        .filter(({ count }) => count > 0)
-        .map(({ type, count }) => ({
-          key: `place-type:${type.id}`,
-          title: type.name,
-          hue: type.color,
-          count,
-          value: !hiddenPlaceTypeIds.has(type.id),
-          onChange: (next: boolean) =>
-            setHiddenPlaceTypeIds((current) => {
-              const hidden = new Set(current);
-              if (next) hidden.delete(type.id);
-              else hidden.add(type.id);
-              return hidden;
-            }),
-        })),
+      children: [
+        ...(placeTypes.data ?? [])
+          .map((type) => ({
+            type,
+            count: placesByType[type.id] ?? 0,
+          }))
+          .filter(({ count }) => count > 0)
+          .map(({ type, count }) => ({
+            key: `place-type:${type.id}`,
+            title: type.name,
+            hue: type.color,
+            count,
+            value: !hiddenPlaceTypeIds.has(type.id),
+            onChange: (next: boolean) =>
+              setHiddenPlaceTypeIds((current) => {
+                const hidden = new Set(current);
+                if (next) hidden.delete(type.id);
+                else hidden.add(type.id);
+                return hidden;
+              }),
+          })),
+        // The one axis that crosses every type: whose, not what kind.
+        ...(sharedPlaces.length > 0
+          ? [
+              {
+                key: "shared-places",
+                title: MAP_OVERLAY_REFINEMENTS.places.sharedWithMe,
+                hue: SHARED_PLACE_COLOR,
+                count: sharedPlaces.length,
+                value: showSharedPlaces && showPlaces,
+                onChange: setShowSharedPlaces,
+              },
+            ]
+          : []),
+      ],
     },
     {
-      // The OTHER axis: whose, not what kind. It stays a row of its own rather
-      // than a child, because it crosses every type.
-      key: "shared-places",
-      icon: "share-2",
-      hue: SHARED_PLACE_COLOR,
-      title: "Shared with me",
-      count: sharedPlaces.length,
-      value: showSharedPlaces,
-      onChange: setShowSharedPlaces,
-      // Places off means places off: a switch that flips real state while the
-      // map draws nothing is the same lie as a dead button.
-      inert: !showPlaces,
-    },
-    {
-      key: "routes",
-      icon: "edit-3",
+      // ONE row for every line there is, as on Logjam Web. Logjam GPS refines it
+      // by what the line IS (`MAP_OVERLAY_REFINEMENTS.ways`): the lines this
+      // phone holds are the ones a hiker wants to hide one kind of.
+      key: "ways",
+      icon: "route",
       hue: assetHue.route,
-      title: "My routes",
-      count: standaloneRoutes.length,
-      value: showRoutes,
-      onChange: setShowRoutes,
-    },
-    {
-      key: "place-routes",
-      icon: "git-commit",
-      hue: OWNED_PLACE_COLOR,
-      title: "Place routes",
-      count: placeRouteCount + placeLinkedRoutes.length,
-      // The layer's own report of what it could not draw. Present only while
-      // it is on AND something is missing — a map drawing less than it says
-      // has to say so (DESIGN.md §8), and the rest of the time there is
-      // nothing to report.
+      title: MAP_OVERLAYS.copy.ways,
+      count:
+        standaloneRoutes.length +
+        placeRouteCount +
+        placeLinkedRoutes.length +
+        imports.length +
+        savedTracks.length,
+      value: showRoutes || showPlaceRoutes || showVectorImports || showTracks,
+      // All the kinds together: on draws every kind, off hides every kind.
+      onChange: (next: boolean) => {
+        setShowRoutes(next);
+        setShowPlaceRoutes(next);
+        setShowVectorImports(next);
+        setShowTracks(next);
+      },
+      children: [
+        {
+          key: "routes",
+          title: MAP_OVERLAY_REFINEMENTS.ways.routes,
+          hue: assetHue.route,
+          count: standaloneRoutes.length,
+          value: showRoutes,
+          onChange: setShowRoutes,
+        },
+        {
+          key: "place-routes",
+          title: MAP_OVERLAY_REFINEMENTS.ways.placeRoutes,
+          hue: OWNED_PLACE_COLOR,
+          count: placeRouteCount + placeLinkedRoutes.length,
+          value: showPlaceRoutes,
+          onChange: setShowPlaceRoutes,
+        },
+        {
+          key: "vector-imports",
+          title: MAP_OVERLAY_REFINEMENTS.ways.importedWays,
+          hue: assetHue.import,
+          count: imports.length,
+          value: showVectorImports,
+          onChange: setShowVectorImports,
+        },
+        {
+          key: "tracks",
+          title: MAP_OVERLAY_REFINEMENTS.ways.tracks,
+          hue: assetHue.track,
+          count: savedTracks.length,
+          value: showTracks,
+          onChange: setShowTracks,
+        },
+      ],
+      // The layer's own report of what it could not draw. Present only while it
+      // is on AND something is missing: a map drawing less than it says has to
+      // say so (shared/DESIGN.md §11).
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
           ? `${routesStatus.unavailable} not downloaded yet`
           : undefined,
-      value: showPlaceRoutes,
-      onChange: setShowPlaceRoutes,
     },
     {
-      key: "vector-imports",
-      icon: "file-plus",
-      hue: assetHue.import,
-      title: "Imported ways",
-      count: imports.length,
-      value: showVectorImports,
-      onChange: setShowVectorImports,
-    },
-    {
-      key: "tracks",
-      icon: "activity",
-      hue: assetHue.track,
-      title: "Tracks",
-      count: savedTracks.length,
-      value: showTracks,
-      onChange: setShowTracks,
-    },
-    {
-      key: "geopdfs",
-      icon: "file-text",
+      key: "geoPdfs",
+      icon: "geoPdf",
       hue: assetHue.geoPdf,
-      title: "GeoPDF maps",
+      title: MAP_OVERLAYS.copy.geoPdfs,
       count: readyGeoPdfs.length,
       value: showGeoPdfs,
       onChange: setShowGeoPdfs,
@@ -4346,10 +4373,60 @@ export function MapScreen({
       : "Offline — no map saved for this area.";
   })();
 
-  const attributionText = basemapResolved
-    .map((r) => (r.status === "ok" ? r.attribution : null))
-    .filter(Boolean)
-    .join(" · ");
+  // Once each: offline, every saved clip of a source carries the same credit.
+  const attributionText = [
+    ...new Set(
+      [...basemapResolved, ...contoursResolved]
+        .map((r) => (r.status === "ok" ? r.attribution : null))
+        .filter(Boolean),
+    ),
+  ].join(" · ");
+
+  const nswContoursStyle = useMemo(
+    () => nswContourStyle(renderedBasemapId),
+    [renderedBasemapId],
+  );
+
+  // The ground band, bottom to top: the statewide contours, topo overlays,
+  // GeoPDFs, vector imports.
+  // Listed by id and anchored layer-to-layer under the saved routes, NOT by
+  // index: a layer switched on after the place pins mounted must still land
+  // under them (layerOrder.ts).
+  const overlayMounts = overlayRefs.map((ref) => ({
+    ref,
+    resolved: resolveMapSource(ref, ctx).filter((r) => r.status === "ok"),
+  }));
+  const geoPdfMounts = readyGeoPdfImports.map((geoPdf) => ({
+    geoPdf,
+    resolved: resolveMapSource(
+      { kind: "geopdf-import", importId: geoPdf.id },
+      ctx,
+    ).filter((r) => r.status === "ok"),
+  }));
+  const groundIds = [
+    ...contoursResolved.flatMap((r) =>
+      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
+    ),
+    // Above the statewide contours, which belong to the basemap: a saved
+    // contour clip is whole tiles and runs past the edge of the saved area.
+    ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
+    ...overlayMounts.flatMap(({ ref, resolved }) =>
+      resolved.flatMap((r) =>
+        ref.format === "vector"
+          ? topoVectorLayerIds(overlayKind(ref), `topo-${r.key}`, vectorStyle)
+          : [`topo-layer-${r.key}`],
+      ),
+    ),
+    ...geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
+      resolved.map(() => `geopdf-layer-${geoPdf.id}`),
+    ),
+    ...visibleImports.flatMap((i) => [
+      `import-fill-${i.id}`,
+      `import-line-${i.id}`,
+      `import-point-${i.id}`,
+    ]),
+  ];
+  const groundBefore = chainBeforeIds(groundIds, ROUTES_FLOOR);
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
@@ -4494,136 +4571,137 @@ export function MapScreen({
         )}
 
         {/* The edge of what this phone actually holds. Above the basemap band
-            and below everything else, so place pins, tracks and imports stay
+            and the statewide contours, and below everything else, so place pins, tracks and imports stay
             visible over the blanked ground. */}
         {offlineMask ? (
           <GeoJSONSource id="offline-mask" data={offlineMask}>
             <Layer
               key="offline-mask-fill"
               type="fill"
-              id="offline-mask-fill"
-              layerIndex={maskLayerIndex}
-              style={{ fillColor: theme.primary, fillOpacity: 1 }}
+              id={OFFLINE_MASK_LAYER}
+              beforeId={groundBefore[OFFLINE_MASK_LAYER]}
+              style={{ fillColor: theme.page, fillOpacity: 1 }}
             />
           </GeoJSONSource>
         ) : null}
 
+        {/* The statewide contours: a topo area's contour layers, on the
+            statewide archive (or the clips saved from it). */}
+        {contoursResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <TopoVectorOverlay
+              kind="contours"
+              idPrefix={`nsw-contours-${r.key}`}
+              sourceID={sourceIdFor(r.key)}
+              beforeIds={groundBefore}
+              vectorStyle={nswContoursStyle}
+            />
+          </ResolvedSource>
+        ))}
+
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
             the full contour/feature layer stack styled by the user's
             server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
-        {overlayRenderPlan.plans.flatMap(({ ref, start }) =>
-          resolveMapSource(ref, ctx).map((resolved) =>
-            resolved.status === "ok" ? (
-              <ResolvedSource key={resolved.key} resolved={resolved}>
-                {ref.format === "vector" ? (
-                  <TopoVectorOverlay
-                    kind={overlayKind(ref)}
-                    idPrefix={`topo-${resolved.key}`}
-                    sourceID={sourceIdFor(resolved.key)}
-                    startIndex={start}
-                    vectorStyle={vectorStyle}
-                  />
-                ) : (
-                  <Layer
-                    key={`topo-layer-${resolved.key}`}
-                    type="raster"
-                    id={`topo-layer-${resolved.key}`}
-                    layerIndex={start}
-                    style={{ rasterOpacity: 0.8 }}
-                  />
-                )}
-              </ResolvedSource>
-            ) : null,
-          ),
+        {overlayMounts.flatMap(({ ref, resolved }) =>
+          resolved.map((r) => (
+            <ResolvedSource key={r.key} resolved={r}>
+              {ref.format === "vector" ? (
+                <TopoVectorOverlay
+                  kind={overlayKind(ref)}
+                  idPrefix={`topo-${r.key}`}
+                  sourceID={sourceIdFor(r.key)}
+                  beforeIds={groundBefore}
+                  vectorStyle={vectorStyle}
+                />
+              ) : (
+                <Layer
+                  key={`topo-layer-${r.key}`}
+                  type="raster"
+                  id={`topo-layer-${r.key}`}
+                  beforeId={groundBefore[`topo-layer-${r.key}`]}
+                  style={{ rasterOpacity: 0.8 }}
+                />
+              )}
+            </ResolvedSource>
+          )),
         )}
 
         {/* GeoPDF imports (Stage 6): device-tiled MBTiles rendered through
             the resolver's local-artifact path — one translucent RasterLayer
             per ready import, above the overlay band. */}
-        {readyGeoPdfImports.map((geoPdf, geoPdfPosition) =>
-          resolveMapSource(
-            { kind: "geopdf-import", importId: geoPdf.id },
-            ctx,
-          ).map((resolved) =>
-            resolved.status === "ok" ? (
-              <ResolvedSource key={resolved.key} resolved={resolved}>
-                <Layer
-                  key={`geopdf-layer-${geoPdf.id}`}
-                  type="raster"
-                  id={`geopdf-layer-${geoPdf.id}`}
-                  layerIndex={overlayRenderPlan.nextIndex + geoPdfPosition}
-                  // FULL, not `geoPdf.opacity`. Nothing writes that column
-                  // since the layers sheet lost its opacity rail, so reading it
-                  // only meant imports made before that change stayed
-                  // permanently washed out with no control to fix them. A
-                  // future opacity control re-wires this line and the default
-                  // in importPipeline together.
-                  style={{ rasterOpacity: 1 }}
-                />
-              </ResolvedSource>
-            ) : null,
-          ),
+        {geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
+          resolved.map((r) => (
+            <ResolvedSource key={r.key} resolved={r}>
+              <Layer
+                key={`geopdf-layer-${geoPdf.id}`}
+                type="raster"
+                id={`geopdf-layer-${geoPdf.id}`}
+                beforeId={groundBefore[`geopdf-layer-${geoPdf.id}`]}
+                // FULL, not `geoPdf.opacity`. Nothing writes that column
+                // since the layers sheet lost its opacity rail, so reading it
+                // only meant imports made before that change stayed
+                // permanently washed out with no control to fix them. A
+                // future opacity control re-wires this line and the default
+                // in importPipeline together.
+                style={{ rasterOpacity: 1 }}
+              />
+            </ResolvedSource>
+          )),
         )}
 
         {/* Vector imports (Stage 5): device-local GeoJSON from user files,
-            pinned above the overlay band, below the place layers. Each
+            above the overlay band, below the place layers. Each
             import is one GeoJSONSource read straight off disk. */}
-        {visibleImports.map((imported, importPosition) => {
-          const base =
-            overlayRenderPlan.nextIndex +
-            readyGeoPdfImports.length +
-            importPosition * 3;
-          return (
-            <GeoJSONSource
-              key={imported.id}
-              id={`import-${imported.id}`}
-              data={`file://${imported.path}`}
-              onPress={(event) => handleImportPress(imported.id, event)}
-            >
-              <Layer
-                key={`import-fill-${imported.id}`}
-                type="fill"
-                id={`import-fill-${imported.id}`}
-                layerIndex={base}
-                filter={["==", "$type", "Polygon"] as never}
-                style={{ fillColor: imported.color, fillOpacity: 0.2 }}
-              />
-              <Layer
-                key={`import-line-${imported.id}`}
-                type="line"
-                id={`import-line-${imported.id}`}
-                layerIndex={base + 1}
-                filter={
-                  [
-                    "any",
-                    ["==", "$type", "LineString"],
-                    ["==", "$type", "Polygon"],
-                  ] as never
-                }
-                style={{
-                  lineColor: imported.color,
-                  lineWidth: 3,
-                  lineOpacity: 0.9,
-                  lineJoin: "round",
-                  lineCap: "round",
-                }}
-              />
-              <Layer
-                key={`import-point-${imported.id}`}
-                type="circle"
-                id={`import-point-${imported.id}`}
-                layerIndex={base + 2}
-                filter={["==", "$type", "Point"] as never}
-                style={{
-                  circleRadius: 5,
-                  circleColor: imported.color,
-                  circleStrokeColor: "#ffffff",
-                  circleStrokeWidth: 1.5,
-                }}
-              />
-            </GeoJSONSource>
-          );
-        })}
+        {visibleImports.map((imported) => (
+          <GeoJSONSource
+            key={imported.id}
+            id={`import-${imported.id}`}
+            data={`file://${imported.path}`}
+            onPress={(event) => handleImportPress(imported.id, event)}
+          >
+            <Layer
+              key={`import-fill-${imported.id}`}
+              type="fill"
+              id={`import-fill-${imported.id}`}
+              beforeId={groundBefore[`import-fill-${imported.id}`]}
+              filter={["==", "$type", "Polygon"] as never}
+              style={{ fillColor: imported.color, fillOpacity: 0.2 }}
+            />
+            <Layer
+              key={`import-line-${imported.id}`}
+              type="line"
+              id={`import-line-${imported.id}`}
+              beforeId={groundBefore[`import-line-${imported.id}`]}
+              filter={
+                [
+                  "any",
+                  ["==", "$type", "LineString"],
+                  ["==", "$type", "Polygon"],
+                ] as never
+              }
+              style={{
+                lineColor: imported.color,
+                lineWidth: 3,
+                lineOpacity: 0.9,
+                lineJoin: "round",
+                lineCap: "round",
+              }}
+            />
+            <Layer
+              key={`import-point-${imported.id}`}
+              type="circle"
+              id={`import-point-${imported.id}`}
+              beforeId={groundBefore[`import-point-${imported.id}`]}
+              filter={["==", "$type", "Point"] as never}
+              style={{
+                circleRadius: 5,
+                circleColor: imported.color,
+                circleStrokeColor: MAP_INK.ring,
+                circleStrokeWidth: 1.5,
+              }}
+            />
+          </GeoJSONSource>
+        ))}
 
         {/* Every place route at once (layers sheet → Layers → Place routes).
             Mirror-backed, so it draws with no signal for any file this phone
@@ -4666,8 +4744,9 @@ export function MapScreen({
               key="nav-line-layer"
               type="line"
               id="nav-line-layer"
+              beforeId={PIN_FLOOR}
               style={{
-                lineColor: "#4285F4",
+                lineColor: MARKER_COLORS[markerColorId],
                 lineWidth: 2,
                 lineOpacity: 0.8,
                 lineDasharray: [2, 2],
@@ -4743,7 +4822,7 @@ export function MapScreen({
                 style={{
                   circleRadius: 5,
                   circleColor: theme.accent,
-                  circleStrokeColor: "#ffffff",
+                  circleStrokeColor: MAP_INK.ring,
                   circleStrokeWidth: 2,
                 }}
               />
@@ -4787,7 +4866,7 @@ export function MapScreen({
                 accessibilityLabel="Remove this point"
                 style={styles.anchorDelete}
               >
-                <Feather name="trash-2" size={20} color={theme.primary} />
+                <Icon idea="delete" size={20} color={theme.onFill} />
               </View>
             </Marker>
           ) : null}
@@ -4883,12 +4962,10 @@ export function MapScreen({
             without being asked (MLIFE-001). Everything else about a running
             recording is a tap away; this is the exception. */}
         {activeTrack && recordingWriteFailing ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Points aren&apos;t being saved — finish the recording and check
-              free space.
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Points aren&apos;t being saved — finish the recording and check free
+            space.
+          </Notice>
         ) : null}
 
         {/* Measure HUD — the same panel as route draw, minus Save. */}
@@ -4957,18 +5034,10 @@ export function MapScreen({
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
         {offlineOnly ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Offline mode — using only saved maps
-            </Text>
-          </View>
+          <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
 
-        {noticeText ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{noticeText}</Text>
-          </View>
-        ) : null}
+        {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
 
         {/* The compass is confidently wrong and nothing else on screen would
             say so — every app on the phone reads the same miscalibrated
@@ -4977,44 +5046,39 @@ export function MapScreen({
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
         {headingWanted && magneticInterference(fieldWindow) ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Magnetic interference — move the phone away from metal
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Magnetic interference — move the phone away from metal
+          </Notice>
         ) : headingWanted && compassCalibration.warning ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Compass needs calibrating — wave the phone in a figure 8
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Compass needs calibrating — wave the phone in a figure 8
+          </Notice>
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
         {places.error ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{places.error}</Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            {places.error}
+          </Notice>
         ) : null}
 
         {/* A map that quietly hides pins is a map you can't trust. Says how many
             are missing, and the dismiss IS the way out — clearing it turns the
             Places screen's "show only these" option back off. */}
         {withholdingPlaces ? (
-          <View style={styles.filterBadge}>
-            <Feather name="filter" size={14} color={theme.accent} />
-            {/* Two lines: this sentence grows with the user's text size, and a
-                badge that says "Showing 5 of 2…" is a warning nobody can act on. */}
-            <Text style={styles.filterBadgeText} numberOfLines={2}>
-              {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
-            </Text>
-            <IconButton
-              icon="x"
-              size={16}
-              accessibilityLabel="Show all places again"
-              onPress={() => setPlaceMapFilterEnabled(false)}
-            />
-          </View>
+          <Notice
+            icon="filter"
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel="Show all places again"
+                onPress={() => setPlaceMapFilterEnabled(false)}
+              />
+            }
+          >
+            {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+          </Notice>
         ) : null}
 
         {/* A download keeps running while the user walks around the map, so it
@@ -5027,9 +5091,7 @@ export function MapScreen({
             map notices; it used to be an accent-outlined pill that matched
             nothing else on the screen. */}
         {downloadProgress ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{downloadProgress}</Text>
-          </View>
+          <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
       </View>
 
@@ -5059,7 +5121,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Feather name="layers" size={FAB_ICON} color={theme.textPrimary} />
+          <Icon idea="layers" size={FAB_ICON} color={theme.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -5070,26 +5132,24 @@ export function MapScreen({
           ]}
           onPress={handleLocateMe}
         >
-          {/* Three states, three glyphs: an arrow you are not following, a
+          {/* Three states, three glyphs: a crosshair you are not following, a
               crosshair locked on you, a compass rose when the map itself turns
               to face where you are looking. Colour alone said "active" but
               never said WHICH active. */}
-          <Feather
-            name={LOCATE_ICON[followMode]}
+          <Icon
+            idea={LOCATE_ICON[followMode]}
             size={FAB_ICON}
-            color={theme.textPrimary}
-            // The arrow glyph's ink sits up-and-right of its box centre, so a
-            // geometrically centred icon reads off-centre — nudge it back.
-            style={followMode === "off" ? styles.locateIcon : undefined}
+            color={followMode !== "off" ? theme.onFill : theme.text}
           />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
           style={styles.miniButton}
+          hitSlop={slopTo(MINI_FAB_SIZE)}
           onPress={() => setAttributionOpen(true)}
         >
-          <Feather name="info" size={MINI_FAB_ICON} color={theme.textPrimary} />
+          <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
         </Pressable>
       </View>
 
@@ -5122,25 +5182,31 @@ export function MapScreen({
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
       {navTarget ? (
-        <View style={[styles.navChip, { top: noticeTop }]}>
+        <View
+          style={[styles.navDock, { top: noticeTop }]}
+          pointerEvents="box-none"
+        >
           {/* The distance and bearing live at the end of this line, so a
               one-line cap cuts off the half that changes. */}
-          <Text style={styles.noticeText} numberOfLines={2}>
-            {navTarget.name}
-            {navDistanceM != null && navBearingDeg != null
-              ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
-                  navBearingDeg,
-                )} ${Math.round(navBearingDeg)}°`
-              : " · waiting for GPS…"}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Stop navigating"
-            onPress={() => setNavTarget(null)}
-            hitSlop={8}
+          <Notice
+            icon="navigateTo"
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel="Stop navigating"
+                onPress={() => setNavTarget(null)}
+              />
+            }
           >
-            <Text style={styles.deleteText}>✕</Text>
-          </Pressable>
+            {`${navTarget.name}${
+              navDistanceM != null && navBearingDeg != null
+                ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
+                    navBearingDeg,
+                  )} ${Math.round(navBearingDeg)}°`
+                : " · waiting for GPS…"
+            }`}
+          </Notice>
         </View>
       ) : null}
 
@@ -5176,11 +5242,22 @@ export function MapScreen({
             ones that aren't currently drawn — their licences permit that with
             credit, so the credit lives here rather than nowhere. */}
         <Text style={styles.attributionText}>{BASEMAP_THUMB_CREDIT}</Text>
+        {/* The LiDAR-derived overlays on screen, credited with the same lines
+            Logjam Web's attribution control shows (shared/geoPdfBaseLayers). */}
+        {topoOverlayCredits(overlayRefs).map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
         {/* Elevation is derived from a DIFFERENT source than whatever basemap
             is drawn — every height in the app (point readout, route profile,
             gain/loss) comes from it, online or off, so its credit is
             unconditional rather than tied to the active layer. */}
-        <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
+        {demCredits().map((line) => (
+          <Text key={line} style={styles.attributionText}>
+            {line}
+          </Text>
+        ))}
       </BottomSheet>
 
       {/* Tap: "what's there?" — the question that comes before the long
@@ -5229,7 +5306,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="navigation"
+            icon="navigateTo"
             title="Navigate here"
             onPress={() => {
               const point = longPressPoint;
@@ -5238,7 +5315,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="pen-tool"
+            icon="draw"
             title="Draw a route from here"
             onPress={() => {
               const point = longPressPoint;
@@ -5246,11 +5323,9 @@ export function MapScreen({
               if (point) startRouteDrawAt(point);
             }}
           />
-          {/* MaterialCommunityIcons, as everywhere else measure appears: Feather
-              has no ruler, and the near misses read as "resize" (DESIGN.md §2). */}
           <Row
-            leading={<MeasureGlyph />}
-            title="Measure from here"
+            icon="measure"
+            title={MAP_MEASURE.copy.fromHere}
             onPress={() => {
               const point = longPressPoint;
               setLongPressPoint(null);
@@ -5258,7 +5333,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="plus-circle"
+            icon="addPlace"
             title="Add a place"
             subtitle="With this position filled in"
             onPress={() => {
@@ -5269,7 +5344,7 @@ export function MapScreen({
         </View>
       </BottomSheet>
 
-      {/* ONE form for both modes (DESIGN.md §7): a long-press drops a new
+      {/* ONE form for both modes (DESIGN.md): a long-press drops a new
           place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
@@ -5288,6 +5363,7 @@ export function MapScreen({
           Places list opens, minus its "Show on map" row. */}
       <PlaceOptionsSheet
         place={optionsPlace}
+        surface="pin"
         visible={optionsPlace !== null}
         onClose={() => setOptionsPlaceId(null)}
         onOpenPlace={(place) => onOpenPlace(place.id, place.name)}
@@ -5320,7 +5396,7 @@ export function MapScreen({
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
-          in (DESIGN.md §7). No "Show on map" row here — the user is looking at
+          in (DESIGN.md). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
       <RouteOptionsSheet
         route={optionsRoute}
@@ -5356,11 +5432,19 @@ export function MapScreen({
       <TrackOptionsSheet
         track={tracks.find((track) => track.id === optionsTrackId) ?? null}
         visible={optionsTrackId !== null}
+        passes={optionsTrackPasses}
         onClose={() => setOptionsTrackId(null)}
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
+        onLogTrip={setLoggingTrack}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
+      />
+
+      <LogTripFromTrackSheet
+        track={loggingTrack}
+        onClose={() => setLoggingTrack(null)}
+        onSaved={(text) => notify(text, "info")}
       />
 
       {/* An imported file's verbs, from the features the user tapped. Same
@@ -5382,6 +5466,8 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={chooseContoursOverImagery}
         artifacts={artifacts}
         overlays={overlayList}
         enabledOverlays={enabledOverlays}
@@ -5405,6 +5491,10 @@ export function MapScreen({
           setPickerOpen(false);
           onOpenSaved?.(category);
         }}
+        onImportFile={() => {
+          setPickerOpen(false);
+          onImportFile?.();
+        }}
       />
     </View>
   );
@@ -5425,8 +5515,10 @@ function RouteNameForm({
   saving: boolean;
   onSubmit: (name: string) => void;
 }) {
+  const styles = useStyles();
+
   const [draft, setDraft] = useState(initialName);
-  // Empty-name requirement shows on SUBMIT, not while typing (DESIGN.md §8);
+  // Empty-name requirement shows on SUBMIT, not while typing (shared/DESIGN.md §11);
   // clears as soon as the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -5486,7 +5578,7 @@ function RouteNameForm({
       />
       <Button
         label={saving ? "Saving…" : "Save"}
-        icon="check"
+        icon="done"
         disabled={saving}
         onPress={commit}
       />
@@ -5494,38 +5586,25 @@ function RouteNameForm({
   );
 }
 
-/**
- * The measure tool's icon in a `Row`'s identity tile. Hand-built rather than
- * passed as `Row.icon` because that prop takes a Feather name, and measure is
- * the one glyph Feather doesn't have (DESIGN.md §2 — a second family is allowed
- * only for a glyph it lacks). Mirrors `Row`'s own tile exactly.
- */
-function MeasureGlyph() {
-  return (
-    <View style={styles.measureTile}>
-      <MaterialCommunityIcons name="ruler" size={20} color={theme.accent} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the
-  // same 44 dp the rest of the app treats as a real touch target. Solid rather
-  // than translucent — it sits over the map, which can be any colour under it.
+  // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
+  // rather than translucent — it sits over the map, which can be any colour
+  // under it.
   anchorDelete: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: touchTargetMin,
+    height: touchTargetMin,
+    borderRadius: touchTargetMin / 2,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.warning,
     borderWidth: 2,
-    borderColor: theme.primary,
+    borderColor: theme.page,
   },
   // The field and its Save button were flush against each other, which read as
   // one control and put the button under the thumb aiming for the input.
   nameForm: { gap: spacing(2) },
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   map: { flex: 1 },
   noticeStack: {
     position: "absolute",
@@ -5533,33 +5612,7 @@ const styles = StyleSheet.create({
     right: spacing(2),
     gap: spacing(1),
   },
-  notice: {
-    alignSelf: "center",
-    backgroundColor: scrim.heavy,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
-  // Centred, because the banner is centre-anchored (`alignSelf`) and grows
-  // around its own midline — left-aligned text in a box that moves under it
-  // reads as drifting, and these wrap to two lines at large text sizes.
-  noticeText: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
-  // Takes the slack so the dismiss sits at the pill's right edge rather than
-  // floating next to the text.
-  filterBadgeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
   sheetBody: { gap: spacing(1) },
-  measureTile: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withAlpha(theme.accent, 0.16),
-  },
   controls: {
     position: "absolute",
     right: CHROME_GAP,
@@ -5575,7 +5628,7 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -5583,24 +5636,11 @@ const styles = StyleSheet.create({
     width: MINI_FAB_SIZE,
     height: MINI_FAB_SIZE,
     borderRadius: MINI_FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
-  locateIcon: { marginTop: 3, marginLeft: -3 },
-  // Pill shape for "something is being done to this map" notices.
-  filterBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-    paddingLeft: spacing(1.5),
-    paddingRight: spacing(0.5),
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.5),
-    backgroundColor: withAlpha(theme.primary, 0.92),
-  },
   instruments: {
     position: "absolute",
     left: CHROME_GAP,
@@ -5608,25 +5648,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: INSTRUMENT_GAP,
   },
-  navChip: {
-    position: "absolute",
-    alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1.5),
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
-  attributionText: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
-  deleteText: {
-    color: theme.warning,
-    fontSize: fontSize.sm,
-    fontWeight: "600",
-  },
-});
+  // Where the navigation readout sits: a Notice, centred, in the notice stack's
+  // column.
+  navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
+  attributionText: { ...textRole.hint, color: theme.textMuted },
+}));

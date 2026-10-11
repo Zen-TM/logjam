@@ -3,7 +3,7 @@
 // Moved out of Logjam GPS's `mobile/src/format.ts` when Logjam Web needed the
 // same two answers for its Maps page (2026-09-17). The web had five private
 // copies of a byte formatter, no two alike — "118.3 MB" on one page, "118 MB"
-// on the phone for the same file — which is the drift DESIGN.md §0 exists to
+// on the phone for the same file — which is the drift DESIGN.md exists to
 // stop.
 
 /**

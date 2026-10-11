@@ -33,20 +33,20 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
 import {
   fontSize,
-  fontWeight,
   hitSlop,
   radius,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
+import { FieldError, Icon, type Glyph } from "../ui";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -68,7 +68,7 @@ const MAX_LOCAL_RESULTS = 6;
  */
 export type SavedSearchItem = {
   key: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   hue: string;
   title: string;
   /** What kind of thing it is — "Place", "Waypoint". The row's only subtitle. */
@@ -106,6 +106,9 @@ export function MapSearchBar({
   onSelectPlace: (latitude: number, longitude: number) => void;
   onSelectSaved: (item: SavedSearchItem) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   // Tagged with the query it answers, so a short or still-pending query reads
@@ -223,10 +226,10 @@ export function MapSearchBar({
       <Animated.View
         style={[styles.pill, side === "right" && styles.pillRight, { width }]}
       >
-        <Feather
-          name="search"
+        <Icon
+          idea="search"
           size={GLYPH}
-          color={expanded ? theme.textMuted : theme.textPrimary}
+          color={expanded ? theme.textMuted : theme.text}
           style={side === "right" ? styles.glyphRight : styles.glyph}
         />
         <Animated.View
@@ -254,7 +257,7 @@ export function MapSearchBar({
             hitSlop={hitSlop}
             onPress={() => (query ? setQuery("") : collapse())}
           >
-            <Feather name="x" size={GLYPH} color={theme.textPrimary} />
+            <Icon idea="close" size={GLYPH} color={theme.text} />
           </Pressable>
         </Animated.View>
         {/* Collapsed, the whole circle is the button; expanded it must not
@@ -291,7 +294,7 @@ export function MapSearchBar({
                   collapse();
                 }}
               >
-                <Feather name={item.icon} size={16} color={item.hue} />
+                <Icon idea={item.icon} size={16} color={item.hue} />
                 <View style={styles.savedText}>
                   <Text style={styles.resultText} numberOfLines={1}>
                     {item.title}
@@ -302,7 +305,11 @@ export function MapSearchBar({
             ))}
 
             {loading ? <Text style={styles.status}>Searching…</Text> : null}
-            {error !== null ? <Text style={styles.status}>{error}</Text> : null}
+            {error !== null ? (
+              <View style={styles.statusBox}>
+                <FieldError message={error} />
+              </View>
+            ) : null}
             {!loading && error === null
               ? results.map((result, index) => (
                   <Pressable
@@ -330,7 +337,7 @@ export function MapSearchBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: {
     position: "absolute",
     left: CHROME_GAP,
@@ -347,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: SEARCH_SIZE,
     borderRadius: SEARCH_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     // The field is clipped by the growing circle rather than spilling past it.
     overflow: "hidden",
   },
@@ -370,15 +377,19 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
     paddingVertical: spacing(1),
   },
   panel: {
     alignSelf: "stretch",
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     borderRadius: radius.lg,
     overflow: "hidden",
     maxHeight: 260,
+  },
+  statusBox: {
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(1.5),
   },
   status: {
     color: theme.textMuted,
@@ -390,9 +401,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
     borderBottomWidth: 1,
-    borderBottomColor: theme.bonus2,
+    borderBottomColor: theme.line,
   },
-  resultPressed: { backgroundColor: theme.bonus2 },
+  resultPressed: { backgroundColor: theme.cardPressed },
   savedResult: {
     flexDirection: "row",
     alignItems: "center",
@@ -400,9 +411,5 @@ const styles = StyleSheet.create({
   },
   savedText: { flex: 1 },
   resultKind: { color: theme.textMuted, fontSize: fontSize.xs },
-  resultText: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
-});
+  resultText: { ...textRole.hint, color: theme.text },
+}));

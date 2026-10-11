@@ -19,24 +19,27 @@
   /* Sit above the bottom nav strip so panel switching stays reachable. */
   bottom: var(--bottom-nav-height);
   height: calc(100dvh - var(--bottom-nav-height));
-  background-color: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background-color: var(--color-page);
+  color: var(--color-text);
   z-index: 4;
   display: flex;
   flex-direction: column;
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sheet);
   /* Snap animation. Suppressed mid-drag via inline style. */
-  transition: transform var(--transition-med) ease-out;
+  transition: transform var(--motion-med) ease-out;
   touch-action: none;
 }
 
 /* Drag handle bar — the only grab area, so panel-body scroll stays usable, and
    a `slider` the arrow keys move between the three snaps. The whole bar is the
    target: it is 36px of grip on a full-width row, and a keyboard reaching a
-   4px-tall pill would be a worse promise than reaching none. */
+   4px-tall pill would be a worse promise than reaching none. The bar is drawn
+   16px tall; `::after` grows what a finger or a pointer hits to `--control-lg`
+   (36px, 48 on a touch screen) without moving the content under it. */
 .handle {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -46,6 +49,12 @@
   touch-action: none;
 }
 
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: calc((100% - var(--control-lg)) / 2) 0;
+}
+
 /* The ring hugs the grip rather than the full-width bar it sits in, so focus
    points at the thing that moves. */
 .handle:focus-visible {
@@ -53,7 +62,7 @@
 }
 
 .handle:focus-visible .grip {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 4px;
 }
 
@@ -66,11 +75,7 @@
   height: 4px;
   /* A pill, not an ellipse: `--radius-full` is 50% and this box is 9:1. */
   border-radius: var(--radius-pill);
-  background-color: color-mix(
-    in srgb,
-    var(--theme-text-primary) 30%,
-    transparent
-  );
+  background-color: color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
 /* Sheet content is sized (inline height) to the *visible* portion of the sheet

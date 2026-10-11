@@ -1,14 +1,20 @@
+import {
+  ACCOUNT,
+  ACCOUNT_DELETE_BODY,
+  deleteAccountPhrase,
+  deleteAccountPhraseLabel,
+  deleteAccountPhraseMatches,
+} from "@logjam/shared";
 import { useId, useState } from "react";
 import { deleteUser } from "aws-amplify/auth";
 import { deleteAccount } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { Button, Dialog, TextField } from "../../ui";
+import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
 import classes from "./DeleteAccountDialog.module.css";
 
 /**
  * The one irreversible thing in the app, and the only place a typed phrase
- * guards a button (DESIGN.md §7). Everything else destructive is undoable, or
+ * guards a button (DESIGN.md). Everything else destructive is undoable, or
  * loses one row; this ends the account, in both Cognito and our own database.
  *
  * The phrase is "delete <username>" rather than "DELETE": it cannot be typed by
@@ -50,9 +56,7 @@ function DeleteAccountForm({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const expectedPhrase = `delete ${username}`;
-  const inputMatches =
-    confirmInput.trim().toLowerCase() === expectedPhrase.toLowerCase();
+  const inputMatches = deleteAccountPhraseMatches(confirmInput, username);
 
   async function handleDelete() {
     if (!inputMatches || deleting) return;
@@ -76,13 +80,17 @@ function DeleteAccountForm({
   return (
     <Dialog
       open
-      title="Delete account"
+      title={ACCOUNT.copy.deleteAccount}
       onClose={onClose}
       dismissible={!deleting}
       alert
       footer={
         <>
-          <Button onClick={onClose} disabled={deleting}>
+          <Button
+            onClick={onClose}
+            disabled={deleting}
+            disabledReason="Deleting…"
+          >
             Cancel
           </Button>
           <Button
@@ -91,8 +99,9 @@ function DeleteAccountForm({
             variant="destructive"
             busy={deleting}
             disabled={!inputMatches}
+            disabledReason="Type the phrase above to confirm"
           >
-            Delete account
+            {ACCOUNT.copy.deleteAccount}
           </Button>
         </>
       }
@@ -105,15 +114,12 @@ function DeleteAccountForm({
           handleDelete();
         }}
       >
-        <p className={classes.warning}>
-          This deletes your account and everything in it — places, trips, media,
-          maps and settings. It cannot be undone.
-        </p>
+        <p className={classes.warning}>{ACCOUNT_DELETE_BODY}</p>
         <TextField
-          label={`Type "${expectedPhrase}" to confirm`}
+          label={deleteAccountPhraseLabel(username)}
           value={confirmInput}
           onChange={(event) => setConfirmInput(event.target.value)}
-          placeholder={expectedPhrase}
+          placeholder={deleteAccountPhrase(username)}
           disabled={deleting}
           data-autofocus
         />

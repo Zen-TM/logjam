@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
-import { X } from "lucide-react";
 import { useIsMobile } from "../useIsMobile";
 import { IconButton } from "./Button";
 import { useEscape } from "./useEscape";
@@ -65,7 +64,7 @@ export function SideSheet({
         >
           {title}
         </h2>
-        <IconButton icon={X} label="Close" onClick={onClose} />
+        <IconButton icon="close" label="Close" onClick={onClose} />
       </header>
       <div className={classes.body}>{children}</div>
       {footer && <footer className={classes.foot}>{footer}</footer>}

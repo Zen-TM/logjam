@@ -1,5 +1,5 @@
 /* Ways gives the panel body its full height: the hero and the kind rail are
-   pinned, and only the list scrolls (DESIGN.md §2). */
+   pinned, and only the list scrolls (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;
@@ -44,5 +44,5 @@
   margin: 0;
   text-align: center;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

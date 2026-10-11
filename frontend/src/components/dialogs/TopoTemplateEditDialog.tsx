@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import {
   RASTER_TEMPLATE_DEFAULTS,
   AUTO_EXPORT_DEFAULTS,
@@ -11,7 +10,7 @@ import {
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
-import { Button, ChipRail, Dialog, TextField } from "../../ui";
+import { Button, ChipRail, Dialog, TextField, ErrorBanner } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
 import type { TopoTemplate } from "./TopoDialog";
@@ -60,16 +59,25 @@ function TemplateForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The same shared checks the settings themselves report against, so Save is
-  // never offered for something the server would refuse.
-  const canSave =
-    name.trim().length > 0 &&
-    slopeBandsError(settings.slope.bands) == null &&
-    hillshadeSettingsError(settings.hillshade) == null;
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  // The same shared checks the settings themselves report against, so a save
+  // never reaches the server with something it would refuse.
+  const settingsInvalid =
+    slopeBandsError(settings.slope.bands) != null ||
+    hillshadeSettingsError(settings.hillshade) != null;
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (!trimmed || saving) return;
+    if (saving) return;
+    if (!trimmed) {
+      setNameError("Name this template first.");
+      return;
+    }
+    if (settingsInvalid) {
+      setError("A setting needs fixing before this can be saved.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -110,13 +118,17 @@ function TemplateForm({
             id={formId}
             onSubmit={(event) => {
               event.preventDefault();
-              if (canSave) void handleSave();
+              void handleSave();
             }}
           >
             <TextField
               label="Template name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              error={nameError}
+              onChange={(event) => {
+                setName(event.target.value);
+                setNameError(null);
+              }}
               data-autofocus
             />
           </form>
@@ -130,16 +142,10 @@ function TemplateForm({
       }
       footer={
         <>
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            type="submit"
-            form={formId}
-            variant="filled"
-            busy={saving}
-            disabled={!canSave}
-          >
+          <Button type="submit" form={formId} variant="filled" busy={saving}>
             Save
           </Button>
         </>

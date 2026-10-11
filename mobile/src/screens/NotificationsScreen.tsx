@@ -1,6 +1,6 @@
 // Inbox — "what happened while I was away?"
 //
-// LAYOUT (DESIGN.md §1, §2): hero answers the question with a count and carries
+// LAYOUT (shared/DESIGN.md §2, §2): hero answers the question with a count and carries
 // the one bulk action; a pinned rail partitions into Unread / Read; the list is a
 // `SectionList` grouped by local calendar day with sticky headers, because a
 // notification list is chronological and dates are an ordering aid, not a second
@@ -27,15 +27,16 @@
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
 // through passes an opaque id and the detail screen fetches over the authed API,
 // so a share revoked since the notification lands on the 404-not-403 path.
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -44,20 +45,28 @@ import {
   batchPendingFileSends,
   bulkReadAction,
   collapseBatches,
+  CLEAR_READ_CONFIRM,
+  contractSectionKeys,
   countBatchRows,
   expandBatchSelection,
   findNotificationBatches,
   groupNotificationsByDay,
+  INBOX,
+  inboxHeroTitle,
+  inboxTruncatedNote,
+  inboxVerb,
   isResolvedElsewhereError,
   messageFromError,
   newestNotificationsFirst,
   notificationActions,
+  notificationDeleteConfirm,
   notificationHaystack,
   notificationLabel,
   notificationPlaceId,
   notificationsTruncated,
   selectionCountLabel,
   tallyNotifications,
+  type SectionKeysOn,
   type NotificationActionKind,
   type NotificationActions,
   type NotificationBatch,
@@ -80,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -93,22 +102,24 @@ import {
   removeCachedNotifications,
 } from "../sync/notificationsCache";
 import { onMirrorChanged } from "../sync/syncDb";
+import { clearReadNotifications } from "../api/queries";
 import {
+  BottomSheet,
   Button,
   EmptyState,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SelectionMark,
   StatusPill,
   TextField,
   Toast,
   useBulkSelection,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 import { notificationMeta } from "./notificationMeta";
@@ -160,7 +171,7 @@ function useNotifications(blocked: boolean): NotificationsState {
         }
       } catch (err) {
         if (!cancelled && !cache) {
-          setError(messageFromError(err, "Couldn't load notifications."));
+          setError(messageFromError(err, INBOX.copy.loadFailed));
           setNotifications([]);
         }
       }
@@ -237,6 +248,9 @@ export function NotificationsScreen({
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("inbox", accountState),
@@ -244,7 +258,7 @@ export function NotificationsScreen({
   );
   const query = useNotifications(guestBlock !== null);
   const refetch = query.refetch;
-  // ONE toast channel for every action outcome (DESIGN.md §6): an inline banner
+  // ONE toast channel for every action outcome (DESIGN.md): an inline banner
   // reflows the list under the user's thumb and then lingers with no owner, and
   // on a scrolled list it lands off screen entirely — which is how accepting a
   // file came to look like it did nothing.
@@ -260,7 +274,7 @@ export function NotificationsScreen({
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
    *  live list, so a refetch can't leave the sheet holding a stale copy. */
   const [menuId, setMenuId] = useState<string | null>(null);
-  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (§10): the
+  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
   const online = useConnectivity() === "online";
@@ -342,7 +356,7 @@ export function NotificationsScreen({
   );
   const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
-  // --- Multi-select (DESIGN.md §7) -----------------------------------------
+  // --- Multi-select (DESIGN.md) -----------------------------------------
   // The same hook and the same bar as Places, Logs and Saved: press and hold a
   // row to start, tap to toggle, the last row deselected leaves the mode. Every
   // notification is selectable — unlike a shared place, there is no row the
@@ -372,7 +386,7 @@ export function NotificationsScreen({
     () => expandBatchSelection(selectedItems, batches),
     [batches, selectedItems],
   );
-  // A selection is a transient mode over rows you can see (§7). Also drops the
+  // A selection is a transient mode over rows you can see (DESIGN.md). Also drops the
   // per-row sheet: a sheet does not outlive the tab.
   useFocusEffect(
     useCallback(() => {
@@ -524,27 +538,20 @@ export function NotificationsScreen({
   const deleteSelected = useCallback(() => {
     const targets = selectedNotifications;
     const count = targets.length;
-    Alert.alert(
-      count === 1
-        ? "Delete this notification?"
-        : `Delete ${count} notifications?`,
-      count === 1
-        ? "It goes from every device on your account. This can't be undone."
-        : "They go from every device on your account. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              await deleteNotifications(targets);
-              clearSelection();
-            })();
-          },
+    const { confirmTitle, confirmBody } = notificationDeleteConfirm(count);
+    Alert.alert(confirmTitle, confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            await deleteNotifications(targets);
+            clearSelection();
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }, [clearSelection, deleteNotifications, selectedNotifications]);
 
   const markAll = useCallback(async () => {
@@ -558,6 +565,42 @@ export function NotificationsScreen({
       notify(messageFromError(err, "Couldn't mark those as read."), "error");
     }
   }, [notifications, notify, onUnreadChanged]);
+
+  // The hero's ⋯: the verbs that act on the whole inbox (`INBOX_VERBS`).
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const readCount = notifications.filter((n) => n.read).length;
+
+  const clearRead = useCallback(() => {
+    Alert.alert(
+      CLEAR_READ_CONFIRM.confirmTitle,
+      CLEAR_READ_CONFIRM.confirmBody,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: CLEAR_READ_CONFIRM.confirmLabel,
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await clearReadNotifications();
+                // The mirror follows the server: the read ones this phone holds
+                // go from the cache too, so they stay gone offline.
+                await removeCachedNotifications(
+                  notifications.filter((n) => n.read).map((n) => n.id),
+                );
+                clearSelection();
+                onUnreadChanged?.();
+                query.refetch();
+              } catch (err) {
+                console.error(err);
+                notify(CLEAR_READ_CONFIRM.failed, "error");
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [clearSelection, notifications, notify, onUnreadChanged, query]);
 
   /**
    * Answer a notification's question, then let the refetch settle the row.
@@ -635,7 +678,7 @@ export function NotificationsScreen({
     [markRead, notify, onUnreadChanged, refetch],
   );
 
-  /** A destructive action is a dialog first, and the dialog carries the why (§7). */
+  /** A destructive action is a dialog first, and the dialog carries the why (DESIGN.md). */
   const requestAction = useCallback(
     (
       n: TNotification,
@@ -844,7 +887,7 @@ export function NotificationsScreen({
         </Text>
       </View>
     ),
-    [batches],
+    [batches, styles],
   );
 
   // UNREAD + READ CAN EXCEED ALL, and that is correct rather than a rounding
@@ -852,11 +895,11 @@ export function NotificationsScreen({
   // row in each, because a group that is partly read is genuinely still in both
   // piles. The collapsed row already says so — it keeps its New pill while any
   // member is unread.
-  const buckets: SegmentOption<Bucket>[] = [
-    { value: "all", label: "All", count: bucketCounts.all },
+  const buckets: ChipOption<Bucket>[] = [
+    { value: "all", label: INBOX.copy.bucketAll, count: bucketCounts.all },
     {
       value: "unread",
-      label: "Unread",
+      label: INBOX.copy.bucketUnread,
       count: bucketCounts.unread,
       // A bucket the search has emptied stays in place but is not a tap into a
       // dead end — a rail that reshuffles on every keystroke is worse.
@@ -864,7 +907,7 @@ export function NotificationsScreen({
     },
     {
       value: "read",
-      label: "Read",
+      label: INBOX.copy.bucketRead,
       count: bucketCounts.read,
       disabled: bucketCounts.read === 0 && bucket !== "read",
     },
@@ -876,95 +919,99 @@ export function NotificationsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Inbox" title="Inbox" onBack={onBack} />
+        <Hero eyebrow={INBOX.title} title={INBOX.title} onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
   }
-  if (query.loading && notifications.length === 0) return <LoadingState />;
+  if (query.loading && notifications.length === 0)
+    return <LoadingState label={INBOX.copy.loading} />;
   if (query.error && notifications.length === 0) {
     return <ErrorState message={query.error} onRetry={query.refetch} />;
   }
 
-  return (
-    <View style={styles.root}>
-      <HeroHeader
-        eyebrow="Inbox"
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
+  const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
+    hero: () => (
+      <Hero
+        eyebrow={INBOX.title}
         // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (§1). "Something new" was that answer rounded to a boolean —
+        // that did (shared/DESIGN.md §2). "Something new" was that answer rounded to a boolean —
         // it said the same words for one notification and for forty, and read as
         // a marketing line rather than a count. The tally below it stays the
         // whole inbox, so the two lines never restate each other.
-        title={
-          unreadCount > 0
-            ? `${unreadCount} unread`
-            : notifications.length > 0
-              ? "All caught up"
-              : "Nothing yet"
-        }
+        title={inboxHeroTitle(unreadCount, notifications.length)}
         onBack={onBack}
         value={String(tally.total)}
         valueSuffix={tally.total === 1 ? "notification" : "notifications"}
-        action={
-          unreadCount > 0 ? (
-            <Button
-              label="Mark all read"
-              variant="outlineAccent"
-              compact
-              onPress={() => void markAll()}
-            />
-          ) : undefined
+        actions={
+          <IconButton
+            icon="overflow"
+            accessibilityLabel="Inbox actions"
+            onPress={() => setActionsOpen(true)}
+          />
         }
       />
-
-      {/* The bulk bar takes the SegmentedControl's slot and only that slot, so
-          the rail's height cannot change when a selection starts (§7). */}
-      {notifications.length > 0 ? (
-        <View style={styles.rail}>
-          {selecting && readAction ? (
-            <SelectionBar
-              countLabel={selectionCountLabel(selectedNotifications)}
-              showSelectAll={selectedItems.length < selectableItems.length}
-              // ONE read/unread button, not a pair: which way it goes follows the
-              // selection (all read → unread, anything unread → read), and the
-              // bar's count line states the unread tally so the direction can be
-              // read off the screen rather than remembered.
-              extra={
-                <IconButton
-                  icon={readAction.icon}
-                  accessibilityLabel={readAction.label}
-                  color={theme.accent}
-                  onPress={applyReadAction}
-                />
-              }
-              onClear={clearSelection}
-              onSelectAll={selectAll}
-              onDelete={deleteSelected}
-            />
-          ) : (
-            <SegmentedControl
-              options={buckets}
-              value={bucket}
-              onChange={changeBucket}
-              scroll
-            />
-          )}
-          {/* The name search, in the SAME place in both states so the rail's
-              height cannot differ between them (§7). It goes inert rather than
-              unmounting while picking — a keystroke could narrow a selected row
-              out of the list — and dims to say so, the treatment Saved's field
-              and the waypoint tag rail already use. */}
-          <View style={styles.searchField}>
-            <TextField
-              label="Search notifications"
-              value={search}
-              onChangeText={setSearch}
-              editable={!selecting}
-            />
+    ),
+    buckets: () => (
+      <>
+        {/* The bulk bar takes the ChipRail's slot and only that slot, so
+            the rail's height cannot change when a selection starts (DESIGN.md). */}
+        {notifications.length > 0 ? (
+          <View style={styles.rail}>
+            {selecting && readAction ? (
+              <SelectionBar
+                countLabel={selectionCountLabel(selectedNotifications)}
+                showSelectAll={selectedItems.length < selectableItems.length}
+                // ONE read/unread button, not a pair: which way it goes follows the
+                // selection (all read → unread, anything unread → read), and the
+                // bar's count line states the unread tally so the direction can be
+                // read off the screen rather than remembered.
+                extra={
+                  <IconButton
+                    icon={readAction.icon}
+                    accessibilityLabel={readAction.label}
+                    color={theme.accent}
+                    onPress={applyReadAction}
+                  />
+                }
+                onClear={clearSelection}
+                onSelectAll={selectAll}
+                onDelete={deleteSelected}
+              />
+            ) : (
+              <ChipRail
+                options={buckets}
+                value={bucket}
+                onChange={changeBucket}
+                scroll
+              />
+            )}
+            {/* The name search, in the SAME place in both states so the rail's
+                height cannot differ between them (DESIGN.md). It goes inert rather than
+                unmounting while picking — a keystroke could narrow a selected row
+                out of the list — and dims to say so, the treatment Saved's field
+                and the waypoint tag rail already use. */}
+            <View style={styles.searchField}>
+              <TextField
+                label={INBOX.copy.searchField}
+                value={search}
+                onChangeText={setSearch}
+                editable={!selecting}
+              />
+            </View>
           </View>
-        </View>
-      ) : null}
-
+        ) : null}
+      </>
+    ),
+    truncated: () =>
+      truncated ? (
+        <Text style={styles.truncation}>
+          {inboxTruncatedNote(query.notifications.length, query.total ?? 0)}
+        </Text>
+      ) : null,
+    list: () => (
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -993,14 +1040,15 @@ export function NotificationsScreen({
             }}
           />
         }
-        ListFooterComponent={
-          truncated ? (
-            <Text style={styles.truncation}>
-              {`Showing the ${query.notifications.length} most recent of ${query.total}. Older ones aren't listed.`}
-            </Text>
-          ) : null
-        }
       />
+    ),
+  };
+
+  return (
+    <View style={styles.root}>
+      {contractSectionKeys(INBOX, "gps").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       {/* Per-row verbs. Looked up from the live list, so a refetch that drops
           or restyles the row cannot leave the sheet acting on a stale copy. */}
@@ -1013,6 +1061,43 @@ export function NotificationsScreen({
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
       />
+
+      <BottomSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        title="Inbox actions"
+      >
+        <View style={styles.actionsBody}>
+          <Row
+            icon={inboxVerb("markAllRead").icon}
+            title={inboxVerb("markAllRead").label}
+            // Disabled, with its reason, when it could apply but not now (UX §5).
+            disabled={unreadCount === 0}
+            subtitle={unreadCount === 0 ? "Nothing to mark as read" : undefined}
+            onPress={() => {
+              setActionsOpen(false);
+              void markAll();
+            }}
+          />
+          <Row
+            icon={inboxVerb("clearRead").icon}
+            hue={theme.warning}
+            title={inboxVerb("clearRead").label}
+            disabled={readCount === 0 || !online}
+            subtitle={
+              !online
+                ? "Needs a connection"
+                : readCount === 0
+                  ? "No read notifications"
+                  : undefined
+            }
+            onPress={() => {
+              setActionsOpen(false);
+              clearRead();
+            }}
+          />
+        </View>
+      </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -1077,6 +1162,9 @@ const NotificationRow = memo(function NotificationRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (batch) {
     return (
       <BatchRow
@@ -1095,7 +1183,7 @@ const NotificationRow = memo(function NotificationRow({
     );
   }
   const label = notificationLabel(item);
-  const meta = notificationMeta(item);
+  const meta = notificationMeta(item, theme);
   const target = notificationActions(item);
   const subtitle = [label.warning, formatTime(item.createdAt)]
     .filter(Boolean)
@@ -1105,7 +1193,7 @@ const NotificationRow = memo(function NotificationRow({
   const pill = target?.pill ? (
     <StatusPill label={target.pill} tone="muted" />
   ) : !item.read ? (
-    <StatusPill label="New" tone="accent" />
+    <StatusPill label={INBOX.copy.unreadMark} tone="accent" />
   ) : undefined;
   return (
     <Row
@@ -1123,7 +1211,7 @@ const NotificationRow = memo(function NotificationRow({
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel="Notification actions"
               onPress={() => onMenu(item)}
             />
@@ -1177,7 +1265,7 @@ const NotificationRow = memo(function NotificationRow({
                 />
               ))}
             </View>
-            {/* The reason on the thing that is dimmed, not on the screen (§10). */}
+            {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md). */}
             {!online ? (
               <Text style={styles.actionHint}>Needs a connection</Text>
             ) : null}
@@ -1233,7 +1321,10 @@ const BatchRow = memo(function BatchRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
-  const meta = notificationMeta(batch.representative);
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = notificationMeta(batch.representative, theme);
   const pending = batchPendingFileSends(batch);
   const subtitle = [
     batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
@@ -1256,15 +1347,15 @@ const BatchRow = memo(function BatchRow({
       right={
         <View style={styles.rowTrailing}>
           {batch.unreadCount > 0 ? (
-            <StatusPill label="New" tone="accent" />
+            <StatusPill label={INBOX.copy.unreadMark} tone="accent" />
           ) : undefined}
           {selecting ? (
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
-              icon={expanded ? "chevron-up" : "chevron-down"}
+              icon={expanded ? "collapse" : "expand"}
               accessibilityLabel={
-                expanded ? "Collapse this group" : "Show each one"
+                expanded ? INBOX.copy.collapseGroup : INBOX.copy.expandGroup
               }
               onPress={() => onToggleBatch(batch.key)}
             />
@@ -1329,7 +1420,7 @@ const BatchRow = memo(function BatchRow({
   );
 });
 
-/** Per-bucket, and actionable where there is an action (§8). */
+/** Per-bucket, and actionable where there is an action (shared/DESIGN.md §11). */
 function EmptyPanel({
   bucket,
   searching,
@@ -1341,45 +1432,38 @@ function EmptyPanel({
   searching: boolean;
   onShowAll: () => void;
 }) {
+  const copy = INBOX.copy;
   if (searching) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing matches</Text>
-        <Text style={styles.emptyHint}>
-          The search runs over what a row says — a name, a place, a filename.
-        </Text>
-        <Button label="Clear search" variant="ghost" onPress={onShowAll} />
-      </View>
+      <EmptyState
+        title={copy.noMatchTitle}
+        hint={copy.noMatchBody}
+        action={{
+          label: copy.clearSearch,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
-  if (bucket === "unread") {
+  if (bucket !== "all") {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing unread</Text>
-        <Button label="Show everything" variant="ghost" onPress={onShowAll} />
-      </View>
+      <EmptyState
+        title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        action={{
+          label: copy.showEverything,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
-  if (bucket === "read") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing read yet</Text>
-        <Button label="Show everything" variant="ghost" onPress={onShowAll} />
-      </View>
-    );
-  }
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>No notifications</Text>
-      <Text style={styles.emptyHint}>
-        Shares, friend requests and finished maps appear here.
-      </Text>
-    </View>
-  );
+  return <EmptyState title={copy.firstRunTitle} hint={copy.firstRunBody} />;
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+const useStyles = makeStyles((theme, textRole) => ({
+  actionsBody: { gap: spacing(1) },
+  root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
@@ -1396,16 +1480,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: theme.primary,
-    paddingVertical: spacing(0.75),
+    backgroundColor: theme.page,
+    paddingVertical: spacing(1),
   },
-  dayLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  dayLabel: { ...textRole.section, color: theme.textMuted },
   dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks
@@ -1416,6 +1494,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     textAlign: "center",
     paddingTop: spacing(1.5),
+    paddingHorizontal: spacing(2),
   },
   // Unread is an accent EDGE, not an accent border all round — that border is
   // `Row`'s `selected` treatment, and while a multi-select is running the two
@@ -1424,7 +1503,7 @@ const styles = StyleSheet.create({
   // which is most of them), the way an unread marker does in any inbox. Both
   // states declare the same WIDTH — see the note at the call site.
   rowEdgeAccent: { borderLeftWidth: 3, borderLeftColor: theme.accent },
-  rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: surface.border },
+  rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: theme.line },
   // One step in, so an expanded batch's rows read as belonging to the header
   // above them. Margin, never a border width change — the row's left edge is
   // 3pt in EVERY state for the Fabric clip-bounds reason at `rowEdgeIdle`.
@@ -1432,7 +1511,7 @@ const styles = StyleSheet.create({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
@@ -1441,14 +1520,6 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     fontSize: fontSize.xs,
     textAlign: "center",
-    paddingTop: spacing(0.75),
+    paddingTop: spacing(0.5),
   },
-  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
-});
+}));

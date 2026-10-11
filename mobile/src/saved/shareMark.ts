@@ -12,7 +12,7 @@
 //               is a GLYPH, not a pill: same reasoning as the backed-up cloud
 //               beside it — it sits on rows the user is not asking about most
 //               of the time, and a repeated word down a list stops being read
-//               while eating the width the title needs (DESIGN.md §5, and the
+//               while eating the width the title needs (DESIGN.md, and the
 //               "a pill that costs the TITLE" note in §11).
 //
 // The old pair was `Shared` and `Shared with 3` — one word apart, same tone,

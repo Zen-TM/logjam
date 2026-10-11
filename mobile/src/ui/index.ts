@@ -2,12 +2,13 @@
 // individual files. Keep this the single public surface of the UI kit.
 export { ActivitySpark, type ActivityBucket } from "./ActivitySpark";
 export { Button } from "./Button";
-export { CapacityBar, type CapacitySegment } from "./CapacityBar";
-export { Card } from "./Card";
-export { Chip } from "./Chip";
-export { ChipPicker, type ChipOption } from "./ChipPicker";
+export { Meter, type MeterSegment } from "./Meter";
+export { Avatar } from "./Avatar";
+export { Chip, type ChipOption } from "./Chip";
+export { ChipPicker } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
-export { AttributeFilter, ThresholdFilter } from "./AttributeFilter";
+export { AttributeFilter } from "./AttributeFilter";
+export { DateRangeFilter } from "./DateRangeFilter";
 export { RangePills } from "./RangePills";
 export {
   formatRange,
@@ -15,28 +16,29 @@ export {
   nextRange,
   type NumberRange,
 } from "@logjam/shared";
-export { HeroHeader } from "./HeroHeader";
+export { Hero } from "./Hero";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
+export { Icon, type Glyph } from "./Icon";
 export { IconButton } from "./IconButton";
 export { SectionHeader } from "./SectionHeader";
+export { ListEnd } from "./ListEnd";
+export { ColourField } from "./ColourField";
 export { StatusPill } from "./StatusPill";
 export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";
-export {
-  SegmentedControl,
-  SEGMENTED_CONTROL_HEIGHT,
-  type SegmentOption,
-} from "./SegmentedControl";
-export { BottomSheet } from "./BottomSheet";
+export { SwitchRow } from "./SwitchRow";
+export { Notice } from "./Notice";
+export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
+export { BottomSheet, closedSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";
 export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";
 export { TextField } from "./TextField";
+export { Field, FormStack } from "./Field";
 export { TextLink } from "./TextLink";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
 export { ErrorBanner } from "./ErrorBanner";
 export { FieldError } from "./FieldError";
-export { RootErrorBoundary } from "./RootErrorBoundary";
 export { RenameForm } from "./RenameForm";
 export { Screen, ScreenScroll } from "./Screen";
 export { Row } from "./Row";
@@ -45,6 +47,7 @@ export { ProfileChart } from "./ProfileChart";
 export {
   elevationSeries,
   speedSeries,
+  timeOfDayFormatter,
   type ProfilePoint,
   type ProfileSeries,
 } from "./profileSeries";

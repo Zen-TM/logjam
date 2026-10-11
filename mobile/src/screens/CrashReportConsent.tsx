@@ -11,22 +11,24 @@
 // Settings → Privacy and security is where it changes afterwards. Installs that
 // predate the toggle are grandfathered, read as answered, and never see this.
 //
-// A sheet rather than an `Alert`: DESIGN.md §6 keeps `Alert` for destructive
+// A sheet rather than an `Alert`: DESIGN.md keeps `Alert` for destructive
 // confirms, and this is a two-option question with copy that is the point.
 // Dismissing it (backdrop, handle, back gesture) is "no consent" and stores the
 // off, because a consent request that is walked away from has been declined.
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import {
   needsCrashReportChoice,
   setCrashReportsEnabled,
 } from "../sentry/crashReportPreference";
 import { initSentry } from "../sentry/initSentry";
-import { fontSize, lineHeight, spacing, theme } from "../theme";
+import { fontSize, lineHeight, spacing, makeStyles } from "../theme";
 import { BottomSheet, Button } from "../ui";
 
 export function CrashReportConsent() {
+  const styles = useStyles();
+
   // Read once per mount: after either answer the preference is set, so a
   // remount (sign-out and back in) finds it answered and never asks again.
   const [asking, setAsking] = useState(needsCrashReportChoice);
@@ -59,8 +61,8 @@ export function CrashReportConsent() {
       }
     >
       <Text style={styles.body}>
-        If Logjam crashes, we get the technical details. Reports are anonymous
-        and stripped of place names and coordinates.
+        If Logjam GPS crashes, we get the technical details. Reports are
+        anonymous and stripped of place names and coordinates.
       </Text>
       <Text style={styles.body}>
         Off by default. Change it any time in Settings › Privacy and security.
@@ -69,7 +71,7 @@ export function CrashReportConsent() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: {
     fontSize: fontSize.sm,
     color: theme.textMuted,
@@ -77,4 +79,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing(1.5),
   },
   actions: { gap: spacing(0.5) },
-});
+}));

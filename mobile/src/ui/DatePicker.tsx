@@ -1,13 +1,5 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  PanResponder,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
 import {
   fontSize,
@@ -15,8 +7,9 @@ import {
   hitSlop,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import {
   addMonths,
@@ -28,6 +21,7 @@ import {
   yearBlockStart,
   type YearMonth,
 } from "./monthGrid";
+import { Icon } from "./Icon";
 
 /**
  * Month-grid date picker, rendered inline (inside a sheet) rather than as an
@@ -66,6 +60,8 @@ export function DatePicker({
   value: string | null;
   onChange: (key: string) => void;
 }) {
+  const styles = useStyles();
+
   const today = todayDateKey();
   const currentYear = Number(today.slice(0, 4));
   const [visibleMonth, setVisibleMonth] = useState<YearMonth>(() =>
@@ -296,6 +292,8 @@ function DayCell({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+
   const label = (
     <Text
       style={[
@@ -360,6 +358,8 @@ function YearCell({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+
   const label = (
     <Text
       style={[
@@ -415,6 +415,9 @@ function Header({
   labelAccessibility: string;
   expanded: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.headerRow}>
       <Pressable
@@ -424,7 +427,7 @@ function Header({
         onPress={onPrev}
         style={({ pressed }) => [styles.nav, pressed && styles.pressed]}
       >
-        <Feather name="chevron-left" size={20} color={theme.textPrimary} />
+        <Icon idea="back" size={20} color={theme.text} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -435,8 +438,8 @@ function Header({
         style={({ pressed }) => [styles.labelButton, pressed && styles.pressed]}
       >
         <Text style={styles.label}>{label}</Text>
-        <Feather
-          name={expanded ? "chevron-up" : "chevron-down"}
+        <Icon
+          idea={expanded ? "collapse" : "expand"}
           size={14}
           color={theme.textMuted}
         />
@@ -454,7 +457,7 @@ function Header({
           nextDisabled && styles.disabledNav,
         ]}
       >
-        <Feather name="chevron-right" size={20} color={theme.textPrimary} />
+        <Icon idea="forward" size={20} color={theme.text} />
       </Pressable>
     </View>
   );
@@ -470,7 +473,7 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(0.5) },
   headerRow: {
     flexDirection: "row",
@@ -494,19 +497,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(0.5),
     borderRadius: radius.pill,
   },
-  label: {
-    color: theme.textPrimary,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.rowTitle, color: theme.text },
   viewport: { overflow: "hidden", backgroundColor: "transparent" },
   week: { flexDirection: "row" },
   weekday: {
+    ...textRole.caption,
     flex: 1,
     textAlign: "center",
     color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
     paddingBottom: spacing(0.5),
   },
   day: {
@@ -536,8 +534,8 @@ const styles = StyleSheet.create({
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
-  dayText: { color: theme.textPrimary, fontSize: fontSize.sm },
-  selectedText: { color: theme.primary, fontWeight: fontWeight.bold },
+  dayText: { color: theme.text, fontSize: fontSize.sm },
+  selectedText: { color: theme.onFill, fontWeight: fontWeight.bold },
   disabledText: { color: withAlpha(theme.textMuted, 0.45) },
   // Four rows of four, sized to match the six day rows so switching grids
   // barely moves the sheet's height.
@@ -551,8 +549,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   yearPill: {
-    paddingHorizontal: spacing(1.25),
-    paddingVertical: spacing(0.75),
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.5),
     borderRadius: radius.pill,
     // Same reason as dayPill: keep the background drawable present from the
     // first layout so paging back to a selected year can't lose its rounding.
@@ -561,5 +559,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  yearText: { color: theme.textPrimary, fontSize: fontSize.sm },
-});
+  yearText: { color: theme.text, fontSize: fontSize.sm },
+}));

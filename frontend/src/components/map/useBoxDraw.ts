@@ -111,9 +111,9 @@ export function useBoxDraw({
 
         box = document.createElement("div");
         box.style.position = "absolute";
-        box.style.border = "2px dashed var(--theme-accent)";
+        box.style.border = "2px dashed var(--color-accent)";
         box.style.backgroundColor =
-          "color-mix(in srgb, var(--theme-accent) 20%, transparent)";
+          "color-mix(in srgb, var(--color-accent) 20%, transparent)";
         box.style.pointerEvents = "none";
         box.style.zIndex = "10";
         container.appendChild(box);

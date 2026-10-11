@@ -8,57 +8,21 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ASSET_HUES,
   DEFAULT_THEME_SCHEME_ID,
-  INK,
-  PLACE_STATUS_HUES,
   normalizeUserUiPreferences,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   type ThemeScheme,
   type ThemeSchemeId,
-  type ThemeTokens,
 } from "@logjam/shared";
 import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 
-/** The scheme-independent tokens, written once at module load so the first
- *  paint already has them. Read from @logjam/shared rather than restated in
- *  index.css, so a retuned hue reaches both clients and the contrast guard. */
-function applyStaticTokensToCss() {
-  const root = document.documentElement;
-  root.style.setProperty("--ink", INK);
-  for (const [name, hue] of Object.entries({
-    ...ASSET_HUES,
-    ...PLACE_STATUS_HUES,
-  })) {
-    root.style.setProperty(`--hue-${name}`, hue);
-  }
-}
-applyStaticTokensToCss();
-
-function applyTokensToCss(tokens: ThemeTokens) {
-  const root = document.documentElement;
-
-  root.style.setProperty("--theme-success", tokens.success);
-
-  root.style.setProperty("--theme-primary", tokens.primary);
-  root.style.setProperty("--theme-secondary", tokens.secondary);
-  root.style.setProperty("--theme-accent", tokens.accent);
-  root.style.setProperty("--theme-text-primary", tokens.textPrimary);
-  root.style.setProperty("--theme-text-muted", tokens.textMuted);
-  root.style.setProperty("--theme-warning", tokens.warning);
-  root.style.setProperty("--theme-bonus-1", tokens.bonus1);
-  root.style.setProperty("--theme-bonus-2", tokens.bonus2);
-  root.style.setProperty("--theme-bonus-3", tokens.bonus3);
-
-  // Legacy vars retained so existing CSS modules keep working while migration is in progress.
-  root.style.setProperty("--sandstone-dark", tokens.primary);
-  root.style.setProperty("--sandstone-light", tokens.secondary);
-  root.style.setProperty("--sand-dark", tokens.accent);
-  root.style.setProperty("--sand-light", tokens.bonus1);
-  root.style.setProperty("--content-color", tokens.textPrimary);
-
+/** Every scheme's colours are in tokens.generated.css under
+ *  `[data-scheme="<id>"]`; choosing one is setting the attribute. The map
+ *  listens for the event to repaint what it reads from those colours. */
+function applyScheme(id: ThemeSchemeId) {
+  document.documentElement.dataset.scheme = id;
   window.dispatchEvent(new Event("logjam-theme-change"));
 }
 
@@ -87,11 +51,9 @@ export function ThemePreferencesProvider({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const scheme = THEME_SCHEMES[schemeId];
-
   useEffect(() => {
-    applyTokensToCss(scheme.tokens);
-  }, [scheme]);
+    applyScheme(schemeId);
+  }, [schemeId]);
 
   const hydrateFromUser = useCallback(async () => {
     setIsHydrating(true);

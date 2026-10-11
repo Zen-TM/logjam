@@ -19,35 +19,33 @@
 // stats describe what the last one produced — a control below the readout it
 // governs reads as a footnote to it (operator, 2026-09-17).
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Redo2, Trash2, Undo2, X } from "lucide-react";
 import {
   densifyLine,
   formatDistanceM,
   routeLengthM,
   trackColorName,
+  MAP_MEASURE,
   MAX_ROUTE_POINTS,
   TRACK_COLORS,
+  PAIRED_STAT_LABELS,
+  pairedStatLayout,
 } from "@logjam/shared";
 import type { SnapMode } from "../map/Map";
+import { SnapSelect, useSettledLine, useUndoKey } from "../map/draftTool";
 import { useElevationProfile } from "../../placeUtils";
 import {
   Button,
   Hero,
   IconButton,
   SectionHeader,
-  Select,
   StatGrid,
-  SwatchPicker,
+  ColourField,
+  FieldError,
   type Stat,
 } from "../../ui";
 import ElevationProfile from "./ElevationProfile";
 import type { RouteHoverChannel } from "../map/routeHover";
 import classes from "./RouteDrawPanel.module.css";
-
-/** How long the line must sit still before its terrain is read. A profile per
- *  placed vertex would be one request per click; this asks once the user pauses,
- *  which is when they are looking at the figures anyway. */
-const PROFILE_SETTLE_MS = 700;
 
 type RouteDrawPanelProps = {
   points: [number, number][];
@@ -97,48 +95,18 @@ export function RouteDrawPanel({
   onSnapModeChange,
   routeHover,
 }: RouteDrawPanelProps): React.JSX.Element {
-  const canSave = points.length >= 2 && !saving;
   const hasLine = points.length >= 2;
+  // The point count when Save was pressed on a line too short to keep: the
+  // message stays for that count and goes with the next point or undo.
+  const [shortAt, setShortAt] = useState<number | null>(null);
 
-  // The line as it was when the user last paused. Profiling the live draft
-  // would fire a request per click and re-render the chart mid-gesture.
-  //
-  // SEEDED with the line as it arrives, when there is one: opening the editor
-  // on an existing route is not a pause to wait out — the geometry is the one
-  // just being looked at, and its profile is already cached, so the chart
-  // should be there rather than appear 700ms later (operator, 2026-09-17).
-  const [settled, setSettled] = useState<[number, number][] | null>(() =>
-    points.length >= 2 ? points : null,
-  );
-  // No line, nothing to profile: dropped during render, not after a pause.
-  // (A pending timer for the last line is cleared by the effect's cleanup.)
-  if (points.length < 2 && settled !== null) setSettled(null);
-  useEffect(() => {
-    if (points.length < 2) return;
-    const timer = window.setTimeout(
-      () => setSettled(points),
-      PROFILE_SETTLE_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [points]);
+  // The line as it was when the user last paused (`useSettledLine`).
+  const settled = useSettledLine(points);
   const { profile, loading: profileLoading } = useElevationProfile(settled);
 
   // Ctrl+Z / Cmd+Z, because this is a drawing tool and that is what the gesture
-  // means everywhere else (operator, 2026-09-17). Bound while the tool is
-  // mounted, which is exactly while a draft exists; it defers to a focused
-  // field so it can never eat an undo meant for typing.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "z" && event.key !== "Z") return;
-      if (!event.ctrlKey && !event.metaKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable]")) return;
-      event.preventDefault();
-      onUndo();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onUndo]);
+  // means everywhere else (operator, 2026-09-17).
+  useUndoKey(onUndo);
 
   // The SAME densification the server profiled, so a sample index maps straight
   // back to a coordinate on the line.
@@ -157,11 +125,11 @@ export function RouteDrawPanel({
       span: true,
     },
     {
-      label: "Climb",
+      label: PAIRED_STAT_LABELS.ascent,
       value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
     },
     {
-      label: "Descent",
+      label: PAIRED_STAT_LABELS.descent,
       value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
     },
   ];
@@ -170,14 +138,8 @@ export function RouteDrawPanel({
     <div className={classes.root}>
       <Hero
         title={editingName ? `Editing ${editingName}` : "New route"}
-        actions={
-          <IconButton
-            icon={X}
-            label="Cancel drawing"
-            onClick={onCancel}
-            disabled={saving}
-          />
-        }
+        onClose={onCancel}
+        closeDisabled={saving}
       />
 
       <div className={classes.body}>
@@ -199,13 +161,20 @@ export function RouteDrawPanel({
             what the next click does are in the footer, with Undo and Clear —
             which is also why they no longer need to sit above the figures they
             do not describe. */}
-        <StatGrid stats={stats} />
+        <StatGrid stats={pairedStatLayout(stats)} />
 
         {atCap && (
-          <p className={classes.warning} role="status">
-            Maximum of {MAX_ROUTE_POINTS} points reached.
-          </p>
+          <FieldError
+            message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+          />
         )}
+        <FieldError
+          message={
+            shortAt === points.length
+              ? "A route needs at least two points."
+              : null
+          }
+        />
 
         {/* The terrain under the line, while it is still being decided — the
             reason a canyoner re-routes a leg before saving it rather than
@@ -241,7 +210,7 @@ export function RouteDrawPanel({
             ) : (
               <p className={classes.note}>
                 {profileLoading
-                  ? "Reading the terrain…"
+                  ? MAP_MEASURE.copy.readingTerrain
                   : "Pause to read the terrain under this line."}
               </p>
             )}
@@ -253,9 +222,9 @@ export function RouteDrawPanel({
               drawing rather than in the save dialog: the line is on the map in
               this colour as it is built, so it is a property of the draft, not
               a question asked at the end. */}
-          <SwatchPicker
+          <ColourField
             label="Colour"
-            colors={TRACK_COLORS}
+            palette={TRACK_COLORS}
             value={color ?? undefined}
             nameOf={trackColorName}
             disabled={saving}
@@ -271,47 +240,48 @@ export function RouteDrawPanel({
             rather than above figures it says nothing about. The footer is one
             row taller for it, and the body above is then the same page a saved
             way shows (operator, 2026-09-17). */}
-        <Select
-          label="Snap to"
+        <SnapSelect
           value={snapMode}
           disabled={saving}
-          onChange={(event) => onSnapModeChange(event.target.value as SnapMode)}
-        >
-          <option value="off">Nothing (straight lines)</option>
-          <option value="trails">Trails</option>
-          <option value="waterways">Creeks &amp; rivers</option>
-          <option value="both">Trails, creeks &amp; rivers</option>
-        </Select>
+          onChange={onSnapModeChange}
+        />
 
         <div className={classes.buttons}>
           <IconButton
-            icon={Undo2}
+            icon="undo"
             label="Undo"
             onClick={onUndo}
             disabled={!canUndo || saving}
+            disabledReason={saving ? "Saving…" : "Nothing to undo"}
           />
           <IconButton
-            icon={ArrowLeftRight}
+            icon="reverse"
             label="Reverse direction"
             onClick={onReverse}
             disabled={!hasLine || saving}
+            disabledReason={saving ? "Saving…" : "Needs two points"}
           />
           <IconButton
-            icon={Trash2}
+            icon="delete"
             label="Clear all points"
             onClick={onClear}
             disabled={points.length === 0 || saving}
+            disabledReason={saving ? "Saving…" : "Nothing to clear"}
           />
           <span className={classes.spacer} />
-          <Button compact onClick={onCancel} disabled={saving}>
+          <Button
+            compact
+            onClick={onCancel}
+            disabled={saving}
+            disabledReason="Saving…"
+          >
             Cancel
           </Button>
           <Button
             compact
             variant="filled"
-            icon={Redo2}
-            onClick={onSave}
-            disabled={!canSave}
+            icon="done"
+            onClick={() => (hasLine ? onSave() : setShortAt(points.length))}
             busy={saving}
           >
             Save

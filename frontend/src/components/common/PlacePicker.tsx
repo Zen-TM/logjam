@@ -15,9 +15,8 @@
 // rule that a place name is not sent to a third party without being asked
 // (root CLAUDE.md, and MapSearchBox's own "Search locations for…" gate).
 import { useId, useMemo, useRef, useState } from "react";
-import { MapPin } from "lucide-react";
 import { placeMatchesSearch, type TPlace } from "../../placeUtils";
-import { SearchField } from "../../ui";
+import { SearchField, Icon } from "../../ui";
 import classes from "./PlacePicker.module.css";
 
 /** Enough to choose from without becoming a list to scroll — the answer to too
@@ -132,7 +131,12 @@ export default function PlacePicker({
                   choose(place);
                 }}
               >
-                <MapPin size={16} aria-hidden className={classes.glyph} />
+                <Icon
+                  idea="place"
+                  size={16}
+                  aria-hidden
+                  className={classes.glyph}
+                />
                 <span className={classes.name}>{place.name}</span>
               </li>
             ))}

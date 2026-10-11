@@ -9,55 +9,78 @@
 // never hides
 // a row behind a combination the user has to reason about.
 //
-// Filtering shares the web panel's predicate (`passesPlaceFilters` in
-// shared/): the web's twelve axes are cut here to the ones that decide a
-// Saturday (grade, commitment, quality, hours, rope length) because a phone
-// screen full of controls is a worse tool than a short one that fits.
+// WHAT the screen is made of, in what order and under what words is its
+// contract (`PLACES_LIST` in `@logjam/shared`), which Logjam Web's Places panel
+// renders from too. Filtering shares its predicate (`passesPlaceFilters`).
 //
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
-// location detail (DESIGN.md §11). Nothing here is logged, and the failure paths
+// location detail (shared/DESIGN.md §13). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a place name.
 import { numericFieldValue } from "@logjam/shared";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
   FlatList,
   Keyboard,
   RefreshControl,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
   placeMatchesSearch,
   comparePlaces,
+  contractSectionKeys,
   distinctTripTypes,
   EMPTY_PLACE_FILTERS,
   passesPlaceFilters,
   type PlaceFilters,
   type PlaceSortKey,
   type RegionBbox,
-  placeSortLabel,
+  PLACE_STATUS_ORDER,
+  PLACES_ADD,
+  PLACES_ADD_ICON,
+  PLACES_FILTER_SHEET,
+  PLACES_LIST,
+  placeDeleteConfirm,
+  placesCountLabel,
+  placesEmptyKind,
+  placeTypeHasTab,
+  isSystemPlaceTypeId,
+  listSelectionLabel,
+  placesEmptyState,
+  placesFilterNote,
+  placesHeroTitle,
   placeStatus,
   placeSummary,
   qualityLabel,
+  type PlacesEmptyKind,
   type PlaceStatus,
+  type SectionKeysOn,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
-  placeHue,
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  surface,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
+  useHues,
+  controlSize,
+  opacity,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
@@ -72,20 +95,23 @@ import {
 import {
   BottomSheet,
   Button,
-  CapacityBar,
-  HeroHeader,
+  Meter,
+  Hero,
+  ListEnd,
+  Icon,
   IconButton,
   LoadingState,
   ErrorState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SyncStatusPills,
   Toast,
   useBulkSelection,
-  type CapacitySegment,
-  type SegmentOption,
+  type MeterSegment,
+  type ChipOption,
   type ToastMessage,
+  EmptyState,
 } from "../ui";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
@@ -93,7 +119,8 @@ import { PlaceEditSheet } from "./PlaceEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
 import { setAreaPickerStart, takePickedArea } from "../map/pickedArea";
 import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
-import { usePlaceTypeForm } from "./PlaceTypesEditor";
+import { usePlaceTypeForm, type NewPlaceType } from "./PlaceTypesEditor";
+import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { PlaceFilterSheet } from "./PlaceFilterSheet";
 import {
@@ -101,13 +128,15 @@ import {
   setPlaceMapFilterEnabled,
   usePlaceMapFilter,
 } from "./placeMapFilter";
-import { PLACE_STATUS_META } from "./placeMeta";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import { placeStatusMeta } from "./placeMeta";
+import { placeTypeGlyph } from "./placeTypeIcon";
+
+const { copy } = PLACES_LIST;
 
 type Bucket = "all" | PlaceStatus;
 
 /** The type rail's "every type" chip. A sentinel rather than `null`, because
- *  `SegmentedControl` keys its chips by value. No place type can collide with
+ *  `ChipRail` keys its chips by value. No place type can collide with
  *  it — an id is a UUID. */
 const ALL_TYPES = "all";
 /** The rail's trailing ACTION chip. Not a type id and cannot collide with one:
@@ -141,6 +170,10 @@ export function PlacesScreen({
    */
   onPickArea: () => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const pendingCount = usePendingSyncCount();
@@ -155,12 +188,21 @@ export function PlacesScreen({
 
   const [bucket, setBucket] = useState<Bucket>("all");
   const [findOpen, setFindOpen] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  // Focused on the next frame, once the row has mounted: `autoFocus` runs
+  // before the field is attached (mobile/DESIGN.md §4).
+  useEffect(() => {
+    if (!findOpen) return;
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [findOpen]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
   const [sheet, setSheet] = useState<
-    "filters" | "bulkShare" | "placeTypeForm" | null
+    "filters" | "bulkShare" | "placeTypeForm" | "typeAttributes" | null
   >(null);
+  const [addedType, setAddedType] = useState<NewPlaceType | null>(null);
   const mapFilter = usePlaceMapFilter();
   const [menuPlaceId, setMenuPlaceId] = useState<string | null>(null);
   /** The sheet owns its own share sub-mode and forgets it on close. */
@@ -243,7 +285,7 @@ export function PlacesScreen({
     setToast({ text, tone: "error", nonce: toastNonce.current });
   }, []);
 
-  // Sheets don't outlive the tab (DESIGN.md §7) — with ONE exception, and it is
+  // Sheets don't outlive the tab (DESIGN.md) — with ONE exception, and it is
   // the same focus effect because the two must not race: arriving back from the
   // point picker is not "the user came to this tab", it is the second half of
   // something they started here. `takePickedPoint` consumes the answer, so a
@@ -354,7 +396,7 @@ export function PlacesScreen({
     isDeletable: (place) => place.syncRole === "owner",
   });
   // A selection is a transient mode over rows you can see; a pending "delete
-  // these five" you no longer remember making is a stale prompt (DESIGN.md §7).
+  // these five" you no longer remember making is a stale prompt (DESIGN.md).
   useFocusEffect(
     useCallback(() => {
       clearSelection();
@@ -364,34 +406,30 @@ export function PlacesScreen({
   const deleteSelected = useCallback(() => {
     const targets = selectedItems;
     const count = targets.length;
-    Alert.alert(
-      count === 1 ? "Delete this place?" : `Delete ${count} places?`,
-      "Their notes and photos are removed from this device and from your account. Trips that link to them stay, but lose the link. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              let failures = 0;
-              for (const place of targets) {
-                try {
-                  await deletePlaceLocal(place.id);
-                } catch (err) {
-                  console.error(err);
-                  failures += 1;
-                }
+    const confirm = placeDeleteConfirm({ count });
+    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            let failures = 0;
+            for (const place of targets) {
+              try {
+                await deletePlaceLocal(place.id);
+              } catch (err) {
+                console.error(err);
+                failures += 1;
               }
-              clearSelection();
-              if (failures === 0)
-                info(`Deleted ${count} ${count === 1 ? "place" : "places"}.`);
-              else fail(`${failures} of ${count} couldn't be deleted.`);
-            })();
-          },
+            }
+            clearSelection();
+            if (failures === 0) info(`Deleted ${placesCountLabel(count)}.`);
+            else fail(`${failures} of ${count} couldn't be deleted.`);
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Every selectable place is one this user OWNS (`isDeletable` above), so a
@@ -432,10 +470,9 @@ export function PlacesScreen({
   // permanent control, because "which kind of place am I looking at" is the
   // question people arrive with (§5.4).
   //
-  // MEMBERSHIP is decided over the whole collection, not the filtered view: a
-  // type with no places at all never appears (a canyoner should not be offered
-  // a Campsite tab they have never used), but a tab does NOT come and go as the
-  // user types — the bucket rail's rule, for the same reason.
+  // MEMBERSHIP is `placeTypeHasTab`, decided over the whole collection, not
+  // the filtered view: a tab does NOT come and go as the user types — the
+  // bucket rail's rule, for the same reason.
   const typeTotals = useMemo(() => {
     const counts = new Map<string, number>();
     for (const place of places) {
@@ -470,18 +507,20 @@ export function PlacesScreen({
     return counts;
   }, [withoutType]);
 
-  const typeOptions: SegmentOption<string>[] = useMemo(
+  const typeOptions: ChipOption<string>[] = useMemo(
     () => [
-      // "Any type", not "All": the bucket rail directly below has its own
-      // "All" chip, and two identical words with the same number stacked six
-      // pixels apart read as a rendering bug.
-      { value: ALL_TYPES, label: "Any type", count: withoutType.length },
+      { value: ALL_TYPES, label: copy.anyType, count: withoutType.length },
       ...placeTypes
-        .filter((type) => (typeTotals.get(type.id) ?? 0) > 0)
+        .filter((type) =>
+          placeTypeHasTab({
+            builtIn: isSystemPlaceTypeId(type.id),
+            places: typeTotals.get(type.id) ?? 0,
+          }),
+        )
         .map((type) => ({
           value: type.id,
           label: type.name,
-          icon: placeTypeFeatherIcon(type.iconKey),
+          icon: placeTypeGlyph(type.iconKey),
           hue: type.color,
           count: typeCounts.get(type.id) ?? 0,
           disabled:
@@ -504,13 +543,13 @@ export function PlacesScreen({
    * notices they want a new type, and Settings is three taps and a different
    * mental mode away. The chip is drawn last so it never moves as types come
    * and go, and it is an action rather than a selectable value — `selectType`
-   * intercepts it (DESIGN.md §5: a control that changes mode says so by what it
+   * intercepts it (DESIGN.md: a control that changes mode says so by what it
    * does, not by looking different).
    */
-  const railOptions: SegmentOption<string>[] = useMemo(
+  const railOptions: ChipOption<string>[] = useMemo(
     () => [
       ...typeOptions,
-      { value: NEW_TYPE, label: "New type", icon: "plus" },
+      { value: NEW_TYPE, label: copy.newType, icon: "add" },
     ],
     [typeOptions],
   );
@@ -539,19 +578,28 @@ export function PlacesScreen({
   }, []);
 
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet === "placeTypeForm",
     editing: null,
     onSaved: info,
     onDone: () => setSheet(null),
+    onAdded: (type) => {
+      setAddedType(type);
+      setSheet("typeAttributes");
+    },
+  });
+  const typeAttributes = useTypeAttributesStep({
+    type: sheet === "typeAttributes" ? addedType : null,
+    onDone: () => setSheet(null),
   });
 
-  const bucketOptions: SegmentOption<Bucket>[] = useMemo(
+  const bucketOptions: ChipOption<Bucket>[] = useMemo(
     () => [
-      { value: "all", label: "All", count: withoutBucket.length },
-      ...(["todo", "done", "shared"] as PlaceStatus[]).map((status) => ({
+      { value: "all", label: copy.allStatuses, count: withoutBucket.length },
+      ...PLACE_STATUS_ORDER.map((status) => ({
         value: status,
-        label: PLACE_STATUS_META[status].label,
-        icon: PLACE_STATUS_META[status].icon,
-        hue: PLACE_STATUS_META[status].hue,
+        label: placeStatusMeta(theme)[status].label,
+        icon: placeStatusMeta(theme)[status].icon,
+        hue: placeStatusMeta(theme)[status].hue,
         count: bucketCounts[status],
         // A bucket the other axes have emptied stays in place but isn't a tap
         // into a dead end. Never removed: a rail that reshuffles under the
@@ -559,31 +607,31 @@ export function PlacesScreen({
         disabled: bucketCounts[status] === 0 && bucket !== status,
       })),
     ],
-    [bucket, bucketCounts, withoutBucket.length],
+    [bucket, bucketCounts, withoutBucket.length, theme],
   );
 
-  const heroSegments: CapacitySegment[] = useMemo(
+  const heroSegments: MeterSegment[] = useMemo(
     () => [
       {
         label: "Visited",
         value: totals.done,
-        color: placeHue.done,
+        hue: placeHue.done,
         display: String(totals.done),
       },
       {
         label: "Not visited",
         value: totals.todo,
-        color: placeHue.todo,
+        hue: placeHue.todo,
         display: String(totals.todo),
       },
       {
         label: "Shared",
         value: totals.shared,
-        color: placeHue.shared,
+        hue: placeHue.shared,
         display: String(totals.shared),
       },
     ],
-    [totals],
+    [totals, placeHue],
   );
 
   // The trip form's type vocabulary, so logging from here offers the same
@@ -617,7 +665,7 @@ export function PlacesScreen({
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
   // Stable identities so the memoised rows never re-render for a state change
-  // that has nothing to do with them (DESIGN.md §9).
+  // that has nothing to do with them (DESIGN.md).
   const openPlace = useCallback(
     (place: MirrorPlace) => onOpenPlace(place),
     [onOpenPlace],
@@ -676,116 +724,129 @@ export function PlacesScreen({
     return <ErrorState message={query.error} onRetry={query.refresh} />;
   }
 
-  return (
-    <View style={styles.screen}>
-      <HeroHeader
+  const note = placesFilterNote(hiddenFilterCount, sort);
+  const filterButton = (
+    <IconButton
+      icon="filter"
+      accessibilityLabel={PLACES_FILTER_SHEET.title}
+      color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
+      filled={hiddenFilterCount > 0}
+      onPress={() => {
+        // Drop the keyboard BEFORE the sheet mounts: a sheet opening over a
+        // live IME inherits the shrunk frame and stops short of the bottom
+        // edge.
+        Keyboard.dismiss();
+        setSheet("filters");
+      }}
+    />
+  );
+
+  // The screen, section by section, in the order its contract gives.
+  // Exhaustive by type: a section the contract names cannot be left out, and
+  // one it does not name cannot be drawn.
+  const sections: Record<
+    SectionKeysOn<typeof PLACES_LIST, "gps">,
+    ReactNode
+  > = {
+    hero: (
+      <Hero
         eyebrow="Places"
-        title={places.length === 1 ? "1 place" : `${places.length} places`}
-        action={
+        title={placesHeroTitle(places.length)}
+        actions={
           <View style={styles.heroActions}>
             <IconButton
               icon="search"
-              accessibilityLabel={findOpen ? "Hide search" : "Search places"}
+              accessibilityLabel={findOpen ? copy.closeSearch : copy.search}
               color={search.trim() !== "" ? theme.accent : theme.textMuted}
               filled={search.trim() !== ""}
               onPress={() => (findOpen ? clearFind() : setFindOpen(true))}
             />
-            <Button
-              label="Add place"
-              icon="plus"
-              compact
-              onPress={() => startEditing(null)}
-            />
+            {/* One way in on this client, so a button and no menu. */}
+            {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
+              <Button
+                key={key}
+                label={PLACES_ADD.copy[key]}
+                icon={PLACES_ADD_ICON[key]}
+                compact
+                onPress={() => startEditing(null)}
+              />
+            ))}
           </View>
         }
       >
         {/* One slot, two uses: the tick-list meter is the answer you came for,
             and the search row replaces it in place so opening search doesn't
-            shove the list down (DESIGN.md §2). */}
+            shove the list down (DESIGN.md). */}
         {findOpen ? (
           <View style={styles.findRow}>
             <View style={styles.searchWrap}>
-              <Feather name="search" size={16} color={theme.textMuted} />
+              <Icon idea="search" size={16} color={theme.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Place or alternative name"
+                placeholder={copy.searchPlaceholder}
                 placeholderTextColor={theme.textMuted}
-                accessibilityLabel="Search by place or alternative name"
+                accessibilityLabel={copy.searchField}
+                ref={searchInputRef}
                 autoCapitalize="none"
-                autoFocus
                 returnKeyType="search"
               />
             </View>
+            {filterButton}
             <IconButton
-              icon="sliders"
-              accessibilityLabel="Sort and filter"
-              color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
-              filled={hiddenFilterCount > 0}
-              onPress={() => {
-                // Drop the keyboard BEFORE the sheet mounts: a sheet opening
-                // over a live IME inherits the shrunk frame and stops short of
-                // the bottom edge.
-                Keyboard.dismiss();
-                setSheet("filters");
-              }}
-            />
-            <IconButton
-              icon="x"
-              accessibilityLabel="Clear search"
+              icon="close"
+              accessibilityLabel={copy.closeSearch}
               onPress={clearFind}
             />
           </View>
         ) : (
           <View style={styles.meterRow}>
             <View style={styles.meter}>
-              <CapacityBar segments={heroSegments} />
+              <Meter segments={heroSegments} />
             </View>
-            <IconButton
-              icon="sliders"
-              accessibilityLabel="Sort and filter"
-              color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
-              filled={hiddenFilterCount > 0}
-              onPress={() => setSheet("filters")}
-            />
+            {filterButton}
           </View>
         )}
 
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
+    ),
 
-      {/* Two rails, and they answer different questions: WHAT kind of place
+    typeRail: (
+      <>
+        {/* Two rails, and they answer different questions: WHAT kind of place
           (the user's own vocabulary) and WHERE it is in the tick list. Only the
           bucket rail gives way to the selection bar — the type rail is the
           heading for what is selected, not a control over it. */}
-      {/* ALWAYS ON SCREEN now, where it used to appear only once a second type
+        {/* ALWAYS ON SCREEN now, where it used to appear only once a second type
           had places in it: the rail carries the only way to create a type from
           this tab, and hiding it from exactly the accounts that have not made
           one yet would have hidden the affordance from everyone who needs it. */}
-      {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
+        {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
           ~52pt of chrome out from under the finger that had just long-pressed a
-          row, sliding every row up mid-gesture — the same jump DESIGN.md §7
+          row, sliding every row up mid-gesture — the same jump DESIGN.md
           fixed once for the bucket rail. A filter that cannot be changed during
           a selection still has to say what the selection is drawn from. */}
-      <View
-        style={[styles.typeRail, selecting && styles.railInert]}
-        pointerEvents={selecting ? "none" : "auto"}
-      >
-        <SegmentedControl
-          scroll
-          options={railOptions}
-          value={filters.placeTypeId ?? ALL_TYPES}
-          onChange={selectType}
-        />
-      </View>
+        <View
+          style={[styles.typeRail, selecting && styles.railInert]}
+          pointerEvents={selecting ? "none" : "auto"}
+        >
+          <ChipRail
+            scroll
+            options={railOptions}
+            value={filters.placeTypeId ?? ALL_TYPES}
+            onChange={selectType}
+          />
+        </View>
+      </>
+    ),
 
+    statusRail: (
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
-            countLabel={`${selectedItems.length} ${
-              selectedItems.length === 1 ? "place" : "places"
-            } selected`}
+            countLabel={listSelectionLabel(selectedItems.length)}
             showSelectAll={selectedItems.length < selectableItems.length}
             extra={
               <BulkShareButton
@@ -798,7 +859,7 @@ export function PlacesScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             scroll
             options={bucketOptions}
             value={bucket}
@@ -806,37 +867,30 @@ export function PlacesScreen({
           />
         )}
       </View>
+    ),
 
-      {/* An active hidden filter has to announce itself, with the way out in
-          reach (DESIGN.md §2). */}
-      {hiddenFilterCount > 0 || sort !== "name" ? (
-        <View style={styles.filterNote}>
-          <Text style={styles.filterText} numberOfLines={1}>
-            {hiddenFilterCount === 0
-              ? placeSortLabel(sort)
-              : hiddenFilterCount === 1
-                ? "1 filter active"
-                : `${hiddenFilterCount} filters active`}
-            {hiddenFilterCount === 0 || sort === "name"
-              ? ""
-              : ` · ${placeSortLabel(sort)}`}
-          </Text>
-          <IconButton
-            icon="x"
-            size={16}
-            accessibilityLabel={
-              hiddenFilterCount === 0
-                ? "Sort by name again"
-                : "Clear all filters"
-            }
-            onPress={() => {
-              if (hiddenFilterCount === 0) setSort("name");
-              else resetFilters();
-            }}
-          />
-        </View>
-      ) : null}
+    // An active hidden filter has to announce itself, with the way out in
+    // reach.
+    filterNote: note ? (
+      <View style={styles.filterNote}>
+        <Text style={styles.filterText} numberOfLines={1}>
+          {note}
+        </Text>
+        <IconButton
+          icon="close"
+          size={16}
+          accessibilityLabel={
+            hiddenFilterCount === 0 ? copy.sortByNameAgain : copy.clearFilters
+          }
+          onPress={() => {
+            if (hiddenFilterCount === 0) setSort("name");
+            else resetFilters();
+          }}
+        />
+      </View>
+    ) : null,
 
+    list: (
       <FlatList
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -861,10 +915,26 @@ export function PlacesScreen({
             tintColor={theme.accent}
           />
         }
+        ListFooterComponent={
+          // The list ends with the button its empty state offers.
+          places.length > 0 && !filtering ? (
+            <ListEnd>
+              <Button
+                label={PLACES_ADD.copy.add}
+                icon={PLACES_ADD_ICON.add}
+                variant="outlineAccent"
+                onPress={() => startEditing(null)}
+              />
+            </ListEnd>
+          ) : null
+        }
         ListEmptyComponent={
           <EmptyPanel
-            bucket={bucket}
-            filtering={filtering}
+            kind={placesEmptyKind({
+              total: places.length,
+              filtering,
+              bucket,
+            })}
             onAdd={() => startEditing(null)}
             onClear={() => {
               // "Show me everything" — the ONE place the type tab clears too,
@@ -877,6 +947,14 @@ export function PlacesScreen({
         }
         renderItem={renderItem}
       />
+    ),
+  };
+
+  return (
+    <View style={styles.screen}>
+      {contractSectionKeys(PLACES_LIST, "gps").map((key) => (
+        <Fragment key={key}>{sections[key]}</Fragment>
+      ))}
 
       {/* Per-place actions, titled with the place so a mis-tap can't destroy
           the wrong one — the SAME sheet the map opens on a place pin, so the
@@ -884,6 +962,7 @@ export function PlacesScreen({
           §7). The only row this surface adds is "Show on map". */}
       <PlaceOptionsSheet
         place={menuPlace}
+        surface="row"
         visible={menuPlace !== null}
         onClose={closeMenu}
         onOpenPlace={onOpenPlace}
@@ -911,14 +990,26 @@ export function PlacesScreen({
 
       {/* Making a type without leaving the tab that made you want one. The
           same form Settings uses, so the two cannot drift; only ADD is offered
-          here — editing and deleting a type belong with the list of them. */}
+          here — editing and deleting a type belong with the list of them. The
+          new type's attributes follow in the same sheet. */}
       <BottomSheet
-        visible={sheet === "placeTypeForm"}
-        onClose={() => setSheet(null)}
-        title="New place type"
-        footer={placeTypeForm.footer}
+        visible={sheet === "placeTypeForm" || sheet === "typeAttributes"}
+        onClose={
+          sheet === "typeAttributes"
+            ? typeAttributes.onClose
+            : () => setSheet(null)
+        }
+        title={
+          sheet === "typeAttributes" ? typeAttributes.title : "New place type"
+        }
+        onBack={sheet === "typeAttributes" ? typeAttributes.onBack : undefined}
+        footer={
+          sheet === "typeAttributes"
+            ? typeAttributes.footer
+            : placeTypeForm.footer
+        }
       >
-        {placeTypeForm.body}
+        {sheet === "typeAttributes" ? typeAttributes.body : placeTypeForm.body}
       </BottomSheet>
 
       <PlaceFilterSheet
@@ -930,7 +1021,7 @@ export function PlacesScreen({
         onChangeSort={setSort}
         onReset={resetFilters}
         onPickArea={() => openAreaPicker(filters.area)}
-        activeCount={filterCount}
+        activeCount={hiddenFilterCount}
         showFilteredOnMap={mapFilter.enabled}
         onChangeShowFilteredOnMap={setPlaceMapFilterEnabled}
         filteredCount={visible.length}
@@ -1002,7 +1093,10 @@ const PlaceRow = memo(function PlaceRow({
   deletable: boolean;
   onToggle: () => void;
 }) {
-  const meta = PLACE_STATUS_META[status];
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = placeStatusMeta(theme)[status];
   const quality = qualityLabel(numericFieldValue(place.fieldValues, "quality"));
   // The glyph stays the STATUS one — that is what the rail filters on, and the
   // map is where a type is a colour. What the row owes a mixed list is the
@@ -1028,7 +1122,7 @@ const PlaceRow = memo(function PlaceRow({
           {quality ? <Text style={styles.quality}>{quality}</Text> : null}
           {sharedWith > 0 ? (
             <View style={styles.badge}>
-              <Feather name="users" size={12} color={theme.textMuted} />
+              <Icon idea="friends" size={12} color={theme.textMuted} />
               <Text style={styles.badgeText}>{sharedWith}</Text>
             </View>
           ) : null}
@@ -1037,8 +1131,8 @@ const PlaceRow = memo(function PlaceRow({
             // shared place (an empty checkbox promises a tap that does nothing).
             <View style={styles.selectBox}>
               {deletable ? (
-                <Feather
-                  name={selected ? "check-circle" : "circle"}
+                <Icon
+                  idea={selected ? "success" : "unselected"}
                   size={22}
                   color={selected ? theme.accent : theme.textMuted}
                 />
@@ -1046,7 +1140,7 @@ const PlaceRow = memo(function PlaceRow({
             </View>
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel={`Actions for ${place.name}`}
               onPress={() => onMenu(place)}
             />
@@ -1057,79 +1151,48 @@ const PlaceRow = memo(function PlaceRow({
   );
 });
 
-/** Per-bucket empty states: an empty tick list, an exhausted one and an
- * over-tight filter are three different problems with three different ways out
- * (DESIGN.md §8). */
+/** An empty tick list, an exhausted one and an over-tight filter are three
+ * different problems with three different ways out. Which is which, and the
+ * words, are `placesEmptyKind` and `placesEmptyState` in `@logjam/shared`. */
 function EmptyPanel({
-  bucket,
-  filtering,
+  kind,
   onAdd,
   onClear,
 }: {
-  bucket: Bucket;
-  filtering: boolean;
+  kind: PlacesEmptyKind;
   onAdd: () => void;
   onClear: () => void;
 }) {
-  const isGuest = useAccountState().accountState === "guest";
-  const copy = filtering
-    ? {
-        icon: "filter" as const,
-        title: "No places match",
-        body: "Nothing matches your search and filters. Clear them to see the rest.",
-      }
-    : bucket === "done"
-      ? {
-          icon: "check-circle" as const,
-          title: "Nothing ticked off yet",
-          body: "Log a trip at a place and it moves here.",
-        }
-      : bucket === "shared"
-        ? {
-            icon: "users" as const,
-            title: "Nothing shared with you",
-            body: "Places a friend shares appear here with notes and photos. Share your own from a place's page.",
-          }
-        : bucket === "todo"
-          ? {
-              icon: "map-pin" as const,
-              title: "Your list is clear",
-              body: "You've logged a trip for every place. Add a new place and it appears here.",
-            }
-          : {
-              icon: "map-pin" as const,
-              title: "No places yet",
-              // Without an account there is no web list to import from and
-              // nothing will ever sync — promising both would be the first
-              // thing a new guest reads, and wrong.
-              body: isGuest
-                ? "Add places to start. Everything is saved on this phone and works offline."
-                : "Add places, or import your list on Logjam Web. Once synced, they work offline.",
-            };
+  // Without an account there is no web list to import from and nothing will
+  // ever sync — promising both would be the first thing a new guest reads.
+  const guest = useAccountState().accountState === "guest";
+  const state = placesEmptyState(kind, { platform: "gps", guest });
   return (
-    <View style={styles.empty}>
-      <Feather
-        name={copy.icon}
-        size={28}
-        color={withAlpha(theme.accent, 0.8)}
-      />
-      <Text style={styles.emptyTitle}>{copy.title}</Text>
-      <Text style={styles.emptyBody}>{copy.body}</Text>
-      {filtering ? (
-        <Button
-          label="Clear filters"
-          variant="outlineAccent"
-          onPress={onClear}
-        />
-      ) : bucket === "all" || bucket === "todo" ? (
-        <Button label="Add a place" icon="plus" onPress={onAdd} />
-      ) : null}
-    </View>
+    <EmptyState
+      icon={state.icon}
+      title={state.title}
+      hint={state.body}
+      action={
+        state.action === "clear"
+          ? {
+              label: copy.clearFilters,
+              variant: "outlineAccent",
+              onPress: onClear,
+            }
+          : state.action === "add"
+            ? {
+                label: PLACES_ADD.copy.add,
+                icon: PLACES_ADD_ICON.add,
+                onPress: onAdd,
+              }
+            : undefined
+      }
+    />
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+const useStyles = makeStyles((theme, textRole) => ({
+  screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1146,22 +1209,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.4),
-    backgroundColor: withAlpha(theme.primary, 0.5),
+    backgroundColor: withAlpha(theme.page, 0.5),
     paddingHorizontal: spacing(1.5),
-    minHeight: 40,
+    minHeight: controlSize.md,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.textPrimary,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
-  // The rail's bottom pad is the gap the list scrolls against (DESIGN.md §2).
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
+  // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   // The type rail sits directly under the hero and carries the bucket rail's
   // top padding, so the pair reads as one block rather than two stacked bars.
   typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },
   // Dimmed, not gone: see the comment at the render site.
-  railInert: { opacity: 0.4 },
+  railInert: { opacity: opacity.disabled },
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),
@@ -1178,7 +1236,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(theme.accent, 0.12),
   },
-  filterText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
+  filterText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
@@ -1188,7 +1246,7 @@ const styles = StyleSheet.create({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
@@ -1201,24 +1259,4 @@ const styles = StyleSheet.create({
   quality: { color: theme.textMuted, fontSize: fontSize.xs },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(5),
-    paddingHorizontal: spacing(2),
-    backgroundColor: surface.card,
-    borderWidth: 1,
-    borderColor: surface.border,
-    borderRadius: radius.lg,
-  },
-  emptyTitle: {
-    color: theme.textPrimary,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyBody: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
-});
+}));

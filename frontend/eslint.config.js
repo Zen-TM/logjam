@@ -5,6 +5,14 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
 
+const MUI_PATTERNS = [
+  {
+    group: ["@mui/*", "@emotion/*"],
+    message:
+      "Logjam Web builds on its own kit — import from src/ui (frontend/DESIGN.md).",
+  },
+];
+
 export default tseslint.config(
   { ignores: ["dist"] },
   {
@@ -18,13 +26,58 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         {
-          patterns: [
+          paths: [
             {
-              group: ["@mui/*", "@emotion/*"],
+              name: "lucide-react",
               message:
-                "Logjam Web builds on its own kit — import from src/ui (frontend/DESIGN.md).",
+                "Draw icons with <Icon idea=…> from src/ui — add the idea to shared/src/icons.ts if it is missing.",
             },
           ],
+          patterns: MUI_PATTERNS,
+        },
+      ],
+    },
+  },
+  {
+    // The only files that may name a Lucide glyph: the kit's Icon and its
+    // registry map, and the two resolvers for the USER-PICKED vocabularies
+    // (a place type's and a trip type's icon). Everything else renders
+    // `<Icon idea=…>`.
+    files: [
+      "src/ui/Icon.tsx",
+      "src/ui/webIcons.ts",
+      "src/components/sidebar/panels/placeTypeIcon.tsx",
+      "src/components/sidebar/panels/tripTypeIcon.ts",
+      "src/**/*.test.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: MUI_PATTERNS }],
+    },
+  },
+  {
+    // Gotchas of Logjam Web that a selector can hold (frontend/DESIGN.md §3).
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "JSXElement[openingElement.name.name='Dialog'] JSXAttribute[name.name='autoFocus']",
+          message:
+            "autoFocus fires before a dialog is shown, when nothing in it can take focus. Mark the first control data-autofocus and Dialog focuses it (frontend/DESIGN.md §3).",
+        },
+        {
+          selector:
+            "JSXAttribute[name.name='style'] Property[key.name=/^(color|background|backgroundColor|borderColor|outlineColor|fill|stroke)$/]",
+          message:
+            'A colour is a role (--color-<role>), or a hue the kit reads through a custom property (style={{ "--tile-hue": hue }}). Never set one inline (frontend/DESIGN.md §1).',
+        },
+        {
+          selector:
+            "JSXElement > JSXExpressionContainer MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]",
+          message:
+            "An error's message can carry a place name. Show messageFromError(err, \"Couldn't save place.\") through ErrorBanner, FieldError or useToast().error (frontend/DESIGN.md §3).",
         },
       ],
     },

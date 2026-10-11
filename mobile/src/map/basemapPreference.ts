@@ -19,6 +19,17 @@ export function readBasemapPreference(): BasemapId {
   return MOBILE_BASEMAPS.find((id) => id === stored) ?? DEFAULT_BASEMAP;
 }
 
+const CONTOURS_OVER_IMAGERY_PREF_KEY = "mapContoursOverImagery";
+
+/** Whether the statewide contours are drawn over imagery. Off until asked. */
+export function readContoursOverImagery(): boolean {
+  return readPref(CONTOURS_OVER_IMAGERY_PREF_KEY) === "1";
+}
+
+export function setContoursOverImagery(on: boolean): boolean {
+  return writePref(CONTOURS_OVER_IMAGERY_PREF_KEY, on ? "1" : "0");
+}
+
 /** False when the device refused to store it, so the caller can say so. */
 export function setBasemapPreference(basemapId: BasemapId): boolean {
   return writePref(BASEMAP_PREF_KEY, basemapId);

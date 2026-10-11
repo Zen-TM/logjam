@@ -1,12 +1,13 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import {
   fontSize,
   fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 
 export type ActivityBucket = {
@@ -35,6 +36,9 @@ export function ActivitySpark({
   buckets: ActivityBucket[];
   caption?: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const peak = Math.max(1, ...buckets.map((bucket) => bucket.count));
   return (
     <View style={styles.wrap}>
@@ -69,14 +73,14 @@ export function ActivitySpark({
 
 const BAR_HEIGHT = 28;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   wrap: { gap: spacing(0.5) },
   bars: { flexDirection: "row", alignItems: "flex-end", gap: spacing(0.5) },
   column: { flex: 1, alignItems: "stretch", gap: spacing(0.25) },
   track: {
     height: BAR_HEIGHT,
     justifyContent: "flex-end",
-    backgroundColor: withAlpha(theme.textPrimary, 0.08),
+    backgroundColor: withAlpha(theme.text, 0.08),
     borderRadius: radius.sm,
     overflow: "hidden",
   },
@@ -86,6 +90,6 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     fontSize: fontSize.xs,
   },
-  labelCurrent: { color: theme.textPrimary, fontWeight: fontWeight.medium },
+  labelCurrent: { color: theme.text, fontWeight: fontWeight.medium },
   caption: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

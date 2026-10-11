@@ -7,10 +7,10 @@
   width: var(--panel-width);
   display: flex;
   flex-direction: column;
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   border-right: var(--hairline);
-  animation: slideIn var(--transition-med) ease-out;
+  animation: slideIn var(--motion-med) ease-out;
 }
 
 @keyframes slideIn {
@@ -31,7 +31,7 @@
 }
 
 /* A page owns its layout: pinned hero and rails over a list that scrolls on
- * its own (DESIGN.md §2). The body itself never scrolls and adds no gutter. */
+ * its own (DESIGN.md). The body itself never scrolls and adds no gutter. */
 .panelBody {
   flex: 1;
   min-height: 0;

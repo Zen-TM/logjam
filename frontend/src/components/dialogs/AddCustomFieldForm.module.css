@@ -17,7 +17,7 @@
 .note {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .scope {
@@ -27,7 +27,7 @@
 
 .groupLabel {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The type, as the picker it is on a new attribute and as a fact on an

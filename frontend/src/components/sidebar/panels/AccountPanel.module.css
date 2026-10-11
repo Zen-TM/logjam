@@ -1,4 +1,4 @@
-/* Hero pinned, only the body scrolls (DESIGN.md §2). */
+/* Hero pinned, only the body scrolls (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;
@@ -17,21 +17,21 @@
 }
 
 /* What a meter's bar means, in words — the bar is for the eye, this is the
-   content (§1). */
+   content (shared/DESIGN.md §2). */
 .meterLabel {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .meterHint {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .state {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .form {

@@ -10,21 +10,22 @@
 //    label.** A link inside a `<label>` toggles the control it labels, so
 //    reading the terms used to tick (or untick) the box that says you agree
 //    with them.
-//  - **The error goes directly above the button it belongs to** (§8), never at
+//  - **The error goes directly above the button it belongs to** (shared/DESIGN.md §11), never at
 //    the top of the form, and a field's own complaint goes under the field.
 import { useState, useEffect } from "react";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
-import { ErrorBanner } from "./feedback/ErrorBanner";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
+import { FRIENDS } from "@logjam/shared";
+import { pendingFriendInvite } from "../pendingFriendInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
 } from "../consent";
-import { Button, Checkbox, TextField } from "../ui";
+import { Button, Checkbox, TextField, ErrorBanner } from "../ui";
 
 const PASSWORD_HINT =
   "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";
@@ -144,11 +145,11 @@ function SignIn({
       return;
     }
     if (!consented) {
-      setLocalError("You must agree to the Terms and Privacy Policy");
+      setLocalError("Agree to the Terms of Use and Privacy Policy to sign up.");
       return;
     }
     if (!ageConfirmed) {
-      setLocalError("You must confirm you are 18 or older");
+      setLocalError("Confirm you are 18 or older to sign up.");
       return;
     }
     setSubmitting(true);
@@ -240,6 +241,7 @@ function SignIn({
           <Button
             type="button"
             disabled={resendCooldown > 0}
+            disabledReason={`Wait ${resendCooldown}s before asking again`}
             onClick={handleResendCode}
             className={classes.submit}
           >
@@ -367,6 +369,11 @@ function SignIn({
       <div className={classes.container}>
         <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
+          {pendingFriendInvite() && (
+            <p className={classes.successBanner} role="status">
+              {FRIENDS.copy.inviteSignIn}
+            </p>
+          )}
           <TextField
             label="Name"
             value={name}
@@ -441,7 +448,6 @@ function SignIn({
             type="submit"
             variant="filled"
             busy={submitting}
-            disabled={!consented || !ageConfirmed}
             className={classes.submit}
           >
             {submitting ? "Creating account…" : "Sign up"}
@@ -465,6 +471,11 @@ function SignIn({
     <div className={classes.container}>
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
+        {pendingFriendInvite() && (
+          <p className={classes.successBanner} role="status">
+            {FRIENDS.copy.inviteSignIn}
+          </p>
+        )}
         {resetSuccess && (
           <p className={classes.successBanner} role="status">
             Password reset — please sign in.

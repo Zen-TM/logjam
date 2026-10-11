@@ -1,23 +1,22 @@
 import { useState } from "react";
 import {
-  EllipsisVertical,
-  Lock,
-  Pencil,
-  Plus,
-  Tag,
-  Trash2,
-} from "lucide-react";
-import {
   ATTRIBUTE_NOUN,
+  attributesEmptyHint,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
+  defsForType,
+  drawsYoursHeading,
   isSystemFieldDef,
+  NEW_TYPE_ATTRIBUTES,
+  placeAttributesTitle,
+  SETTINGS_LIST,
   tripTypeLabel,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
+
 import {
   createCustomField,
   updateCustomField,
@@ -37,8 +36,11 @@ import {
   Menu,
   Row,
   SectionHeader,
+  LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
+
+const listCopy = SETTINGS_LIST.copy;
 
 function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
   return (
@@ -109,37 +111,34 @@ function CustomFieldSection({
           <Button
             compact
             variant="outline"
-            icon={Plus}
+            icon="add"
             onClick={() => setEditing("new")}
           >
-            Add
+            {listCopy.addAttribute}
           </Button>
         }
       />
 
       <div className={classes.list}>
         {loading ? (
-          <p className={classes.state}>Loading…</p>
+          <LoadingState />
         ) : (
           <>
             {own.length === 0 && (
-              <p className={classes.note}>
-                Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} —
-                water level, say, or party size.
-              </p>
+              <p className={classes.note}>{attributesEmptyHint(rowNoun)}</p>
             )}
             {/* "Yours" only earns a line when there is a "Built in" opposite
                 it. Every system definition is place-scoped, so a trip's list
                 is nothing but the user's own, and a heading dividing a list
                 from nothing states a contrast that is not there. */}
-            {own.length > 0 && system.length > 0 && (
-              <SectionHeader title="Yours" count={own.length} />
+            {drawsYoursHeading(own.length, system.length) && (
+              <SectionHeader title={listCopy.yours} count={own.length} />
             )}
 
             {own.map((def) => (
               <Row
                 key={def.key}
-                leading={<IconTile icon={Tag} hue="var(--theme-accent)" />}
+                leading={<IconTile icon="tag" hue="var(--color-accent)" />}
                 title={customFieldDisplayLabel(def)}
                 subtitle={rowSubtitle(def, placeTypes)}
                 description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
@@ -158,14 +157,14 @@ function CustomFieldSection({
                          you learn to avoid. */
                       {
                         id: "edit",
-                        label: `Edit ${ATTRIBUTE_NOUN.one}`,
-                        icon: Pencil,
+                        label: listCopy.editAttribute,
+                        icon: "edit",
                         onSelect: () => setEditing(def),
                       },
                       {
                         id: "delete",
-                        label: `Delete ${ATTRIBUTE_NOUN.one}`,
-                        icon: Trash2,
+                        label: listCopy.deleteAttribute,
+                        icon: "delete",
                         danger: true,
                         onSelect: () => setDeletingDef(def),
                       },
@@ -173,7 +172,7 @@ function CustomFieldSection({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${def.label}`}
                       />
                     )}
@@ -184,12 +183,12 @@ function CustomFieldSection({
 
             {system.length > 0 && (
               <>
-                <SectionHeader title="Built in" count={system.length} />
+                <SectionHeader title={listCopy.builtIn} count={system.length} />
                 {system.map((def) => (
                   <Row
                     key={def.key}
                     leading={
-                      <IconTile icon={Lock} hue="var(--theme-bonus-2)" />
+                      <IconTile icon="private" hue="var(--color-neutral)" />
                     }
                     title={customFieldDisplayLabel(def)}
                     subtitle={rowSubtitle(def, placeTypes)}
@@ -267,6 +266,7 @@ function AttributeDialog({
   def,
   defs,
   placeTypes,
+  initialTypeId,
   onSaved,
   onClose,
 }: {
@@ -276,6 +276,9 @@ function AttributeDialog({
   def: ScopedCustomFieldDef | null;
   defs: ScopedCustomFieldDef[];
   placeTypes?: TPlaceType[];
+  /** A new attribute opened for one place type starts scoped to it; the
+   *  picker still offers the rest. */
+  initialTypeId?: string;
   onSaved: (defs: ScopedCustomFieldDef[]) => void;
   onClose: () => void;
 }) {
@@ -287,13 +290,13 @@ function AttributeDialog({
   const [min, setMin] = useState(def?.min != null ? String(def.min) : "");
   const [max, setMax] = useState(def?.max != null ? String(def.max) : "");
   const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>(
-    def?.placeTypeIds ?? [],
+    def?.placeTypeIds ?? (initialTypeId ? [initialTypeId] : []),
   );
   // A NEW attribute defaults to "all types": the user is defining one with no
   // place in front of them, so the honest default shows it everywhere rather
-  // than nowhere.
+  // than nowhere. Opened for one type, it is that type's.
   const [appliesToAllTypes, setAppliesToAllTypes] = useState(
-    def?.appliesToAllTypes ?? true,
+    def?.appliesToAllTypes ?? !initialTypeId,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -356,15 +359,10 @@ function AttributeDialog({
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={saving}
-            disabled={!label.trim()}
-            onClick={handleSave}
-          >
+          <Button variant="filled" busy={saving} onClick={handleSave}>
             {def ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
           </Button>
         </>
@@ -417,6 +415,100 @@ function AttributeDialog({
           {impactSentence(impactCount, rowNoun)}
         </p>
       )}
+    </Dialog>
+  );
+}
+
+/**
+ * The step a new place type leads into (`stepAfterPlaceTypeSave`): the
+ * attributes a place of it shows, and the way to add one already scoped to it.
+ * Logjam GPS draws the same step as a mode of its sheet.
+ *
+ * One dialog at a time: adding or opening an attribute swaps this for the
+ * attribute's own dialog, and closing that comes back here.
+ */
+export function TypeAttributesDialog({
+  type,
+  placeTypes,
+  defs,
+  onDefsChange,
+  onClose,
+}: {
+  type: TPlaceType;
+  placeTypes: TPlaceType[];
+  /** Every place attribute, not only this type's: a new one is checked
+   *  against all of them. */
+  defs: ScopedCustomFieldDef[];
+  onDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  onClose: () => void;
+}) {
+  const [editing, setEditing] = useState<ScopedCustomFieldDef | "new" | null>(
+    null,
+  );
+  if (editing !== null) {
+    return (
+      <AttributeDialog
+        entity="place"
+        rowNoun="place"
+        def={editing === "new" ? null : editing}
+        defs={defs}
+        placeTypes={placeTypes}
+        initialTypeId={type.id}
+        onSaved={(updated) => {
+          onDefsChange(updated);
+          setEditing(null);
+        }}
+        onClose={() => setEditing(null)}
+      />
+    );
+  }
+
+  const shown = defsForType(defs, type.id);
+  const own = shown.filter((def) => !isSystemFieldDef(def));
+  const system = shown.filter(isSystemFieldDef);
+  return (
+    <Dialog
+      open
+      title={placeAttributesTitle(type.name)}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>{NEW_TYPE_ATTRIBUTES.done}</Button>
+          <Button variant="filled" icon="add" onClick={() => setEditing("new")}>
+            {listCopy.addAttribute}
+          </Button>
+        </>
+      }
+    >
+      <div className={classes.dialogForm}>
+        {own.length === 0 && (
+          <p className={classes.note}>{NEW_TYPE_ATTRIBUTES.hint}</p>
+        )}
+        {drawsYoursHeading(own.length, system.length) && (
+          <SectionHeader title={listCopy.yours} count={own.length} />
+        )}
+        {own.map((def) => (
+          <Row
+            key={def.key}
+            leading={<IconTile icon="tag" hue="var(--color-accent)" />}
+            title={customFieldDisplayLabel(def)}
+            subtitle={rowSubtitle(def, placeTypes)}
+            description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
+            onOpen={() => setEditing(def)}
+          />
+        ))}
+        {system.length > 0 && (
+          <SectionHeader title={listCopy.builtIn} count={system.length} />
+        )}
+        {system.map((def) => (
+          <Row
+            key={def.key}
+            leading={<IconTile icon="private" hue="var(--color-neutral)" />}
+            title={customFieldDisplayLabel(def)}
+            subtitle={rowSubtitle(def, placeTypes)}
+          />
+        ))}
+      </div>
     </Dialog>
   );
 }

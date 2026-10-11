@@ -5,40 +5,26 @@
 // CHROME_BOTTOM that is deliberately a constant (mapChrome.ts) — growing
 // upward walks the tools into the search pill, and growing the column itself
 // is exactly the "every pinned element is a piece of map the user can't see"
-// tax DESIGN.md §8 warns about. One button costs one button's worth of map no
+// tax shared/DESIGN.md §11 warns about. One button costs one button's worth of map no
 // matter how many tools live behind it.
 //
 // The group closes as soon as a tool arms: the HUD in the top notice stack is
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
 import { useEffect, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Animated, Easing, Pressable, View } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
-import { theme } from "../theme";
+import { MAP_MEASURE, MAP_MEASURE_ICON, type IconIdea } from "@logjam/shared";
+
+import { makeStyles, useTheme } from "../theme";
+import { Icon } from "../ui";
 
 export type MapTool = "measure" | "route";
 
-/**
- * Icon family per tool. Feather has no ruler in its 286 glyphs, and the nearest
- * stand-ins (maximize-2, git-commit) read as "resize" and "commit" rather than
- * "measure" — so measure borrows MaterialCommunityIcons, which ships inside
- * @expo/vector-icons already (no new dependency). See DESIGN.md §3.
- */
-const TOOLS: {
-  id: MapTool;
-  label: string;
-  family: "feather" | "material";
-  icon: string;
-}[] = [
-  {
-    id: "measure",
-    label: "Measure distance",
-    family: "material",
-    icon: "ruler",
-  },
-  { id: "route", label: "Draw a route", family: "feather", icon: "pen-tool" },
+const TOOLS: { id: MapTool; label: string; icon: IconIdea }[] = [
+  { id: "measure", label: MAP_MEASURE.title, icon: MAP_MEASURE_ICON },
+  { id: "route", label: "Draw a route", icon: "draw" },
 ];
 
 /** Time to slide one tool across one button + gap. */
@@ -63,6 +49,9 @@ export function MapToolGroup({
   onToggleOpen: () => void;
   onPickTool: (tool: MapTool) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // Each tool slides out from directly UNDER the + button, one after the
   // next, and translateX runs on the native driver — no width animation, no
   // fade.
@@ -146,19 +135,11 @@ export function MapToolGroup({
             ]}
             onPress={() => onPickTool(tool.id)}
           >
-            {tool.family === "material" ? (
-              <MaterialCommunityIcons
-                name={tool.icon as never}
-                size={FAB_ICON}
-                color={theme.textPrimary}
-              />
-            ) : (
-              <Feather
-                name={tool.icon as never}
-                size={FAB_ICON}
-                color={theme.textPrimary}
-              />
-            )}
+            <Icon
+              idea={tool.icon}
+              size={FAB_ICON}
+              color={activeTool === tool.id ? theme.onFill : theme.text}
+            />
           </Pressable>
         </Animated.View>
       ))}
@@ -174,17 +155,17 @@ export function MapToolGroup({
         ]}
         onPress={onToggleOpen}
       >
-        <Feather
-          name={open ? "x" : "plus"}
+        <Icon
+          idea={open ? "close" : "add"}
           size={FAB_ICON}
-          color={theme.textPrimary}
+          color={open || activeTool ? theme.onFill : theme.text}
         />
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // The group occupies exactly one button's width in the column. Every
   // child (each tool, the +) is its own ABSOLUTE sibling so opening the
   // group can't widen the row: laid out in flow, growth pushed the whole
@@ -216,7 +197,7 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -238,4 +219,4 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   armedToolSlot: { zIndex: 2, elevation: 2 },
-});
+}));

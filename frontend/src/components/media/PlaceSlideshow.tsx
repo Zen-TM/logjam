@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Play, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import Lightbox from "./Lightbox";
 import { slideshowDots } from "./slideshowDots";
 import classes from "./PlaceSlideshow.module.css";
+import { Icon } from "../../ui";
 
 // Square photo/video slideshow shown at the top of the place detail panel.
 // Images render in their native aspect ratio, letterboxed on black. Videos show
@@ -42,7 +42,7 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
         <button
           className={classes.slide}
           onClick={() => setLightbox(current)}
-          aria-label={`View ${current.filename}`}
+          aria-label={`${isVideo ? "Play video" : "View"} ${current.filename}`}
         >
           {slideSrc && !slideFailed ? (
             <img
@@ -55,13 +55,13 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
             />
           ) : (
             <div className={classes.fallback}>
-              <ImageOff size={22} />
+              <Icon idea="missingMedia" size={22} />
               <span>{current.filename}</span>
             </div>
           )}
           {isVideo && (
             <span className={classes.playBadge}>
-              <Play size={22} />
+              <Icon idea="play" size={22} />
             </span>
           )}
         </button>
@@ -72,14 +72,14 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
               onClick={() => step(-1)}
               aria-label="Previous photo"
             >
-              <ChevronLeft size={20} />
+              <Icon idea="back" size={20} />
             </button>
             <button
               className={`${classes.arrow} ${classes.arrowRight}`}
               onClick={() => step(1)}
               aria-label="Next photo"
             >
-              <ChevronRight size={20} />
+              <Icon idea="disclosure" size={20} />
             </button>
           </>
         )}

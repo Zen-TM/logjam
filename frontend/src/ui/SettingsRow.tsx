@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
-import { Info } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import classes from "./SettingsRow.module.css";
+import { Icon } from "./Icon";
+import type { Disablable } from "./Button";
 
 /**
  * One setting as a LINE: what it is at the left, the control that sets it at
- * the right — the same anatomy as `SwatchPicker` and the style sheet's widths
- * (DESIGN.md §9). The visible words are the row's; the control carries the same
+ * the right — the same anatomy as `ColourField` and the style sheet's widths
+ * (DESIGN.md). The visible words are the row's; the control carries the same
  * words as its own accessible name (`hideLabel`, or `Toggle label`), so a
  * reader hears the setting and a pointer sees it once.
  *
@@ -19,26 +20,26 @@ export function SettingsRow({
   label,
   tooltip,
   disabled,
+  disabledReason,
   children,
 }: {
   label: string;
   tooltip?: string;
-  /** Dimmed and `inert` (out of the tab order and the a11y tree, so axe does not
-   *  grade its dimmed colours): another setting here has taken this one over. */
-  disabled?: boolean;
   children: ReactNode;
-}) {
+} & Disablable) {
+  // Another setting here has taken this one over: its control is dimmed and
+  // `inert`, but the label stays readable and its glyph says why (§5), so a
+  // reader who cannot see the dimming still finds the setting and the reason.
+  const note = disabled && disabledReason ? disabledReason : tooltip;
   return (
-    <div
-      className={classes.row}
-      data-disabled={disabled || undefined}
-      inert={disabled}
-    >
+    <div className={classes.row} data-disabled={disabled || undefined}>
       <span className={classes.rowLabel}>
         {label}
-        {tooltip && <InfoTip label={label} content={tooltip} />}
+        {note && <InfoTip label={label} content={note} />}
       </span>
-      {children}
+      <div className={classes.control} inert={disabled}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -61,7 +62,7 @@ export function InfoTip({
           aria-label={`About ${label.toLowerCase()}`}
           aria-describedby={describedById}
         >
-          <Info size={14} aria-hidden />
+          <Icon idea="info" size={14} aria-hidden />
         </button>
       )}
     </Tooltip>

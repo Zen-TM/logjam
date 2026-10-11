@@ -14,7 +14,7 @@ describe("bulkReadAction — one button, both directions", () => {
     const action = bulkReadAction([read("a"), read("b")]);
     expect(action).toMatchObject({
       read: false,
-      icon: "eye-off",
+      icon: "hide",
       label: "Mark as unread",
     });
     expect(action?.ids).toEqual(["a", "b"]);
@@ -24,7 +24,7 @@ describe("bulkReadAction — one button, both directions", () => {
     const action = bulkReadAction([unread("a"), unread("b")]);
     expect(action).toMatchObject({
       read: true,
-      icon: "eye",
+      icon: "show",
       label: "Mark as read",
     });
     expect(action?.ids).toEqual(["a", "b"]);

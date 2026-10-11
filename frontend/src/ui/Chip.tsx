@@ -1,3 +1,4 @@
+import { FieldError } from "./FieldError";
 import {
   useCallback,
   useEffect,
@@ -11,21 +12,20 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Plus, Star, type LucideIcon } from "lucide-react";
-import { FieldError } from "../components/feedback/FieldError";
 import { nextEnabledIndex } from "./rovingFocus";
 import classes from "./Chip.module.css";
+import { Icon, type Glyph } from "./Icon";
 
 /**
  * The pill behind every chip surface: filter rails, sort choices, sub-mode
- * switches. Active fills with `hue` (default accent) and writes its label in
- * the fixed ink; a `count` rides as a trailing badge; an `icon` leads, tinted
- * with the hue. `dashed` is the "add one" chip at the end of a vocabulary.
+ * switches. Active fills with `hue` (default accent), writes its label in the
+ * fixed ink and leads with a check unless it has an `icon` of its own; a
+ * `count` rides as a trailing badge; an `icon` leads. `dashed` is the "add one" chip at the end of a vocabulary.
  */
 export function Chip({
   label,
   count,
-  icon: Icon,
+  icon,
   hue,
   active = false,
   dashed = false,
@@ -38,7 +38,7 @@ export function Chip({
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   label: string;
   count?: number;
-  icon?: LucideIcon;
+  icon?: Glyph;
   hue?: string;
   active?: boolean;
   dashed?: boolean;
@@ -64,10 +64,17 @@ export function Chip({
       aria-label={count != null ? `${label}, ${count}` : undefined}
       {...rest}
     >
-      {Icon && <Icon size={14} aria-hidden className={classes.glyph} />}
+      {icon ? (
+        <Icon idea={icon} size={14} className={classes.glyph} />
+      ) : (
+        // A SELECTED chip says so with a check as well as a fill, so it is
+        // never mistaken for the primary button, which is filled too.
+        active && <Icon idea="done" size={14} className={classes.glyph} />
+      )}
       <span>{label}</span>
       {starred && (
-        <Star
+        <Icon
+          idea="favourite"
           size={12}
           aria-hidden
           fill="currentColor"
@@ -197,7 +204,7 @@ export function ChipPicker({
             <Chip
               ref={addChipRef}
               label={addLabel}
-              icon={Plus}
+              icon="add"
               dashed
               onClick={() => setAdding(true)}
             />
@@ -222,7 +229,7 @@ export type ChipOption<T extends string> = {
   value: T;
   label: string;
   count?: number;
-  icon?: LucideIcon;
+  icon?: Glyph;
   hue?: string;
   disabled?: boolean;
 };

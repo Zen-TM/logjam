@@ -1,14 +1,4 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import {
-  Check,
-  ChevronRight,
-  CircleHelp,
-  MapPin,
-  MapPinPlus,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   buildCustomFieldDef,
@@ -25,6 +15,7 @@ import {
   primaryTripType,
   SYSTEM_PLACE_TYPE_IDS,
   todayDateKey,
+  tripPrefillFromTrack,
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
   tripTypeLabel,
@@ -33,8 +24,6 @@ import {
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import type { TPlace, TTripLog } from "../../placeUtils";
@@ -42,9 +31,11 @@ import {
   createTripLog,
   updateTripLog,
   deleteTripLog,
+  getMediaDownloadUrls,
   getTripLog,
   createPlace,
   createCustomField,
+  uploadMedia,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -56,6 +47,7 @@ import {
   type TripDraftForm,
 } from "../../tripDraft";
 import MediaUpload from "../media/MediaUpload";
+import { generateThumbnail, resolveMediaType } from "../media/mediaFiles";
 import MediaGallery from "../media/MediaGallery";
 import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
 import {
@@ -69,6 +61,9 @@ import {
   SectionHeader,
   TextArea,
   TextField,
+  Icon,
+  ErrorBanner,
+  FieldError,
 } from "../../ui";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
@@ -118,6 +113,19 @@ function dedupeTypesPreserveCase(values: string[]): string[] {
 }
 
 /**
+ * A recorded track to log a trip FROM: the form opens on the track's day, with
+ * its place linked and the track already in the Tracks section.
+ */
+export type TripLogTrack = {
+  mediaId: string;
+  /** The file's own name, extension included: the API pins the format on it. */
+  filename: string;
+  startedAt: string | null;
+  /** The track's place, if it is on one the user owns. */
+  placeId: string | null;
+};
+
+/**
  * Log or edit a trip — one form for both, because the fields are identical and
  * a second form would drift (Logjam GPS's `TripEditSheet`).
  *
@@ -132,6 +140,7 @@ function TripLogDialog({
   onSaved,
   places,
   defaultPlaceId = null,
+  fromTrack = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -147,6 +156,8 @@ function TripLogDialog({
   // dialog) — seeds the initial multi-selection. Edit mode always uses the
   // trip's own places. Defaults to none.
   defaultPlaceId?: string | null;
+  // Create-mode only: log the trip from this track (`TripLogTrack`).
+  fromTrack?: TripLogTrack | null;
   tripLog?: TTripLog;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -369,9 +380,20 @@ function TripLogDialog({
       }
       initialFieldValues = vals;
     } else {
-      initialDate = todayDateKey();
+      // A track's own day and place, or the place the dialog was opened on and
+      // today. A place the user no longer has is left out rather than linked.
+      const fromTrackPrefill = fromTrack
+        ? tripPrefillFromTrack(fromTrack)
+        : null;
+      initialDate = fromTrackPrefill?.date ?? todayDateKey();
       initialNotes = "";
-      initialSelectedPlaceIds = defaultPlaceId ? [defaultPlaceId] : [];
+      initialSelectedPlaceIds = fromTrackPrefill
+        ? fromTrackPrefill.placeIds.filter((id) =>
+            places.some((place) => place.id === id),
+          )
+        : defaultPlaceId
+          ? [defaultPlaceId]
+          : [];
       initialDisplayNameInput = "";
       initialSelectedTypes = enforceCanyoningTag(
         [],
@@ -650,6 +672,52 @@ function TripLogDialog({
     setMedia((prev) => prev.filter((m) => m.id !== id));
   }
 
+  // "Log a trip" on a track: the track goes into the form as a copy of its file
+  // on the draft trip, the same way a file the user drops here does, so it can
+  // be taken out again and a Cancel deletes it with the draft. Once per open.
+  // The form state it reads is the populate's, which was set during render.
+  const [attachingTrack, setAttachingTrack] = useState(false);
+  const attachedSessionRef = useRef(-1);
+  useEffect(() => {
+    if (!open || tripLog || !fromTrack) return;
+    if (attachedSessionRef.current === formSession) return;
+    attachedSessionRef.current = formSession;
+    setAttachingTrack(true);
+    void (async () => {
+      try {
+        const { items } = await getMediaDownloadUrls([fromTrack.mediaId]);
+        const url = items[0]?.displayUrl;
+        if (!url) throw new Error("The file could not be fetched.");
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("The file could not be fetched.");
+        const file = new File([await response.blob()], fromTrack.filename);
+        const resolved = resolveMediaType(file);
+        if (!resolved) throw new Error("Unsupported track file.");
+        const tripId = await ensureLinkedTripId();
+        const item = await uploadMedia({
+          linkedType: "tripLog",
+          linkedId: tripId,
+          file,
+          mediaType: resolved.mediaType,
+          thumbnail: await generateThumbnail(file, resolved.category),
+        });
+        setMedia((prev) => [...prev, item]);
+      } catch (err) {
+        console.error(err);
+        setError(
+          messageFromError(
+            err,
+            "Couldn't add the track to this trip. You can add it below.",
+          ),
+        );
+      } finally {
+        setAttachingTrack(false);
+      }
+    })();
+    // The attach runs once per open (formSession); the form's own state is read
+    // as it is at that moment, not re-run when it changes.
+  }, [open, tripLog, fromTrack, formSession]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Cancel/close. If a draft trip was materialised but never saved, delete it
   // (cascades its media from S3 + DB + quota) before closing.
   async function handleRequestClose() {
@@ -865,7 +933,8 @@ function TripLogDialog({
   // this single path and cannot both fire for one interaction.
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || !date) return;
+    // A track being attached is part of what the save would carry.
+    if (saving || attachingTrack) return;
     void handleSave();
   }
 
@@ -1014,7 +1083,7 @@ function TripLogDialog({
         onClose={mode === "places" ? backToForm : guard.requestClose}
         footer={
           mode === "places" ? (
-            <Button variant="filled" icon={Check} onClick={backToForm}>
+            <Button variant="filled" icon="done" onClick={backToForm}>
               Done
             </Button>
           ) : (
@@ -1025,7 +1094,11 @@ function TripLogDialog({
                   edit mode the object is the *changes*, not the trip: "Discard
                   trip" on a saved trip would read as "delete it from my
                   logbook". */}
-              <Button onClick={guard.requestClose} disabled={saving}>
+              <Button
+                onClick={guard.requestClose}
+                disabled={saving}
+                disabledReason="Saving…"
+              >
                 {tripLog ? "Discard changes" : "Discard trip"}
               </Button>
               {/* type="submit" with no onClick — handleSubmit is the only save
@@ -1034,8 +1107,7 @@ function TripLogDialog({
                 type="submit"
                 form={formId}
                 variant="filled"
-                busy={saving}
-                disabled={!date}
+                busy={saving || attachingTrack}
               >
                 {tripLog ? "Save changes" : "Log trip"}
               </Button>
@@ -1048,6 +1120,7 @@ function TripLogDialog({
             <SearchField
               label="Search your places"
               value={placeSearch}
+              // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
               autoFocus
               onChange={(event) => {
                 setPlaceSearch(event.target.value);
@@ -1073,9 +1146,7 @@ function TripLogDialog({
                     title={place.name}
                     subtitle={`${index + 1} of ${selectedCount}`}
                     description="On this trip. Press to take it off."
-                    leading={
-                      <IconTile icon={Check} hue="var(--theme-accent)" />
-                    }
+                    leading={<IconTile icon="done" hue="var(--color-accent)" />}
                     onOpen={() => togglePlace(place.id)}
                   />
                 ))}
@@ -1086,7 +1157,7 @@ function TripLogDialog({
                     subtitle={`${selectedCount} of ${selectedCount} · made when the trip is saved`}
                     description="A new place. Press to take it off."
                     leading={
-                      <IconTile icon={MapPinPlus} hue="var(--theme-accent)" />
+                      <IconTile icon="addPlace" hue="var(--color-accent)" />
                     }
                     onOpen={() => setCreating(null)}
                   />
@@ -1104,7 +1175,7 @@ function TripLogDialog({
                   title={`Create “${placeSearch.trim()}”`}
                   subtitle="A new canyon, made when the trip is saved"
                   leading={
-                    <IconTile icon={MapPinPlus} hue="var(--theme-bonus-1)" />
+                    <IconTile icon="addPlace" hue="var(--color-neutral)" />
                   }
                   onOpen={() => startCreate(placeSearch.trim())}
                 />
@@ -1122,9 +1193,7 @@ function TripLogDialog({
                     className={classes.row}
                     title={place.name}
                     description="Press to add it to this trip."
-                    leading={
-                      <IconTile icon={Plus} hue="var(--theme-bonus-1)" />
-                    }
+                    leading={<IconTile icon="add" hue="var(--color-neutral)" />}
                     onOpen={() => togglePlace(place.id)}
                   />
                 ))
@@ -1192,9 +1261,10 @@ function TripLogDialog({
                 selectedCount === 1 ? "1 place" : `${selectedCount} places`
               }
               description="Places on this trip. Press to choose."
-              leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+              leading={<IconTile icon="place" hue="var(--color-accent)" />}
               trailing={
-                <ChevronRight
+                <Icon
+                  idea="disclosure"
                   size={18}
                   aria-hidden
                   className={classes.chevron}
@@ -1240,7 +1310,7 @@ function TripLogDialog({
                   {onPickCoords && (
                     <Button
                       variant="outline"
-                      icon={MapPinPlus}
+                      icon="addPlace"
                       onClick={handlePickCoords}
                     >
                       Pick on map
@@ -1300,7 +1370,7 @@ function TripLogDialog({
                   />
                 </div>
                 <IconButton
-                  icon={Trash2}
+                  icon="delete"
                   label={`Delete the attribute ${def.label}`}
                   tone="danger"
                   onClick={() => setFieldToDelete(def)}
@@ -1336,7 +1406,7 @@ function TripLogDialog({
             ) : (
               <Button
                 compact
-                icon={Plus}
+                icon="add"
                 className={classes.addAttribute}
                 onClick={() => setShowAddField(true)}
               >
@@ -1362,9 +1432,7 @@ function TripLogDialog({
               {leftoverFieldDefs.map((def) => (
                 <Row
                   key={def.key}
-                  leading={
-                    <IconTile icon={CircleHelp} hue="var(--theme-accent)" />
-                  }
+                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
                   title={def.label}
                   subtitle={formatFieldValue(
                     coerceFieldValue(getFieldValue(def.key), def.type),
@@ -1372,7 +1440,7 @@ function TripLogDialog({
                   )}
                   trailing={
                     <IconButton
-                      icon={X}
+                      icon="close"
                       label={`Remove ${def.label} from this trip`}
                       onClick={() => removeLeftoverField(def.key)}
                     />
@@ -1411,6 +1479,11 @@ function TripLogDialog({
 
           <section className={classes.section}>
             <SectionHeader title="Tracks" />
+            {attachingTrack && (
+              <p className={classes.muted} role="status">
+                Adding the track…
+              </p>
+            )}
             {!mediaLoading && (
               <MediaGallery
                 media={media}

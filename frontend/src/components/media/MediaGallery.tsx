@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { Trash2, FileDown, Play, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import Lightbox from "./Lightbox";
 import TrackIcon from "./TrackIcon";
 import classes from "./MediaGallery.module.css";
+import { ErrorBanner, Icon, IconButton, Menu, Row } from "../../ui";
 
 // `variant` selects which media this gallery surfaces:
 //   all     → visual grid + track list (default; legacy behaviour)
@@ -80,7 +79,7 @@ export default function MediaGallery({
                   type="button"
                   className={classes.tileButton}
                   onClick={() => setLightbox(m)}
-                  aria-label={`View ${m.filename}`}
+                  aria-label={`${isVideo ? "Play video" : "View"} ${m.filename}`}
                 >
                   {m.thumbnailUrl && !failedThumbIds.has(m.id) ? (
                     <img
@@ -94,13 +93,13 @@ export default function MediaGallery({
                     />
                   ) : (
                     <div className={classes.thumbFallback}>
-                      <ImageOff size={18} />
+                      <Icon idea="missingMedia" size={18} />
                       <span>{m.filename}</span>
                     </div>
                   )}
                   {isVideo && (
                     <span className={classes.playBadge}>
-                      <Play size={16} />
+                      <Icon idea="play" size={16} />
                     </span>
                   )}
                 </button>
@@ -112,7 +111,7 @@ export default function MediaGallery({
                     disabled={deletingId === m.id}
                     aria-label={`Delete ${m.filename}`}
                   >
-                    <Trash2 size={14} />
+                    <Icon idea="delete" size={14} />
                   </button>
                 )}
               </div>
@@ -123,32 +122,47 @@ export default function MediaGallery({
 
       {showTracks && tracks.length > 0 && (
         <div className={classes.trackList}>
+          {/* A file to download is a `Row` with an href (frontend/DESIGN.md §3);
+              its one verb is behind the ⋯ like any other row's. */}
           {tracks.map((m) => (
-            <div key={m.id} className={classes.trackRow}>
-              <a
-                className={classes.trackLink}
-                href={m.displayUrl}
-                download={m.filename}
-              >
-                {m.color ? (
+            <Row
+              key={m.id}
+              leading={
+                m.color ? (
                   <TrackIcon color={m.color} />
                 ) : (
-                  <FileDown size={16} />
-                )}
-                <span className={classes.trackName}>{m.filename}</span>
-              </a>
-              {canDelete && (
-                <button
-                  type="button"
-                  className={classes.deleteBtnInline}
-                  onClick={() => setPendingDelete(m)}
-                  disabled={deletingId === m.id}
-                  aria-label={`Delete ${m.filename}`}
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
+                  <Icon idea="export" size={16} />
+                )
+              }
+              title={m.filename}
+              href={m.displayUrl}
+              download={m.filename}
+              trailing={
+                canDelete && (
+                  <Menu
+                    label={`Actions for ${m.filename}`}
+                    title={m.filename}
+                    placement="right-start"
+                    entries={[
+                      {
+                        id: "delete",
+                        label: "Delete",
+                        icon: "delete",
+                        danger: true,
+                        onSelect: () => setPendingDelete(m),
+                      },
+                    ]}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon="overflow"
+                        label={`Actions for ${m.filename}`}
+                      />
+                    )}
+                  />
+                )
+              }
+            />
           ))}
         </div>
       )}

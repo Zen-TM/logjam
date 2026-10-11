@@ -26,15 +26,15 @@ describe("tripTypeIdentity", () => {
 
   it("gives a trip with no type its own glyph and the untyped role", () => {
     expect(tripTypeIdentity(null)).toEqual({
-      icon: "book-open",
+      icon: "bookmark",
       hue: "untyped",
     });
-    expect(tripTypeIdentity("")).toEqual({ icon: "book-open", hue: "untyped" });
+    expect(tripTypeIdentity("")).toEqual({ icon: "bookmark", hue: "untyped" });
   });
 
   it("hashes a user-typed type into the open palette, stably and case-blind", () => {
     const caving = tripTypeIdentity("vertical caving");
-    expect(caving.icon).toBe("tag");
+    expect(caving.icon).toBe("hash");
     expect(Object.values(TRIP_TYPE_OPEN_HUES)).toContain(caving.hue);
     expect(tripTypeIdentity("Vertical Caving")).toEqual(caving);
   });

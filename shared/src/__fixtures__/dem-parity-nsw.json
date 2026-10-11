@@ -1,0 +1,12 @@
+{
+  "positions": [
+    { "lon": 150.3105, "lat": -33.7005, "distanceM": 0 },
+    { "lon": 150.3149, "lat": -33.7031, "distanceM": 500 },
+    { "lon": 150.3187, "lat": -33.7052, "distanceM": 920 },
+    { "lon": 150.3231, "lat": -33.7068, "distanceM": 1370 },
+    { "lon": 150.329, "lat": -33.7093, "distanceM": 1980 }
+  ],
+  "heights": [983.42, 1003.44, 999.54, 1009.26, 967.41],
+  "levelled": [983.42, 1003.44, 999.54, 1007.22, 965.36],
+  "sourceIds": ["nsw-5m", "nsw-5m", "nsw-5m", "terrarium", "terrarium"]
+}

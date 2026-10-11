@@ -15,7 +15,7 @@
 //
 // A verb is ABSENT when it cannot exist for this way (a file has no direction
 // to reverse), never present-and-refused — the API answers 403 or 404 for the
-// ones the user may not have, so offering them would be a lie (DESIGN.md §7).
+// ones the user may not have, so offering them would be a lie (DESIGN.md).
 //
 // A verb that ENDS the user's relationship with the way sits below a rule
 // (`separated`), whether or not it destroys anything. There are three, and only
@@ -34,12 +34,13 @@
 //   * VISIBILITY was a per-file switch on a detail page, which is a control the
 //     user had to open a page to find. The Layers overlays draw these files
 //     now, so the switch has nowhere left to be and nothing left to do.
-import { WAY_SHARE_VERB } from "@logjam/shared";
+import { WAY_SHARE_VERB, WAY_VERBS, wayVerbLabel } from "@logjam/shared";
 import type { WayItem, WayKind } from "./waysModel";
 
 export type WayVerbId =
   | "open"
   | "openPlace"
+  | "logTrip"
   | "edit"
   | "copy"
   | "copyAndRemove"
@@ -72,32 +73,12 @@ export type WayVerb = {
 /** Which surface is asking. The two differ by one verb, and only one. */
 export type WaySurface = "row" | "detail";
 
+// The words are the contract's (`WAY_VERBS`); Delete is the one verb whose
+// noun depends on the way, so it is said here.
 const LABELS: Record<WayVerbId, string> = {
-  open: "Open",
-  openPlace: "Open its place",
-  edit: "Edit points",
-  // Not "Copy": the promise is that it becomes YOURS — editable, permanent, and
-  // unaffected by the owner later unsharing it. Logjam GPS draws the same
-  // distinction between a live share and a copy you keep.
-  copy: "Save to my Ways",
-  // The two halves said in the order they happen. Someone who has decided they
-  // want to keep a friend's route and stop carrying the share should not have
-  // to do it as two steps and guess whether the first survives the second.
-  copyAndRemove: "Save to my Ways and remove",
-  share: "Share…",
-  // Logjam GPS's words for the other verb, and never Share's: the friend keeps
-  // the file and it cannot be taken back (shared/src/sharing.ts).
-  sendCopy: "Send a copy…",
-  exportGpx: "Export as GPX",
-  exportKml: "Export as KML",
-  // Not "Export": this hands back the FILE the user brought or recorded, byte
-  // for byte, where Export writes a new one out of geometry held in the page.
-  download: "Download",
-  rename: "Rename…",
-  // "Remove", not "Remove share" or "Delete": it drops the caller's own share
-  // (`DELETE .../me`) and the owner keeps their row. The wording is the one
-  // `removeShareConfirm` in shared/src/sharing.ts promises.
-  removeShare: "Remove",
+  ...(Object.fromEntries(
+    WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
+  ) as Record<Exclude<WayVerbId, "delete">, string>),
   delete: "Delete",
 };
 
@@ -133,6 +114,10 @@ export function wayVerbs(
   // already looking at it.
   if (surface === "row") verbs.push(verb("open"));
   if (way.placeId) verbs.push(verb("openPlace"));
+  // A recorded track only, and the owner's: it is attached to the trip as a
+  // copy of the file, which is the owner's to take. An import is somebody
+  // else's walk with no start of its own, and a route is a plan, not a day out.
+  if (owned && way.kind === "track") verbs.push(verb("logTrip"));
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
   // Taking your own copy of someone else's route. `POST /routes/:id/copy` has
@@ -182,12 +167,11 @@ export function wayProperties(
 ): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
-    // The colour IS the way's identity on the map — but only a ROUTE's can be
-    // changed from here. `PATCH /media/:id` takes a display name and nothing
-    // else (it 400s without one), so a file's colour is set by whatever made
-    // the file. Offering a picker that silently did nothing would be worse
-    // than not offering one.
-    colour: owned && way.kind === "route",
+    // The colour IS the way's identity on the map. A route's and an import's
+    // can be changed from here; a recording's lives on the phone that made it
+    // (its own table), so a picker here would paint a line that phone never
+    // redraws.
+    colour: owned && (way.kind === "route" || way.kind === "import"),
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

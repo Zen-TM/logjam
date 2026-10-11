@@ -1,20 +1,103 @@
 // Scheme-INDEPENDENT design tokens, shared by Logjam GPS and Logjam Web.
 //
-// The four theme schemes (`themeSchemes.ts`) own the surfaces and text; the
-// values here encode WHAT A THING IS, which does not change with the user's
-// theme — and they must read the same on both clients, or a GeoPDF is clay on
-// the phone and blue in the browser. Every foreground/background pair built
-// from these is measured under all four schemes by `scripts/wcag-contrast.mjs`.
+// The theme schemes (`themeSchemes.ts`) own the surfaces and text; the hues
+// here encode WHAT A THING IS, which does not change with the user's theme —
+// and they must read the same on both clients, or a GeoPDF is clay on the
+// phone and blue in the browser. Every foreground/background pair built from
+// these is measured under every scheme by `scripts/wcag-contrast.mjs`.
+//
+// The scales below (space, type, control sizes, motion, opacity) are declared
+// once for both clients under the same names. Where a value differs it is
+// because the MEDIUM differs (a mouse on a desktop vs a finger on a phone),
+// and the declaration is split by medium to say so. Logjam Web reads all of
+// it from the generated `frontend/src/tokens.generated.css` (`webTokens.ts`).
 import { SHARED_PLACE_COLOR } from "./placeTypes.js";
 
 /**
  * The label and glyph colour for anything drawn ON a colour fill — an active
- * chip, a filled button, a hue tile. Fixed, not the scheme's `primary`:
- * `primary` clears 4.5:1 on the accent and the light place-type palette, which
- * is why it looked like the rule, but on the shared heath it is 3.7:1
- * (Sandstone) and on the GeoPDF hue 2.7:1. One dark ink clears every fill.
+ * chip, a filled button, a hue tile. Every scheme's `onFill` is this ink, not
+ * its page colour: the old dark page clears 4.5:1 on the accent and the light
+ * place-type palette, which is why it looked like the rule, but on the shared
+ * heath it is 3.7:1 (Sandstone) and on the GeoPDF hue 2.7:1. One dark ink
+ * clears every fill, in the light scheme too.
  */
 export const INK = "#1E1B18";
+
+/**
+ * What is drawn ON THE MAP in a dark of its own — a place's name label, the
+ * halo behind it, the casing under a line — is drawn on the BASEMAP, not on
+ * the page, so it never follows the scheme: a light scheme's dark text on a
+ * light halo would vanish into a satellite image. Sandstone's values, fixed.
+ */
+export const MAP_INK = {
+  /** A label drawn on the map. */
+  label: "#F7F3EC",
+  /** The halo behind a map label, and the casing that sets a line off any basemap. */
+  casing: "#4E4944",
+  /** The ring round a point mark, which separates it from any basemap. */
+  ring: "#FFFFFF",
+  /** The light halo behind a LiDAR topo's own label colour. */
+  labelHalo: "rgba(255,255,255,0.8)",
+} as const;
+
+/**
+ * The location marker's colour options.
+ *
+ * Not a scheme colour and not an `ASSET_HUES` kind: a preference the user sets
+ * for legibility against the ground they actually walk on — a blue arrow over
+ * blue water is the complaint this exists to answer. Scheme-independent for
+ * the same reason the asset hues are: the marker sits on a basemap, not on a
+ * scheme surface.
+ *
+ * Every entry is mid-light and saturated enough to hold up on aerial imagery,
+ * which is the busiest basemap here. The arrow keeps a white halo whatever is
+ * picked (see MapScreen), so none of these has to carry its own contrast.
+ */
+export const MARKER_COLORS = {
+  /** The original — the blue every mapping app trained the user on. */
+  blue: "#4285F4",
+  /** Warning-tape amber. Reads over water, scrub and imagery alike. */
+  amber: "#F5A524",
+  /** Signal red. The one people pick to find themselves fast. */
+  red: "#F2635F",
+  /** Fluoro green — a colour bushland does not contain. */
+  green: "#4ADE80",
+  /** Heath flower, as on the Places rail. */
+  violet: "#C77DD6",
+  /** No hue at all, for anyone who finds a coloured arrow noisy. */
+  white: "#FFFFFF",
+} as const;
+
+export type MarkerColorId = keyof typeof MARKER_COLORS;
+
+export const MARKER_COLOR_ORDER: readonly MarkerColorId[] = [
+  "blue",
+  "amber",
+  "red",
+  "green",
+  "violet",
+  "white",
+];
+
+/**
+ * The black veils: `light` under a bottom sheet, `heavy` behind chrome drawn
+ * over the map, `photo` behind a full-resolution photo (judged against black,
+ * so no scheme tint). The only black-alpha overlays; everything else derives
+ * from the scheme.
+ */
+export const SCRIM = {
+  light: "rgba(0,0,0,0.5)",
+  heavy: "rgba(0,0,0,0.6)",
+  photo: "rgba(0,0,0,0.92)",
+} as const;
+
+/**
+ * Words and glyphs drawn on a `SCRIM`. White in every scheme: the veil is
+ * black whatever the scheme, so a scheme's dark `text` on it is near-zero
+ * contrast. `scripts/wcag-contrast.mjs` measures it on `SCRIM.heavy` over a
+ * white map.
+ */
+export const ON_SCRIM = "#FFFFFF";
 
 /**
  * Per-kind identity hues for map material and the things you draw on it.
@@ -69,3 +152,155 @@ export const PLACE_STATUS_HUES = {
 
 /** Corner radii. `pill` is the fully rounded end (chips, meters, badges). */
 export const RADIUS = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
+
+/**
+ * Spacing steps (8 × n), named by n. The one scale both clients lay out with:
+ * Logjam GPS's `spacing(n)`, Logjam Web's `--space-<n>` (`--space-1-5` is 12).
+ * 2 is a hairline gap inside one object (a label over its figure); 6 is not a
+ * step: inside one object take 4, between objects 8. Logjam GPS's `spacing()`
+ * takes only a `SpaceStep`, so an off-scale value does not typecheck.
+ */
+export const SPACE_UNIT = 8;
+export const SPACE = {
+  "0.25": 2,
+  "0.5": 4,
+  "1": 8,
+  "1.5": 12,
+  "2": 16,
+  "3": 24,
+  "4": 32,
+  "6": 48,
+} as const;
+
+/** A key of `SPACE` as the number `spacing(n)` is called with. */
+export type SpaceStep = {
+  [K in keyof typeof SPACE]: K extends `${infer N extends number}` ? N : never;
+}[keyof typeof SPACE];
+
+/**
+ * The rhythm of a form, in px: how far a label sits from its control, one field
+ * from the next, and a section heading from what is above it. Both clients lay
+ * a form out with these three and no others (Logjam GPS's `Field`/`FormStack`
+ * and `SectionHeader`, Logjam Web's `--form-*` properties), so a control never
+ * sits a label's distance from the chips above it. Guard: `FORM_RHYTHM` in
+ * `designTokens.test.ts` holds the order label < field < section.
+ */
+export const FORM_RHYTHM = {
+  /** A label, a hint or an error to the control it is about. */
+  label: SPACE["0.5"],
+  /** One field (label, control, hint, error) to the next. */
+  field: SPACE["1.5"],
+  /** The space above a section heading, which divides two groups of fields. */
+  section: SPACE["2"],
+} as const;
+
+/**
+ * Type sizes in px, by medium. Logjam GPS is read at arm's length on a phone;
+ * Logjam Web is a desktop density, a step smaller, emitted in rem so a browser
+ * text-size setting reaches every label. 12 is the floor on both. `display`
+ * (a screen's one hero metric) is Logjam GPS only: no web page has one.
+ */
+export const FONT = {
+  gps: { xs: 12, sm: 14, base: 16, lg: 20, xl: 24, display: 34 },
+  web: { xs: 12, sm: 13, base: 14, lg: 18, xl: 20 },
+} as const;
+
+/** Type weights, the same on both media. */
+export const FONT_WEIGHT = { regular: 400, medium: 600, bold: 700 } as const;
+
+/**
+ * Type roles: which size and weight each kind of text takes, by client. A role
+ * names a size from `FONT` and a weight from `FONT_WEIGHT`, so the scale stays
+ * the one list of numbers; Logjam GPS reads them as `textRole.<name>` (theme.ts)
+ * and Logjam Web as `--text-<name>-size|weight|transform` (webTokens.ts). A
+ * client that does not draw a role has no entry for it. Colour is the screen's
+ * choice among `text` and `textMuted` (`muted` marks the roles that are always
+ * the second), never a role's.
+ */
+type TextRoleStyle<Size extends string> = {
+  size: Size;
+  weight: keyof typeof FONT_WEIGHT;
+  /** A section heading; shared/DESIGN.md §2. */
+  uppercase?: true;
+  muted?: true;
+};
+type TextRoleSpec = {
+  gps?: TextRoleStyle<keyof typeof FONT.gps>;
+  web?: TextRoleStyle<keyof typeof FONT.web>;
+};
+export const TEXT_ROLES = {
+  /** A screen's or a page's own title. */
+  title: {
+    gps: { size: "xl", weight: "bold" },
+    web: { size: "xl", weight: "bold" },
+  },
+  /** A sheet's, dialog's or side sheet's title. */
+  sheetTitle: {
+    gps: { size: "lg", weight: "bold" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** The one figure a hero carries. */
+  metric: {
+    gps: { size: "lg", weight: "medium" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** A figure in a grid of stats. */
+  statValue: {
+    gps: { size: "lg", weight: "bold" },
+    web: { size: "lg", weight: "medium" },
+  },
+  /** Running text and what the user types into a field. Logjam GPS only: Logjam
+   *  Web's body is the element's own. */
+  body: { gps: { size: "base", weight: "regular" } },
+  /** The label of a pill, chip, tab or small control. Logjam GPS only. */
+  control: { gps: { size: "sm", weight: "medium" } },
+  /** A figure or note small enough to sit on the map or inside a pill. Logjam
+   *  GPS only. */
+  caption: { gps: { size: "xs", weight: "medium" } },
+  /** A row's title. */
+  rowTitle: {
+    gps: { size: "base", weight: "medium" },
+    web: { size: "base", weight: "medium" },
+  },
+  /** What a row says under its title. */
+  subtitle: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "sm", weight: "regular", muted: true },
+  },
+  /** The label of a field or a control: sentence case, never a heading. */
+  label: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "sm", weight: "regular", muted: true },
+  },
+  /** A line under a control saying what it means. */
+  hint: {
+    gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "xs", weight: "regular", muted: true },
+  },
+  /** A section heading or a stat caption: the only capitals. */
+  section: {
+    gps: { size: "xs", weight: "medium", uppercase: true, muted: true },
+    web: { size: "xs", weight: "medium", uppercase: true, muted: true },
+  },
+} as const satisfies Record<string, TextRoleSpec>;
+
+/**
+ * Control heights in px, by pointer: `lg` buttons and text fields, `md`
+ * compact buttons, chips and icon buttons, `sm` the round icon button at a
+ * pill's end. A mouse keeps the desktop density (still clear of WCAG 2.5.8's
+ * 24px); a finger gets the touch set, on Logjam GPS and on a coarse-pointer
+ * browser alike.
+ */
+export const CONTROL = {
+  web: { lg: 36, md: 32, sm: 24 },
+  touch: { lg: 48, md: 40, sm: 32 },
+} as const;
+
+/** Every pressable's hit area on a touch screen, visual size plus slop. */
+export const TOUCH_TARGET_MIN = 48;
+
+/** Transition durations in ms. */
+export const MOTION = { fast: 150, med: 200 } as const;
+
+/** Opacity of a control that exists but cannot be used right now. */
+export const OPACITY = { disabled: 0.5 } as const;

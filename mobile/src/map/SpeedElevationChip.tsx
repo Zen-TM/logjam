@@ -24,14 +24,7 @@ import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, radius, spacing, withAlpha, makeStyles } from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
@@ -60,6 +53,8 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
    *  a wakeup nobody sees. */
   active: boolean;
 }) {
+  const styles = useStyles();
+
   const readout = useLiveReadout();
   const [now, setNow] = useState(() => Date.now());
 
@@ -108,7 +103,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // Same translucent warm backing as the scale bar — these sit in one stack
   // over map imagery of any brightness and have to read as one instrument set.
   chip: {
@@ -116,7 +111,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: CHIP_WIDTH,
     height: READOUT_CHIP_HEIGHT,
-    backgroundColor: `${theme.primary}CC`,
+    backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
@@ -127,10 +122,9 @@ const styles = StyleSheet.create({
     lineHeight: LABEL_LINE,
   },
   value: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
+    ...textRole.control,
+    color: theme.text,
     lineHeight: VALUE_LINE,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   // A hairline rather than a gap: two centred columns with nothing between them
@@ -138,7 +132,7 @@ const styles = StyleSheet.create({
   divider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
-    marginVertical: spacing(0.75),
-    backgroundColor: withAlpha(theme.textPrimary, 0.25),
+    marginVertical: spacing(1),
+    backgroundColor: withAlpha(theme.text, 0.25),
   },
-});
+}));

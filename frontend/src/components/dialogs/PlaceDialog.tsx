@@ -1,5 +1,4 @@
 import { useState, useEffect, useId, useMemo, useRef } from "react";
-import { MapPin, Plus, Trash2 } from "lucide-react";
 import type {
   ScopedCustomFieldDef,
   TripLogCustomFieldType,
@@ -34,8 +33,6 @@ import {
   isHttpUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
@@ -54,6 +51,8 @@ import {
   SectionHeader,
   TextArea,
   TextField,
+  ErrorBanner,
+  FieldError,
 } from "../../ui";
 import classes from "./PlaceDialog.module.css";
 
@@ -72,7 +71,7 @@ const LNG_CONSTRAINTS: NumericFieldConstraints = {
  * A place: what it is, where it is, and what this type of place records.
  *
  * EVERY ATTRIBUTE IS DRAWN FROM ITS DEFINITION. The seven canyon grades were
- * seven hand-written controls keyed to `CANYON_FORM_FIELD_KEYS` — two selects
+ * seven hand-written controls keyed to a list of their keys — two selects
  * of literal 1-7, a roman-numeral one, four number boxes and their tooltips —
  * and the rest of the type's fields rendered generically underneath, with the
  * seven subtracted so they were not asked twice. They are ordinary field
@@ -94,6 +93,7 @@ function PlaceDialog({
   onCustomFieldDefsChange,
   placeTypes,
   onMediaChanged,
+  initialCoords = null,
 }: {
   place: TPlace | null;
   open: boolean;
@@ -112,6 +112,9 @@ function PlaceDialog({
   // Called after a media/track upload or delete so the opener (place detail
   // panel) can refresh its slideshow/track without waiting for a Save.
   onMediaChanged?: () => void;
+  /** Create mode only: the spot the form opens on ("Add a place here"), so the
+   *  coordinates are already in and the user names it. */
+  initialCoords?: { latitude: number; longitude: number } | null;
 }) {
   const isEdit = place != null;
 
@@ -252,8 +255,10 @@ function PlaceDialog({
     } else {
       initialName = "";
       initialAltNames = "";
-      initialLatitude = "";
-      initialLongitude = "";
+      initialLatitude = initialCoords ? initialCoords.latitude.toFixed(6) : "";
+      initialLongitude = initialCoords
+        ? initialCoords.longitude.toFixed(6)
+        : "";
       initialNotes = "";
       initialSources = [];
       initialFieldValues = {};
@@ -626,7 +631,11 @@ function PlaceDialog({
                 "Cancel" that only backs out of that sub-form, and both can be
                 on screen at once. In edit mode the object is the *changes*,
                 not the place. */}
-            <Button onClick={guard.requestClose} disabled={saving}>
+            <Button
+              onClick={guard.requestClose}
+              disabled={saving}
+              disabledReason="Saving…"
+            >
               {isEdit ? "Discard changes" : "Discard place"}
             </Button>
             {/* type="submit" with no onClick — handleSubmit is the only save
@@ -710,10 +719,11 @@ function PlaceDialog({
                 required
               />
               <Button
-                icon={MapPin}
+                icon="place"
                 className={classes.pickButton}
                 onClick={handlePickCoords}
                 disabled={saving}
+                disabledReason="Saving…"
               >
                 Pick on map
               </Button>
@@ -753,14 +763,14 @@ function PlaceDialog({
                     showError={showFieldErrors}
                   />
                 </div>
-                {/* ABSENT on a built-in, not disabled (DESIGN.md §7): the
+                {/* ABSENT on a built-in, not disabled (DESIGN.md): the
                     server owns those definitions and refuses the delete, so
                     the verb does not exist here rather than being unavailable
                     right now. It never arose while the grades were drawn by
                     hand — they were the seven fields this list excluded. */}
                 {!isSystemFieldDef(def) && (
                   <IconButton
-                    icon={Trash2}
+                    icon="delete"
                     label={`Delete the attribute ${def.label}`}
                     tone="danger"
                     onClick={() => setFieldToDelete(def)}
@@ -790,7 +800,7 @@ function PlaceDialog({
             ) : (
               <Button
                 compact
-                icon={Plus}
+                icon="add"
                 className={classes.addAttribute}
                 onClick={() => {
                   setAddFieldError(null);
@@ -828,7 +838,7 @@ function PlaceDialog({
                   }}
                 />
                 <IconButton
-                  icon={Trash2}
+                  icon="delete"
                   label={`Delete the source ${source.label || index + 1}`}
                   tone="danger"
                   onClick={() =>
@@ -839,7 +849,7 @@ function PlaceDialog({
             ))}
             <Button
               compact
-              icon={Plus}
+              icon="add"
               className={classes.addAttribute}
               onClick={() => setSources([...sources, { label: "", url: "" }])}
             >

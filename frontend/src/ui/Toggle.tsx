@@ -1,4 +1,5 @@
 import { useId } from "react";
+import type { Disablable } from "./Button";
 import classes from "./Toggle.module.css";
 
 /** An on/off switch. A real `role="switch"` button, so Space and Enter work
@@ -38,32 +39,56 @@ export function Toggle({
   );
 }
 
-/** A setting: its title and an explanation on the left, the switch on the right.
- *  The title names the switch and the explanation describes it. */
+/**
+ * A setting: its title and an explanation on the left, the switch on the right.
+ * The WHOLE row is the switch's target (UX §4: a thing that does something on
+ * press looks pressable), so it wears the card fill and answers the pointer. The
+ * switch inside stays the one real control: one `role="switch"` named by the
+ * title and described by the explanation, which is also the keyboard path. A
+ * press on the rest of the row flips it too.
+ *
+ * `disabled` dims it and stops it answering, and comes with a
+ * `disabledReason` ("Needs an account") that replaces the description and is
+ * read out as the switch's description.
+ */
 export function SwitchRow({
   title,
   description,
   checked,
   onChange,
   disabled,
+  disabledReason,
 }: {
   title: string;
   description?: string;
   checked: boolean;
   onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
+} & Disablable) {
+  // A disabled switch says why, in the place its description reads from, so a
+  // screen reader hears the reason with the switch (shared/DESIGN.md §5).
+  const words = disabled && disabledReason ? disabledReason : description;
   const titleId = useId();
   const descriptionId = useId();
   return (
-    <div className={classes.row}>
+    // The click is a convenience over the switch's own button, which already
+    // takes Space and Enter: a second tab stop here would announce it twice.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div
+      className={classes.row}
+      data-disabled={disabled || undefined}
+      onClick={(event) => {
+        if (disabled) return;
+        if ((event.target as HTMLElement).closest('[role="switch"]')) return;
+        onChange(!checked);
+      }}
+    >
       <div className={classes.text}>
         <span id={titleId} className={classes.title}>
           {title}
         </span>
-        {description && (
+        {words && (
           <span id={descriptionId} className={classes.description}>
-            {description}
+            {words}
           </span>
         )}
       </div>
@@ -71,7 +96,7 @@ export function SwitchRow({
         checked={checked}
         onChange={onChange}
         labelledBy={titleId}
-        describedBy={description ? descriptionId : undefined}
+        describedBy={words ? descriptionId : undefined}
         disabled={disabled}
       />
     </div>

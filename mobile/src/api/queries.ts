@@ -33,6 +33,11 @@ export function getNotifications(): Promise<{
   return apiFetchWithTotal<TNotification[]>("/notifications");
 }
 
+/** Every notification the account has read goes, server-side; unread ones stay. */
+export function clearReadNotifications(): Promise<void> {
+  return apiFetch<void>("/notifications", { method: "DELETE" });
+}
+
 export function getUnreadNotificationCount(): Promise<{ count: number }> {
   return apiFetch<{ count: number }>("/notifications/unread-count");
 }

@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { Prisma, User } from "@prisma/client";
 import { z } from "zod";
 import {
-  isThemeSchemeId,
+  normalizeThemeSchemeId,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
   isNotificationPreferences,
@@ -390,7 +390,13 @@ router.patch(
       importMergePolicy !== undefined ||
       copyPlaceMedia !== undefined
     ) {
-      if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
+      // An older client may still send a retired id; it is stored as the
+      // scheme it became.
+      const nextThemeSchemeId =
+        themeSchemeId === undefined
+          ? undefined
+          : normalizeThemeSchemeId(themeSchemeId);
+      if (themeSchemeId !== undefined && nextThemeSchemeId == null) {
         throw new AppError(400, "Invalid themeSchemeId");
       }
       if (
@@ -422,7 +428,7 @@ router.patch(
         // field keys; drop them so they are never written back to storage.
         tripLogCustomFields: undefined,
         placeCustomFields: undefined,
-        ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
+        ...(nextThemeSchemeId ? { themeSchemeId: nextThemeSchemeId } : {}),
         ...(notifications !== undefined
           ? {
               notifications: {
@@ -721,6 +727,8 @@ router.delete(
       prisma.friendship.deleteMany({
         where: { OR: [{ requesterId: user.id }, { addresseeId: user.id }] },
       }),
+      // Unspent invite links die with the account that issued them.
+      prisma.friendInvite.deleteMany({ where: { inviterId: user.id } }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
       prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),

@@ -9,9 +9,8 @@
 //
 // A date field opens the sheet's own date picker rather than asking the user to
 // type an ISO string, which is why `onPickDate` is a callback: the picker is a
-// MODE of the host sheet (DESIGN.md §6 — never a second modal), and only the
+// MODE of the host sheet (DESIGN.md — never a second modal), and only the
 // host knows how to enter it.
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import {
   customFieldDisplayLabel,
@@ -22,13 +21,15 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme } from "../theme";
 import {
+  Field,
   IconButton,
   Row,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  type SegmentOption,
+  type ChipOption,
+  Icon,
 } from "../ui";
 
 /**
@@ -41,7 +42,7 @@ import {
  * it. The same row of stops a bounded integer draws, for the same reason: unset
  * has to stay reachable.
  */
-const BOOLEAN_OPTIONS: SegmentOption<string>[] = [
+const BOOLEAN_OPTIONS: ChipOption<string>[] = [
   { value: "", label: "—" },
   { value: "true", label: "Yes" },
   { value: "false", label: "No" },
@@ -76,7 +77,7 @@ export function CustomFieldValueInputs({
           trailing={
             onRemove ? (
               <IconButton
-                icon="x"
+                icon="close"
                 accessibilityLabel={`Remove ${def.label}`}
                 onPress={() => onRemove(def.key)}
               />
@@ -94,6 +95,8 @@ export function CustomFieldValueInputs({
  * attribute is a CARD; a recorded one is a table row" in mobile/CLAUDE.md.
  */
 export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
+  const styles = useStyles();
+
   return (
     <View>
       {rows.map(([key, label, value, type], index) => (
@@ -127,75 +130,71 @@ function CustomFieldValueInput({
   /** Drawn beside the CONTROL, centred on it — not beside the label above it. */
   trailing?: React.ReactNode;
 }) {
+  const theme = useTheme();
+
   const label = customFieldDisplayLabel(def);
   // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
   // places have gaps, and a picker with no way back to blank turns "I don't
   // know" into a wrong answer, which is why the first stop is "—".
   const stops = railStops(def);
   if (stops) {
-    const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
+    const options: ChipOption<string>[] = [{ value: "", label: "—" }];
     for (const stop of stops)
       options.push({ value: String(stop), label: String(stop) });
     return (
-      <View style={styles.field}>
-        <Text style={styles.railLabel}>{def.label}</Text>
+      <Field label={def.label}>
         <Beside trailing={trailing}>
-          <SegmentedControl
+          <ChipRail
             scroll
             options={options}
             value={value}
             onChange={onChange}
           />
         </Beside>
-      </View>
+      </Field>
     );
   }
   if (def.type === "boolean") {
     return (
-      <View style={styles.field}>
-        <Text style={styles.railLabel}>{label}</Text>
+      <Field label={label}>
         <Beside trailing={trailing}>
-          <SegmentedControl
+          <ChipRail
             options={BOOLEAN_OPTIONS}
             value={value}
             onChange={onChange}
           />
         </Beside>
-      </View>
+      </Field>
     );
   }
   if (def.type === "date") {
     return (
       <Beside trailing={trailing}>
         <Row
-          icon="calendar"
+          icon="date"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           onPress={onPickDate}
         />
       </Beside>
     );
   }
   return (
-    <View style={styles.field}>
-      <TextField
-        label={label}
-        value={value}
-        onChangeText={onChange}
-        accessory={trailing}
-        keyboardType={
-          def.type === "integer"
-            ? "number-pad"
-            : def.type === "float"
-              ? "decimal-pad"
-              : "default"
-        }
-        autoCapitalize="sentences"
-      />
-    </View>
+    <TextField
+      label={label}
+      value={value}
+      onChangeText={onChange}
+      accessory={trailing}
+      keyboardType={
+        def.type === "integer"
+          ? "number-pad"
+          : def.type === "float"
+            ? "decimal-pad"
+            : "default"
+      }
+      autoCapitalize="sentences"
+    />
   );
 }
 
@@ -207,6 +206,8 @@ function Beside({
   trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   if (!trailing) return <>{children}</>;
   return (
     <View style={styles.beside}>
@@ -216,18 +217,7 @@ function Beside({
   );
 }
 
-const styles = StyleSheet.create({
-  field: { gap: spacing(0.5) },
-  // Matches `TextField`'s own label exactly. A rail and a number box sit in one
-  // list under one heading now, so a sentence-case label beside an uppercase
-  // one reads as two different kinds of control.
-  railLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
+const useStyles = makeStyles((theme, textRole) => ({
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.
@@ -237,17 +227,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: spacing(2),
-    paddingVertical: spacing(0.875),
+    paddingVertical: spacing(1),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: surface.border,
+    borderBottomColor: theme.line,
   },
   tableRowLast: { borderBottomWidth: 0 },
   tableKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   tableValue: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
+    ...textRole.control,
+    color: theme.text,
     textAlign: "right",
     flexShrink: 1,
   },
-});
+}));

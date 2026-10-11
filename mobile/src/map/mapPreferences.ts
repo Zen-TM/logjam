@@ -10,14 +10,24 @@
 // DEVICE-scoped, all of them, and deliberately: which side your thumb reaches
 // from, whether this handset's screen may stay lit, and what its long press does
 // are claims about a phone, not about a person. None of them syncs, so all of
-// them work as a guest and with no signal (DESIGN.md §10).
+// them work as a guest and with no signal (DESIGN.md).
 //
 // Every read is SYNCHRONOUS (`prefsDb`), because `MapScreen` renders its chrome
 // on the first frame and a layout that settles into the correct side a moment
 // later is worse than one that was never wrong.
 //
 // PRIVACY: a side, a colour, an enum. Nothing about where the user is.
+import {
+  MARKER_COLOR_ORDER,
+  MARKER_COLORS,
+  type MarkerColorId,
+} from "@logjam/shared";
+
 import { readPref, writePref } from "../prefsDb";
+
+// Declared in shared (a colour on the map is not a scheme's); re-exported here
+// for the screens that read the preference beside its colours.
+export { MARKER_COLOR_ORDER, MARKER_COLORS, type MarkerColorId };
 
 /** Which edge carries the action column. The instruments take the other one. */
 export type MapControlSide = "right" | "left";
@@ -82,45 +92,6 @@ const LONG_PRESS_ACTIONS: readonly LongPressAction[] = [
 ];
 const NORTH_REFERENCES: readonly NorthReference[] = ["true", "magnetic"];
 const KEEP_AWAKE_MODES: readonly KeepAwakeMode[] = ["off", "recording", "map"];
-
-/**
- * The location marker's colour options.
- *
- * NOT in `theme.ts` with `assetHue`: those encode what a thing IS and are chosen
- * by us, where this is a preference the user sets for legibility against the
- * ground they actually walk on — a blue arrow over blue water is the complaint
- * this exists to answer. Scheme-independent for the same reason the asset hues
- * are: the marker sits on a basemap, not on a scheme surface.
- *
- * Every entry is mid-light and saturated enough to hold up on aerial imagery,
- * which is the busiest basemap here. The arrow keeps a white halo whatever is
- * picked (see MapScreen), so none of these has to carry its own contrast.
- */
-export const MARKER_COLORS = {
-  /** The original — the blue every mapping app trained the user on. */
-  blue: "#4285F4",
-  /** Warning-tape amber. Reads over water, scrub and imagery alike. */
-  amber: "#F5A524",
-  /** Signal red. The one people pick to find themselves fast. */
-  red: "#F2635F",
-  /** Fluoro green — a colour bushland does not contain. */
-  green: "#4ADE80",
-  /** Heath flower, as on the Places rail. */
-  violet: "#C77DD6",
-  /** No hue at all, for anyone who finds a coloured arrow noisy. */
-  white: "#FFFFFF",
-} as const;
-
-export type MarkerColorId = keyof typeof MARKER_COLORS;
-
-export const MARKER_COLOR_ORDER: readonly MarkerColorId[] = [
-  "blue",
-  "amber",
-  "red",
-  "green",
-  "violet",
-  "white",
-];
 
 export function readMapControlSide(): MapControlSide {
   return readEnum(CONTROL_SIDE_KEY, CONTROL_SIDES, "right");

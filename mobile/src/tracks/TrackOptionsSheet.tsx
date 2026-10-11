@@ -5,26 +5,35 @@
 // ONE component for both, same shape and same reason as RouteOptionsSheet: the
 // actions have one definition in saved/assetActions.ts, and a track reached
 // from the map must not be a lesser object than one reached from Saved
-// (DESIGN.md §7). Rename, Send a copy and the stats are sub-modes of THIS
+// (DESIGN.md). Rename, Send a copy and the stats are sub-modes of THIS
 // sheet rather than second sheets (§6: never open a second sheet — swap the
 // content), so no caller can be the surface that forgot one.
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
+import { Alert, Text, View } from "react-native";
+import {
+  messageFromError,
+  TRACK_COLORS,
+  trackColorName,
+  wayVerbIcon,
+  wayVerbLabel,
+  type TrackPass,
+} from "@logjam/shared";
 
-import { assetHue, radius, spacing, theme, withAlpha } from "../theme";
-import { BottomSheet, RenameForm, Row } from "../ui";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { type Track } from "./tracksDb";
+import type { TripTrackSource } from "./tripTrackSource";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
+import { passedHereText } from "./passedHere";
 import { TrackStatsBody } from "./TrackStatsBody";
 import { useTrackDetail } from "./useTrackDetail";
 
@@ -33,7 +42,9 @@ export function TrackOptionsSheet({
   visible,
   onClose,
   onShowOnMap,
+  passes,
   onContinueRecording,
+  onLogTrip,
   onInfo,
   onError,
   allowNetwork = true,
@@ -44,27 +55,41 @@ export function TrackOptionsSheet({
   /**
    * Fly the map to this track. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md §7: "View on map" is the one row the two surfaces differ by).
+   * (DESIGN.md: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
   /**
+   * When this track was at the spot tapped to open the sheet. Map-only, for
+   * the same reason: Saved opens a track without pointing at any part of it.
+   */
+  passes?: readonly TrackPass[];
+  /**
    * Pick this recording back up. Owned by the MAP rather than by this sheet
    * because starting a recorder needs the location permission prompt, which
-   * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made
+   * cannot be raised from an open sheet (DESIGN.md — the bug that made
    * "Take photo" look dead), and because the map is what has to enter
    * recording mode afterwards.
    */
   onContinueRecording: (track: Track) => void;
+  /**
+   * Open the trip form with this track in it. The caller's, as a place's
+   * "Log a trip here" is: the form is a sheet of its own, so this one closes
+   * and the screen opens that one. Required, so a surface cannot forget it.
+   */
+  onLogTrip: (track: TripTrackSource) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** False in "Simulating offline mode" — the stats sub-mode then reads
    *  elevation only from tiles already on the phone. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [attaching, setAttaching] = useState(false);
-  const [pickingColor, setPickingColor] = useState(false);
   // Rendered in this sheet rather than handed to the caller: this component is
   // the map's track options as well as Saved's, and a callback would have
   // given the verb only to whichever surface remembered to pass it.
@@ -87,7 +112,6 @@ export function TrackOptionsSheet({
       setSending(false);
       setShowingStats(false);
       setAttaching(false);
-      setPickingColor(false);
     }
   }
 
@@ -105,6 +129,14 @@ export function TrackOptionsSheet({
       allowNetwork,
     },
   );
+
+  const passedHere =
+    passes && track
+      ? passedHereText(passes, {
+          startMs: Date.parse(track.startedAt),
+          endMs: Date.parse(track.endedAt ?? track.updatedAt),
+        })
+      : null;
 
   const shareRowProps = useShareRowProps(online);
   const actions = track ? trackActions(track) : null;
@@ -147,7 +179,7 @@ export function TrackOptionsSheet({
     onError,
   });
 
-  if (!track || !actions) return null;
+  if (!track || !actions) return closedSheet;
 
   const close = () => {
     setRenaming(false);
@@ -177,7 +209,7 @@ export function TrackOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §6 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = renaming
     ? () => setRenaming(false)
     : sending
@@ -191,7 +223,7 @@ export function TrackOptionsSheet({
   return (
     <BottomSheet
       visible={visible}
-      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §6).
+      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md).
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the track's own name: it is the same subject,
       // seen as numbers.
@@ -253,11 +285,12 @@ export function TrackOptionsSheet({
         </View>
       ) : (
         <View style={styles.body}>
+          {passedHere ? <Text style={styles.note}>{passedHere}</Text> : null}
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.track}
               disabled={busy}
               onPress={() => {
@@ -271,64 +304,38 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          <Row
-            title="Colour"
-            icon="droplet"
-            hue={assetHue.track}
-            right={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Choose track colour"
-                accessibilityState={{ expanded: pickingColor }}
-                onPress={() => setPickingColor((open) => !open)}
-                style={styles.swatchButton}
-              >
-                <View
-                  style={[
-                    styles.currentSwatch,
-                    { backgroundColor: track.color },
-                  ]}
-                />
-              </Pressable>
-            }
-            onPress={() => setPickingColor((open) => !open)}
-          />
-          {pickingColor ? (
-            <View style={styles.palette}>
-              {TRACK_COLORS.map((swatch) => (
-                <Pressable
-                  key={swatch}
-                  accessibilityRole="button"
-                  accessibilityLabel={trackColorName(swatch)}
-                  accessibilityState={{ selected: swatch === track.color }}
-                  onPress={() => {
-                    setPickingColor(false);
-                    actions.setColor?.(swatch).catch((err: unknown) => {
-                      console.error(err);
-                      onError(
-                        messageFromError(err, "Couldn't update track colour."),
-                      );
-                    });
-                  }}
-                  style={[
-                    styles.swatch,
-                    { backgroundColor: swatch },
-                    swatch === track.color ? styles.swatchSelected : null,
-                  ]}
-                >
-                  {swatch === track.color ? (
-                    <Text style={styles.swatchTick}>✓</Text>
-                  ) : null}
-                </Pressable>
-              ))}
-            </View>
+          {/* The same verb, word and glyph as the web's, first among the verbs
+              after the one that goes to the line. */}
+          {actions.logTrip ? (
+            <Row
+              title={wayVerbLabel("logTrip", "gps")}
+              icon={wayVerbIcon("logTrip")}
+              hue={assetHue.track}
+              disabled={busy}
+              onPress={() => {
+                close();
+                if (actions.logTrip) onLogTrip(actions.logTrip);
+              }}
+            />
           ) : null}
+          <ColourField
+            label="Colour"
+            palette={TRACK_COLORS}
+            value={track.color}
+            nameOf={trackColorName}
+            onChange={(swatch) => {
+              actions.setColor?.(swatch).catch((err: unknown) => {
+                console.error(err);
+                onError(messageFromError(err, "Couldn't update track colour."));
+              });
+            }}
+          />
           {/* What this track IS, one tap in — a tapped line opens the verbs
-              now, and the numbers are behind this row (DESIGN.md §7). */}
+              now, and the numbers are behind this row (DESIGN.md). */}
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.track}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -337,7 +344,7 @@ export function TrackOptionsSheet({
               what it is showing. */}
           <Row
             title="Continue recording"
-            icon="play-circle"
+            icon="play"
             hue={assetHue.track}
             disabled={busy}
             onPress={() => {
@@ -348,7 +355,7 @@ export function TrackOptionsSheet({
           {actions.createRouteFrom ? (
             <Row
               title="Create route from this"
-              icon="pen-tool"
+              icon="draw"
               hue={assetHue.route}
               disabled={busy}
               onPress={() => {
@@ -385,8 +392,8 @@ export function TrackOptionsSheet({
             <Row
               key={option.title}
               title={option.title}
-              icon="download"
-              hue={theme.bonus1}
+              icon="export"
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => save(option)}
             />
@@ -398,7 +405,7 @@ export function TrackOptionsSheet({
             <Row
               title="Send a copy"
               icon="send"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSending((open) => !open)}
@@ -406,14 +413,14 @@ export function TrackOptionsSheet({
           ) : null}
           <Row
             title="Rename"
-            icon="edit-2"
-            hue={theme.bonus1}
+            icon="edit"
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => setRenaming(true)}
           />
           <Row
             title="Delete track"
-            icon="trash-2"
+            icon="delete"
             hue={theme.warning}
             disabled={busy}
             onPress={() => {
@@ -440,41 +447,7 @@ export function TrackOptionsSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: spacing(1) },
-  swatchButton: {
-    padding: spacing(0.5),
-    borderRadius: radius.sm,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  currentSwatch: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.35),
-  },
-  palette: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing(1),
-    paddingHorizontal: spacing(1),
-    paddingVertical: spacing(0.5),
-  },
-  swatch: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  swatchSelected: {
-    borderWidth: 2,
-    borderColor: theme.textPrimary,
-  },
-  swatchTick: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-});
+  note: { color: theme.textMuted, fontSize: fontSize.sm },
+}));

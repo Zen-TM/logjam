@@ -297,3 +297,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # NumPy 2 breaks the image's apt GDAL bindings, which are built against
+    # NumPy 1.x (topo/tests/test_numpy_gdal_abi.py). Lift this with the GDAL
+    # bindings, not before. Tracked in #289.
+    ignore:
+      - dependency-name: "numpy"
+        update-types:
+          - "version-update:semver-major"

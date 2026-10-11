@@ -1,36 +1,48 @@
 import { useEffect, useState } from "react";
-import { EllipsisVertical, Merge, Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  drawsYoursHeading,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
+  placeTypeDeleteConfirm,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
+  SETTINGS_LIST,
+  stepAfterPlaceTypeSave,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import {
   createPlaceType,
   deletePlaceType,
+  getPlaceTypes,
   reassignPlaceType,
   updatePlaceType,
   type TPlaceType,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { TypeAttributesDialog } from "./CustomFieldSection";
 import { messageFromError } from "../../../errors/messageFromError";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   Dialog,
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SectionHeader,
   Select,
-  SwatchPicker,
+  ColourField,
   TextField,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
+
+const copy = SETTINGS_LIST.copy;
 
 /**
  * The place types a user keeps — Settings' first list page. The list is the
@@ -64,14 +76,20 @@ function PlaceTypeSection({
   types,
   loading,
   onTypesChange,
+  placeDefs,
+  onPlaceDefsChange,
   onBack,
 }: {
   types: TPlaceType[];
   loading: boolean;
   onTypesChange: (types: TPlaceType[]) => void;
+  /** The user's place attributes, for the step a new type leads into. */
+  placeDefs: ScopedCustomFieldDef[];
+  onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   onBack: () => void;
 }) {
   const [editing, setEditing] = useState<TPlaceType | "new" | null>(null);
+  const [attributesFor, setAttributesFor] = useState<TPlaceType | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
@@ -81,7 +99,6 @@ function PlaceTypeSection({
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
   async function refresh() {
-    const { getPlaceTypes } = await import("../../../placeUtils");
     onTypesChange(await getPlaceTypes());
   }
 
@@ -114,22 +131,25 @@ function PlaceTypeSection({
   const system = types.filter((type) => type.isSystem);
   const mergeTarget = types.find((type) => type.id === mergeTargetId) ?? null;
 
+  // The hero's button and the end of the list's are the same button.
+  const addTypeButton = (
+    <Button
+      compact
+      variant="outline"
+      icon="add"
+      onClick={() => setEditing("new")}
+    >
+      {copy.addPlaceType}
+    </Button>
+  );
+
   return (
     <div className={classes.root}>
       <Hero
         title="Place types"
         onBack={onBack}
         backLabel="Back to Settings"
-        actions={
-          <Button
-            compact
-            variant="outline"
-            icon={Plus}
-            onClick={() => setEditing("new")}
-          >
-            Add
-          </Button>
-        }
+        actions={addTypeButton}
       />
 
       {error && (
@@ -138,11 +158,11 @@ function PlaceTypeSection({
 
       <div className={classes.list}>
         {loading ? (
-          <p className={classes.state}>Loading…</p>
+          <LoadingState />
         ) : (
           <>
-            {own.length > 0 && (
-              <SectionHeader title="Yours" count={own.length} />
+            {drawsYoursHeading(own.length, system.length) && (
+              <SectionHeader title={copy.yours} count={own.length} />
             )}
             {own.map((type) => (
               <Row
@@ -173,15 +193,15 @@ function PlaceTypeSection({
                     entries={[
                       {
                         id: "edit",
-                        label: "Edit type",
-                        icon: Pencil,
+                        label: copy.editType,
+                        icon: "edit",
                         onSelect: () => setEditing(type),
                       },
                       type.placeCount > 0
                         ? {
                             id: "merge",
-                            label: "Merge into another type",
-                            icon: Merge,
+                            label: copy.mergeType,
+                            icon: "merge",
                             danger: true,
                             onSelect: () => {
                               setMergingFrom(type);
@@ -193,8 +213,8 @@ function PlaceTypeSection({
                           }
                         : {
                             id: "delete",
-                            label: "Delete type",
-                            icon: Trash2,
+                            label: copy.deleteType,
+                            icon: "delete",
                             danger: true,
                             onSelect: () => setDeleting(type),
                           },
@@ -202,7 +222,7 @@ function PlaceTypeSection({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${type.name}`}
                       />
                     )}
@@ -214,7 +234,7 @@ function PlaceTypeSection({
             {/* A built-in gets no verbs at all rather than disabled ones: it
                 belongs to no account, and a greyed button invites the question
                 "why not". */}
-            <SectionHeader title="Built in" count={system.length} />
+            <SectionHeader title={copy.builtIn} count={system.length} />
             {system.map((type) => (
               <Row
                 key={type.id}
@@ -228,6 +248,7 @@ function PlaceTypeSection({
                 subtitle={placeCountLabel(type.placeCount)}
               />
             ))}
+            <ListEnd>{addTypeButton}</ListEnd>
           </>
         )}
       </div>
@@ -235,6 +256,7 @@ function PlaceTypeSection({
       {editing !== null && (
         <PlaceTypeDialog
           editing={editing === "new" ? null : editing}
+          types={types}
           saving={saving}
           error={error}
           onDismissError={() => setError(null)}
@@ -243,26 +265,42 @@ function PlaceTypeSection({
             setError(null);
           }}
           onSave={async (draft) => {
+            // Held in an object: the assignment happens inside `run`'s
+            // callback, which the compiler cannot follow for a `let`.
+            const made: { type: TPlaceType | null } = { type: null };
             const ok =
               editing === "new"
-                ? await run(
-                    () => createPlaceType(draft),
-                    "Couldn't create that type.",
-                  )
+                ? await run(async () => {
+                    made.type = await createPlaceType(draft);
+                  }, "Couldn't create that type.")
                 : await run(
                     () => updatePlaceType(editing.id, draft),
                     "Couldn't save that type.",
                   );
-            if (ok) setEditing(null);
+            if (!ok) return;
+            setEditing(null);
+            if (stepAfterPlaceTypeSave(made.type !== null) === "attributes") {
+              setAttributesFor(made.type);
+            }
           }}
+        />
+      )}
+
+      {attributesFor && (
+        <TypeAttributesDialog
+          type={attributesFor}
+          placeTypes={types}
+          defs={placeDefs}
+          onDefsChange={onPlaceDefsChange}
+          onClose={() => setAttributesFor(null)}
         />
       )}
 
       <ConfirmDialog
         open={deleting !== null}
-        title={`Delete "${deleting?.name ?? ""}"?`}
-        message="Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none."
-        confirmLabel="Delete"
+        title={placeTypeDeleteConfirm(deleting?.name ?? "").confirmTitle}
+        message={placeTypeDeleteConfirm(deleting?.name ?? "").confirmBody}
+        confirmLabel={copy.deleteType}
         confirmColor="error"
         busy={saving}
         onConfirm={async () => {
@@ -334,6 +372,7 @@ function PlaceTypeSection({
  *  finishes or abandons. */
 function PlaceTypeDialog({
   editing,
+  types,
   saving,
   error,
   onDismissError,
@@ -342,6 +381,8 @@ function PlaceTypeDialog({
 }: {
   /** null = adding. */
   editing: TPlaceType | null;
+  /** Every type the user can see, to refuse a name one of them has. */
+  types: TPlaceType[];
   saving: boolean;
   error: string | null;
   onDismissError: () => void;
@@ -353,6 +394,10 @@ function PlaceTypeDialog({
     editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
+  // A taken name shows as it is typed; a blank one only once Save was pressed.
+  const [pressed, setPressed] = useState(false);
+  const nameError =
+    name.trim() || pressed ? placeTypeNameError(name, types, editing) : null;
 
   return (
     <Dialog
@@ -362,14 +407,19 @@ function PlaceTypeDialog({
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
             Cancel
           </Button>
           <Button
             variant="filled"
             busy={saving}
-            disabled={!name.trim()}
-            onClick={() => onSave({ name: name.trim(), iconKey, color })}
+            onClick={() => {
+              if (placeTypeNameError(name, types, editing)) {
+                setPressed(true);
+                return;
+              }
+              onSave({ name: name.trim(), iconKey, color });
+            }}
           >
             Save
           </Button>
@@ -381,7 +431,8 @@ function PlaceTypeDialog({
           label="Name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          maxLength={60}
+          maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
+          error={nameError}
           disabled={saving}
           data-autofocus
         />
@@ -414,9 +465,9 @@ function PlaceTypeDialog({
           })}
         </div>
 
-        <SwatchPicker
+        <ColourField
           label="Colour"
-          colors={PLACE_TYPE_COLORS}
+          palette={PLACE_TYPE_COLORS}
           value={color}
           onChange={setColor}
           nameOf={placeTypeColorName}

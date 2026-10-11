@@ -20,8 +20,8 @@ export type BulkReadAction = {
   read: boolean;
   /** The rows that actually change — the ones not already in that state. */
   ids: string[];
-  /** Named by the glyph both icon sets draw it with (Feather and lucide). */
-  icon: "eye" | "eye-off";
+  /** The icon idea (`ICONS`) both clients draw it with. */
+  icon: "show" | "hide";
   /** Screen-reader label for the bar's button. */
   label: string;
   /** The toast when it lands. */
@@ -41,7 +41,7 @@ export function bulkReadAction(
     return {
       read: false,
       ids: selected.map((notification) => notification.id),
-      icon: "eye-off",
+      icon: "hide",
       label: "Mark as unread",
       success: "Marked as unread.",
     };
@@ -49,7 +49,7 @@ export function bulkReadAction(
   return {
     read: true,
     ids: unread.map((notification) => notification.id),
-    icon: "eye",
+    icon: "show",
     label:
       unread.length === selected.length
         ? "Mark as read"

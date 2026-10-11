@@ -1,8 +1,19 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
-import { LoaderCircle, type LucideIcon } from "lucide-react";
 import classes from "./Button.module.css";
+import { Icon, type Glyph } from "./Icon";
+import { Tooltip } from "./Tooltip";
 
 type ButtonVariant = "filled" | "outline" | "danger" | "destructive" | "plain";
+
+/**
+ * A control that can be disabled says why (shared/DESIGN.md §5), so `disabled`
+ * and `disabledReason` come as a pair: the compiler refuses a bare
+ * `disabled={…}`. The one request in flight is `busy`, which needs neither. A
+ * reason with nothing to disable is refused too: it would say nothing.
+ */
+export type Disablable =
+  | { disabled?: false; disabledReason?: undefined }
+  | { disabled: boolean; disabledReason: string };
 
 /**
  * A text button. Pill-shaped, as on Logjam GPS. `filled` is the ONE primary
@@ -11,30 +22,39 @@ type ButtonVariant = "filled" | "outline" | "danger" | "destructive" | "plain";
  * `compact` is the `--control-md` size for headers, bars and sheets. `busy`
  * swaps the leading glyph for a spinner and disables the button while its
  * request runs.
+ *
+ * `disabledReason` (UX §5) says why a disabled button is, and what to do: it
+ * shows as a tooltip on hover and on focus and a screen reader hears it as the
+ * description. A button that carries one stays FOCUSABLE (`aria-disabled`, and
+ * the press does nothing), because a disabled button can neither be tabbed to
+ * nor hovered for its tooltip.
  */
 export function Button({
   variant = "plain",
   compact = false,
   busy = false,
   disabled,
-  icon: Icon,
-  trailingIcon: TrailingIcon,
+  disabledReason,
+  icon,
+  trailingIcon,
   children,
   className,
   ref,
   type = "button",
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
-  compact?: boolean;
-  busy?: boolean;
-  icon?: LucideIcon;
-  trailingIcon?: LucideIcon;
-  children: ReactNode;
-  ref?: Ref<HTMLButtonElement>;
-}) {
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> &
+  Disablable & {
+    variant?: ButtonVariant;
+    compact?: boolean;
+    busy?: boolean;
+    icon?: Glyph;
+    trailingIcon?: Glyph;
+    children: ReactNode;
+    ref?: Ref<HTMLButtonElement>;
+  }) {
   const glyph = compact ? 14 : 16;
-  return (
+  const explained = Boolean(disabled && disabledReason && !busy);
+  const button = (describedBy?: string) => (
     <button
       ref={ref}
       type={type}
@@ -46,25 +66,34 @@ export function Button({
       ]
         .filter(Boolean)
         .join(" ")}
-      disabled={busy || disabled}
+      disabled={explained ? undefined : busy || disabled}
+      aria-disabled={explained || undefined}
+      aria-describedby={describedBy}
       aria-busy={busy || undefined}
       {...rest}
+      onClick={explained ? undefined : rest.onClick}
     >
       {busy ? (
-        <LoaderCircle size={glyph} aria-hidden className={classes.spinner} />
+        <Icon idea="loading" size={glyph} className={classes.spinner} />
       ) : (
-        Icon && <Icon size={glyph} aria-hidden />
+        icon && <Icon idea={icon} size={glyph} />
       )}
       {children}
-      {TrailingIcon && <TrailingIcon size={glyph} aria-hidden />}
+      {trailingIcon && <Icon idea={trailingIcon} size={glyph} />}
     </button>
+  );
+  if (!explained) return button();
+  return (
+    <Tooltip content={disabledReason as string}>
+      {(describedById) => button(describedById)}
+    </Tooltip>
   );
 }
 
 const ICON_TONE_CLASS = {
   filled: "tinted",
   danger: "danger",
-  onFill: "onFill",
+  onInverse: "onInverse",
 } as const;
 
 /**
@@ -73,33 +102,43 @@ const ICON_TONE_CLASS = {
  * state is "on" (a search with a query, filters that are active).
  */
 export function IconButton({
-  icon: Icon,
+  icon,
   label,
   tone = "default",
   size = 18,
   round = false,
+  disabled,
+  disabledReason,
   className,
   ref,
   type = "button",
   ...rest
-}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label"> & {
-  icon: LucideIcon;
-  label: string;
-  tone?: "default" | "filled" | "danger" | "onFill";
-  size?: number;
-  /** At the end of a pill (a toast, a strip, a notice): a `--control-sm`
-   *  circle. The host pads that end by (its height − that) / 2, so the circle
-   *  is concentric with the pill's end and neither hover nor focus crosses its
-   *  edge. */
-  round?: boolean;
-  ref?: Ref<HTMLButtonElement>;
-}) {
-  return (
+}: Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "children" | "aria-label" | "disabled"
+> &
+  Disablable & {
+    icon: Glyph;
+    label: string;
+    tone?: "default" | "filled" | "danger" | "onInverse";
+    size?: number;
+    /** At the end of a pill (a toast, a strip, a notice): a `--control-sm`
+     *  circle. The host pads that end by (its height − that) / 2, so the circle
+     *  is concentric with the pill's end and neither hover nor focus crosses its
+     *  edge. */
+    round?: boolean;
+    ref?: Ref<HTMLButtonElement>;
+  }) {
+  // The same rule as `Button`: with a reason it stays focusable, and the
+  // tooltip says label and reason together (the native title would say only the
+  // label).
+  const explained = Boolean(disabled && disabledReason);
+  const button = (describedBy?: string) => (
     <button
       ref={ref}
       type={type}
       aria-label={label}
-      title={label}
+      title={explained ? undefined : label}
       className={[
         classes.iconButton,
         tone !== "default" && classes[ICON_TONE_CLASS[tone]],
@@ -108,9 +147,19 @@ export function IconButton({
       ]
         .filter(Boolean)
         .join(" ")}
+      disabled={explained ? undefined : disabled}
+      aria-disabled={explained || undefined}
+      aria-describedby={describedBy}
       {...rest}
+      onClick={explained ? undefined : rest.onClick}
     >
-      <Icon size={size} aria-hidden />
+      <Icon idea={icon} size={size} />
     </button>
+  );
+  if (!explained) return button();
+  return (
+    <Tooltip content={`${label} — ${disabledReason}`}>
+      {(describedById) => button(describedById)}
+    </Tooltip>
   );
 }

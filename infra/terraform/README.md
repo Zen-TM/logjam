@@ -25,21 +25,25 @@ These are the checks `terraform-ci.yml` runs on a PR:
 terraform fmt -check -recursive infra/terraform
 terraform -chdir=infra/terraform/envs/prod init -backend=false -input=false
 terraform -chdir=infra/terraform/envs/prod validate
+terraform -chdir=infra/terraform/envs/prod test
 ```
 
-To check `bootstrap`, `envs/local` or `envs/github`, run the last two
-commands against that directory instead. For `envs/github`, also run its
-guard test, offline against a mocked provider, as `test-github` does:
+The last one is the prod guard test, offline against mocked providers, as
+`test-prod` runs it. To check `bootstrap`, `envs/local` or `envs/github`, run
+the init and validate commands against that directory instead. For
+`envs/github`, also run its guard test, offline against a mocked provider, as
+`test-github` does:
 
 ```sh
 terraform -chdir=infra/terraform/envs/github init -backend=false -input=false
 terraform -chdir=infra/terraform/envs/github test
 ```
 
-The prod and GitHub-settings plans run on your PR by themselves
-(`terraform-plan.yml`, jobs `plan-prod` and `plan-github`) and are posted as
-comments. Merging applies those plans
-([0026](../docs/decisions/0026-plan-fingerprint-covers-planned-values.md),
+The prod and GitHub-settings plans run on your PR (`terraform-plan.yml`, jobs
+`plan-prod` and `plan-github`) once the maintainer approves the run, and are
+posted as comments. A PR that changes no infra skips them
+([0027](../../docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md)). Merging applies those plans
+([0026](../../docs/decisions/0026-plan-fingerprint-covers-planned-values.md),
 [0025](../../docs/decisions/0025-github-settings-in-terraform.md)).
 
 ## Read prod (maintainer's AWS access)

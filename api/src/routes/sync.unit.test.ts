@@ -90,6 +90,31 @@ describe("conflictReceipts (§6 detection, arrival-order resolution)", () => {
       ),
     ).toEqual([{ field: "placeIds", serverValue: ["b", "a"] }]);
   });
+
+  // A replay after a lost reply meets the row its own first send wrote. jsonb
+  // hands object keys back in its own order and several writers trim a name,
+  // so the stored value can differ from the sent one in representation only.
+  // Mutation: compare with a bare JSON.stringify again.
+  it("a value stored in another representation is the same value", () => {
+    expect(
+      conflictReceipts(
+        BASE,
+        new Date(LATER),
+        { fieldValues: { quality: 4, hours: 9 }, name: " Rim track " },
+        { fieldValues: { hours: 9, quality: 4 }, name: "Rim track" },
+      ),
+    ).toEqual([]);
+    expect(
+      conflictReceipts(
+        BASE,
+        new Date(LATER),
+        { fieldValues: { quality: 4, hours: 9 } },
+        { fieldValues: { hours: 8, quality: 4 } },
+      ),
+    ).toEqual([
+      { field: "fieldValues", serverValue: { hours: 8, quality: 4 } },
+    ]);
+  });
 });
 
 describe("parsePushOp", () => {

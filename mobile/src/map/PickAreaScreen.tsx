@@ -34,7 +34,7 @@
 // device. The framed box is returned in memory (`pickedArea.ts`) and reaches
 // nothing but the filter state on the screen that asked.
 import { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import {
   Camera,
@@ -47,19 +47,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
-import { Button } from "../ui";
+import { spacing, makeStyles } from "../theme";
+import { Button, Notice } from "../ui";
 import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
+import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import { SelectionFrame } from "./SelectionFrame";
 import {
   bboxToFrame,
@@ -106,6 +107,8 @@ export function PickAreaScreen({
   onCancel: () => void;
   onConfirm: (area: RegionBbox) => void;
 }) {
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is honoured on the first render only, and
   // re-reading the module store mid-session would move a map the user is
@@ -121,9 +124,9 @@ export function PickAreaScreen({
   const [viewport, setViewport] = useState<FrameViewport | null>(null);
 
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
 
   // Saved regions count here as they do everywhere else: a picker that needed
@@ -299,13 +302,13 @@ export function PickAreaScreen({
         ) : null}
       </View>
 
+      <MapBackButton top={insets.top + spacing(2)} onPress={onCancel} />
+
       <View
         style={[styles.hint, { top: insets.top + spacing(2) }]}
         pointerEvents="none"
       >
-        <Text style={styles.hintText}>
-          Move the map, drag the edges to frame an area
-        </Text>
+        <Notice>Move the map, drag the edges to frame an area</Notice>
       </View>
 
       {/* NO `insets.bottom`: this screen is pushed inside a tab stack, so the
@@ -317,7 +320,7 @@ export function PickAreaScreen({
         <View style={styles.action}>
           <Button
             label="Use this area"
-            icon="check"
+            icon="done"
             // Null only until the map has reported its first bounds — a second
             // or two on launch, not a state the user can get stuck in.
             disabled={area == null}
@@ -329,21 +332,15 @@ export function PickAreaScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+const useStyles = makeStyles((theme) => ({
+  root: { flex: 1, backgroundColor: theme.page },
+  // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
+  // was dark on dark in Daylight).
+  // After the back button, which owns the top left.
   hint: {
     position: "absolute",
-    left: spacing(2),
+    left: MAP_BACK_SPACE,
     right: spacing(2),
-    backgroundColor: scrim.heavy,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
-  hintText: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
   },
   actions: {
     position: "absolute",
@@ -354,7 +351,7 @@ const styles = StyleSheet.create({
     gap: spacing(1.5),
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   action: { flex: 1 },
-});
+}));

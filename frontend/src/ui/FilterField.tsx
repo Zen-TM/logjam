@@ -1,5 +1,4 @@
 import { useId, type ReactNode } from "react";
-import { X } from "lucide-react";
 import { IconButton } from "./Button";
 import classes from "./FilterField.module.css";
 
@@ -36,7 +35,7 @@ export function FilterField({
         </span>
         {active && (
           <IconButton
-            icon={X}
+            icon="close"
             size={16}
             label={`Clear the ${label} filter`}
             onClick={onClear}

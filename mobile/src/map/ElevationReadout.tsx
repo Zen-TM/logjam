@@ -3,10 +3,10 @@
 // Renders NOTHING until there is a profile: an empty row that later fills in
 // reads as broken, and a "—" placeholder in a tool used offline would sit
 // there permanently implying something is wrong. Absence is the honest state.
-import { StyleSheet, Text, View } from "react-native";
-import type { ElevationProfile } from "@logjam/shared";
+import { Text, View } from "react-native";
+import { MAP_MEASURE, type ElevationProfile } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles } from "../theme";
 
 export function ElevationReadout({
   profile,
@@ -15,16 +15,18 @@ export function ElevationReadout({
   profile: ElevationProfile | null;
   loading: boolean;
 }) {
+  const styles = useStyles();
+
   if (!profile) {
     return loading ? (
-      <Text style={styles.pending}>Reading the terrain…</Text>
+      <Text style={styles.pending}>{MAP_MEASURE.copy.readingTerrain}</Text>
     ) : null;
   }
   return (
     <View style={styles.row}>
       <Text
         style={styles.value}
-        accessibilityLabel={`Climb ${Math.round(profile.gainM)} metres`}
+        accessibilityLabel={`Ascent ${Math.round(profile.gainM)} metres`}
       >
         ↑ {Math.round(profile.gainM)} m
       </Text>
@@ -43,12 +45,11 @@ export function ElevationReadout({
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "baseline", gap: spacing(1.25) },
+const useStyles = makeStyles((theme, textRole) => ({
+  row: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
   value: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
+    ...textRole.control,
+    color: theme.text,
     fontVariant: ["tabular-nums"],
   },
   range: {
@@ -57,4 +58,4 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   pending: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

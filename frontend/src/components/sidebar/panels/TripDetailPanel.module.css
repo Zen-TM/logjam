@@ -25,7 +25,7 @@
 .date {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .pills {
@@ -43,7 +43,7 @@
 .muted {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .notes {
@@ -77,7 +77,7 @@
 .attribute dt {
   flex-shrink: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .attribute dd {

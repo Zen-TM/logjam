@@ -22,6 +22,7 @@ import {
   moveAnchor,
   type RouteDraft,
   type RoutePoint,
+  MAP_INK,
 } from "@logjam/shared";
 
 import { dragIsTap } from "./anchorHit";
@@ -32,7 +33,7 @@ import {
   arrowSegmentFeatures,
   routeArrowStyle,
 } from "./routeArrowStyle";
-import { theme } from "../theme";
+import { touchTargetMin, useTheme, withAlpha } from "../theme";
 
 /**
  * Anchor sizes and fills.
@@ -92,7 +93,7 @@ export function RouteDraftLayer({
   draft,
   dotted,
   degreesPerDp,
-  color = theme.accent,
+  color,
   selectedIndex = null,
   onAnchorDrag,
   onAnchorDragEnd,
@@ -127,6 +128,9 @@ export function RouteDraftLayer({
    */
   onDragActiveChange?: (dragging: boolean) => void;
 }) {
+  const theme = useTheme();
+  color ??= theme.accent;
+
   /**
    * The anchor being dragged, held HERE rather than in the screen's state.
    *
@@ -259,8 +263,8 @@ export function RouteDraftLayer({
                 "start",
                 color,
                 "end",
-                theme.primary,
-                theme.textPrimary,
+                MAP_INK.casing,
+                MAP_INK.label,
               ],
             ],
             circleStrokeWidth: ["case", ["get", "selected"], 3, 2],
@@ -270,7 +274,7 @@ export function RouteDraftLayer({
             circleStrokeColor: [
               "case",
               ["get", "selected"],
-              theme.textPrimary,
+              MAP_INK.label,
               color,
             ],
           }}
@@ -342,15 +346,17 @@ export function RouteDraftLayer({
 
 const styles = StyleSheet.create({
   // Invisible, and deliberately far bigger than the dot it grabs: the visible
-  // anchor is ~14px and a 14px touch target is unhittable with a thumb.
+  // anchor is ~14px and a 14px touch target is unhittable with a thumb. A
+  // ViewAnnotation's child cannot take a hitSlop, so the view is the 48 dp
+  // target itself.
   //
   // The alpha is 0.01 rather than 0: MLRN rasterises the child view, and a
   // fully empty bitmap makes it fall back to its own red default pin. One
   // percent of a colour is a bitmap.
   handle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.01)",
+    width: touchTargetMin,
+    height: touchTargetMin,
+    borderRadius: touchTargetMin / 2,
+    backgroundColor: withAlpha(MAP_INK.ring, 0.01),
   },
 });

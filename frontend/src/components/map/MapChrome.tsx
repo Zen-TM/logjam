@@ -8,38 +8,21 @@ import {
 } from "react";
 import type * as maplibregl from "maplibre-gl";
 import {
-  createLucideIcon,
-  LocateFixed,
-  Minus,
-  Mountain,
-  PencilRuler,
-  Plus,
-  type LucideIcon,
-} from "lucide-react";
-import {
   MapButton,
   MapButtonGroup,
+  Icon,
   Menu,
+  NorthNeedle,
   useEscape,
   type MenuEntry,
+  type Glyph,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
-/** A compass NEEDLE, not lucide's Compass: that glyph is a symbol for
- *  "navigation" whose needle points nowhere in particular, while this one
- *  rotates with the map, so its shape is the reading. North is the filled half. */
-const NorthNeedle = createLucideIcon("north-needle", [
-  [
-    "path",
-    { d: "M12 2.5 16.5 12h-9z", className: classes.needleNorth, key: "north" },
-  ],
-  ["path", { d: "M7.5 12h9L12 21.5z", key: "south" }],
-]);
-
 export type MapTool =
-  | { id: string; label: string; icon: LucideIcon; onSelect: () => void }
-  | { id: string; label: string; icon: LucideIcon; menu: readonly MenuEntry[] };
+  | { id: string; label: string; icon: Glyph; onSelect: () => void }
+  | { id: string; label: string; icon: Glyph; menu: readonly MenuEntry[] };
 
 type LocateState = "off" | "waiting" | "on" | "error";
 
@@ -91,7 +74,9 @@ export default function MapChrome({
   const [locate, setLocate] = useState<LocateState>("off");
   const [toolsOpen, setToolsOpen] = useState(false);
   const trayId = useId();
-  const trayRef = useRef<HTMLDivElement>(null);
+  // The tray AND its button: opening the tray leaves focus on the button, so
+  // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
+  const toolsLineRef = useRef<HTMLDivElement>(null);
   const toolsButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -137,7 +122,7 @@ export default function MapChrome({
     };
   }, [map, geolocate, toast]);
 
-  useEscape(toolsOpen ? trayRef : null, () => {
+  useEscape(toolsOpen ? toolsLineRef : null, () => {
     setToolsOpen(false);
     toolsButtonRef.current?.focus();
   });
@@ -158,10 +143,9 @@ export default function MapChrome({
       <div className={classes.topRight}>{layersButton}</div>
 
       <div className={classes.actions}>
-        <div className={classes.toolsLine}>
+        <div ref={toolsLineRef} className={classes.toolsLine}>
           {toolsOpen && (
             <div
-              ref={trayRef}
               id={trayId}
               role="group"
               aria-label="Tools"
@@ -184,9 +168,9 @@ export default function MapChrome({
                         type="button"
                         className={classes.trayItem}
                       >
-                        <tool.icon
+                        <Icon
+                          idea={tool.icon}
                           size={18}
-                          aria-hidden
                           className={classes.trayGlyph}
                         />
                         {tool.label}
@@ -200,9 +184,9 @@ export default function MapChrome({
                     className={classes.trayItem}
                     onClick={() => runTool(tool.onSelect)}
                   >
-                    <tool.icon
+                    <Icon
+                      idea={tool.icon}
                       size={18}
-                      aria-hidden
                       className={classes.trayGlyph}
                     />
                     {tool.label}
@@ -213,7 +197,9 @@ export default function MapChrome({
           )}
           <MapButton
             ref={toolsButtonRef}
-            icon={PencilRuler}
+            // Logjam GPS's glyphs for the same button; the ruler is the measure
+            // tool's alone (one idea, one icon).
+            icon={toolsOpen ? "close" : "add"}
             label="Tools"
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}
@@ -221,14 +207,14 @@ export default function MapChrome({
           />
         </div>
         <MapButton
-          icon={Mountain}
+          icon="lidar"
           label="3D terrain"
           pressed={is3D}
           onClick={onToggle3D}
           disabled={!map}
         />
         <MapButton
-          icon={LocateFixed}
+          icon="locate"
           label="Show my location"
           pressed={locate === "on" || locate === "waiting"}
           aria-busy={locate === "waiting"}
@@ -237,13 +223,13 @@ export default function MapChrome({
         />
         <MapButtonGroup label="Zoom">
           <MapButton
-            icon={Plus}
+            icon="zoomIn"
             label="Zoom in"
             disabled={!map || zoom.atMax}
             onClick={() => map?.zoomIn()}
           />
           <MapButton
-            icon={Minus}
+            icon="zoomOut"
             label="Zoom out"
             disabled={!map || zoom.atMin}
             onClick={() => map?.zoomOut()}

@@ -13,7 +13,7 @@
 // they used to gate on connection, back when an account's list lived on the
 // user record.
 //
-// LAYOUT: a plain list, so per DESIGN.md §2 it keeps `ScreenScroll` and the
+// LAYOUT: a plain list, so per DESIGN.md it keeps `ScreenScroll` and the
 // native header rather than being given a hero. There is no headline metric
 // here; a hero whose only content is the word "Settings" is exactly the pattern
 // the hero rule exists to replace.
@@ -24,10 +24,19 @@
 // §10's "Needs an account".
 //
 // PRIVACY: nothing here reads place data.
-import { useCallback, useState } from "react";
-import { StyleSheet, Text } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { ATTRIBUTE_NOUN, type ScopedCustomFieldDef } from "@logjam/shared";
+import { Fragment, useCallback, useState, type ReactNode } from "react";
+import { Text } from "react-native";
+import {
+  ATTRIBUTE_NOUN,
+  contractSectionKeys,
+  isSystemFieldDef,
+  ownAttributeCountLabel,
+  ownTypeCountLabel,
+  SETTINGS,
+  SETTINGS_LIST,
+  type ScopedCustomFieldDef,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -42,11 +51,13 @@ import {
   isSystemPlaceType,
   PlaceTypeList,
   usePlaceTypeForm,
+  type NewPlaceType,
 } from "../places/PlaceTypesEditor";
+import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
-import { fontSize, theme } from "../theme";
+import { fontSize, makeStyles, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -55,6 +66,8 @@ import {
   SectionHeader,
   Toast,
   type ToastMessage,
+  Icon,
+  type Glyph,
 } from "../ui";
 
 /** The sub-pages, in the order someone goes looking for them. */
@@ -65,16 +78,18 @@ export type SettingsPage =
   | "offline"
   | "privacy";
 
+const copy = SETTINGS.copy;
+
 const PAGES: {
   page: SettingsPage;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   title: string;
 }[] = [
-  { page: "display", icon: "type", title: "Display" },
+  { page: "display", icon: "typography", title: "Display" },
   { page: "map", icon: "map", title: "Map" },
-  { page: "notifications", icon: "bell", title: "Notifications" },
-  { page: "offline", icon: "download", title: "Offline and storage" },
-  { page: "privacy", icon: "lock", title: "Privacy and security" },
+  { page: "notifications", icon: "notifications", title: "Notifications" },
+  { page: "offline", icon: "device", title: "Offline and storage" },
+  { page: "privacy", icon: "private", title: "Privacy and security" },
 ];
 
 type SheetMode =
@@ -86,6 +101,7 @@ type SheetMode =
       editing: ScopedCustomFieldDef | null;
     }
   | { kind: "placeTypes" }
+  | { kind: "typeAttributes"; type: NewPlaceType }
   | { kind: "placeTypeForm"; editing: MirrorPlaceType | null };
 
 export function SettingsScreen({
@@ -93,6 +109,9 @@ export function SettingsScreen({
 }: {
   onOpenPage: (page: SettingsPage) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -122,8 +141,14 @@ export function SettingsScreen({
 
   const placeTypes = useMirrorPlaceTypes();
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet.kind === "placeTypeForm",
     editing: sheet.kind === "placeTypeForm" ? sheet.editing : null,
     onSaved: (message) => notify(message),
+    onDone: () => setSheet({ kind: "placeTypes" }),
+    onAdded: (type) => setSheet({ kind: "typeAttributes", type }),
+  });
+  const typeAttributes = useTypeAttributesStep({
+    type: sheet.kind === "typeAttributes" ? sheet.type : null,
     onDone: () => setSheet({ kind: "placeTypes" }),
   });
 
@@ -134,6 +159,7 @@ export function SettingsScreen({
       ? sheet.entity
       : "place";
   const fieldForm = useCustomFieldForm({
+    open: sheet.kind === "fieldForm",
     entity: formEntity,
     defs: defsFor(formEntity),
     editing: sheet.kind === "fieldForm" ? sheet.editing : null,
@@ -144,16 +170,21 @@ export function SettingsScreen({
     onDone: () => setSheet({ kind: "fields", entity: formEntity }),
   });
 
-  return (
-    <>
-      <ScreenScroll>
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SETTINGS, "gps">,
+    () => ReactNode
+  > = {
+    preferences: () => (
+      <>
         {PAGES.map(({ page, icon, title }) => (
           <Row
             key={page}
             icon={icon}
             title={title}
             // Notifications and Offline & Storage are account-backed pages, so
-            // they say so on the way in rather than after the tap (§10). The
+            // they say so on the way in rather than after the tap (DESIGN.md). The
             // offline tab's switches all govern account-backed downloads or
             // sync, none of which a guest has.
             {...(page === "notifications"
@@ -162,64 +193,86 @@ export function SettingsScreen({
                 ? capabilityRowProps("offlineSettings", accountState, online)
                 : {})}
             onPress={() => onOpenPage(page)}
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           />
         ))}
-
+      </>
+    ),
+    categories: () => (
+      <>
         {/* A list you keep, not a preference you set — which is why the LIST
             sits here with the attribute lists. The form is also one tap from
             the Places tab's type rail ("New type", the chip at the end of it),
             because that is where a user notices they want another one; editing
             and deleting stay here, with the list of them. */}
-        <SectionHeader label="Your own categories" />
+        <SectionHeader title={copy.categories} />
         <Row
-          icon="layers"
-          title="Place types"
-          subtitle={placeTypeCountLabel(placeTypes.data ?? [])}
+          icon="place"
+          title={copy.placeTypes}
+          subtitle={ownTypeCountLabel(
+            (placeTypes.data ?? []).filter((type) => !isSystemPlaceType(type))
+              .length,
+          )}
           onPress={() => setSheet({ kind: "placeTypes" })}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
-
-        <SectionHeader label="Your own attributes" />
+      </>
+    ),
+    attributes: () => (
+      <>
+        <SectionHeader title={copy.attributes} />
         <Row
           icon="tag"
-          title="Trip attributes"
-          subtitle={fieldCountLabel(tripFields.defs.length)}
+          title={copy.tripAttributes}
+          subtitle={ownAttributeCountLabel(ownCount(tripFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
         <Row
           icon="tag"
-          title="Place attributes"
-          subtitle={fieldCountLabel(placeFields.defs.length)}
+          title={copy.placeAttributes}
+          subtitle={ownAttributeCountLabel(ownCount(placeFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
-
-        <SectionHeader label="About" />
+      </>
+    ),
+    about: () => (
+      <>
+        <SectionHeader title={copy.about} />
         <Text style={styles.version}>{CLIENT_VERSION}</Text>
+      </>
+    ),
+  };
+
+  return (
+    <>
+      <ScreenScroll>
+        {contractSectionKeys(SETTINGS, "gps").map((key) => (
+          <Fragment key={key}>{sections[key]()}</Fragment>
+        ))}
       </ScreenScroll>
 
       {/* One sheet, two modes (§6: never a second sheet — swap the content). */}
       <BottomSheet
         visible={sheet.kind !== "closed"}
         // Inside the form, a drag or a backdrop tap means "back to the list".
-        onClose={() =>
+        onClose={() => {
+          if (sheet.kind === "typeAttributes") {
+            typeAttributes.onClose();
+            return;
+          }
           setSheet((current) =>
             current.kind === "fieldForm"
               ? { kind: "fields", entity: current.entity }
               : { kind: "closed" },
-          )
+          );
+        }}
+        title={
+          sheet.kind === "typeAttributes"
+            ? typeAttributes.title
+            : sheetTitle(sheet)
         }
-        title={sheetTitle(sheet)}
         // A sub-mode gets an arrow back to the list it came from, rather than
         // only a button at the far end of a scroll.
         onBack={
@@ -227,15 +280,19 @@ export function SettingsScreen({
             ? () => setSheet({ kind: "fields", entity: sheet.entity })
             : sheet.kind === "placeTypeForm"
               ? () => setSheet({ kind: "placeTypes" })
-              : undefined
+              : sheet.kind === "typeAttributes"
+                ? typeAttributes.onBack
+                : undefined
         }
         footer={
-          sheet.kind === "placeTypeForm" ? (
+          sheet.kind === "typeAttributes" ? (
+            typeAttributes.footer
+          ) : sheet.kind === "placeTypeForm" ? (
             placeTypeForm.footer
           ) : sheet.kind === "placeTypes" ? (
             <Button
-              label="Add a place type"
-              icon="plus"
+              label={SETTINGS_LIST.copy.addPlaceType}
+              icon="add"
               onPress={() => setSheet({ kind: "placeTypeForm", editing: null })}
             />
           ) : sheet.kind === "fieldForm" ? (
@@ -245,8 +302,8 @@ export function SettingsScreen({
             // for, and a list long enough to need scrolling is exactly the list
             // you came here to add to.
             <Button
-              label={ATTRIBUTE_NOUN.add}
-              icon="plus"
+              label={SETTINGS_LIST.copy.addAttribute}
+              icon="add"
               onPress={() =>
                 setSheet({
                   kind: "fieldForm",
@@ -281,6 +338,7 @@ export function SettingsScreen({
           />
         ) : null}
         {sheet.kind === "placeTypeForm" ? placeTypeForm.body : null}
+        {sheet.kind === "typeAttributes" ? typeAttributes.body : null}
       </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -289,7 +347,8 @@ export function SettingsScreen({
 }
 
 function sheetTitle(sheet: SheetMode): string {
-  if (sheet.kind === "closed") return "";
+  // The attributes step titles itself (`useTypeAttributesStep`).
+  if (sheet.kind === "closed" || sheet.kind === "typeAttributes") return "";
   if (sheet.kind === "placeTypes") return "Place types";
   if (sheet.kind === "placeTypeForm") {
     return sheet.editing ? sheet.editing.name : "New place type";
@@ -301,19 +360,10 @@ function sheetTitle(sheet: SheetMode): string {
     : `New ${noun.toLowerCase()} ${ATTRIBUTE_NOUN.one}`;
 }
 
-function fieldCountLabel(count: number): string {
-  if (count === 0) return "None yet";
-  return `${count} ${count === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
-}
+/** Only the user's OWN attributes are counted: a built-in is not theirs. */
+const ownCount = (defs: ScopedCustomFieldDef[]) =>
+  defs.filter((def) => !isSystemFieldDef(def)).length;
 
-/** Only the user's OWN types are counted: "3 types" for an account that has
- *  made none reads as a list they are already keeping. */
-function placeTypeCountLabel(types: MirrorPlaceType[]): string {
-  const own = types.filter((type) => !isSystemPlaceType(type)).length;
-  if (own === 0) return "Built-ins only";
-  return `${own} of your own`;
-}
-
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   version: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

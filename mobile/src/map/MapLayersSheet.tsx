@@ -10,9 +10,9 @@
 //   Layers   — what is drawn on top of it?
 //   Offline  — what works with no signal?
 //
-// Tabs rather than a second sheet, per DESIGN.md §6: one sheet, content swapped
+// Tabs rather than a second sheet, per DESIGN.md: one sheet, content swapped
 // in place. The rail is pinned, so switching tabs never scrolls the list you are
-// working in out of reach (§2).
+// working in out of reach (DESIGN.md).
 //
 // The Layers tab is one row PER KIND, not per file: a phone with thirty tracks
 // and a dozen GeoPDFs made that tab a scroll of near-identical switches with no
@@ -34,25 +34,52 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { BASEMAP_CATALOG } from "@logjam/shared";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Text, View } from "react-native";
+import {
+  BASEMAP_CATALOG,
+  contractSectionKeys,
+  MAP_LAYERS,
+  MAP_OVERLAYS,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import {
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+  controlSize,
+  opacity,
+} from "../theme";
 import {
   BottomSheet,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   Toggle,
+  Icon,
+  type Glyph,
+  SwitchRow,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import type { BasemapId, MapArtifact } from "./sourceResolver";
+import {
+  hasSavedImageryContours,
+  type BasemapId,
+  type MapArtifact,
+} from "./sourceResolver";
 
-type Tab = "basemap" | "layers" | "offline";
+type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
+
+const copy = MAP_LAYERS.copy;
+
+const TAB_LABEL: Record<Tab, string> = {
+  basemap: copy.tabBasemap,
+  overlays: copy.tabOverlays,
+  offline: copy.tabOffline,
+};
 
 /**
  * One switchable kind of thing drawn over the basemap.
@@ -63,7 +90,7 @@ type Tab = "basemap" | "layers" | "offline";
  */
 export type LayerToggleEntry = {
   key: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   hue: string;
   title: string;
   /** How many of this kind exist — NOT how many are visible. */
@@ -71,7 +98,7 @@ export type LayerToggleEntry = {
   /**
    * Live state worth a second line, and ONLY that: "2 not downloaded yet" on a
    * layer that is drawing less than its count. Never a description of what the
-   * layer is (DESIGN.md §7) — those are what this tab just lost.
+   * layer is (DESIGN.md) — those are what this tab just lost.
    */
   note?: string;
   value: boolean;
@@ -114,6 +141,8 @@ export function MapLayersSheet({
   connectivity,
   basemapId,
   onBasemapChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
   artifacts,
   layers,
   overlays,
@@ -127,12 +156,15 @@ export function MapLayersSheet({
   onOfflineOnlyChange,
   onSaveArea,
   onOpenSaved,
+  onImportFile,
 }: {
   visible: boolean;
   onClose: () => void;
   connectivity: Connectivity;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -150,56 +182,69 @@ export function MapLayersSheet({
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
   onOpenSaved: (category: "region") => void;
+  /** The overlays list ends with the way to add one: the existing importer. */
+  onImportFile: () => void;
 }) {
+  const styles = useStyles();
+
   const [tab, setTab] = useState<Tab>("basemap");
   const online = connectivity === "online";
 
+  // Exhaustive by type: a tab the contract names and this sheet does not
+  // draw, or the reverse, fails `tsc` (`MAP_LAYERS`, shared/src/contracts).
+  const panes: Record<Tab, () => ReactNode> = {
+    basemap: () => (
+      <BasemapTab
+        basemapId={basemapId}
+        onBasemapChange={onBasemapChange}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={onContoursOverImageryChange}
+        // Offline they come only from saved clips, so the switch is offered
+        // only when some saved area has them with imagery.
+        offersContours={online || hasSavedImageryContours(artifacts)}
+        online={online}
+      />
+    ),
+    overlays: () => (
+      <LayersTab
+        layers={layers}
+        overlays={overlays}
+        enabledOverlays={enabledOverlays}
+        onToggleOverlay={onToggleOverlay}
+        mutedAreas={mutedAreas}
+        onSetAreasMuted={onSetAreasMuted}
+        showOverlays={showOverlays}
+        onShowOverlaysChange={onShowOverlaysChange}
+        onImportFile={onImportFile}
+      />
+    ),
+    offline: () => (
+      <OfflineTab
+        online={online}
+        offlineOnly={offlineOnly}
+        onOfflineOnlyChange={onOfflineOnlyChange}
+        onSaveArea={onSaveArea}
+        onOpenSaved={onOpenSaved}
+        artifacts={artifacts}
+        visible={visible}
+      />
+    ),
+  };
+
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Map layers">
+    <BottomSheet visible={visible} onClose={onClose} title={MAP_LAYERS.title}>
       <View style={styles.rail}>
-        <SegmentedControl
-          options={[
-            { value: "basemap", label: "Basemap" },
-            { value: "layers", label: "Layers" },
-            { value: "offline", label: "Offline" },
-          ]}
+        <ChipRail
+          options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
+            value: key,
+            label: TAB_LABEL[key],
+          }))}
           value={tab}
           onChange={(next) => setTab(next as Tab)}
         />
       </View>
 
-      {tab === "basemap" ? (
-        <BasemapTab
-          basemapId={basemapId}
-          onBasemapChange={onBasemapChange}
-          online={online}
-        />
-      ) : null}
-
-      {tab === "layers" ? (
-        <LayersTab
-          layers={layers}
-          overlays={overlays}
-          enabledOverlays={enabledOverlays}
-          onToggleOverlay={onToggleOverlay}
-          mutedAreas={mutedAreas}
-          onSetAreasMuted={onSetAreasMuted}
-          showOverlays={showOverlays}
-          onShowOverlaysChange={onShowOverlaysChange}
-        />
-      ) : null}
-
-      {tab === "offline" ? (
-        <OfflineTab
-          online={online}
-          offlineOnly={offlineOnly}
-          onOfflineOnlyChange={onOfflineOnlyChange}
-          onSaveArea={onSaveArea}
-          onOpenSaved={onOpenSaved}
-          artifacts={artifacts}
-          visible={visible}
-        />
-      ) : null}
+      {panes[tab]()}
     </BottomSheet>
   );
 }
@@ -207,12 +252,21 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
+  offersContours,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
+  offersContours: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.body}>
       {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
@@ -227,29 +281,43 @@ function BasemapTab({
         const unavailable = !online && !entry.offlineCapable;
         const active = basemapId === id;
         return (
-          <Row
-            key={entry.id}
-            leading={<BasemapThumb basemapId={id} />}
-            title={entry.name}
-            // Name + sample tile only. The blurbs were a sentence each on six
-            // rows the user scrolls past every time, and the thumbnail already
-            // says what the map looks like far better than the words did. The
-            // subtitle now carries STATE and nothing else — which is why the
-            // one that survives is the offline reason (DESIGN.md §10).
-            subtitle={unavailable ? "Needs a connection" : undefined}
-            disabled={unavailable}
-            onPress={() => onBasemapChange(id)}
-            // No "Showing" pill: the selection is a state of the row, not a
-            // label on it. A filled check on an accent-lit card says it at a
-            // glance, and a downloaded-region pill used to say "Offline" for a
-            // basemap of which one small area is on the phone.
-            right={
-              active ? (
-                <Feather name="check-circle" size={22} color={theme.accent} />
-              ) : null
-            }
-            selected={active}
-          />
+          <Fragment key={entry.id}>
+            <Row
+              leading={<BasemapThumb basemapId={id} />}
+              title={entry.name}
+              // Name + sample tile only. The blurbs were a sentence each on six
+              // rows the user scrolls past every time, and the thumbnail already
+              // says what the map looks like far better than the words did. The
+              // subtitle now carries STATE and nothing else — which is why the
+              // one that survives is the offline reason (DESIGN.md).
+              subtitle={unavailable ? "Needs a connection" : undefined}
+              disabled={unavailable}
+              onPress={() => onBasemapChange(id)}
+              // No "Showing" pill: the selection is a state of the row, not a
+              // label on it. A filled check on an accent-lit card says it at a
+              // glance, and a downloaded-region pill used to say "Offline" for a
+              // basemap of which one small area is on the phone.
+              right={
+                active ? (
+                  <Icon idea="success" size={22} color={theme.accent} />
+                ) : null
+              }
+              selected={active}
+            />
+            {/* Imagery has no contours of its own; the vector basemap always
+              draws them (shared nswContours.ts). */}
+            {active && id === "six-imagery" && offersContours ? (
+              <SwitchRow
+                title="Contours"
+                description={
+                  online ? undefined : "Only in saved areas that include them"
+                }
+                style={styles.itemRow}
+                checked={contoursOverImagery}
+                onChange={onContoursOverImageryChange}
+              />
+            ) : null}
+          </Fragment>
         );
       })}
     </View>
@@ -259,9 +327,12 @@ function BasemapTab({
 /**
  * One kind of layer: its glyph, how many exist, and a switch. No subtitle — the
  * count IS the state, and the sentence that used to sit there explained a thing
- * the user can see on the map behind the sheet (DESIGN.md §7).
+ * the user can see on the map behind the sheet (DESIGN.md).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const expandable = (entry.children?.length ?? 0) > 0;
 
@@ -279,12 +350,12 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
             <View style={styles.trailing}>
               <Text style={styles.count}>{entry.count}</Text>
               <Toggle
-                value={entry.value}
-                onValueChange={entry.onChange}
+                checked={entry.value}
+                onChange={entry.onChange}
                 accessibilityLabel={`Show ${entry.title}`}
               />
-              <Feather
-                name={expanded ? "chevron-up" : "chevron-down"}
+              <Icon
+                idea={expanded ? "collapse" : "expand"}
                 size={20}
                 color={theme.textMuted}
               />
@@ -325,21 +396,14 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
       style={entry.inert ? styles.inert : undefined}
       pointerEvents={entry.inert ? "none" : "auto"}
     >
-      <Row
+      <SwitchRow
         icon={entry.icon}
         hue={entry.hue}
         title={entry.title}
-        subtitle={entry.note}
-        right={
-          <View style={styles.trailing}>
-            <Text style={styles.count}>{entry.count}</Text>
-            <Toggle
-              value={entry.value}
-              onValueChange={entry.onChange}
-              accessibilityLabel={`Show ${entry.title}`}
-            />
-          </View>
-        }
+        description={entry.note}
+        badge={<Text style={styles.count}>{entry.count}</Text>}
+        checked={entry.value}
+        onChange={entry.onChange}
       />
     </View>
   );
@@ -354,6 +418,7 @@ function LayersTab({
   onSetAreasMuted,
   showOverlays,
   onShowOverlaysChange,
+  onImportFile,
 }: {
   layers: LayerToggleEntry[];
   overlays: OverlayEntry[];
@@ -363,39 +428,52 @@ function LayersTab({
   onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
   showOverlays: boolean;
   onShowOverlaysChange: (next: boolean) => void;
+  onImportFile: () => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const expandable = overlays.length > 0;
 
-  return (
-    <View style={styles.body}>
-      {layers.map((entry) => (
-        <LayerRow key={entry.key} entry={entry} />
-      ))}
+  const entryRow = (key: string) => {
+    const entry = layers.find((candidate) => candidate.key === key);
+    return entry ? <LayerRow entry={entry} /> : null;
+  };
 
-      {/* LAST, and the only row that opens — see the header. Its "items" are
-          five layer TYPES over an area, not five files, so the choice between
-          them is the map itself rather than an inventory question. */}
+  // Exhaustive by type: a row the contract names and this tab does not draw, or
+  // the reverse, fails `tsc` (`MAP_OVERLAYS`, shared/src/contracts).
+  const rows: Record<
+    SectionKeysOn<typeof MAP_OVERLAYS, "gps">,
+    () => ReactNode
+  > = {
+    places: () => entryRow("places"),
+    ways: () => entryRow("ways"),
+    geoPdfs: () => entryRow("geoPdfs"),
+    lidarTopos: () => (
       <View style={styles.group}>
         <Row
-          icon="layers"
+          icon="lidar"
           hue={assetHue.overlay}
-          title="Topo overlays"
+          title={copy.lidarTopos}
           onPress={
-            expandable ? () => setExpanded((current) => !current) : undefined
+            expandable
+              ? () => setExpanded((current) => !current)
+              : () => onShowOverlaysChange(!showOverlays)
           }
-          accessibilityLabel={`Topo overlays — ${expanded ? "hide" : "show"} the list`}
+          accessibilityLabel={`${copy.lidarTopos} — ${expanded ? "hide" : "show"} the list`}
           right={
             <View style={styles.trailing}>
               <Text style={styles.count}>{overlays.length}</Text>
               <Toggle
-                value={showOverlays}
-                onValueChange={onShowOverlaysChange}
-                accessibilityLabel="Show topo overlays"
+                checked={showOverlays}
+                onChange={onShowOverlaysChange}
+                accessibilityLabel={`Show ${copy.lidarTopos}`}
               />
               {expandable ? (
-                <Feather
-                  name={expanded ? "chevron-up" : "chevron-down"}
+                <Icon
+                  idea={expanded ? "collapse" : "expand"}
                   size={20}
                   color={theme.textMuted}
                 />
@@ -415,6 +493,22 @@ function LayersTab({
           </View>
         ) : null}
       </View>
+    ),
+    importFile: () => (
+      <Row
+        icon="upload"
+        hue={theme.neutral}
+        title={copy.importFile}
+        onPress={onImportFile}
+      />
+    ),
+  };
+
+  return (
+    <View style={styles.body}>
+      {contractSectionKeys(MAP_OVERLAYS, "gps").map((key) => (
+        <Fragment key={key}>{rows[key]()}</Fragment>
+      ))}
     </View>
   );
 }
@@ -454,6 +548,8 @@ function TopoOverlayList({
   mutedAreas: ReadonlySet<string>;
   onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
 }) {
+  const { assetHue } = useHues();
+
   // Both groupings keep first-seen order, which is the order MapScreen composed
   // the jobs in (newest area first, TOPO_LAYERS order within one).
   const byLayer = useMemo(() => {
@@ -482,7 +578,7 @@ function TopoOverlayList({
 
   return (
     <>
-      <SectionHeader label="Layers" />
+      <SectionHeader title="Layers" />
       {byLayer.map(([layer, group]) => {
         const allOn = group.keys.every((key) => enabledOverlays.has(key));
         return (
@@ -500,7 +596,7 @@ function TopoOverlayList({
         );
       })}
 
-      <SectionHeader label="Areas" />
+      <SectionHeader title="Areas" />
       {areas.map(([areaId, label]) => (
         <ItemRow
           key={areaId}
@@ -532,21 +628,16 @@ function ItemRow({
   visible: boolean;
   onVisibility: () => void;
 }) {
+  const styles = useStyles();
+
   return (
-    <Row
+    <SwitchRow
       leading={<View style={[styles.dot, { backgroundColor: hue }]} />}
       title={title}
       style={styles.itemRow}
-      right={
-        <View style={styles.trailing}>
-          {count != null ? <Text style={styles.count}>{count}</Text> : null}
-          <Toggle
-            value={visible}
-            onValueChange={onVisibility}
-            accessibilityLabel={`Show ${title}`}
-          />
-        </View>
-      }
+      badge={count != null ? <Text style={styles.count}>{count}</Text> : null}
+      checked={visible}
+      onChange={onVisibility}
     />
   );
 }
@@ -568,6 +659,10 @@ function OfflineTab({
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const savedRegions = artifacts.filter(
     (artifact) => artifact.kind === "basemap-region",
   );
@@ -579,31 +674,26 @@ function OfflineTab({
   return (
     <View style={styles.body}>
       <Row
-        icon="download-cloud"
+        icon="saveOffline"
         hue={assetHue.region}
         title="Save maps for offline use"
         subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
         disabled={!online}
         onPress={onSaveArea}
       />
-      <Row
-        icon="cloud-off"
+      <SwitchRow
+        icon="offline"
         hue={assetHue.region}
         title="Offline maps only"
-        subtitle="Use only saved maps, even with signal"
-        subtitleNumberOfLines={2}
-        right={
-          <Toggle
-            value={offlineOnly}
-            onValueChange={onOfflineOnlyChange}
-            accessibilityLabel="Offline maps only"
-          />
-        }
+        description="Use only saved maps, even with signal"
+        descriptionNumberOfLines={2}
+        checked={offlineOnly}
+        onChange={onOfflineOnlyChange}
       />
 
-      <SectionHeader label="On this phone" />
+      <SectionHeader title="On this phone" />
       <Row
-        icon="hard-drive"
+        icon="device"
         hue={assetHue.region}
         title={
           savedRegions.length === 1
@@ -618,34 +708,31 @@ function OfflineTab({
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.
         onPress={() => onOpenSaved("region")}
-        right={
-          <Feather name="chevron-right" size={20} color={theme.textMuted} />
-        }
+        right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
-  // (DESIGN.md §2).
+  // (DESIGN.md).
   rail: { paddingBottom: spacing(1.5) },
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },
   // A row something above it has already decided for.
-  inert: { opacity: 0.4 },
+  inert: { opacity: opacity.disabled },
   // Items hang off their group's row, indented so the hierarchy is visible
   // without a second card colour.
   groupItems: { gap: spacing(0.5), paddingLeft: spacing(2) },
-  itemRow: { minHeight: 48, paddingVertical: spacing(1) },
+  itemRow: { minHeight: controlSize.lg, paddingVertical: spacing(1) },
   dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {
+    ...textRole.control,
     color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
-});
+}));
