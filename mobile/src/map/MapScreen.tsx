@@ -85,6 +85,7 @@ import {
   type TrackPass,
   drawsNswContours,
   nswContourStyle,
+  MAP_INK,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -186,6 +187,7 @@ import {
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import {
+  MARKER_COLORS,
   isNorthUpLocked,
   isScaleBarEnabled,
   isSpeedElevationEnabled,
@@ -4693,7 +4695,7 @@ export function MapScreen({
               style={{
                 circleRadius: 5,
                 circleColor: imported.color,
-                circleStrokeColor: "#ffffff",
+                circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 1.5,
               }}
             />
@@ -4743,7 +4745,7 @@ export function MapScreen({
               id="nav-line-layer"
               beforeId={PIN_FLOOR}
               style={{
-                lineColor: "#4285F4",
+                lineColor: MARKER_COLORS[markerColorId],
                 lineWidth: 2,
                 lineOpacity: 0.8,
                 lineDasharray: [2, 2],
@@ -4819,7 +4821,7 @@ export function MapScreen({
                 style={{
                   circleRadius: 5,
                   circleColor: theme.accent,
-                  circleStrokeColor: "#ffffff",
+                  circleStrokeColor: MAP_INK.ring,
                   circleStrokeWidth: 2,
                 }}
               />

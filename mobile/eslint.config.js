@@ -23,6 +23,12 @@ const GPS_GOTCHAS = [
     message:
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
   },
+  {
+    selector:
+      "CallExpression[callee.name='emitToast'] MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/], JSXExpressionContainer > MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]",
+    message:
+      "An error's message can carry a place name or a file name. Show words we wrote (shared/DESIGN.md §11, messageFromError from @logjam/shared), never err.message.",
+  },
 ];
 
 // A colour is a role from `theme`, or `withAlpha(token, a)` for a tint
@@ -39,22 +45,6 @@ const COLOUR_LITERALS = [
     message:
       "A tint is withAlpha(theme.<role>, a), never an rgba() string (mobile/DESIGN.md §1).",
   },
-];
-
-// Files that still draw a literal colour, so the colour rule is not on for
-// them yet. The list only shrinks: move each onto a role or `MAP_INK`, then
-// delete its line.
-const COLOUR_LITERAL_DEBT = [
-  "src/imports/importsDb.ts",
-  "src/map/MapBackButton.tsx",
-  "src/map/MapScreen.tsx",
-  "src/map/PickPointScreen.tsx",
-  "src/map/PlacePinsLayer.tsx",
-  "src/map/PlaceRoutesLayer.tsx",
-  "src/map/RouteDraftLayer.tsx",
-  "src/map/SelectionFrame.tsx",
-  "src/map/mapPreferences.ts",
-  "src/map/topoVectorLayers.ts",
 ];
 
 // The scheme is state, so nothing may hold a colour from before it changed
@@ -125,12 +115,7 @@ module.exports = defineConfig([
   },
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: [
-      "**/*.test.{ts,tsx}",
-      "src/theme.ts",
-      "src/ui/**",
-      ...COLOUR_LITERAL_DEBT,
-    ],
+    ignores: ["**/*.test.{ts,tsx}", "src/theme.ts", "src/ui/**"],
     rules: {
       "no-restricted-syntax": ["error", ...GPS_GOTCHAS, ...COLOUR_LITERALS],
     },

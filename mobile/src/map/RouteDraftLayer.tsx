@@ -33,7 +33,7 @@ import {
   arrowSegmentFeatures,
   routeArrowStyle,
 } from "./routeArrowStyle";
-import { useTheme } from "../theme";
+import { useTheme, withAlpha } from "../theme";
 
 /**
  * Anchor sizes and fills.
@@ -355,6 +355,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.01)",
+    backgroundColor: withAlpha(MAP_INK.ring, 0.01),
   },
 });

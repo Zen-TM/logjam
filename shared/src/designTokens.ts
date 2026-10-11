@@ -34,7 +34,70 @@ export const MAP_INK = {
   label: "#F7F3EC",
   /** The halo behind a map label, and the casing that sets a line off any basemap. */
   casing: "#4E4944",
+  /** The ring round a point mark, which separates it from any basemap. */
+  ring: "#FFFFFF",
+  /** The light halo behind a LiDAR topo's own label colour. */
+  labelHalo: "rgba(255,255,255,0.8)",
 } as const;
+
+/**
+ * The location marker's colour options.
+ *
+ * Not a scheme colour and not an `ASSET_HUES` kind: a preference the user sets
+ * for legibility against the ground they actually walk on — a blue arrow over
+ * blue water is the complaint this exists to answer. Scheme-independent for
+ * the same reason the asset hues are: the marker sits on a basemap, not on a
+ * scheme surface.
+ *
+ * Every entry is mid-light and saturated enough to hold up on aerial imagery,
+ * which is the busiest basemap here. The arrow keeps a white halo whatever is
+ * picked (see MapScreen), so none of these has to carry its own contrast.
+ */
+export const MARKER_COLORS = {
+  /** The original — the blue every mapping app trained the user on. */
+  blue: "#4285F4",
+  /** Warning-tape amber. Reads over water, scrub and imagery alike. */
+  amber: "#F5A524",
+  /** Signal red. The one people pick to find themselves fast. */
+  red: "#F2635F",
+  /** Fluoro green — a colour bushland does not contain. */
+  green: "#4ADE80",
+  /** Heath flower, as on the Places rail. */
+  violet: "#C77DD6",
+  /** No hue at all, for anyone who finds a coloured arrow noisy. */
+  white: "#FFFFFF",
+} as const;
+
+export type MarkerColorId = keyof typeof MARKER_COLORS;
+
+export const MARKER_COLOR_ORDER: readonly MarkerColorId[] = [
+  "blue",
+  "amber",
+  "red",
+  "green",
+  "violet",
+  "white",
+];
+
+/**
+ * The black veils: `light` under a bottom sheet, `heavy` behind chrome drawn
+ * over the map, `photo` behind a full-resolution photo (judged against black,
+ * so no scheme tint). The only black-alpha overlays; everything else derives
+ * from the scheme.
+ */
+export const SCRIM = {
+  light: "rgba(0,0,0,0.5)",
+  heavy: "rgba(0,0,0,0.6)",
+  photo: "rgba(0,0,0,0.92)",
+} as const;
+
+/**
+ * Words and glyphs drawn on a `SCRIM`. White in every scheme: the veil is
+ * black whatever the scheme, so a scheme's dark `text` on it is near-zero
+ * contrast. `scripts/wcag-contrast.mjs` measures it on `SCRIM.heavy` over a
+ * white map.
+ */
+export const ON_SCRIM = "#FFFFFF";
 
 /**
  * Per-kind identity hues for map material and the things you draw on it.

@@ -295,15 +295,8 @@ export const textRolesFor = perScheme(
 );
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
-// Modal/sheet scrims — the only intentional black-alpha overlays. Everything
-// else derives from the scheme. `light` for bottom sheets, `heavy` for
-// full-screen edit modals, `photo` for the full-res photo viewer (a photo is
-// judged against black, and any scheme tint here reads as a colour cast).
-export const scrim = {
-  light: "rgba(0,0,0,0.5)",
-  heavy: "rgba(0,0,0,0.6)",
-  photo: "rgba(0,0,0,0.92)",
-} as const;
+// Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
+export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";
 
 // Default touch-target padding for small text/icon actions.
 export const hitSlop = 8;

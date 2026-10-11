@@ -432,13 +432,16 @@ const useStyles = makeStyles((theme) => ({
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
+  // A chosen cell changes its edge's colour, never its width: Fabric drops a
+  // rounded card's children when a border width changes (mobile/DESIGN.md §7).
   cell: {
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: theme.line,
+    borderWidth: 2,
+    borderColor: "transparent",
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
-  cellChosen: { borderWidth: 2, borderColor: theme.accent },
+  cellChosen: { borderColor: theme.accent },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
 }));
