@@ -410,7 +410,7 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
         print(sheet.stem, flush=True)
         smooth = work / f"{sheet.stem}.10m.tif"
         raw = work / f"{sheet.stem}.raw.gpkg"
-        part = work / f"{sheet.stem}.lines.part"
+        part = work / f"{sheet.stem}.part.gpkg"
         raw.unlink(missing_ok=True)
         part.unlink(missing_ok=True)
         # Averaged to 10 m first: contours of the raw 5 m grid are knobbly,
