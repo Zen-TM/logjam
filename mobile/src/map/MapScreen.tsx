@@ -85,6 +85,7 @@ import {
   type SnapMode,
   type TrackPass,
   drawsNswContours,
+  nswContourStyle,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -500,6 +501,8 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
+
+const OFFLINE_MASK_LAYER = "offline-mask-fill";
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -4356,6 +4359,11 @@ export function MapScreen({
     .filter(Boolean)
     .join(" · ");
 
+  const nswContoursStyle = useMemo(
+    () => nswContourStyle(vectorStyle, renderedBasemapId),
+    [vectorStyle, renderedBasemapId],
+  );
+
   // The ground band, bottom to top: the statewide contours, topo overlays,
   // GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
@@ -4376,6 +4384,9 @@ export function MapScreen({
     ...contoursResolved.flatMap((r) =>
       topoVectorLayerIds("contours", `nsw-contours-${r.key}`, vectorStyle),
     ),
+    // Above the statewide contours, which belong to the basemap: a saved
+    // contour clip is whole tiles and runs past the edge of the saved area.
+    ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
     ...overlayMounts.flatMap(({ ref, resolved }) =>
       resolved.flatMap((r) =>
         ref.format === "vector"
@@ -4537,15 +4548,15 @@ export function MapScreen({
         )}
 
         {/* The edge of what this phone actually holds. Above the basemap band
-            and below everything else, so place pins, tracks and imports stay
+            and the statewide contours, and below everything else, so place pins, tracks and imports stay
             visible over the blanked ground. */}
         {offlineMask ? (
           <GeoJSONSource id="offline-mask" data={offlineMask}>
             <Layer
               key="offline-mask-fill"
               type="fill"
-              id="offline-mask-fill"
-              beforeId={groundIds[0] ?? ROUTES_FLOOR}
+              id={OFFLINE_MASK_LAYER}
+              beforeId={groundBefore[OFFLINE_MASK_LAYER]}
               style={{ fillColor: theme.page, fillOpacity: 1 }}
             />
           </GeoJSONSource>
@@ -4560,7 +4571,7 @@ export function MapScreen({
               idPrefix={`nsw-contours-${r.key}`}
               sourceID={sourceIdFor(r.key)}
               beforeIds={groundBefore}
-              vectorStyle={vectorStyle}
+              vectorStyle={nswContoursStyle}
             />
           </ResolvedSource>
         ))}

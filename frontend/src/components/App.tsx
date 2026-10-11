@@ -18,7 +18,7 @@ import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import type { TBbox } from "./map/Map";
+import { NSW_CONTOURS_ENTRY_ID, type TBbox } from "./map/Map";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -106,14 +106,12 @@ import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
 
 /**
- * The statewide contours as one entry of the Map's topo layer list. The id has
- * no dash and contains "contours": the Map reads both (it splits a layer id at
- * the first dash, and styles an entry as contours by that word).
+ * The statewide contours as one entry of the Map's topo layer list.
  * Same origin, like the vector basemap: `/master/*` is served by the web
  * distribution and proxied in dev.
  */
 const NSW_CONTOURS_ENTRY = {
-  id: "nswcontours",
+  id: NSW_CONTOURS_ENTRY_ID,
   pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
   format: "vector" as const,
   attribution: NSW_CONTOURS.creditHtml,

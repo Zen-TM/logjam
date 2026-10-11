@@ -32,3 +32,30 @@ export function drawsNswContours(
     basemapId === "protomaps" || (overImagery && basemapId === "six-imagery")
   );
 }
+
+/** Imagery is dark, and the brown a paper map prints its contours in is lost on it. */
+const OVER_IMAGERY = { majorColour: "#ffffffe6", minorColour: "#ffffff8c" };
+
+/**
+ * The style the statewide contours are drawn in over a basemap: the user's
+ * own topo style, with light lines over imagery.
+ */
+export function nswContourStyle<
+  T extends { contours: { majorColour: string; minorColour: string } },
+>(style: T, basemapId: string): T {
+  return basemapId === "six-imagery"
+    ? { ...style, contours: { ...style.contours, ...OVER_IMAGERY } }
+    : style;
+}
+
+/**
+ * The halo behind a contour label, which is drawn in the major line's colour
+ * (`#RRGGBBAA`): dark behind a light label, light behind a dark one.
+ */
+export function contourLabelHalo(majorColour: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) =>
+    parseInt(majorColour.slice(i, i + 2), 16),
+  );
+  const light = 0.299 * r! + 0.587 * g! + 0.114 * b! > 150;
+  return light ? "rgba(0, 0, 0, 0.7)" : "rgba(255, 255, 255, 0.8)";
+}

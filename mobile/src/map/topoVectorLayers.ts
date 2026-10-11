@@ -11,6 +11,7 @@ import {
   OSM_POINT_FEATURE_KEYS,
   OSM_POINT_ICON,
   OSM_POINT_ICON_NATURAL_PX,
+  contourLabelHalo,
   contourWidthStops,
   featureLineWidthStops,
   iconTargetPx,
@@ -113,7 +114,7 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         // along wiggly runs at low zoom (web parity, see Map.tsx).
         textMaxAngle: 150,
         textColor: rgbaCssFromHex(vs.contours.majorColour),
-        textHaloColor: "rgba(255, 255, 255, 0.8)",
+        textHaloColor: contourLabelHalo(vs.contours.majorColour),
         textHaloWidth: 1.5,
       },
     },

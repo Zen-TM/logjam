@@ -186,6 +186,11 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  */
 const PANEL_HEIGHT = 208;
 const PANEL_HEIGHT_GUEST = 250;
+/**
+ * The Contours row and its gap. The panel grows by this only while a chosen
+ * map draws contours, which changes on a chip tap, never under a drag.
+ */
+const CONTOURS_ROW_HEIGHT = 58;
 
 /** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
 const PROTOMAPS_FLAVOR = "light" as const;
@@ -688,7 +693,13 @@ export function RegionDownloadScreen({
         </View>
       </View>
 
-      <View style={[styles.panel, isGuest && styles.panelGuest]}>
+      <View
+        style={[
+          styles.panel,
+          isGuest && styles.panelGuest,
+          offersContours && styles.panelContours,
+        ]}
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -759,6 +770,7 @@ export function RegionDownloadScreen({
                   ? `≈ ${formatBytes(job.contours.meanBytes)}`
                   : undefined
               }
+              style={styles.contoursRow}
               checked={saveContours}
               onChange={setSaveContours}
             />
@@ -858,6 +870,8 @@ const styles = StyleSheet.create({
     borderTopColor: theme.line,
   },
   panelGuest: { height: PANEL_HEIGHT_GUEST },
+  panelContours: { height: PANEL_HEIGHT + CONTOURS_ROW_HEIGHT },
+  contoursRow: { minHeight: 48, paddingVertical: spacing(0.5) },
   panelBody: {
     flex: 1,
     paddingHorizontal: spacing(2),
