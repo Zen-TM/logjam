@@ -3275,7 +3275,7 @@ function Map({
         if (toggle !== terrainToggleRef.current || mapRef.current !== map)
           return;
         // Turning on — wait for the terrain tiles to actually load before tilting
-        map.setTerrain({ source, exaggeration: 1.5 });
+        map.setTerrain({ source, exaggeration: 1.0 });
         map.once("idle", () => {
           map.easeTo({ pitch: 30, duration: 1200 });
         });
