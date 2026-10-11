@@ -631,7 +631,11 @@ function PlaceDialog({
                 "Cancel" that only backs out of that sub-form, and both can be
                 on screen at once. In edit mode the object is the *changes*,
                 not the place. */}
-            <Button onClick={guard.requestClose} disabled={saving}>
+            <Button
+              onClick={guard.requestClose}
+              disabled={saving}
+              disabledReason="Saving…"
+            >
               {isEdit ? "Discard changes" : "Discard place"}
             </Button>
             {/* type="submit" with no onClick — handleSubmit is the only save
@@ -719,6 +723,7 @@ function PlaceDialog({
                 className={classes.pickButton}
                 onClick={handlePickCoords}
                 disabled={saving}
+                disabledReason="Saving…"
               >
                 Pick on map
               </Button>

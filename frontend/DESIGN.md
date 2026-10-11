@@ -136,7 +136,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   not removed.
 - **A screen stylesheet lays out and paints no corner, shadow or fill**:
   `lookBudget.test.ts` holds each file to a budget that only shrinks.
-- **A disabled `Button` takes `disabledReason`** and stays focusable.
+- **A disabled control stays focusable**: `disabledReason` is required by type.
 - **Pure decisions leave the component** into a tested module beside it
   (`placesModel.ts`).
 
