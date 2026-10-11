@@ -21,6 +21,7 @@ import {
 import {
   fontSize,
   radius,
+  ON_SCRIM,
   scrim,
   spacing,
   withAlpha,
@@ -585,7 +586,7 @@ function AttachmentTile({
       )}
       {category === "video" ? (
         <View style={styles.playBadge}>
-          <Icon idea="play" size={12} color={theme.text} />
+          <Icon idea="play" size={12} color={ON_SCRIM} />
         </View>
       ) : null}
       {item.syncState === "pendingUpload" ? (
@@ -653,13 +654,14 @@ const useStyles = makeStyles((theme, textRole) => ({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: scrim.light,
+    backgroundColor: scrim.heavy,
     paddingVertical: spacing(0.25),
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },
+  // Words on a scrim are white in every scheme (shared/DESIGN.md §7).
   pendingBadgeText: {
-    color: theme.text,
+    color: ON_SCRIM,
     fontSize: fontSize.xs,
     textAlign: "center",
   },
