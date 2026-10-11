@@ -20,6 +20,7 @@ import {
 } from "@logjam/shared";
 import { s3 } from "../src/services/awsClients";
 import { seedId, cid } from "./seedIds";
+import { saveSeedSnapshot } from "../src/__tests__/_seedBaseline";
 
 // ── Seeded vector files ─────────────────────────────────────────────────────
 //
@@ -1731,6 +1732,10 @@ async function main() {
   // Topo jobs are intentionally not seeded: a "complete" job with no S3 tiles
   // behind it renders nothing / breaks the map UI. Submit a real LiDAR ZIP in
   // dev to exercise the topo flow end-to-end instead.
+
+  // Last: the integration suite refuses to run on a database that differs
+  // from this (src/__tests__/_seedBaseline.ts).
+  await saveSeedSnapshot(prisma);
 
   const placeCount = ALL_PLACES.length;
   console.log(

@@ -19,7 +19,11 @@
 // and ECS tasks. They are orphaned by the row sweep and harmless to a rerun,
 // since nothing lists a bucket; MiniStack's volume is wiped by `make reset`.
 
-import prisma from "../services/prisma";
+import defaultPrisma from "../services/prisma";
+
+/** The seed passes its own client; the suite uses the app's. */
+type Db = Pick<typeof defaultPrisma, "$queryRawUnsafe" | "$executeRawUnsafe">;
+const prisma = defaultPrisma;
 
 /** table -> (row key -> the whole row as jsonb text). */
 export type Snapshot = Record<string, Record<string, string>>;
@@ -36,8 +40,8 @@ interface TableDef {
   keyExpr: string;
 }
 
-async function tables(): Promise<TableDef[]> {
-  const rows = await prisma.$queryRawUnsafe<
+async function tables(db: Db = prisma): Promise<TableDef[]> {
+  const rows = await db.$queryRawUnsafe<
     { table: string; pk: string[] | null }[]
   >(`
     SELECT c.relname AS "table",
@@ -61,15 +65,68 @@ async function tables(): Promise<TableDef[]> {
   }));
 }
 
-export async function takeSnapshot(): Promise<Snapshot> {
+export async function takeSnapshot(db: Db = prisma): Promise<Snapshot> {
   const snap: Snapshot = {};
-  for (const { table, keyExpr } of await tables()) {
-    const rows = await prisma.$queryRawUnsafe<{ k: string; h: string }[]>(
+  for (const { table, keyExpr } of await tables(db)) {
+    const rows = await db.$queryRawUnsafe<{ k: string; h: string }[]>(
       `SELECT ${keyExpr} AS k, to_jsonb(t)::text AS h FROM "${table}" t`,
     );
     snap[table] = Object.fromEntries(rows.map((r) => [r.k, r.h]));
   }
   return snap;
+}
+
+// The seed's own state, written by `prisma db seed` after it finishes. It lives
+// in the database it describes, in a schema Prisma and `tables()` never see,
+// so it is there wherever the seed ran (laptop, kiosk, CI) and can never be
+// read against a different database than it was taken from. A list of seeded
+// ids would need a hand edit with every new kind of seeded data; this does not.
+const SEED_SCHEMA = "logjam_seed";
+
+export async function saveSeedSnapshot(db: Db): Promise<void> {
+  const snap = await takeSnapshot(db);
+  await db.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS ${SEED_SCHEMA}`);
+  await db.$executeRawUnsafe(
+    `CREATE TABLE IF NOT EXISTS ${SEED_SCHEMA}.snapshot (data jsonb NOT NULL)`,
+  );
+  await db.$executeRawUnsafe(`DELETE FROM ${SEED_SCHEMA}.snapshot`);
+  await db.$executeRawUnsafe(
+    `INSERT INTO ${SEED_SCHEMA}.snapshot (data) VALUES ($1::jsonb)`,
+    JSON.stringify(snap),
+  );
+}
+
+/** null when no seed has recorded one (a database seeded before this existed). */
+export async function loadSeedSnapshot(
+  db: Db = prisma,
+): Promise<Snapshot | null> {
+  const rows = await db
+    .$queryRawUnsafe<{ data: Snapshot }[]>(
+      `SELECT data FROM ${SEED_SCHEMA}.snapshot LIMIT 1`,
+    )
+    .catch(() => []);
+  return rows[0]?.data ?? null;
+}
+
+/** Pure: every difference between the seed and the live database, either way. */
+export function seedMismatch(seed: Snapshot, live: Snapshot): Drift[] {
+  return [...seededDrift(seed, live), ...extraRows(seed, live)];
+}
+
+/** Pure: what a run that starts off the seed refuses with. */
+export function describeSeedMismatch(seed: Snapshot | null, live: Snapshot) {
+  const fix =
+    "Put the database back with `make seed` (it wipes the dev database and " +
+    "re-seeds it, so local data you want to keep must be exported first).";
+  if (!seed)
+    return `No seed snapshot in this database. It was seeded before the suite checked for one. ${fix}`;
+  const diff = seedMismatch(seed, live);
+  if (!diff.length) return null;
+  return (
+    `The database is not as the seed left it (${diff.length} row(s)): a ` +
+    "run killed before its cleanup, or local use of the app, leaves rows " +
+    `the suite would adopt as seed.\n${describeDrift(diff)}\n${fix}`
+  );
 }
 
 /** Pure: what changed or vanished among the baseline rows. Extras are not
