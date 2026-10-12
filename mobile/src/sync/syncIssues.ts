@@ -48,7 +48,10 @@ export type ParkedOp = {
    * was deleted server-side under a pending edit (§6 delete-wins). */
   state: "blocked" | "deadRemote";
   fields: Record<string, unknown> | null;
-  error: { code: number; message: string } | null;
+  /** The refusal's status code and nothing else. The server's own sentence is
+   *  developer wording that can carry a name, so it is dropped as the row is
+   *  loaded and no screen can render it (`syncIssueDisplay.ts` writes the line). */
+  error: { code: number } | null;
   attempts: number;
   createdAt: string;
   /**
@@ -138,7 +141,7 @@ export async function listParkedOps(): Promise<ParkedOp[]> {
       state: row.state as "blocked" | "deadRemote",
       fields,
       error: row.error_json
-        ? (JSON.parse(row.error_json) as { code: number; message: string })
+        ? { code: (JSON.parse(row.error_json) as { code: number }).code }
         : null,
       attempts: row.attempts,
       createdAt: row.created_at,

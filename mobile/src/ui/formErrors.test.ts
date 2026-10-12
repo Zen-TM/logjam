@@ -28,7 +28,7 @@ function tsxFilesUnder(dir: string): string[] {
 }
 
 /** Style entries named for an error, or any entry, whose object sets `color: theme.warning`
- *  beside a `fontSize` (words, not an icon's colour; words are `text`: UX §7) or, if named for an error, `color: theme.text`. */
+ *  beside a `...textRole.<name>` (words, not an icon's colour; words are `text`: UX §7) or, if named for an error, `color: theme.text`. */
 function handRolledErrorStyles(source: string): string[] {
   const named = [
     ...source.matchAll(
@@ -37,7 +37,7 @@ function handRolledErrorStyles(source: string): string[] {
   ].map((match) => match[1]);
   const warningWords = [
     ...source.matchAll(
-      /(\w+)\s*:\s*\{[^}]*\bfontSize:[^}]*\bcolor:\s*theme\.warning\b|(\w+)\s*:\s*\{[^}]*\bcolor:\s*theme\.warning\b[^}]*\bfontSize:/g,
+      /(\w+)\s*:\s*\{[^}]*\btextRole\.\w+[^}]*\bcolor:\s*theme\.warning\b|(\w+)\s*:\s*\{[^}]*\bcolor:\s*theme\.warning\b[^}]*\btextRole\.\w+/g,
     ),
   ].map((match) => match[1] ?? match[2]);
   return [...new Set([...named, ...warningWords])];

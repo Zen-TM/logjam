@@ -14,13 +14,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  formRhythm,
-  spacing,
-  makeStyles,
-} from "../theme";
+import { formRhythm, spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
 import { DateRangeFilter } from "./DateRangeFilter";
 import { RangePills } from "./RangePills";
@@ -322,9 +316,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "space-between",
   },
   blockLabel: { ...textRole.control, color: theme.text },
-  blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
+  blockValue: { ...textRole.bodySmall, color: theme.textMuted },
   // Words are text-coloured; the weight says it is set.
-  blockValueActive: { color: theme.text, fontWeight: fontWeight.medium },
+  blockValueActive: { ...textRole.control, color: theme.text },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   pair: { flexDirection: "row", gap: spacing(1) },
   pairField: { flex: 1, maxWidth: 200 },

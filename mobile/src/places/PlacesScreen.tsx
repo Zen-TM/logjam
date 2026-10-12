@@ -72,7 +72,6 @@ import {
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
-  fontSize,
   radius,
   spacing,
   withAlpha,
@@ -1236,7 +1235,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(theme.accent, 0.12),
   },
-  filterText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
+  filterText: { ...textRole.bodySmall, flex: 1, color: theme.text },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
@@ -1256,7 +1255,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  quality: { color: theme.textMuted, fontSize: fontSize.xs },
+  quality: { ...textRole.meta },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
-  badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
+  badgeText: { ...textRole.meta },
 }));

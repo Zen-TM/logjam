@@ -145,8 +145,8 @@ export const makeStyles = <T extends NamedStyles<T> | NamedStyles<unknown>>(
  * out of. `resolveTextScale` therefore clamps the COMBINED figure to
  * `MAX_COMBINED_TEXT_SCALE` and returns what is left for us to apply.
  *
- * Applied at launch, unlike the scheme: `fontSize`, `lineHeight` and the sizes
- * in `textRole` are module constants every style reads (DESIGN.md).
+ * Applied at launch, unlike the scheme: the sizes in `textRole` are module
+ * constants every style reads (DESIGN.md).
  */
 export const TEXT_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
 export type TextScale = (typeof TEXT_SCALES)[number];
@@ -267,39 +267,80 @@ export const fontWeight = {
   bold: weight(FONT_WEIGHT.bold),
 } as const;
 
-/** One of `TEXT_ROLES`' styles, spread into a text style: `...textRole.title`. */
+/** Line height of running text that wraps over several lines. */
+const leading = { body: scaled(22) } as const;
+
+/**
+ * Roles Logjam GPS draws that `TEXT_ROLES` does not hold yet. A role that is
+ * not Logjam GPS-only belongs there; `themeParity.test.ts` fails on a name in
+ * both, so it is moved rather than shadowed.
+ * `leading` is the one place a line height is chosen: a paragraph's lines are
+ * set apart, a one-line label's are the font's own.
+ */
+export const GPS_ROLES = {
+  /** Running text one step down, text colour: a value beside its label, an
+   *  error line, a calendar cell. */
+  bodySmall: { size: "sm", weight: "regular" },
+  /** A count, qualifier or source beside or under another line. */
+  meta: { size: "xs", weight: "regular", muted: true },
+  /** Prose the user reads: notes on a place, a consent text. */
+  paragraph: { size: "base", weight: "regular", leading: "body" },
+  /** A few sentences explaining a screen or a sheet. */
+  note: { size: "sm", weight: "regular", muted: true, leading: "body" },
+} as const satisfies Record<
+  string,
+  {
+    size: keyof typeof FONT.gps;
+    weight: keyof typeof FONT_WEIGHT;
+    muted?: true;
+    leading?: keyof typeof leading;
+  }
+>;
+
+/** One of the type roles' styles, spread into a text style: `...textRole.title`. */
 type TextRoleStyle = {
   fontSize: number;
   fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
+  lineHeight?: number;
   textTransform?: "uppercase";
   color?: string;
 };
-export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
+export type TextRoles = {
+  [Name in keyof typeof TEXT_ROLES | keyof typeof GPS_ROLES]: TextRoleStyle;
+};
 /** The type roles in one scheme, for a reader outside a component. */
-export const textRolesFor = perScheme(
-  (theme) =>
-    Object.fromEntries(
-      Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
-        if (!("gps" in spec)) return [];
-        const role = spec.gps as {
-          size: keyof typeof fontSize;
-          weight: keyof typeof fontWeight;
-          uppercase?: true;
-          muted?: true;
-        };
-        // The one place a size and a weight are written together.
-        // eslint-disable-next-line no-restricted-syntax
-        const style: TextRoleStyle = {
-          fontSize: fontSize[role.size],
-          fontWeight: fontWeight[role.weight],
-          ...(role.uppercase ? { textTransform: "uppercase" } : {}),
-          ...(role.muted ? { color: theme.textMuted } : {}),
-        };
-        return [[name, style]];
-      }),
-    ) as TextRoles,
-);
-export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
+export const textRolesFor = perScheme((theme) => {
+  const specs: [string, unknown][] = [
+    ...Object.entries(GPS_ROLES).map(([name, role]): [string, unknown] => [
+      name,
+      role,
+    ]),
+    ...Object.entries(TEXT_ROLES).flatMap(
+      ([name, spec]): [string, unknown][] =>
+        "gps" in spec ? [[name, spec.gps]] : [],
+    ),
+  ];
+  return Object.fromEntries(
+    specs.map(([name, spec]) => {
+      const role = spec as {
+        size: keyof typeof fontSize;
+        weight: keyof typeof fontWeight;
+        uppercase?: true;
+        muted?: true;
+        leading?: keyof typeof leading;
+      };
+      // The one place a size and a weight are written together.
+      const style: TextRoleStyle = {
+        fontSize: fontSize[role.size],
+        fontWeight: fontWeight[role.weight],
+        ...(role.leading ? { lineHeight: leading[role.leading] } : {}),
+        ...(role.uppercase ? { textTransform: "uppercase" } : {}),
+        ...(role.muted ? { color: theme.textMuted } : {}),
+      };
+      return [name, style];
+    }),
+  ) as TextRoles;
+});
 
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
 export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";
