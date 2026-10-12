@@ -15,14 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
 
-import {
-  fontSize,
-  radius,
-  scrim,
-  spacing,
-  textRolesFor,
-  withAlpha,
-} from "../theme";
+import { radius, scrim, spacing, textRolesFor, withAlpha } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton, Icon } from "../ui";
@@ -274,13 +267,12 @@ const styles = StyleSheet.create({
   },
   image: { flex: 1, width: "100%" },
   notice: {
+    ...photoRole.body,
     color: photoChrome.text,
-    fontSize: fontSize.base,
     textAlign: "center",
   },
   noticeMuted: {
-    color: photoChrome.textMuted,
-    fontSize: fontSize.sm,
+    ...photoRole.hint,
     textAlign: "center",
   },
   topBar: {
@@ -327,7 +319,6 @@ const styles = StyleSheet.create({
   caption: {
     flex: 1,
     textAlign: "center",
-    color: photoChrome.textMuted,
-    fontSize: fontSize.sm,
+    ...photoRole.hint,
   },
 });

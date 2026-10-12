@@ -212,8 +212,8 @@ export const FONT_WEIGHT = { regular: 400, medium: 600, bold: 700 } as const;
  * Type roles: which size and weight each kind of text takes, by client. A role
  * names a size from `FONT` and a weight from `FONT_WEIGHT`, so the scale stays
  * the one list of numbers; Logjam GPS reads them as `textRole.<name>` (theme.ts)
- * and Logjam Web as `--text-<name>-size|weight|transform` (webTokens.ts). A
- * client that does not draw a role has no entry for it. Colour is the screen's
+ * and Logjam Web as a class to `composes:` (webTokens.ts). A client that
+ * does not draw a role has no entry for it. Colour is the screen's
  * choice among `text` and `textMuted` (`muted` marks the roles that are always
  * the second), never a role's.
  */
@@ -223,6 +223,9 @@ type TextRoleStyle<Size extends string> = {
   /** A section heading; shared/DESIGN.md §2. */
   uppercase?: true;
   muted?: true;
+  /** Lines set apart so several read in a row: 22 dp on Logjam GPS
+   *  (theme.ts), 1.5 on Logjam Web. A role without it takes the font's own. */
+  leading?: true;
 };
 type TextRoleSpec = {
   gps?: TextRoleStyle<keyof typeof FONT.gps>;
@@ -249,20 +252,51 @@ export const TEXT_ROLES = {
     gps: { size: "lg", weight: "bold" },
     web: { size: "lg", weight: "medium" },
   },
-  /** Running text and what the user types into a field. Logjam GPS only: Logjam
-   *  Web's body is the element's own. */
-  body: { gps: { size: "base", weight: "regular" } },
-  /** The label of a pill, chip, tab or small control. Logjam GPS only. */
-  control: { gps: { size: "sm", weight: "medium" } },
-  /** A figure or note small enough to sit on the map or inside a pill. Logjam
-   *  GPS only. */
-  caption: { gps: { size: "xs", weight: "medium" } },
+  /** Running text: a sentence, or a line of choice text. */
+  body: {
+    gps: { size: "base", weight: "regular" },
+    web: { size: "sm", weight: "regular" },
+  },
+  /** What the user types into a field. Its size is `body`'s on Logjam GPS;
+   *  Logjam Web's running text is a step smaller than what is typed. */
+  field: {
+    gps: { size: "base", weight: "regular" },
+    web: { size: "base", weight: "regular" },
+  },
+  /** Running text one step down, in the text colour: an error line, a notice,
+   *  a value beside its label. */
+  bodySmall: {
+    gps: { size: "sm", weight: "regular" },
+    web: { size: "xs", weight: "regular" },
+  },
+  /** Prose the user reads: notes on a place, a consent text. `body` with its
+   *  lines set apart. */
+  paragraph: {
+    gps: { size: "base", weight: "regular", leading: true },
+    web: { size: "sm", weight: "regular", leading: true },
+  },
+  /** A few sentences explaining a screen or a sheet. */
+  note: {
+    gps: { size: "sm", weight: "regular", muted: true, leading: true },
+    web: { size: "sm", weight: "regular", muted: true, leading: true },
+  },
+  /** The label of a pill, chip, tab or small control. */
+  control: {
+    gps: { size: "sm", weight: "medium" },
+    web: { size: "sm", weight: "medium" },
+  },
+  /** A figure or note small enough to sit on the map or inside a pill: a
+   *  status, a badge, a tab's name, initials. */
+  caption: {
+    gps: { size: "xs", weight: "medium" },
+    web: { size: "xs", weight: "medium" },
+  },
   /** A row's title. */
   rowTitle: {
     gps: { size: "base", weight: "medium" },
     web: { size: "base", weight: "medium" },
   },
-  /** What a row says under its title. */
+  /** What a row says under its title, and any other secondary line. */
   subtitle: {
     gps: { size: "sm", weight: "regular", muted: true },
     web: { size: "sm", weight: "regular", muted: true },
@@ -275,6 +309,11 @@ export const TEXT_ROLES = {
   /** A line under a control saying what it means. */
   hint: {
     gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "xs", weight: "regular", muted: true },
+  },
+  /** A count, qualifier or source beside or under another line. */
+  meta: {
+    gps: { size: "xs", weight: "regular", muted: true },
     web: { size: "xs", weight: "regular", muted: true },
   },
   /** A section heading or a stat caption: the only capitals. */

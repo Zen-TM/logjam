@@ -88,7 +88,6 @@ import {
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import {
-  fontSize,
   radius,
   spacing,
   makeStyles,
@@ -1900,7 +1899,7 @@ export function SavedScreen({
               />
             ))}
             <Text style={styles.downloadNote}>
-              Downloads keep going until Logjam GPS is closed.
+              Downloads keep going after you leave Logjam GPS.
             </Text>
           </>
         ) : null}
@@ -2590,7 +2589,7 @@ export function SavedScreen({
             <RegionDownloadRow key={job.spec.id} job={job} />
           ))}
           <Text style={styles.downloadNote}>
-            Downloads keep going until Logjam GPS is closed.
+            Downloads keep going after you leave Logjam GPS.
           </Text>
         </View>
       </BottomSheet>
@@ -2828,8 +2827,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // Small and honest: the constraint is real, but it is a footnote to the
   // cards above it, not a warning banner.
   downloadNote: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...textRole.meta,
     paddingHorizontal: spacing(0.5),
   },
 }));

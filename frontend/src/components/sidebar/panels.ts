@@ -26,6 +26,17 @@ export type PanelId =
   // this page is open: nothing is kept, so leaving the page is leaving the tool.
   | "measure";
 
+/** The pages that are an armed drawing tool (`map/draftTool.tsx`). On narrow
+ *  web they open their sheet at the peek, so the map is there to press. */
+const DRAFT_PANELS: readonly PanelId[] = ["way-draw", "measure"];
+export const isDraftPanel = (panel: PanelId | null) =>
+  panel !== null && DRAFT_PANELS.includes(panel);
+
+/** How much of a drawing tool's sheet shows at its peek, in px: the grab bar,
+ *  the hero (57, or 73 for a finger) and one row, which is `DraftPeek`. Taller
+ *  than a title's peek, which would show the hero and none of the readout. */
+export const DRAFT_PEEK_REVEAL_PX = 152;
+
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
   places: "Places",

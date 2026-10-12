@@ -61,11 +61,10 @@
 }
 
 .title {
+  composes: sheetTitle from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: var(--text-sheet-title-size);
-  font-weight: var(--text-sheet-title-weight);
 }
 
 .title:focus-visible {
@@ -84,6 +83,7 @@
 }
 
 .body {
+  composes: body from "../textRoles.generated.module.css";
   flex: 1;
   min-height: 0;
   /* The containing block for what it scrolls. An absolutely positioned
@@ -94,7 +94,6 @@
   position: relative;
   overflow-y: auto;
   padding: var(--form-field) var(--gutter);
-  font-size: var(--font-sm);
   line-height: 1.45;
 }
 

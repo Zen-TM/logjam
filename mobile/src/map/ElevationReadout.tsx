@@ -6,7 +6,7 @@
 import { Text, View } from "react-native";
 import { MAP_MEASURE, type ElevationProfile } from "@logjam/shared";
 
-import { fontSize, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 
 export function ElevationReadout({
   profile,
@@ -53,9 +53,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     fontVariant: ["tabular-nums"],
   },
   range: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...textRole.hint,
     fontVariant: ["tabular-nums"],
   },
-  pending: { color: theme.textMuted, fontSize: fontSize.xs },
+  pending: { ...textRole.meta },
 }));

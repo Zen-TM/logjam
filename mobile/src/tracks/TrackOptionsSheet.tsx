@@ -24,7 +24,7 @@ import {
   ELEVATION_TRACK_MAX_SAMPLES,
 } from "@logjam/shared";
 
-import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
@@ -466,7 +466,7 @@ export function TrackOptionsSheet({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
-  note: { color: theme.textMuted, fontSize: fontSize.sm },
+  note: { ...textRole.hint },
 }));

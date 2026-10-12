@@ -27,7 +27,7 @@ import {
   savesCapturesToGallery,
   setSaveCapturesToGallery,
 } from "../../media/galleryPreference";
-import { fontSize, lineHeight, spacing, makeStyles } from "../../theme";
+import { spacing, makeStyles } from "../../theme";
 import {
   ScreenScroll,
   SectionHeader,
@@ -148,11 +148,9 @@ export function PrivacySettingsScreen() {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   note: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    lineHeight: lineHeight.body,
+    ...textRole.note,
     marginBottom: spacing(2),
   },
 }));

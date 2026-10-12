@@ -1,10 +1,10 @@
 .banner {
+  composes: bodySmall from "../textRoles.generated.module.css";
   display: flex;
   align-items: flex-start;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-1-5);
   border-radius: var(--radius-sm);
-  font-size: var(--font-xs);
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-warning) 25%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
@@ -28,10 +28,9 @@
 }
 
 .retryBtn {
+  composes: caption from "../textRoles.generated.module.css";
   padding: 2px var(--space-1);
   border-radius: var(--radius-sm);
-  font-size: var(--font-xs);
-  font-weight: 600;
   border: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
   background: transparent;
   color: var(--color-text);

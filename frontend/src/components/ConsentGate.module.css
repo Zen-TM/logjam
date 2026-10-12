@@ -32,20 +32,19 @@
 }
 
 .title {
+  composes: title from "../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xl);
 }
 
 .body {
+  composes: paragraph from "../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
-  line-height: 1.5;
   color: var(--color-text);
 }
 
 .legal {
+  composes: body from "../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

@@ -33,7 +33,7 @@ import {
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import { getSyncStatus, requestSync } from "../sync/syncEngine";
-import { fontSize, spacing, makeStyles, makeThemed, useTheme } from "../theme";
+import { spacing, makeStyles, makeThemed, useTheme } from "../theme";
 import {
   Button,
   Hero,
@@ -257,6 +257,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   health: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
   healthText: { flex: 1, gap: spacing(0.25) },
   headline: { ...textRole.rowTitle },
-  detail: { color: theme.textMuted, fontSize: fontSize.sm },
+  detail: { ...textRole.hint },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
 }));

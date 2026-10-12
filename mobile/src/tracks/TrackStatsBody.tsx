@@ -27,7 +27,7 @@ import {
   type TrackDetail,
 } from "@logjam/shared";
 
-import { fontSize, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import { ProfileChart, StatGrid, type Stat } from "../ui";
 
 export function TrackStatsBody({
@@ -182,9 +182,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   // caption is inset as a stat cell is.
   statGroup: { gap: spacing(1) },
   statCaption: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...textRole.hint,
     paddingHorizontal: spacing(1.5),
   },
-  pending: { color: theme.textMuted, fontSize: fontSize.sm },
+  pending: { ...textRole.hint },
 }));
