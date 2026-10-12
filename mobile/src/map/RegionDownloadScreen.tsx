@@ -70,7 +70,7 @@ import {
 } from "../offline/regionDownloadQueue";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
-import { vectorClipFor } from "../offline/regionTilePlanning";
+import { savesVectorOnly, vectorClipFor } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -406,7 +406,7 @@ export function RegionDownloadScreen({
       .map((source) => source.zMax) ?? [];
   const deepestZoom =
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
-  const vectorOnly = pyramidIds.length === 0;
+  const vectorOnly = savesVectorOnly(vectorClip, pyramidIds.length);
 
   // ONE warning, over the map (DESIGN.md). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
