@@ -12,23 +12,19 @@ vi.mock("../prefsDb", () => ({
   },
 }));
 
-// grandfatherCrashReports lives beside initSentry, which pulls the native SDK.
-vi.mock("@sentry/react-native", () => ({ init: vi.fn() }));
-
 const {
   areCrashReportsEnabled,
   needsCrashReportChoice,
   readCrashReportChoice,
   setCrashReportsEnabled,
 } = await import("./crashReportPreference");
-const { grandfatherCrashReports } = await import("./initSentry");
 
 describe("crash report consent", () => {
   beforeEach(() => store.clear());
 
   // The distinction the whole mechanism rests on: "said no" is not "never
-  // asked". Collapse them and grandfathering silently re-enables a reporter the
-  // user turned off.
+  // asked". Collapse them and an explicit no gets asked again, or an unasked
+  // install reads as having answered.
   it("reads a fresh install as unset, and off", () => {
     expect(readCrashReportChoice()).toBe("unset");
     expect(areCrashReportsEnabled()).toBe(false);
@@ -48,15 +44,16 @@ describe("crash report consent", () => {
     expect(areCrashReportsEnabled()).toBe(true);
   });
 
-  it("grandfathers an install that predates the toggle", () => {
-    grandfatherCrashReports();
-    expect(areCrashReportsEnabled()).toBe(true);
-    expect(needsCrashReportChoice()).toBe(false);
-  });
-
-  it("never overwrites an explicit no", () => {
-    setCrashReportsEnabled(false);
-    grandfatherCrashReports();
+  // Consent before telemetry: an install that already has a stored identity
+  // but no recorded choice must report nothing and still be asked. Red if
+  // anything writes "on" for an unset install (e.g. a restored grandfathering
+  // call in the auth restore path, simulated by calling setCrashReportsEnabled(true)
+  // before the reads), or if needsCrashReportChoice stops keying on "unset".
+  it("keeps reporting off and asks an install that has an identity but no choice", () => {
+    // Nothing in the identity store feeds the choice, so the empty prefs store
+    // here IS that install.
+    expect(readCrashReportChoice()).toBe("unset");
     expect(areCrashReportsEnabled()).toBe(false);
+    expect(needsCrashReportChoice()).toBe(true);
   });
 });

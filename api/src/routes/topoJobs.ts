@@ -228,7 +228,7 @@ router.post(
     requireShareOwner(
       await getJobRole(user.id, "topoJob", job),
       "topoJob",
-      "Only the owner can delete this job",
+      "Only the owner can start this job",
     );
     if (job.status !== "uploading")
       throw new AppError(400, "Job is not awaiting upload");

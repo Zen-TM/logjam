@@ -41,6 +41,22 @@ export function formatTripPlaceNames(names: string[]): string | null {
 }
 
 /**
+ * A trip's title: an explicit displayName always wins; otherwise the joined
+ * names of its linked places; otherwise a generic fallback. Every display site
+ * must use this, never inline the displayName fallback chain.
+ */
+export function tripTitle(trip: {
+  displayName?: string | null;
+  places: { name: string }[];
+}): string {
+  return (
+    trip.displayName ??
+    formatTripPlaceNames(trip.places.map((c) => c.name)) ??
+    "Untitled trip"
+  );
+}
+
+/**
  * Whether a trip linking places of these types is a canyoning trip: it links a
  * place of the system CANYON type.
  *

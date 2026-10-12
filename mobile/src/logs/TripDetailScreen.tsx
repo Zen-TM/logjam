@@ -19,11 +19,11 @@ import {
   mediaCategory,
   messageFromError,
   TRIP_PAGE,
+  tripTitle,
   type SectionKeysOn,
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
-import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
