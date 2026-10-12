@@ -133,6 +133,116 @@ describe("fillDemFromGps", () => {
   });
 });
 
+describe("fillDemFromGps across a pause gap", () => {
+  // Recorded on the flat at 500 m inside the saved terrain, paused, driven
+  // up the hill, resumed outside it. GPS reads 20 m high throughout.
+  const at = every(25, 6).map((position, i) => ({
+    ...position,
+    segment: i < 3 ? 0 : 1,
+  }));
+  /**
+   * The boundary is 60 m along, between two samples. The second segment's
+   * first fix shares that distance with the first one's last.
+   */
+  const gps = (before: number[], after: number[]): GpsHeight[] => [
+    ...before.map((heightM, i) => ({ distanceM: i * 30, heightM, segment: 0 })),
+    ...after.map((heightM, i) => ({
+      distanceM: 60 + i * 25,
+      heightM,
+      segment: 1,
+    })),
+  ];
+  const climb = (filled: DemSamples) => buildElevationProfile(at, filled);
+
+  // Mutation: walk the fixes straight across the boundary and the 700 m
+  // drive is climbed.
+  it("does not count the gap as climb", () => {
+    const profile = climb(
+      fillDemFromGps(
+        dem([500, 500, 500, null, null, null]),
+        at,
+        gps([520, 520, 520], [1220, 1220, 1220, 1220]),
+      ),
+    );
+    expect(profile.gainM).toBe(0);
+    expect(profile.lossM).toBe(0);
+    expect(profile.maxM).toBe(1220); // charted where it was recorded
+  });
+
+  // Mutation: carry the held GPS height over the boundary and the second
+  // segment starts from the first one's 520, not its own 530: 26 m, not 16.
+  it("holds GPS still from each segment's own first fix", () => {
+    const profile = climb(
+      fillDemFromGps(
+        dem([500, 500, 500, null, null, null]),
+        at,
+        gps([520, 520, 520], [530, 546, 546, 546]),
+      ),
+    );
+    expect(profile.gainM).toBe(16);
+  });
+
+  // Mutation: ramp the shift from the DEM sample before the gap and the
+  // stretch is drawn up to 7 m off the DEM it meets.
+  it("shifts a filled stretch by its own segment's DEM only", () => {
+    const filled = fillDemFromGps(
+      dem([500, 500, 500, null, null, 700]),
+      at,
+      gps([520, 520, 520], [730, 730, 730, 730]),
+    );
+    expect(filled.heights.slice(3)).toEqual([700, 700, 700]);
+    expect(climb(filled).gainM).toBe(0);
+  });
+
+  it("leaves a segment with no heights of its own unfilled", () => {
+    const filled = fillDemFromGps(
+      dem([500, null, 500, null, null, null]),
+      at,
+      gps([520, 520, 520], []),
+    );
+    expect(filled.heights).toEqual([500, 500, 500, null, null, null]);
+    expect(climbFromProfile(climb(filled))).toBeNull();
+  });
+
+  // The real helpers end to end: a one-point segment between the two is
+  // dropped by both, so they must still number the segments alike.
+  // Mutation: number the fixes by the segment's place in the input and the
+  // second segment finds no fixes and stays unfilled.
+  it("matches fixes to samples by segment through the real helpers", () => {
+    const first: RoutePoint[] = [
+      [150.4, -33.5],
+      [150.42, -33.5],
+    ];
+    const second: RoutePoint[] = [
+      [150.6, -33.5],
+      [150.61, -33.5],
+    ];
+    const segments = [first, [[150.5, -33.5]] as RoutePoint[], second];
+    const positions = densifyLineSegments(segments);
+    const profile = buildTrackElevationProfile(
+      segments,
+      [
+        [
+          { vertex: 0, heightM: 620 },
+          { vertex: 1, heightM: 620 },
+        ],
+        [],
+        [
+          { vertex: 0, heightM: 1320 },
+          { vertex: 1, heightM: 1320 },
+        ],
+      ],
+      positions,
+      dem(positions.map((position) => (position.segment === 0 ? 600 : null))),
+    );
+    expect(profile.gainM).toBe(0);
+    expect(profile.lossM).toBe(0);
+    expect(profile.minM).toBe(600);
+    expect(profile.maxM).toBe(1320);
+    expect(climbFromProfile(profile)?.elevationSource).toBe("gps");
+  });
+});
+
 describe("gpsAlongLine", () => {
   const first: RoutePoint[] = [
     [150.4, -33.5],

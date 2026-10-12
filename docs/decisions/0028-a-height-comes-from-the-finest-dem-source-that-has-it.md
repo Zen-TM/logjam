@@ -55,7 +55,12 @@ Proposal: #359.
   `shared/src/trackStats.ts` fills the positions no DEM answers, sums each
   filled stretch and its joins from every GPS fix, in GPS throughout, and
   holds GPS still until it has moved `ELEVATION_HYSTERESIS_M` so its wander
-  is not summed at the DEM's threshold. Such a climb is labelled `gps`. `upgradeTrackClimbs` in
+  is not summed at the DEM's threshold. Such a climb is labelled `gps`. The
+  ground between two segments of a track (a pause gap) was not walked, so
+  the step across it is counted by neither: a sample position carries its
+  segment, `sampleDem` leaves that step out of `levelled` and reads no seam
+  for it, and each segment is filled from its own fixes and DEM samples. The
+  chart still shows the jump. `upgradeTrackClimbs` in
   `mobile/src/tracks/trackClimb.ts` asks again on the first sync cycle after
   the finish, and after that only when the ids or `coverage` in
   `DEM_SOURCES` change; nothing polls. It reads saved terrain and
