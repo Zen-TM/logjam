@@ -1,0 +1,37 @@
+name: expo-doctor
+
+# Not a job in CI: the check compares the expo-* pins with the versions Expo
+# currently publishes, so it turns red whenever a patch release lands, on
+# commits that changed nothing. The deploy workflows run only after a green CI
+# on main, and a patch release must not hold a deploy back.
+on:
+  pull_request:
+    paths:
+      - "mobile/package.json"
+      - "mobile/package-lock.json"
+      - ".github/workflows/expo-doctor.yml"
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expo-doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+      # Fails when an expo-* pin drifts from the SDK's own; fix with
+      # `npx expo install --fix`.
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
