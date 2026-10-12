@@ -52,7 +52,7 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import { fontSize, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -786,7 +786,7 @@ export function RegionDownloadScreen({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
   hero: { zIndex: 1 },
@@ -814,7 +814,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
   },
   namingBody: { gap: spacing(1.5) },
-  namingNote: { color: theme.textMuted, fontSize: fontSize.sm },
+  namingNote: { ...textRole.hint },
   panel: {
     height: PANEL_HEIGHT,
     backgroundColor: theme.page,
@@ -836,8 +836,7 @@ const useStyles = makeStyles((theme) => ({
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
   sourceNote: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...textRole.hint,
     paddingHorizontal: spacing(2),
     paddingTop: spacing(0.5),
   },
@@ -847,5 +846,5 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailCaption: { color: theme.textMuted, fontSize: fontSize.xs },
+  detailCaption: { ...textRole.meta },
 }));

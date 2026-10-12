@@ -1,13 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
-import {
-  fontSize,
-  radius,
-  spacing,
-  makeStyles,
-  useTheme,
-  withAlpha,
-} from "../theme";
+import { radius, spacing, makeStyles, useTheme, withAlpha } from "../theme";
 import { Icon } from "./Icon";
 
 type ErrorBannerProps = {
@@ -69,7 +62,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     padding: spacing(1.5),
   },
   content: { flex: 1, gap: spacing(1) },
-  message: { color: theme.text, fontSize: fontSize.sm },
+  message: { ...textRole.bodySmall, color: theme.text },
   actions: { flexDirection: "row", gap: spacing(2) },
   action: {
     ...textRole.control,

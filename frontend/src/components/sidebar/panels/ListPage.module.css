@@ -21,14 +21,14 @@
 
 /* A line of explanation under a control, or in place of an empty list. */
 .note {
+  composes: hint from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
 .state {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

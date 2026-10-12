@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   radius,
   spacing,
@@ -534,8 +532,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
-  dayText: { color: theme.text, fontSize: fontSize.sm },
-  selectedText: { color: theme.onFill, fontWeight: fontWeight.bold },
+  dayText: { ...textRole.bodySmall, color: theme.text },
+  selectedText: { ...textRole.control, color: theme.onFill },
   disabledText: { color: withAlpha(theme.textMuted, 0.45) },
   // Four rows of four, sized to match the six day rows so switching grids
   // barely moves the sheet's height.
@@ -559,5 +557,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  yearText: { color: theme.text, fontSize: fontSize.sm },
+  yearText: { ...textRole.bodySmall, color: theme.text },
 }));

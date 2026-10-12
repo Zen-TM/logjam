@@ -19,7 +19,6 @@ import {
 } from "@logjam/shared";
 
 import {
-  fontSize,
   radius,
   ON_SCRIM,
   scrim,
@@ -622,7 +621,7 @@ const TILE_SIZE = 96;
 
 const useStyles = makeStyles((theme, textRole) => ({
   row: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  emptyHint: { color: theme.textMuted, fontSize: fontSize.sm, maxWidth: 200 },
+  emptyHint: { ...textRole.hint, maxWidth: 200 },
   tileWrap: { position: "relative" },
   tile: {
     width: TILE_SIZE,
@@ -637,7 +636,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(0.25),
     padding: spacing(0.5),
   },
-  glyphLabel: { color: theme.textMuted, fontSize: 10, textAlign: "center" },
+  glyphLabel: { ...textRole.meta, textAlign: "center" },
   playBadge: {
     position: "absolute",
     top: spacing(0.5),
@@ -661,8 +660,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // Words on a scrim are white in every scheme (shared/DESIGN.md §7).
   pendingBadgeText: {
+    ...textRole.caption,
     color: ON_SCRIM,
-    fontSize: fontSize.xs,
     textAlign: "center",
   },
   addTile: {
@@ -692,8 +691,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   viewerImage: { width: "100%", height: "100%" },
   viewerUnavailable: {
+    ...textRole.body,
     color: theme.textMuted,
-    fontSize: fontSize.base,
     textAlign: "center",
   },
 }));

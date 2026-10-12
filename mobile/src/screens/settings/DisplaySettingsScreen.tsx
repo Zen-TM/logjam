@@ -1,8 +1,8 @@
 // Settings → Display: the two things that change how the whole app looks.
 //
 // The theme repaints the running app the moment it is picked. The text size
-// applies at the NEXT LAUNCH and says so: `fontSize` is a module constant every
-// style reads (DESIGN.md).
+// applies at the NEXT LAUNCH and says so: a type role's size is a module
+// constant every style reads (DESIGN.md).
 //
 // The theme is the one preference here with an account copy: it is a single
 // scalar with no merge hazard, and a scheme picked in a browser is what this

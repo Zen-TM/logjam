@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import {
-  fontSize,
   formRhythm,
   radius,
   spacing,
@@ -121,9 +120,9 @@ export function ChipPicker({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: formRhythm.label },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  hint: { ...textRole.hint },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   input: {
     minWidth: 120,
@@ -134,7 +133,7 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.field,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
+    ...textRole.field,
     color: theme.text,
-    fontSize: fontSize.sm,
   },
 }));

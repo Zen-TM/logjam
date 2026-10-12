@@ -23,9 +23,9 @@
 }
 
 .note {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 /* A track's stat grid, split by the line that says where its climb came from.
@@ -38,18 +38,18 @@
 
 /* Inset as a stat cell is, so it lines up under the figures it is about. */
 .statCaption {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 0;
   padding: 0 var(--space-1-5) var(--space-1);
   /* A cell's own invisible border, or the text sits a pixel left of theirs. */
   border-inline: 1px solid transparent;
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 /* The height band: a figure, so it reads with the stats above it. */
 .band {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
 }
@@ -59,9 +59,9 @@
    `--color-text-muted` put it under 4.5:1, which axe caught the moment Ways
    joined e2e/a11y.spec.ts (DESIGN.md). */
 .attribution {
+  composes: meta from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-xs);
   font-style: italic;
   line-height: 1.3;
 }
@@ -75,7 +75,7 @@
 }
 
 .linkName {
+  composes: body from "../../../textRoles.generated.module.css";
   composes: twoLines from "../../../ui/TwoLines.module.css";
   min-width: 0;
-  font-size: var(--font-base);
 }

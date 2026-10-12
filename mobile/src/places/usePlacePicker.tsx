@@ -19,7 +19,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { TRACK_MIME_TYPES, messageFromError } from "@logjam/shared";
 
-import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import { Row, TextField } from "../ui";
 import { fillRouteSlot } from "./fillRouteSlot";
 import {
@@ -205,8 +205,8 @@ export function usePlacePicker({
   };
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
-  hint: { color: theme.textMuted, fontSize: fontSize.xs },
+  hint: { ...textRole.meta },
 }));
