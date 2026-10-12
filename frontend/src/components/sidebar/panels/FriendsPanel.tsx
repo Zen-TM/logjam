@@ -37,6 +37,7 @@ import {
   friendInviteUrl,
   friendInvitesLiveLabel,
   friendRemovedMessage,
+  friendRequestMadeFriend,
   friendsRemovedMessage,
   friendsRemoveConfirm,
   friendRemoveConfirm,
@@ -411,6 +412,7 @@ function FriendsPanel({
         friends={friends}
         onClose={() => setAddOpen(false)}
         onSent={onRefetchFriends}
+        onFriended={onRefetchNotifications}
       />
 
       <ConfirmDialog
@@ -441,22 +443,31 @@ function FriendsPanel({
 
 /** Username search → friend request. Already-a-friend and already-pending are
  *  refused server-side with a 409 whose message is worth showing, so the row
- *  stays and the error arrives as a toast. */
-function AddFriendDialog({
+ *  stays and the error arrives as a toast. A request to someone who had
+ *  already asked makes a friend there and then: `onFriended`, because their
+ *  request's prompt has just left the inbox.
+ *  Exported for FriendsPanel.render.test.tsx. */
+export function AddFriendDialog({
   open,
   friends,
   onClose,
   onSent,
+  onFriended,
 }: {
   open: boolean;
   friends: TFriend[];
   onClose: () => void;
   onSent: () => void;
+  onFriended: () => void;
 }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TSearchUser[]>([]);
   const [sentIds, setSentIds] = useState<ReadonlySet<string>>(new Set());
+  // Made a friend by sending, shown until the refetched list says so itself.
+  const [friendedIds, setFriendedIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [sendingId, setSendingId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -468,6 +479,7 @@ function AddFriendDialog({
       setQuery("");
       setResults([]);
       setSentIds(new Set());
+      setFriendedIds(new Set());
     }
   }
 
@@ -504,10 +516,18 @@ function AddFriendDialog({
   async function handleSend(user: TSearchUser) {
     setSendingId(user.id);
     try {
-      await sendFriendRequest(user.id);
+      const friended = friendRequestMadeFriend(
+        await sendFriendRequest(user.id),
+      );
       // Mark the row rather than dropping it: a search with several matches can
       // keep going, and the pill is what says the request went.
-      setSentIds((prev) => new Set(prev).add(user.id));
+      (friended ? setFriendedIds : setSentIds)((prev) =>
+        new Set(prev).add(user.id),
+      );
+      if (friended) {
+        toast.success(friendAcceptedMessage(user.username));
+        onFriended();
+      }
       onSent();
     } catch (err) {
       console.error(err);
@@ -517,7 +537,10 @@ function AddFriendDialog({
     }
   }
 
-  const friendIds = new Set(friends.map((friend) => friend.id));
+  const friendIds = new Set([
+    ...friends.map((friend) => friend.id),
+    ...friendedIds,
+  ]);
   const typed = query.trim();
 
   return (

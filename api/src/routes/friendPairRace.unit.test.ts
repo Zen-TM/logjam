@@ -4,8 +4,8 @@
 // now fails with P2002. These tests are the routes' half: that failure is
 // answered the way the check would have answered it, never with a 500.
 //
-// Mutations that turn it red: drop the P2002 catch in POST /friends/request,
-// or the second attempt in POST /friends/invites/redeem.
+// Mutations that turn it red: drop the second attempt in POST
+// /friends/request or in POST /friends/invites/redeem.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 
@@ -22,7 +22,8 @@ vi.mock("../services/prisma", () => ({
     $transaction: transaction,
   },
 }));
-vi.mock("../services/push", () => ({ sendPushToUser: vi.fn() }));
+const sendPushToUser = vi.fn();
+vi.mock("../services/push", () => ({ sendPushToUser }));
 vi.mock("../lib/resolveUser", () => ({
   resolveUser: vi.fn().mockResolvedValue({ id: "me" }),
 }));
@@ -53,28 +54,100 @@ beforeEach(() => {
   transaction.mockReset();
 });
 
-describe("POST /friends/request, when the other write lands first", () => {
+// A request to someone whose own request is waiting accepts it: both asked.
+// It has to end the same whether the two were a year apart (the read finds
+// the row) or raced (the insert is refused, and the second read finds it).
+//
+// Mutations that turn it red: answer an opposite pending row with the 409 a
+// same-way one gets; let a block reach `acceptFriendRequest`.
+describe("POST /friends/request", () => {
+  const theirs = { id: "f-1", requesterId: "them", addresseeId: "me" };
+  const tx = {
+    friendship: {
+      create: vi.fn(),
+      update: vi.fn().mockResolvedValue({ ...theirs, status: "accepted" }),
+    },
+    notification: { create: vi.fn(), deleteMany: vi.fn() },
+  };
+  const res = { status: vi.fn(), json: vi.fn() };
   const send = () =>
     handlerOf(friends, "/request")(
       { user: { sub: "me-sub" }, body: { addresseeId: "them" } },
-      {},
+      res,
     ).catch((err: unknown) => err);
+  const runTx = (run: (client: typeof tx) => unknown) => run(tx);
 
-  it.each([
-    ["pending", 409, "Friend request already pending"],
-    ["accepted", 409, "Already friends"],
-    ["blocked", 403, "Unable to send friend request"],
-  ])(
-    "answers as the check does for a %s row",
-    async (status, code, message) => {
-      findFriendship
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: "f-1", status });
-      transaction.mockRejectedValueOnce(lostTheRace());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    res.status.mockReturnValue(res);
+  });
 
-      expect(await send()).toMatchObject({ statusCode: code, message });
-    },
-  );
+  // `raced` is the read that found nothing, then the insert that lost.
+  describe.each([
+    ["sent long after theirs", false],
+    ["raced with theirs", true],
+  ])("%s", (_when, raced) => {
+    const found = (row: object) => {
+      if (raced) {
+        findFriendship.mockResolvedValueOnce(null);
+        transaction.mockRejectedValueOnce(lostTheRace());
+      }
+      findFriendship.mockResolvedValueOnce(row);
+      transaction.mockImplementation(runTx);
+    };
+
+    it("accepts their pending request, as an accept does", async () => {
+      found({ ...theirs, status: "pending" });
+
+      expect(await send()).toBeUndefined();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ...theirs, status: "accepted" });
+      expect(tx.friendship.create).not.toHaveBeenCalled();
+      expect(tx.friendship.update).toHaveBeenCalledWith({
+        where: { id: "f-1" },
+        data: { status: "accepted" },
+      });
+      // My prompt for their request goes; they are told, and pushed.
+      expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: "me",
+          type: "friend_request",
+          payload: { path: ["friendshipId"], equals: "f-1" },
+        },
+      });
+      expect(tx.notification.create).toHaveBeenCalledWith({
+        data: {
+          userId: "them",
+          type: "friend_request_accepted",
+          payload: { friendshipId: "f-1", acceptedById: "me" },
+        },
+      });
+      expect(sendPushToUser).toHaveBeenCalledWith("them", {
+        type: "friend_request_accepted",
+        friendshipId: "f-1",
+      });
+    });
+
+    it.each([
+      [{ ...theirs, status: "blocked" }, 403, "Unable to send friend request"],
+      [{ ...theirs, status: "accepted" }, 409, "Already friends"],
+      [
+        {
+          id: "f-1",
+          requesterId: "me",
+          addresseeId: "them",
+          status: "pending",
+        },
+        409,
+        "Friend request already pending",
+      ],
+    ])("refuses over %o", async (row, statusCode, message) => {
+      found(row);
+
+      expect(await send()).toMatchObject({ statusCode, message });
+      expect(tx.friendship.update).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe("POST /friends/invites/redeem, when the other write lands first", () => {

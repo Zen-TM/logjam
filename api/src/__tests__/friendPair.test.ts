@@ -12,8 +12,10 @@ import { API_URL, BOB_ID, BOB_SUB, CAROL_ID, CAROL_SUB, as } from "./_actors";
 //
 // Mutations that turn it red: drop the `friendships_pair_key` index
 // (migration 20261012120000_friendships_one_per_pair) and the reciprocal
-// insert is accepted; drop the P2002 handling in POST /friends/request or
-// POST /friends/invites/redeem and a race that interleaves answers 500.
+// insert is accepted; drop the second attempt in POST /friends/request or
+// POST /friends/invites/redeem and a race that interleaves answers 500;
+// answer an opposite pending request with a 409 and the two never become
+// friends by asking.
 
 const betweenBobAndCarol = {
   OR: [
@@ -41,14 +43,55 @@ describe("one friendship per pair", () => {
     ).rejects.toMatchObject({ code: "P2002" });
   });
 
-  it("gives two people who ask each other at once one request", async () => {
+  it("makes friends of two people who ask each other at once", async () => {
     const answers = await Promise.all([
       requestFriend(BOB_SUB, CAROL_ID),
       requestFriend(CAROL_SUB, BOB_ID),
     ]);
-    expect(answers.map((res) => res.status).sort()).toEqual([201, 409]);
-    expect(await prisma.friendship.count({ where: betweenBobAndCarol })).toBe(
-      1,
+    // One made the request, the other accepted it, whichever landed first.
+    expect(answers.map((res) => res.status).sort()).toEqual([200, 201]);
+    const rows = await prisma.friendship.findMany({
+      where: betweenBobAndCarol,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("accepted");
+  });
+
+  it("accepts a waiting request when its addressee asks back", async () => {
+    const first = await requestFriend(BOB_SUB, CAROL_ID);
+    expect(first.status).toBe(201);
+    expect(first.body.status).toBe("pending");
+    // Asking twice the same way is still refused.
+    expect((await requestFriend(BOB_SUB, CAROL_ID)).status).toBe(409);
+
+    const back = await requestFriend(CAROL_SUB, BOB_ID);
+    expect(back.status).toBe(200);
+    // The row an older build already reads, now accepted: same id, same
+    // fields, and `updatedAt` moved for the delta pull.
+    expect(Object.keys(back.body).sort()).toEqual(
+      Object.keys(first.body).sort(),
+    );
+    expect(back.body).toMatchObject({
+      id: first.body.id,
+      requesterId: BOB_ID,
+      addresseeId: CAROL_ID,
+      status: "accepted",
+    });
+    expect(Date.parse(back.body.updatedAt)).toBeGreaterThan(
+      Date.parse(first.body.updatedAt),
+    );
+
+    // Carol's prompt went; bob, who asked first, is told as by any accept.
+    const about = await prisma.notification.findMany({
+      where: { payload: { path: ["friendshipId"], equals: first.body.id } },
+      select: { userId: true, type: true },
+    });
+    expect(about).toEqual([
+      { userId: BOB_ID, type: "friend_request_accepted" },
+    ]);
+    const friends = await request(API_URL).get("/friends").set(as(CAROL_SUB));
+    expect(friends.body.some((row: { id: string }) => row.id === BOB_ID)).toBe(
+      true,
     );
   });
 
