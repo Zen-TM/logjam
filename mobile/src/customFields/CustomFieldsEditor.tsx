@@ -207,11 +207,24 @@ export function useCustomFieldForm({
     seedDraft(entity, editing, initialTypeId),
   );
   const [seededFor, setSeededFor] = useState(formKey);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [boundsError, setBoundsError] = useState<string | null>(null);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  // A save the local write refused, or a failed delete — this form stays open
+  // either way, so it reports in its own banner above the footer's buttons
+  // rather than a toast (shared/DESIGN.md §11).
+  const [formError, setFormError] = useState<string | null>(null);
   if (seededFor !== formKey) {
     // React's documented way to adjust state when a prop changes: assign during
     // render, no effect, no flash of the old field's name.
     setSeededFor(formKey);
     setDraft(seedDraft(entity, editing, initialTypeId));
+    // Nor of the last form's complaints, under fields nobody has touched yet.
+    setError(null);
+    setBoundsError(null);
+    setScopeError(null);
+    setFormError(null);
   }
   const { label, type, bounded, min, max, appliesToAll, typeIds } = draft;
   const patch = (change: Partial<FieldDraft>) =>
@@ -238,14 +251,6 @@ export function useCustomFieldForm({
         }));
   const allScopeValues = scopeOptions.map((option) => option.value);
 
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [boundsError, setBoundsError] = useState<string | null>(null);
-  const [scopeError, setScopeError] = useState<string | null>(null);
-  // A save the local write refused, or a failed delete — this form stays open
-  // either way, so it reports in its own banner above the footer's buttons
-  // rather than a toast (shared/DESIGN.md §11).
-  const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
 
