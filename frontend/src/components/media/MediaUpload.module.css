@@ -44,12 +44,12 @@
 }
 
 .hint {
-  font-size: var(--font-sm);
+  composes: body from "../../textRoles.generated.module.css";
   color: var(--color-text);
 }
 
 .sub {
-  font-size: var(--font-xs);
+  composes: hint from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 

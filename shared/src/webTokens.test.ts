@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { FONT, INK, TEXT_ROLES } from "./designTokens.js";
 import { THEME_SCHEMES, THEME_SCHEME_ORDER } from "./themeSchemes.js";
-import { kebab, webTokensCss } from "./webTokens.js";
+import { kebab, webTextRolesCss, webTokensCss } from "./webTokens.js";
 
 /** The declarations of one rule block, as a name → value map. */
 function blockOf(css: string, selector: string): Map<string, string> {
@@ -50,18 +50,26 @@ describe("webTokensCss", () => {
     expect(root.get("--motion-fast")).toBe("150ms");
   });
 
-  // A role points at the scale's own property, so a size is written once.
-  // Mutation that turns it red: emit `--text-title-size` from `FONT.gps`.
-  it("points every type role at the font scale", () => {
-    const root = blockOf(css, ":root");
+  // A role's class points at the font scale, so a size is written once.
+  // Mutation that turns it red: emit `font-size` from `FONT.gps`, or drop the
+  // `uppercase` branch in `webTextRolesCss`.
+  it("draws every type role as a class on the font scale", () => {
+    const roles = webTextRolesCss();
     for (const [name, spec] of Object.entries(TEXT_ROLES)) {
-      if (!("web" in spec)) continue;
+      const rule = blockOf(roles, `.${name}`);
+      if (!("web" in spec)) {
+        expect(roles, `${name} is Logjam GPS's alone`).not.toContain(
+          `.${name} `,
+        );
+        continue;
+      }
       expect(spec.web.size in FONT.web).toBe(true);
-      expect(root.get(`--text-${kebab(name)}-size`)).toBe(
-        `var(--font-${spec.web.size})`,
-      );
-      expect(root.get(`--text-${kebab(name)}-weight`)).toBe(
+      expect(rule.get("font-size")).toBe(`var(--font-${spec.web.size})`);
+      expect(rule.get("font-weight")).toBe(
         `var(--font-weight-${spec.web.weight})`,
+      );
+      expect(rule.get("text-transform") === "uppercase").toBe(
+        "uppercase" in spec.web,
       );
     }
   });

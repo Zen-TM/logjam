@@ -11,11 +11,11 @@
 }
 
 .note {
+  composes: body from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

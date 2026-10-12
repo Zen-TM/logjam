@@ -25,15 +25,16 @@
 }
 
 .input {
+  composes: field from "../../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   border: none;
   background: transparent;
   color: var(--color-text);
-  font: inherit;
+  font-family: inherit;
+  line-height: inherit;
   /* Map chrome's own step (MapControl.module.css), between the panel's base
      and the old 16px. */
-  font-size: 0.9375rem;
 }
 
 .input::placeholder {
@@ -45,6 +46,7 @@
 }
 
 .kbd {
+  composes: hint from "../../textRoles.generated.module.css";
   min-width: 24px;
   height: 24px;
   box-sizing: border-box;
@@ -54,8 +56,8 @@
   justify-content: center;
   border: 1px solid var(--color-text-muted);
   border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: var(--font-xs);
+  font-family: inherit;
+  line-height: inherit;
 }
 
 .results {
@@ -79,6 +81,7 @@
 }
 
 .option {
+  composes: body from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 12px;
@@ -86,7 +89,6 @@
   padding: 0 10px;
   border-radius: var(--radius-md);
   color: var(--color-text);
-  font-size: var(--font-sm);
   cursor: pointer;
 }
 
@@ -112,13 +114,13 @@
 }
 
 .optionMeta {
-  font-size: var(--font-xs);
+  composes: hint from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .status {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
   padding: 8px 10px;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }

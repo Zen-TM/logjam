@@ -12,14 +12,14 @@
 }
 
 .lede {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-base);
   color: var(--color-text);
 }
 
 .note {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
   line-height: 1.5;
 }
@@ -27,6 +27,7 @@
 /* A dashed target is the one place in the app that draws its own border: it has
    to read as somewhere to put a thing, which a card edge does not say. */
 .dropZone {
+  composes: body from "../../textRoles.generated.module.css";
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -37,8 +38,8 @@
   border-radius: var(--radius-md);
   background: var(--color-field);
   color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--font-sm);
+  font-family: inherit;
+  line-height: inherit;
   text-align: center;
   cursor: pointer;
   transition:
@@ -80,11 +81,10 @@
 }
 
 .fileName {
+  composes: control from "../../textRoles.generated.module.css";
   composes: twoLines from "../../ui/TwoLines.module.css";
   flex: 1;
   min-width: 0;
-  font-size: var(--font-sm);
-  font-weight: 600;
   color: var(--color-text);
 }
 
@@ -98,12 +98,9 @@
 }
 
 .mapHeaderCell {
+  composes: section from "../../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
-  font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -120,11 +117,11 @@
 /* The header as it is written in the file, in a monospace so a trailing space
    or a case difference is visible. */
 .sourceHeader {
+  composes: body from "../../textRoles.generated.module.css";
   composes: twoLines from "../../ui/TwoLines.module.css";
   flex: 1;
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--font-sm);
   color: var(--color-text);
 }
 
