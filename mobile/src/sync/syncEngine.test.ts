@@ -279,6 +279,25 @@ describe("changes waiting with no answer", () => {
     stop();
   });
 
+  it("does not take time off the count when the clock is set back", async () => {
+    // The phone's clock is corrected by the network between two failures.
+    // Mutation: add a negative gap to the stored total.
+    stateWrites[UNANSWERED_KEY] = JSON.stringify({
+      ms: SYNC_GIVE_UP_AFTER_MS,
+      since: "2026-10-06T02:00:00.000Z",
+    });
+    vi.setSystemTime(new Date("2026-10-07T03:00:00.000Z"));
+    const stop = registerSyncTriggers();
+    flushError = markNoResponse(new TypeError("Network request failed"));
+    await requestSync();
+    await settle();
+    vi.setSystemTime(new Date("2026-10-07T02:55:00.000Z"));
+    await requestSync();
+    await settle();
+    expect(getSyncStatus().waitingSince).toBe("2026-10-06T02:00:00.000Z");
+    stop();
+  });
+
   it("keeps the count across a restart, and drops it at the first answer", async () => {
     stateWrites[UNANSWERED_KEY] = JSON.stringify({
       ms: SYNC_GIVE_UP_AFTER_MS,

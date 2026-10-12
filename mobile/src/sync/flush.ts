@@ -235,12 +235,19 @@ async function applyOpResult(
         // too: when a batch holding two edits to one field is replayed after
         // a lost reply, the first is told it replaced the second
         // (flush.test.ts). That edit is about to write the value again.
-        const later = (await loadOutboxRowsFor(row.entity, row.entity_id)).map(
-          (queued) =>
+        // Only an edit still to be sent after this one can have been that
+        // write: an earlier op still here was refused, and so is a parked one.
+        const later = (await loadOutboxRowsFor(row.entity, row.entity_id))
+          .filter(
+            (queued) =>
+              queued.seq > row.seq &&
+              (queued.state === "queued" || queued.state === "inflight"),
+          )
+          .map((queued) =>
             queued.fields_json
               ? (JSON.parse(queued.fields_json) as Record<string, unknown>)
               : {},
-        );
+          );
         const real = later.reduce(
           (kept, fields) => filterSelfConflicts(kept, base, fields),
           filterSelfConflicts(result.conflicts, base, ownFields),
