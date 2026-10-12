@@ -18,10 +18,12 @@ import {
   formatDistanceM,
   formatElevationM,
   formatSpeedMps,
+  PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedClockMs,
   speedSeries,
   speedTimeFormatter,
+  storedClimbCaption,
   TRACK_PROFILE_COPY,
   trackHeights,
   trackStatRows,
@@ -35,6 +37,8 @@ import {
 } from "../../media/useTrackFileDetail";
 import { ProfileChart, SectionHeader, StatGrid, type Stat } from "../../../ui";
 import classes from "./WayDetailPanel.module.css";
+
+const ASCENT = PAIRED_STAT_LABELS.ascent;
 
 export default function TrackProfiles({
   source,
@@ -177,7 +181,16 @@ export default function TrackProfiles({
       ...stored.filter((stat) => !listed.has(stat.label)),
     ];
   }, [detail, heights, stored]);
-  const grid = stats.length > 0 && <StatGrid stats={pairedStatLayout(stats)} />;
+  const grid = stats.length > 0 && (
+    <>
+      <StatGrid stats={pairedStatLayout(stats)} />
+      {/* The stored climb and the chart below can come from different sources
+          (`storedClimbCaption`), so each says its own. */}
+      {climb && stored.some((stat) => stat.label === ASCENT) && (
+        <p className={classes.note}>{storedClimbCaption(climb.source)}</p>
+      )}
+    </>
+  );
 
   if (loading || error || !detail || !heights)
     return (

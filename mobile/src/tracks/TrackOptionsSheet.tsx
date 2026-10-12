@@ -298,6 +298,7 @@ export function TrackOptionsSheet({
             storedClimb={{
               gainM: track.elevationGainM,
               lossM: track.elevationLossM,
+              source: track.elevationSource,
             }}
           />
         </View>

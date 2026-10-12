@@ -6,12 +6,14 @@
 // 3.4 km walk that gap was 14%, and the chart ran to 4.0 km beside a stat card
 // reading 3.4 — which reads as one of them being broken.
 import { describe, expect, it } from "vitest";
+import { CLIMB_SOURCES } from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import type { TrackDetail } from "./trackStats.js";
 
 import {
   elevationSeries,
   sameSeries,
+  storedClimbCaption,
   speedSeries,
   timeOfDayFormatter,
   trackHeights,
@@ -247,5 +249,37 @@ describe("trackStatRows", () => {
   it("lists no height band for a track with nothing to chart", () => {
     // A lone altitude reading sets a min and a max and cannot be drawn.
     expect(labels({ ...timed, elevation: null })).not.toContain("High point");
+  });
+});
+
+describe("storedClimbCaption", () => {
+  // Mutation: delete an entry of HEIGHT_SOURCE_NAMES.
+  it("names every source a climb can be stored from", () => {
+    const captions = CLIMB_SOURCES.map(storedClimbCaption);
+    expect(new Set(captions).size).toBe(CLIMB_SOURCES.length);
+    for (const caption of captions) {
+      expect(caption).not.toBe("Ascent and descent from terrain data");
+    }
+  });
+
+  it("takes a climb with no source beside it as GPS", () => {
+    expect(storedClimbCaption(undefined)).toBe(
+      "Ascent and descent from GPS heights",
+    );
+  });
+
+  it("names the chart's source in the same words when one source answered", () => {
+    const detail = { elevation: profile, maxAltitudeM: 40 } as TrackDetail;
+    const fine = { ...profile, demSourceIds: ["nsw-5m"] };
+    expect(trackHeights(detail, fine, false).note).toBe(
+      "Heights from NSW 5 m terrain data",
+    );
+    expect(storedClimbCaption("nsw-5m")).toBe(
+      "Ascent and descent from NSW 5 m terrain data",
+    );
+    const mixed = { ...profile, demSourceIds: ["nsw-5m", "terrarium"] };
+    expect(trackHeights(detail, mixed, false).note).toBe(
+      "Heights from terrain data",
+    );
   });
 });

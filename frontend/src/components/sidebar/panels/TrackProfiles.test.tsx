@@ -188,8 +188,15 @@ describe("TrackProfiles", () => {
       attribution: "Terrain credit",
     };
     const save = vi.fn();
-    show("finer", gpx(true), [], { source: "terrarium", save });
-    await screen.findByText("Heights from terrain data");
+    show("finer", gpx(true), [{ label: "Ascent", value: "↑ 70 m" }], {
+      source: "terrarium",
+      save,
+    });
+    // The chart and the stored figures each name their own source.
+    await screen.findByText("Heights from NSW 5 m terrain data");
+    expect(
+      screen.getByText("Ascent and descent from 30 m terrain data"),
+    ).toBeTruthy();
     expect(save).toHaveBeenCalledExactlyOnceWith({
       elevationGainM: 80,
       elevationLossM: 0,
@@ -199,7 +206,7 @@ describe("TrackProfiles", () => {
     cleanup();
     const same = vi.fn();
     show("same", gpx(true), [], { source: "nsw-5m", save: same });
-    await screen.findByText("Heights from terrain data");
+    await screen.findByText("Heights from NSW 5 m terrain data");
     expect(same).not.toHaveBeenCalled();
 
     // A reading with a hole sums a surface and nothing: never stored.

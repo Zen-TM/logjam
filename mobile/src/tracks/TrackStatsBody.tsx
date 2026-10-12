@@ -18,6 +18,7 @@ import {
   pairedStatLayout,
   speedSeries,
   speedTimeFormatter,
+  storedClimbCaption,
   TRACK_PROFILE_COPY,
   trackHeights,
   trackStatRows,
@@ -79,7 +80,7 @@ export function TrackStatsBody({
    * the Stats totals and Logjam Web give one figure for one track. Omitted for
    * a live recording and an import, which have nothing stored.
    */
-  storedClimb?: { gainM: number; lossM: number };
+  storedClimb?: { gainM: number; lossM: number; source?: string | null };
 }) {
   const styles = useStyles();
 
@@ -111,6 +112,13 @@ export function TrackStatsBody({
       {/* Pairs share a line and a lone stat takes the row (`STAT_PAIRS`), so a
           missing Time or a missing pair cannot slide the rest out of step. */}
       <StatGrid stats={pairedStatLayout(stats)} />
+      {/* The stored climb and the chart below can come from different sources
+          (`storedClimbCaption`), so each says its own. */}
+      {storedClimb ? (
+        <Text style={styles.pending}>
+          {storedClimbCaption(storedClimb.source)}
+        </Text>
+      ) : null}
 
       {elevation ? (
         <View style={styles.chartBlock}>

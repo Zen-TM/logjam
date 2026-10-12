@@ -6,6 +6,7 @@
 // means, which heights are charted and the words around them are decided once
 // and each client only draws.
 import { MAP_MEASURE } from "./contracts/mapMeasure.js";
+import { GPS_CLIMB_SOURCE, NSW_5M, TERRARIUM } from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
@@ -127,6 +128,29 @@ export const TRACK_PROFILE_COPY = {
 } as const;
 
 /**
+ * What a reader is told a height came from, by `CLIMB_SOURCES` id. One per
+ * id: "names every source a climb can be stored from" in
+ * profileSeries.test.ts.
+ */
+const HEIGHT_SOURCE_NAMES: Record<string, string> = {
+  [NSW_5M.id]: "NSW 5 m terrain data",
+  [TERRARIUM.id]: "30 m terrain data",
+  [GPS_CLIMB_SOURCE]: "GPS heights",
+};
+/** A source this build does not know was written by a newer one. */
+const UNNAMED_SOURCE = "terrain data";
+
+/**
+ * The line under a finished recording's stored Ascent and Descent, saying
+ * which source they were read from (nothing stored beside them means GPS).
+ * They are stored and the chart is read live, so the two can come from
+ * different sources; each says its own, in the same words.
+ */
+export function storedClimbCaption(source: string | null | undefined): string {
+  return `Ascent and descent from ${HEIGHT_SOURCE_NAMES[source ?? GPS_CLIMB_SOURCE] ?? UNNAMED_SOURCE}`;
+}
+
+/**
  * Which heights a track's panel shows, and the line that says where they came
  * from.
  *
@@ -160,7 +184,13 @@ export function trackHeights(
     : dem?.filledFromGps
       ? "Terrain data covers part of this track — the rest is from GPS"
       : dem
-        ? "Heights from terrain data"
+        ? // Named only when ONE source answered: a line read from two has no
+          // single name, and the credit beside it lists both.
+          `Heights from ${
+            (dem.demSourceIds?.length === 1
+              ? HEIGHT_SOURCE_NAMES[dem.demSourceIds[0]!]
+              : undefined) ?? UNNAMED_SOURCE
+          }`
         : demProfile
           ? "Terrain data incomplete — heights from GPS"
           : demLoading

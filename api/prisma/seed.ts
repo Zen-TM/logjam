@@ -1691,6 +1691,9 @@ async function main() {
           durationMs: 1_500_000,
           elevationGainM: 95,
           elevationLossM: 130,
+          // The finest source, so opening the page finds nothing finer and
+          // writes nothing: the a11y e2e cases must not change the account.
+          elevationSource: "nsw-5m",
           pointCount: wollangambeFile.positionCount,
           ...WOLLANGAMBE_RECORDED,
         },
@@ -1737,6 +1740,9 @@ async function main() {
           durationMs: 1_500_000,
           elevationGainM: 70,
           elevationLossM: 95,
+          // The finest source, so opening the page finds nothing finer and
+          // writes nothing: the a11y e2e cases must not change the account.
+          elevationSource: "nsw-5m",
           pointCount: bellCreekFile.positionCount,
           ...BELL_CREEK_RECORDED,
         },
