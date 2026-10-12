@@ -242,9 +242,10 @@ export type DemSamples = {
   /** The source each height came from. */
   sourceIds: (string | null)[];
   /**
-   * `heights` with the offset between two sources taken out at each seam, so
-   * climb and descent are summed from this and never count the join. Equal to
-   * `heights` when one source answered throughout.
+   * `heights` with the offset between two sources taken out at each seam and
+   * the jump taken out at each pause gap, so climb and descent are summed
+   * from this and count neither. Equal to `heights` when one source answered
+   * throughout a line in one piece.
    */
   levelled: (number | null)[];
   /**
@@ -275,7 +276,11 @@ function covers(source: DemSource, position: SamplePosition): boolean {
  * both, found by walking the list from the coarser of the two. That is not
  * always the coarser one itself: two footprints that only touch share neither,
  * and the walk goes on to a source under both. If none has both, the step is
- * not counted. `demSources.test.ts` holds each case.
+ * not counted.
+ *
+ * Nor is the step between two samples on different segments of the line (a
+ * pause gap): that ground was not walked, whatever any source says of it, so
+ * it is never read as a seam. `demSources.test.ts` holds each case.
  */
 export async function sampleDem(
   positions: readonly SamplePosition[],
@@ -322,10 +327,12 @@ export async function sampleDem(
   for (let i = 0; i < heights.length; i++) {
     const height = heights[i];
     if (height == null) continue;
-    if (previous >= 0 && ranks[i] !== ranks[previous]) {
+    const gap =
+      previous >= 0 && positions[i]!.segment !== positions[previous]!.segment;
+    if (previous >= 0 && (gap || ranks[i] !== ranks[previous])) {
       let step = 0;
       const coarser = Math.max(ranks[i]!, ranks[previous]!);
-      for (let rank = coarser; rank < sources.length; rank++) {
+      for (let rank = coarser; !gap && rank < sources.length; rank++) {
         const both = await read(rank, [previous, i]);
         if (both.size === 2) {
           step = both.get(i)! - both.get(previous)!;
