@@ -29,9 +29,10 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
   cards.
 - **A photo viewer's chrome is fixed**: a photo sits on black.
 
-- **A text style is a role** from `TEXT_ROLES` or `GPS_ROLES` in `theme.ts`:
-  `...textRole.<name>` inside `makeStyles`. A size, weight or line height is
-  never written on a screen (lint); a kind of text no role covers is a new role.
+- **A text style is a role** from `TEXT_ROLES` (`shared/src/designTokens.ts`,
+  read in `theme.ts`): `...textRole.<name>` inside `makeStyles`. A size,
+  weight or line height is never written on a screen (lint); a kind of text no
+  role covers is a new role there, for both clients to take.
 
 Radius: `md` tile or inline surface; `lg` card or row; `xl` sheet; `pill`
 anything text-shaped that is not a card; `sm` swatch.

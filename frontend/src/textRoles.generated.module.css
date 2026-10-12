@@ -32,6 +32,23 @@
   font-weight: var(--font-weight-regular);
 }
 
+.bodySmall {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+.paragraph {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+}
+
+.note {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+}
+
 .control {
   font-size: var(--font-sm);
   font-weight: var(--font-weight-medium);
@@ -58,6 +75,11 @@
 }
 
 .hint {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+.meta {
   font-size: var(--font-xs);
   font-weight: var(--font-weight-regular);
 }

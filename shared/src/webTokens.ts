@@ -37,7 +37,7 @@ const rem = (n: number) => `${n / 16}rem`;
 /**
  * One class per type role, for a CSS module to take with `composes: <role>
  * from "…/textRoles.generated.module.css"`. The class is the whole text style
- * (size, weight, case), so a stylesheet never writes a `font-size` or a
+ * (size, weight, case, leading), so a stylesheet never writes a `font-size` or a
  * `font-weight` of its own (`frontend/src/textRoles.test.ts`). Colour stays the
  * element's: a role's `muted` is a choice between two text colours, not a
  * style. A role Logjam GPS alone draws has no class.
@@ -53,6 +53,7 @@ export function webTextRolesCss(): string {
       size: string;
       weight: string;
       uppercase?: true;
+      leading?: true;
     };
     const props = [
       `font-size: var(--font-${role.size})`,
@@ -61,6 +62,9 @@ export function webTextRolesCss(): string {
       ...(role.uppercase
         ? ["text-transform: uppercase", "letter-spacing: 0.08em"]
         : []),
+      // The page's own line height (index.css), written so the role does not
+      // depend on where it is composed.
+      ...(role.leading ? ["line-height: 1.5"] : []),
     ];
     return [`.${name} {\n${props.map((p) => `  ${p};`).join("\n")}\n}\n`];
   });
