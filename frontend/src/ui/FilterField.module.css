@@ -12,8 +12,8 @@
 }
 
 .label {
+  composes: label from "../textRoles.generated.module.css";
   flex: 1;
-  font-size: var(--font-sm);
   color: var(--color-text);
 }
 
@@ -22,13 +22,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-sm);
+}
+
+.summaryIdle {
+  composes: body from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 /* Set is said by weight, and by the clear button beside it: words are never an
    intent colour. */
-.summary[data-active="true"] {
+.summaryActive {
+  composes: control from "../textRoles.generated.module.css";
   color: var(--color-text);
-  font-weight: 600;
 }

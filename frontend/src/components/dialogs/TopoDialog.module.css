@@ -6,6 +6,7 @@
    phone, but it says so rather than pretending otherwise (frontend/CLAUDE.md,
    "Heavy authoring tools"). */
 .wideHint {
+  composes: hint from "../../textRoles.generated.module.css";
   display: none;
 }
 
@@ -13,7 +14,6 @@
   .wideHint {
     display: block;
     margin: 0;
-    font-size: var(--font-xs);
     color: var(--color-text-muted);
   }
 }
@@ -51,7 +51,7 @@
 }
 
 .dropLine {
-  font-size: var(--font-sm);
+  composes: body from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
@@ -61,7 +61,7 @@
 }
 
 .dropHint {
-  font-size: var(--font-xs);
+  composes: hint from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -112,20 +112,20 @@
 }
 
 .summaryLabel {
-  font-size: var(--font-xs);
+  composes: hint from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .summaryValue {
+  composes: bodySmall from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .summaryNote {
+  composes: hint from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -138,14 +138,14 @@
 }
 
 .workingLine {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
 }
 
 .workingDetail {
+  composes: hint from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -164,8 +164,8 @@
 }
 
 .doneName {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-base);
   color: var(--color-text);
 }
 
@@ -179,6 +179,7 @@
 }
 
 .step {
+  composes: body from "../../textRoles.generated.module.css";
   /* A flex li has no marker, and the numbers are the point of an ordered list:
      the item stays a list item and its contents do the stacking. */
   display: list-item;
@@ -186,7 +187,6 @@
 
 .step::marker {
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 .stepBody {
@@ -196,8 +196,8 @@
 }
 
 .stepLine {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

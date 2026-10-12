@@ -44,14 +44,7 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import {
-  fontSize,
-  lineHeight,
-  spacing,
-  makeStyles,
-  useTheme,
-  useHues,
-} from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -637,22 +630,17 @@ function DeleteAccountForm({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
-  email: { color: theme.textMuted, fontSize: fontSize.sm },
+  email: { ...textRole.hint },
   body: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
-  meterLabel: { color: theme.text, fontSize: fontSize.sm },
+  meterLabel: { ...textRole.bodySmall, color: theme.text },
   meterHint: { color: theme.textMuted },
   form: { gap: spacing(1.5) },
-  formHint: { color: theme.textMuted, fontSize: fontSize.sm },
+  formHint: { ...textRole.hint },
   version: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...textRole.meta,
     paddingTop: spacing(1),
   },
-  guestNote: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    lineHeight: lineHeight.body,
-  },
+  guestNote: { ...textRole.note },
 }));

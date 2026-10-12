@@ -103,7 +103,8 @@
 }
 
 :global(#map .maplibregl-ctrl-attrib a) {
-  color: var(--color-accent);
+  color: var(--color-text);
+  text-decoration: underline;
 }
 
 /* A wrapped box is not a stadium: pill ends would clip the text. `lg` is the

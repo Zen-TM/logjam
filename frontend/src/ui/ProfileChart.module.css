@@ -57,7 +57,7 @@
 /* Text wears text tokens, never the series colour. The backdrop keeps it
    legible where it crosses the filled area. */
 .markerLabel {
-  font-size: var(--font-xs);
+  composes: hint from "../textRoles.generated.module.css";
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-page) 82%, transparent);

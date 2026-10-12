@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
 import { IconButton } from "./IconButton";
 import {
@@ -85,9 +85,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     gap: spacing(0.25),
   },
-  value: { color: theme.textMuted, fontSize: fontSize.sm },
+  value: { ...textRole.bodySmall, color: theme.textMuted },
   // Active is said by weight and by the clear button beside it, never by an
   // intent colour: words are `text`.
-  valueActive: { color: theme.text, fontWeight: fontWeight.medium },
+  valueActive: { ...textRole.control, color: theme.text },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));

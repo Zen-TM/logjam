@@ -70,7 +70,7 @@ import {
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -685,7 +685,7 @@ function EmptyPanel({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
@@ -702,5 +702,5 @@ const useStyles = makeStyles((theme) => ({
   menuBody: { gap: spacing(1) },
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  hint: { ...textRole.hint },
 }));

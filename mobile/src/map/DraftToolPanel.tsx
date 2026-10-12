@@ -47,14 +47,7 @@ import {
   type SnapMode,
 } from "@logjam/shared";
 
-import {
-  fontSize,
-  radius,
-  spacing,
-  withAlpha,
-  makeStyles,
-  useTheme,
-} from "../theme";
+import { radius, spacing, withAlpha, makeStyles, useTheme } from "../theme";
 import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
@@ -242,8 +235,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     color: theme.text,
     fontVariant: ["tabular-nums"],
   },
-  meta: { color: theme.textMuted, fontSize: fontSize.xs, flexShrink: 1 },
-  editing: { color: theme.textMuted, fontSize: fontSize.xs },
+  meta: { ...textRole.meta, flexShrink: 1 },
+  editing: { ...textRole.meta },
   actions: {
     flexDirection: "row",
     alignItems: "center",

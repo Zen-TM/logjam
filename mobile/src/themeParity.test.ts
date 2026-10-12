@@ -70,16 +70,25 @@ describe("theme parity with @logjam/shared", () => {
     // Not the launch scheme: a muted role follows the scheme it is asked for.
     const theme = THEME_SCHEMES[THEME_SCHEME_ORDER.at(-1)!].tokens;
     const textRole = textRolesFor(theme);
-    expect(Object.keys(textRole).sort()).toEqual(
-      Object.keys(TEXT_ROLES).sort(),
+    const drawn = Object.entries(TEXT_ROLES).flatMap(([name, spec]) =>
+      "gps" in spec ? [[name, spec.gps] as const] : [],
     );
-    for (const [name, spec] of Object.entries(TEXT_ROLES)) {
-      const role = spec.gps;
+    expect(Object.keys(textRole).sort()).toEqual(
+      drawn.map(([name]) => name).sort(),
+    );
+    for (const [name, spec] of drawn) {
+      const role: Record<string, string | true> = spec;
       const style = textRole[name as keyof typeof textRole];
-      expect(style.fontSize).toBe(Math.round(FONT.gps[role.size] * textScale));
-      expect(style.fontWeight).toBe(String(FONT_WEIGHT[role.weight]));
+      expect(style.fontSize).toBe(
+        Math.round(FONT.gps[role.size as keyof typeof FONT.gps] * textScale),
+      );
+      expect(style.fontWeight).toBe(
+        String(FONT_WEIGHT[role.weight as keyof typeof FONT_WEIGHT]),
+      );
       expect(style.textTransform === "uppercase").toBe("uppercase" in role);
       expect(style.color === theme.textMuted).toBe("muted" in role);
+      // Only a role that says so sets its lines apart; the rest take the font's own.
+      expect(style.lineHeight !== undefined).toBe("leading" in role);
     }
   });
 });

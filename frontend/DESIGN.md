@@ -29,8 +29,12 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
 - **`--radius-full` is a circle on a square box only**; anything
   stadium-shaped is `--radius-pill`.
 
-- **A text style is a role** from `TEXT_ROLES`: `--text-<role>-size` and
-  `-weight`, never a `--font-*` and a weight written by hand.
+- **A text style is a role** from `TEXT_ROLES`: `composes: <role> from
+  "…/textRoles.generated.module.css"`, never a `font-size` or `font-weight`
+  written by hand (`textRoles.test.ts`). Put one role on an element; a
+  variant that changes the role is its own class. A kind of text no role
+  covers is a new role in `TEXT_ROLES` (`shared/src/designTokens.ts`), which
+  Logjam GPS takes too.
 
 Radius: `sm` swatch or checkbox; `md` tile, icon button, menu item, field;
 `lg` row, card, map button; `xl` popover, sheet; `pill` anything text-shaped
@@ -66,6 +70,9 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   Its settings and edit controls (snap, Undo, Reverse, Clear) are in its
   footer. Leaving a draft that would be kept (a route) confirms on every way
   out; a measurement is not kept, so leaving it asks nothing.
+  Narrow, its sheet opens at the peek (the note, the distance and Undo:
+  `DraftPeek`) so the map is there to press; dragging it up brings back the
+  rest.
 - **MapLibre's controls are restyled, not rebuilt**: kit buttons on the map's
   public API; the scale bar and attribution stay MapLibre's.
 - **Hovering a row lights its pin; pressing a pin opens the place**, from any

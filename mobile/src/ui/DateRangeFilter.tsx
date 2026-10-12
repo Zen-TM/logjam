@@ -1,13 +1,7 @@
 import { Text, View } from "react-native";
 import { dateSummary, formatDateKey } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  formRhythm,
-  spacing,
-  makeStyles,
-} from "../theme";
+import { formRhythm, spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
 
 /**
@@ -77,8 +71,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "space-between",
   },
   label: { ...textRole.control, color: theme.text },
-  value: { color: theme.textMuted, fontSize: fontSize.sm },
+  value: { ...textRole.bodySmall, color: theme.textMuted },
   // Words are text-coloured; the weight says it is set.
-  valueActive: { color: theme.text, fontWeight: fontWeight.medium },
+  valueActive: { ...textRole.control, color: theme.text },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));

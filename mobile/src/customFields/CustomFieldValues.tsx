@@ -21,7 +21,7 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import {
   Field,
   IconButton,
@@ -232,7 +232,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderBottomColor: theme.line,
   },
   tableRowLast: { borderBottomWidth: 0 },
-  tableKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
+  tableKey: { ...textRole.hint, flexShrink: 1 },
   tableValue: {
     ...textRole.control,
     color: theme.text,
