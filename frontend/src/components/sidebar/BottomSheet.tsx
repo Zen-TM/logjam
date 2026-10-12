@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import classes from "./BottomSheet.module.css";
+import { SheetSnapContext } from "./sheetSnap";
 
 export type SheetSnap = "peek" | "half" | "full";
 
@@ -30,7 +31,11 @@ function sheetHeightPx(viewportHeight: number): number {
 }
 
 /** translateY (px from fully-open) for each snap point, given the viewport height. */
-function snapTranslate(snap: SheetSnap, viewportHeight: number): number {
+function snapTranslate(
+  snap: SheetSnap,
+  viewportHeight: number,
+  peekReveal: number,
+): number {
   const sheetHeight = sheetHeightPx(viewportHeight);
   switch (snap) {
     case "full":
@@ -38,16 +43,20 @@ function snapTranslate(snap: SheetSnap, viewportHeight: number): number {
     case "half":
       return sheetHeight - viewportHeight * HALF_REVEAL_FRACTION;
     case "peek":
-      return sheetHeight - PEEK_REVEAL_PX;
+      return sheetHeight - peekReveal;
   }
 }
 
 /** Snap point whose translate is nearest the given drag translate. */
-function nearestSnap(translate: number, viewportHeight: number): SheetSnap {
+function nearestSnap(
+  translate: number,
+  viewportHeight: number,
+  peekReveal: number,
+): SheetSnap {
   const snaps: SheetSnap[] = ["full", "half", "peek"];
   return snaps.reduce((best, snap) =>
-    Math.abs(snapTranslate(snap, viewportHeight) - translate) <
-    Math.abs(snapTranslate(best, viewportHeight) - translate)
+    Math.abs(snapTranslate(snap, viewportHeight, peekReveal) - translate) <
+    Math.abs(snapTranslate(best, viewportHeight, peekReveal) - translate)
       ? snap
       : best,
   );
@@ -80,12 +89,16 @@ function BottomSheet({
   snap,
   onSnapChange,
   title,
+  peekReveal = PEEK_REVEAL_PX,
   children,
 }: {
   snap: SheetSnap;
   onSnapChange: (snap: SheetSnap) => void;
   /** The page's own title: the landmark's accessible name. */
   title: string;
+  /** How much of the sheet shows at "peek", in px. The default is a title; a
+   *  page that keeps a readout at its peek (a drawing tool) asks for more. */
+  peekReveal?: number;
   children: ReactNode;
 }) {
   const viewportHeight = useViewportHeight();
@@ -110,15 +123,15 @@ function BottomSheet({
     event.currentTarget.setPointerCapture(event.pointerId);
     dragStart.current = {
       pointerY: event.clientY,
-      baseTranslate: snapTranslate(snap, viewportHeight),
+      baseTranslate: snapTranslate(snap, viewportHeight, peekReveal),
     };
-    setDragTranslate(snapTranslate(snap, viewportHeight));
+    setDragTranslate(snapTranslate(snap, viewportHeight, peekReveal));
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (!dragStart.current) return;
     const delta = event.clientY - dragStart.current.pointerY;
-    const maxTranslate = sheetHeightPx(viewportHeight) - PEEK_REVEAL_PX;
+    const maxTranslate = sheetHeightPx(viewportHeight) - peekReveal;
     const next = Math.min(
       Math.max(dragStart.current.baseTranslate + delta, 0),
       maxTranslate,
@@ -128,7 +141,7 @@ function BottomSheet({
 
   function handlePointerUp() {
     if (dragTranslate !== null) {
-      onSnapChange(nearestSnap(dragTranslate, viewportHeight));
+      onSnapChange(nearestSnap(dragTranslate, viewportHeight, peekReveal));
     }
     dragStart.current = null;
     setDragTranslate(null);
@@ -150,7 +163,8 @@ function BottomSheet({
     if (clamped !== index) onSnapChange(SNAP_ORDER[clamped]);
   }
 
-  const translate = dragTranslate ?? snapTranslate(snap, viewportHeight);
+  const translate =
+    dragTranslate ?? snapTranslate(snap, viewportHeight, peekReveal);
 
   // The sheet element is always full-height and slides down via translateY.
   // Size the content region to only the *visible* portion so overflow-y: auto
@@ -200,7 +214,9 @@ function BottomSheet({
           className={classes.content}
           style={{ height: visibleContentHeight }}
         >
-          {children}
+          <SheetSnapContext.Provider value={snap}>
+            {children}
+          </SheetSnapContext.Provider>
         </div>
       </aside>
     </>

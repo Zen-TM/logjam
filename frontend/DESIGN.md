@@ -68,6 +68,9 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   Its settings and edit controls (snap, Undo, Reverse, Clear) are in its
   footer. Leaving a draft that would be kept (a route) confirms on every way
   out; a measurement is not kept, so leaving it asks nothing.
+  Narrow, its sheet opens at the peek (the note, the distance and Undo:
+  `DraftPeek`) so the map is there to press; dragging it up brings back the
+  rest.
 - **MapLibre's controls are restyled, not rebuilt**: kit buttons on the map's
   public API; the scale bar and attribution stay MapLibre's.
 - **Hovering a row lights its pin; pressing a pin opens the place**, from any

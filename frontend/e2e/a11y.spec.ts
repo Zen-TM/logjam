@@ -42,6 +42,14 @@ async function settled(page: Page) {
 
 async function expectNoViolations(page: Page, include?: string) {
   await settled(page);
+  // MapLibre writes the map's credits once the style's sources have loaded,
+  // well after the canvas is up. A run before then measures a box with no
+  // links in it, which is how their missing underline passed.
+  if (include === "#map") {
+    await expect(
+      page.locator("#map .maplibregl-ctrl-attrib a").first(),
+    ).toBeAttached({ timeout: 15_000 });
+  }
   let builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
   if (include) builder = builder.include(include);
   const { violations } = await builder.analyze();
@@ -976,21 +984,51 @@ test.describe("narrow web", () => {
     await expectNoViolations(page, "aside");
   });
 
-  test("Measure: the tool's page is the sheet under the map", async ({
-    page,
-  }) => {
-    await openApp(page);
-    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
-    await page.getByRole("button", { name: "Tools", exact: true }).click();
-    await page.getByRole("button", { name: "Measure distance" }).click();
-    const sheet = page.getByRole("complementary", { name: "Measure distance" });
-    await expect(sheet).toBeVisible();
-    await page.locator("canvas.maplibregl-canvas").focus();
-    await page.keyboard.press("Enter");
-    await expect(sheet.getByRole("status")).toHaveText("1 point");
-    await expectNoViolations(page, "aside");
-    await expectNoViolations(page, "#map");
-  });
+  // A drawing tool's work is on the map, so its sheet opens at the peek: the
+  // note, the distance and Undo, with the map left to press. Dragging it up (the
+  // keyboard does the same through the grab bar) brings back the rest.
+  for (const tool of [
+    { name: "Measure distance", title: "Measure distance", rest: "Clear" },
+    { name: "Draw a route", title: "New route", rest: "Save" },
+  ]) {
+    test(`${tool.name}: the tool's page opens at the peek, over little of the map`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+      await page.getByRole("button", { name: "Tools", exact: true }).click();
+      await page.getByRole("button", { name: tool.name }).click();
+      const sheet = page.getByRole("complementary", { name: tool.title });
+      await expect(sheet).toBeVisible();
+
+      const height = page.getByRole("slider", { name: "Panel height" });
+      await expect(height).toHaveAttribute("aria-valuetext", "Peek");
+      // Under a quarter of the screen: most of the map is there to press.
+      const top = (await sheet.boundingBox())!.y;
+      expect(top).toBeGreaterThan(844 * 0.7);
+      await expect(sheet.getByText("Distance")).toBeInViewport();
+      await expect(
+        sheet.getByRole("button", { name: "Undo" }),
+      ).toBeInViewport();
+      await expect(
+        sheet.getByRole("button", { name: tool.rest, exact: true }),
+      ).toHaveCount(0);
+
+      await page.locator("canvas.maplibregl-canvas").focus();
+      await page.keyboard.press("Enter");
+      await expect(sheet.getByRole("status")).toHaveText("1 point");
+      await expectNoViolations(page, "aside");
+      await expectNoViolations(page, "#map");
+
+      await height.focus();
+      await page.keyboard.press("ArrowUp");
+      await expect(height).toHaveAttribute("aria-valuetext", "Half height");
+      await expect(
+        sheet.getByRole("button", { name: tool.rest, exact: true }),
+      ).toBeVisible();
+      await expectNoViolations(page, "aside");
+    });
+  }
 
   test("a form dialog filling the phone's screen", async ({ page }) => {
     await openApp(page);
