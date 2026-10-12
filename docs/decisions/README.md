@@ -127,3 +127,4 @@ supersede instead.
 | [0029](0029-vector-map-with-every-signed-in-region.md) | A signed-in region save always includes the vector map; a guest's never does | 2026-10-10 | Accepted |
 | [0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md) | A DEM Logjam builds is terrarium PNG tiles, rounded to a quarter metre, in one PMTiles archive | 2026-10-10 | Accepted |
 | [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md) | Heights in NSW come from the Spatial Services 5 m DEM, built once into our own archive | 2026-10-10 | Accepted |
+| [0032](0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md) | A contributor's AWS access is read-only, behind the CI privacy Deny and MFA | 2026-10-08 | Accepted |

@@ -190,8 +190,8 @@ function resolveTextScale(): number {
  */
 function osFontScale(): number {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PixelRatio } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require("react-native") as typeof import("react-native");
     return PixelRatio.getFontScale() || 1;
   } catch {

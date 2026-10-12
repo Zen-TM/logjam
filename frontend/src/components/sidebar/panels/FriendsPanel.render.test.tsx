@@ -16,7 +16,10 @@ vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   getFriendInvites: vi.fn(async () => []),
-  searchUsers: vi.fn(async () => [{ id: "carol-id", username: "carol" }]),
+  searchUsers: vi.fn(async () => ({
+    data: [{ id: "carol-id", username: "carol" }],
+    total: 1,
+  })),
   sendFriendRequest: vi.fn(),
   createFriendInvite: vi.fn(async () => ({
     token: "A".repeat(43),

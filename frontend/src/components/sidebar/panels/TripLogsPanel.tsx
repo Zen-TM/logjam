@@ -38,13 +38,10 @@ import {
   type SectionKeysOn,
   type TripSortKey,
   type TripVerbId,
+  tripTitle,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
-import {
-  bulkDeleteTripLogs,
-  deleteTripLog,
-  tripTitle,
-} from "../../../placeUtils";
+import { bulkDeleteTripLogs, deleteTripLog } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
 import TripLogDialog from "../../dialogs/TripLogDialog";
