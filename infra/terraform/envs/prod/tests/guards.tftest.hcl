@@ -81,10 +81,40 @@ run "ci_reads_no_secret_or_user_data" {
           st.Effect == "Deny" && try(st.Resource, null) == "*" && contains(flatten([st.Action]), "secretsmanager:GetSecretValue")
         ]) &&
         !anytrue([for st in jsondecode(p).Statement : st.Effect == "Allow" && strcontains(jsonencode(st.Action), "secretsmanager")]) &&
-        !anytrue([for st in jsondecode(p).Statement : can(st.NotResource)])
+        !anytrue([for st in jsondecode(p).Statement : can(st.NotResource) && !alltrue([for a in flatten([st.Action]) : startswith(a, "s3:")])])
       )
     ])
     error_message = "Every CI role and the apply boundary must deny GetSecretValue on every secret, with no exception (infra/AGENTS.md)."
+  }
+
+  # Mutation: turning the object Deny back into a list of buckets, adding a
+  # bucket to its exceptions, or scoping the log Deny to named log groups
+  # leaves the next bucket or log group readable until someone remembers to
+  # add it.
+  assert {
+    condition = alltrue([
+      for p in [
+        aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy,
+        aws_iam_role_policy.gha_readonly_privacy_deny.policy,
+        aws_iam_policy.github_actions_apply_boundary.policy,
+        ] : (
+        anytrue([
+          for st in jsondecode(p).Statement :
+          st.Effect == "Deny" && contains(flatten([st.Action]), "s3:GetObject") &&
+          toset(try(st.NotResource, [])) == toset([
+            "arn:aws:s3:::logjam-tfstate-620853681701/*",
+            "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
+            "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
+          ])
+        ]) &&
+        anytrue([
+          for st in jsondecode(p).Statement :
+          st.Effect == "Deny" && try(st.Resource, null) == "*" &&
+          length(setsubtract(["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"], flatten([st.Action]))) == 0
+        ])
+      )
+    ])
+    error_message = "The CI privacy Deny must cover objects in every bucket but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
   }
 
   # Mutation: dropping any of these from the Deny gives the plan and deploy
