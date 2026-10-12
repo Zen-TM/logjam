@@ -34,9 +34,8 @@
 }
 
 .message {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: note from "../../textRoles.generated.module.css";
   margin: 0 0 24px;
-  line-height: 1.5;
   color: var(--color-text-muted);
 }
 

@@ -223,6 +223,9 @@ type TextRoleStyle<Size extends string> = {
   /** A section heading; shared/DESIGN.md §2. */
   uppercase?: true;
   muted?: true;
+  /** Lines set apart so several read in a row: 22 dp on Logjam GPS
+   *  (theme.ts), 1.5 on Logjam Web. A role without it takes the font's own. */
+  leading?: true;
 };
 type TextRoleSpec = {
   gps?: TextRoleStyle<keyof typeof FONT.gps>;
@@ -254,12 +257,28 @@ export const TEXT_ROLES = {
     gps: { size: "base", weight: "regular" },
     web: { size: "sm", weight: "regular" },
   },
-  /** What the user types into a field. Logjam GPS draws it as `body`: its body
-   *  is the one size, where Logjam Web's running text is a step smaller than
-   *  what is typed. */
+  /** What the user types into a field. Its size is `body`'s on Logjam GPS;
+   *  Logjam Web's running text is a step smaller than what is typed. */
   field: {
     gps: { size: "base", weight: "regular" },
     web: { size: "base", weight: "regular" },
+  },
+  /** Running text one step down, in the text colour: an error line, a notice,
+   *  a value beside its label. */
+  bodySmall: {
+    gps: { size: "sm", weight: "regular" },
+    web: { size: "xs", weight: "regular" },
+  },
+  /** Prose the user reads: notes on a place, a consent text. `body` with its
+   *  lines set apart. */
+  paragraph: {
+    gps: { size: "base", weight: "regular", leading: true },
+    web: { size: "sm", weight: "regular", leading: true },
+  },
+  /** A few sentences explaining a screen or a sheet. */
+  note: {
+    gps: { size: "sm", weight: "regular", muted: true, leading: true },
+    web: { size: "sm", weight: "regular", muted: true, leading: true },
   },
   /** The label of a pill, chip, tab or small control. */
   control: {
@@ -290,6 +309,11 @@ export const TEXT_ROLES = {
   /** A line under a control saying what it means. */
   hint: {
     gps: { size: "sm", weight: "regular", muted: true },
+    web: { size: "xs", weight: "regular", muted: true },
+  },
+  /** A count, qualifier or source beside or under another line. */
+  meta: {
+    gps: { size: "xs", weight: "regular", muted: true },
     web: { size: "xs", weight: "regular", muted: true },
   },
   /** A section heading or a stat caption: the only capitals. */

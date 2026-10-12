@@ -52,7 +52,7 @@ describe("webTokensCss", () => {
 
   // A role's class points at the font scale, so a size is written once.
   // Mutation that turns it red: emit `font-size` from `FONT.gps`, or drop the
-  // `uppercase` branch in `webTextRolesCss`.
+  // `uppercase` or `leading` branch in `webTextRolesCss`.
   it("draws every type role as a class on the font scale", () => {
     const roles = webTextRolesCss();
     for (const [name, spec] of Object.entries(TEXT_ROLES)) {
@@ -71,6 +71,7 @@ describe("webTokensCss", () => {
       expect(rule.get("text-transform") === "uppercase").toBe(
         "uppercase" in spec.web,
       );
+      expect(rule.get("line-height") === "1.5").toBe("leading" in spec.web);
     }
   });
 

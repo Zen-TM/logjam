@@ -368,7 +368,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingRight: spacing(1.5),
   },
   input: {
-    ...textRole.body,
+    ...textRole.field,
     flex: 1,
     color: theme.text,
     paddingVertical: spacing(1),

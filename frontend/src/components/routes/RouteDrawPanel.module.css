@@ -44,7 +44,7 @@
 }
 
 .attribution {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
   font-style: italic;

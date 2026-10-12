@@ -114,7 +114,7 @@
 }
 
 .warning {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: bodySmall from "../../textRoles.generated.module.css";
   color: var(--color-text);
 }
 

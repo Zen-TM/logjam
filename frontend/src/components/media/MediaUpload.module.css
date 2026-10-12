@@ -49,7 +49,7 @@
 }
 
 .sub {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 

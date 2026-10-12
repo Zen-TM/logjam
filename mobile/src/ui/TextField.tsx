@@ -108,7 +108,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.md,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(1.5),
-    ...textRole.body,
+    ...textRole.field,
     color: theme.text,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },

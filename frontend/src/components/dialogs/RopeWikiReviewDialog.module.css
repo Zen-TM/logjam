@@ -5,7 +5,7 @@
 }
 
 .intro {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: note from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -22,7 +22,7 @@
 }
 
 .rwCoords {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -53,7 +53,7 @@
 }
 
 .optionMeta {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 

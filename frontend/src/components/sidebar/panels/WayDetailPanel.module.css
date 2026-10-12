@@ -59,7 +59,7 @@
    `--color-text-muted` put it under 4.5:1, which axe caught the moment Ways
    joined e2e/a11y.spec.ts (DESIGN.md). */
 .attribution {
-  composes: hint from "../../../textRoles.generated.module.css";
+  composes: meta from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
   font-style: italic;

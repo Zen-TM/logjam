@@ -221,3 +221,20 @@ describe("a colour tint and a control size are tokens", () => {
     expect(messages).toHaveLength(1);
   }, 60_000);
 });
+
+describe("typed text is the `field` role", () => {
+  // Logjam Web draws what is typed as `field` (shared/src/designTokens.ts), so
+  // a file that draws a TextInput takes the same role for it. Mutation: change
+  // `...textRole.field` to `...textRole.body` in `ui/TextField.tsx`.
+  it("holds for every file that draws a TextInput", () => {
+    const offenders = sources(SRC)
+      .filter((path) => {
+        const code = readFileSync(path, "utf8");
+        return (
+          /<TextInput\s+\w+=/.test(code) && !code.includes("textRole.field")
+        );
+      })
+      .map((path) => relative(SRC, path));
+    expect(offenders).toEqual([]);
+  });
+});

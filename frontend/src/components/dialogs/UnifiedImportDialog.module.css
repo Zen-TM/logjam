@@ -18,10 +18,9 @@
 }
 
 .note {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: note from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
-  line-height: 1.5;
 }
 
 /* A dashed target is the one place in the app that draws its own border: it has

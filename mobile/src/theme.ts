@@ -267,35 +267,8 @@ export const fontWeight = {
   bold: weight(FONT_WEIGHT.bold),
 } as const;
 
-/** Line height of running text that wraps over several lines. */
-const leading = { body: scaled(22) } as const;
-
-/**
- * Roles Logjam GPS draws that `TEXT_ROLES` does not hold yet. A role that is
- * not Logjam GPS-only belongs there; `themeParity.test.ts` fails on a name in
- * both, so it is moved rather than shadowed.
- * `leading` is the one place a line height is chosen: a paragraph's lines are
- * set apart, a one-line label's are the font's own.
- */
-export const GPS_ROLES = {
-  /** Running text one step down, text colour: a value beside its label, an
-   *  error line, a calendar cell. */
-  bodySmall: { size: "sm", weight: "regular" },
-  /** A count, qualifier or source beside or under another line. */
-  meta: { size: "xs", weight: "regular", muted: true },
-  /** Prose the user reads: notes on a place, a consent text. */
-  paragraph: { size: "base", weight: "regular", leading: "body" },
-  /** A few sentences explaining a screen or a sheet. */
-  note: { size: "sm", weight: "regular", muted: true, leading: "body" },
-} as const satisfies Record<
-  string,
-  {
-    size: keyof typeof FONT.gps;
-    weight: keyof typeof FONT_WEIGHT;
-    muted?: true;
-    leading?: keyof typeof leading;
-  }
->;
+/** Line height of a role that sets its lines apart (`leading` in `TEXT_ROLES`). */
+const leading = scaled(22);
 
 /** One of the type roles' styles, spread into a text style: `...textRole.title`. */
 type TextRoleStyle = {
@@ -305,39 +278,28 @@ type TextRoleStyle = {
   textTransform?: "uppercase";
   color?: string;
 };
-export type TextRoles = {
-  [Name in keyof typeof TEXT_ROLES | keyof typeof GPS_ROLES]: TextRoleStyle;
-};
+export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 /** The type roles in one scheme, for a reader outside a component. */
 export const textRolesFor = perScheme((theme) => {
-  const specs: [string, unknown][] = [
-    ...Object.entries(GPS_ROLES).map(([name, role]): [string, unknown] => [
-      name,
-      role,
-    ]),
-    ...Object.entries(TEXT_ROLES).flatMap(
-      ([name, spec]): [string, unknown][] =>
-        "gps" in spec ? [[name, spec.gps]] : [],
-    ),
-  ];
   return Object.fromEntries(
-    specs.map(([name, spec]) => {
-      const role = spec as {
+    Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
+      if (!("gps" in spec)) return [];
+      const role: {
         size: keyof typeof fontSize;
         weight: keyof typeof fontWeight;
         uppercase?: true;
         muted?: true;
-        leading?: keyof typeof leading;
-      };
+        leading?: true;
+      } = spec.gps;
       // The one place a size and a weight are written together.
       const style: TextRoleStyle = {
         fontSize: fontSize[role.size],
         fontWeight: fontWeight[role.weight],
-        ...(role.leading ? { lineHeight: leading[role.leading] } : {}),
+        ...(role.leading ? { lineHeight: leading } : {}),
         ...(role.uppercase ? { textTransform: "uppercase" } : {}),
         ...(role.muted ? { color: theme.textMuted } : {}),
       };
-      return [name, style];
+      return [[name, style]];
     }),
   ) as TextRoles;
 });

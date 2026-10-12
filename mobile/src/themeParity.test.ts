@@ -16,7 +16,6 @@ import {
   controlSize,
   fontSize,
   fontWeight,
-  GPS_ROLES,
   radius,
   spacing,
   textRolesFor,
@@ -71,14 +70,14 @@ describe("theme parity with @logjam/shared", () => {
     // Not the launch scheme: a muted role follows the scheme it is asked for.
     const theme = THEME_SCHEMES[THEME_SCHEME_ORDER.at(-1)!].tokens;
     const textRole = textRolesFor(theme);
-    expect(Object.keys(textRole).sort()).toEqual(
-      [...Object.keys(TEXT_ROLES), ...Object.keys(GPS_ROLES)].sort(),
+    const drawn = Object.entries(TEXT_ROLES).flatMap(([name, spec]) =>
+      "gps" in spec ? [[name, spec.gps] as const] : [],
     );
-    const specs = [
-      ...Object.entries(TEXT_ROLES).map(([name, spec]) => [name, spec.gps]),
-      ...Object.entries(GPS_ROLES),
-    ] as [string, Record<string, string | true>][];
-    for (const [name, role] of specs) {
+    expect(Object.keys(textRole).sort()).toEqual(
+      drawn.map(([name]) => name).sort(),
+    );
+    for (const [name, spec] of drawn) {
+      const role: Record<string, string | true> = spec;
       const style = textRole[name as keyof typeof textRole];
       expect(style.fontSize).toBe(
         Math.round(FONT.gps[role.size as keyof typeof FONT.gps] * textScale),
@@ -88,15 +87,8 @@ describe("theme parity with @logjam/shared", () => {
       );
       expect(style.textTransform === "uppercase").toBe("uppercase" in role);
       expect(style.color === theme.textMuted).toBe("muted" in role);
-      // Only a paragraph's lines are set apart; the rest take the font's own.
+      // Only a role that says so sets its lines apart; the rest take the font's own.
       expect(style.lineHeight !== undefined).toBe("leading" in role);
-    }
-  });
-
-  // Mutation: add a name to `GPS_ROLES` that `TEXT_ROLES` already holds.
-  it("holds no role in both tables", () => {
-    for (const name of Object.keys(GPS_ROLES)) {
-      expect(Object.keys(TEXT_ROLES)).not.toContain(name);
     }
   });
 });

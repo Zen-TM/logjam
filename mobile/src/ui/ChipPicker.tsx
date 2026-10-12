@@ -133,7 +133,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     backgroundColor: theme.field,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
-    ...textRole.bodySmall,
+    ...textRole.field,
     color: theme.text,
   },
 }));
