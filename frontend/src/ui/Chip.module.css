@@ -32,7 +32,7 @@
 }
 
 .count {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: caption from "../textRoles.generated.module.css";
   min-width: 20px;
   height: 18px;
   padding: 0 var(--space-0-5);
