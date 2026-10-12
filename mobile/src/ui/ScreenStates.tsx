@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
-import { spacing, makeStyles, useTheme, withAlpha } from "../theme";
+import { spacing, makeStyles, useTheme, withAlpha, muted } from "../theme";
 import { Button } from "./Button";
 import { Icon, type Glyph } from "./Icon";
 
@@ -96,5 +96,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     backgroundColor: theme.page,
   },
   title: { ...textRole.rowTitle, color: theme.text, textAlign: "center" },
-  hint: { ...textRole.hint, textAlign: "center" },
+  hint: { ...muted(theme, textRole.detail), textAlign: "center" },
 }));

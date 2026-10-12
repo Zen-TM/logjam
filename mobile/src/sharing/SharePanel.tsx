@@ -87,6 +87,7 @@ import {
   makeStyles,
   useTheme,
   controlSize,
+  muted,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -862,7 +863,7 @@ function SearchField({
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
   footerStack: { gap: spacing(1.5) },
-  muted: { ...textRole.hint },
+  muted: { ...muted(theme, textRole.detail) },
   spinner: { alignSelf: "flex-start" },
   promise: {
     flexDirection: "row",
@@ -875,7 +876,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   promiseIcon: { marginTop: spacing(0.25) },
   promiseText: {
     flex: 1,
-    ...textRole.bodySmall,
+    ...textRole.detail,
     color: theme.text,
   },
   search: {
@@ -890,7 +891,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     minHeight: controlSize.lg,
   },
   searchInput: {
-    ...textRole.field,
+    ...textRole.body,
     flex: 1,
     color: theme.text,
     paddingVertical: spacing(1),

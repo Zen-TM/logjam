@@ -68,7 +68,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // `flexShrink`, not `flex: 1`: the notice hugs its words until they wrap.
   text: {
     flexShrink: 1,
-    ...textRole.bodySmall,
+    ...textRole.detail,
     color: theme.text,
     textAlign: "center",
   },

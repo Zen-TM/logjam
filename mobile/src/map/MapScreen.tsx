@@ -118,6 +118,7 @@ import {
   touchTargetMin,
   useTheme,
   useHues,
+  muted,
 } from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
@@ -5653,5 +5654,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   // Where the navigation readout sits: a Notice, centred, in the notice stack's
   // column.
   navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
-  attributionText: { ...textRole.hint, color: theme.textMuted },
+  attributionText: { ...muted(theme, textRole.detail) },
 }));

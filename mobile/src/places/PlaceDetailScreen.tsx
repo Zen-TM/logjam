@@ -59,7 +59,7 @@ import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { AddWaySheet } from "./AddWaySheet";
-import { spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createPlaceLinkLocal,
@@ -1056,7 +1056,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingTop: spacing(0.5),
   },
   action: { flex: 1 },
-  muted: { ...textRole.hint },
+  muted: { ...muted(theme, textRole.detail) },
   notes: {
     ...textRole.paragraph,
     color: theme.text,
@@ -1079,7 +1079,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderBottomColor: theme.line,
   },
   fieldRowLast: { borderBottomWidth: 0 },
-  fieldKey: { ...textRole.hint, flexShrink: 1 },
+  fieldKey: { ...muted(theme, textRole.detail), flexShrink: 1 },
   fieldValue: {
     ...textRole.control,
     color: theme.text,

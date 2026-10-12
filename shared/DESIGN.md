@@ -74,6 +74,12 @@ renumber.
 - **A pill, badge or notice centres its text in itself**, not only itself on
   the screen.
 - **Capitals mark a section heading and nothing else.**
+- **Type is a short list of roles**, one declaration for both clients
+  (`TEXT_ROLES` in `designTokens.ts`): a role is a size step, a weight and,
+  for prose, a line height. A text takes the role that says what it is; if
+  none does, the nearest size and weight is the role, not a new one. Hierarchy
+  comes from the few steps and from weight and colour, not from a size of its
+  own.
 - **A title does not repeat a count the screen already shows.**
 - **A pair is drawn on one line** (ascent and descent, highest and lowest);
   a figure with no partner takes the whole line. Pairs: `statPairs.ts`.
@@ -147,7 +153,9 @@ renumber.
 
 - **A screen names a role, never a colour**; the scheme decides the colour.
 - **Words are `text` or `textMuted`.** Accent, warning and success are fills,
-  edges and glyphs, never the colour of words.
+  edges and glyphs, never the colour of words. A type role has no colour: the
+  screen picks one of the two where the text is drawn, so a secondary line and
+  its muted twin are one role.
 - **Anything drawn on a fill uses `onFill`.**
 - **A kind's hue is a fill**: a tile, a chip, a swatch, a map mark. Never a
   glyph or a word on a surface.

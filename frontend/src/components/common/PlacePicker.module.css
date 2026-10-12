@@ -62,7 +62,7 @@
 }
 
 .status {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
   padding: 8px 10px;
   color: var(--color-text-muted);

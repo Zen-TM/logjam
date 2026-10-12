@@ -18,7 +18,7 @@
 }
 
 .note {
-  composes: note from "../../textRoles.generated.module.css";
+  composes: paragraph from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -26,7 +26,7 @@
 /* A dashed target is the one place in the app that draws its own border: it has
    to read as somewhere to put a thing, which a card edge does not say. */
 .dropZone {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   display: flex;
   flex-direction: column;
   align-items: center;

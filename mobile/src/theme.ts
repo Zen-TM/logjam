@@ -107,15 +107,14 @@ function perScheme<T>(build: (theme: ThemeTokens) => T) {
 /**
  * A hook for anything derived from the scheme's colours: `build` runs once per
  * scheme, so the value keeps its identity from render to render and is safe as
- * a memo dependency or a prop. `textRole` is the type roles in that scheme
- * (the muted ones carry a colour).
+ * a memo dependency or a prop. `textRole` is the type roles.
  *
  *   const useToneColour = makeThemed((theme) => ({ ok: theme.accent }));
  */
 export function makeThemed<T>(
   build: (theme: ThemeTokens, textRole: TextRoles) => T,
 ): () => T {
-  const forScheme = perScheme((theme) => build(theme, textRolesFor(theme)));
+  const forScheme = perScheme((theme) => build(theme, textRoles));
   return () => forScheme(useTheme());
 }
 
@@ -237,8 +236,6 @@ export const fontSize = {
   base: scaled(FONT.gps.base),
   lg: scaled(FONT.gps.lg),
   xl: scaled(FONT.gps.xl),
-  /** Hero metric — one per screen, never body copy. */
-  display: scaled(FONT.gps.display),
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: SpaceStep): number => n * SPACE_UNIT;
@@ -270,39 +267,40 @@ export const fontWeight = {
 /** Line height of a role that sets its lines apart (`leading` in `TEXT_ROLES`). */
 const leading = scaled(22);
 
-/** One of the type roles' styles, spread into a text style: `...textRole.title`. */
+/**
+ * One of the type roles' styles, spread into a text style: `...textRole.title`.
+ * Size, weight and line height only: the colour is the screen's, `theme.text`
+ * or `theme.textMuted`, where the text is drawn.
+ */
 type TextRoleStyle = {
   fontSize: number;
   fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
   lineHeight?: number;
   textTransform?: "uppercase";
-  color?: string;
 };
 export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
-/** The type roles in one scheme, for a reader outside a component. */
-export const textRolesFor = perScheme((theme) => {
-  return Object.fromEntries(
-    Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
-      if (!("gps" in spec)) return [];
-      const role: {
-        size: keyof typeof fontSize;
-        weight: keyof typeof fontWeight;
-        uppercase?: true;
-        muted?: true;
-        leading?: true;
-      } = spec.gps;
-      // The one place a size and a weight are written together.
-      const style: TextRoleStyle = {
-        fontSize: fontSize[role.size],
-        fontWeight: fontWeight[role.weight],
-        ...(role.leading ? { lineHeight: leading } : {}),
-        ...(role.uppercase ? { textTransform: "uppercase" } : {}),
-        ...(role.muted ? { color: theme.textMuted } : {}),
-      };
-      return [[name, style]];
-    }),
-  ) as TextRoles;
-});
+/**
+ * A role in the muted text colour: `...muted(theme, textRole.detail)`. The
+ * colour is the screen's choice, never a role's, so a text that is not muted
+ * (or is an error) names its own.
+ */
+export const muted = (
+  theme: ThemeTokens,
+  role: TextRoleStyle,
+): TextRoleStyle & { color: string } => ({ ...role, color: theme.textMuted });
+/** The type roles, for a reader outside a component. */
+export const textRoles = Object.fromEntries(
+  Object.entries(TEXT_ROLES).map(([name, role]) => {
+    // The one place a size and a weight are written together.
+    const style: TextRoleStyle = {
+      fontSize: fontSize[role.size],
+      fontWeight: fontWeight[role.weight],
+      ...("leading" in role ? { lineHeight: leading } : {}),
+      ...("uppercase" in role ? { textTransform: "uppercase" } : {}),
+    };
+    return [name, style];
+  }),
+) as TextRoles;
 
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
 export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";

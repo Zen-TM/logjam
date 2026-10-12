@@ -32,9 +32,9 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
 - **A text style is a role** from `TEXT_ROLES`: `composes: <role> from
   "…/textRoles.generated.module.css"`, never a `font-size` or `font-weight`
   written by hand (`textRoles.test.ts`). Put one role on an element; a
-  variant that changes the role is its own class. A kind of text no role
-  covers is a new role in `TEXT_ROLES` (`shared/src/designTokens.ts`), which
-  Logjam GPS takes too.
+  variant that changes the role is its own class. The roles are the one
+  list in `shared/src/designTokens.ts`; the colour of a text is the
+  element's own, never the role's.
 
 Radius: `sm` swatch or checkbox; `md` tile, icon button, menu item, field;
 `lg` row, card, map button; `xl` popover, sheet; `pill` anything text-shaped

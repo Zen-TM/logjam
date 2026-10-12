@@ -7,44 +7,23 @@
   font-weight: var(--font-weight-bold);
 }
 
-.sheetTitle {
+.heading {
   font-size: var(--font-lg);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
 }
 
-.metric {
-  font-size: var(--font-lg);
-  font-weight: var(--font-weight-medium);
-}
-
-.statValue {
-  font-size: var(--font-lg);
+.rowTitle {
+  font-size: var(--font-base);
   font-weight: var(--font-weight-medium);
 }
 
 .body {
-  font-size: var(--font-sm);
-  font-weight: var(--font-weight-regular);
-}
-
-.field {
   font-size: var(--font-base);
   font-weight: var(--font-weight-regular);
 }
 
-.bodySmall {
-  font-size: var(--font-xs);
-  font-weight: var(--font-weight-regular);
-}
-
 .paragraph {
-  font-size: var(--font-sm);
-  font-weight: var(--font-weight-regular);
-  line-height: 1.5;
-}
-
-.note {
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   font-weight: var(--font-weight-regular);
   line-height: 1.5;
 }
@@ -54,34 +33,19 @@
   font-weight: var(--font-weight-medium);
 }
 
-.caption {
-  font-size: var(--font-xs);
-  font-weight: var(--font-weight-medium);
-}
-
-.rowTitle {
-  font-size: var(--font-base);
-  font-weight: var(--font-weight-medium);
-}
-
-.subtitle {
+.detail {
   font-size: var(--font-sm);
-  font-weight: var(--font-weight-regular);
-}
-
-.label {
-  font-size: var(--font-sm);
-  font-weight: var(--font-weight-regular);
-}
-
-.hint {
-  font-size: var(--font-xs);
   font-weight: var(--font-weight-regular);
 }
 
 .meta {
   font-size: var(--font-xs);
   font-weight: var(--font-weight-regular);
+}
+
+.caption {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .section {

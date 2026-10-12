@@ -26,7 +26,7 @@ import {
   isAppLockEnabled,
   onAppLockPreferenceChanged,
 } from "./appLockPreference";
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
 // fires background/active AppState churn on the host activity. Any relock
@@ -201,7 +201,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   title: { ...textRole.title, color: theme.text },
   line: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     textAlign: "center",
   },
 }));

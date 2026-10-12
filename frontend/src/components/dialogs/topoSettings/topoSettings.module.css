@@ -21,7 +21,7 @@
 /* A sentence a tab genuinely needs — what the numbers under it MEAN, never a
    description of the controls themselves (operator, 2026-09-18). */
 .helpText {
-  composes: hint from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -45,7 +45,7 @@
 }
 
 .head {
-  composes: hint from "../../../textRoles.generated.module.css";
+  composes: meta from "../../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -54,7 +54,7 @@
 }
 
 .fixedCell {
-  composes: body from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -130,7 +130,7 @@
 }
 
 .scaleEnd {
-  composes: hint from "../../../textRoles.generated.module.css";
+  composes: meta from "../../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -169,7 +169,7 @@
 
 /* Why the format the user just picked refuses what they had chosen. */
 .exportNote {
-  composes: hint from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }

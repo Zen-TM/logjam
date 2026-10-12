@@ -80,6 +80,7 @@ import {
   useHues,
   controlSize,
   opacity,
+  muted,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
@@ -1212,7 +1213,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
   },
-  searchInput: { ...textRole.field, flex: 1, color: theme.text },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   // The type rail sits directly under the hero and carries the bucket rail's
   // top padding, so the pair reads as one block rather than two stacked bars.
@@ -1235,7 +1236,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(theme.accent, 0.12),
   },
-  filterText: { ...textRole.bodySmall, flex: 1, color: theme.text },
+  filterText: { ...textRole.detail, flex: 1, color: theme.text },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
@@ -1255,7 +1256,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  quality: { ...textRole.meta },
+  quality: { ...muted(theme, textRole.meta) },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
-  badgeText: { ...textRole.meta },
+  badgeText: { ...muted(theme, textRole.meta) },
 }));

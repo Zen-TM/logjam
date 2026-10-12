@@ -57,7 +57,7 @@ import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
-import { makeStyles, useTheme } from "../theme";
+import { makeStyles, useTheme, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -365,5 +365,5 @@ const ownCount = (defs: ScopedCustomFieldDef[]) =>
   defs.filter((def) => !isSystemFieldDef(def)).length;
 
 const useStyles = makeStyles((theme, textRole) => ({
-  version: { ...textRole.meta },
+  version: { ...muted(theme, textRole.meta) },
 }));

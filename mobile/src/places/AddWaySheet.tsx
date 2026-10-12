@@ -42,7 +42,7 @@ import {
   routeLengthM,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
 import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
 import { importVectorSource } from "../imports/vectorImports";
@@ -473,5 +473,5 @@ function trackSummary(track: Track): string {
 const useStyles = makeStyles((theme, textRole) => ({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
-  hint: { ...textRole.meta },
+  hint: { ...muted(theme, textRole.meta) },
 }));

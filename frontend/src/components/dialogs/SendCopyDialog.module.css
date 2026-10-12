@@ -30,7 +30,7 @@
 
 /* Nobody matching the search. */
 .note {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 2px 0;
   color: var(--color-text-muted);
 }

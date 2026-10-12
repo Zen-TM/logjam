@@ -18,7 +18,7 @@
 }
 
 .rowLabel {
-  composes: label from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-5);

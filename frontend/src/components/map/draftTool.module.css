@@ -11,7 +11,7 @@
 }
 
 .note {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -26,7 +26,7 @@
 }
 
 .figureLabel {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 

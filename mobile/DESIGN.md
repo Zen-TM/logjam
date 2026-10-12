@@ -31,8 +31,9 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
 
 - **A text style is a role** from `TEXT_ROLES` (`shared/src/designTokens.ts`,
   read in `theme.ts`): `...textRole.<name>` inside `makeStyles`. A size,
-  weight or line height is never written on a screen (lint); a kind of text no
-  role covers is a new role there, for both clients to take.
+  weight or line height is never written on a screen (lint). A role has no
+  colour: `color: theme.text`, or `...muted(theme, textRole.detail)` for the
+  muted one, is chosen where the text is drawn.
 
 Radius: `md` tile or inline surface; `lg` card or row; `xl` sheet; `pill`
 anything text-shaped that is not a card; `sm` swatch.

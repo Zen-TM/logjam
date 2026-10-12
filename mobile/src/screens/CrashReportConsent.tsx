@@ -23,7 +23,7 @@ import {
   setCrashReportsEnabled,
 } from "../sentry/crashReportPreference";
 import { initSentry } from "../sentry/initSentry";
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import { BottomSheet, Button } from "../ui";
 
 export function CrashReportConsent() {
@@ -73,7 +73,7 @@ export function CrashReportConsent() {
 
 const useStyles = makeStyles((theme, textRole) => ({
   body: {
-    ...textRole.note,
+    ...muted(theme, textRole.paragraph),
     marginBottom: spacing(1.5),
   },
   actions: { gap: spacing(0.5) },

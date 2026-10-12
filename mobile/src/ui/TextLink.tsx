@@ -28,7 +28,7 @@ export function TextLink({
 const useStyles = makeStyles((theme, textRole) => ({
   link: { alignSelf: "center", padding: spacing(1) },
   text: {
-    ...textRole.bodySmall,
+    ...textRole.detail,
     color: theme.text,
     textDecorationLine: "underline",
   },

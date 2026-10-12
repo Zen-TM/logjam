@@ -50,7 +50,7 @@
 }
 
 .subtitle {
-  composes: subtitle from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   text-align: center;
   color: var(--color-text-muted);
@@ -65,7 +65,7 @@
 
 /* Lined up with the checkbox text above it, not with its box. */
 .legal {
-  composes: body from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0 0 0 30px;
   color: var(--color-text-muted);
 }
@@ -87,7 +87,7 @@
 }
 
 .switchText {
-  composes: body from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   text-align: center;
   color: var(--color-text-muted);

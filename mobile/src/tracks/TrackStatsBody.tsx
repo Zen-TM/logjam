@@ -27,7 +27,7 @@ import {
   type TrackDetail,
 } from "@logjam/shared";
 
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import { ProfileChart, StatGrid, type Stat } from "../ui";
 
 export function TrackStatsBody({
@@ -177,13 +177,13 @@ export function TrackStatsBody({
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1.5) },
   chartBlock: { gap: spacing(0.5) },
-  chartLabel: { ...textRole.section, color: theme.textMuted },
+  chartLabel: { ...muted(theme, textRole.section) },
   // The gap is the grid's own, so the two halves read as one grid, and the
   // caption is inset as a stat cell is.
   statGroup: { gap: spacing(1) },
   statCaption: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(1.5),
   },
-  pending: { ...textRole.hint },
+  pending: { ...muted(theme, textRole.detail) },
 }));

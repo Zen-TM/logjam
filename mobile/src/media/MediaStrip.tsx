@@ -26,6 +26,7 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  muted,
 } from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
@@ -621,7 +622,7 @@ const TILE_SIZE = 96;
 
 const useStyles = makeStyles((theme, textRole) => ({
   row: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  emptyHint: { ...textRole.hint, maxWidth: 200 },
+  emptyHint: { ...muted(theme, textRole.detail), maxWidth: 200 },
   tileWrap: { position: "relative" },
   tile: {
     width: TILE_SIZE,
@@ -636,7 +637,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(0.25),
     padding: spacing(0.5),
   },
-  glyphLabel: { ...textRole.meta, textAlign: "center" },
+  glyphLabel: { ...muted(theme, textRole.meta), textAlign: "center" },
   playBadge: {
     position: "absolute",
     top: spacing(0.5),

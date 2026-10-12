@@ -27,7 +27,7 @@ import {
   savesCapturesToGallery,
   setSaveCapturesToGallery,
 } from "../../media/galleryPreference";
-import { spacing, makeStyles } from "../../theme";
+import { spacing, makeStyles, muted } from "../../theme";
 import {
   ScreenScroll,
   SectionHeader,
@@ -150,7 +150,7 @@ export function PrivacySettingsScreen() {
 
 const useStyles = makeStyles((theme, textRole) => ({
   note: {
-    ...textRole.note,
+    ...muted(theme, textRole.paragraph),
     marginBottom: spacing(2),
   },
 }));

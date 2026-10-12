@@ -74,7 +74,7 @@ import {
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -772,5 +772,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   spinner: { alignSelf: "flex-start" },
   liveInvites: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   liveInvitesLabel: { flex: 1 },
-  hint: { ...textRole.hint },
+  hint: { ...muted(theme, textRole.detail) },
 }));

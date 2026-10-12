@@ -48,7 +48,7 @@ import {
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-import { radius, spacing, makeStyles, useTheme } from "../theme";
+import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
@@ -438,5 +438,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   cellChosen: { borderColor: theme.accent },
-  hint: { ...textRole.hint },
+  hint: { ...muted(theme, textRole.detail) },
 }));

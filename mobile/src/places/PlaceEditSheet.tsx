@@ -11,7 +11,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
 import {
@@ -676,7 +676,7 @@ function sameList(a: string[], b: string[]): boolean {
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  hint: { ...textRole.hint, flex: 1 },
+  hint: { ...muted(theme, textRole.detail), flex: 1 },
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
   fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },

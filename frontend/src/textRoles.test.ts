@@ -93,10 +93,8 @@ describe("every text style is a role", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("composes only roles the declaration has for Logjam Web", () => {
-    const webRoles = Object.entries(TEXT_ROLES)
-      .filter(([, spec]) => "web" in spec)
-      .map(([name]) => name);
+  it("composes only roles the declaration has", () => {
+    const webRoles = Object.keys(TEXT_ROLES);
     const used = new Set(
       stylesheets.flatMap((file) =>
         [

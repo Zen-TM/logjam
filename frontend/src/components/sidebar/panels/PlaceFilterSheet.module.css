@@ -11,7 +11,7 @@
 }
 
 .count {
-  composes: body from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   flex: 1;
   color: var(--color-text-muted);
 }

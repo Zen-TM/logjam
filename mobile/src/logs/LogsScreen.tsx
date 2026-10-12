@@ -71,6 +71,7 @@ import {
   makeStyles,
   useTheme,
   controlSize,
+  muted,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
@@ -811,7 +812,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
   },
-  searchInput: { ...textRole.field, flex: 1, color: theme.text },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   rail: {
     paddingLeft: spacing(2),
@@ -829,7 +830,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(theme.accent, 0.12),
   },
-  rangeText: { ...textRole.bodySmall, flex: 1, color: theme.text },
+  rangeText: { ...textRole.detail, flex: 1, color: theme.text },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
@@ -846,8 +847,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingTop: spacing(1),
     paddingBottom: spacing(0.5),
   },
-  yearLabel: { ...textRole.sheetTitle, color: theme.text },
-  yearCount: { ...textRole.meta },
+  yearLabel: { ...textRole.heading, color: theme.text },
+  yearCount: { ...muted(theme, textRole.meta) },
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
@@ -862,7 +863,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
-  badgeText: { ...textRole.meta },
+  badgeText: { ...muted(theme, textRole.meta) },
   sheetBody: { gap: spacing(1) },
   presets: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));

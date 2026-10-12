@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
 
-import { radius, scrim, spacing, textRolesFor, withAlpha } from "../theme";
+import { radius, scrim, spacing, textRoles, withAlpha } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton, Icon } from "../ui";
@@ -24,7 +24,6 @@ import { IconButton, Icon } from "../ui";
 // always wears a DARK scheme's colours, whatever the app is painted in: a
 // light scheme's ink would vanish into the backdrop.
 const photoChrome = THEME_SCHEMES.sandstone.tokens;
-const photoRole = textRolesFor(photoChrome);
 
 /**
  * Full-screen viewer for a trip's or place's attachments.
@@ -267,12 +266,13 @@ const styles = StyleSheet.create({
   },
   image: { flex: 1, width: "100%" },
   notice: {
-    ...photoRole.body,
+    ...textRoles.body,
     color: photoChrome.text,
     textAlign: "center",
   },
   noticeMuted: {
-    ...photoRole.hint,
+    ...textRoles.detail,
+    color: photoChrome.textMuted,
     textAlign: "center",
   },
   topBar: {
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1),
   },
   counter: {
-    ...photoRole.control,
+    ...textRoles.control,
     color: photoChrome.text,
     backgroundColor: withAlpha(photoChrome.page, 0.6),
     borderRadius: radius.pill,
@@ -319,6 +319,7 @@ const styles = StyleSheet.create({
   caption: {
     flex: 1,
     textAlign: "center",
-    ...photoRole.hint,
+    ...textRoles.detail,
+    color: photoChrome.textMuted,
   },
 });

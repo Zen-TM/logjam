@@ -23,7 +23,7 @@
 }
 
 .note {
-  composes: body from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -38,7 +38,7 @@
 
 /* Inset as a stat cell is, so it lines up under the figures it is about. */
 .statCaption {
-  composes: body from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   padding: 0 var(--space-1-5) var(--space-1);
   /* A cell's own invisible border, or the text sits a pixel left of theirs. */

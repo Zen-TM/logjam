@@ -24,7 +24,14 @@ import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
-import { fontSize, radius, spacing, withAlpha, makeStyles } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  withAlpha,
+  makeStyles,
+  muted,
+} from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
 // The height of one line of each text, as the font draws it (the same estimate
@@ -118,7 +125,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(0.5),
   },
   column: { flex: 1, alignItems: "center" },
-  label: { ...textRole.meta },
+  label: { ...muted(theme, textRole.meta) },
   value: {
     ...textRole.control,
     color: theme.text,

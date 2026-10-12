@@ -62,7 +62,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     padding: spacing(1.5),
   },
   content: { flex: 1, gap: spacing(1) },
-  message: { ...textRole.bodySmall, color: theme.text },
+  message: { ...textRole.detail, color: theme.text },
   actions: { flexDirection: "row", gap: spacing(2) },
   action: {
     ...textRole.control,

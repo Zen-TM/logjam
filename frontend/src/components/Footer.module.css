@@ -1,5 +1,5 @@
 .footer {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   display: flex;
   justify-content: center;
   align-items: center;

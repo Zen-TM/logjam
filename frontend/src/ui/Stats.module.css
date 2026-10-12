@@ -41,7 +41,7 @@
 }
 
 .axisIdle {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -51,7 +51,7 @@
 }
 
 .caption {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -117,12 +117,12 @@
 }
 
 .statLabel {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .statValue {
-  composes: statValue from "../textRoles.generated.module.css";
+  composes: heading from "../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text);
 }

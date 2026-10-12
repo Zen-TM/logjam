@@ -316,7 +316,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "space-between",
   },
   blockLabel: { ...textRole.control, color: theme.text },
-  blockValue: { ...textRole.bodySmall, color: theme.textMuted },
+  blockValue: { ...textRole.detail, color: theme.textMuted },
   // Words are text-coloured; the weight says it is set.
   blockValueActive: { ...textRole.control, color: theme.text },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },

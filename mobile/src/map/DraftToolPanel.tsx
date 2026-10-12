@@ -47,7 +47,14 @@ import {
   type SnapMode,
 } from "@logjam/shared";
 
-import { radius, spacing, withAlpha, makeStyles, useTheme } from "../theme";
+import {
+  radius,
+  spacing,
+  withAlpha,
+  makeStyles,
+  useTheme,
+  muted,
+} from "../theme";
 import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
@@ -231,12 +238,12 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   distance: {
-    ...textRole.sheetTitle,
+    ...textRole.heading,
     color: theme.text,
     fontVariant: ["tabular-nums"],
   },
-  meta: { ...textRole.meta, flexShrink: 1 },
-  editing: { ...textRole.meta },
+  meta: { ...muted(theme, textRole.meta), flexShrink: 1 },
+  editing: { ...muted(theme, textRole.meta) },
   actions: {
     flexDirection: "row",
     alignItems: "center",

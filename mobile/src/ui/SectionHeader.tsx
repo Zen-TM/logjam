@@ -1,6 +1,6 @@
 import { Text } from "react-native";
 
-import { formRhythm, makeStyles } from "../theme";
+import { formRhythm, makeStyles, muted } from "../theme";
 
 // Uppercase, letter-spaced section label — the one heading style shared by the
 // layer sheet, forms (TextField reuses the same treatment), and list sections.
@@ -23,7 +23,7 @@ export function SectionHeader({
 
 const useStyles = makeStyles((theme, textRole) => ({
   header: {
-    ...textRole.section,
+    ...muted(theme, textRole.section),
     letterSpacing: 0.8,
     marginTop: formRhythm.section,
     marginBottom: formRhythm.label,

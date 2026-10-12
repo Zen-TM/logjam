@@ -6,7 +6,7 @@
    phone, but it says so rather than pretending otherwise (frontend/CLAUDE.md,
    "Heavy authoring tools"). */
 .wideHint {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   display: none;
 }
 
@@ -51,7 +51,7 @@
 }
 
 .dropLine {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
@@ -61,7 +61,7 @@
 }
 
 .dropHint {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -112,19 +112,19 @@
 }
 
 .summaryLabel {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .summaryValue {
-  composes: bodySmall from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .summaryNote {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -144,7 +144,7 @@
 }
 
 .workingDetail {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -196,7 +196,7 @@
 }
 
 .stepLine {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }

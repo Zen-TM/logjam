@@ -7,6 +7,7 @@ import {
   spacing,
   withAlpha,
   makeStyles,
+  muted,
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
@@ -227,7 +228,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(0.5),
   },
   title: { ...textRole.rowTitle, color: theme.text },
-  subtitle: textRole.subtitle,
+  subtitle: muted(theme, textRole.detail),
   progressTrack: {
     position: "absolute",
     left: 0,

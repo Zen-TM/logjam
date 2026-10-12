@@ -4,7 +4,7 @@
 
 /* The one surface that inverts, so it reads as not-page. */
 .tip {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   position: fixed;
   inset: auto;
   margin: 0;

@@ -61,7 +61,7 @@
 }
 
 .title {
-  composes: sheetTitle from "../textRoles.generated.module.css";
+  composes: heading from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   margin: 0;
