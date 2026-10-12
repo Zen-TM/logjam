@@ -26,4 +26,6 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   CloudFront, EB) is a stop: ask. Never remove `prevent_destroy` to get past one.
 - **The CI roles' privacy Deny** (`local.ci_readonly_privacy_deny` in
   `terraform/envs/prod/iam.tf`) stays on every read-only role and in the apply
-  role's boundary: CI never reads user data, audit objects or secret values.
+  role's boundary: CI never reads user data, audit objects, logs or secret
+  values. Objects and log events are denied by default; a bucket CI must
+  read objects from is added to the Deny's exceptions and to its guard.
