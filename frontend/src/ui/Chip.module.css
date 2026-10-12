@@ -86,7 +86,7 @@
 
 /* A field's label, not a section title: sentence case, like TextField's. */
 .pickerLabel {
-  composes: label from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -97,7 +97,7 @@
 }
 
 .pickerInput {
-  composes: field from "../textRoles.generated.module.css";
+  composes: body from "../textRoles.generated.module.css";
   width: 140px;
   min-height: var(--control-md);
   box-sizing: border-box;
@@ -116,7 +116,7 @@
 }
 
 .pickerHint {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }

@@ -19,7 +19,7 @@
    the dialog still fits a phone, but it says so rather than pretending
    otherwise (frontend/CLAUDE.md, "Heavy authoring tools"). */
 .wideHint {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   display: none;
 }
 
@@ -52,7 +52,7 @@
 
 /* A sub-heading inside a section: what the checkboxes under it are. */
 .groupLabel {
-  composes: label from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 4px 0 0;
   color: var(--color-text-muted);
 }
@@ -77,7 +77,7 @@
 }
 
 .elementSuffix {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -178,7 +178,7 @@
 }
 
 .pivotLabel {
-  composes: label from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -223,7 +223,7 @@
 }
 
 .scalePrefix {
-  composes: label from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
   white-space: nowrap;
 }

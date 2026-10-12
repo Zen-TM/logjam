@@ -5,7 +5,7 @@
 }
 
 .empty {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   font-style: italic;
   color: var(--color-text-muted);
 }
@@ -43,7 +43,7 @@
 }
 
 .thumbFallback {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -58,7 +58,7 @@
 }
 
 .optionLabel {
-  composes: label from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   color: var(--color-text);

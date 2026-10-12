@@ -33,12 +33,12 @@
 }
 
 .subtitle {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .caption {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -50,7 +50,7 @@
 }
 
 .emptyLine {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -114,7 +114,7 @@
 }
 
 .warning {
-  composes: bodySmall from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text);
 }
 

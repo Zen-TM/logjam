@@ -29,7 +29,7 @@
 
 /* A dead end inside a section: nobody left to share with, or nobody matching. */
 .note {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 2px 0;
   color: var(--color-text-muted);
 }

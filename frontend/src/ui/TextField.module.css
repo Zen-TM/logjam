@@ -7,12 +7,12 @@
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {
-  composes: label from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .input {
-  composes: field from "../textRoles.generated.module.css";
+  composes: body from "../textRoles.generated.module.css";
   min-height: var(--control-lg);
   box-sizing: border-box;
   padding: 0 var(--space-1);
@@ -56,7 +56,7 @@
 }
 
 .hint {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -110,7 +110,7 @@
 }
 
 .searchInput {
-  composes: field from "../textRoles.generated.module.css";
+  composes: body from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   border: none;
@@ -163,7 +163,7 @@
 }
 
 .rangeEnd {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   flex: none;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);

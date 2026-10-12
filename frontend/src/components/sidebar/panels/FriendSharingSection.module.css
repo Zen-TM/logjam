@@ -17,7 +17,7 @@
 
 /* Which direction this list is, in words — the chips alone read as a filter. */
 .note {
-  composes: hint from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -53,7 +53,7 @@
 }
 
 .loading {
-  composes: body from "../../../textRoles.generated.module.css";
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   text-align: center;
   color: var(--color-text-muted);

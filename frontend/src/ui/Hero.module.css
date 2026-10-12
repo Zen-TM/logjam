@@ -59,7 +59,7 @@
 }
 
 .legendItem {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: var(--space-0-5);

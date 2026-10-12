@@ -89,12 +89,12 @@
 }
 
 .title {
-  composes: label from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text);
 }
 
 .description {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
   /* A description may hold an unbroken token (an OSM query) wider than the row. */
   overflow-wrap: anywhere;

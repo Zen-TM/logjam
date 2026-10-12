@@ -63,11 +63,9 @@ describe("tokens.generated.css", () => {
     expect(committedRoles).toBe(webTextRolesCss());
   });
 
-  it("declares one class per type role Logjam Web draws", () => {
-    // A role with no `web` spec is Logjam GPS's alone.
-    const expected = Object.entries(TEXT_ROLES)
-      .filter(([, role]) => "web" in role)
-      .map(([name]) => `.${name}`)
+  it("declares one class per type role", () => {
+    const expected = Object.keys(TEXT_ROLES)
+      .map((name) => `.${name}`)
       .sort();
     const declared = [...committedRoles.matchAll(/^(\.\w+) \{/gm)]
       .map((m) => m[1])

@@ -84,7 +84,7 @@
 }
 
 .hint {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: detail from "../textRoles.generated.module.css";
   font-family: inherit;
   line-height: inherit;
   color: var(--color-text-muted);
