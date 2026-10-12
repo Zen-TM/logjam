@@ -286,7 +286,10 @@ function SidebarPanel({
   collapseToPeek: boolean;
 }) {
   const isMobile = useIsMobile();
-  const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
+  // A drawing tool armed from a closed panel mounts this already on its page.
+  const [sheetSnap, setSheetSnap] = useState<SheetSnap>(
+    isDraftPanel(activePanel) ? "peek" : "half",
+  );
   // Remember the snap to restore to once a map-pick flow ends.
   const [snapBeforePeek, setSnapBeforePeek] = useState<SheetSnap>("half");
   // Follows collapseToPeek, during render: collapsing remembers the snap and

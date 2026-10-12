@@ -989,7 +989,7 @@ test.describe("narrow web", () => {
   // keyboard does the same through the grab bar) brings back the rest.
   for (const tool of [
     { name: "Measure distance", title: "Measure distance", rest: "Clear" },
-    { name: "Draw a route", title: "New route", rest: "Save" },
+    { name: "Draw a route", title: "Draw a route", rest: "Save" },
   ]) {
     test(`${tool.name}: the tool's page opens at the peek, over little of the map`, async ({
       page,
@@ -1006,7 +1006,9 @@ test.describe("narrow web", () => {
       // Under a quarter of the screen: most of the map is there to press.
       const top = (await sheet.boundingBox())!.y;
       expect(top).toBeGreaterThan(844 * 0.7);
-      await expect(sheet.getByText("Distance")).toBeInViewport();
+      await expect(
+        sheet.getByText("Distance", { exact: true }),
+      ).toBeInViewport();
       await expect(
         sheet.getByRole("button", { name: "Undo" }),
       ).toBeInViewport();
@@ -1026,6 +1028,20 @@ test.describe("narrow web", () => {
       await expect(
         sheet.getByRole("button", { name: tool.rest, exact: true }),
       ).toBeVisible();
+      // The sheet slides for 200ms and its footer rides over the tab bar on the
+      // way: measured at rest, as a user sees it.
+      let last = Number.NaN;
+      await expect
+        .poll(
+          async () => {
+            const top = (await sheet.boundingBox())!.y;
+            const still = top === last;
+            last = top;
+            return still;
+          },
+          { intervals: [250] },
+        )
+        .toBe(true);
       await expectNoViolations(page, "aside");
     });
   }
