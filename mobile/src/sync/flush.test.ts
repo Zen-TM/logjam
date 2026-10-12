@@ -473,6 +473,38 @@ describe("a write the server applied whose reply was lost", () => {
     expect(shelved).toHaveLength(1);
   });
 
+  // The server never took a refused edit, so a value it holds that matches
+  // one came from somewhere else. Reached when two edits to a field are
+  // refused and a third is applied: the third's base is the second's value,
+  // and the first is still in the outbox.
+  // Mutation: compare a receipt against every op left for the row, not only
+  // the ones still to be sent after this one.
+  it("still shelves a value that only an earlier refused edit matches", async () => {
+    const edit = (seq: number, from: string, to: string): Row => ({
+      ...pushRow(seq),
+      entity_id: "wp-1",
+      fields_json: JSON.stringify({ name: to }),
+      base_fields_json: JSON.stringify({ name: from }),
+    });
+    rows = [
+      edit(1, "before", "attempt"),
+      pushRow(2),
+      edit(3, "attempt", "between"),
+      pushRow(4),
+      edit(5, "between", "final"),
+    ];
+    rejections.set("op-1", { code: 400, message: "" });
+    rejections.set("op-3", { code: 400, message: "" });
+    answers.set("op-5", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "name", serverValue: "attempt" }],
+    });
+
+    await flushOutbox();
+
+    expect(shelved).toHaveLength(1);
+  });
+
   it("still shelves a value another device wrote", async () => {
     rows = [
       {
