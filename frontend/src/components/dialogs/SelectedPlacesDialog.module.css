@@ -11,11 +11,11 @@
 }
 
 .note {
+  composes: paragraph from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -38,7 +38,7 @@
 }
 
 /* The destructive verb sits at the far left of the footer, away from Close
-   (DESIGN.md §4). */
+   (DESIGN.md). */
 .deleteVerb {
   margin-right: auto;
 }

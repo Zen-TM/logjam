@@ -33,8 +33,8 @@ describe("demTileCache", () => {
   });
 
   it("evicts oldest first, so a long profile cannot grow it without bound", () => {
-    for (let i = 0; i < 9; i += 1) cacheTile(`t/${i}`, TILE, "saved");
+    for (let i = 0; i < 33; i += 1) cacheTile(`t/${i}`, TILE, "saved");
     expect(cachedTile("t/0", { allowNetwork: true })).toBeUndefined();
-    expect(cachedTile("t/8", { allowNetwork: true })).toBe(TILE);
+    expect(cachedTile("t/32", { allowNetwork: true })).toBe(TILE);
   });
 });

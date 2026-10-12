@@ -21,11 +21,10 @@
 }
 
 .title {
+  composes: title from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: var(--font-xl);
-  font-weight: 700;
   color: var(--color-text);
 }
 
@@ -60,16 +59,16 @@
 }
 
 .legendItem {
+  composes: meta from "../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: var(--space-0-5);
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
-.legendItem b {
+.legendValue {
+  composes: caption from "../textRoles.generated.module.css";
   color: var(--color-text);
-  font-weight: 600;
 }
 
 .dot {

@@ -1,4 +1,4 @@
-/* Who gets a copy. Layout only — every control is the kit's (DESIGN.md §4). */
+/* Who gets a copy. Layout only — every control is the kit's (DESIGN.md). */
 
 .body {
   display: flex;
@@ -10,6 +10,7 @@
    the glyph with the text in the text colour, as the warning StatusPill does:
    this one does not come back. */
 .promise {
+  composes: body from "../../textRoles.generated.module.css";
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -18,7 +19,6 @@
   border: 1px solid var(--color-warning);
   border-left-width: 3px;
   border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
   line-height: 1.45;
 }
 
@@ -30,7 +30,7 @@
 
 /* Nobody matching the search. */
 .note {
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 2px 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }

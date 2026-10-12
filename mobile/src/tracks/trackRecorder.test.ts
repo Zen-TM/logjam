@@ -67,6 +67,20 @@ vi.mock("./trackBackup", () => ({
     backUpFinishedTrack(...(args as [])),
 }));
 
+// The real one reads saved DEM tiles through expo-sqlite; `trackClimb.test.ts`
+// covers it. Null is "no saved terrain covers the track".
+const climbFromSavedTerrain = vi.fn(
+  async (): Promise<{
+    elevationGainM: number;
+    elevationLossM: number;
+    elevationSource: string;
+  } | null> => null,
+);
+vi.mock("./trackClimb", () => ({
+  climbFromSavedTerrain: (...args: unknown[]) =>
+    climbFromSavedTerrain(...(args as [])),
+}));
+
 vi.mock("./recordingPreferences", () => ({
   FIX_RATE_OPTIONS: {
     finest: { timeInterval: 3000, deferredUpdatesInterval: 15_000 },
@@ -103,6 +117,7 @@ vi.mock("./tracksDb", () => ({
 const {
   applyRecordingOptionsToActiveTrack,
   continueTrackRecording,
+  finishTrackRecording,
   pauseTrackRecording,
   reconcileTrackRecording,
   resumeTrackRecording,
@@ -557,5 +572,64 @@ describe("rejected fixes are kept, and cannot cost a recording", () => {
       RecordedTrackPoint[],
     ];
     expect(points).toHaveLength(2);
+  });
+});
+
+describe("a finished track's climb and descent", () => {
+  /** Two fixes 1 km apart that the recorded altitudes say climb 400 m. */
+  function climbingPoints(): RecordedTrackPoint[] {
+    return [0, 1].map((index) => ({
+      lon: 150.4 + index * 0.01,
+      lat: -33.5,
+      altitudeM: 500 + index * 400,
+      timestampMs: 1_700_000_000_000 + index * 600_000,
+      segment: 0,
+    })) as RecordedTrackPoint[];
+  }
+  const savedStats = () =>
+    (
+      updateTrack.mock.calls.at(-1) as unknown as [
+        string,
+        {
+          stats: {
+            elevationGainM: number;
+            elevationLossM: number;
+            elevationSource?: string;
+          };
+        },
+      ]
+    )[1].stats;
+
+  beforeEach(() => {
+    activeTrack = recordingTrack();
+    storedPoints = climbingPoints();
+  });
+
+  // Mutation: drop the `climbFromSavedTerrain` spread in `finishTrackRecording`
+  // and the row goes back to the recorded 400 m with no source.
+  it("come from the saved terrain, with its source, when it covers the track", async () => {
+    const climb = {
+      elevationGainM: 12,
+      elevationLossM: 34,
+      elevationSource: "nsw-5m",
+    };
+    climbFromSavedTerrain.mockResolvedValueOnce(climb);
+
+    await finishTrackRecording("track-1");
+
+    expect(savedStats()).toMatchObject(climb);
+    // The backed-up file's metadata is built from the same row.
+    expect(
+      (backUpFinishedTrack.mock.calls.at(-1) as unknown as [unknown])[0],
+    ).toMatchObject(climb);
+  });
+
+  it("stay as recorded, with no source, where no saved terrain covers it", async () => {
+    climbFromSavedTerrain.mockResolvedValueOnce(null);
+
+    await finishTrackRecording("track-1");
+
+    expect(savedStats().elevationGainM).toBe(400);
+    expect(savedStats().elevationSource).toBeUndefined();
   });
 });

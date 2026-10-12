@@ -205,6 +205,7 @@ function ShareDialog({
                     icon="unshare"
                     label={`Stop sharing with ${row.sharedWith.username}`}
                     disabled={busyId !== null}
+                    disabledReason="Working…"
                     onClick={() => void handleUnshare(row)}
                   />
                 }

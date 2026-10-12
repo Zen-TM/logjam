@@ -15,14 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  scrim,
-  spacing,
-  withAlpha,
-} from "../theme";
+import { radius, scrim, spacing, textRoles, withAlpha } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton, Icon } from "../ui";
@@ -273,13 +266,13 @@ const styles = StyleSheet.create({
   },
   image: { flex: 1, width: "100%" },
   notice: {
+    ...textRoles.body,
     color: photoChrome.text,
-    fontSize: fontSize.base,
     textAlign: "center",
   },
   noticeMuted: {
+    ...textRoles.detail,
     color: photoChrome.textMuted,
-    fontSize: fontSize.sm,
     textAlign: "center",
   },
   topBar: {
@@ -293,12 +286,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1),
   },
   counter: {
+    ...textRoles.control,
     color: photoChrome.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     backgroundColor: withAlpha(photoChrome.page, 0.6),
     borderRadius: radius.pill,
-    paddingHorizontal: spacing(1.25),
+    paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.25),
     overflow: "hidden",
   },
@@ -327,7 +319,7 @@ const styles = StyleSheet.create({
   caption: {
     flex: 1,
     textAlign: "center",
+    ...textRoles.detail,
     color: photoChrome.textMuted,
-    fontSize: fontSize.sm,
   },
 });

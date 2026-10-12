@@ -10,6 +10,7 @@ import { createElement } from "react";
 import { registerRootComponent } from "expo";
 
 import { RootErrorBoundary } from "./src/ui/RootErrorBoundary";
+import { ThemeProvider } from "./src/theme";
 import { initSentry } from "./src/sentry/initSentry";
 import { configureAmplify } from "./src/auth/amplifyConfig";
 // Side-effect import: registers the background track-recording task at module
@@ -25,7 +26,12 @@ configureAmplify();
 // App is wrapped OUTSIDE itself so the boundary also catches throws from App's
 // own hooks (min-version gate, auth) — a boundary rendered inside App cannot
 // catch the render that mounts it. createElement rather than JSX because this
-// entry stays a .ts (package.json "main").
+// entry stays a .ts (package.json "main"). The theme provider is outermost
+// because the boundary's own fallback is painted in the scheme.
 registerRootComponent(() =>
-  createElement(RootErrorBoundary, null, createElement(App)),
+  createElement(
+    ThemeProvider,
+    null,
+    createElement(RootErrorBoundary, null, createElement(App)),
+  ),
 );

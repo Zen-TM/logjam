@@ -1,13 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { radius, spacing, withAlpha, makeStyles, muted } from "../theme";
 
 export type MeterSegment = {
   /** Legend text. */
@@ -39,6 +32,8 @@ export function Meter({
   total?: number;
   legend?: boolean;
 }) {
+  const styles = useStyles();
+
   const present = segments.filter((segment) => segment.value > 0);
   const sum = present.reduce((acc, segment) => acc + segment.value, 0);
   const basis = total != null && total > sum ? total : sum;
@@ -77,28 +72,24 @@ export function Meter({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { gap: spacing(1.25) },
+const useStyles = makeStyles((theme, textRole) => ({
+  wrap: { gap: spacing(1) },
   track: {
     flexDirection: "row",
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
     backgroundColor: withAlpha(theme.text, 0.1),
-    gap: 2,
+    gap: spacing(0.25),
   },
   legend: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing(1.5),
-    rowGap: spacing(0.75),
+    rowGap: spacing(0.5),
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
-  legendLabel: { color: theme.textMuted, fontSize: fontSize.xs },
-  legendValue: {
-    color: theme.text,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
-});
+  legendLabel: { ...muted(theme, textRole.meta) },
+  legendValue: { ...textRole.caption, color: theme.text },
+}));

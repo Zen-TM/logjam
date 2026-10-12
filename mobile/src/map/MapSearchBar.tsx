@@ -36,17 +36,17 @@ import {
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   radius,
   spacing,
-  theme,
+  makeStyles,
+  useTheme,
+  muted,
 } from "../theme";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
-import { Icon, type Glyph } from "../ui";
+import { FieldError, Icon, type Glyph } from "../ui";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -106,6 +106,9 @@ export function MapSearchBar({
   onSelectPlace: (latitude: number, longitude: number) => void;
   onSelectSaved: (item: SavedSearchItem) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   // Tagged with the query it answers, so a short or still-pending query reads
@@ -302,7 +305,11 @@ export function MapSearchBar({
             ))}
 
             {loading ? <Text style={styles.status}>Searching…</Text> : null}
-            {error !== null ? <Text style={styles.status}>{error}</Text> : null}
+            {error !== null ? (
+              <View style={styles.statusBox}>
+                <FieldError message={error} />
+              </View>
+            ) : null}
             {!loading && error === null
               ? results.map((result, index) => (
                   <Pressable
@@ -330,7 +337,7 @@ export function MapSearchBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: {
     position: "absolute",
     left: CHROME_GAP,
@@ -368,8 +375,8 @@ const styles = StyleSheet.create({
     paddingRight: spacing(1.5),
   },
   input: {
+    ...textRole.body,
     flex: 1,
-    fontSize: fontSize.base,
     color: theme.text,
     paddingVertical: spacing(1),
   },
@@ -380,9 +387,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     maxHeight: 260,
   },
+  statusBox: {
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(1.5),
+  },
   status: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
   },
@@ -399,10 +409,6 @@ const styles = StyleSheet.create({
     gap: spacing(1.5),
   },
   savedText: { flex: 1 },
-  resultKind: { color: theme.textMuted, fontSize: fontSize.xs },
-  resultText: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
-});
+  resultKind: { ...muted(theme, textRole.meta) },
+  resultText: { ...textRole.detail, color: theme.text },
+}));

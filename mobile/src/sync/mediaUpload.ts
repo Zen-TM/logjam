@@ -19,9 +19,11 @@ import {
   MEDIA_EXTENSION_BY_MIME,
   type MediaMetadata,
   type MediaOrigin,
+  type TrackClimb,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import { markTransferCut } from "../api/noResponse";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
@@ -307,6 +309,7 @@ export async function createStandaloneMediaLocal(args: {
         sizeBytes,
         origin: args.origin,
         displayName: args.displayName,
+        color: args.color,
         metadata: args.metadata,
         localDisplayPath: displayPath,
         localThumbPath: null,
@@ -351,6 +354,98 @@ export async function renameStandaloneMediaLocal(
       mintUuid(),
       mediaId,
       JSON.stringify({ displayName } satisfies RenameFields),
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
+/**
+ * Recolour a standalone file. Optimistic like a rename, and supersedes for the
+ * same reason: two picks are one colour. A file still waiting to upload has its
+ * queued create rewritten too, so the confirm hands back the new colour
+ * rather than overwriting the local row with the old one.
+ */
+export async function recolourStandaloneMediaLocal(
+  mediaId: string,
+  color: string,
+): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      "UPDATE media SET color = ? WHERE id = ?",
+      color,
+      mediaId,
+    );
+    await db.runAsync(
+      `UPDATE outbox SET fields_json = json_set(fields_json, '$.color', ?)
+       WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+         AND state = 'queued'`,
+      color,
+      mediaId,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox
+       WHERE entity = 'media' AND op = 'recolour' AND entity_id = ?
+         AND state = 'queued'`,
+      mediaId,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'recolour', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      JSON.stringify({ color } satisfies RecolourFields),
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
+/**
+ * Replace a recorded track's climb on its file. Optimistic like a recolour and
+ * supersedes for the same reason: two readings are one climb. A file still
+ * waiting to upload has its queued create rewritten too, so the confirm does
+ * not hand the old figures back over the new ones.
+ */
+export async function reclimbStandaloneMediaLocal(
+  mediaId: string,
+  climb: TrackClimb,
+): Promise<void> {
+  const db = await getSyncDb();
+  // `json_patch` merges the three keys into the object and leaves the rest.
+  const patch = JSON.stringify(climb satisfies ClimbFields);
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      `UPDATE media
+       SET metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?)
+       WHERE id = ?`,
+      patch,
+      mediaId,
+    );
+    await db.runAsync(
+      `UPDATE outbox SET fields_json = json_patch(fields_json, ?)
+       WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+         AND state = 'queued'`,
+      JSON.stringify({ metadata: climb }),
+      mediaId,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox
+       WHERE entity = 'media' AND op = 'reclimb' AND entity_id = ?
+         AND state = 'queued'`,
+      mediaId,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'reclimb', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      patch,
       new Date().toISOString(),
     );
   });
@@ -428,8 +523,16 @@ type MediaFields = {
   /** Standalone files only: what kind it is, and its row-level stats. */
   origin?: MediaOrigin;
   displayName?: string | null;
+  /** The phone's pick, sent so the server keeps it instead of reassigning. */
+  color?: string | null;
   metadata?: MediaMetadata;
 };
+
+/** Fields of a recolour op (`op = 'recolour'`). */
+type RecolourFields = { color: string };
+
+/** Fields of a climb replacement (`op = 'reclimb'`). */
+type ClimbFields = TrackClimb;
 
 /** Fields of a rename op (`op = 'rename'`). */
 type RenameFields = { displayName: string | null };
@@ -459,11 +562,19 @@ async function putFile(
   // mobile/CLAUDE.md's rule is that a second caller inherits the first's
   // guards). A first-byte timeout throws, so the op fails and retries like any
   // other transient error instead of hanging.
+  //
+  // A throw from the task is the transfer dying without an answer from S3 (the
+  // file itself was checked in phase 0), so it is marked as the link's failure;
+  // an answer carries its status so the flush can classify it like the API's.
   const result = await uploadToPresignedUrl(url, fileUri, {
     "Content-Type": contentType,
+  }).catch((err: unknown) => {
+    throw markTransferCut(err);
   });
   if (result.status < 200 || result.status >= 300) {
-    throw new Error(`Upload failed (${result.status})`);
+    throw Object.assign(new Error(`Upload failed (${result.status})`), {
+      status: result.status,
+    });
   }
 }
 
@@ -579,8 +690,7 @@ export async function runMediaCreateOp(
   // bytes (up to 30 MB an image, 500 MB a video) and answer to their own
   // metered gate instead. Not allowed right now is not a failure — undo
   // flush.ts's optimistic attempts bump and leave the op exactly where it
-  // was, so it waits for Wi-Fi like every other large transfer instead of
-  // burning through MEDIA_MAX_ATTEMPTS and parking as a Sync Issue.
+  // was, so it waits for Wi-Fi like every other large transfer.
   if (!(await canRunNow("mediaUpload"))) {
     await db.runAsync(
       "UPDATE outbox SET state = 'queued', attempts = ? WHERE seq = ?",
@@ -641,6 +751,7 @@ function linkBody(fields: MediaFields): Record<string, unknown> {
     linkedType: "none",
     origin: fields.origin,
     displayName: fields.displayName ?? undefined,
+    color: fields.color ?? undefined,
     metadata: fields.metadata ?? {},
   };
 }
@@ -664,6 +775,49 @@ export async function runMediaRenameOp(
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status !== 404) throw err;
+  }
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
+  return "done";
+}
+
+/** Recolour server-side. Same idempotence and 404 rule as a rename. */
+export async function runMediaRecolourOp(
+  row: MediaOpRow,
+): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  const fields = JSON.parse(row.fields_json ?? "{}") as RecolourFields;
+  try {
+    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}`, {
+      method: "PATCH",
+      body: { color: fields.color },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404) throw err;
+  }
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
+  return "done";
+}
+
+/**
+ * Replace a track's climb server-side. Same idempotence and 404 rule as a
+ * rename. A 400 is dropped too: an API older than this op refuses a body with
+ * no name or colour in it, and a figure nobody asked for must not surface as a
+ * sync issue. The phone keeps the better figure; the account keeps its old one.
+ */
+export async function runMediaReclimbOp(
+  row: MediaOpRow,
+): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  const fields = JSON.parse(row.fields_json ?? "{}") as ClimbFields;
+  try {
+    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}`, {
+      method: "PATCH",
+      body: fields,
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404 && status !== 400) throw err;
   }
   await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
   return "done";

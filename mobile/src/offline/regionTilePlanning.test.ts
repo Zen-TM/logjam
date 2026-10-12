@@ -4,9 +4,13 @@ import { planRegionTiles } from "@logjam/shared";
 import {
   classifyTileResponse,
   deadTileBudget,
+  exhaustedTileOutcome,
   regionPlanHash,
   regionTileSequence,
+  savesVectorOnly,
+  settledStop,
   tileUrlFrom,
+  vectorClipFor,
 } from "./regionTilePlanning";
 
 const BBOX = { west: 150.26, south: -33.745, east: 150.368, north: -33.655 };
@@ -102,5 +106,74 @@ describe("deadTileBudget", () => {
   it("tolerates a handful on any size, and 1% on a large region", () => {
     expect(deadTileBudget(50)).toBe(10);
     expect(deadTileBudget(4000)).toBe(40);
+  });
+});
+
+// Mutation: return "include" for a guest and the first line goes red; the
+// download screen then enqueues an authed clip request a guest cannot make.
+describe("vectorClipFor", () => {
+  it("rides along for a signed-in user, never for a guest", () => {
+    expect(vectorClipFor(false)).toBe("include");
+    expect(vectorClipFor(true)).toBe("none");
+  });
+});
+
+// Mutation: ignore the clip and the second line goes red. A guest who
+// deselects the only map then reads "Detailed map only" under the note saying
+// the detailed map needs an account.
+describe("savesVectorOnly", () => {
+  it("is the vector map with no raster picked, and never a save without it", () => {
+    expect(savesVectorOnly("include", 0)).toBe(true);
+    expect(savesVectorOnly("none", 0)).toBe(false);
+    expect(savesVectorOnly("include", 1)).toBe(false);
+  });
+});
+
+describe("settledStop", () => {
+  // Two workers run a job. One sees the cancel and stops; the other is midway
+  // through a tile's retries and halts the job as paused for a connection.
+  // Mutation: return what the workers halted on and the first line goes red.
+  // The partial file is then kept and the job resumes itself on reconnect.
+  it("lets a cancel win over whatever a worker halted on", () => {
+    const cancelled = { kind: "cancelled" };
+    expect(
+      settledStop("cancel", { kind: "paused", reason: "connectivity" }),
+    ).toEqual(cancelled);
+    expect(settledStop("cancel", { kind: "failed" })).toEqual(cancelled);
+    expect(settledStop("cancel", null)).toEqual(cancelled);
+  });
+
+  // Mutation: keep the worker's reason. A download the user paused is then
+  // restarted by the next reconnect.
+  it("keeps a pause the user asked for the user's", () => {
+    expect(
+      settledStop("pause", { kind: "paused", reason: "connectivity" }),
+    ).toEqual({ kind: "paused", reason: "user" });
+  });
+
+  it("is what the workers halted on when nobody asked", () => {
+    const failed = { kind: "failed" };
+    expect(settledStop(null, failed)).toBe(failed);
+    expect(settledStop("pause", failed)).toBe(failed);
+    expect(settledStop("pause", null)).toBeNull();
+  });
+});
+
+// Mutation: return "dead" whatever the app state and the second line goes red.
+// The download then counts every tile Android refused it behind another app
+// against the dead budget and ends as a failure instead of waiting.
+describe("exhaustedTileOutcome", () => {
+  it("counts a tile dead in the foreground and parks the job behind another app", () => {
+    expect(exhaustedTileOutcome("active", true)).toBe("dead");
+    expect(exhaustedTileOutcome("background", true)).toBe("park");
+  });
+
+  // Mutation: ignore `online` and both lines go red. Behind another app the
+  // job then parks until the user is back instead of waiting for the
+  // connection (seen on the emulator: airplane mode stopped the download for
+  // good); in front, a dropped connection spends the dead-tile budget.
+  it("waits for the connection when there is none, wherever the app is", () => {
+    expect(exhaustedTileOutcome("background", false)).toBe("offline");
+    expect(exhaustedTileOutcome("active", false)).toBe("offline");
   });
 });

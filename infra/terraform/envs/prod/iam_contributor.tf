@@ -7,7 +7,7 @@
 # The grant is the CI plan role's: ReadOnlyAccess plus the same privacy Deny
 # (local.ci_readonly_privacy_deny, iam.tf), so the contributor reads no user
 # data, secret values, logs or user directory either. Why read-only, why a
-# Deny over a managed policy, and why MFA: docs/decisions/0028.
+# Deny over a managed policy, and why MFA: docs/decisions/0032.
 locals {
   contributor_user  = "collaborator-oliver"
   contributor_group = "logjam-developers"

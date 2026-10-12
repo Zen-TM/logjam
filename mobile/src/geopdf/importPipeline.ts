@@ -111,13 +111,13 @@ function assertRendererPageMatchesGeoref(
     rotationDeg: number;
   },
 ): void {
-  if (!rendered) throw new Error(GEOPDF_ERRORS.RENDER_FAILED);
+  if (!rendered) throw new GeoPdfImportError("RENDER_FAILED");
   // /Rotate is checked on its own value, not inferred from the dimensions.
   // 90 and 270 swap them, but 180 does not — so a dimension comparison alone
   // waved through an upside-down page and fetched every tile from the
   // diagonally opposite corner of the sheet.
   if (page.rotationDeg !== 0)
-    throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
+    throw new GeoPdfImportError("UNSUPPORTED_PAGE_BOX");
   // Belt and braces: the box we rebased onto must be the one being rendered.
   // pdfium rounds to whole points; a point of slack costs 8.8 m at 1:25 000,
   // which is inside GPS noise, and anything real is off by tens of points.
@@ -125,7 +125,7 @@ function assertRendererPageMatchesGeoref(
   const matches =
     Math.abs(rendered.widthPt - page.renderBoxPt.width) <= TOLERANCE_PT &&
     Math.abs(rendered.heightPt - page.renderBoxPt.height) <= TOLERANCE_PT;
-  if (!matches) throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
+  if (!matches) throw new GeoPdfImportError("UNSUPPORTED_PAGE_BOX");
 }
 
 export const GEOPDF_ERRORS: Record<string, string> = {
@@ -136,16 +136,40 @@ export const GEOPDF_ERRORS: Record<string, string> = {
     "This GeoPDF uses an older georeferencing format that isn't supported yet.",
   MALFORMED_GEOREF: "This PDF's georeferencing is malformed.",
   UNSUPPORTED_PAGE_BOX:
-    "This PDF's page is rotated in a way Logjam can't place accurately.",
+    "This PDF's page is rotated in a way Logjam GPS can't place accurately.",
   UNSUPPORTED_CRS: "This PDF uses a map projection that isn't supported.",
   FILE_TOO_LARGE: `This PDF is too large to import (${Math.round(MAX_GEOPDF_FILE_BYTES / 1024 / 1024)} MB limit).`,
   RENDER_FAILED: "Rendering this PDF failed.",
+  DOWNLOAD_FAILED: "This PDF didn't download.",
   // The planner refused before rendering: a sheet this large at this scale is
   // tens of minutes of work. It steps the zoom down first, so reaching this
   // means the georeferencing is implausible rather than the map merely big.
   TOO_MANY_TILES: "This map covers too much ground to import.",
   NO_SPACE: "There isn't enough free space on this phone for this map.",
 };
+
+/**
+ * A failure the pipeline names itself. Every failure that reaches the user does
+ * so as a code looked up in `GEOPDF_ERRORS` (see `geoPdfErrorCode`): an
+ * exception's own message can carry a path or a file name.
+ */
+export class GeoPdfImportError extends Error {
+  constructor(readonly code: keyof typeof GEOPDF_ERRORS) {
+    super(code);
+    this.name = "GeoPdfImportError";
+  }
+}
+
+/**
+ * The `GEOPDF_ERRORS` key for a failed import, or null when the failure is not
+ * one the pipeline names. The one place an error becomes words.
+ */
+export function geoPdfErrorCode(err: unknown): string | null {
+  if (err instanceof GeoPdfParseError || err instanceof GeoPdfImportError)
+    return err.code;
+  if (err instanceof NotEnoughSpaceError) return "NO_SPACE";
+  return null;
+}
 
 export interface GeoPdfProgress {
   phase: GeoPdfImportState;
@@ -382,7 +406,7 @@ export async function importGeoPdfFromUrl(
   try {
     const result = await downloadFromPresignedUrl(downloadUrl, scratchUri);
     if (result.status !== 200) {
-      throw new Error(`GeoPDF download failed (HTTP ${result.status})`);
+      throw new GeoPdfImportError("DOWNLOAD_FAILED");
     }
     return await importGeoPdfFile(displayName, scratchUri, onProgress, token);
   } finally {
@@ -400,7 +424,7 @@ export async function resumeGeoPdfImport(
 ): Promise<GeoPdfImportOutcome> {
   const imports = await listGeoPdfImports();
   const record = imports.find((row) => row.id === id);
-  if (!record) throw new Error(GEOPDF_ERRORS.RENDER_FAILED);
+  if (!record) throw new GeoPdfImportError("RENDER_FAILED");
   return buildArtifact(record, onProgress, token);
 }
 
@@ -605,13 +629,10 @@ async function buildArtifact(
     report("ready", 1);
     return { status: "imported", record: done };
   } catch (err) {
-    const code =
-      err instanceof GeoPdfParseError
-        ? err.code
-        : err instanceof NotEnoughSpaceError
-          ? "NO_SPACE"
-          : "RENDER_FAILED";
-    await updateGeoPdfImport(record.id, { state: "failed", errorCode: code });
+    await updateGeoPdfImport(record.id, {
+      state: "failed",
+      errorCode: geoPdfErrorCode(err) ?? "RENDER_FAILED",
+    });
     throw err;
   }
 }

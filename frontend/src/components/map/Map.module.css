@@ -2,7 +2,7 @@
    a thing that moves every frame must not touch the canvas: `setData` on a
    GeoJSON source invalidates it and MapLibre repaints the whole map, measured
    at 72ms per pointer move against 16ms for the same drag without it — the
-   cost of dragging over dead panel (DESIGN.md §6).
+   cost of dragging over dead panel (DESIGN.md).
 
    The line's OWN colour inside a white ring: on this map colour is what says
    which line you are looking at, so a dot in the accent would be the one colour
@@ -22,6 +22,24 @@
 
 .map {
   --map-inset-left: 0px;
+  /* How far in from the map's right edge the credits stop: past the action
+     column (its edge gap, one button, a gap), so the credits are never under a
+     button and a button is never over them, whatever page or sheet is open. */
+  --map-actions-clear: calc(
+    var(--space-2) +
+    var(--map-button-size) +
+    var(--space-1)
+  );
+  /* And how far from the left edge of the visible map: past the compass and the
+     scale bar at its longest, so the credits clear the instrument edge too. */
+  --scale-bar-max: 160px; /* intrinsic: ScaleControl's maxWidth in Map.tsx */
+  --instrument-gap: 10px; /* intrinsic: the compass to the scale bar */
+  --map-instruments-clear: calc(
+    var(--space-2) +
+    var(--map-button-size) +
+    var(--instrument-gap) +
+    var(--scale-bar-max)
+  );
   position: absolute;
   top: 0;
   left: var(--nav-rail-width);
@@ -50,7 +68,7 @@
 
 /* The scale bar sits on the instrument edge, beside MapChrome's compass. */
 :global(#map .maplibregl-ctrl-bottom-left) {
-  left: calc(var(--map-inset-left) + 16px + 42px + 10px);
+  left: calc(var(--map-inset-left) + 16px + var(--map-button-size) + 10px);
   bottom: 26px;
   transition: left var(--motion-med) ease-out;
 }
@@ -74,8 +92,8 @@
 }
 
 :global(#map .maplibregl-ctrl-bottom-right) {
-  right: 16px;
-  bottom: 12px;
+  right: var(--map-actions-clear);
+  bottom: var(--space-1-5);
 }
 
 :global(#map .maplibregl-ctrl-attrib) {
@@ -85,11 +103,35 @@
 }
 
 :global(#map .maplibregl-ctrl-attrib a) {
-  color: var(--color-accent);
+  color: var(--color-text);
+  text-decoration: underline;
 }
 
+/* A wrapped box is not a stadium: pill ends would clip the text. `lg` is the
+   box's own corner at any height, and at 24px (the (i) alone, or one line) it
+   is a circle's or a pill's. */
 :global(#map .maplibregl-ctrl-attrib.maplibregl-compact) {
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
+}
+
+/* Open, the credits wrap to as many lines as they need, between the instrument
+   edge and the action column, with their text padded clear of the corners. */
+:global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
+  box-sizing: border-box;
+  min-height: var(--space-3);
+  /* Never narrower than a readable column: on a small map the credits give up
+     the instrument edge before they give up being readable. */
+  max-width: max(
+    calc(
+      100vw -
+      var(--nav-rail-width) -
+      var(--map-inset-left) -
+      var(--map-instruments-clear) -
+      var(--map-actions-clear)
+    ),
+    calc(var(--space-6) * 5)
+  );
+  padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
 }
 
 /* MapLibre draws the (i) as a dark data-URI icon; every scheme is dark. */
@@ -120,25 +162,29 @@
   }
 
   :global(#map .maplibregl-ctrl-bottom-left) {
-    left: calc(12px + 42px + 10px);
+    left: calc(12px + var(--map-button-size) + 10px);
     bottom: calc(var(--bottom-nav-height) + 22px);
   }
 
+  /* The credits keep the action column's edge on this side too: they open
+     leftwards of it and wrap, rather than run under the scale bar clipped. */
+  .map {
+    --map-actions-clear: calc(
+      var(--space-1-5) +
+      var(--map-button-size) +
+      var(--space-1)
+    );
+    --scale-bar-max: 100px; /* intrinsic: the narrow ScaleControl's maxWidth */
+    --map-instruments-clear: calc(
+      var(--space-1-5) +
+      var(--map-button-size) +
+      var(--instrument-gap) +
+      var(--scale-bar-max)
+    );
+  }
+
   :global(#map .maplibregl-ctrl-bottom-right) {
-    right: 12px;
     bottom: calc(var(--bottom-nav-height) + 8px);
-  }
-
-  /* The attribution starts expanded until the map is first moved; on a 390px
-     viewport that pill can run under the scale bar — cap it (MOBILE-10). */
-  :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
-    max-width: calc(100vw - 130px);
-  }
-
-  :global(#map .maplibregl-ctrl-attrib-inner) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .geoPdfConfirmBar {
@@ -152,12 +198,6 @@
   left: calc(var(--map-inset-left) + (100% - var(--map-inset-left)) / 2);
   transform: translateX(-50%);
   z-index: 2;
-  padding: 8px 16px;
-  border-radius: var(--radius-pill);
-  background: var(--color-page);
-  color: var(--color-text);
-  font-size: var(--font-sm);
-  box-shadow: var(--shadow-float);
   pointer-events: none;
 }
 
@@ -186,34 +226,29 @@
   gap: 8px;
 }
 
-/* Ink on the accent: the text colour on the accent failed AA. */
-.geoPdfButton {
-  min-height: 44px;
-  padding: 0 20px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  color: var(--color-on-fill);
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
+/* Kit buttons, floating over the map: the shadow is the one look added. */
+.geoPdfConfirmBar > * {
   box-shadow: var(--shadow-float);
-  cursor: pointer;
-}
-
-.geoPdfButton:hover {
-  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
 }
 
 /* Draggable vertex handle for the route draw/edit tool. Larger than the
    painted circle underneath it so it stays grabbable on a trackpad; the
    painted circle is what the user actually sees. */
 .routeVertexHandle {
-  width: 18px;
-  height: 18px;
+  width: var(--control-sm);
+  height: var(--control-sm);
   border-radius: var(--radius-full, 50%);
   background: transparent;
   cursor: grab;
+}
+
+/* A finger's target, not a mouse's (shared/DESIGN.md §1): `--control-sm` grows
+   with the pointer but stops short of it. */
+@media (pointer: coarse) {
+  .routeVertexHandle {
+    width: var(--control-lg);
+    height: var(--control-lg);
+  }
 }
 
 .routeVertexHandle:active {

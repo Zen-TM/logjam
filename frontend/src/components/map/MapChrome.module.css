@@ -38,7 +38,8 @@
   right: 16px;
 }
 
-/* Clears MapLibre's attribution, which sits in the bottom-right corner. */
+/* Clears the bottom strip: MapLibre's credits open leftwards of this column
+   (`--map-actions-clear`), and the (i) sits in that strip. */
 .actions {
   position: absolute;
   z-index: 3;
@@ -65,6 +66,7 @@
 }
 
 .trayItem {
+  composes: control from "../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -74,9 +76,8 @@
   border-radius: var(--radius-pill);
   background: var(--color-page);
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-family: inherit;
+  line-height: inherit;
   white-space: nowrap;
   box-shadow: var(--shadow-float);
   cursor: pointer;

@@ -111,17 +111,44 @@ export function connectionAllowsMetered(
 }
 
 /**
+ * Should a job that paused for want of a connection start again on this one?
+ *
+ * Asked on every connectivity change, not on the offline-to-online edge: a
+ * phone coming back usually finds cellular first and Wi-Fi seconds later, and
+ * for a Wi-Fi-only job only the second of those is news.
+ * Guard: `networkPolicy.test.ts` ("connectionWorthResuming").
+ */
+export function connectionWorthResuming(
+  state: ConnectionState & { isInternetReachable?: boolean | null },
+  allowMetered: boolean,
+): boolean {
+  return (
+    state.isConnected === true &&
+    state.isInternetReachable === true &&
+    connectionAllowsMetered(state, allowMetered)
+  );
+}
+
+/**
  * May this job use the connection the phone is on right now?
  *
  * False when there is no connection at all, so a caller gets one answer to
  * "should I start" rather than having to ask twice. Failing to read the state
  * counts as not allowed: starting a tens-of-megabytes download on an unknown
  * connection is the expensive way to be wrong.
+ *
+ * `refresh()`, not `fetch()`: `fetch()` answers from the last state NetInfo was
+ * sent, and Android sends none when it lifts the network block it puts on an
+ * app behind another app. The state sent under that block calls Wi-Fi metered,
+ * so a Wi-Fi-only job back in front read "mobile data" on Wi-Fi until the next
+ * real change. `refresh()` is one local call to the platform: it sends nothing
+ * over the radio and arms nothing, so it is no background wakeup
+ * (docs/decisions/0013). Guard: `networkPolicy.test.ts` ("canRunNow").
  */
 export async function canRunNow(job: MeteredJob): Promise<boolean> {
   try {
     return connectionAllowsMetered(
-      await NetInfo.fetch(),
+      await NetInfo.refresh(),
       isMeteredAllowed(job),
     );
   } catch (err) {

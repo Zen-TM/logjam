@@ -13,7 +13,7 @@
 // they used to gate on connection, back when an account's list lived on the
 // user record.
 //
-// LAYOUT: a plain list, so per DESIGN.md §2 it keeps `ScreenScroll` and the
+// LAYOUT: a plain list, so per DESIGN.md it keeps `ScreenScroll` and the
 // native header rather than being given a hero. There is no headline metric
 // here; a hero whose only content is the word "Settings" is exactly the pattern
 // the hero rule exists to replace.
@@ -25,7 +25,7 @@
 //
 // PRIVACY: nothing here reads place data.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   contractSectionKeys,
@@ -51,11 +51,13 @@ import {
   isSystemPlaceType,
   PlaceTypeList,
   usePlaceTypeForm,
+  type NewPlaceType,
 } from "../places/PlaceTypesEditor";
+import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
-import { fontSize, theme } from "../theme";
+import { makeStyles, useTheme, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -99,6 +101,7 @@ type SheetMode =
       editing: ScopedCustomFieldDef | null;
     }
   | { kind: "placeTypes" }
+  | { kind: "typeAttributes"; type: NewPlaceType }
   | { kind: "placeTypeForm"; editing: MirrorPlaceType | null };
 
 export function SettingsScreen({
@@ -106,6 +109,9 @@ export function SettingsScreen({
 }: {
   onOpenPage: (page: SettingsPage) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -135,8 +141,14 @@ export function SettingsScreen({
 
   const placeTypes = useMirrorPlaceTypes();
   const placeTypeForm = usePlaceTypeForm({
+    open: sheet.kind === "placeTypeForm",
     editing: sheet.kind === "placeTypeForm" ? sheet.editing : null,
     onSaved: (message) => notify(message),
+    onDone: () => setSheet({ kind: "placeTypes" }),
+    onAdded: (type) => setSheet({ kind: "typeAttributes", type }),
+  });
+  const typeAttributes = useTypeAttributesStep({
+    type: sheet.kind === "typeAttributes" ? sheet.type : null,
     onDone: () => setSheet({ kind: "placeTypes" }),
   });
 
@@ -147,6 +159,7 @@ export function SettingsScreen({
       ? sheet.entity
       : "place";
   const fieldForm = useCustomFieldForm({
+    open: sheet.kind === "fieldForm",
     entity: formEntity,
     defs: defsFor(formEntity),
     editing: sheet.kind === "fieldForm" ? sheet.editing : null,
@@ -171,7 +184,7 @@ export function SettingsScreen({
             icon={icon}
             title={title}
             // Notifications and Offline & Storage are account-backed pages, so
-            // they say so on the way in rather than after the tap (DESIGN.md §8). The
+            // they say so on the way in rather than after the tap (DESIGN.md). The
             // offline tab's switches all govern account-backed downloads or
             // sync, none of which a guest has.
             {...(page === "notifications"
@@ -244,14 +257,22 @@ export function SettingsScreen({
       <BottomSheet
         visible={sheet.kind !== "closed"}
         // Inside the form, a drag or a backdrop tap means "back to the list".
-        onClose={() =>
+        onClose={() => {
+          if (sheet.kind === "typeAttributes") {
+            typeAttributes.onClose();
+            return;
+          }
           setSheet((current) =>
             current.kind === "fieldForm"
               ? { kind: "fields", entity: current.entity }
               : { kind: "closed" },
-          )
+          );
+        }}
+        title={
+          sheet.kind === "typeAttributes"
+            ? typeAttributes.title
+            : sheetTitle(sheet)
         }
-        title={sheetTitle(sheet)}
         // A sub-mode gets an arrow back to the list it came from, rather than
         // only a button at the far end of a scroll.
         onBack={
@@ -259,10 +280,14 @@ export function SettingsScreen({
             ? () => setSheet({ kind: "fields", entity: sheet.entity })
             : sheet.kind === "placeTypeForm"
               ? () => setSheet({ kind: "placeTypes" })
-              : undefined
+              : sheet.kind === "typeAttributes"
+                ? typeAttributes.onBack
+                : undefined
         }
         footer={
-          sheet.kind === "placeTypeForm" ? (
+          sheet.kind === "typeAttributes" ? (
+            typeAttributes.footer
+          ) : sheet.kind === "placeTypeForm" ? (
             placeTypeForm.footer
           ) : sheet.kind === "placeTypes" ? (
             <Button
@@ -313,6 +338,7 @@ export function SettingsScreen({
           />
         ) : null}
         {sheet.kind === "placeTypeForm" ? placeTypeForm.body : null}
+        {sheet.kind === "typeAttributes" ? typeAttributes.body : null}
       </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -321,7 +347,8 @@ export function SettingsScreen({
 }
 
 function sheetTitle(sheet: SheetMode): string {
-  if (sheet.kind === "closed") return "";
+  // The attributes step titles itself (`useTypeAttributesStep`).
+  if (sheet.kind === "closed" || sheet.kind === "typeAttributes") return "";
   if (sheet.kind === "placeTypes") return "Place types";
   if (sheet.kind === "placeTypeForm") {
     return sheet.editing ? sheet.editing.name : "New place type";
@@ -337,6 +364,6 @@ function sheetTitle(sheet: SheetMode): string {
 const ownCount = (defs: ScopedCustomFieldDef[]) =>
   defs.filter((def) => !isSystemFieldDef(def)).length;
 
-const styles = StyleSheet.create({
-  version: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+const useStyles = makeStyles((theme, textRole) => ({
+  version: { ...muted(theme, textRole.meta) },
+}));

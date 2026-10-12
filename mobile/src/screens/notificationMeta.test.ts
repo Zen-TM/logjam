@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import type { TNotification } from "../api/types";
-import { notificationPlaceId } from "@logjam/shared";
-import { notificationMeta } from "./notificationMeta";
-import { notificationHue } from "../theme";
+import {
+  DEFAULT_THEME_SCHEME_ID,
+  notificationPlaceId,
+  THEME_SCHEMES,
+} from "@logjam/shared";
+import { notificationMeta as notificationMetaIn } from "./notificationMeta";
+import { huesFor } from "../theme";
+
+const theme = THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens;
+const { notificationHue } = huesFor(theme);
+const notificationMeta = (n: TNotification) => notificationMetaIn(n, theme);
 
 function notification(
   type: string,

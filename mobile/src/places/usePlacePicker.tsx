@@ -7,7 +7,7 @@
 // near-copies of a place picker is how one of them ends up with a different
 // filter or a different warning. It returns `{ header, body }` — the shape
 // `useSharePanel` established — so the sheet that owns the verb renders it as a
-// SUB-MODE and never stacks a second sheet (DESIGN.md §4).
+// SUB-MODE and never stacks a second sheet (DESIGN.md).
 //
 // Reads places from the MIRROR, so it works with no signal: the link is an
 // outbox op like any other edit. Only places the user OWNS are offered — the
@@ -16,10 +16,10 @@
 // What varies by kind is only the promise sentence and what `attach` does; the
 // displacement decision is `routeSlot.ts`'s and nobody else's.
 import { useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { TRACK_MIME_TYPES, messageFromError } from "@logjam/shared";
 
-import { assetHue, fontSize, spacing, theme } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import { Row, TextField } from "../ui";
 import { fillRouteSlot } from "./fillRouteSlot";
 import {
@@ -69,6 +69,10 @@ export function usePlacePicker({
   onDone: () => void;
   onError: (message: string) => void;
 }): { header: ReactNode; body: ReactNode } {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const places = useMirrorPlaces();
   const routes = useMirrorRoutes();
   const attachments = useMirrorPlaceTracks(TRACK_MIME_TYPES);
@@ -201,8 +205,8 @@ export function usePlacePicker({
   };
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
-  hint: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+  hint: { ...muted(theme, textRole.meta) },
+}));

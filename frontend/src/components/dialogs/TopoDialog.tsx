@@ -5,7 +5,7 @@
 // holds the state's LiDAR, the user orders the tiles they want and uploads the
 // ZIP that arrives. That errand is several steps long and is needed once, so it
 // lives in a sub-view of this dialog rather than above the thing it explains
-// (DESIGN.md §4: a picker inside a dialog swaps the body and backs out to the
+// (DESIGN.md: a picker inside a dialog swaps the body and backs out to the
 // form). The raster settings are the other sub-view.
 import { useState, useRef, Fragment, useEffect, useCallback } from "react";
 import {
@@ -45,6 +45,7 @@ import {
   TextField,
   Icon,
   ErrorBanner,
+  FieldError,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
@@ -167,6 +168,7 @@ export default function TopoDialog({
   const [topoName, setTopoName] = useState("");
   const [topoNameTouched, setTopoNameTouched] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [saveAsError, setSaveAsError] = useState<string | null>(null);
   const [creditsUsed, setCreditsUsed] = useState<number | null>(null);
   const [creditsQuota, setCreditsQuota] = useState<number | null>(null);
   const [creditsResetAt, setCreditsResetAt] = useState<string | null>(null);
@@ -278,7 +280,14 @@ export default function TopoDialog({
 
   async function handleSaveAsTemplate() {
     const name = saveAsName.trim();
-    if (!name) return;
+    if (!name) {
+      setSaveAsError("Name this template first.");
+      return;
+    }
+    if (settingsInvalid) {
+      setSaveAsError("A setting needs fixing before this can be saved.");
+      return;
+    }
     try {
       const created = await apiFetch<TopoTemplate>("/topo-templates", {
         method: "POST",
@@ -423,7 +432,18 @@ export default function TopoDialog({
   }
 
   async function handleSubmit() {
-    if (!file || !stats) return;
+    if (!file || !stats) {
+      setError("Choose your LiDAR ZIP first.");
+      return;
+    }
+    // validationError is already in the banner above the form.
+    if (validationError) return;
+    if (settingsInvalid) {
+      setError(
+        "A setting needs fixing. Open “How this topo is drawn” to see which.",
+      );
+      return;
+    }
     setError(null);
 
     if (
@@ -556,13 +576,17 @@ export default function TopoDialog({
                       className={classes.saveAsField}
                       placeholder="Name this template"
                       value={saveAsName}
+                      // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
                       autoFocus
-                      onChange={(event) => setSaveAsName(event.target.value)}
+                      error={saveAsError}
+                      onChange={(event) => {
+                        setSaveAsName(event.target.value);
+                        setSaveAsError(null);
+                      }}
                     />
                     <Button
                       variant="filled"
                       compact
-                      disabled={!saveAsName.trim() || settingsInvalid}
                       onClick={handleSaveAsTemplate}
                     >
                       Save
@@ -572,6 +596,7 @@ export default function TopoDialog({
                       onClick={() => {
                         setShowSaveAs(false);
                         setSaveAsName("");
+                        setSaveAsError(null);
                       }}
                     >
                       Cancel
@@ -608,21 +633,7 @@ export default function TopoDialog({
           ) : (
             <>
               <Button onClick={guard.requestClose}>Cancel</Button>
-              <Button
-                variant="filled"
-                onClick={handleSubmit}
-                disabled={
-                  !file ||
-                  validating ||
-                  !stats ||
-                  !!validationError ||
-                  settingsInvalid ||
-                  (creditsUsed !== null &&
-                    creditsQuota !== null &&
-                    jobCredits !== null &&
-                    creditsUsed + jobCredits > creditsQuota)
-                }
-              >
+              <Button variant="filled" onClick={handleSubmit} busy={validating}>
                 Make it
               </Button>
             </>
@@ -663,7 +674,7 @@ export default function TopoDialog({
             </p>
             <p className={classes.workingDetail}>
               {stats?.tileCount
-                ? `${stats.tileCount} tile${stats.tileCount > 1 ? "s" : ""} queued. `
+                ? `${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""} queued. `
                 : ""}
               We'll let you know when it's ready. You can close this.
             </p>
@@ -854,7 +865,7 @@ function ZipSummary({
   const rows: ([string, string] | null)[] = [
     ["Survey", stats.surveyNames.join(", ") || "—"],
     ["Mode", stats.modeLabel],
-    ["Tiles", String(stats.tileCount)],
+    ["Areas", String(stats.tileCount)],
     stats.lazCount > 0
       ? [
           "Point clouds",
@@ -957,17 +968,14 @@ function ElvisInstructions({
             )}
           </div>
           {warnCredits && (
-            <p className={classes.stepWarning}>
-              An area this size may cost more credits than you have left this
-              month. Try a smaller one.
-            </p>
+            <FieldError message="An area this size may cost more credits than you have left this month. Try a smaller one." />
           )}
         </div>
       </li>
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Order the tiles from ELVIS" />
+          <SectionHeader title="Order the data from ELVIS" />
           <p className={classes.stepLine}>
             In ELVIS, choose <strong>Order Data</strong>, then{" "}
             <strong>Load File</strong> and give it the shapefile. Then press{" "}
