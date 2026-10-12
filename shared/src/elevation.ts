@@ -92,7 +92,21 @@ export type ElevationProfile = {
 };
 
 /** A position to sample, with its distance along the line. */
-export type SamplePosition = { lon: number; lat: number; distanceM: number };
+export type SamplePosition = {
+  lon: number;
+  lat: number;
+  distanceM: number;
+  /**
+   * Which piece of a line in several pieces the position is on. The ground
+   * between two pieces was not walked (a pause gap), so no climb is counted
+   * from one to the next. Absent on a line in one piece.
+   */
+  segment?: number;
+};
+
+/** The piece of the line a position or a fix is on: 0 when it does not say. */
+export const lineSegmentOf = (at: { segment?: number }): number =>
+  at.segment ?? 0;
 
 /**
  * Resample a polyline to evenly spaced positions.
@@ -171,6 +185,15 @@ export function densifyLine(
  * segment lengths, and each segment is densified against a running distance
  * offset, so the profile's x axis runs continuously across the whole track
  * while the teleport between segments contributes nothing.
+ *
+ * Each position says which segment it is on, so the height difference across
+ * a gap is not counted either (`sampleDem`, `fillDemFromGps`). Segments are
+ * numbered as `gpsAlongLine` numbers them: among those with two points or
+ * more.
+ *
+ * ponytail: the ground from a segment's last sample to its end, and from the
+ * next one's start to its first sample, is in no step: up to one sample
+ * spacing per gap. Sample each segment's two ends if that ever matters.
  */
 export function densifyLineSegments(
   segments: readonly (readonly RoutePoint[])[],
@@ -244,6 +267,7 @@ export function densifyLineSegments(
       lon: a[0] + (b[0] - a[0]) * t,
       lat: a[1] + (b[1] - a[1]) * t,
       distanceM: target,
+      segment: segIndex,
     });
   }
   return positions;
@@ -259,8 +283,16 @@ export type GpsFix = {
   heightM: number;
 };
 
-/** A GPS height at a distance along the line, in walked order. */
-export type GpsHeight = { distanceM: number; heightM: number };
+/**
+ * A GPS height at a distance along the line, in walked order. `segment` is
+ * the one `SamplePosition` carries: the last fix before a pause gap and the
+ * first after it share a distance, and only this tells them apart.
+ */
+export type GpsHeight = {
+  distanceM: number;
+  heightM: number;
+  segment?: number;
+};
 
 /**
  * Every fix's height against the distance `densifyLineSegments` gives the
@@ -277,9 +309,11 @@ export function gpsAlongLine(
   if (segments.length !== fixes.length) return [];
   const out: GpsHeight[] = [];
   let offsetM = 0;
+  let segment = -1;
   for (let k = 0; k < segments.length; k++) {
     const seg = segments[k]!;
     if (seg.length < 2) continue;
+    segment++;
     const atM: number[] = [0];
     for (let i = 1; i < seg.length; i++) {
       const a = seg[i - 1]!;
@@ -295,6 +329,7 @@ export function gpsAlongLine(
           atM[before]! +
           (vertex - before) * (atM[before + 1]! - atM[before]!),
         heightM,
+        segment,
       });
     }
     offsetM += atM[atM.length - 1]!;
@@ -366,7 +401,8 @@ export function elevationGainLoss(
  * Assemble a profile from sample positions and the heights read for them.
  *
  * The chart shows the heights as read; gain and loss are summed from the
- * levelled series, so a join between two DEM sources is never counted as climb.
+ * levelled series, so neither a join between two DEM sources nor a pause gap
+ * is ever counted as climb.
  */
 export function buildElevationProfile(
   positions: readonly SamplePosition[],

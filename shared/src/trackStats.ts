@@ -14,6 +14,7 @@ import {
   buildElevationProfile,
   elevationGainLoss,
   gpsAlongLine,
+  lineSegmentOf,
   type ElevationProfile,
   type ElevationSample,
   type GpsFix,
@@ -955,19 +956,70 @@ export function formatDurationMs(durationMs: number): string {
  *   both ends. The shift is the offset measured at the DEM sample either
  *   side, ramped from one to the other along the stretch, so GPS drift
  *   across it shows as no step at either join.
+ *
+ * Each segment of the line is filled on its own, from its own fixes and its
+ * own DEM samples, and the climb series carries on level from one to the
+ * next: a pause gap was not walked, the same rule `computeTrackDetail` and
+ * `sampleDem` keep. A segment with no GPS heights stays unfilled.
  */
 export function fillDemFromGps(
   dem: DemSamples,
   positions: readonly SamplePosition[],
   gps: readonly GpsHeight[],
 ): DemSamples {
-  const isFill = (i: number) => i >= 0 && dem.heights[i] === null;
   if (
     gps.length === 0 ||
     dem.heights.every((height) => height == null) ||
     dem.heights.every((height) => height != null)
   )
     return dem;
+
+  const out = {
+    heights: [] as (number | null)[],
+    levelled: [] as (number | null)[],
+    climbSeries: [] as number[],
+    sourceIds: [] as (string | null)[],
+  };
+  let level: number | null = null; // where the climb series has got to
+  for (let start = 0, end = 0; start < positions.length; start = end) {
+    const segment = lineSegmentOf(positions[start]!);
+    while (end < positions.length && lineSegmentOf(positions[end]!) === segment)
+      end++;
+    const part = fillSegmentFromGps(
+      {
+        heights: dem.heights.slice(start, end),
+        levelled: dem.levelled.slice(start, end),
+        sourceIds: dem.sourceIds.slice(start, end),
+      },
+      positions.slice(start, end),
+      gps.filter((fix) => lineSegmentOf(fix) === segment),
+    );
+    const first = part.climbSeries[0];
+    const shift = level != null && first != null ? level - first : 0;
+    out.heights.push(...part.heights);
+    out.sourceIds.push(...part.sourceIds);
+    for (const value of part.levelled)
+      out.levelled.push(value == null ? null : value + shift);
+    for (const value of part.climbSeries) out.climbSeries.push(value + shift);
+    level = out.climbSeries[out.climbSeries.length - 1] ?? level;
+  }
+  return out;
+}
+
+/** `fillDemFromGps` for one segment: its samples, and its fixes only. */
+function fillSegmentFromGps(
+  dem: DemSamples,
+  positions: readonly SamplePosition[],
+  gps: readonly GpsHeight[],
+): DemSamples & { climbSeries: number[] } {
+  const isFill = (i: number) => i >= 0 && dem.heights[i] === null;
+  if (gps.length === 0 || dem.heights.every((height) => height != null))
+    return {
+      ...dem,
+      climbSeries: dem.levelled.filter(
+        (value): value is number => value != null,
+      ),
+    };
 
   const held: number[] = [];
   for (const { heightM } of gps) {
