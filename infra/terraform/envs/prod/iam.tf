@@ -312,12 +312,13 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
 }
 
 # Privacy carve-out from ReadOnlyAccess (which grants s3:GetObject on every
-# bucket): CI must never be able to read user canyon data (media photos,
-# LiDAR/tile outputs) or pull secret values. Explicit Deny beats the managed
-# Allow. Bucket-level GetBucket* config reads stay allowed — terraform
-# refresh of the storage module needs those; it never reads objects. The
-# state bucket (logjam-tfstate-*) is intentionally NOT denied: init needs
-# GetObject on the state file. Plans run -lock=false, so no write is needed.
+# bucket and log events in every log group): CI must never be able to read
+# user canyon data (media photos, LiDAR/tile outputs), logs, or secret values.
+# Explicit Deny beats the managed Allow. Objects and log events are denied by
+# default, so a bucket or log group added later is closed without an edit
+# here; the buckets CI does read are the named exceptions. Bucket-level
+# GetBucket* config reads stay allowed — terraform refresh of the storage
+# module needs those; it never reads objects.
 #
 # s3:ListBucket is deliberately NOT denied: HeadBucket (terraform's bucket
 # existence check) requires it, and denying it made CI plans propose
@@ -334,21 +335,30 @@ locals {
   ci_readonly_privacy_deny = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # Every bucket but the three CI reads objects from: media, topo
+      # outputs, the WORM audit sink (pgaudit query text can embed canyon
+      # names/coords), the access logs (viewers' IPs and request paths) and
+      # any bucket added later. The exceptions: init reads the state file
+      # (plans run -lock=false, so no write is needed), the frontend deploy
+      # and rollback read release files, and the deploy role's app versions
+      # live in the EB bucket.
       {
-        Sid    = "DenyUserDataObjects"
+        Sid    = "DenyObjectsByDefault"
         Effect = "Deny"
         Action = ["s3:GetObject", "s3:GetObjectVersion"]
-        Resource = [
-          "arn:aws:s3:::logjam-media/*",
-          "arn:aws:s3:::logjam-topo-jobs/*",
-          # WORM audit sink: pgaudit query text can embed canyon names/coords.
-          "arn:aws:s3:::logjam-audit-620853681701/*",
-          # CloudFront and S3 access logs: viewers' IPs and request paths.
-          "arn:aws:s3:::logjam-access-logs-620853681701/*",
-          # The API instance's rotated logs, which EB uploads here. The
-          # deploy role's app versions live elsewhere in this bucket.
-          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/resources/environments/logs/*",
+        NotResource = [
+          "arn:aws:s3:::logjam-tfstate-620853681701/*",
+          "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
+          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
         ]
+      },
+      # The API instance's rotated logs, which EB uploads into the bucket
+      # excepted above.
+      {
+        Sid      = "DenyInstanceLogObjects"
+        Effect   = "Deny"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
+        Resource = "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/resources/environments/logs/*"
       },
       # No exception: the origin-verify secret version is write-only
       # (origin_verify.tf), so no plan or apply reads a secret value.
@@ -375,17 +385,16 @@ locals {
         Action   = ["cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup", "cognito-idp:AdminGet*", "cognito-idp:AdminList*"]
         Resource = "*"
       },
-      # Postgres log export carries pgaudit query text (same sensitivity as
-      # the audit bucket). Deny reading log *events*; DescribeLogGroups stays
-      # allowed so terraform can refresh log-group resources.
+      # Every log group: the Postgres export carries pgaudit query text (same
+      # sensitivity as the audit bucket), and the API's request log, which EB
+      # streams to CloudWatch, carries viewers' IPs and request paths. Deny
+      # reading log *events*; DescribeLogGroups stays allowed so terraform can
+      # refresh log-group resources. Nothing in CI reads an event.
       {
-        Sid    = "DenyDbLogEvents"
-        Effect = "Deny"
-        Action = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"]
-        Resource = [
-          "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*",
-          "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*:*",
-        ]
+        Sid      = "DenyLogEvents"
+        Effect   = "Deny"
+        Action   = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"]
+        Resource = "*"
       },
       # The same logs by other routes: RDS's own log files, a single record
       # by pointer (no resource-level permission, hence "*"), and the EB
