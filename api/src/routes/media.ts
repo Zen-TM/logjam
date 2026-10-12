@@ -37,6 +37,7 @@ import {
   categoryHasThumbnail,
   isMediaOrigin,
   parseMediaMetadata,
+  parseTrackClimb,
   MediaMetadataError,
   type MediaLinkedType,
   type MediaOrigin,
@@ -179,6 +180,19 @@ function parseMediaDisplayName(value: unknown): string | null {
     );
   }
   return trimmed;
+}
+
+/** The body fields of a replacement climb: sent together or not at all. */
+const CLIMB_FIELDS = ["elevationGainM", "elevationLossM", "elevationSource"];
+
+/** parseTrackClimb, with its shape complaint turned into a 400. */
+function parseTrackClimbOr400(body: Record<string, unknown>) {
+  try {
+    return parseTrackClimb(body);
+  } catch (err) {
+    if (err instanceof MediaMetadataError) throw new AppError(400, err.message);
+    throw err;
+  }
 }
 
 /** parseMediaMetadata, with its shape complaint turned into a 400. The message
@@ -594,13 +608,20 @@ router.get(
   },
 );
 
-// PATCH /media/:id — rename or recolour a standalone file.
+// PATCH /media/:id — rename or recolour a standalone file, or replace a
+// recorded track's climb.
 //
 // The label and the colour have to sync or they diverge per device, which is
-// the inconsistency this whole change exists to remove. Only `displayName` and
-// `color` are editable: the filename is what the download is called and what
-// pins the track format, and nothing about the bytes can change once they are
-// confirmed. `color` is limited to the shared palette (parseRouteColor).
+// the inconsistency this whole change exists to remove. Only `displayName`,
+// `color` and a track's climb are editable: the filename is what the download
+// is called and what pins the track format, and nothing about the bytes can
+// change once they are confirmed. `color` is limited to the shared palette
+// (parseRouteColor).
+//
+// The climb (`elevationGainM`, `elevationLossM`, `elevationSource`, all three
+// or none) is the one part of a track's stats that can improve after the
+// recording: the phone that holds the line reads it again when a finer DEM
+// can answer. Every other stat on the row is the recorder's and stays.
 router.patch(
   "/:id",
   requireAuth,
@@ -608,10 +629,16 @@ router.patch(
     const user = await getUser(req.user!.sub);
     const id = getParam(req.params.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    if (!("displayName" in body) && !("color" in body)) {
-      throw new AppError(400, "displayName or color is required");
+    const hasClimb = CLIMB_FIELDS.some((field) => field in body);
+    if (!("displayName" in body) && !("color" in body) && !hasClimb) {
+      throw new AppError(400, "displayName, color or a climb is required");
     }
-    const data: { displayName?: string | null; color?: string } = {};
+    const data: {
+      displayName?: string | null;
+      color?: string;
+      metadata?: Prisma.InputJsonValue;
+    } = {};
+    const climb = hasClimb ? parseTrackClimbOr400(body) : null;
     if ("displayName" in body) {
       data.displayName = parseMediaDisplayName(body.displayName);
     }
@@ -633,6 +660,16 @@ router.patch(
         400,
         "Only an import or a recorded track can be edited",
       );
+    }
+
+    if (climb) {
+      if (media.origin !== "track") {
+        throw new AppError(400, "Only a recorded track has a climb");
+      }
+      data.metadata = {
+        ...readMediaMetadata(media.origin, media.metadata),
+        ...climb,
+      };
     }
 
     const updated = await prisma.media.update({

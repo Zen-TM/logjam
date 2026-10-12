@@ -143,7 +143,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           style={{
             circleRadius: 6,
             circleColor: ["get", "color"] as unknown as string,
-            circleStrokeColor: "#ffffff",
+            circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
           }}
         />
@@ -182,7 +182,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleColor: ["get", "color"] as unknown as string,
             // White, not a colour: an owned pin's ring is a separator against
             // the map, not a second piece of information.
-            circleStrokeColor: "#ffffff",
+            circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
           }}
         />

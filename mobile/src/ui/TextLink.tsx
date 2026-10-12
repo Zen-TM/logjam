@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, Text } from "react-native";
 
-import { fontSize, hitSlop, spacing, theme } from "../theme";
+import { fontSize, hitSlop, spacing, makeStyles } from "../theme";
 
 /** A small text link, centred under the content it follows. Text-coloured
  *  and underlined, never accent: words are never an intent colour. */
@@ -11,6 +11,8 @@ export function TextLink({
   label: string;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+
   return (
     <Pressable
       onPress={onPress}
@@ -23,11 +25,11 @@ export function TextLink({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   link: { alignSelf: "center", padding: spacing(1) },
   text: {
     color: theme.text,
     fontSize: fontSize.sm,
     textDecorationLine: "underline",
   },
-});
+}));

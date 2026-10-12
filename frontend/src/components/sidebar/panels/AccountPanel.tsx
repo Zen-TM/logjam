@@ -353,7 +353,7 @@ function UsernameForm({
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
             Cancel
           </Button>
           <Button type="submit" form={formId} variant="filled" busy={saving}>

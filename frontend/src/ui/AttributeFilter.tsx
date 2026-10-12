@@ -206,10 +206,14 @@ function MinMaxFilter({
     const from = nextLow.trim() === "" ? bounds[0] : Number(nextLow);
     const to = nextHigh.trim() === "" ? bounds[1] : Number(nextHigh);
     if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return;
-    onChange({
-      kind: "numberRange",
-      range: [Math.max(bounds[0], from), Math.min(bounds[1], to)],
-    });
+    const range: NumberRange = [
+      Math.max(bounds[0], from),
+      Math.min(bounds[1], to),
+    ];
+    // The whole span filters nothing, so it is "no filter", not a filter that
+    // counts as one in the rail's tally.
+    if (isFullRange(range, bounds)) return onChange(null);
+    onChange({ kind: "numberRange", range });
   };
   return (
     <FilterField

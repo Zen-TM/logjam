@@ -550,11 +550,9 @@ export default function LidarPanel({
                     label={MAP_IDENTITY.export.label}
                   />
                 }
-                onOpen={
-                  exportJob.downloadUrl
-                    ? () => downloadFile(exportJob.downloadUrl!)
-                    : undefined
-                }
+                // A real anchor, so middle-click and "save as" work.
+                href={exportJob.downloadUrl ?? undefined}
+                download=""
                 trailing={
                   <Menu
                     label={`Actions for ${label}`}

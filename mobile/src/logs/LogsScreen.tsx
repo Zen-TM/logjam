@@ -27,7 +27,6 @@ import {
   Keyboard,
   RefreshControl,
   SectionList,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -67,11 +66,12 @@ import {
 import { tripTitle } from "../api/tripTitle";
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
+  controlSize,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
@@ -101,6 +101,7 @@ import {
   type ChipOption,
   type ToastMessage,
   Icon,
+  EmptyState,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -117,6 +118,9 @@ export function LogsScreen({
   onOpenTrip: (trip: MirrorTrip) => void;
   onOpenStats: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const guest = useAccountState().accountState === "guest";
@@ -305,8 +309,8 @@ export function LogsScreen({
         .map(({ type, count }) => ({
           value: type,
           label: tripTypeLabel(type),
-          hue: tripTypeMeta(type).hue,
-          icon: tripTypeMeta(type).icon,
+          hue: tripTypeMeta(type, theme).hue,
+          icon: tripTypeMeta(type, theme).icon,
           count,
           // A chip the other filters have emptied stays in place but can't be
           // tapped into a dead end — removing it instead would make the rail
@@ -318,14 +322,14 @@ export function LogsScreen({
             {
               value: NO_TYPE_FILTER_VALUE,
               label: "No type",
-              hue: tripTypeMeta(null).hue,
+              hue: tripTypeMeta(null, theme).hue,
               count: untyped,
               disabled: untyped === 0 && typeFilter !== NO_TYPE_FILTER_VALUE,
             },
           ]
         : []),
     ];
-  }, [distinctTypes, trips, typeFilter, withoutType]);
+  }, [distinctTypes, trips, typeFilter, withoutType, theme]);
 
   const spark = useMemo(() => monthlyTripCounts(trips, new Date()), [trips]);
   const recentCount = useMemo(
@@ -377,7 +381,7 @@ export function LogsScreen({
         <Text style={styles.yearCount}>{section.count}</Text>
       </View>
     ),
-    [],
+    [styles],
   );
 
   const clearFind = useCallback(() => {
@@ -689,7 +693,10 @@ const TripRow = memo(function TripRow({
   selected: boolean;
   onToggle: () => void;
 }) {
-  const meta = tripTypeMeta(primaryTripType(trip.types));
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = tripTypeMeta(primaryTripType(trip.types), theme);
   return (
     <Row
       icon={meta.icon}
@@ -762,28 +769,30 @@ function EmptyPanel({
   onClear: () => void;
 }) {
   return (
-    <View style={styles.empty}>
-      <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
-      <Text style={styles.emptyTitle}>{state.title}</Text>
-      <Text style={styles.emptyBody}>{state.body}</Text>
-      {state.action === "add" ? (
-        <Button
-          label={TRIPS_ADD.copy.add}
-          icon={TRIPS_ADD_ICON.add}
-          onPress={onLogTrip}
-        />
-      ) : filtering || state.action === "clear" ? (
-        <Button
-          label={TRIPS_LIST.copy.clearFilters}
-          variant="outlineAccent"
-          onPress={onClear}
-        />
-      ) : null}
-    </View>
+    <EmptyState
+      icon={state.icon}
+      title={state.title}
+      hint={state.body}
+      action={
+        state.action === "add"
+          ? {
+              label: TRIPS_ADD.copy.add,
+              icon: TRIPS_ADD_ICON.add,
+              onPress: onLogTrip,
+            }
+          : filtering || state.action === "clear"
+            ? {
+                label: TRIPS_LIST.copy.clearFilters,
+                variant: "outlineAccent",
+                onPress: onClear,
+              }
+            : undefined
+      }
+    />
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
@@ -801,14 +810,9 @@ const styles = StyleSheet.create({
     borderColor: withAlpha(theme.accent, 0.4),
     backgroundColor: withAlpha(theme.page, 0.5),
     paddingHorizontal: spacing(1.5),
-    minHeight: 40,
+    minHeight: controlSize.md,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.regular,
-  },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   rail: {
     paddingLeft: spacing(2),
@@ -841,13 +845,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: theme.page,
     paddingTop: spacing(1),
-    paddingBottom: spacing(0.75),
+    paddingBottom: spacing(0.5),
   },
-  yearLabel: {
-    color: theme.text,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-  },
+  yearLabel: { ...textRole.sheetTitle, color: theme.text },
   yearCount: { color: theme.textMuted, fontSize: fontSize.xs },
   rowTrailing: {
     flexDirection: "row",
@@ -866,24 +866,4 @@ const styles = StyleSheet.create({
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },
   presets: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(5),
-    paddingHorizontal: spacing(2),
-    backgroundColor: theme.card,
-    borderWidth: 1,
-    borderColor: theme.line,
-    borderRadius: radius.lg,
-  },
-  emptyTitle: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  emptyBody: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
-});
+}));

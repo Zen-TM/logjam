@@ -94,6 +94,8 @@ export const SCHEMA_SQL = `
           durationMs     INTEGER NOT NULL DEFAULT 0,
           elevationGainM REAL NOT NULL DEFAULT 0,
           elevationLossM REAL NOT NULL DEFAULT 0,
+          elevationSource TEXT,
+          elevationCheckedFor TEXT,
           pointCount     INTEGER NOT NULL DEFAULT 0,
           startedAt      TEXT NOT NULL,
           endedAt        TEXT,
@@ -214,6 +216,14 @@ export const ADDED_COLUMNS: {
   // media row is a copy that syncs. This column is what stops the two being
   // shown as two recordings.
   { table: "track", column: "mediaId", definition: "TEXT" },
+  // Where the row's climb and descent were read from (`CLIMB_SOURCES` in
+  // shared/src/demSources.ts). NULL is GPS heights: every row written before
+  // this, a live recording, and a finish no DEM could answer the whole of.
+  { table: "track", column: "elevationSource", definition: "TEXT" },
+  // The DEM source list the network was last asked for a finer climb under,
+  // and had none: the upgrade pass asks again only when the list changes
+  // (`tracks/trackClimb.ts`).
+  { table: "track", column: "elevationCheckedFor", definition: "TEXT" },
   // What the recorder REFUSED after this point: fixes too close to it to be
   // progress, and how long they kept arriving. Positive evidence of standing
   // still — the only thing that separates a stop from slow travel once the

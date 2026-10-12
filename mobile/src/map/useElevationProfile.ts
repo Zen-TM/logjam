@@ -36,8 +36,10 @@
 // to AWS's public bucket, from the user's own connection. Never log either.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  buildElevationProfile,
+  buildTrackElevationProfile,
   densifyLineSegments,
+  type DemSamples,
+  type GpsFix,
   type ElevationProfile,
 } from "@logjam/shared";
 
@@ -65,12 +67,31 @@ export type ElevationState = {
  * sample is missing) would otherwise throw away a partial answer AND never
  * reach the source that could have completed it. Null only when nothing
  * anywhere is known.
+ *
+ * `gpsFixes` are a recorded track's own heights. Where no source completes
+ * the profile they fill its gaps, so a track that strays past a saved area
+ * keeps the DEM for the part inside it.
+ *
+ * `maxSamples` is the ceiling a track asks for (`ELEVATION_TRACK_MAX_SAMPLES`).
+ * An API older than the field ignores it and answers at the default.
  */
 async function profileFromDem(
   segments: readonly (readonly [number, number][])[],
   sources: { api: boolean; tiles: boolean },
+  {
+    gpsFixes,
+    maxSamples,
+  }: {
+    gpsFixes?: readonly (readonly GpsFix[])[] | null;
+    maxSamples?: number;
+  } = {},
 ): Promise<ElevationProfile | null> {
-  const positions = densifyLineSegments(segments);
+  const positions = densifyLineSegments(segments, maxSamples);
+  const buildElevationProfile = (
+    at: typeof positions,
+    dem: DemSamples,
+  ): ElevationProfile =>
+    buildTrackElevationProfile(segments, gpsFixes, at, dem);
 
   const saved = await sampleElevations(positions);
   if (saved.heights.every((value) => value != null)) {
@@ -84,7 +105,7 @@ async function profileFromDem(
     try {
       return await apiFetch<ElevationProfile>("/elevation/profile", {
         method: "POST",
-        body: { segments },
+        body: { segments, ...(maxSamples ? { maxSamples } : {}) },
       });
     } catch {
       // A deployed API older than this app has no such route, and a flaky link
@@ -102,7 +123,17 @@ async function profileFromDem(
 
 export function useElevationProfile(
   segments: readonly (readonly [number, number][])[],
-  { allowNetwork = true }: { allowNetwork?: boolean } = {},
+  {
+    allowNetwork = true,
+    gpsFixes = null,
+    maxSamples,
+  }: {
+    allowNetwork?: boolean;
+    /** A recorded track's GPS heights along `segments`, to fill gaps. */
+    gpsFixes?: readonly (readonly GpsFix[])[] | null;
+    /** A track's higher sample ceiling; a drawn line leaves it out. */
+    maxSamples?: number;
+  } = {},
 ): ElevationState {
   const [profile, setProfile] = useState<ElevationProfile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,6 +153,14 @@ export function useElevationProfile(
   // one — without it, undoing a point could leave the pre-undo profile on
   // screen.
   const latestKey = useRef<string | null>(null);
+  // Every fix of a long recording: too much to put in the key, and it changes
+  // only when the line does. Declared before the effect below, so it is
+  // written first. A set that no longer matches the line fills nothing
+  // (`gpsAlongLine`).
+  const latestGpsFixes = useRef(gpsFixes);
+  useEffect(() => {
+    latestGpsFixes.current = gpsFixes;
+  }, [gpsFixes]);
 
   // No line, no profile: cleared during render rather than from the effect.
   if (!geometryKey && (profile !== null || loading)) {
@@ -141,6 +180,7 @@ export function useElevationProfile(
           const built = await profileFromDem(
             segments,
             planElevationSources({ allowNetwork, isGuest }),
+            { gpsFixes: latestGpsFixes.current, maxSamples },
           );
           if (latestKey.current === geometryKey) setProfile(built);
         } catch {
@@ -156,7 +196,7 @@ export function useElevationProfile(
     }, ELEVATION_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [geometryKey, allowNetwork, isGuest]);
+  }, [geometryKey, allowNetwork, isGuest, maxSamples]);
 
   return { profile, loading };
 }

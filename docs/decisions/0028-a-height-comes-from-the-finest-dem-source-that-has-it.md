@@ -42,6 +42,61 @@ Proposal: #359.
 - **A result names its sources.** `sampleDem` returns a source id per sample,
   a profile carries `demSourceIds`, and a saved `dem-region` file is filed
   under its source's id and read back only for that source.
+- **Update 2026-10-12: a track's climb is stored with one source id, and
+  replaced only by a finer one.** A finished track's climb and descent are
+  the sums above, written once to the track and to its file's metadata
+  (`elevationSource` in `shared/src/mediaMetadata.ts`) so every screen shows
+  the same figure without reading terrain. The figure is still finest per
+  position; the id is only a label, and `climbFromProfile` in
+  `shared/src/elevation.ts` sets it to the coarsest source any sample came
+  from, so a track partly on a coarse source is offered again when a finer
+  one reaches it. Absent means GPS heights. A recorded track's own GPS heights
+  are the source under every DEM: `fillDemFromGps` in
+  `shared/src/trackStats.ts` fills the positions no DEM answers, sums each
+  filled stretch and its joins from every GPS fix, in GPS throughout, and
+  holds GPS still until it has moved `ELEVATION_HYSTERESIS_M` so its wander
+  is not summed at the DEM's threshold. Such a climb is labelled `gps`. The
+  ground between two segments of a track (a pause gap) was not walked, so
+  the step across it is counted by neither: a sample position carries its
+  segment, `sampleDem` leaves that step out of `levelled` and reads no seam
+  for it, and each segment is filled from its own fixes and DEM samples. The
+  chart still shows the jump. `upgradeTrackClimbs` in
+  `mobile/src/tracks/trackClimb.ts` asks again on the first sync cycle after
+  the finish, and after that only when the ids or `coverage` in
+  `DEM_SOURCES` change; nothing polls. It reads saved terrain and
+  `POST /elevation/profile`, never a public tile host, because nobody opened
+  the track. Guards: `shared/src/elevation.test.ts`,
+  `shared/src/gpsFill.test.ts`, `mobile/src/tracks/trackClimb.test.ts`. Cost: a stored figure can be older
+  than the best terrain, a phone built with a new source before the API
+  serves it marks its tracks as asked, and the key sees only the declaration: an
+  archive rebuilt inside an unchanged `coverage` re-asks nothing, and a
+  source with no declared footprint (a LiDAR job's DEM) must change the key
+  itself when it gains ground. Everything else above stands.
+- **Update 2026-10-12: Logjam Web replaces a stored climb too, and each
+  figure says its source.** A finished recording's Ascent and Descent are the
+  stored figures on every screen of both clients; no screen shows its own
+  reading beside them. A track's page on Logjam Web
+  (`frontend/src/components/sidebar/panels/TrackProfiles.tsx`) reads the
+  terrain for its chart anyway, so when that reading is complete and
+  `isFinerClimbSource` says its source beats the stored one, the page sends
+  it (`reclimbMedia` in `frontend/src/placeUtils.ts`), for the viewer's own
+  recording only: never an import, never a shared track. It builds the
+  request as `upgradeTrackClimbs` does (`toElevationLine` in
+  `shared/src/trackLine.ts`, `ELEVATION_TRACK_MAX_SAMPLES`), so both clients
+  store the same figure for one source. The stored climb and the chart under
+  it can still come from different sources (a phone offline on coarse saved
+  terrain), so the line under the two figures names the stored source
+  (`storedClimbCaption` in `shared/src/profileSeries.ts`) and the chart's
+  line names its own in the same words. Guards:
+  `frontend/src/components/sidebar/panels/TrackProfiles.test.tsx` ("stores a
+  climb read from a finer source"), `shared/src/profileSeries.test.ts`
+  ("names every source a climb can be stored from"). Cost: opening a page
+  can write; `PATCH /media/:id` accepts any valid climb from the owner, so
+  "finer only" is held by each client and not by the API; and the phone that
+  recorded the track shows its own row, which learns of the web's write only
+  when its own pass reaches the same answer. A climb stored before the
+  arithmetic changed is still replaced by nothing. Everything else above
+  stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS
@@ -83,5 +138,34 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   need no precedence. Rejected because a LiDAR job's DEM is private to the
   job's owner and cannot go into a shared archive, and a composite hides which
   source a height came from.
+- **Derive a track's climb wherever it is shown** (2026-10-12). No stored
+  figure to go stale. Rejected because the Saved list, the Stats totals and
+  Logjam Web would each read terrain for every track they list, and the track
+  sheet did exactly this while the other screens showed the stored GPS
+  figure, so they disagreed.
+- **Label a stored climb with the finest, or the most used, source in it**
+  (2026-10-12). Reads better beside the figure. Rejected because the label's
+  one job is to say whether a finer source could still improve the figure,
+  and only the coarsest one answers that.
+- **Keep a track wholly on GPS heights when any position has no DEM**
+  (2026-10-12). One surface for the whole chart, and no join to level. Built
+  and removed before merge: a track that strayed a few metres past a saved
+  area lost the DEM for all the ground inside it until the phone was next
+  online.
+- **Ask again about every unimproved track on a timer** (2026-10-12). Built
+  as a seven-day wait and removed before merge: a track outside NSW would be
+  sent to the API every week for good, for an answer that changes only when
+  the source list does.
+- **Show Logjam Web's own terrain reading on a track's page** (2026-10-12).
+  Always the best data the page can get. Rejected because the Ways list, the
+  Stats totals and Logjam GPS would show the stored figure beside it, which
+  is the disagreement the stored climb exists to end.
+- **Leave replacing a stored climb to the phone that holds the line**
+  (2026-10-12). One writer. Rejected because a track that reached the account
+  from a phone no longer in use is never read again by anything.
+- **Have the API compute the climb when the file is uploaded** (2026-10-12).
+  It holds both the file and the DEM, so no client would need a pass. Not
+  taken: a larger change, and a phone offline must still store a figure of
+  its own at the finish.
 - **Choose the source in each client.** Rejected by 0020: deciding twice is
   how the two clients drifted before.

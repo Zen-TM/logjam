@@ -69,6 +69,9 @@ vi.mock("./mediaCache", () => ({
 vi.mock("../tracks/trackBackup", () => ({
   sweepTrackBackups: () => Promise.resolve(0),
 }));
+vi.mock("../tracks/trackClimb", () => ({
+  upgradeTrackClimbs: () => Promise.resolve(0),
+}));
 vi.mock("./mediaSyncBridge", () => ({ setMutationSyncHandler: () => {} }));
 vi.mock("./outbox", () => ({
   migrateLegacyWaypoints: () => Promise.resolve(),

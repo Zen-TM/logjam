@@ -64,7 +64,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   `data-panel-open` and `data-sheet-open`). Never pass a width from JS.
 - **An armed map tool is a page in the panel**, never a card over the map.
   Its settings and edit controls (snap, Undo, Reverse, Clear) are in its
-  footer. Leaving discards the draft, so every way out confirms.
+  footer. Leaving a draft that would be kept (a route) confirms on every way
+  out; a measurement is not kept, so leaving it asks nothing.
 - **MapLibre's controls are restyled, not rebuilt**: kit buttons on the map's
   public API; the scale bar and attribution stay MapLibre's.
 - **Hovering a row lights its pin; pressing a pin opens the place**, from any
@@ -136,7 +137,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   not removed.
 - **A screen stylesheet lays out and paints no corner, shadow or fill**:
   `lookBudget.test.ts` holds each file to a budget that only shrinks.
-- **A disabled `Button` takes `disabledReason`** and stays focusable.
+- **A disabled control stays focusable**: `disabledReason` is required by type.
 - **Pure decisions leave the component** into a tested module beside it
   (`placesModel.ts`).
 

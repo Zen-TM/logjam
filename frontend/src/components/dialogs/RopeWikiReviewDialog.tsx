@@ -156,17 +156,19 @@ function RopeWikiReviewDialog({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose} disabled={submitting}>
+          <Button
+            onClick={onClose}
+            disabled={submitting}
+            disabledReason="Applying…"
+          >
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={submitting}
-            disabled={review.length === 0}
-            onClick={handleApply}
-          >
-            Apply
-          </Button>
+          {/* Absent with nothing to review: no decision exists to apply. */}
+          {review.length > 0 && (
+            <Button variant="filled" busy={submitting} onClick={handleApply}>
+              Apply
+            </Button>
+          )}
         </>
       }
     >

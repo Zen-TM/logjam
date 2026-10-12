@@ -29,7 +29,7 @@ import {
   wayVerbLabel,
 } from "@logjam/shared";
 
-import { assetHue, placeHue, theme } from "../theme";
+import { spacing, useTheme, useHues } from "../theme";
 import { BottomSheet, closedSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useCopyPanel } from "../sharing/CopySheet";
@@ -83,6 +83,9 @@ export function RouteOptionsSheet({
    *  elevation only from tiles already on the phone. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue, placeHue } = useHues();
+
   const [busy, setBusy] = useState(false);
   // The share panel is rendered HERE rather than handed to the caller: this
   // one component is both Saved's three-dots sheet and the map's route sheet,
@@ -524,5 +527,5 @@ export function RouteOptionsSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 8 },
+  body: { gap: spacing(1) },
 });

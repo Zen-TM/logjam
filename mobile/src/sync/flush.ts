@@ -31,6 +31,7 @@ import {
   runMediaCreateOp,
   runMediaDeleteOp,
   runMediaLinkOp,
+  runMediaReclimbOp,
   runMediaRecolourOp,
   runMediaRenameOp,
   type MediaOpRow,
@@ -483,6 +484,8 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
       return runMediaRenameOp(row);
     case "recolour":
       return runMediaRecolourOp(row);
+    case "reclimb":
+      return runMediaReclimbOp(row);
     case "link":
       return runMediaLinkOp(row);
     default:

@@ -37,6 +37,8 @@ import {
 } from "./recordingPreferences";
 import { startSensorLog, stopSensorLog } from "./sensorLog";
 import { backUpFinishedTrack } from "./trackBackup";
+import { climbFromSavedTerrain } from "./trackClimb";
+import { toElevationGpsFixes, toElevationLine } from "@logjam/shared";
 import { enqueueTrackWrite, resetTrackWriteHealth } from "./trackWriteQueue";
 import {
   addTrackPointSuppression,
@@ -73,7 +75,7 @@ function locationOptions(): Location.LocationTaskOptions {
     activityType: Location.ActivityType.Fitness,
     foregroundService: {
       notificationTitle: "Recording track",
-      notificationBody: "Logjam is recording. Open the app to pause or finish.",
+      notificationBody: "Logjam GPS is recording. Open it to pause or finish.",
       killServiceOnDestroy: false,
     },
   };
@@ -398,6 +400,7 @@ export async function startTrackRecording(): Promise<Track> {
     durationMs: 0,
     elevationGainM: 0,
     elevationLossM: 0,
+    elevationSource: null,
     pointCount: 0,
     startedAt: now.toISOString(),
     endedAt: null,
@@ -553,6 +556,14 @@ export async function finishTrackRecording(
   const points = await listTrackPoints(trackId);
   const stats = {
     ...computeTrackStats(points),
+    // The climb from the terrain saved on this phone, with the track's own
+    // GPS heights across any stretch it does not cover; null keeps the
+    // recorder's GPS figures. No request at the finish tap: the upgrade pass
+    // asks the network later (`trackClimb.ts`).
+    ...(await climbFromSavedTerrain(
+      toElevationLine(points),
+      toElevationGpsFixes(points),
+    )),
     durationMs: trackDurationMs(track, endedAt.getTime()),
   };
   await updateTrack(trackId, {

@@ -19,6 +19,7 @@ import { runDeltaPull, SyncApplyError } from "./deltaPull";
 import { flushOutbox } from "./flush";
 import { syncThumbnailCache } from "./mediaCache";
 import { sweepTrackBackups } from "../tracks/trackBackup";
+import { upgradeTrackClimbs } from "../tracks/trackClimb";
 import { setMutationSyncHandler } from "./mediaSyncBridge";
 import {
   APPLY_FAILED_KEY,
@@ -142,6 +143,9 @@ async function runCycleOnce(): Promise<void> {
   // below: a recording that cannot be written to disk is not a reason to stop
   // the mirror receiving server changes, and the sweep itself is the retry.
   await sweepTrackBackups().catch(() => {});
+  // After the sweep, so a track it has just registered has a file to carry
+  // the new figures, and before the flush for the same reason as the sweep.
+  await upgradeTrackClimbs().catch(() => {});
   let flushError: unknown = null;
   let retryingOps = 0;
   try {

@@ -1,14 +1,13 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   opacity,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
@@ -61,6 +60,9 @@ export function Chip({
   starred?: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const tint = hue ?? theme.accent;
   return (
     <Pressable
@@ -121,17 +123,17 @@ export function Chip({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(0.5),
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.line,
     backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(0.5),
     minHeight: CHIP_HEIGHT,
     // A pill is never narrower than it is tall: a one-glyph chip is a circle.
     minWidth: CHIP_HEIGHT,
@@ -139,11 +141,7 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.75 },
   disabled: { opacity: opacity.disabled },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.control, color: theme.text },
   // `onFill`, not the page colour: on the shared heath fill the old dark page
   // was 3.7:1 (root CLAUDE.md, "Text or a glyph ON a colour fill uses a dark
   // ink").
@@ -165,10 +163,6 @@ const styles = StyleSheet.create({
   // No wash on a fill: an ink wash darkened Daylight's accent until the count
   // on it fell under 4.5:1. The count reads as `onFill` on the fill itself.
   badgeActive: { backgroundColor: "transparent" },
-  badgeText: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  badgeText: { ...textRole.caption, color: theme.textMuted },
   badgeTextActive: { color: theme.onFill },
-});
+}));

@@ -12,9 +12,14 @@ import type {
   MediaOrigin,
   PlaceMergePolicy,
   ElevationProfile,
+  TrackClimb,
   SharableEntityType,
 } from "@logjam/shared";
-import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
+import {
+  ELEVATION_TRACK_MAX_SAMPLES,
+  formatTripPlaceNames,
+  tallyNotifications,
+} from "@logjam/shared";
 import {
   settleReadOverrides,
   withReadOverrides,
@@ -35,12 +40,7 @@ import { cacheProfile, cachedProfile } from "./elevationCache";
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
 // file cannot drift — they used to be two hand-maintained copies kept in step
 // by a comment. Every existing `from "./placeUtils"` import still resolves.
-export type {
-  TPlace,
-  TNotification,
-  TTripLog,
-  TUser,
-} from "@logjam/shared";
+export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 
 // A trip's title: an explicit displayName always wins; otherwise it's the
@@ -518,13 +518,27 @@ export function deleteRoute(id: string): Promise<void> {
  * whenever it is shown. See shared/src/elevation.ts.
  */
 export function getElevationProfile(
-  points: [number, number][],
+  line: ProfiledLine,
 ): Promise<ElevationProfile & { attribution: string }> {
   return apiFetch<ElevationProfile & { attribution: string }>(
     "/elevation/profile",
-    { method: "POST", body: { points } },
+    {
+      method: "POST",
+      // A track asks for the sample ceiling Logjam GPS asks for, so the two
+      // clients read the same climb off the same line.
+      body: Array.isArray(line[0]?.[0])
+        ? { segments: line, maxSamples: ELEVATION_TRACK_MAX_SAMPLES }
+        : { points: line },
+    },
   );
 }
+
+/**
+ * What a profile can be asked for: one line (a route, the measure tool), or a
+ * track's segments, which the server samples without crossing the gap between
+ * them.
+ */
+export type ProfiledLine = [number, number][] | [number, number][][];
 
 /**
  * Loads a profile for the given points, keyed on the geometry itself: move a
@@ -537,7 +551,7 @@ export function getElevationProfile(
  * has already been sampled draws its chart immediately rather than flashing
  * "Reading the terrain…" at someone who was just looking at it.
  */
-export function useElevationProfile(points: [number, number][] | null) {
+export function useElevationProfile(points: ProfiledLine | null) {
   const geometryKey = points ? JSON.stringify(points) : null;
   const [profile, setProfile] = useState<
     (ElevationProfile & { attribution: string }) | null
@@ -570,7 +584,7 @@ export function useElevationProfile(points: [number, number][] | null) {
     if (!fetchKey) return;
     // A late response from a previous line must not overwrite this one's.
     let current = true;
-    getElevationProfile(JSON.parse(fetchKey) as [number, number][])
+    getElevationProfile(JSON.parse(fetchKey) as ProfiledLine)
       .then((result) => {
         // Cached even if this hook has moved on: the answer is about the
         // geometry, not about who asked.
@@ -1422,7 +1436,10 @@ export function useStandaloneFiles(enabled: boolean) {
     };
   }, [enabled, fetchCount]);
 
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+  const refetch = useCallback(() => {
+    setError(null);
+    setFetchCount((n) => n + 1);
+  }, []);
 
   return { files, loaded, error, refetch };
 }
@@ -1435,6 +1452,18 @@ export function renameMedia(
     method: "PATCH",
     body: { displayName },
   });
+}
+
+/**
+ * Replaces a recorded track's stored climb. The API takes any valid climb:
+ * the caller sends only one read from a finer source than the stored one
+ * (`isFinerClimbSource`).
+ */
+export function reclimbMedia(
+  id: string,
+  climb: TrackClimb,
+): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}`, { method: "PATCH", body: climb });
 }
 
 export function recolourMedia(id: string, color: string): Promise<MediaItem> {

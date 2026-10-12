@@ -607,9 +607,10 @@ function Map({
   selectRoute,
   selectTrack,
   onAddPlaceAt,
-  onDrawRouteFrom,
+  onMeasureFrom,
   routeHover,
   drawingRoute,
+  measuring,
   drawColor,
   drawPoints,
   drawAnchorIndices,
@@ -680,7 +681,7 @@ function Map({
   selectTrack: (mediaId: string) => void;
   /** "What is here?" verbs: each hands the point to the flow that exists. */
   onAddPlaceAt: (point: MapPointCoord) => void;
-  onDrawRouteFrom: (point: MapPointCoord) => void;
+  onMeasureFrom: (point: MapPointCoord) => void;
   /** Where along a line the elevation-profile cursor sits, marked on the map so
    *  the chart and the ground read as the same place. A CHANNEL, not a value:
    *  it changes many times a second (see the subscribing effect). */
@@ -688,6 +689,9 @@ function Map({
   // Draw/edit mode. The vertex list lives in App so the HUD can render the
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
+  /** The draft is a measurement, not a route: the same gestures, drawn dotted
+   *  and without direction (it is asked, not made). Implies `drawingRoute`. */
+  measuring: boolean;
   /** Palette colour the draft will be saved with. */
   drawColor?: string;
   drawPoints: [number, number][];
@@ -952,6 +956,20 @@ function Map({
         // Offline or unreachable archive: the straight line already drawn is
         // the right answer, and a toast per gesture would be noise.
       });
+  });
+
+  // The next vertex of the draft, from a click or from Enter on the focused map.
+  const placeDrawPointRef = useRef((at: { lng: number; lat: number }) => {
+    const tapped: [number, number] = [at.lng, at.lat];
+    const previous = drawPointsRef.current[drawPointsRef.current.length - 1];
+    // Snapping only ever ADDS intermediate points between the previous
+    // vertex and this one — the user's own clicks stay exactly where they
+    // put them, so a bad snap is undone by one Undo rather than by
+    // reconstructing what they meant. The tapped point lands immediately and
+    // the run fills in behind it; waiting would make every click feel laggy.
+    onDrawPointAddRef.current(tapped);
+    if (previous && snapModeRef.current !== "off")
+      snapBetweenRef.current(previous, tapped);
   });
 
   const onMapBoundsChangeRef = useRef(onMapBoundsChange);
@@ -1324,7 +1342,7 @@ function Map({
         data: { type: "FeatureCollection", features: [] },
       });
       // SOLID. A route is a thing you are making; the measure tool's dotted
-      // line is a thing you are asking.
+      // line is a thing you are asking (the `measuring` effect below).
       map.addLayer({
         id: "route-draft-line",
         type: "line",
@@ -1727,6 +1745,7 @@ function Map({
           // URL retries; same-URL failures stay cached (LAYERS-2).
           if (!cached || cached.url !== entry.displayUrl) {
             const promise = fetchTrackGeoJSON(
+              entry.mediaId,
               entry.displayUrl,
               entry.color,
               entry.stamp,
@@ -1857,8 +1876,11 @@ function Map({
       cancel();
       ask(e.lngLat.lat, e.lngLat.lng);
     };
+    // Enter on the focused map is a press on the middle of it: it asks what is
+    // there, or, with a drawing tool armed, places the next point there. With
+    // the arrow keys panning, that is either tool without a pointer.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Enter" || armed()) return;
+      if (event.key !== "Enter" || pickModeRef.current) return;
       event.preventDefault();
       // The middle of the map the user can SEE: the page and its sheet cover
       // the left of the canvas, and their widths are the layout's tokens.
@@ -1875,7 +1897,8 @@ function Map({
         inset + (box.width - inset) / 2,
         box.height / 2,
       ]);
-      ask(centre.lat, centre.lng);
+      if (drawingRouteRef.current) placeDrawPointRef.current(centre);
+      else ask(centre.lat, centre.lng);
     };
     const canvas = map.getCanvas();
     map.on("click", onClick);
@@ -1969,10 +1992,10 @@ function Map({
       mapRef.current.setLayoutProperty(
         id,
         "visibility",
-        vis(showWays || drawingRoute),
+        vis(showWays || (drawingRoute && !measuring)),
       );
     }
-  }, [showPlaces, showWays, drawingRoute, mapLoaded]);
+  }, [showPlaces, showWays, drawingRoute, measuring, mapLoaded]);
 
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
@@ -2022,21 +2045,7 @@ function Map({
       // the user was trying to delete.
       if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
         return;
-      const tapped: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      const previous = drawPointsRef.current[drawPointsRef.current.length - 1];
-      // No snap to consider: place the point now rather than waiting on an
-      // async path that would do nothing.
-      if (!previous || snapModeRef.current === "off") {
-        onDrawPointAddRef.current(tapped);
-        return;
-      }
-      // Snapping only ever ADDS intermediate points between the previous
-      // vertex and this one — the user's own clicks stay exactly where they
-      // put them, so a bad snap is undone by one Undo rather than by
-      // reconstructing what they meant. The tapped point lands immediately and
-      // the run fills in behind it; waiting would make every click feel laggy.
-      onDrawPointAddRef.current(tapped);
-      snapBetweenRef.current(previous, tapped);
+      placeDrawPointRef.current(e.lngLat);
     };
     map.on("click", handleClick);
     return () => {
@@ -2059,6 +2068,26 @@ function Map({
         : { type: "FeatureCollection", features: [] },
     );
   }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
+
+  // A measurement is the same draft drawn DOTTED and without direction arrows:
+  // a route is a thing you are making, a measurement a thing you are asking,
+  // and it has no way it runs.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    if (!map.getLayer("route-draft-line")) return;
+    map.setPaintProperty(
+      "route-draft-line",
+      "line-dasharray",
+      // Round caps turn a near-zero dash into a dot.
+      measuring ? [0.1, 2] : undefined,
+    );
+    map.setLayoutProperty(
+      "route-draft-direction",
+      "visibility",
+      measuring ? "none" : "visible",
+    );
+  }, [measuring, mapLoaded]);
 
   // Update route draft colors dynamically when drawColor changes.
   useEffect(() => {
@@ -3326,7 +3355,7 @@ function Map({
           from={asked.from}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
-          onDrawRoute={onDrawRouteFrom}
+          onMeasure={onMeasureFrom}
         />
       )}
       {pickingCoords && (

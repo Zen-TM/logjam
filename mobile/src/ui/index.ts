@@ -44,11 +44,4 @@ export { Screen, ScreenScroll } from "./Screen";
 export { Row } from "./Row";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
-export {
-  elevationSeries,
-  speedSeries,
-  timeOfDayFormatter,
-  type ProfilePoint,
-  type ProfileSeries,
-} from "./profileSeries";
 export { Toast, type ToastMessage } from "./Toast";

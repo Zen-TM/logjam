@@ -394,10 +394,10 @@ function PlaceTypeDialog({
     editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
-  // Shown once something is typed: an empty name is the disabled Save button.
-  const nameError = name.trim()
-    ? placeTypeNameError(name, types, editing)
-    : null;
+  // A taken name shows as it is typed; a blank one only once Save was pressed.
+  const [pressed, setPressed] = useState(false);
+  const nameError =
+    name.trim() || pressed ? placeTypeNameError(name, types, editing) : null;
 
   return (
     <Dialog
@@ -407,14 +407,19 @@ function PlaceTypeDialog({
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
             Cancel
           </Button>
           <Button
             variant="filled"
             busy={saving}
-            disabled={!name.trim() || nameError !== null}
-            onClick={() => onSave({ name: name.trim(), iconKey, color })}
+            onClick={() => {
+              if (placeTypeNameError(name, types, editing)) {
+                setPressed(true);
+                return;
+              }
+              onSave({ name: name.trim(), iconKey, color });
+            }}
           >
             Save
           </Button>

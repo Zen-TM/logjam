@@ -15,6 +15,7 @@ import {
   contourWidthStops,
   featureLineWidthStops,
   iconTargetPx,
+  MAP_INK,
   rgbaCssFromHex,
   type OsmFeatureKey,
   type VectorStyleSettings,
@@ -212,7 +213,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         symbolPlacement: "line",
         textMaxAngle: 60,
         textColor: rgbaCssFromHex(feat(key).colour),
-        textHaloColor: "rgba(255,255,255,0.8)",
+        textHaloColor: MAP_INK.labelHalo,
         textHaloWidth: 1.5,
       },
     });
@@ -270,7 +271,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         textOffset: [0, 0.8],
         textOptional: true,
         textColor: rgbaCssFromHex(feat(key).colour),
-        textHaloColor: "rgba(255,255,255,0.85)",
+        textHaloColor: MAP_INK.labelHalo,
         textHaloWidth: 1.5,
       },
     });

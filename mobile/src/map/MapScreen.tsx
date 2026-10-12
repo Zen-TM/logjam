@@ -29,7 +29,6 @@ import {
   BackHandler,
   Linking,
   Pressable,
-  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -86,6 +85,8 @@ import {
   type TrackPass,
   drawsNswContours,
   nswContourStyle,
+  MAP_INK,
+  MAP_MEASURE,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -110,7 +111,14 @@ import {
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import {
+  slopTo,
+  spacing,
+  makeStyles,
+  touchTargetMin,
+  useTheme,
+  useHues,
+} from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
   PlacePinsLayer,
@@ -120,6 +128,7 @@ import {
 } from "./PlacePinsLayer";
 import { SpeedElevationChip, READOUT_CHIP_HEIGHT } from "./SpeedElevationChip";
 import { sampleElevations } from "../offline/demLookup";
+import { setOfflineOnly as setOfflineOnlyMode } from "../offline/offlineOnlyMode";
 import {
   deriveSpeedMps,
   publishLiveReadout,
@@ -180,6 +189,7 @@ import {
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import {
+  MARKER_COLORS,
   isNorthUpLocked,
   isScaleBarEnabled,
   isSpeedElevationEnabled,
@@ -294,7 +304,7 @@ import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
-import { buildShellStyle } from "./basemap/shellStyle";
+import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
   ANCHOR_DROP_SELECT_MS,
@@ -417,7 +427,7 @@ async function currentHeading(): Promise<number | null> {
 }
 
 /** Gap between the stacked instruments, and the same value their container uses. */
-const INSTRUMENT_GAP = spacing(0.75);
+const INSTRUMENT_GAP = spacing(1);
 
 /**
  * How long to wait for a `rotation` reading before deciding the device has no
@@ -836,6 +846,10 @@ export function MapScreen({
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
@@ -844,6 +858,7 @@ export function MapScreen({
   const offlineOnlyRef = useRef(offlineOnly);
   useLayoutEffect(() => {
     offlineOnlyRef.current = offlineOnly;
+    setOfflineOnlyMode(offlineOnly);
   });
   const { artifacts } = useMapArtifacts();
   // Bundled glyph/sprite install (§8.3). Map render is gated below until it
@@ -851,9 +866,9 @@ export function MapScreen({
   // style. Post-install launches resolve in ~ms; install failure falls back
   // to the remote asset host (online-only labels).
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useMemo(
-    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
-    [basemapAssets.localBaseUrl],
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
   );
   // Whether the Map (and therefore the camera) is mounted at all — the same
   // condition as the render gate at the bottom of this component. Anything that
@@ -2480,7 +2495,7 @@ export function MapScreen({
         if (kind === null) {
           Alert.alert(
             "Can't open this file",
-            "Logjam can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+            "Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
           );
           return;
         }
@@ -4117,7 +4132,7 @@ export function MapScreen({
         resolveBbox: vectorImportActions(imported).resolveBbox,
       })),
     ],
-    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports],
+    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports, assetHue],
   );
 
   /**
@@ -4683,7 +4698,7 @@ export function MapScreen({
               style={{
                 circleRadius: 5,
                 circleColor: imported.color,
-                circleStrokeColor: "#ffffff",
+                circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 1.5,
               }}
             />
@@ -4733,7 +4748,7 @@ export function MapScreen({
               id="nav-line-layer"
               beforeId={PIN_FLOOR}
               style={{
-                lineColor: "#4285F4",
+                lineColor: MARKER_COLORS[markerColorId],
                 lineWidth: 2,
                 lineOpacity: 0.8,
                 lineDasharray: [2, 2],
@@ -4809,7 +4824,7 @@ export function MapScreen({
                 style={{
                   circleRadius: 5,
                   circleColor: theme.accent,
-                  circleStrokeColor: "#ffffff",
+                  circleStrokeColor: MAP_INK.ring,
                   circleStrokeWidth: 2,
                 }}
               />
@@ -5126,13 +5141,14 @@ export function MapScreen({
           <Icon
             idea={LOCATE_ICON[followMode]}
             size={FAB_ICON}
-            color={theme.text}
+            color={followMode !== "off" ? theme.onFill : theme.text}
           />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
           style={styles.miniButton}
+          hitSlop={slopTo(MINI_FAB_SIZE)}
           onPress={() => setAttributionOpen(true)}
         >
           <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
@@ -5311,7 +5327,7 @@ export function MapScreen({
           />
           <Row
             icon="measure"
-            title="Measure from here"
+            title={MAP_MEASURE.copy.fromHere}
             onPress={() => {
               const point = longPressPoint;
               setLongPressPoint(null);
@@ -5501,6 +5517,8 @@ function RouteNameForm({
   saving: boolean;
   onSubmit: (name: string) => void;
 }) {
+  const styles = useStyles();
+
   const [draft, setDraft] = useState(initialName);
   // Empty-name requirement shows on SUBMIT, not while typing (shared/DESIGN.md §11);
   // clears as soon as the field is edited.
@@ -5570,14 +5588,15 @@ function RouteNameForm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the
-  // same 44 dp the rest of the app treats as a real touch target. Solid rather
-  // than translucent — it sits over the map, which can be any colour under it.
+  // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
+  // rather than translucent — it sits over the map, which can be any colour
+  // under it.
   anchorDelete: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: touchTargetMin,
+    height: touchTargetMin,
+    borderRadius: touchTargetMin / 2,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.warning,
@@ -5634,9 +5653,5 @@ const styles = StyleSheet.create({
   // Where the navigation readout sits: a Notice, centred, in the notice stack's
   // column.
   navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
-  attributionText: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular,
-  },
-});
+  attributionText: { ...textRole.hint, color: theme.textMuted },
+}));

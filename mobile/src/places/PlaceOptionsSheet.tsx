@@ -31,7 +31,7 @@ import {
   copyOutcomeMessage,
 } from "@logjam/shared";
 
-import { spacing, theme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import { BottomSheet, closedSheet, Row } from "../ui";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useCopyPanel } from "../sharing/CopySheet";
@@ -94,6 +94,9 @@ export function PlaceOptionsSheet({
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [sharing, setSharing] = useState(false);
   const online = useConnectivity() === "online";
   const trips = useMirrorTrips();
@@ -338,7 +341,7 @@ export function PlaceOptionsSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   body: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
-});
+}));

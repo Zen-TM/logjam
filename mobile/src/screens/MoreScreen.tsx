@@ -20,7 +20,7 @@
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -33,7 +33,7 @@ import {
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import { getSyncStatus, requestSync } from "../sync/syncEngine";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, makeThemed, useTheme } from "../theme";
 import {
   Button,
   Hero,
@@ -50,11 +50,13 @@ import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
 // third state hue, because waiting is not a problem.
-const TONE_STYLE: Record<SyncTone, { icon: Glyph; color: string }> = {
-  ok: { icon: "success", color: theme.accent },
-  pending: { icon: "pending", color: theme.textMuted },
-  problem: { icon: "warning", color: theme.warning },
-};
+const useToneStyle = makeThemed(
+  (theme): Record<SyncTone, { icon: Glyph; color: string }> => ({
+    ok: { icon: "success", color: theme.accent },
+    pending: { icon: "pending", color: theme.textMuted },
+    problem: { icon: "warning", color: theme.warning },
+  }),
+);
 
 export function MoreScreen({
   unreadCount,
@@ -71,6 +73,9 @@ export function MoreScreen({
   onOpenSyncIssues: () => void;
   onOpenSettings: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState, linkAccount } = useAccountState();
   const isGuest = accountState === "guest";
   // Best-effort: the hub is fully usable without it (offline, or a failed
@@ -96,6 +101,7 @@ export function MoreScreen({
     waitingSince: syncStatus.waitingSince,
     accountState,
   });
+  const TONE_STYLE = useToneStyle();
   const tone = TONE_STYLE[health.tone];
 
   // The hero's "Sync now" says how it went. A failure already has its words (the
@@ -113,7 +119,7 @@ export function MoreScreen({
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
       <Hero
-        eyebrow={isGuest ? "Logjam" : user ? "Signed in as" : "Logjam"}
+        eyebrow={isGuest ? "Logjam GPS" : user ? "Signed in as" : "Logjam GPS"}
         title={isGuest ? "No account" : (user?.username ?? "Your account")}
         actions={
           // "Sync now" is meaningless without an account, so the hero's one
@@ -233,6 +239,9 @@ export function MoreScreen({
 
 /** Optional badge, then the chevron — the §5 trailing order. */
 function Trailing({ badge }: { badge?: React.ReactNode }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.trailing}>
       {badge}
@@ -241,13 +250,13 @@ function Trailing({ badge }: { badge?: React.ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero runs edge to edge; only the menu takes the body padding.
   menu: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
   health: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
   healthText: { flex: 1, gap: spacing(0.25) },
-  headline: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
+  headline: { ...textRole.rowTitle },
   detail: { color: theme.textMuted, fontSize: fontSize.sm },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-});
+}));

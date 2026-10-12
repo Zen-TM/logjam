@@ -95,8 +95,10 @@ vi.mock("expo-file-system/legacy", () => ({
 
 const {
   attachMediaLocal,
+  reclimbStandaloneMediaLocal,
   recolourStandaloneMediaLocal,
   runMediaCreateOp,
+  runMediaReclimbOp,
   runMediaRecolourOp,
 } = await import("./mediaUpload");
 const { isNoResponse } = await import("../api/noResponse");
@@ -248,5 +250,60 @@ describe("recolouring a standalone file", () => {
     });
     apiFetch.mockRejectedValueOnce({ status: 404 });
     expect(await runMediaRecolourOp(row)).toBe("done");
+  });
+});
+
+describe("replacing a recorded track's climb", () => {
+  const CLIMB = {
+    elevationGainM: 41,
+    elevationLossM: 38,
+    elevationSource: "nsw-5m",
+  };
+  const row = {
+    seq: 4,
+    entity_id: "m1",
+    op: "reclimb",
+    fields_json: JSON.stringify(CLIMB),
+    media_phase: null,
+    attempts: 0,
+  };
+
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset().mockResolvedValue({});
+  });
+
+  it("patches the row, rewrites a queued create, and queues one PATCH", async () => {
+    await reclimbStandaloneMediaLocal("m1", CLIMB);
+    const mirror = calls.find((c) => c.sql.includes("UPDATE media"));
+    // Merged into the stats, never replacing them: the row keeps its extent.
+    expect(mirror?.sql).toContain("json_patch(COALESCE(metadata_json");
+    expect(mirror?.args[0]).toBe(JSON.stringify(CLIMB));
+    // A file still waiting to upload must confirm with the new figures.
+    const create = calls.find((c) => c.sql.includes("op = 'create'"));
+    expect(create?.args[0]).toBe(JSON.stringify({ metadata: CLIMB }));
+    const insert = calls.find(
+      (c) => c.sql.includes("'reclimb'") && c.sql.includes("INSERT"),
+    );
+    expect(insert?.args[2]).toBe(JSON.stringify(CLIMB));
+  });
+
+  it("PATCHes the three fields together", async () => {
+    expect(await runMediaReclimbOp(row)).toBe("done");
+    expect(apiFetch).toHaveBeenCalledWith("/media/m1", {
+      method: "PATCH",
+      body: CLIMB,
+    });
+  });
+
+  // Mutation: stop treating 400 as done and a phone ahead of the API parks a
+  // sync issue for a figure nobody asked for.
+  it("drops the op when the file is gone or the API is too old to take it", async () => {
+    for (const status of [404, 400]) {
+      apiFetch.mockRejectedValueOnce({ status });
+      expect(await runMediaReclimbOp(row)).toBe("done");
+    }
+    apiFetch.mockRejectedValueOnce({ status: 503 });
+    await expect(runMediaReclimbOp(row)).rejects.toEqual({ status: 503 });
   });
 });

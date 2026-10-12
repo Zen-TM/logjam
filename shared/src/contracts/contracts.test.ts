@@ -18,6 +18,14 @@ import {
   WAY_VERBS,
   wayVerbLabel,
   wayVerbIcon,
+  mapMeasureFacts,
+  mapMeasurePointsLabel,
+  mapMeasureRange,
+  mapMeasureVerbs,
+  MAP_MEASURE,
+  MAP_MEASURE_START_NOTE,
+  MAP_MEASURE_VERBS,
+  MAP_SNAP_OPTIONS,
   mapPointFacts,
   mapPointVerbs,
   MAP_POINT,
@@ -774,7 +782,7 @@ describe("the map point panel", () => {
   it("gives each client its own verbs, in order, each with a reason", () => {
     expect(mapPointVerbs("web").map((verb) => verb.id)).toEqual([
       "addPlace",
-      "drawRoute",
+      "measure",
       "copy",
     ]);
     expect(mapPointVerbs("gps").map((verb) => verb.id)).toEqual([
@@ -811,5 +819,89 @@ describe("the map point panel", () => {
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");
     expect(MAP_POINT_NO_FIX_NOTE.gps).toContain("locate button");
+  });
+
+  // Mutation: give the point panel's verb words of its own.
+  it("arms the measure tool in the tool's own words", () => {
+    const verb = mapPointVerbs("web").find((each) => each.id === "measure");
+    expect(verb).toMatchObject({
+      label: MAP_MEASURE.copy.fromHere,
+      icon: "measure",
+    });
+  });
+});
+
+// The measure tool both clients draw: the same figures from the same points.
+describe("the measure tool", () => {
+  // ~1.11 km due north, then the same again due east of there.
+  const line: [number, number][] = [
+    [150.35, -33.66],
+    [150.35, -33.65],
+    [150.362, -33.65],
+  ];
+  const terrain = { gainM: 212.4, lossM: 87.6, minM: 411.7, maxM: 655.2 };
+
+  // Mutation: measure the straight line between the ends instead of the path.
+  it("measures along every leg, and shows a dash until there is a line", () => {
+    const fact = (points: [number, number][]) =>
+      mapMeasureFacts({ points, terrain: null });
+    expect(fact([])).toEqual([
+      { key: "distance", label: "Distance", value: "—" },
+    ]);
+    expect(fact(line.slice(0, 1))[0].value).toBe("—");
+    expect(fact(line.slice(0, 2))[0].value).toBe("1.1 km");
+    expect(fact(line)[0].value).toBe("2.2 km");
+  });
+
+  it("adds ascent and descent only once the terrain has been read", () => {
+    const facts = mapMeasureFacts({ points: line, terrain });
+    expect(facts.map((fact) => [fact.key, fact.value, fact.spoken])).toEqual([
+      ["distance", "2.2 km", undefined],
+      ["ascent", "↑ 212 m", "Ascent 212 metres"],
+      ["descent", "↓ 88 m", "Descent 88 metres"],
+    ]);
+    expect(facts.map((fact) => fact.key)).toEqual(
+      MAP_MEASURE.sections.map((section) => section.key),
+    );
+  });
+
+  it("gives the ground's range only when the terrain covered the line", () => {
+    expect(mapMeasureRange(terrain)).toBe("412–655 m");
+    expect(mapMeasureRange({ ...terrain, minM: null })).toBeNull();
+    expect(mapMeasureRange(null)).toBeNull();
+  });
+
+  it("counts the user's points", () => {
+    expect(mapMeasurePointsLabel(1)).toBe("1 point");
+    expect(mapMeasurePointsLabel(3)).toBe("3 points");
+  });
+
+  // Mutation: drop `on: "gps"` from `leave`, or its reason.
+  it("gives both clients undo and clear, and a reason for the verb only one has", () => {
+    expect(mapMeasureVerbs("web").map((verb) => verb.id)).toEqual([
+      "undo",
+      "clear",
+    ]);
+    expect(mapMeasureVerbs("gps").map((verb) => verb.id)).toEqual([
+      "undo",
+      "clear",
+      "leave",
+    ]);
+    for (const verb of MAP_MEASURE_VERBS)
+      expect("on" in verb, verb.id).toBe("reason" in verb);
+    expect(MAP_MEASURE_START_NOTE.web).toBe("Click the map to measure");
+    expect(MAP_MEASURE_START_NOTE.gps).toBe("Tap the map to measure");
+  });
+});
+
+describe("the snap words", () => {
+  it("name every snap mode once", () => {
+    expect(MAP_SNAP_OPTIONS.map((option) => option.value)).toEqual([
+      "off",
+      "trails",
+      "waterways",
+      "both",
+    ]);
+    expect(new Set(MAP_SNAP_OPTIONS.map((o) => o.label)).size).toBe(4);
   });
 });

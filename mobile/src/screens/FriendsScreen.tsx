@@ -35,7 +35,6 @@ import {
   FlatList,
   RefreshControl,
   Share,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -71,7 +70,7 @@ import {
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { placeHue, fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -119,6 +118,10 @@ export function FriendsScreen({
    */
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("friends", accountState),
@@ -482,6 +485,9 @@ const FriendRow = memo(function FriendRow({
   onOpen: (item: FriendItem) => void;
   onMenu: (item: FriendItem) => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+
   const request = item.kind === "request";
   return (
     <Row
@@ -515,6 +521,9 @@ function AddFriendBody({
   existingIds: string[];
   onSent: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -665,22 +674,18 @@ function EmptyPanel({
   onAdd: () => void;
 }) {
   if (kind === "noRequests") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noRequestsTitle}</Text>
-      </View>
-    );
+    return <EmptyState title={copy.noRequestsTitle} />;
   }
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-      <Button label={copy.addTitle} icon="addFriend" onPress={onAdd} />
-    </View>
+    <EmptyState
+      title={copy.firstRunTitle}
+      hint={copy.firstRunBody}
+      action={{ label: copy.addTitle, icon: "addFriend", onPress: onAdd }}
+    />
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
@@ -698,16 +703,4 @@ const styles = StyleSheet.create({
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1.5),
-    paddingVertical: spacing(6),
-  },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
-});
+}));

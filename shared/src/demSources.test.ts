@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CLIMB_SOURCES,
   DEM_SOURCES,
+  GPS_CLIMB_SOURCE,
   NSW_5M,
   clearDemArchives,
   demArchive,
@@ -12,12 +14,13 @@ import {
   TERRARIUM,
   demCredits,
   demTileUrl,
+  isFinerClimbSource,
   sampleDem,
   type DemSource,
   type DemTileReader,
 } from "./demSources.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
-import { buildElevationProfile } from "./elevation.js";
+import { buildElevationProfile, densifyLineSegments } from "./elevation.js";
 
 describe("demTileUrl", () => {
   // The decode fixture is a REAL terrarium tile named for its address: z13,
@@ -77,6 +80,29 @@ describe("the declaration", () => {
       offenders,
       "read a DEM source's URL from DEM_SOURCES (docs/decisions/0028)",
     ).toEqual([]);
+  });
+});
+
+describe("climb sources", () => {
+  it("rank every DEM source above GPS heights, finest first", () => {
+    expect(CLIMB_SOURCES).toEqual([
+      ...DEM_SOURCES.map((source) => source.id),
+      GPS_CLIMB_SOURCE,
+    ]);
+    expect(isFinerClimbSource("nsw-5m", "terrarium")).toBe(true);
+    expect(isFinerClimbSource("terrarium", "gps")).toBe(true);
+    expect(isFinerClimbSource("terrarium", "nsw-5m")).toBe(false);
+    expect(isFinerClimbSource("nsw-5m", "nsw-5m")).toBe(false);
+    expect(isFinerClimbSource("gps", "gps")).toBe(false);
+  });
+
+  it("take a climb with no source beside it as GPS", () => {
+    expect(isFinerClimbSource("terrarium", null)).toBe(true);
+    expect(isFinerClimbSource("terrarium", undefined)).toBe(true);
+  });
+
+  it("never replace a climb from a source this build does not know", () => {
+    expect(isFinerClimbSource("nsw-5m", "nsw-1m")).toBe(false);
   });
 });
 
@@ -208,6 +234,64 @@ describe("sampleDem", () => {
   it("leaves heights untouched when one source answers throughout", async () => {
     const dem = await sampleDem([at(1), at(2)], reader, [coarse]);
     expect(dem.levelled).toEqual(dem.heights);
+  });
+
+  describe("a pause gap", () => {
+    // A height here depends on the column only, so a line that runs north
+    // along one column is level. Two of them: recorded at 1020 m, paused,
+    // driven 190 m up the hill, resumed.
+    const level = (column: number): [number, number][] => [
+      [lonOfColumn(column + 0.5), LAT - 0.001],
+      [lonOfColumn(column + 0.5), LAT + 0.001],
+    ];
+    const paused = [level(10), level(200)];
+
+    // Mutation: drop the `gap` test in `sampleDem` and the 190 m between the
+    // two segments is counted as climb nobody walked.
+    it("is not counted as climb", async () => {
+      const positions = densifyLineSegments(paused);
+      const dem = await sampleDem(positions, reader, [coarse]);
+      expect(new Set(dem.heights)).toEqual(new Set([1020, 1210]));
+      expect(new Set(dem.levelled)).toEqual(new Set([1020]));
+      const profile = buildElevationProfile(positions, dem);
+      expect(profile.gainM).toBe(0);
+      expect(profile.lossM).toBe(0);
+      expect(profile.minM).toBe(1020); // the chart still shows both levels
+      expect(profile.maxM).toBe(1210);
+    });
+
+    // Mutation: test for a seam before the gap and the step is read from
+    // `coarse` at both ends: 190 m of climb, and a read that was never needed.
+    it("is not measured as a seam when the two sides read from different sources", async () => {
+      const spy = vi.fn(reader);
+      const positions = densifyLineSegments(paused);
+      const dem = await sampleDem(positions, spy, [fine, coarse]);
+      expect(new Set(dem.sourceIds)).toEqual(new Set(["fine", "coarse"]));
+      expect(new Set(dem.levelled)).toEqual(new Set([1010]));
+      expect(spy.mock.calls.map(([src]) => src.id)).toEqual(["fine", "coarse"]);
+    });
+
+    // Mutation: compare a sample with its neighbour in the list instead of
+    // the last one that has a height, and a gap hidden behind a sample no
+    // source answered is climbed.
+    it("is still a gap when the first sample after it has no height", async () => {
+      const far = source("far", 1000, 1, [0, 100]);
+      const positions = [
+        { ...at(10), segment: 0 },
+        { ...at(150), segment: 1 },
+        { ...at(60), segment: 1 },
+      ];
+      const dem = await sampleDem(positions, reader, [far]);
+      expect(dem.heights).toEqual([1010, null, 1060]);
+      expect(dem.levelled).toEqual([1010, null, 1010]);
+    });
+
+    // A line with no gap goes down the path it always did: its positions
+    // carry no segment, so the gap test can never be true for it.
+    it("leaves a line in one piece exactly as it was", async () => {
+      const positions = densifyLineSegments([level(10)]);
+      expect(positions.some((position) => "segment" in position)).toBe(false);
+    });
   });
 });
 

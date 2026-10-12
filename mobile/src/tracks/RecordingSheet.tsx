@@ -16,8 +16,10 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
+import { ELEVATION_TRACK_MAX_SAMPLES } from "@logjam/shared";
+
 import { useElevationProfile } from "../map/useElevationProfile";
-import { spacing, theme } from "../theme";
+import { spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   closedSheet,
@@ -53,6 +55,8 @@ export function RecordingSheet({
    *  already on the phone, and nothing goes out. */
   allowNetwork?: boolean;
 }) {
+  const theme = useTheme();
+
   const recording = activeTrack?.state === "recording";
   const open = visible && activeTrack != null;
 
@@ -107,7 +111,7 @@ export function RecordingSheet({
   // since the last accepted fix is counted as stopped rather than as nothing
   // (computeTrackDetail's `recordedMs`). Standing still is exactly when this
   // panel gets opened, and it is the case where the two disagree most.
-  const { detail, loading, line } = useTrackDetail(
+  const { detail, loading, line, gpsFixes } = useTrackDetail(
     activeTrack?.id ?? null,
     open,
     elapsedMs,
@@ -120,6 +124,8 @@ export function RecordingSheet({
     line,
     {
       allowNetwork,
+      gpsFixes,
+      maxSamples: ELEVATION_TRACK_MAX_SAMPLES,
     },
   );
 

@@ -95,6 +95,41 @@ export const NSW_5M = {
 export const DEM_SOURCES: readonly DemSource[] = [NSW_5M, TERRARIUM];
 
 /**
+ * A climb summed from the recorder's own GPS heights: what a track carries
+ * when no DEM could answer along the whole of it, and what a stored climb
+ * with no source beside it is taken to be.
+ */
+export const GPS_CLIMB_SOURCE = "gps";
+
+/**
+ * Where a track's stored climb and descent can have come from, finest first:
+ * every DEM source, then GPS heights. Recorded beside the figures so a phone
+ * can tell later that a finer source could now answer.
+ */
+export const CLIMB_SOURCES: readonly string[] = [
+  ...DEM_SOURCES.map((source) => source.id),
+  GPS_CLIMB_SOURCE,
+];
+
+export function isClimbSource(value: unknown): value is string {
+  return CLIMB_SOURCES.includes(value as string);
+}
+
+/**
+ * Whether a climb read from `candidate` should replace one stored from
+ * `stored`. Nothing stored means GPS. An id this build does not know was
+ * written by a newer one from a source it cannot read, so it is never
+ * replaced.
+ */
+export function isFinerClimbSource(
+  candidate: string,
+  stored: string | null | undefined,
+): boolean {
+  const rank = CLIMB_SOURCES.indexOf(candidate);
+  return rank >= 0 && rank < CLIMB_SOURCES.indexOf(stored ?? GPS_CLIMB_SOURCE);
+}
+
+/**
  * The tile URL for an address in a source, at the zoom it is read at.
  *
  * The y is the XYZ row, NOT the TMS row an MBTiles store flips to. Getting
@@ -207,11 +242,18 @@ export type DemSamples = {
   /** The source each height came from. */
   sourceIds: (string | null)[];
   /**
-   * `heights` with the offset between two sources taken out at each seam, so
-   * climb and descent are summed from this and never count the join. Equal to
-   * `heights` when one source answered throughout.
+   * `heights` with the offset between two sources taken out at each seam and
+   * the jump taken out at each pause gap, so climb and descent are summed
+   * from this and count neither. Equal to `heights` when one source answered
+   * throughout a line in one piece.
    */
   levelled: (number | null)[];
+  /**
+   * What climb and descent are summed from when it is finer than `levelled`:
+   * a track's GPS stretches carry every fix, not one value per sample
+   * (`fillDemFromGps` in trackStats.ts). Absent means `levelled`.
+   */
+  climbSeries?: number[];
 };
 
 function covers(source: DemSource, position: SamplePosition): boolean {
@@ -234,7 +276,11 @@ function covers(source: DemSource, position: SamplePosition): boolean {
  * both, found by walking the list from the coarser of the two. That is not
  * always the coarser one itself: two footprints that only touch share neither,
  * and the walk goes on to a source under both. If none has both, the step is
- * not counted. `demSources.test.ts` holds each case.
+ * not counted.
+ *
+ * Nor is the step between two samples on different segments of the line (a
+ * pause gap): that ground was not walked, whatever any source says of it, so
+ * it is never read as a seam. `demSources.test.ts` holds each case.
  */
 export async function sampleDem(
   positions: readonly SamplePosition[],
@@ -281,10 +327,12 @@ export async function sampleDem(
   for (let i = 0; i < heights.length; i++) {
     const height = heights[i];
     if (height == null) continue;
-    if (previous >= 0 && ranks[i] !== ranks[previous]) {
+    const gap =
+      previous >= 0 && positions[i]!.segment !== positions[previous]!.segment;
+    if (previous >= 0 && (gap || ranks[i] !== ranks[previous])) {
       let step = 0;
       const coarser = Math.max(ranks[i]!, ranks[previous]!);
-      for (let rank = coarser; rank < sources.length; rank++) {
+      for (let rank = coarser; !gap && rank < sources.length; rank++) {
         const both = await read(rank, [previous, i]);
         if (both.size === 2) {
           step = both.get(i)! - both.get(previous)!;

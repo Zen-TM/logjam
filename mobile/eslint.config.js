@@ -2,6 +2,12 @@
 const { defineConfig } = require("eslint/config");
 const expoConfig = require("eslint-config-expo/flat");
 const globals = require("globals");
+const { builtinRules } = require("eslint/use-at-your-own-risk");
+
+// The style properties that hold space between things. `spacing()` takes only
+// the scale's steps by type; a bare number would walk round that.
+const SPACING_PROPS =
+  "^(gap|rowGap|columnGap|(padding|margin)(Horizontal|Vertical|Top|Bottom|Left|Right|Start|End)?)$";
 
 // Gotchas of Logjam GPS that a selector can hold (mobile/DESIGN.md §4, §1).
 const GPS_GOTCHAS = [
@@ -22,6 +28,35 @@ const GPS_GOTCHAS = [
     message:
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
   },
+  {
+    selector:
+      "ObjectExpression:has(> Property[key.name='fontSize']):has(> Property[key.name='fontWeight'])",
+    message:
+      "A text style is a role: ...textRole.<name> (body, control, caption, rowTitle, …) from makeStyles((theme, textRole) => …), never a fontSize and fontWeight written together (mobile/DESIGN.md §1, TEXT_ROLES in shared).",
+  },
+  {
+    selector:
+      "TemplateLiteral:has(MemberExpression[object.name='theme']) > TemplateElement[value.raw=/^[0-9A-Fa-f]{2}$/]",
+    message:
+      "A tint is withAlpha(theme.<role>, a), never a role with hex digits appended (mobile/DESIGN.md §1).",
+  },
+  {
+    selector:
+      "Property[key.name=/^(minHeight|minWidth)$/] > Literal[raw=/^(32|36|40|44|48)$/]",
+    message:
+      "A control's size is a step of controlSize (sm 32, md 40, lg 48); a smaller thing reaches 48 with hitSlop (mobile/DESIGN.md §1).",
+  },
+  {
+    selector: `Property[key.name=/${SPACING_PROPS}/] > Literal[value!=0][raw=/^[0-9.]+$/], Property[key.name=/${SPACING_PROPS}/] > UnaryExpression > Literal`,
+    message:
+      "Space is a step of the scale: spacing(0.5), spacing(1), … (shared/src/designTokens.ts SPACE). A raw number, a negative or an off-scale fraction leaves it.",
+  },
+  {
+    selector:
+      "CallExpression[callee.name='emitToast'] MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/], JSXExpressionContainer > MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]",
+    message:
+      "An error's message can carry a place name or a file name. Show words we wrote (shared/DESIGN.md §11, messageFromError from @logjam/shared), never err.message.",
+  },
 ];
 
 // A colour is a role from `theme`, or `withAlpha(token, a)` for a tint
@@ -40,20 +75,31 @@ const COLOUR_LITERALS = [
   },
 ];
 
-// Files that still draw a literal colour, so the colour rule is not on for
-// them yet. The list only shrinks: move each onto a role or `MAP_INK`, then
-// delete its line.
-const COLOUR_LITERAL_DEBT = [
-  "src/imports/importsDb.ts",
-  "src/map/MapBackButton.tsx",
-  "src/map/MapScreen.tsx",
-  "src/map/PickPointScreen.tsx",
-  "src/map/PlacePinsLayer.tsx",
-  "src/map/PlaceRoutesLayer.tsx",
-  "src/map/RouteDraftLayer.tsx",
-  "src/map/SelectionFrame.tsx",
-  "src/map/mapPreferences.ts",
-  "src/map/topoVectorLayers.ts",
+// The scheme is state, so nothing may hold a colour from before it changed
+// (mobile/DESIGN.md §1). theme.ts once exported these as module constants,
+// painted in the scheme the app started in; this keeps them from coming back.
+// A colour is reachable only through a hook, which `rules-of-hooks` already
+// keeps out of module scope. Guard: src/liveTheme.test.ts.
+const LAUNCH_THEME_IMPORTS = [
+  "error",
+  {
+    patterns: [
+      {
+        regex: "^(\\./|(\\.\\./)+)(src/)?theme$",
+        importNames: [
+          "theme",
+          "textRole",
+          "assetHue",
+          "placeHue",
+          "notificationHue",
+          "themeMode",
+          "activeThemeSchemeId",
+        ],
+        message:
+          "A colour held at module scope does not repaint when the scheme changes. Use useTheme(), makeStyles((theme, textRole) => …) or useHues() (mobile/DESIGN.md §1).",
+      },
+    ],
+  },
 ];
 
 module.exports = defineConfig([
@@ -97,15 +143,21 @@ module.exports = defineConfig([
   },
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: [
-      "**/*.test.{ts,tsx}",
-      "src/theme.ts",
-      "src/ui/**",
-      ...COLOUR_LITERAL_DEBT,
-    ],
+    ignores: ["**/*.test.{ts,tsx}", "src/theme.ts", "src/ui/**"],
     rules: {
       "no-restricted-syntax": ["error", ...GPS_GOTCHAS, ...COLOUR_LITERALS],
     },
+  },
+  {
+    // `no-restricted-imports` under a second name, so this ban has its own
+    // severity and does not replace the icon and kit-barrel bans above.
+    files: ["src/**/*.{ts,tsx}", "App.tsx", "index.ts"],
+    plugins: {
+      logjam: {
+        rules: { "no-launch-theme": builtinRules.get("no-restricted-imports") },
+      },
+    },
+    rules: { "logjam/no-launch-theme": LAUNCH_THEME_IMPORTS },
   },
   {
     // Build-time scripts run in node, not in the app: they legitimately use

@@ -7,6 +7,7 @@ import {
   densifyLine,
   densifyLineSegments,
   elevationGainLoss,
+  climbFromProfile,
 } from "./elevation.js";
 import type { RoutePoint } from "./routeValidation.js";
 
@@ -254,5 +255,56 @@ describe("buildElevationProfile", () => {
     expect(() => buildElevationProfile(positions, [100, 200])).toThrow(
       /does not match/,
     );
+  });
+});
+
+describe("climbFromProfile", () => {
+  const positions = [0, 100, 200].map((distanceM, i) => ({
+    lon: 150 + i * 0.001,
+    lat: -33.7,
+    distanceM,
+  }));
+  const dem = (heights: (number | null)[], sourceIds: (string | null)[]) => ({
+    heights,
+    levelled: heights,
+    sourceIds,
+  });
+
+  it("gives the profile's own figures and the source they came from", () => {
+    const profile = buildElevationProfile(
+      positions,
+      dem([100, 140, 120], ["nsw-5m", "nsw-5m", "nsw-5m"]),
+    );
+    expect(climbFromProfile(profile)).toEqual({
+      elevationGainM: 40,
+      elevationLossM: 20,
+      elevationSource: "nsw-5m",
+    });
+  });
+
+  it("records the coarsest source any sample came from", () => {
+    const profile = buildElevationProfile(
+      positions,
+      dem([100, 140, 120], ["nsw-5m", "terrarium", "nsw-5m"]),
+    );
+    expect(climbFromProfile(profile)?.elevationSource).toBe("terrarium");
+  });
+
+  it("gives nothing when any sample has no height, so GPS figures stay", () => {
+    const profile = buildElevationProfile(
+      positions,
+      dem([100, null, 120], ["nsw-5m", null, "nsw-5m"]),
+    );
+    expect(climbFromProfile(profile)).toBeNull();
+    expect(climbFromProfile(null)).toBeNull();
+  });
+
+  it("takes a profile that names no source as the coarsest DEM", () => {
+    // What an API older than `demSourceIds` returns.
+    const { demSourceIds: _ids, ...profile } = buildElevationProfile(
+      positions,
+      [100, 140, 120],
+    );
+    expect(climbFromProfile(profile)?.elevationSource).toBe("terrarium");
   });
 });

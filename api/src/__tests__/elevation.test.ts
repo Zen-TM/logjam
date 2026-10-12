@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
-import { NSW_5M } from "@logjam/shared";
+import {
+  ELEVATION_PROFILE_MAX_SAMPLES,
+  ELEVATION_TRACK_MAX_SAMPLES,
+  NSW_5M,
+} from "@logjam/shared";
 
 import { s3 } from "../services/awsClients";
 import { ALICE_SUB, API_URL, as } from "./_actors";
@@ -52,6 +56,42 @@ describe("POST /elevation/profile", () => {
     // and 999.54 m, worked out by an independent decoder.
     expect(res.body.samples[0].elevationM).toBeCloseTo(983.42, 1);
     expect(res.body.samples.at(-1).elevationM).toBeCloseTo(999.54, 1);
+  });
+
+  // 60 legs of the fixture line: about 54 km without leaving its tiles.
+  const LONG = Array.from({ length: 61 }, (_, i) => LINE[i % 2]!);
+
+  it("samples a long line at the default ceiling unless a track asks for more", async () => {
+    const plain = await request(API_URL)
+      .post("/elevation/profile")
+      .set(as(ALICE_SUB))
+      .send({ segments: [LONG] });
+    expect(plain.status).toBe(200);
+    expect(plain.body.samples).toHaveLength(ELEVATION_PROFILE_MAX_SAMPLES);
+
+    const track = await request(API_URL)
+      .post("/elevation/profile")
+      .set(as(ALICE_SUB))
+      .send({ segments: [LONG], maxSamples: ELEVATION_TRACK_MAX_SAMPLES });
+    expect(track.status).toBe(200);
+    expect(track.body.samples).toHaveLength(ELEVATION_TRACK_MAX_SAMPLES);
+  });
+
+  // Mutation: pass `maxSamples` straight through and one request can make the
+  // API read as many positions as the caller cares to name.
+  it("clamps a ceiling above a track's, and ignores one that is not a count", async () => {
+    const greedy = await request(API_URL)
+      .post("/elevation/profile")
+      .set(as(ALICE_SUB))
+      .send({ segments: [LONG], maxSamples: 1_000_000 });
+    expect(greedy.body.samples).toHaveLength(ELEVATION_TRACK_MAX_SAMPLES);
+
+    const nonsense = await request(API_URL)
+      .post("/elevation/profile")
+      .set(as(ALICE_SUB))
+      .send({ segments: [LONG], maxSamples: "all" });
+    expect(nonsense.status).toBe(200);
+    expect(nonsense.body.samples).toHaveLength(ELEVATION_PROFILE_MAX_SAMPLES);
   });
 
   it("refuses a body with no line", async () => {

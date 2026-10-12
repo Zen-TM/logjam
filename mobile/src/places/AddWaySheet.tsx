@@ -34,7 +34,7 @@
 // PRIVACY: nothing here logs a filename, a place name or a coordinate; the
 // error paths carry our own copy.
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import {
   formatDistanceM,
@@ -42,7 +42,7 @@ import {
   routeLengthM,
 } from "@logjam/shared";
 
-import { assetHue, fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
 import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
 import { importVectorSource } from "../imports/vectorImports";
@@ -84,6 +84,10 @@ export function AddWaySheet({
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [mode, setMode] = useState<Mode>("sources");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -323,7 +327,7 @@ export function AddWaySheet({
             icon="track"
             hue={assetHue.track}
             title="Use a recorded track"
-            subtitle="A track you recorded in Logjam"
+            subtitle="A track you recorded in Logjam GPS"
             disabled={busy}
             onPress={() => setMode("tracks")}
           />
@@ -466,8 +470,8 @@ function trackSummary(track: Track): string {
   return `${distance} · ${duration}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

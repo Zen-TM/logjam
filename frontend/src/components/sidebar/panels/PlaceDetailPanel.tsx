@@ -18,7 +18,6 @@ import {
   useMemo,
   useRef,
   Fragment,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -662,17 +661,15 @@ function PlaceDetailPanel({
   > = {
     hero: () => (
       <div className={classes.section}>
-        {/* WHAT IT IS, in the type's own glyph and colour, then where it
-            stands: a fact, not a field, so a line and pills rather than a row
-            in a table. The hue goes in as a custom property the stylesheet
-            reads, never as an inline colour (DESIGN.md). */}
-        <p
-          className={classes.identity}
-          style={{ "--tile-hue": placeType?.color } as CSSProperties}
-        >
-          {/* A lookup in lucide's static exports, not a component made in
-              render: the same key is the same component every time. */}
-          <TypeGlyph size={16} aria-hidden className={classes.typeGlyph} />
+        {/* WHAT IT IS, in the type's own tile (its hue is a fill, never a
+            glyph on the page: shared/DESIGN.md §7), then where it stands: a
+            fact, not a field, so a line and pills rather than a row in a
+            table. */}
+        <p className={classes.identity}>
+          <IconTile
+            icon={TypeGlyph}
+            hue={placeType?.color ?? "var(--color-accent)"}
+          />
           {placeType?.name ?? "Unknown type"}
         </p>
         <div className={classes.pills}>
@@ -701,6 +698,7 @@ function PlaceDetailPanel({
               variant={index === primaryVerbs.length - 1 ? "filled" : "outline"}
               icon={verb.icon}
               disabled={busy}
+              disabledReason="Working…"
               onClick={() => verbRunners[verb.id]()}
             >
               {verb.label}

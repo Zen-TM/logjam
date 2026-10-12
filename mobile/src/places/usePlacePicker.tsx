@@ -16,10 +16,10 @@
 // What varies by kind is only the promise sentence and what `attach` does; the
 // displacement decision is `routeSlot.ts`'s and nobody else's.
 import { useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { TRACK_MIME_TYPES, messageFromError } from "@logjam/shared";
 
-import { assetHue, fontSize, spacing, theme } from "../theme";
+import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
 import { Row, TextField } from "../ui";
 import { fillRouteSlot } from "./fillRouteSlot";
 import {
@@ -69,6 +69,10 @@ export function usePlacePicker({
   onDone: () => void;
   onError: (message: string) => void;
 }): { header: ReactNode; body: ReactNode } {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const places = useMirrorPlaces();
   const routes = useMirrorRoutes();
   const attachments = useMirrorPlaceTracks(TRACK_MIME_TYPES);
@@ -201,8 +205,8 @@ export function usePlacePicker({
   };
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.xs },
-});
+}));

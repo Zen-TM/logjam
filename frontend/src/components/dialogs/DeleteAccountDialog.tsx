@@ -86,7 +86,11 @@ function DeleteAccountForm({
       alert
       footer={
         <>
-          <Button onClick={onClose} disabled={deleting}>
+          <Button
+            onClick={onClose}
+            disabled={deleting}
+            disabledReason="Deleting…"
+          >
             Cancel
           </Button>
           <Button
@@ -95,6 +99,7 @@ function DeleteAccountForm({
             variant="destructive"
             busy={deleting}
             disabled={!inputMatches}
+            disabledReason="Type the phrase above to confirm"
           >
             {ACCOUNT.copy.deleteAccount}
           </Button>
