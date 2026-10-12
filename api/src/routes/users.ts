@@ -455,11 +455,11 @@ router.patch(
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2002"
       ) {
-        const target = (e.meta?.target as string[] | undefined) ?? [];
-        if (target.includes("username")) {
-          throw new AppError(409, say`That username is taken. Choose another.`);
-        }
-        throw new AppError(409, say`Couldn't save your profile. Try again.`);
+        // The username is the only unique column this route writes. The
+        // error's `meta.target` used to be asked which column it was, but it
+        // does not name one under the driver adapter, so a taken name read
+        // "Conflict updating profile" (users.test.ts).
+        throw new AppError(409, say`That username is taken. Choose another.`);
       }
       throw e;
     }
