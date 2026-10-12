@@ -45,7 +45,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
-import { fontSize, fontWeight, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import {
   BottomSheet,
   Hero,
@@ -928,7 +928,7 @@ function EmptyPanel() {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
@@ -938,9 +938,7 @@ const useStyles = makeStyles((theme) => ({
   // Matches the SelectionBar it swaps with, so the list below cannot move.
   railHint: { height: CHIP_RAIL_HEIGHT, justifyContent: "center" },
   railHintText: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    lineHeight: 17,
+    ...textRole.hint,
   },
   list: { flex: 1 },
   listContent: {
@@ -949,11 +947,11 @@ const useStyles = makeStyles((theme) => ({
     paddingBottom: spacing(4),
   },
   menuBody: { gap: spacing(1) },
-  menuCause: { color: theme.textMuted, fontSize: fontSize.sm },
+  menuCause: { ...textRole.hint },
   valueBlock: { gap: spacing(0.25) },
-  menuLabel: { color: theme.textMuted, fontSize: fontSize.xs },
-  menuValue: { color: theme.text, fontSize: fontSize.base },
+  menuLabel: { ...textRole.meta },
+  menuValue: { ...textRole.body, color: theme.text },
   // The line the rejection is about, so two changes over one complaint stop
   // being a guessing game.
-  menuValueRejected: { fontWeight: fontWeight.bold },
+  menuValueRejected: { ...textRole.rowTitle },
 }));

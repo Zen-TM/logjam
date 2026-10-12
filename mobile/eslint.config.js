@@ -9,6 +9,24 @@ const { builtinRules } = require("eslint/use-at-your-own-risk");
 const SPACING_PROPS =
   "^(gap|rowGap|columnGap|(padding|margin)(Horizontal|Vertical|Top|Bottom|Left|Right|Start|End)?)$";
 
+// The four properties a type role owns. A number read from `fontSize` to size a
+// box (the two map instruments) is geometry, not a font, and is not this.
+const FONT_PROPS = "^(fontSize|fontWeight|lineHeight|fontFamily)$";
+
+// A map label layer's text is MapLibre's own: its font and size are declared
+// once, in `src/map/mapLabelText.ts`, and a layer imports them from there.
+const MAP_LABEL_TEXT = {
+  selector: "Property[key.name=/^(textSize|textFont)$/]",
+  message:
+    "A map label's font and size are declared once in src/map/mapLabelText.ts; import them there (mobile/DESIGN.md §1).",
+};
+
+const FONT_RULE = {
+  selector: `Property[key.name=/${FONT_PROPS}/], Property[key.value=/${FONT_PROPS}/], JSXAttribute[name.name=/${FONT_PROPS}/]`,
+  message:
+    "A text style is a role: ...textRole.<name> (body, hint, meta, control, …) from makeStyles((theme, textRole) => …). A size, weight or line height is chosen in theme.ts, never on a screen; if no role is the text's kind, add one there (mobile/DESIGN.md §1).",
+};
+
 // Gotchas of Logjam GPS that a selector can hold (mobile/DESIGN.md §4, §1).
 const GPS_GOTCHAS = [
   {
@@ -27,12 +45,6 @@ const GPS_GOTCHAS = [
       "Property[key.name=/^(shadowColor|shadowOffset|shadowOpacity|shadowRadius)$/]",
     message:
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
-  },
-  {
-    selector:
-      "ObjectExpression:has(> Property[key.name='fontSize']):has(> Property[key.name='fontWeight'])",
-    message:
-      "A text style is a role: ...textRole.<name> (body, control, caption, rowTitle, …) from makeStyles((theme, textRole) => …), never a fontSize and fontWeight written together (mobile/DESIGN.md §1, TEXT_ROLES in shared).",
   },
   {
     selector:
@@ -137,15 +149,48 @@ module.exports = defineConfig([
     },
   },
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "App.tsx"],
     ignores: ["**/*.test.{ts,tsx}"],
-    rules: { "no-restricted-syntax": ["error", ...GPS_GOTCHAS] },
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...GPS_GOTCHAS,
+        FONT_RULE,
+        MAP_LABEL_TEXT,
+      ],
+    },
   },
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["**/*.test.{ts,tsx}", "src/theme.ts", "src/ui/**"],
     rules: {
-      "no-restricted-syntax": ["error", ...GPS_GOTCHAS, ...COLOUR_LITERALS],
+      "no-restricted-syntax": [
+        "error",
+        ...GPS_GOTCHAS,
+        FONT_RULE,
+        MAP_LABEL_TEXT,
+        ...COLOUR_LITERALS,
+      ],
+    },
+  },
+  {
+    // Where a size, weight and line height are written: the type roles.
+    files: ["src/theme.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...GPS_GOTCHAS, MAP_LABEL_TEXT],
+    },
+  },
+  {
+    // The one place a map label layer's font and size live; the roles' sizes
+    // do not apply to MapLibre's symbol layers.
+    files: ["src/map/mapLabelText.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...GPS_GOTCHAS,
+        FONT_RULE,
+        ...COLOUR_LITERALS,
+      ],
     },
   },
   {

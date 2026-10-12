@@ -14,7 +14,7 @@ import {
   TERMS_URL,
   openLegalDocument,
 } from "../legalLinks";
-import { fontSize, lineHeight, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextLink } from "../ui";
 
 export function ConsentGate({
@@ -92,8 +92,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   title: { ...textRole.title, color: theme.text },
   body: {
-    fontSize: fontSize.base,
+    ...textRole.paragraph,
     color: theme.text,
-    lineHeight: lineHeight.body,
   },
 }));

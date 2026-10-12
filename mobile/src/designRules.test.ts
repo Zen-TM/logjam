@@ -147,21 +147,58 @@ describe("space is a step of the scale", () => {
 });
 
 describe("a text style is a role", () => {
-  // Mutation: delete the ObjectExpression selector from GPS_GOTCHAS.
-  it("bans a size and a weight written together", async () => {
-    const messages = await lint(
-      "export const s = { fontSize: 14, fontWeight: '500' };\n",
-      "src/screens/Probe.tsx",
-    );
-    expect(messages).toHaveLength(1);
+  // `fontSize`, `fontWeight`, `lineHeight` and `fontFamily` are written in
+  // `theme.ts` and nowhere else. Mutations: delete FONT_RULE from the two
+  // blocks of eslint.config.js that list it; allow `src/ui/**` to write one.
+  it("bans each of the four properties on a screen, alone", async () => {
+    for (const style of [
+      "{ fontSize: 14 }",
+      "{ fontWeight: '500' }",
+      "{ lineHeight: 22 }",
+      "{ fontFamily: 'Inter' }",
+      "{ ...r.control, fontWeight: '700' }",
+    ]) {
+      const messages = await lint(
+        `export const s = ${style};\n`,
+        "src/screens/Probe.tsx",
+      );
+      expect(messages, style).toHaveLength(1);
+    }
   }, 60_000);
 
-  it("leaves a role with its weight overridden alone", async () => {
-    const messages = await lint(
-      "const t = (r) => ({ ...r.control, fontWeight: '700' });\n",
-      "src/screens/Probe.tsx",
-    );
-    expect(messages).toEqual([]);
+  it("bans one in the kit, in App.tsx and as an SVG text attribute", async () => {
+    const style = "export const s = { fontSize: 14 };\n";
+    expect(await lint(style, "src/ui/Probe.tsx")).toHaveLength(1);
+    expect(await lint(style, "App.tsx")).toHaveLength(1);
+    expect(
+      await lint(
+        "export const A = () => <SvgText fontSize={12}>x</SvgText>;\n",
+        "src/screens/Probe.tsx",
+      ),
+    ).toHaveLength(1);
+  }, 60_000);
+
+  it("leaves a role, a font variant and theme.ts alone", async () => {
+    expect(
+      await lint(
+        "const t = (r) => ({ ...r.control, fontVariant: ['tabular-nums'] });\n",
+        "src/screens/Probe.tsx",
+      ),
+    ).toEqual([]);
+    expect(
+      await lint(
+        "export const s = { fontSize: 14, fontWeight: '500' };\n",
+        "src/theme.ts",
+      ),
+    ).toEqual([]);
+  }, 60_000);
+
+  it("keeps a map label's font and size in one file", async () => {
+    // Mutation: delete MAP_LABEL_TEXT from the block for src/**.
+    const layer =
+      "export const l = { textFont: ['Noto Sans'], textSize: 12 };\n";
+    expect(await lint(layer, "src/map/Probe.tsx")).toHaveLength(2);
+    expect(await lint(layer, "src/map/mapLabelText.ts")).toEqual([]);
   }, 60_000);
 });
 

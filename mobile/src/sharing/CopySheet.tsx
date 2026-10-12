@@ -35,7 +35,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import type { TUser } from "../api/types";
 import { formatBytes } from "../format";
 import { listMediaForLinked } from "../sync/mirrorStore";
-import { fontSize, lineHeight, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import { BottomSheet, Button, FieldError, SwitchRow } from "../ui";
 import type { CopyAndRemoveTarget } from "./copyAndRemove";
 
@@ -261,11 +261,10 @@ export function CopySheet({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   body: {
+    ...textRole.paragraph,
     color: theme.textMuted,
-    fontSize: fontSize.base,
-    lineHeight: lineHeight.body,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(1.5),
   },

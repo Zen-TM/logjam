@@ -28,7 +28,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { fontSize, lineHeight, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
   useMirrorPlaces,
@@ -269,7 +269,7 @@ export function TripDetailScreen({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   body: {
@@ -277,10 +277,9 @@ const useStyles = makeStyles((theme) => ({
     paddingBottom: spacing(4),
     gap: spacing(1),
   },
-  muted: { color: theme.textMuted, fontSize: fontSize.sm },
+  muted: { ...textRole.hint },
   notes: {
+    ...textRole.paragraph,
     color: theme.text,
-    fontSize: fontSize.base,
-    lineHeight: lineHeight.body,
   },
 }));

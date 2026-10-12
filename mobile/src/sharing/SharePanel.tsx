@@ -81,8 +81,6 @@ import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
 import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
 import {
-  fontSize,
-  lineHeight,
   radius,
   spacing,
   withAlpha,
@@ -861,10 +859,10 @@ function SearchField({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
   footerStack: { gap: spacing(1.5) },
-  muted: { color: theme.textMuted, fontSize: fontSize.sm },
+  muted: { ...textRole.hint },
   spinner: { alignSelf: "flex-start" },
   promise: {
     flexDirection: "row",
@@ -877,9 +875,8 @@ const useStyles = makeStyles((theme) => ({
   promiseIcon: { marginTop: spacing(0.25) },
   promiseText: {
     flex: 1,
+    ...textRole.bodySmall,
     color: theme.text,
-    fontSize: fontSize.sm,
-    lineHeight: lineHeight.tight,
   },
   search: {
     flexDirection: "row",
@@ -893,9 +890,9 @@ const useStyles = makeStyles((theme) => ({
     minHeight: controlSize.lg,
   },
   searchInput: {
+    ...textRole.body,
     flex: 1,
     color: theme.text,
-    fontSize: fontSize.base,
     paddingVertical: spacing(1),
   },
 }));
