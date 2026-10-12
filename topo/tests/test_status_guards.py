@@ -223,6 +223,7 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
     """
 
     def _run_main(self, *, fail_in_process_job=False, fail_after_complete=False):
+        self.s3 = mock.MagicMock()
         deleted = []
         statuses = []
 
@@ -261,7 +262,7 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
                 create_notification=_create_notification,
                 get_user_email=lambda conn, uid: None,
                 delete_s3_prefix_best_effort=lambda prefix: deleted.append(prefix),
-                s3=mock.MagicMock(),
+                s3=self.s3,
             ),
             mock.patch.dict(sys.modules, {"push_send": mock.MagicMock()}),
         ):
@@ -286,6 +287,20 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
         self.assertNotIn("complete", statuses)
         self.assertIn("failed", statuses)
         self.assertEqual(deleted, ["outputs/job-123/"])
+
+    def test_failed_job_deletes_its_input_zip(self):
+        # No server path reuses the upload (retry = a new job), so a failed job
+        # must not leave a multi-GB ZIP behind. Mutation: drop the delete in
+        # the except path of main().
+        self._run_main(fail_in_process_job=True)
+        self.s3.delete_object.assert_called_once_with(
+            Bucket="test-bucket", Key="in.zip"
+        )
+
+    def test_input_zip_delete_failure_does_not_change_the_outcome(self):
+        with mock.patch.object(worker, "s3") as s3:
+            s3.delete_object.side_effect = RuntimeError("s3 down")
+            worker.delete_input_zip_best_effort("in.zip")  # must not raise
 
 
 if __name__ == "__main__":

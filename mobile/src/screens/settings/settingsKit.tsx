@@ -1,11 +1,11 @@
 // The two shapes every settings sub-page is made of, and the one place their
 // copy rules live. Not in `src/ui`: the kit is a vocabulary of visuals, and
 // these are compositions of `Row`, `Toggle` and `ChipRail` that only
-// mean anything on a preferences page (DESIGN.md §7 — add a kit file for a new
+// mean anything on a preferences page (DESIGN.md — add a kit file for a new
 // SHAPE, not for a recurring arrangement of existing ones).
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 
-import { fontSize, spacing, theme } from "../../theme";
+import { makeStyles, muted } from "../../theme";
 import {
   SectionHeader,
   ChipRail,
@@ -80,7 +80,7 @@ export function ChoiceGroup<T extends string>({
    * Why the whole choice can't be made right now. Greys every chip and replaces
    * the hint — a picker that governs a switched-off feature governs nothing, and
    * one left live is a setting the user changes and sees no effect from
-   * (DESIGN.md §8: disabled, with the reason, never hidden).
+   * (DESIGN.md: disabled, with the reason, never hidden).
    */
   disabledReason?: string;
   onChange: (next: T) => void;
@@ -109,13 +109,11 @@ export function ChoiceGroup<T extends string>({
 
 /** A note under a control. Muted, small, and never a substitute for a clear label. */
 export function Hint({ text }: { text: string }) {
+  const styles = useStyles();
+
   return <Text style={styles.hint}>{text}</Text>;
 }
 
-const styles = StyleSheet.create({
-  hint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    marginTop: spacing(-0.5),
-  },
-});
+const useStyles = makeStyles((theme, textRole) => ({
+  hint: { ...muted(theme, textRole.detail) },
+}));

@@ -1,14 +1,13 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   opacity,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
@@ -39,7 +38,8 @@ export type ChipOption<T extends string = string> = {
  * Active fills with `hue` (default accent) and draws its label and glyph in
  * `onFill`; inactive, the glyph is `textMuted` — a hue is only ever a fill,
  * never a glyph on a surface. A `count` rides as a trailing badge, an `icon`
- * leads.
+ * leads. `dashed` is the "add one" chip at the end of a vocabulary (the same
+ * prop and look as Logjam Web's): no fill, a dashed muted edge, muted words.
  */
 export function Chip({
   label,
@@ -49,6 +49,7 @@ export function Chip({
   icon,
   count,
   starred = false,
+  dashed = false,
   onPress,
 }: {
   label: string;
@@ -59,8 +60,12 @@ export function Chip({
   count?: number;
   /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
   starred?: boolean;
+  dashed?: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const tint = hue ?? theme.accent;
   return (
     <Pressable
@@ -73,6 +78,7 @@ export function Chip({
       style={({ pressed }) => [
         styles.chip,
         active && { backgroundColor: tint, borderColor: tint },
+        dashed && styles.dashed,
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
@@ -92,7 +98,8 @@ export function Chip({
         style={[
           styles.label,
           active && styles.labelActive,
-          disabled && styles.labelDisabled,
+          dashed && styles.labelMuted,
+          disabled && styles.labelMuted,
         ]}
       >
         {label}
@@ -121,17 +128,17 @@ export function Chip({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(0.5),
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.line,
     backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(0.5),
     minHeight: CHIP_HEIGHT,
     // A pill is never narrower than it is tall: a one-glyph chip is a circle.
     minWidth: CHIP_HEIGHT,
@@ -139,16 +146,19 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.75 },
   disabled: { opacity: opacity.disabled },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.control, color: theme.text },
   // `onFill`, not the page colour: on the shared heath fill the old dark page
   // was 3.7:1 (root CLAUDE.md, "Text or a glyph ON a colour fill uses a dark
   // ink").
   labelActive: { color: theme.onFill },
-  labelDisabled: { color: theme.textMuted },
+  labelMuted: { color: theme.textMuted },
+  // The add chip is not a value of the rail, so it does not wear a value's
+  // card: an outline of its own kind, the way Logjam Web draws it.
+  dashed: {
+    backgroundColor: "transparent",
+    borderStyle: "dashed",
+    borderColor: theme.textMuted,
+  },
   // A fixed box with a radius of exactly half of it, and a background that is
   // always set (`badgeActive` makes it transparent, never absent): see
   // `halfRadius` for why a 999 radius came back square once another chip was
@@ -165,10 +175,6 @@ const styles = StyleSheet.create({
   // No wash on a fill: an ink wash darkened Daylight's accent until the count
   // on it fell under 4.5:1. The count reads as `onFill` on the fill itself.
   badgeActive: { backgroundColor: "transparent" },
-  badgeText: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-  },
+  badgeText: { ...textRole.caption, color: theme.textMuted },
   badgeTextActive: { color: theme.onFill },
-});
+}));

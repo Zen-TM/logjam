@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   attributeFilterShape,
   formatRange,
@@ -14,7 +14,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { formRhythm, spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
 import { DateRangeFilter } from "./DateRangeFilter";
 import { RangePills } from "./RangePills";
@@ -71,36 +71,7 @@ const SHAPES: Record<AttributeFilterShape, (props: Props) => ReactNode> = {
     />
   ),
 
-  boolean: ({ def, value, onChange }) => {
-    const current = value?.kind === "boolean" ? value.value : null;
-    return (
-      <View style={styles.block}>
-        <Header
-          label={def.label}
-          summary={current == null ? "Any" : current ? "Yes" : "No"}
-          active={current != null}
-        />
-        <View style={styles.chipRow}>
-          {[true, false].map((option) => (
-            <Chip
-              key={String(option)}
-              label={option ? "Yes" : "No"}
-              active={current === option}
-              // Tapping the active chip clears it: "either" is the third state
-              // and it needs to be reachable without a Reset.
-              onPress={() =>
-                onChange(
-                  current === option
-                    ? null
-                    : { kind: "boolean", value: option },
-                )
-              }
-            />
-          ))}
-        </View>
-      </View>
-    );
-  },
+  boolean: (props) => <BooleanFilter {...props} />,
 
   text: ({ def, value, onChange }) => (
     <TextField
@@ -149,6 +120,8 @@ function Header({
   summary: string;
   active: boolean;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.blockHeader}>
       <Text style={styles.blockLabel}>{label}</Text>
@@ -172,6 +145,8 @@ function MinMaxFilter({
   value: NumberRange | null;
   onChange: (next: CustomFieldFilter | null) => void;
 }) {
+  const styles = useStyles();
+
   const [low, setLow] = useState(value ? String(value[0]) : "");
   const [high, setHigh] = useState(value ? String(value[1]) : "");
   // Reset empties the filter from outside; empty the boxes with it, or they go
@@ -247,6 +222,8 @@ function ThresholdFilter({
   value: PlaceThresholdFilter | null;
   onChange: (next: PlaceThresholdFilter | null) => void;
 }) {
+  const styles = useStyles();
+
   const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
     value?.[0] ?? "Less than",
   );
@@ -301,22 +278,48 @@ function ThresholdFilter({
   );
 }
 
-const styles = StyleSheet.create({
-  block: { gap: spacing(0.75) },
+function BooleanFilter({ def, value, onChange }: Props) {
+  const styles = useStyles();
+  const current = value?.kind === "boolean" ? value.value : null;
+  return (
+    <View style={styles.block}>
+      <Header
+        label={def.label}
+        summary={current == null ? "Any" : current ? "Yes" : "No"}
+        active={current != null}
+      />
+      <View style={styles.chipRow}>
+        {[true, false].map((option) => (
+          <Chip
+            key={String(option)}
+            label={option ? "Yes" : "No"}
+            active={current === option}
+            // Tapping the active chip clears it: "either" is the third state
+            // and it needs to be reachable without a Reset.
+            onPress={() =>
+              onChange(
+                current === option ? null : { kind: "boolean", value: option },
+              )
+            }
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const useStyles = makeStyles((theme, textRole) => ({
+  block: { gap: formRhythm.label },
   blockHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  blockLabel: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-  blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
+  blockLabel: { ...textRole.control, color: theme.text },
+  blockValue: { ...textRole.detail, color: theme.textMuted },
   // Words are text-coloured; the weight says it is set.
-  blockValueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  blockValueActive: { ...textRole.control, color: theme.text },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   pair: { flexDirection: "row", gap: spacing(1) },
   pairField: { flex: 1, maxWidth: 200 },
-});
+}));

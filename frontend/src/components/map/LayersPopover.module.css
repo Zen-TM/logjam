@@ -29,17 +29,16 @@
 }
 
 .title {
-  font-size: var(--font-base);
-  font-weight: 600;
+  composes: rowTitle from "../../textRoles.generated.module.css";
 }
 
 .subtitle {
-  font-size: var(--font-xs);
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .caption {
-  font-size: var(--font-xs);
+  composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -51,12 +50,12 @@
 }
 
 .emptyLine {
+  composes: detail from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 4px;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -85,10 +84,10 @@
 }
 
 .listName {
+  composes: body from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-sm);
 }
 
 .dot {
@@ -114,14 +113,9 @@
   cursor: grab;
 }
 
-.info {
-  display: inline-flex;
-  color: var(--color-text-muted);
-}
-
 .warning {
-  font-size: var(--font-xs);
-  color: var(--color-warning);
+  composes: detail from "../../textRoles.generated.module.css";
+  color: var(--color-text);
 }
 
 .gallery {

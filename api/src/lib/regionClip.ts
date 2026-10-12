@@ -8,7 +8,9 @@
 // never appear in URLs, filenames, error messages, or persisted storage.
 import { randomUUID } from "crypto";
 import {
+  DEM_SOURCES,
   MAX_REGION_AREA_KM2,
+  NSW_CONTOURS,
   regionEdgesKm,
   type RegionBbox,
 } from "@logjam/shared";
@@ -31,6 +33,14 @@ export const CLIP_TOKEN_TTL_MS = 120_000;
 export type RegionClipRequest = {
   bbox: RegionBbox;
   maxzoom: number;
+  /** Shallowest zoom kept; the archive's own when absent. */
+  minzoom?: number;
+  /**
+   * Set when the clip is of a DEM or contour archive, not the basemap. Its
+   * zooms are pinned to the ones its reader uses, so a saved area never holds
+   * a depth nothing reads.
+   */
+  archive?: { id: string; archivePath: string };
 };
 
 export type RegionClipValidation =
@@ -91,7 +101,64 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
     maxzoom = b.maxzoom;
   }
 
+  if (b.demSourceId !== undefined) {
+    const dem = DEM_SOURCES.find((source) => source.id === b.demSourceId);
+    if (!dem || dem.archivePath == null) {
+      return { ok: false, error: "Unknown elevation source" };
+    }
+    return {
+      ok: true,
+      value: {
+        bbox,
+        minzoom: dem.sampleZoom,
+        maxzoom: dem.sampleZoom,
+        archive: { id: dem.id, archivePath: dem.archivePath },
+      },
+    };
+  }
+
+  if (b.contours === true) {
+    return {
+      ok: true,
+      value: {
+        bbox,
+        minzoom: NSW_CONTOURS.minzoom,
+        maxzoom: NSW_CONTOURS.maxzoom,
+        archive: NSW_CONTOURS,
+      },
+    };
+  }
+
   return { ok: true, value: { bbox, maxzoom } };
+}
+
+/**
+ * Argv for `pmtiles extract`. An `s3://bucket/key` archive has to be split:
+ * go-pmtiles only reads a bucket through `--bucket`, and given the whole URI
+ * as <input> it opens it as a local path and exits 1 — which made every region
+ * clip a 502 in prod, where the archive is in S3, while local dev (a file
+ * path) worked. Guard: `regionClip.unit.test.ts` ("pmtilesExtractArgs").
+ */
+export function pmtilesExtractArgs(
+  archiveUri: string,
+  outPath: string,
+  bboxArg: string,
+  maxzoom: number,
+  awsRegion: string,
+  minzoom?: number,
+): string[] {
+  const s3 = /^s3:\/\/([^/]+)\/(.+)$/.exec(archiveUri);
+  return [
+    "extract",
+    s3 ? s3[2] : archiveUri,
+    outPath,
+    // The region rides the URL so the extract does not depend on AWS_REGION
+    // being set in the container's environment.
+    ...(s3 ? [`--bucket=s3://${s3[1]}?region=${awsRegion}`] : []),
+    `--bbox=${bboxArg}`,
+    `--maxzoom=${maxzoom}`,
+    ...(minzoom != null ? [`--minzoom=${minzoom}`] : []),
+  ];
 }
 
 // ── Token store ──────────────────────────────────────────────────────────────

@@ -42,7 +42,7 @@ export type FriendShareDirection = "theySee" | "youSee";
 /**
  * One row of the list, with every decision about it already made.
  *
- * `blockedReason` is the DESIGN.md §7 rule that a verb a group cannot perform
+ * `blockedReason` is the DESIGN.md rule that a verb a group cannot perform
  * is decided BEFORE the bar is drawn: a row that cannot be removed says why in
  * its own sheet, and the bar's tally stays true because it counted the same
  * predicate.
@@ -134,7 +134,7 @@ export function buildShareCards(
 /**
  * The selection bar's count line.
  *
- * A TALLY PER VERB, because each verb acts on a SUBSET (DESIGN.md §7): the
+ * A TALLY PER VERB, because each verb acts on a SUBSET (DESIGN.md): the
  * bar's buttons are glyphs and cannot say "3 of your 5", so the line says it
  * before the press. The forward direction needs no tally — every row there can
  * be shared on and unshared — so it stays the plain count.

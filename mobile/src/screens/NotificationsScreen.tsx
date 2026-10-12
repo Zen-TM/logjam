@@ -1,6 +1,6 @@
 // Inbox — "what happened while I was away?"
 //
-// LAYOUT (docs/ux-principles.md §2, §2): hero answers the question with a count and carries
+// LAYOUT (shared/DESIGN.md §2, §2): hero answers the question with a count and carries
 // the one bulk action; a pinned rail partitions into Unread / Read; the list is a
 // `SectionList` grouped by local calendar day with sticky headers, because a
 // notification list is chronological and dates are an ordering aid, not a second
@@ -36,14 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -96,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -255,6 +248,9 @@ export function NotificationsScreen({
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("inbox", accountState),
@@ -262,7 +258,7 @@ export function NotificationsScreen({
   );
   const query = useNotifications(guestBlock !== null);
   const refetch = query.refetch;
-  // ONE toast channel for every action outcome (DESIGN.md §4): an inline banner
+  // ONE toast channel for every action outcome (DESIGN.md): an inline banner
   // reflows the list under the user's thumb and then lingers with no owner, and
   // on a scrolled list it lands off screen entirely — which is how accepting a
   // file came to look like it did nothing.
@@ -278,7 +274,7 @@ export function NotificationsScreen({
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
    *  live list, so a refetch can't leave the sheet holding a stale copy. */
   const [menuId, setMenuId] = useState<string | null>(null);
-  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md §8): the
+  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
   const online = useConnectivity() === "online";
@@ -360,7 +356,7 @@ export function NotificationsScreen({
   );
   const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
-  // --- Multi-select (DESIGN.md §5) -----------------------------------------
+  // --- Multi-select (DESIGN.md) -----------------------------------------
   // The same hook and the same bar as Places, Logs and Saved: press and hold a
   // row to start, tap to toggle, the last row deselected leaves the mode. Every
   // notification is selectable — unlike a shared place, there is no row the
@@ -390,7 +386,7 @@ export function NotificationsScreen({
     () => expandBatchSelection(selectedItems, batches),
     [batches, selectedItems],
   );
-  // A selection is a transient mode over rows you can see (DESIGN.md §5). Also drops the
+  // A selection is a transient mode over rows you can see (DESIGN.md). Also drops the
   // per-row sheet: a sheet does not outlive the tab.
   useFocusEffect(
     useCallback(() => {
@@ -682,7 +678,7 @@ export function NotificationsScreen({
     [markRead, notify, onUnreadChanged, refetch],
   );
 
-  /** A destructive action is a dialog first, and the dialog carries the why (DESIGN.md §5). */
+  /** A destructive action is a dialog first, and the dialog carries the why (DESIGN.md). */
   const requestAction = useCallback(
     (
       n: TNotification,
@@ -891,7 +887,7 @@ export function NotificationsScreen({
         </Text>
       </View>
     ),
-    [batches],
+    [batches, styles],
   );
 
   // UNREAD + READ CAN EXCEED ALL, and that is correct rather than a rounding
@@ -941,7 +937,7 @@ export function NotificationsScreen({
       <Hero
         eyebrow={INBOX.title}
         // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (docs/ux-principles.md §2). "Something new" was that answer rounded to a boolean —
+        // that did (shared/DESIGN.md §2). "Something new" was that answer rounded to a boolean —
         // it said the same words for one notification and for forty, and read as
         // a marketing line rather than a count. The tally below it stays the
         // whole inbox, so the two lines never restate each other.
@@ -961,7 +957,7 @@ export function NotificationsScreen({
     buckets: () => (
       <>
         {/* The bulk bar takes the ChipRail's slot and only that slot, so
-            the rail's height cannot change when a selection starts (DESIGN.md §5). */}
+            the rail's height cannot change when a selection starts (DESIGN.md). */}
         {notifications.length > 0 ? (
           <View style={styles.rail}>
             {selecting && readAction ? (
@@ -993,7 +989,7 @@ export function NotificationsScreen({
               />
             )}
             {/* The name search, in the SAME place in both states so the rail's
-                height cannot differ between them (DESIGN.md §5). It goes inert rather than
+                height cannot differ between them (DESIGN.md). It goes inert rather than
                 unmounting while picking — a keystroke could narrow a selected row
                 out of the list — and dims to say so, the treatment Saved's field
                 and the waypoint tag rail already use. */}
@@ -1166,6 +1162,9 @@ const NotificationRow = memo(function NotificationRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (batch) {
     return (
       <BatchRow
@@ -1184,7 +1183,7 @@ const NotificationRow = memo(function NotificationRow({
     );
   }
   const label = notificationLabel(item);
-  const meta = notificationMeta(item);
+  const meta = notificationMeta(item, theme);
   const target = notificationActions(item);
   const subtitle = [label.warning, formatTime(item.createdAt)]
     .filter(Boolean)
@@ -1266,7 +1265,7 @@ const NotificationRow = memo(function NotificationRow({
                 />
               ))}
             </View>
-            {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md §8). */}
+            {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md). */}
             {!online ? (
               <Text style={styles.actionHint}>Needs a connection</Text>
             ) : null}
@@ -1322,7 +1321,10 @@ const BatchRow = memo(function BatchRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
-  const meta = notificationMeta(batch.representative);
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const meta = notificationMeta(batch.representative, theme);
   const pending = batchPendingFileSends(batch);
   const subtitle = [
     batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
@@ -1418,7 +1420,7 @@ const BatchRow = memo(function BatchRow({
   );
 });
 
-/** Per-bucket, and actionable where there is an action (docs/ux-principles.md §11). */
+/** Per-bucket, and actionable where there is an action (shared/DESIGN.md §11). */
 function EmptyPanel({
   bucket,
   searching,
@@ -1433,36 +1435,33 @@ function EmptyPanel({
   const copy = INBOX.copy;
   if (searching) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noMatchTitle}</Text>
-        <Text style={styles.emptyHint}>{copy.noMatchBody}</Text>
-        <Button label={copy.clearSearch} variant="ghost" onPress={onShowAll} />
-      </View>
+      <EmptyState
+        title={copy.noMatchTitle}
+        hint={copy.noMatchBody}
+        action={{
+          label: copy.clearSearch,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
   if (bucket !== "all") {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>
-          {bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
-        </Text>
-        <Button
-          label={copy.showEverything}
-          variant="ghost"
-          onPress={onShowAll}
-        />
-      </View>
+      <EmptyState
+        title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        action={{
+          label: copy.showEverything,
+          variant: "ghost",
+          onPress: onShowAll,
+        }}
+      />
     );
   }
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-    </View>
-  );
+  return <EmptyState title={copy.firstRunTitle} hint={copy.firstRunBody} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
@@ -1482,23 +1481,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: theme.page,
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(1),
   },
-  dayLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
+  dayLabel: { ...muted(theme, textRole.section) },
+  dayCount: { ...muted(theme, textRole.meta) },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks
   // clipped. Same treatment as Saved's search.
   searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
   truncation: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...muted(theme, textRole.meta),
     textAlign: "center",
     paddingTop: spacing(1.5),
     paddingHorizontal: spacing(2),
@@ -1518,23 +1510,14 @@ const styles = StyleSheet.create({
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
   actions: { flexDirection: "row", gap: spacing(1) },
   actionHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...muted(theme, textRole.meta),
     textAlign: "center",
-    paddingTop: spacing(0.75),
+    paddingTop: spacing(0.5),
   },
-  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
-});
+}));

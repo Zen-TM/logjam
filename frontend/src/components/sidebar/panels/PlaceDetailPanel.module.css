@@ -24,17 +24,12 @@
 
 /* The type, as a fact in its own glyph and colour. */
 .identity {
+  composes: body from "../../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
-}
-
-.typeGlyph {
-  color: var(--tile-hue, var(--color-accent));
-  flex-shrink: 0;
 }
 
 .pills {
@@ -54,8 +49,8 @@
 }
 
 .meta {
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -70,6 +65,7 @@
 }
 
 .tableRow {
+  composes: body from "../../../textRoles.generated.module.css";
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -84,7 +80,6 @@
 
 .tableRow dt {
   flex-shrink: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -92,7 +87,6 @@
   margin: 0;
   min-width: 0;
   text-align: right;
-  font-size: var(--font-sm);
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
@@ -108,31 +102,30 @@
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--color-accent);
+  color: var(--color-text);
   cursor: pointer;
   text-decoration: underline;
 }
 
 .notes {
+  composes: paragraph from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
-  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .list {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 0;
   padding-left: 1.2em;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: var(--font-sm);
 }
 
 .muted {
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

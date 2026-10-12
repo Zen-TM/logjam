@@ -3,6 +3,10 @@ import {
   collectDirtyFields,
   computeBackoffMs,
   isTransientSyncError,
+  shouldGiveUpOnSyncOp,
+  SYNC_GIVE_UP_AFTER_MS,
+  SYNC_GIVE_UP_FAILURES,
+  tallySyncFailure,
   filterSelfConflicts,
   planOutboxEnqueue,
   rebaseRow,
@@ -508,6 +512,108 @@ describe("collectDirtyFields + rebaseRow (§8.5)", () => {
       name: "w",
       latitude: -33.6,
     });
+  });
+});
+
+describe("filterSelfConflicts on a replayed write", () => {
+  // A push whose reply is lost is sent again, and by then the server row
+  // already holds the op's own values under a newer updatedAt. The server
+  // compares by serialisation, so a value it stores differently from how the
+  // phone sent it (jsonb reorders keys, names are trimmed) comes back as a
+  // receipt for a conflict with nobody. Mutation: drop the `ownFields`
+  // comparison and the first two cases shelve the user's own value.
+  const base = { fieldValues: { grade: "2" }, displayName: "Old" };
+
+  it("drops a receipt that only differs from the op's own value in key order", () => {
+    expect(
+      filterSelfConflicts(
+        [{ field: "fieldValues", serverValue: { grade: "3", abseils: 4 } }],
+        base,
+        { fieldValues: { abseils: 4, grade: "3" } },
+      ),
+    ).toEqual([]);
+  });
+
+  it("drops a receipt for the op's own text the server trimmed", () => {
+    expect(
+      filterSelfConflicts(
+        [{ field: "displayName", serverValue: "Claustral" }],
+        base,
+        { displayName: " Claustral " },
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps a receipt for a value somebody else wrote", () => {
+    const receipts = [{ field: "displayName", serverValue: "Web edit" }];
+    expect(
+      filterSelfConflicts(receipts, base, { displayName: "Claustral" }),
+    ).toEqual(receipts);
+  });
+});
+
+describe("giving up on a sync op", () => {
+  const since = "2026-10-01T00:00:00.000Z";
+  const at = (ms: number) => new Date(Date.parse(since) + ms);
+
+  it("starts the tally at the first failure and keeps that instant", () => {
+    const first = tallySyncFailure(null, at(0));
+    expect(first).toEqual({ failures: 1, since });
+    expect(tallySyncFailure(first, at(60_000))).toEqual({ failures: 2, since });
+  });
+
+  it("starts again from a record that holds no tally", () => {
+    expect(tallySyncFailure({ code: 503 }, at(0))).toEqual({
+      failures: 1,
+      since,
+    });
+  });
+
+  it("does not give up on a temporary failure inside the window, however many", () => {
+    expect(
+      shouldGiveUpOnSyncOp(
+        { failures: 500, since },
+        true,
+        at(SYNC_GIVE_UP_AFTER_MS - 1),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not give up on a few temporary failures spread over days", () => {
+    expect(
+      shouldGiveUpOnSyncOp(
+        { failures: SYNC_GIVE_UP_FAILURES - 1, since },
+        true,
+        at(SYNC_GIVE_UP_AFTER_MS * 5),
+      ),
+    ).toBe(false);
+  });
+
+  it("gives up on a temporary failure that has lasted the whole window", () => {
+    expect(
+      shouldGiveUpOnSyncOp(
+        { failures: SYNC_GIVE_UP_FAILURES, since },
+        true,
+        at(SYNC_GIVE_UP_AFTER_MS),
+      ),
+    ).toBe(true);
+  });
+
+  it("gives up on a failure that is not temporary as soon as the count is reached", () => {
+    expect(
+      shouldGiveUpOnSyncOp(
+        { failures: SYNC_GIVE_UP_FAILURES, since },
+        false,
+        at(1_000),
+      ),
+    ).toBe(true);
+    expect(
+      shouldGiveUpOnSyncOp(
+        { failures: SYNC_GIVE_UP_FAILURES - 1, since },
+        false,
+        at(1_000),
+      ),
+    ).toBe(false);
   });
 });
 

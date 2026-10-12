@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { INK } from "./designTokens.js";
+import { FONT, INK, TEXT_ROLES } from "./designTokens.js";
 import { THEME_SCHEMES, THEME_SCHEME_ORDER } from "./themeSchemes.js";
-import { kebab, webTokensCss } from "./webTokens.js";
+import { kebab, webTextRolesCss, webTokensCss } from "./webTokens.js";
 
 /** The declarations of one rule block, as a name → value map. */
 function blockOf(css: string, selector: string): Map<string, string> {
@@ -44,9 +44,27 @@ describe("webTokensCss", () => {
     );
     expect(root.get("--color-on-fill")).toBe(INK.toLowerCase());
     expect(root.get("--space-1-5")).toBe("12px");
+    expect(root.get("--form-field")).toBe("12px");
     expect(root.get("--font-sm")).toBe("0.8125rem");
     expect(root.get("--control-lg")).toBe("36px");
     expect(root.get("--motion-fast")).toBe("150ms");
+  });
+
+  // A role's class points at the font scale, so a size is written once.
+  // Mutation that turns it red: emit `font-size` from `FONT.gps`, or drop the
+  // `uppercase` or `leading` branch in `webTextRolesCss`.
+  it("draws every type role as a class on the font scale", () => {
+    const roles = webTextRolesCss();
+    for (const [name, spec] of Object.entries(TEXT_ROLES)) {
+      const rule = blockOf(roles, `.${name}`);
+      expect(spec.size in FONT.web).toBe(true);
+      expect(rule.get("font-size")).toBe(`var(--font-${spec.size})`);
+      expect(rule.get("font-weight")).toBe(`var(--font-weight-${spec.weight})`);
+      expect(rule.get("text-transform") === "uppercase").toBe(
+        "uppercase" in spec,
+      );
+      expect(rule.get("line-height") === "1.5").toBe("leading" in spec);
+    }
   });
 
   it("gives a coarse pointer the touch control sizes", () => {

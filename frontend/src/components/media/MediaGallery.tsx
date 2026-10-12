@@ -6,7 +6,7 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import Lightbox from "./Lightbox";
 import TrackIcon from "./TrackIcon";
 import classes from "./MediaGallery.module.css";
-import { Icon, ErrorBanner } from "../../ui";
+import { ErrorBanner, Icon, IconButton, Menu, Row } from "../../ui";
 
 // `variant` selects which media this gallery surfaces:
 //   all     → visual grid + track list (default; legacy behaviour)
@@ -122,32 +122,47 @@ export default function MediaGallery({
 
       {showTracks && tracks.length > 0 && (
         <div className={classes.trackList}>
+          {/* A file to download is a `Row` with an href (frontend/DESIGN.md §3);
+              its one verb is behind the ⋯ like any other row's. */}
           {tracks.map((m) => (
-            <div key={m.id} className={classes.trackRow}>
-              <a
-                className={classes.trackLink}
-                href={m.displayUrl}
-                download={m.filename}
-              >
-                {m.color ? (
+            <Row
+              key={m.id}
+              leading={
+                m.color ? (
                   <TrackIcon color={m.color} />
                 ) : (
                   <Icon idea="export" size={16} />
-                )}
-                <span className={classes.trackName}>{m.filename}</span>
-              </a>
-              {canDelete && (
-                <button
-                  type="button"
-                  className={classes.deleteBtnInline}
-                  onClick={() => setPendingDelete(m)}
-                  disabled={deletingId === m.id}
-                  aria-label={`Delete ${m.filename}`}
-                >
-                  <Icon idea="delete" size={14} />
-                </button>
-              )}
-            </div>
+                )
+              }
+              title={m.filename}
+              href={m.displayUrl}
+              download={m.filename}
+              trailing={
+                canDelete && (
+                  <Menu
+                    label={`Actions for ${m.filename}`}
+                    title={m.filename}
+                    placement="right-start"
+                    entries={[
+                      {
+                        id: "delete",
+                        label: "Delete",
+                        icon: "delete",
+                        danger: true,
+                        onSelect: () => setPendingDelete(m),
+                      },
+                    ]}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon="overflow"
+                        label={`Actions for ${m.filename}`}
+                      />
+                    )}
+                  />
+                )
+              }
+            />
           ))}
         </div>
       )}

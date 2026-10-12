@@ -11,7 +11,7 @@
 }
 
 .count {
+  composes: detail from "../../../textRoles.generated.module.css";
   flex: 1;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }

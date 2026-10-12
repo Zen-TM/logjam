@@ -49,6 +49,21 @@ export function sendFriendRequest(addresseeId: string): Promise<unknown> {
   });
 }
 
+/** Mint a single-use invite link's token (api/src/routes/friendInvites.ts). */
+export function createFriendInvite(): Promise<{ token: string }> {
+  return apiFetch("/friends/invites", { method: "POST" });
+}
+
+/** The caller's unspent links. Never the links: the server keeps none. */
+export function getFriendInvites(): Promise<{ id: string }[]> {
+  return apiFetch("/friends/invites");
+}
+
+/** Every link the caller has out stops working. */
+export function revokeFriendInvites(): Promise<void> {
+  return apiFetch<void>("/friends/invites", { method: "DELETE" });
+}
+
 export function acceptFriendRequest(friendshipId: string): Promise<unknown> {
   return apiFetch(`/friends/${friendshipId}/accept`, { method: "PATCH" });
 }

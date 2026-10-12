@@ -17,7 +17,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 import {
   FOCUS_PULSE_FRAME_MS,
   FOCUS_PULSE_MS,
@@ -40,6 +40,8 @@ export const FocusPulse = memo(function FocusPulse({
   /** A repeat "show on map" for the same asset re-arms the animation. */
   nonce: number;
 }) {
+  const theme = useTheme();
+
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {

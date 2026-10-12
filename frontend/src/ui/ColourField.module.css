@@ -32,12 +32,6 @@
   cursor: default;
 }
 
-/* Sized to the picker, not to the Layers list the kit's Popover is sized for. */
-.popover {
-  width: max-content;
-  padding: var(--space-1-5);
-}
-
 .picker {
   display: flex;
   flex-direction: column;
@@ -112,8 +106,8 @@
 
 /* The field's own clothes, in a monospace face so the eight digits line up. */
 .hex {
+  composes: body from "../textRoles.generated.module.css";
   composes: input from "./TextField.module.css";
   min-height: var(--control-md);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--font-sm);
 }

@@ -6,6 +6,7 @@ export { Icon, type Glyph } from "./Icon";
 export { NorthNeedle } from "./webIcons";
 export { Chip, ChipPicker, ChipRail, type ChipOption } from "./Chip";
 export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
+export { ProfileChart } from "./ProfileChart";
 export { Avatar, IconTile, ListEnd, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
@@ -40,5 +41,5 @@ export {
   Toast,
   type ToastSeverity,
 } from "./Feedback";
-export { MapButton, MapButtonGroup, Notice } from "./MapControl";
+export { MapButton, MapButtonGroup, MapPointDot, Notice } from "./MapControl";
 export { useEscape } from "./useEscape";

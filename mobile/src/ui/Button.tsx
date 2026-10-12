@@ -1,20 +1,19 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Pressable, Text } from "react-native";
 
 import {
   controlSize,
-  fontSize,
-  fontWeight,
   opacity,
   radius,
+  slopTo,
   spacing,
-  theme,
-  touchTargetMin,
+  makeStyles,
+  useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
-const COMPACT_SLOP = (touchTargetMin - controlSize.md) / 2;
+const COMPACT_SLOP = slopTo(controlSize.md);
 
 type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost";
 
@@ -56,6 +55,9 @@ export function Button({
   compact = false,
   grow = false,
 }: ButtonProps) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const inactive = disabled || loading;
   // Words are never an intent colour: an outline button's label is the text
   // colour and its EDGE is the accent, as on Logjam Web.
@@ -103,12 +105,12 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing(0.75),
+    gap: spacing(0.5),
     borderRadius: radius.pill,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
@@ -120,7 +122,7 @@ const styles = StyleSheet.create({
     minWidth: controlSize.lg,
   },
   compact: {
-    paddingVertical: spacing(0.75),
+    paddingVertical: spacing(0.5),
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
     minWidth: controlSize.md,
@@ -135,6 +137,6 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: theme.cardPressed },
   pressedFilled: { opacity: 0.85 },
   disabled: { opacity: opacity.disabled },
-  label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
-  labelCompact: { fontSize: fontSize.sm },
-});
+  label: { ...textRole.rowTitle },
+  labelCompact: { ...textRole.control },
+}));

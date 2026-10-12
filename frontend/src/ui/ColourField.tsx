@@ -32,7 +32,7 @@ import classes from "./ColourField.module.css";
  * Inside: a saturation/brightness plane, a hue strip and an opacity strip, each a
  * `role="slider"` the arrow keys move (Shift for bigger steps), and the value as
  * text for pasting one in. Changes apply as they are made — this is for styling
- * something live on the map — and a press outside closes it (DESIGN.md §4).
+ * something live on the map — and a press outside closes it (DESIGN.md).
  */
 function FreeColourField({
   label,
@@ -95,7 +95,7 @@ function FreeColourField({
         anchorRef={triggerRef}
         label={label}
         placement="bottom-end"
-        className={classes.popover}
+        fit
         dismissOnOutsidePress
       >
         <div
@@ -164,7 +164,7 @@ function FreeColourField({
  *
  * The colour's NAME is the trigger's accessible name ("Colour: Teal") and not
  * text beside the swatch: the swatch already shows the colour, and a reader who
- * cannot see it hears the name (DESIGN.md §6).
+ * cannot see it hears the name (DESIGN.md).
  *
  * The palette keeps its native radios, so the group is one tab stop and the
  * arrow keys move the choice; the popover only changes where they are. It is
@@ -222,13 +222,15 @@ function PaletteField({
         anchorRef={triggerRef}
         label={label}
         placement="bottom-end"
-        className={choice.swatchPopover}
+        fit
         // This popover IS the field's value being chosen, so looking away
         // settles it — like every other control that picks a value.
         dismissOnOutsidePress
       >
         <fieldset className={choice.swatches}>
-          <legend className={choice.legend}>{label}</legend>
+          {/* The field's label is the row the swatch sits on; the palette itself
+              only needs the name for a screen reader. */}
+          <legend className="visually-hidden">{label}</legend>
           <div className={choice.swatchGrid}>
             {colors.map((color) => (
               <input

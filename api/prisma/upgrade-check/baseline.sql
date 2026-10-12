@@ -10,104 +10,88 @@
 -- misses one, a SET NOT NULL over a null, a rename collision) passes CI and
 -- fails — or silently drops data — on prod.
 --
--- RELEASE-SPECIFIC. The metrics below describe the canyons -> places rework
--- (main -> next, 2026-09). They switch themselves off once the base schema has
--- no `canyons` table; the next release that moves data replaces them. The
--- generic half (migrations apply over real rows; the result matches
--- schema.prisma) lives in the script and never goes stale.
+-- RELEASE-SPECIFIC. The metrics below describe
+-- 20261012120000_friendships_one_per_pair, which merges a pair's reciprocal
+-- friendship rows into one before indexing the pair. They switch themselves
+-- off once the base schema has that index; the next release that moves data
+-- replaces them. The generic half (migrations apply over real rows; the result
+-- matches schema.prisma) lives in the script and never goes stale.
 --
--- `-v fixtures=1` first inserts edge cases the seed does not have (reserved-key
--- collisions, grade columns, legacy prefs-held field definitions). CI only —
--- never against a prod copy.
+-- `-v fixtures=1` first inserts what the seed does not have: pairs with a row
+-- each way round, in every mix of statuses, and the notifications that name
+-- them. CI only — never against a prod copy.
 
 \set ON_ERROR_STOP on
 
-SELECT to_regclass('public.canyons') IS NOT NULL AS applies \gset
+SELECT to_regclass('public.friendships_pair_key') IS NULL AS applies \gset
 \if :applies
 
 \if :{?fixtures}
-INSERT INTO users (id, cognito_id, username, email, ui_preferences) VALUES
-  ('upgrade-fixture-owner', 'upgrade-fixture-owner-sub', 'upgrade_owner', 'owner@upgrade.invalid',
-   '{"canyonCustomFields": [
-       {"key": "capacity",  "label": "Group limit", "type": "integer"},
-       {"key": "has_water", "label": "Water?",      "type": "boolean"},
-       {"key": "rope",      "label": "Rope",        "type": "float", "min": 0, "max": 200}
-     ],
-     "tripLogCustomFields": [
-       {"key": "party", "label": "Party size", "type": "integer"}
-     ]}'),
-  ('upgrade-fixture-friend', 'upgrade-fixture-friend-sub', 'upgrade_friend', 'friend@upgrade.invalid', '{}');
+INSERT INTO users (id, cognito_id, username, email) VALUES
+  ('upgrade-fixture-a', 'upgrade-fixture-a-sub', 'upgrade_a', 'a@upgrade.invalid'),
+  ('upgrade-fixture-b', 'upgrade-fixture-b-sub', 'upgrade_b', 'b@upgrade.invalid'),
+  ('upgrade-fixture-c', 'upgrade-fixture-c-sub', 'upgrade_c', 'c@upgrade.invalid'),
+  ('upgrade-fixture-d', 'upgrade-fixture-d-sub', 'upgrade_d', 'd@upgrade.invalid');
 
--- `capacity` and `has_water` are keys the rework later RESERVES for system
--- fields; the migrations must rename the user's definition and move its value.
-INSERT INTO canyons (id, owner_id, name, latitude, longitude, num_abseils, longest_abseil_m,
-                     v_grade, a_grade, commitment, quality, hours, attributes, updated_at) VALUES
-  ('upgrade-fixture-graded', 'upgrade-fixture-owner', 'Graded', -33.6, 150.3, 4, 25.5, 3, 2, 3, 4.5, 6,
-   '{"customFields": {"capacity": 5, "has_water": true, "rope": 60},
-     "sources": {"v_grade": "ropewiki"}}', now()),
-  ('upgrade-fixture-bare', 'upgrade-fixture-owner', 'Bare', -33.7, 150.4,
-   NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', now());
+-- The id says what should happen to the row: keep-* survives, lose-* goes.
+INSERT INTO friendships (id, requester_id, addressee_id, status, created_at, updated_at) VALUES
+  -- accepted beats an OLDER pending
+  ('upgrade-fixture-lose-ab', 'upgrade-fixture-a', 'upgrade-fixture-b', 'pending',  '2026-01-01', '2026-01-01'),
+  ('upgrade-fixture-keep-ba', 'upgrade-fixture-b', 'upgrade-fixture-a', 'accepted', '2026-01-02', '2026-01-02'),
+  -- two accepted: the older
+  ('upgrade-fixture-keep-ac', 'upgrade-fixture-a', 'upgrade-fixture-c', 'accepted', '2026-01-01', '2026-01-01'),
+  ('upgrade-fixture-lose-ca', 'upgrade-fixture-c', 'upgrade-fixture-a', 'accepted', '2026-01-02', '2026-01-02'),
+  -- two pending: the older, ACCEPTED, because both asked
+  ('upgrade-fixture-keep-bc', 'upgrade-fixture-b', 'upgrade-fixture-c', 'pending',  '2026-01-01', '2026-01-01'),
+  ('upgrade-fixture-lose-cb', 'upgrade-fixture-c', 'upgrade-fixture-b', 'pending',  '2026-01-02', '2026-01-02'),
+  -- a block beats an OLDER accepted
+  ('upgrade-fixture-lose-ad', 'upgrade-fixture-a', 'upgrade-fixture-d', 'accepted', '2026-01-01', '2026-01-01'),
+  ('upgrade-fixture-keep-da', 'upgrade-fixture-d', 'upgrade-fixture-a', 'blocked',  '2026-01-02', '2026-01-02'),
+  -- a pair with one row is left alone
+  ('upgrade-fixture-keep-bd', 'upgrade-fixture-b', 'upgrade-fixture-d', 'accepted', '2026-01-01', '2026-01-01');
 
-INSERT INTO canyon_shares (id, canyon_id, shared_by_id, shared_with_id) VALUES
-  ('upgrade-fixture-share', 'upgrade-fixture-graded', 'upgrade-fixture-owner', 'upgrade-fixture-friend');
-
-INSERT INTO trip_logs (id, user_id, date, custom_fields) VALUES
-  ('upgrade-fixture-trip', 'upgrade-fixture-owner', now(), '{"party": 4}');
-INSERT INTO trip_log_canyons (trip_log_id, canyon_id, position) VALUES
-  ('upgrade-fixture-trip', 'upgrade-fixture-graded', 0),
-  ('upgrade-fixture-trip', 'upgrade-fixture-bare', 1);
-
-INSERT INTO media (id, owner_id, linked_type, linked_id, s3_key_display, media_type, filename, file_size_bytes) VALUES
-  ('upgrade-fixture-media', 'upgrade-fixture-owner', 'canyon', 'upgrade-fixture-graded',
-   'fixture/display.jpg', 'photo', 'display.jpg', 1);
-
+-- Same convention: keep-* stays as written, lose-* is deleted (lose-4 is the
+-- prompt for the request that the merge accepts), and move-* stays but now
+-- names the surviving row.
 INSERT INTO notifications (id, user_id, type, payload) VALUES
-  ('upgrade-fixture-note', 'upgrade-fixture-friend', 'canyon_shared',
-   '{"canyonId": "upgrade-fixture-graded", "canyonName": "Graded", "sharedById": "upgrade-fixture-owner"}');
+  ('upgrade-fixture-lose-1', 'upgrade-fixture-b', 'friend_request',          '{"friendshipId": "upgrade-fixture-lose-ab", "requesterId": "upgrade-fixture-a"}'),
+  ('upgrade-fixture-keep-1', 'upgrade-fixture-b', 'friend_request_accepted', '{"friendshipId": "upgrade-fixture-keep-ba", "acceptedById": "upgrade-fixture-a"}'),
+  ('upgrade-fixture-move-1', 'upgrade-fixture-c', 'friend_request_accepted', '{"friendshipId": "upgrade-fixture-lose-ca", "acceptedById": "upgrade-fixture-a"}'),
+  ('upgrade-fixture-lose-4', 'upgrade-fixture-c', 'friend_request',          '{"friendshipId": "upgrade-fixture-keep-bc", "requesterId": "upgrade-fixture-b"}'),
+  ('upgrade-fixture-lose-2', 'upgrade-fixture-b', 'friend_request',          '{"friendshipId": "upgrade-fixture-lose-cb", "requesterId": "upgrade-fixture-c"}'),
+  ('upgrade-fixture-lose-3', 'upgrade-fixture-a', 'friend_request_accepted', '{"friendshipId": "upgrade-fixture-lose-ad", "acceptedById": "upgrade-fixture-d"}');
 \endif
 
 DROP SCHEMA IF EXISTS upgrade_check CASCADE;
 CREATE SCHEMA upgrade_check;
 
+-- Every pair that had a row, and the strongest thing any of its rows said
+-- (0 blocked, 1 accepted, 2 pending). The merge must leave each pair exactly
+-- one row, saying that; except that a pair with only pending rows, and more
+-- than one, ends accepted.
+CREATE TABLE upgrade_check.pair AS
+SELECT LEAST(requester_id, addressee_id) AS lo,
+       GREATEST(requester_id, addressee_id) AS hi,
+       CASE WHEN count(*) > 1 AND bool_and(status = 'pending') THEN 1
+            ELSE min(CASE status WHEN 'blocked' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END)
+       END AS strongest,
+       count(*) AS row_count
+  FROM friendships
+ GROUP BY 1, 2;
+
 CREATE TABLE upgrade_check.baseline AS
 SELECT * FROM (VALUES
-  ('users',             (SELECT count(*) FROM users)),
-  ('places',            (SELECT count(*) FROM canyons)),
-  ('place_shares',      (SELECT count(*) FROM canyon_shares)),
-  ('trip_logs',         (SELECT count(*) FROM trip_logs)),
-  ('trip_log_places',   (SELECT count(*) FROM trip_log_canyons)),
-  ('friendships',       (SELECT count(*) FROM friendships)),
-  ('notifications',     (SELECT count(*) FROM notifications)),
-  ('place_shared_notes',(SELECT count(*) FROM notifications WHERE type = 'canyon_shared')),
-  ('media',             (SELECT count(*) FROM media)),
-  ('media_on_places',   (SELECT count(*) FROM media WHERE linked_type = 'canyon')),
-  ('geo_pdf_marker_cfg',(SELECT count(*) FROM geo_pdf_templates WHERE config ? 'canyonMarkers')),
-  -- Field definitions held as arrays on users.ui_preferences become rows.
-  ('user_field_defs',   (SELECT coalesce(sum(
-                           CASE WHEN jsonb_typeof(ui_preferences -> 'canyonCustomFields') = 'array'
-                                THEN jsonb_array_length(ui_preferences -> 'canyonCustomFields') ELSE 0 END
-                         + CASE WHEN jsonb_typeof(ui_preferences -> 'tripLogCustomFields') = 'array'
-                                THEN jsonb_array_length(ui_preferences -> 'tripLogCustomFields') ELSE 0 END), 0)
-                         FROM users)),
-  -- Grade columns become field_values keys (longest_abseil_m -> longest_abseil).
-  ('v_grade',           (SELECT count(*) FROM canyons WHERE v_grade IS NOT NULL)),
-  ('a_grade',           (SELECT count(*) FROM canyons WHERE a_grade IS NOT NULL)),
-  ('commitment',        (SELECT count(*) FROM canyons WHERE commitment IS NOT NULL)),
-  ('quality',           (SELECT count(*) FROM canyons WHERE quality IS NOT NULL)),
-  ('hours',             (SELECT count(*) FROM canyons WHERE hours IS NOT NULL)),
-  ('num_abseils',       (SELECT count(*) FROM canyons WHERE num_abseils IS NOT NULL)),
-  ('longest_abseil',    (SELECT count(*) FROM canyons WHERE longest_abseil_m IS NOT NULL)),
-  ('_sources',          (SELECT count(*) FROM canyons WHERE attributes ? 'sources')),
-  -- Every user-authored value, counted by key: a rename may change the key,
-  -- never the number of them.
-  ('custom_values',     (SELECT count(*) FROM canyons,
-                           jsonb_object_keys(CASE WHEN jsonb_typeof(attributes -> 'customFields') = 'object'
-                                                  THEN attributes -> 'customFields' ELSE '{}' END)))
+  ('users',            (SELECT count(*) FROM users)),
+  ('place_shares',     (SELECT count(*) FROM place_shares)),
+  ('friendship_pairs', (SELECT count(*) FROM upgrade_check.pair))
 ) AS t(metric, value);
 
 \echo 'upgrade-check baseline captured:'
 SELECT metric, value FROM upgrade_check.baseline ORDER BY metric;
+\echo 'pairs with more than one friendship row (the merge will fold these):'
+SELECT count(*) AS pairs, coalesce(sum(row_count - 1), 0) AS rows_to_go
+  FROM upgrade_check.pair WHERE row_count > 1;
 
 \else
-\echo 'upgrade-check: base has no canyons table — the places-rework checks no longer apply; replace them for this release.'
+\echo 'upgrade-check: base already has the friendship pair index — these checks no longer apply; replace them for this release.'
 \endif

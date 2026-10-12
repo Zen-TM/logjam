@@ -1,7 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { dateSummary, formatDateKey } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { formRhythm, spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
 
 /**
@@ -29,6 +29,8 @@ export function DateRangeFilter({
   toLabel?: string;
   clearLabel?: string;
 }) {
+  const styles = useStyles();
+
   const from = value?.[0] ?? null;
   const to = value?.[1] ?? null;
   const active = from != null || to != null;
@@ -61,20 +63,16 @@ function shortDate(key: string): string {
   return formatDateKey(`${key}T00:00:00.000Z`);
 }
 
-const styles = StyleSheet.create({
-  block: { gap: spacing(0.75) },
+const useStyles = makeStyles((theme, textRole) => ({
+  block: { gap: formRhythm.label },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-  value: { color: theme.textMuted, fontSize: fontSize.sm },
+  label: { ...textRole.control, color: theme.text },
+  value: { ...textRole.detail, color: theme.textMuted },
   // Words are text-coloured; the weight says it is set.
-  valueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
-});
+  valueActive: { ...textRole.control, color: theme.text },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
+}));

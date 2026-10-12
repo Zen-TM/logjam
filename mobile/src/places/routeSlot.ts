@@ -21,7 +21,7 @@
 // `fillRouteSlot.ts` is the runner that acts on them.
 //
 // PRIVACY: the place name and the attachment's filename appear only in a
-// confirm the user opened for that place (docs/ux-principles.md §13) — never in a log or
+// confirm the user opened for that place (shared/DESIGN.md §13) — never in a log or
 // an error string.
 import { mediaCategory, mediaDisplayName } from "@logjam/shared";
 

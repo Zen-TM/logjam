@@ -1,5 +1,5 @@
 // The offline / "N waiting to sync" pill pair, carried in the hero of every
-// list screen (DESIGN.md §8).
+// list screen (DESIGN.md).
 //
 // One component because it was three identical copies — Places, Logs and
 // Saved — and guest mode gave the duplication teeth: **"3 waiting to sync" is a
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(0.75),
+    gap: spacing(1),
     flexWrap: "wrap",
   },
 });

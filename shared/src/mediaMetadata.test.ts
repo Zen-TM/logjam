@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   MediaMetadataError,
   parseMediaMetadata,
+  parseTrackClimb,
   readMediaMetadata,
 } from "./mediaMetadata";
 
@@ -29,6 +30,20 @@ describe("parseMediaMetadata", () => {
 
   it("round-trips a track", () => {
     expect(parseMediaMetadata("track", TRACK)).toEqual(TRACK);
+  });
+
+  it("keeps the source a track's climb was read from", () => {
+    const track = { ...TRACK, elevationSource: "nsw-5m" };
+    expect(parseMediaMetadata("track", track)).toEqual(track);
+  });
+
+  it("reads a climb source it does not know as none, which means GPS", () => {
+    // A row from a newer build must still be accepted by an older API.
+    const parsed = parseMediaMetadata("track", {
+      ...TRACK,
+      elevationSource: "nsw-1m",
+    });
+    expect(parsed).toEqual(TRACK);
   });
 
   it("drops unknown keys rather than rejecting the write", () => {
@@ -96,5 +111,34 @@ describe("readMediaMetadata", () => {
 
   it("returns the stats when the row is good", () => {
     expect(readMediaMetadata("track", TRACK)).toEqual(TRACK);
+  });
+});
+
+describe("parseTrackClimb", () => {
+  const CLIMB = {
+    elevationGainM: 412,
+    elevationLossM: 398,
+    elevationSource: "nsw-5m",
+  };
+
+  it("returns the two figures and their source, and nothing else", () => {
+    expect(parseTrackClimb({ ...CLIMB, distanceM: 1 })).toEqual(CLIMB);
+  });
+
+  it("refuses figures without a known source", () => {
+    const { elevationSource: _source, ...figures } = CLIMB;
+    expect(() => parseTrackClimb(figures)).toThrow(MediaMetadataError);
+    expect(() =>
+      parseTrackClimb({ ...CLIMB, elevationSource: "barometer" }),
+    ).toThrow(MediaMetadataError);
+  });
+
+  it("refuses a source without both figures", () => {
+    expect(() =>
+      parseTrackClimb({ elevationGainM: 1, elevationSource: "gps" }),
+    ).toThrow(MediaMetadataError);
+    expect(() => parseTrackClimb({ ...CLIMB, elevationLossM: -1 })).toThrow(
+      MediaMetadataError,
+    );
   });
 });

@@ -6,11 +6,11 @@
 //
 // What each kind can say for itself differs, and the page says only what it
 // knows. A ROUTE carries its geometry inline, so it gets measured figures and a
-// real elevation profile. A FILE's geometry is an object in S3 this page has
-// not downloaded, so it reports the stats its own row already carries — a
-// recording's distance, climb and descent were computed by the recorder and are
-// better than anything re-derived here anyway. Neither guesses: a figure that
-// is not known is absent rather than zero.
+// real elevation profile. A FILE's figures are the stats its own row already
+// carries — a recording's distance, climb and descent were computed by the
+// recorder — and its charts are drawn from the file itself, downloaded when
+// the page opens (`TrackProfiles`). Neither guesses: a figure that is not
+// known is absent rather than zero.
 //
 // Which verbs appear, and which controls are inline rather than in the ⋯, is
 // `wayActions.ts` — not this file's judgement.
@@ -24,8 +24,10 @@ import {
 import {
   removeShareConfirm,
   densifyLine,
+  elevationSeries,
   formatBytes,
   formatDistanceM,
+  formatElevationM,
   routeLengthM,
   exportFilename,
   mediaDisplayName,
@@ -35,9 +37,12 @@ import {
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
   TRACK_COLORS,
+  TRACK_PROFILE_COPY,
   type StandaloneFile,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
+  wayVerbIcon,
+  MAP_MEASURE,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -49,11 +54,14 @@ import {
   ownerUsername,
   shareEntityWith,
   unshareEntityWith,
+  recolourMedia,
+  reclimbMedia,
   renameMedia,
   sendCopyOfMedia,
   type TRoute,
   type TPlace,
   type TFriend,
+  type PlaceTrack,
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
@@ -61,7 +69,6 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import SendCopyDialog from "../../dialogs/SendCopyDialog";
 import PlacePicker from "../../common/PlacePicker";
-import ElevationProfile from "../../routes/ElevationProfile";
 import type { RouteHoverChannel } from "../../map/routeHover";
 import {
   Button,
@@ -70,6 +77,7 @@ import {
   Menu,
   SectionHeader,
   StatGrid,
+  ProfileChart,
   ColourField,
   TextField,
   Dialog,
@@ -77,12 +85,15 @@ import {
   type Stat,
   type Glyph,
 } from "../../../ui";
+import type { TripLogTrack } from "../../dialogs/TripLogDialog";
 import { wayProperties, wayVerbs, type WayVerbId } from "./wayActions";
 import type { WayItem } from "./waysModel";
+import TrackProfiles from "./TrackProfiles";
 import classes from "./WayDetailPanel.module.css";
 
 const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   openPlace: "place",
+  logTrip: wayVerbIcon("logTrip"),
   edit: "edit",
   copy: "copy",
   copyAndRemove: "moveCopy",
@@ -111,6 +122,7 @@ export default function WayDetailPanel({
   way,
   route,
   file,
+  placeTrack,
   initialVerb,
   onVerbConsumed,
   friends,
@@ -122,6 +134,7 @@ export default function WayDetailPanel({
   onCopied,
   onChanged,
   onOpenPlace,
+  onLogTrip,
   onDeleteFile,
   routeHover,
 }: {
@@ -133,11 +146,14 @@ export default function WayDetailPanel({
    *  place is not among them, so the page shows what the row knows and no
    *  write controls. */
   file: StandaloneFile | null;
+  /** Set when the way is a file the map draws as a place's track, a friend's
+   *  included: the download the map already has is what its charts read. */
+  placeTrack: PlaceTrack | null;
   /**
    * A verb a ROW asked for, run once this page mounts. It is how one verb list
    * serves both surfaces: a row shows Share, Rename and Delete without hosting
    * a second copy of each form (wayActions.ts). CONSUMED, never counted — a
-   * request that stays set fires again on every re-render (DESIGN.md §6).
+   * request that stays set fires again on every re-render (DESIGN.md).
    */
   initialVerb: WayVerbId | null;
   onVerbConsumed: () => void;
@@ -156,6 +172,9 @@ export default function WayDetailPanel({
   onCopied: (copy: TRoute) => void;
   onChanged: () => void;
   onOpenPlace: (placeId: string) => void;
+  /** Open the trip form with this track in it. The form is App's, as the
+   *  place pages' is theirs: a dialog over the map, not part of this page. */
+  onLogTrip: (track: TripLogTrack) => void;
   onDeleteFile: (file: StandaloneFile) => Promise<void>;
   /** Where along a route the elevation cursor sits, so the map marks it. A
    *  channel rather than a callback into App state: it changes many times a
@@ -212,6 +231,24 @@ export default function WayDetailPanel({
   );
   // Closing the panel mid-hover would otherwise strand the map marker.
   useEffect(() => () => routeHover.set(null), [routeHover]);
+
+  // A file's charts are read from the file. The user's own is downloaded
+  // from a URL minted for it; a track on a friend's place has only the URL the
+  // map draws it from, so without one there are no charts.
+  const trackFile = route ? null : (file ?? placeTrack);
+  const trackSource = trackFile && {
+    mediaId: way.id,
+    filename: trackFile.filename,
+    displayUrl: async () => {
+      if (placeTrack) return placeTrack.displayUrl;
+      const { items } = await getMediaDownloadUrls([way.id]);
+      const url = items[0]?.displayUrl;
+      if (!url) throw new Error("The file could not be fetched.");
+      return url;
+    },
+    recordedMs:
+      trackFile.origin === "track" ? trackFile.metadata.durationMs : null,
+  };
 
   const owned = !way.shared;
   // WHICH PLACE, from the live row rather than from `way`.
@@ -383,6 +420,17 @@ export default function WayDetailPanel({
       case "openPlace":
         if (way.placeId) onOpenPlace(way.placeId);
         return;
+      case "logTrip":
+        if (file) {
+          onLogTrip({
+            mediaId: file.id,
+            filename: file.filename,
+            startedAt: file.metadata.startedAt ?? null,
+            // Only a place the user owns: a trip links nobody else's.
+            placeId: linkedPlace?.id ?? null,
+          });
+        }
+        return;
       case "edit":
         if (route) onEdit(route);
         return;
@@ -543,16 +591,44 @@ export default function WayDetailPanel({
         }
       />
 
-      <div className={classes.body}>
-        {stats.length > 0 && <StatGrid stats={pairedStatLayout(stats)} />}
+      {/* Focusable because it scrolls: a track's charts make the page taller
+          than a phone's sheet, and a keyboard must be able to scroll to them
+          (`e2e/a11y.spec.ts`, "a recording's page"). */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt */}
+      <div className={classes.body} tabIndex={0}>
+        {/* A file's page hands its figures to `TrackProfiles`, which lists
+            them among the ones it reads from the file. */}
+        {!trackSource && stats.length > 0 && (
+          <StatGrid stats={pairedStatLayout(stats)} />
+        )}
 
-        {/* Only a route has its geometry here to profile. A recording's climb
-            and descent are in the figures above, measured by the recorder that
-            walked it — better than anything re-derived from a simplified line. */}
+        {trackSource && (
+          <TrackProfiles
+            source={trackSource}
+            stored={stats}
+            climb={
+              file?.origin === "track"
+                ? {
+                    source: file.metadata.elevationSource,
+                    // Quiet either way: nobody asked for this, and a reading
+                    // that could not be stored is offered again next time.
+                    save: (read) =>
+                      void reclimbMedia(file.id, read).then(
+                        onChanged,
+                        () => {},
+                      ),
+                  }
+                : null
+            }
+            color={shownColour}
+            routeHover={routeHover}
+          />
+        )}
+
         {route && (
           <section className={classes.section}>
             {profileLoading && (
-              <p className={classes.note}>Reading the terrain…</p>
+              <p className={classes.note}>{MAP_MEASURE.copy.readingTerrain}</p>
             )}
             {profileError && <p className={classes.note}>{profileError}</p>}
             {profile && (
@@ -568,12 +644,13 @@ export default function WayDetailPanel({
                     This IS the section's heading — a second "Elevation" above it
                     said the same thing twice (operator, 2026-09-17). */}
                 <SectionHeader title="Elevation vs distance" />
-                <ElevationProfile
-                  samples={profile.samples}
-                  minM={profile.minM}
-                  maxM={profile.maxM}
+                <ProfileChart
+                  series={elevationSeries(profile)}
+                  formatValue={formatElevationM}
+                  formatX={formatDistanceM}
+                  label={TRACK_PROFILE_COPY.elevationLabel}
                   color={shownColour ?? "currentColor"}
-                  onHoverSampleChange={handleHoverSample}
+                  onHoverPointChange={handleHoverSample}
                 />
                 <p className={classes.attribution}>{profile.attribution}</p>
               </>
@@ -582,9 +659,7 @@ export default function WayDetailPanel({
         )}
 
         {/* ── Properties: changed in place, never in the ⋯ (wayActions.ts) ── */}
-        {/* Route-only: a file's colour is set by whatever made the file, and
-            the API has no way to change it (wayActions.ts). */}
-        {properties.colour && route && (
+        {properties.colour && (route || file) && (
           <section className={classes.section}>
             <ColourField
               label="Colour"
@@ -597,7 +672,10 @@ export default function WayDetailPanel({
               onChange={(next) => {
                 setPendingColour(next);
                 void run(
-                  () => updateRoute(route.id, { color: next }),
+                  () =>
+                    route
+                      ? updateRoute(route.id, { color: next })
+                      : recolourMedia(file!.id, next),
                   "Couldn't change the colour.",
                 );
               }}
@@ -615,6 +693,7 @@ export default function WayDetailPanel({
                   compact
                   icon="unlink"
                   disabled={busy}
+                  disabledReason="Working…"
                   onClick={handleUnlink}
                 >
                   Unlink
@@ -785,7 +864,7 @@ export default function WayDetailPanel({
 }
 
 /** Renaming a file, as a form with a Cancel — never a live field that commits
- *  on blur (DESIGN.md §3). */
+ *  on blur (DESIGN.md). */
 function RenameWayDialog({
   file,
   busy,
@@ -799,8 +878,20 @@ function RenameWayDialog({
 }) {
   const current = mediaDisplayName(file);
   const [name, setName] = useState(current);
-  const trimmed = name.trim();
-  const canSave = trimmed.length > 0 && trimmed !== current;
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      setError("File name is required");
+      return;
+    }
+    if (trimmed === current) {
+      onClose();
+      return;
+    }
+    onSave(trimmed);
+  }
 
   return (
     <Dialog
@@ -810,15 +901,10 @@ function RenameWayDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={busy}
-            disabled={!canSave}
-            onClick={() => onSave(trimmed)}
-          >
+          <Button variant="filled" busy={busy} onClick={save}>
             Save
           </Button>
         </>
@@ -827,11 +913,15 @@ function RenameWayDialog({
       <TextField
         label="File name"
         value={name}
-        onChange={(event) => setName(event.target.value)}
+        error={error}
+        onChange={(event) => {
+          setName(event.target.value);
+          setError(null);
+        }}
         onKeyDown={(event) => {
-          if (event.key !== "Enter" || !canSave) return;
+          if (event.key !== "Enter") return;
           event.preventDefault();
-          onSave(trimmed);
+          save();
         }}
         data-autofocus
       />

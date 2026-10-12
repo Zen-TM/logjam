@@ -7,7 +7,7 @@
 /* The consequence, in the body rather than in a banner: a banner is for a
    failure that has happened, and this has not happened yet. */
 .warning {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
 }
