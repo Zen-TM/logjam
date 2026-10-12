@@ -106,6 +106,7 @@ const txClient = {
   topoExportJob: { delete: txExportDelete },
   geoPdfJob: { delete: txGeoPdfDelete },
   share: { deleteMany: txShareDeleteMany },
+  notification: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
 };
 
 const NOW = new Date("2026-06-05T12:00:00.000Z");

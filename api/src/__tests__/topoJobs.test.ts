@@ -136,6 +136,13 @@ describe("topo-jobs route (fake auth)", () => {
       expect(aliceRes.body.userId).toBeUndefined();
       expect(aliceRes.body.syncRole).toBe("owner");
       expect(aliceRes.body).toHaveProperty("s3OutputKeys");
+
+      // A sharee starting the job is refused with copy that names the action.
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(as(BOB_SUB));
+      expect(startRes.status).toBe(403);
+      expect(startRes.body.error).toBe("Only the owner can start this job");
     } finally {
       await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
     }

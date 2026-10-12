@@ -17,7 +17,6 @@ import type {
 } from "@logjam/shared";
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
-  formatTripPlaceNames,
   tallyNotifications,
 } from "@logjam/shared";
 import {
@@ -42,18 +41,6 @@ import { cacheProfile, cachedProfile } from "./elevationCache";
 // by a comment. Every existing `from "./placeUtils"` import still resolves.
 export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
-
-// A trip's title: an explicit displayName always wins; otherwise it's the
-// joined names of its linked places; otherwise a generic fallback. Every
-// display site must use this — never inline the place?.name ?? displayName
-// fallback chain, which predates multi-place trips.
-export function tripTitle(trip: TTripLog): string {
-  return (
-    trip.displayName ??
-    formatTripPlaceNames(trip.places.map((c) => c.name)) ??
-    "Untitled trip"
-  );
-}
 
 // Only http(s) URLs are safe to render as a clickable <a href> or store as a
 // place source link — any other scheme (javascript:, data:, vbscript:, ...)
@@ -1546,8 +1533,10 @@ export function useStandaloneTracks(
 
 // ── Friends ───────────────────────────────────────────────────
 
-export function searchUsers(query: string): Promise<TSearchUser[]> {
-  return apiFetch<TSearchUser[]>(
+export function searchUsers(
+  query: string,
+): Promise<{ data: TSearchUser[]; total: number | null }> {
+  return apiFetchWithTotal<TSearchUser[]>(
     `/friends/search?q=${encodeURIComponent(query)}`,
   );
 }

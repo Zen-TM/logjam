@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { BOB_ID, CAROL_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
+import {
+  as,
+  ALICE_ID,
+  BOB_ID,
+  BOB_SUB,
+  CAROL_ID,
+  NONEXISTENT_ID,
+  CANYON_TYPE_ID,
+} from "./_actors";
+import prisma from "../services/prisma";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // alice <-> bob are friends in the seed, so alice may share with bob.
@@ -111,6 +120,43 @@ describe("sharing routes (fake auth = alice)", () => {
         .set(AUTH)
         .send({});
       expect(res.status).toBe(400);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
+  it("DELETE share removes every duplicate row, so the sharee gets 404", async () => {
+    const placeId = await createPlace("CH-003 duplicate share revoke");
+    try {
+      // The grant check is not atomic and there is no unique key, so a raced
+      // pair is reachable; insert it directly. Mutation: revert revoke to
+      // deleting one row and the sharee still reads the place.
+      await prisma.placeShare.createMany({
+        data: [1, 2].map(() => ({
+          placeId,
+          sharedById: ALICE_ID,
+          sharedWithId: BOB_ID,
+        })),
+      });
+      const before = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
+      expect(before.status).toBe(200);
+
+      const revoke = await request(API_URL)
+        .delete(`/places/${placeId}/share/${BOB_ID}`)
+        .set(AUTH);
+      expect(revoke.status).toBe(204);
+
+      expect(
+        await prisma.placeShare.count({
+          where: { placeId, sharedWithId: BOB_ID },
+        }),
+      ).toBe(0);
+      const after = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
+      expect(after.status).toBe(404);
     } finally {
       await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
     }

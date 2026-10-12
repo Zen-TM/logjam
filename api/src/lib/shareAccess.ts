@@ -247,6 +247,18 @@ export async function deleteSharesFor(
   await tx.share.deleteMany({
     where: { entityType, entityId: { in: entityIds } },
   });
+  // The read-time filter already hides a recipient's item_shared notification
+  // once its Share row is gone, but it must not stay at rest (the revoke path
+  // purges it too). Prisma's JSON filter has no `in`, hence one OR arm per id.
+  await tx.notification.deleteMany({
+    where: {
+      type: "item_shared",
+      AND: [{ payload: { path: ["entityType"], equals: entityType } }],
+      OR: entityIds.map((id) => ({
+        payload: { path: ["entityId"], equals: id },
+      })),
+    },
+  });
 }
 
 /**
