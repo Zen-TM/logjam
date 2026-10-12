@@ -37,7 +37,7 @@ function RouteNameForm({
 
   const trimmed = name.trim();
   const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
-  const canSave = trimmed.length > 0 && !tooLong;
+  const [blank, setBlank] = useState(false);
 
   return (
     <Dialog
@@ -47,16 +47,10 @@ function RouteNameForm({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
             Cancel
           </Button>
-          <Button
-            type="submit"
-            form={formId}
-            variant="filled"
-            busy={busy}
-            disabled={!canSave}
-          >
+          <Button type="submit" form={formId} variant="filled" busy={busy}>
             Save
           </Button>
         </>
@@ -68,17 +62,24 @@ function RouteNameForm({
         className={classes.form}
         onSubmit={(event) => {
           event.preventDefault();
-          if (canSave && !busy) onSave(trimmed);
+          if (busy || tooLong) return;
+          if (trimmed.length === 0) setBlank(true);
+          else onSave(trimmed);
         }}
       >
         <TextField
           label="Route name"
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            setBlank(false);
+          }}
           error={
             tooLong
               ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`
-              : null
+              : blank
+                ? "Name is required"
+                : null
           }
           data-autofocus
         />

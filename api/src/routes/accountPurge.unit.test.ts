@@ -104,6 +104,7 @@ describe("account-delete purge covers every notification type", () => {
     ],
     "api/src/routes/bulkShare.ts": ["place_shared"],
     "api/src/routes/fileSends.ts": ["file_sent"],
+    "api/src/routes/friendInvites.ts": ["friend_request_accepted"],
     "api/src/routes/friends.ts": ["friend_request", "friend_request_accepted"],
     "api/src/routes/shares.ts": ["item_shared"],
     "api/src/routes/sharing.ts": ["place_shared"],

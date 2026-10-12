@@ -5,14 +5,17 @@ import {
   CONTROL,
   FONT,
   FONT_WEIGHT,
+  FORM_RHYTHM,
   MOTION,
   OPACITY,
   PLACE_STATUS_HUES,
   ASSET_HUES,
   RADIUS,
   SPACE,
+  TEXT_ROLES,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
+  webTextRolesCss,
   webTokensCss,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
@@ -32,6 +35,14 @@ const committed = readFileSync(
   "utf8",
 );
 
+const committedRoles = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "textRoles.generated.module.css",
+  ),
+  "utf8",
+);
+
 const kebab = (name: string) =>
   name.replace(/\./g, "-").replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
@@ -48,6 +59,20 @@ describe("tokens.generated.css", () => {
     expect(committed).toBe(webTokensCss());
   });
 
+  it("writes the type roles file the generator writes", () => {
+    expect(committedRoles).toBe(webTextRolesCss());
+  });
+
+  it("declares one class per type role", () => {
+    const expected = Object.keys(TEXT_ROLES)
+      .map((name) => `.${name}`)
+      .sort();
+    const declared = [...committedRoles.matchAll(/^(\.\w+) \{/gm)]
+      .map((m) => m[1])
+      .sort();
+    expect(declared).toEqual(expected);
+  });
+
   const colourNames = Object.keys(THEME_SCHEMES.sandstone.tokens).map(
     (role) => `--color-${kebab(role)}`,
   );
@@ -58,6 +83,7 @@ describe("tokens.generated.css", () => {
         (n) => `--hue-${kebab(n)}`,
       ),
       ...Object.keys(SPACE).map((n) => `--space-${kebab(n)}`),
+      ...Object.keys(FORM_RHYTHM).map((n) => `--form-${n}`),
       ...Object.keys(RADIUS).map((n) => `--radius-${n}`),
       ...Object.keys(FONT.web).map((n) => `--font-${n}`),
       ...Object.keys(FONT_WEIGHT).map((n) => `--font-weight-${n}`),

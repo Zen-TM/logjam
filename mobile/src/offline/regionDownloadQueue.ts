@@ -18,10 +18,19 @@ import {
   type RegionBbox,
 } from "@logjam/shared";
 
-import { subscribeReconnect } from "../map/connectivity";
-import type { ToastMessage } from "../ui/Toast";
-import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
+import NetInfo from "@react-native-community/netinfo";
+import type { ToastMessage } from "../ui";
+import LogjamDownloadService from "../../modules/logjam-download-service/src/LogjamDownloadServiceModule";
+import {
+  BACKGROUND_WAIT_MS,
+  MAX_BACKGROUND_RESUMES,
+  downloadNotice,
+  groupRegionJobs,
+  mayResumeOnReconnect,
+  regionGroupToastText,
+} from "./regionDownloadGroups";
 import { failureDetail } from "./failureDetail";
+import { connectionWorthResuming } from "./networkPolicy";
 import {
   connectionAllows,
   runRegionDownload,
@@ -45,7 +54,12 @@ export type RegionTaskSpec =
   | {
       taskKind: "http-file";
       id: string;
-      basemapId: "protomaps";
+      /** The vector basemap, or a DEM archive source's id (`demSourceId`). */
+      basemapId: string;
+      /** Set when the clip is of a DEM archive: shared demSources.ts. */
+      demSourceId?: string;
+      /** Set when the clip is of the statewide contours: shared nswContours.ts. */
+      contours?: boolean;
       label: string;
       groupId: string;
       groupLabel: string;
@@ -89,6 +103,50 @@ function publish(): void {
   snapshot = [...jobs];
   for (const listener of listeners) listener();
   announceSettledGroups();
+  syncDownloadService();
+}
+
+// --- Foreground service ---------------------------------------------------
+// Android freezes the process about 10 s after Logjam GPS leaves the screen
+// unless a foreground service holds it, so the queue keeps one up for exactly
+// as long as `downloadNotice` says there is something to stay up for. A build
+// without the module (iOS, tests) just downloads while the process runs.
+let backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
+let waitTimer: ReturnType<typeof setTimeout> | null = null;
+let shown: { text: string; at: number } | null = null;
+/** Also what re-arms the service's CPU lock, so it must beat its 3-minute timeout. */
+const NOTICE_REFRESH_MS = 30_000;
+
+function syncDownloadService(): void {
+  if (!LogjamDownloadService) return;
+  const notice = downloadNotice(jobs, backgroundResumesLeft);
+  if (waitTimer && !notice?.waiting) {
+    clearTimeout(waitTimer);
+    waitTimer = null;
+  }
+  if (!notice) {
+    if (shown) LogjamDownloadService.stop();
+    shown = null;
+    return;
+  }
+  // Waiting is bounded in time as well as in restarts: after this the service
+  // goes down and the job stays paused until the user is back.
+  if (notice.waiting && !waitTimer) {
+    waitTimer = setTimeout(() => {
+      waitTimer = null;
+      backgroundResumesLeft = 0;
+      syncDownloadService();
+    }, BACKGROUND_WAIT_MS);
+  }
+  const now = Date.now();
+  if (
+    shown?.text === notice.text &&
+    (notice.waiting || now - shown.at < NOTICE_REFRESH_MS)
+  ) {
+    return;
+  }
+  shown = { text: notice.text, at: now };
+  LogjamDownloadService.show("Downloading maps", notice.text, notice.percent);
 }
 
 // --- Finish toast ---------------------------------------------------------
@@ -167,16 +225,19 @@ export function useRegionDownloads(): RegionJob[] {
  */
 function resumeJobsPausedBy(
   reason: Extract<PausedReason, "background" | "connectivity">,
-): void {
+  only: (job: RegionJob) => boolean = () => true,
+): boolean {
   let changed = false;
   jobs = jobs.map((job) => {
     if (job.state.kind !== "paused" || job.state.reason !== reason) return job;
+    if (!only(job)) return job;
     changed = true;
     return { ...job, state: { kind: "queued" } as RegionJobState };
   });
-  if (!changed) return;
+  if (!changed) return false;
   publish();
   pump();
+  return true;
 }
 
 // Installed on first enqueue rather than at import: a user who never downloads
@@ -186,10 +247,54 @@ function installAutoResumeWatchers(): void {
   if (watchersInstalled) return;
   watchersInstalled = true;
   AppState.addEventListener("change", (state) => {
-    if (state === "active") resumeJobsPausedBy("background");
+    // A fresh allowance each time the app changes sides: it counts restarts
+    // within ONE stretch behind another app.
+    backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
+    // And a fresh wait: one that began with Logjam GPS in front would
+    // otherwise run out early behind another app
+    // (regionDownloadQueue.test.ts).
+    if (waitTimer) clearTimeout(waitTimer);
+    waitTimer = null;
+    if (state !== "active") {
+      syncDownloadService();
+      return;
+    }
+    resumeJobsPausedBy("background");
+    // Also the jobs that ran out of background restarts: the reconnect edge
+    // they were waiting for has already come and gone.
+    resumeJobsPausedBy("connectivity");
   });
-  // Edge-triggered (offline → online), same shape as the sync engine's.
-  subscribeReconnect(() => resumeJobsPausedBy("connectivity"));
+  // Cancel on the notification, which is the only control left once Logjam GPS
+  // is off the screen. It ends what the notification stands for: the work in
+  // hand and the jobs waiting for a connection. A job the user paused, or one
+  // that failed, is not what "Downloading maps" was showing.
+  LogjamDownloadService?.addListener("onCancel", () => {
+    for (const job of jobs) {
+      const { state } = job;
+      if (
+        state.kind === "queued" ||
+        state.kind === "downloading" ||
+        (state.kind === "paused" && state.reason === "connectivity")
+      ) {
+        cancelRegionDownload(job.spec.id);
+      }
+    }
+  });
+  // Every connectivity change, not just offline → online: Wi-Fi arriving
+  // while cellular is already up is what a Wi-Fi-only job is waiting for.
+  NetInfo.addEventListener((state) => {
+    if (!mayResumeOnReconnect(AppState.currentState, backgroundResumesLeft)) {
+      return;
+    }
+    if (
+      resumeJobsPausedBy("connectivity", (job) =>
+        connectionWorthResuming(state, job.spec.allowCellular),
+      ) &&
+      AppState.currentState !== "active"
+    ) {
+      backgroundResumesLeft -= 1;
+    }
+  });
 }
 
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
@@ -306,6 +411,8 @@ async function runProtomapsClip(
         groupLabel: spec.groupLabel,
         bbox: spec.bbox,
         zMax: spec.zMax,
+        demSourceId: spec.demSourceId,
+        contours: spec.contours,
       },
       (progress) =>
         onProgress({
@@ -333,13 +440,24 @@ async function runProtomapsClip(
     // user round that loop indefinitely. (It is also the whole of the 503 seen
     // in local dev: PROTOMAPS_ARCHIVE_URI is unset there and no archive exists
     // to cut from — see api/src/routes/basemap.ts.)
+    // A DEM archive the server does not have (503) is not this run's failure:
+    // the worldwide tiles are saved regardless, so the area still has heights.
+    // Nor is a missing contour archive: the basemap it is drawn over is saved.
+    // The job leaves the queue as if it had never been planned.
+    if (
+      (spec.demSourceId || spec.contours) &&
+      err instanceof ApiError &&
+      err.status === 503
+    ) {
+      return { status: "cancelled" };
+    }
     if (err instanceof ApiError && err.status >= 500) {
       return { status: "failed", code: "source-unavailable" };
     }
     // 4xx is the endpoint rejecting THIS AREA (outside the archive extract, or
     // over the clip cap — see validateRegionClipRequest). Its own message is
     // static and coordinate-free, but the copy the user reads is still ours
-    // (docs/ux-principles.md §13), and what it has to say is "reframe", not "retry".
+    // (shared/DESIGN.md §13), and what it has to say is "reframe", not "retry".
     if (err instanceof ApiError && err.status >= 400) {
       // Two rejections share one 400 — outside the NSW extract, or over the
       // 40 km clip cap. The endpoint's message says which (regionClip.ts),
@@ -371,9 +489,9 @@ export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
       : job,
   );
   publish();
-  void import("./registryDb").then((registry) =>
-    registry.renameArtifactGroup(groupId, groupLabel),
-  );
+  void import("./registryDb")
+    .then((registry) => registry.renameArtifactGroup(groupId, groupLabel))
+    .catch((err) => console.error(err));
 }
 
 /** Stop for now; the partial MBTiles keeps every tile already fetched. */
@@ -397,7 +515,7 @@ export function cancelRegionDownload(id: string): void {
   }
   jobs = jobs.filter((job) => job.spec.id !== id);
   publish();
-  void deleteAbandonedRegion(id);
+  deleteAbandonedRegion(id).catch((err) => console.error(err));
 }
 
 /**
@@ -425,6 +543,7 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   tokens.clear();
   // Module state must not outlive a sign-out (see the note above).
   announcedGroups.clear();
+  backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
   publish();
 }
 

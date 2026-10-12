@@ -12,6 +12,8 @@
      coincidence. */
   --filter-sheet-width: var(--panel-width);
   --bottom-nav-height: 68px;
+  /* A button on the map, which the credits and the instruments clear. */
+  --map-button-size: 42px;
 
   /* A PERCENTAGE, so it is a circle only on a square box — a wider one gets
      an ellipse. Anything pill-shaped wants `--radius-pill`. */
@@ -32,10 +34,8 @@
   --shadow-panel: 4px 0 12px rgba(0, 0, 0, 0.2);
   --shadow-float: 0 2px 10px rgba(0, 0, 0, 0.28);
   --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
-
-  /* Type relative to its parent, for a label inside a label. */
-  --text-xs: 0.75em;
-  --text-sm: 0.85em;
+  /* The narrow-web sheet's top edge, over the map. */
+  --shadow-sheet: 0 -4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* The reset. Every width in this app is written as though padding and border

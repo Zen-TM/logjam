@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { idRange } from "./placesModel";
 
 /**
- * A list's multi-select (DESIGN.md §5): tick a row's tile, shift-click for a
+ * A list's multi-select (DESIGN.md): tick a row's tile, shift-click for a
  * range, Esc clears, Ctrl/Cmd-A picks every row the list shows. Attach `rootRef`
  * to the panel so the keys only act while focus is in it.
  *

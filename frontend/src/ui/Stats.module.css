@@ -38,17 +38,20 @@
 
 .axis {
   text-align: center;
-  font-size: var(--font-xs);
+}
+
+.axisIdle {
+  composes: meta from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
-.axis[data-current] {
-  font-weight: 700;
+.axisCurrent {
+  composes: caption from "../textRoles.generated.module.css";
   color: var(--color-text);
 }
 
 .caption {
-  font-size: var(--font-xs);
+  composes: meta from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -114,13 +117,12 @@
 }
 
 .statLabel {
-  font-size: var(--font-xs);
+  composes: meta from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .statValue {
+  composes: heading from "../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-lg);
-  font-weight: 600;
   color: var(--color-text);
 }

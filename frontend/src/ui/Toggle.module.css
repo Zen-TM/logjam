@@ -2,7 +2,9 @@
   position: relative;
   flex: none;
   width: var(--switch-width);
-  height: 22px;
+  /* intrinsic: the drawn track. The target around it is `::after` below. */
+  --track-height: 22px;
+  height: var(--track-height);
   padding: 0;
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-text-muted);
@@ -11,6 +13,15 @@
   transition:
     background-color var(--motion-fast),
     border-color var(--motion-fast);
+}
+
+/* The track is drawn smaller than a target may be: this grows what a pointer
+   hits to `--control-sm` (24px under a mouse, 32 on a touch screen) around it,
+   without moving what is seen. */
+.toggle::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--control-sm) - var(--track-height)) / -2) 0;
 }
 
 .thumb {
@@ -78,12 +89,12 @@
 }
 
 .title {
-  font-size: var(--font-sm);
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text);
 }
 
 .description {
-  font-size: var(--font-xs);
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
   /* A description may hold an unbroken token (an OSM query) wider than the row. */
   overflow-wrap: anywhere;

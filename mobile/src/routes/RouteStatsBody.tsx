@@ -3,7 +3,7 @@
 //
 // Split out of the old standalone RouteStatsSheet for the same reason
 // `tracks/TrackStatsBody.tsx` was: the stats are a SUB-MODE of the route's
-// options sheet now (DESIGN.md §5), not a sheet of their own, so the body has
+// options sheet now (DESIGN.md), not a sheet of their own, so the body has
 // to be mountable inside someone else's `BottomSheet`.
 //
 // It owns its own elevation hook rather than taking a profile prop — unlike a
@@ -14,16 +14,18 @@
 // Elevation is fetched on demand and is simply absent offline (see
 // useElevationProfile) — the distance is always right, which is the number
 // being looked for most of the time.
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
+  elevationSeries,
   formatDistanceM,
+  MAP_MEASURE,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   routeLengthM,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { ProfileChart, StatGrid, elevationSeries } from "../ui";
+import { spacing, makeStyles, muted } from "../theme";
+import { ProfileChart, StatGrid } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
 
@@ -38,6 +40,8 @@ export function RouteStatsBody({
    */
   allowNetwork?: boolean;
 }) {
+  const styles = useStyles();
+
   const { profile, loading } = useElevationProfile([route.points], {
     allowNetwork,
   });
@@ -87,7 +91,7 @@ export function RouteStatsBody({
       ) : (
         <Text style={styles.pending}>
           {loading
-            ? "Reading the terrain…"
+            ? MAP_MEASURE.copy.readingTerrain
             : "Elevation needs a connection; distance always shows."}
         </Text>
       )}
@@ -95,19 +99,12 @@ export function RouteStatsBody({
   );
 }
 
-const styles = StyleSheet.create({
-  chartLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+const useStyles = makeStyles((theme, textRole) => ({
+  chartLabel: { ...muted(theme, textRole.section) },
   body: { gap: spacing(1.5) },
   band: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...muted(theme, textRole.detail),
     fontVariant: ["tabular-nums"],
   },
-  pending: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+  pending: { ...muted(theme, textRole.detail) },
+}));

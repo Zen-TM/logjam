@@ -4,7 +4,7 @@ import { uploadMedia } from "../../placeUtils";
 import { resolveMediaType, generateThumbnail } from "./mediaFiles";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MediaUpload.module.css";
-import { Icon } from "../../ui";
+import { FieldError, Icon } from "../../ui";
 
 // One uploader serves both surfaces; the category narrows what's accepted.
 //   visual → photos + videos      track → GPX/KML only      (undefined → all)
@@ -186,9 +186,7 @@ export default function MediaUpload({
         />
       </div>
       {errors.map((message, i) => (
-        <div key={i} className={classes.error}>
-          {message}
-        </div>
+        <FieldError key={i} message={message} />
       ))}
     </div>
   );

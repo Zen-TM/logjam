@@ -1,15 +1,14 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
 
 import {
-  fontSize,
-  fontWeight,
   hitSlop,
   radius,
   scrim,
   spacing,
-  theme,
-  withAlpha,
+  makeStyles,
+  useTheme,
+  opacity,
 } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -54,6 +53,9 @@ export function ColourField({
   hideLabel?: boolean;
   disabled?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [open, setOpen] = useState(false);
   const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
   return (
@@ -126,7 +128,7 @@ export function ColourField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   field: {
     flexDirection: "row",
     alignItems: "center",
@@ -134,12 +136,7 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     minHeight: CELL,
   },
-  label: {
-    flex: 1,
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.rowTitle, flex: 1, color: theme.text },
   trigger: {
     width: CELL,
     height: CELL,
@@ -148,7 +145,7 @@ const styles = StyleSheet.create({
     borderRadius: CELL / 2,
   },
   pressed: { backgroundColor: theme.cardPressed },
-  disabled: { opacity: 0.4 },
+  disabled: { opacity: opacity.disabled },
   // The disc's own hairline, so a light swatch does not vanish into a light
   // card (and a dark one into a dark card).
   swatch: {
@@ -158,7 +155,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.2),
+    borderColor: theme.line,
   },
   backdrop: {
     flex: 1,
@@ -182,11 +179,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  title: { ...textRole.rowTitle, color: theme.text },
   // Three to a row, as on Logjam Web: a single flat row of ten spends the width
   // showing nine colours nobody picked.
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center" },
@@ -200,4 +193,4 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   cellChosen: { borderColor: theme.accent },
-});
+}));

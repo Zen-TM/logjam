@@ -1,12 +1,16 @@
+import { DEFAULT_THEME_SCHEME_ID, THEME_SCHEMES } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { BASEMAP_ASSETS_REMOTE_BASE, buildShellStyle } from "./shellStyle";
+
+const theme = THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens;
 
 describe("buildShellStyle", () => {
   it("uses bundled file:// URLs when the local assets base is available", () => {
     const style = buildShellStyle(
       "file:///data/user/0/com.logjamnsw.mobile/files/basemap-assets/",
       "light",
+      theme,
     );
     expect(style.glyphs).toBe(
       "file:///data/user/0/com.logjamnsw.mobile/files/basemap-assets/fonts/{fontstack}/{range}.pbf",
@@ -17,7 +21,7 @@ describe("buildShellStyle", () => {
   });
 
   it("falls back to the remote asset host when install failed", () => {
-    const style = buildShellStyle(null, "light");
+    const style = buildShellStyle(null, "light", theme);
     expect(style.glyphs).toBe(
       `${BASEMAP_ASSETS_REMOTE_BASE}/fonts/{fontstack}/{range}.pbf`,
     );
@@ -25,13 +29,13 @@ describe("buildShellStyle", () => {
   });
 
   it("selects the sprite flavor", () => {
-    expect(buildShellStyle(null, "dark").sprite).toMatch(
+    expect(buildShellStyle(null, "dark", theme).sprite).toMatch(
       /\/sprites\/v4\/dark$/,
     );
   });
 
   it("is a style OBJECT with a background layer (never an empty style)", () => {
-    const style = buildShellStyle(null, "light");
+    const style = buildShellStyle(null, "light", theme);
     expect(style.version).toBe(8);
     expect(style.layers[0]?.type).toBe("background");
   });

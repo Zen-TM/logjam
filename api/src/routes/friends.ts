@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
@@ -33,7 +34,7 @@ import {
   type DirectShareRevocation,
 } from "../lib/revokeDirectShares";
 
-async function wantsInAppNotification(
+export async function wantsInAppNotification(
   userId: string,
   key: "friendRequestInApp" | "shareInApp",
 ): Promise<boolean> {
@@ -43,6 +44,136 @@ async function wantsInAppNotification(
   });
   if (!target) return false;
   return normalizeUserUiPreferences(target.uiPreferences).notifications[key];
+}
+
+/** A write refused by a unique index. For a friendship that is
+ *  `friendships_pair_key`: the other of two racing writes for the same pair
+ *  landed first. Guard: friendPairRace.unit.test.ts. */
+export function isUniqueViolation(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
+  );
+}
+
+/** `userId`, its addressee, says yes to a pending request: the row is
+ *  accepted (which moves `updatedAt`, the delta pull's watermark), their own
+ *  prompt for it goes, and the requester is told if they want to be. */
+async function acceptFriendRequest(
+  friendship: { id: string; requesterId: string },
+  userId: string,
+) {
+  const { id, requesterId } = friendship;
+  const notifyRequester = await wantsInAppNotification(
+    requesterId,
+    "friendRequestInApp",
+  );
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.friendship.update({
+      where: { id },
+      data: { status: "accepted" },
+    });
+    // Purge this user's own friend_request notification, mirroring decline
+    // (PRIV-003) — otherwise a stale actionable notification survives the
+    // accept and later 400s from the Notifications panel.
+    await tx.notification.deleteMany({
+      where: {
+        userId,
+        type: "friend_request",
+        payload: { path: ["friendshipId"], equals: id },
+      },
+    });
+    if (notifyRequester) {
+      // Reference IDs only — username is resolved at read time (PRIV-005).
+      await tx.notification.create({
+        data: {
+          userId: requesterId,
+          type: "friend_request_accepted",
+          payload: {
+            friendshipId: id,
+            acceptedById: userId,
+          },
+        },
+      });
+    }
+    return u;
+  });
+  if (notifyRequester) {
+    // Best-effort push after commit; generic title + opaque IDs only.
+    void sendPushToUser(requesterId, {
+      type: "friend_request_accepted",
+      friendshipId: id,
+    });
+  }
+  return updated;
+}
+
+/** One attempt at POST /friends/request. Throws P2002 when another write
+ *  gives the pair its row between the read and the insert. */
+async function requestOrAccept(userId: string, addresseeId: string) {
+  const existing = await prisma.friendship.findFirst({
+    where: {
+      OR: [
+        { requesterId: userId, addresseeId },
+        { requesterId: addresseeId, addresseeId: userId },
+      ],
+    },
+  });
+  if (existing) {
+    if (existing.status === "blocked")
+      throw new AppError(403, "Unable to send friend request");
+    if (existing.status === "accepted")
+      throw new AppError(409, "Already friends");
+    if (existing.requesterId === userId)
+      throw new AppError(409, "Friend request already pending");
+    // Their request to this user is the one waiting. Both have asked, so
+    // this is the yes: the same friendship whether the two requests were a
+    // year apart or raced. 200, not 201: nothing was created.
+    return {
+      status: 200,
+      friendship: await acceptFriendRequest(existing, userId),
+    };
+  }
+
+  const notifyAddressee = await wantsInAppNotification(
+    addresseeId,
+    "friendRequestInApp",
+  );
+
+  // Create friendship first so the notification can reference its real ID
+  // atomically inside the same transaction.
+  const friendship = await prisma.$transaction(async (tx) => {
+    const created = await tx.friendship.create({
+      data: {
+        requesterId: userId,
+        addresseeId,
+        status: "pending",
+      },
+    });
+    if (notifyAddressee) {
+      // Reference IDs only — username is resolved at read time (PRIV-005).
+      await tx.notification.create({
+        data: {
+          userId: addresseeId,
+          type: "friend_request",
+          payload: {
+            friendshipId: created.id,
+            requesterId: userId,
+          },
+        },
+      });
+    }
+    return created;
+  });
+  if (notifyAddressee) {
+    // Best-effort push after commit; generic title + opaque IDs only
+    // (privacy rule — see services/push.ts).
+    void sendPushToUser(addresseeId, {
+      type: "friend_request",
+      friendshipId: friendship.id,
+    });
+  }
+  return { status: 201, friendship };
 }
 
 const router = Router();
@@ -106,7 +237,8 @@ router.get(
 );
 
 // ── POST /friends/request ─────────────────────────────────────
-// Send a friend request to another user
+// Send a friend request to another user, or accept the one they sent.
+// 201 with the pending row, or 200 with the row now accepted.
 router.post(
   "/request",
   requireAuth,
@@ -125,65 +257,21 @@ router.post(
     // which user ids exist.
     if (!addressee) throw new AppError(403, "Unable to send friend request");
 
-    // Check for any existing friendship or pending request in either direction
-    const existing = await prisma.friendship.findFirst({
-      where: {
-        OR: [
-          { requesterId: user.id, addresseeId },
-          { requesterId: addresseeId, addresseeId: user.id },
-        ],
-      },
-    });
-
-    if (existing) {
-      if (existing.status === "accepted")
-        throw new AppError(409, "Already friends");
-      if (existing.status === "pending")
+    // Lost to a racing request or redeem for the same pair: go again, and
+    // this attempt reads the row that won, so a race ends where the same two
+    // requests would have ended a year apart.
+    const { status, friendship } = await requestOrAccept(user.id, addresseeId)
+      .catch((err: unknown) => {
+        if (!isUniqueViolation(err)) throw err;
+        return requestOrAccept(user.id, addresseeId);
+      })
+      .catch((err: unknown) => {
+        if (!isUniqueViolation(err)) throw err;
+        // The pair's row came, went and came again: nothing was made here.
         throw new AppError(409, "Friend request already pending");
-      if (existing.status === "blocked")
-        throw new AppError(403, "Unable to send friend request");
-    }
-
-    const notifyAddressee = await wantsInAppNotification(
-      addresseeId,
-      "friendRequestInApp",
-    );
-
-    // Create friendship first so the notification can reference its real ID
-    // atomically inside the same transaction.
-    const friendship = await prisma.$transaction(async (tx) => {
-      const created = await tx.friendship.create({
-        data: {
-          requesterId: user.id,
-          addresseeId,
-          status: "pending",
-        },
       });
-      if (notifyAddressee) {
-        // Reference IDs only — username is resolved at read time (PRIV-005).
-        await tx.notification.create({
-          data: {
-            userId: addresseeId,
-            type: "friend_request",
-            payload: {
-              friendshipId: created.id,
-              requesterId: user.id,
-            },
-          },
-        });
-      }
-      return created;
-    });
-    if (notifyAddressee) {
-      // Best-effort push after commit; generic title + opaque IDs only
-      // (privacy rule — see services/push.ts).
-      void sendPushToUser(addresseeId, {
-        type: "friend_request",
-        friendshipId: friendship.id,
-      });
-    }
 
-    res.status(201).json(friendship);
+    res.status(status).json(friendship);
   },
 );
 
@@ -203,50 +291,7 @@ router.patch(
     if (friendship.status !== "pending")
       throw new AppError(400, "Friend request is not pending");
 
-    const notifyRequester = await wantsInAppNotification(
-      friendship.requesterId,
-      "friendRequestInApp",
-    );
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const u = await tx.friendship.update({
-        where: { id },
-        data: { status: "accepted" },
-      });
-      // Purge this user's own friend_request notification, mirroring decline
-      // (PRIV-003) — otherwise a stale actionable notification survives the
-      // accept and later 400s from the Notifications panel.
-      await tx.notification.deleteMany({
-        where: {
-          userId: user.id,
-          type: "friend_request",
-          payload: { path: ["friendshipId"], equals: id },
-        },
-      });
-      if (notifyRequester) {
-        // Reference IDs only — username is resolved at read time (PRIV-005).
-        await tx.notification.create({
-          data: {
-            userId: friendship.requesterId,
-            type: "friend_request_accepted",
-            payload: {
-              friendshipId: id,
-              acceptedById: user.id,
-            },
-          },
-        });
-      }
-      return u;
-    });
-    if (notifyRequester) {
-      // Best-effort push after commit; generic title + opaque IDs only.
-      void sendPushToUser(friendship.requesterId, {
-        type: "friend_request_accepted",
-        friendshipId: id,
-      });
-    }
-
-    res.json(updated);
+    res.json(await acceptFriendRequest(friendship, user.id));
   },
 );
 

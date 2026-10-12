@@ -19,11 +19,13 @@ import { AppError } from "../middleware/errorHandler";
 import { regionClipLimiter } from "../middleware/rateLimit";
 import { resolveUser } from "../lib/resolveUser";
 import { getEnv } from "../lib/env";
+import { demArchiveFor } from "../services/elevation";
 import { logger } from "../lib/logger";
 import {
   CLIP_TOKEN_TTL_MS,
   MAX_CLIP_OUTPUT_BYTES,
   createClipTokenStore,
+  pmtilesExtractArgs,
   validateRegionClipRequest,
 } from "../lib/regionClip";
 
@@ -51,19 +53,21 @@ function runPmtilesExtract(
   outPath: string,
   bboxArg: string,
   maxzoom: number,
+  minzoom?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     // Args passed as an array — no shell, no injection surface. The bbox
     // reaches only the pmtiles process, never a log line.
     const child = spawn(
       "pmtiles",
-      [
-        "extract",
+      pmtilesExtractArgs(
         archiveUri,
         outPath,
-        `--bbox=${bboxArg}`,
-        `--maxzoom=${maxzoom}`,
-      ],
+        bboxArg,
+        maxzoom,
+        env.AWS_REGION,
+        minzoom,
+      ),
       { stdio: ["ignore", "ignore", "pipe"] },
     );
     // Collect stderr for failure classification but never log it raw — the
@@ -105,22 +109,26 @@ router.post(
   regionClipLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    if (!env.PROTOMAPS_ARCHIVE_URI) {
-      throw new AppError(503, "Region clips are not available");
-    }
     const validated = validateRegionClipRequest(req.body);
     if (!validated.ok) throw new AppError(400, validated.error);
-    const { bbox, maxzoom } = validated.value;
+    const { bbox, minzoom, maxzoom, archive } = validated.value;
+    // A DEM or contour archive is cut from where it is served (shared
+    // demSources.ts, nswContours.ts); the basemap from its own configured
+    // location.
+    const archiveUri = archive
+      ? env.TOPO_CDN_BASE_URL &&
+        `${env.TOPO_CDN_BASE_URL.replace(/\/$/, "")}/${archive.archivePath}`
+      : env.PROTOMAPS_ARCHIVE_URI;
+    // An archive that is not there yet is "not available", which the phone
+    // skips quietly for these two; a clip that then fails is a 502 it reports.
+    if (!archiveUri || (archive && !(await demArchiveFor(archive)))) {
+      throw new AppError(503, "Region clips are not available");
+    }
 
     const outPath = path.join(os.tmpdir(), `clip-${randomUUID()}.pmtiles`);
     const bboxArg = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
     try {
-      await runPmtilesExtract(
-        env.PROTOMAPS_ARCHIVE_URI,
-        outPath,
-        bboxArg,
-        maxzoom,
-      );
+      await runPmtilesExtract(archiveUri, outPath, bboxArg, maxzoom, minzoom);
       const { size } = await fs.stat(outPath);
       if (size > MAX_CLIP_OUTPUT_BYTES) {
         await fs.unlink(outPath);

@@ -10,6 +10,7 @@
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { TRACK_COLORS } from "@logjam/shared";
 
 import {
   API_URL,
@@ -55,8 +56,10 @@ async function createStandaloneImport(
   sub: string,
   filename = `import-${Date.now()}-${Math.random().toString(16).slice(2)}.gpx`,
   displayName?: string,
+  color?: string,
 ): Promise<string> {
   const body = {
+    ...(color ? { color } : {}),
     linkedType: "none",
     origin: "import",
     filename,
@@ -389,6 +392,169 @@ describe("the delta pull carries standalone files", () => {
       );
       expect(moved).toBeDefined();
       expect(moved.linkedId).toBe(placeId);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+});
+
+describe("recolouring a standalone file", () => {
+  it("changes the colour to a palette colour and leaves the label alone", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB, undefined, "Keep");
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(ALICE_SUB))
+        .send({ color: TRACK_COLORS[3] });
+      expect(res.status).toBe(200);
+      expect(res.body.color).toBe(TRACK_COLORS[3]);
+      expect(res.body.displayName).toBe("Keep");
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses a colour outside the palette", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(ALICE_SUB))
+        .send({ color: "#123456" });
+      expect(res.status).toBe(400);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses a foreign file with 404", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(BOB_SUB))
+        .send({ color: TRACK_COLORS[3] });
+      expect(res.status).toBe(404);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("keeps the colour the phone picked at upload instead of reassigning it", async () => {
+    const mediaId = await createStandaloneImport(
+      ALICE_SUB,
+      undefined,
+      undefined,
+      TRACK_COLORS[5],
+    );
+    try {
+      const mine = await request(API_URL)
+        .get("/media/standalone")
+        .set(as(ALICE_SUB));
+      const row = mine.body.find((f: { id: string }) => f.id === mediaId);
+      expect(row.color).toBe(TRACK_COLORS[5]);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+});
+
+describe("replacing a recorded track's climb", () => {
+  const TRACK_METADATA = {
+    bbox: [150.4, -33.51, 150.41, -33.5],
+    distanceM: 1400,
+    durationMs: 1_200_000,
+    elevationGainM: 99,
+    elevationLossM: 95,
+    pointCount: 2,
+    startedAt: "2026-09-01T00:10:00.000Z",
+    endedAt: "2026-09-01T00:30:00.000Z",
+  };
+  const CLIMB = {
+    elevationGainM: 41,
+    elevationLossM: 38,
+    elevationSource: "nsw-5m",
+  };
+
+  /** Upload one recorded track, with GPS figures and no source beside them. */
+  async function createTrack(sub: string): Promise<string> {
+    const body = {
+      linkedType: "none",
+      origin: "track",
+      filename: `track-${Date.now()}-${Math.random().toString(16).slice(2)}.gpx`,
+      mediaType: GPX_MIME,
+      metadata: TRACK_METADATA,
+    };
+    const presign = await request(API_URL)
+      .post("/media/presign")
+      .set(as(sub))
+      .send({ ...body, sizeBytes: GPX_BYTES.length });
+    expect(presign.status).toBe(201);
+    await putToPresignedUrl(presign.body.displayUploadUrl, GPX_BYTES, GPX_MIME);
+    const confirm = await request(API_URL)
+      .post(`/media/${presign.body.mediaId}/confirm`)
+      .set(as(sub))
+      .send(body);
+    expect(confirm.status).toBe(201);
+    // A row written without a source keeps none: absent means GPS.
+    expect(confirm.body.metadata).toEqual(TRACK_METADATA);
+    return presign.body.mediaId as string;
+  }
+
+  it("stores the new figures with their source and leaves every other stat", async () => {
+    const mediaId = await createTrack(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(ALICE_SUB))
+        .send(CLIMB);
+      expect(res.status).toBe(200);
+      expect(res.body.metadata).toEqual({ ...TRACK_METADATA, ...CLIMB });
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses figures without a source, and a source it does not know", async () => {
+    const mediaId = await createTrack(ALICE_SUB);
+    try {
+      for (const body of [
+        { elevationGainM: 41, elevationLossM: 38 },
+        { ...CLIMB, elevationSource: "barometer" },
+        { ...CLIMB, elevationLossM: -1 },
+      ]) {
+        const res = await request(API_URL)
+          .patch(`/media/${mediaId}`)
+          .set(as(ALICE_SUB))
+          .send(body);
+        expect(res.status).toBe(400);
+      }
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses a climb on an import, which has none", async () => {
+    const mediaId = await createStandaloneImport(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(ALICE_SUB))
+        .send(CLIMB);
+      expect(res.status).toBe(400);
+    } finally {
+      await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  it("refuses a foreign track with 404", async () => {
+    const mediaId = await createTrack(ALICE_SUB);
+    try {
+      const res = await request(API_URL)
+        .patch(`/media/${mediaId}`)
+        .set(as(BOB_SUB))
+        .send(CLIMB);
+      expect(res.status).toBe(404);
     } finally {
       await deleteMedia(ALICE_SUB, mediaId);
     }

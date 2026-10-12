@@ -8,6 +8,7 @@
 // things, what was I trying to do, why did it fail, can I fix it, and what
 // happens if I ignore it. Everything below exists to answer one of them.
 import {
+  ATTRIBUTE_NOUN,
   invalidPlaceFields,
   isTransientSyncError,
   SYSTEM_FIELD_DEFS,
@@ -73,7 +74,7 @@ const FIELD_LABEL: Record<string, string> = {
  * Fields whose VALUE must never be rendered, whatever the op happens to carry.
  * A parked place create holds latitude/longitude, and this screen is exactly the
  * kind of page that ends up in a screenshot attached to a bug report — which is
- * the reason docs/ux-principles.md §13 keeps coordinates off lists entirely.
+ * the reason shared/DESIGN.md §13 keeps coordinates off lists entirely.
  */
 const UNRENDERABLE_FIELDS = new Set(["latitude", "longitude"]);
 
@@ -146,36 +147,118 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
     // the user it is permanent on no evidence and inviting them to discard work.
     return { line: "This change couldn't be saved.", canRetry: true };
   }
+  if (error.code === 0) {
+    // An upload that threw on this phone five times with no status at all
+    // (flush.ts): nothing refused it and no day went by, so neither sentence
+    // below is true of it.
+    return { line: "This keeps failing on this phone.", canRetry: true };
+  }
   if (isTransientSyncError(error.code)) {
-    // ONE line for every temporary failure. A dropped connection (code 0) and a
-    // server that answered but refused (503) are different faults to us and the
-    // same fact to the reader: it didn't get through, and it is worth another
-    // go. Splitting them produced two sentences that looked like two different
-    // problems on two rows of one list.
+    // ONE line for every temporary refusal: a 503 and a 429 are different
+    // faults to us and the same fact to the reader.
     //
-    // A temporary failure only reaches this screen after the engine has spent
-    // its own attempts on it (PUSH_MAX_ATTEMPTS / MEDIA_MAX_ATTEMPTS in
-    // flush.ts). Saying so is what stops "Try again" reading as a chore the app
-    // could have done itself — it already did, five times.
-    const tried = op.attempts > 1 ? `The app tried ${op.attempts} times. ` : "";
+    // It only reaches this screen after the account has answered no for a day
+    // (`shouldGiveUpOnSyncOp`, applied in flush.ts), and the copy says exactly
+    // that. It used to send the reader to find better signal, which was
+    // written for a five-tries cap that a minute of bad signal could reach;
+    // an unanswered send no longer counts at all.
     return {
-      line: "Couldn't reach your account.",
+      line: "Your account kept turning this down for a day.",
       canRetry: true,
       hint:
-        `${tried}Nothing is wrong with the change itself — try again once you're ` +
-        "somewhere with better signal. It waits here until it gets through.",
+        "Nothing is wrong with the change itself, and Logjam GPS has stopped " +
+        "trying on its own. It stays here until you try again.",
     };
   }
-  return {
-    // The server's own message is domain copy we wrote ("Longest abseil must be
-    // a number between 0 and 500"), so it is worth more than anything generic,
-    // and it names the field the "What you changed" block above it is showing.
-    // No hint: the rows underneath ARE the advice, and a sentence telling the
-    // user to go and do what the next button does is a sentence that has not
-    // earned its place.
-    line: error.message || "This change can't be saved as it is.",
-    canRetry: false,
+  return { line: rejectionLine(op), canRetry: false };
+}
+
+const CANT_SAVE = "This change can't be saved as it is.";
+
+/**
+ * One plain sentence for a refusal about the request, chosen from what the
+ * phone already knows: the entity, the op, the status code and the fields it
+ * sent. The server's own message is never read — it is developer wording, it
+ * can carry a name, and `ParkedOp.error` no longer holds it. Anything we cannot
+ * name falls back to `CANT_SAVE`.
+ *
+ * The lines name a KIND of thing ("place", "trip"), never the user's own text:
+ * which one it is already the row's title.
+ */
+export function rejectionLine(op: ParkedOp): string {
+  const code = op.error?.code;
+  const fields = op.fields ?? {};
+  // Missing means "not sent": an update carries only what it dirtied, so only a
+  // create can be missing a field.
+  const blank = (key: string): boolean => {
+    const value = fields[key];
+    if (value === undefined) return op.op === "create";
+    return typeof value !== "string" || value.trim() === "";
   };
+
+  if (code === 409) {
+    if (op.entity === "placeType") {
+      return op.op === "delete"
+        ? "This place type still has places in it. Move them to another type first."
+        : "You already have a place type with that name.";
+    }
+    if (op.entity === "customFieldDef") {
+      return `You already have an ${ATTRIBUTE_NOUN.one} with that name.`;
+    }
+  }
+  if (code === 403 && op.entity === "placeType" && op.op === "delete") {
+    return "Built-in place types can't be deleted.";
+  }
+  if (code === 404 && op.entity === "placeLink") {
+    return "One of the places in this link no longer exists.";
+  }
+  if (code === 400 && op.op !== "delete") {
+    switch (op.entity) {
+      case "place":
+        if (op.op === "create" && blank("name")) {
+          return "This place needs a name before it can sync.";
+        }
+        if (rejectedFields(op).length > 0) {
+          return "A value on this place is outside the range it accepts.";
+        }
+        break;
+      case "tripLog": {
+        if (op.op === "create" && !fields.date) {
+          return "This trip needs a date before it can sync.";
+        }
+        if (
+          typeof fields.date === "string" &&
+          Number.isNaN(new Date(fields.date).getTime())
+        ) {
+          return "The date on this trip isn't a real date.";
+        }
+        if (Array.isArray(fields.placeIds) && fields.placeIds.length > 0) {
+          return "This trip names a place that no longer exists.";
+        }
+        break;
+      }
+      case "placeType":
+        if (blank("name")) {
+          return "This place type needs a name before it can sync.";
+        }
+        break;
+      case "customFieldDef":
+        if (blank("label")) {
+          return `This ${ATTRIBUTE_NOUN.one} needs a name before it can sync.`;
+        }
+        if (
+          typeof fields.min === "number" &&
+          typeof fields.max === "number" &&
+          fields.min > fields.max
+        ) {
+          return "The smallest value can't be above the largest.";
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return CANT_SAVE;
 }
 
 /**
@@ -246,7 +329,7 @@ export function salvageableFields(op: ParkedOp): string[] {
  *
  * PRIVACY: values go through `previewValue`, which refuses coordinates; a
  * create op carries them and this screen is the one that ends up in a
- * screenshot (docs/ux-principles.md §13). Media's fields are bookkeeping — filename only.
+ * screenshot (shared/DESIGN.md §13). Media's fields are bookkeeping — filename only.
  */
 export type OpChange = { label: string; value: string; rejected: boolean };
 

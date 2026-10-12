@@ -16,7 +16,11 @@
 // PRIVACY: imports are the user's own tracks — place-area coordinates. Rows,
 // bboxes and paths never reach logs, telemetry or crash reports; having any
 // import on disk arms the Stage 4 app lock (see AppLockGate).
-import { mediaDisplayName, type MediaMetadata } from "@logjam/shared";
+import {
+  mediaDisplayName,
+  TRACK_COLORS,
+  type MediaMetadata,
+} from "@logjam/shared";
 
 import { getOfflineDb } from "../offline/registryDb";
 import {
@@ -121,7 +125,7 @@ function join(
   return {
     id: media.id,
     name: mediaDisplayName(media),
-    color: media.color ?? "#e6194b",
+    color: media.color ?? TRACK_COLORS[0],
     visible: view ? view.visible !== 0 : true,
     path: view?.path ?? null,
     sourcePath: view?.sourcePath ?? null,

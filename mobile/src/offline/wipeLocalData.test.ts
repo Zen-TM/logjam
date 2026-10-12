@@ -72,8 +72,9 @@ vi.mock("../tracks/trackRecorder", () => ({
     return Promise.resolve();
   },
 }));
+const resetDatabase = vi.hoisted(() => vi.fn());
 vi.mock("@maplibre/maplibre-react-native", () => ({
-  OfflineManager: { resetDatabase: () => Promise.resolve() },
+  OfflineManager: { resetDatabase: () => resetDatabase() },
 }));
 vi.mock("../sync/syncDb", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sync/syncDb")>()),
@@ -83,6 +84,7 @@ vi.mock("../sync/syncDb", async (importOriginal) => ({
 beforeEach(() => {
   events.length = 0;
   failOn = null;
+  resetDatabase.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -153,6 +155,23 @@ describe("wipeAllLocalData", () => {
     failOn = (e) => e === `sql:DELETE FROM ${SYNC_TABLES[0].name}`;
     const { failed } = await wipeAllLocalData();
     expect(failed).toContain("synced data");
+    expect(events).toContain("sql:DELETE FROM map_artifact");
+  });
+});
+
+// The sign-out wipe resets MapLibre's ambient tile cache, and a failure there
+// is reported rather than swallowed. Dropping the `resetDatabase` call turns
+// the first test red; dropping the `failed.push("map tile cache")` turns the
+// second red.
+describe("wipeAllLocalData and the MapLibre tile cache", () => {
+  it("resets the ambient cache and reports a clean wipe", async () => {
+    expect(await wipeAllLocalData()).toEqual({ failed: [] });
+    expect(resetDatabase).toHaveBeenCalledOnce();
+  });
+
+  it("names the tile cache as failed, and still clears the rest", async () => {
+    resetDatabase.mockRejectedValue(new Error("boom"));
+    expect(await wipeAllLocalData()).toEqual({ failed: ["map tile cache"] });
     expect(events).toContain("sql:DELETE FROM map_artifact");
   });
 });

@@ -38,10 +38,9 @@
 }
 
 .title {
+  composes: heading from "../textRoles.generated.module.css";
   flex: 1;
   margin: 0;
-  font-size: var(--font-lg);
-  font-weight: 600;
 }
 
 .title:focus-visible {
@@ -58,7 +57,7 @@
   padding: var(--space-1-5) var(--gutter);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--form-section);
 }
 
 .foot {
@@ -76,6 +75,7 @@
 }
 
 .sectionTitle {
+  composes: section from "../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -86,10 +86,6 @@
      floats midway and the eye reads it as belonging to the row above. Set on
      the kit rather than per page: every list that stacks sections wants it. */
   padding-top: var(--space-1);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
   color: var(--color-text-muted);
 }
 

@@ -235,6 +235,7 @@ export function Popover({
   label,
   placement = "bottom-end",
   className,
+  fit = false,
   dismissOnOutsidePress = false,
   closeButton = true,
   children,
@@ -245,6 +246,11 @@ export function Popover({
   label: string;
   placement?: Placement;
   className?: string;
+  /** Hug the contents instead of the Layers list's width: a value picker's
+   *  panel is as wide as its swatches and no wider. Declared here, beside the
+   *  default it replaces, because a caller's own `width` loses to it whenever
+   *  the kit's stylesheet happens to load last. */
+  fit?: boolean;
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
   /** The × at the top right (UX §3: every surface carries its way out). Off
@@ -274,7 +280,9 @@ export function Popover({
       role="dialog"
       aria-label={label}
       tabIndex={-1}
-      className={[classes.popover, className].filter(Boolean).join(" ")}
+      className={[classes.popover, fit && classes.fit, className]
+        .filter(Boolean)
+        .join(" ")}
     >
       {open && closeButton && (
         <div className={classes.bar}>

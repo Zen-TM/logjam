@@ -14,19 +14,24 @@ import { AppError } from "../middleware/errorHandler";
 import { elevationLimiter } from "../middleware/rateLimit";
 import {
   buildElevationProfile,
+  demCredits,
   densifyLineSegments,
+  ELEVATION_PROFILE_MAX_SAMPLES,
+  ELEVATION_TRACK_MAX_SAMPLES,
   MAX_ROUTE_POINTS,
   parseRoutePoints,
   ROUTE_ERRORS,
   type RoutePoint,
 } from "@logjam/shared";
-import { DEM_ATTRIBUTION, sampleElevations } from "../services/elevation";
+import { sampleElevations } from "../services/elevation";
 
 const router = Router();
 
 // ── POST /elevation/profile ───────────────────────────────────
 // Body: { points: [[lon, lat], ...] }        — a single line (routes, web)
 //   or  { segments: [[[lon, lat], ...], ...] } — a multi-segment track
+//   and optionally { maxSamples } — a track asks for a higher sample ceiling
+//   than a drawn line gets, capped at ELEVATION_TRACK_MAX_SAMPLES.
 // Returns evenly spaced samples along the line(s) plus gain/loss.
 router.post(
   "/profile",
@@ -61,11 +66,24 @@ router.post(
       throw new AppError(400, ROUTE_ERRORS.tooManyPoints);
     }
 
-    const positions = densifyLineSegments(segments);
-    const elevations = await sampleElevations(positions);
-    const profile = buildElevationProfile(positions, elevations);
+    // Clamped, never refused: a caller that sends nothing, or nonsense, gets
+    // the default ceiling, and none can make one request read more than a
+    // track's.
+    const asked: unknown = req.body?.maxSamples;
+    const maxSamples =
+      typeof asked === "number" && Number.isInteger(asked) && asked >= 2
+        ? Math.min(asked, ELEVATION_TRACK_MAX_SAMPLES)
+        : ELEVATION_PROFILE_MAX_SAMPLES;
+    const positions = densifyLineSegments(segments, maxSamples);
+    const profile = buildElevationProfile(
+      positions,
+      await sampleElevations(positions),
+    );
 
-    res.json({ ...profile, attribution: DEM_ATTRIBUTION });
+    res.json({
+      ...profile,
+      attribution: demCredits(profile.demSourceIds).join(" "),
+    });
   },
 );
 

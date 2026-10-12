@@ -55,11 +55,16 @@ export default function TopoExportDialog({
     [job],
   );
 
-  const canSubmit =
-    !submitting && job !== null && validateExportRequest(selection).ok;
-
   async function handleExport() {
     if (!job) return;
+    if (!validateExportRequest(selection).ok) {
+      setError(
+        selection.layers.length === 0
+          ? "Pick at least one layer to export."
+          : "This format can't hold those layers. Change one of them.",
+      );
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -91,17 +96,18 @@ export default function TopoExportDialog({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose} disabled={submitting}>
+          <Button
+            onClick={onClose}
+            disabled={submitting}
+            disabledReason="Starting the export…"
+          >
             Cancel
           </Button>
-          <Button
-            variant="filled"
-            busy={submitting}
-            disabled={!canSubmit}
-            onClick={handleExport}
-          >
-            Start export
-          </Button>
+          {job && (
+            <Button variant="filled" busy={submitting} onClick={handleExport}>
+              Start export
+            </Button>
+          )}
         </>
       }
     >

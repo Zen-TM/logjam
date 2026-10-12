@@ -23,7 +23,7 @@ export const MAP_LAYERS = {
     },
   ],
   copy: {
-    tabBasemap: "Basemap",
+    tabBasemap: "Map",
     tabOverlays: "Overlays",
     tabOffline: "Offline",
     places: "Places",

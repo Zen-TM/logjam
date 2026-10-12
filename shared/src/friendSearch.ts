@@ -37,7 +37,7 @@ function first(part: string): string {
 
 /**
  * Which palette slot an avatar takes, hashed from the NAME rather than from a
- * position in the list — DESIGN.md §3's open-vocabulary rule. An index would
+ * position in the list — DESIGN.md's open-vocabulary rule. An index would
  * repaint everyone the moment a new friend sorts ahead of them; a hash keeps a
  * person the same colour across sessions, screens and devices.
  */

@@ -18,7 +18,7 @@ import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import type { TBbox } from "./map/Map";
+import { NSW_CONTOURS_ENTRY_ID, type TBbox } from "./map/Map";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -79,8 +79,12 @@ import {
 } from "../consent";
 import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
+import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
+import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
+import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
+import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import {
   buildWays,
   wayFromRoute,
@@ -88,14 +92,19 @@ import {
 } from "./sidebar/panels/waysModel";
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
+import FriendInviteDialog from "./dialogs/FriendInviteDialog";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
+  NSW_CONTOURS,
+  drawsNswContours,
+  MAP_MEASURE,
+  MAP_MEASURE_ICON,
 } from "@logjam/shared";
-import type { OverlaySource } from "@logjam/shared";
+import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
 import { useThemePreferences } from "../themePreferences";
@@ -107,6 +116,18 @@ const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
 const defaultLayerToggles = Object.fromEntries(
   currentLayerNames.map((n) => [n, true]),
 );
+
+/**
+ * The statewide contours as one entry of the Map's topo layer list.
+ * Same origin, like the vector basemap: `/master/*` is served by the web
+ * distribution and proxied in dev.
+ */
+const NSW_CONTOURS_ENTRY = {
+  id: NSW_CONTOURS_ENTRY_ID,
+  pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
+  format: "vector" as const,
+  attribution: NSW_CONTOURS.creditHtml,
+};
 
 function App() {
   const toast = useToast();
@@ -152,7 +173,7 @@ function App() {
     null,
   );
   // The trip whose page is open. A trip is READ on a page like a place and a
-  // way (DESIGN.md §4), so it needs the same one piece of state.
+  // way (DESIGN.md), so it needs the same one piece of state.
   const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
     null,
   );
@@ -185,7 +206,17 @@ function App() {
     ? storedLayerId
     : "protomaps";
 
+  const [contoursOverImagery, setContoursOverImagery] = useStoredState(
+    "logjam.contoursOverImagery",
+    false,
+  );
+
   const [showAdd, setShowAdd] = useState(false);
+  // "Add a place here" from the map: the form opens on this spot.
+  const [addPlaceAt, setAddPlaceAt] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // True when the unified importer was opened from the onboarding wizard, so its
@@ -210,6 +241,12 @@ function App() {
   const [drawingRoute, setDrawingRoute] = useState(false);
   const [drawColor, setDrawColor] = useState<string | null>(null);
   const routeDraft = useRouteDraft();
+  // The measure tool is armed exactly while its page is open, and borrows the
+  // route tool's draft: only one of the two holds the map's clicks at a time.
+  const measuring = activePanel === "measure";
+  // What to do once the route tool has been left, if its discard confirm is
+  // what stands in the way (arming the measure tool over a draft with points).
+  const afterRouteCancel = useRef<(() => void) | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
@@ -224,7 +261,12 @@ function App() {
   // A verb a ROW asked for, run once the way's page mounts — how a row offers
   // Share, Rename and Delete without hosting a second copy of each form.
   const [pendingWayVerb, setPendingWayVerb] = useState<WayVerbId | null>(null);
-  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md §6).
+  // "Log a trip" on a track: the form opens over the map, from here, so the
+  // row's ⋯, the page's ⋯ and a line on the map all reach the same one.
+  const [logTripFromTrack, setLogTripFromTrack] = useState<TripLogTrack | null>(
+    null,
+  );
+  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md).
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
   const [flyToBounds, setFlyToBounds] = useState<
@@ -233,7 +275,7 @@ function App() {
   // Where along a line the elevation-profile cursor sits, so the chart and the
   // map point at the same place. NOT state: it changes many times a second, and
   // as state every move re-rendered App, the map and the panel before the dot
-  // could move (DESIGN.md §6 — `map/routeHover.ts` carries the full reasoning).
+  // could move (DESIGN.md — `map/routeHover.ts` carries the full reasoning).
   const routeHover = useMemo(() => createRouteHoverChannel(), []);
 
   // Coordinate picking mode for PlaceDialog
@@ -275,7 +317,7 @@ function App() {
     CompletedTopoJob[]
   >([]);
   // True once the first fetch settles, either way: an empty list before then is
-  // not "no topos yet" (docs/ux-principles.md §11).
+  // not "no topos yet" (shared/DESIGN.md §11).
   const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
@@ -289,6 +331,19 @@ function App() {
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
   const [selectingGeoPdfExtent, setSelectingGeoPdfExtent] = useState(false);
+  // The base layer the GeoPDF will be printed from, handed over when the area is
+  // framed: the map shows it for as long as the framing lasts, and the user's
+  // own stored layer (`activeLayerId`) is never written (`mapLayerFor`).
+  const [geoPdfFramingLayer, setGeoPdfFramingLayer] = useState<string | null>(
+    null,
+  );
+  // What the map actually draws: the user's layer, except while a GeoPDF's area
+  // is framed on the base layer it will be printed from.
+  const mapLayerId = mapLayerFor(activeLayerId, {
+    active: selectingGeoPdfExtent,
+    layerId: geoPdfFramingLayer,
+  });
+
   const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
   const [geoPdfPaperDimensions, setGeoPdfPaperDimensions] = useState<{
     w: number;
@@ -447,11 +502,24 @@ function App() {
     completedTopoJobs,
   ]);
 
+  // The statewide contours ride the same list, underneath every topo area's
+  // own layers, so the Map draws and styles them with the code it has.
+  const mapTopoLayers = useMemo(
+    () =>
+      drawsNswContours(activeLayerId, contoursOverImagery)
+        ? [NSW_CONTOURS_ENTRY, ...combinedTopoLayers]
+        : combinedTopoLayers,
+    [activeLayerId, contoursOverImagery, combinedTopoLayers],
+  );
+
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
   // user once — silently missing layers were the LAYERS-1 finding.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
+      // Not a topo area's layer, and nothing the user switched on: the map is
+      // simply drawn without contours.
+      if (entryId === NSW_CONTOURS_ENTRY.id) return;
       setUnavailableTopoEntryIds((prev) => {
         if (prev.has(entryId)) return prev;
         const next = new Set(prev);
@@ -648,7 +716,7 @@ function App() {
 
   // Ways is built from three fetches, so it has nothing to say until all three
   // have settled — one still in flight would show a short list as if it were
-  // the whole list (docs/ux-principles.md §11).
+  // the whole list (shared/DESIGN.md §11).
   const waysLoaded = routesLoaded && standaloneFilesLoaded && placeTracksLoaded;
 
   /** The places shared WITH the user. What tells a route shared on its own from
@@ -660,8 +728,9 @@ function App() {
 
   // The overlay's count is the SAME list the Ways page builds — including its
   // de-duplication of a file that both endpoints return — so the number on the
-  // layer row and the number in the page's heading cannot drift.
-  const wayCount = useMemo(
+  // layer row and the number in the page's heading cannot drift. A line pressed
+  // on the map is looked up in it too, so a line opens the page its row does.
+  const allWays = useMemo(
     () =>
       buildWays({
         routes,
@@ -669,9 +738,10 @@ function App() {
         placeTracks,
         currentUserId: currentUser?.id ?? null,
         sharedPlaceIds,
-      }).length,
+      }),
     [routes, standaloneFiles, placeTracks, currentUser?.id, sharedPlaceIds],
   );
+  const wayCount = allWays.length;
 
   // A place list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
@@ -1202,6 +1272,8 @@ function App() {
         ? "way-detail"
         : "ways",
     );
+    afterRouteCancel.current?.();
+    afterRouteCancel.current = null;
   };
 
   // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
@@ -1303,6 +1375,23 @@ function App() {
     setActivePanel("way-draw");
   };
 
+  /**
+   * Arm the measure tool, from `from` when a point asked for it. A measurement
+   * is not kept, so arming it over another measurement asks nothing; over a
+   * route being drawn it goes through that tool's own discard confirm first,
+   * as it does on Logjam GPS.
+   */
+  const startMeasuring = (from?: MapPointCoord) => {
+    const arm = () => {
+      routeDraft.reset();
+      if (from) routeDraft.addAnchor([from.longitude, from.latitude]);
+      setActivePanel("measure");
+    };
+    if (!drawingRoute) return arm();
+    afterRouteCancel.current = arm;
+    cancelRouteGuard.requestClose();
+  };
+
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
     // Anchors come back with the route, so a snapped line reopens with the
@@ -1395,13 +1484,21 @@ function App() {
     setGeoPdfPaperDimensions({ w: 210, h: 297 });
     setGeoPdfInitialExtent(bounds);
     setGeoPdfInitialScale(undefined);
+    // No dialog has chosen yet: it will open on the layer it seeds from the
+    // map's, so that is the one the frame is drawn on.
+    setGeoPdfFramingLayer(seedBaseLayer(activeLayerId));
     setActivePanel(null);
     setSelectingGeoPdfExtent(true);
   };
 
-  // Verbs that START on the map. Each opens an existing flow; there is no web
-  // measure tool, so none is offered.
+  // Verbs that START on the map, in Logjam GPS's order for the two it has.
   const mapTools: MapTool[] = [
+    {
+      id: "measure",
+      label: MAP_MEASURE.title,
+      icon: MAP_MEASURE_ICON,
+      onSelect: () => startMeasuring(),
+    },
     {
       id: "route",
       label: "Draw a route",
@@ -1421,7 +1518,7 @@ function App() {
       menu: [
         {
           id: "topo",
-          label: "LiDAR topo",
+          label: "Make a LiDAR topo",
           icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
@@ -1430,7 +1527,7 @@ function App() {
         },
         {
           id: "geopdf",
-          label: "GeoPDF",
+          label: "Make a GeoPDF",
           icon: "geoPdf",
           onSelect: () => {
             setEditingGeoPdfTemplate(undefined);
@@ -1485,7 +1582,9 @@ function App() {
           setEditingGeoPdfTemplate(undefined);
           setInitialGeoPdfTemplateId(null);
         }}
-        onSelectOnMap={(aspect, paperDims, extent, scale) => {
+        onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
+          // The latest pick, every visit: the map follows the dialog.
+          setGeoPdfFramingLayer(baseLayerId ?? null);
           setGeoPdfPaperAspect(aspect);
           setGeoPdfPaperDimensions(paperDims);
           setGeoPdfInitialExtent(extent);
@@ -1534,6 +1633,7 @@ function App() {
           placeTracks={placeTracks}
           standaloneFiles={standaloneFiles}
           standaloneFilesError={standaloneFilesError}
+          onRetryStandaloneFiles={refetchStandaloneFiles}
           onOpenWay={openWay}
           currentUserId={currentUser?.id ?? null}
           wayDetail={
@@ -1543,6 +1643,10 @@ function App() {
                 route={selectedRoute}
                 file={
                   standaloneFiles.find((each) => each.id === selectedWay.id) ??
+                  null
+                }
+                placeTrack={
+                  placeTracks.find((each) => each.mediaId === selectedWay.id) ??
                   null
                 }
                 initialVerb={pendingWayVerb}
@@ -1560,11 +1664,15 @@ function App() {
                 onChanged={() => {
                   refetchRoutes();
                   refetchStandaloneFiles();
+                  // A file linked to a place is drawn by the place-tracks layer
+                  // too, from its own copy of the colour.
+                  refetchPlaceTracks();
                 }}
                 onOpenPlace={(placeId) => {
                   setSelectedPlaceID(placeId);
                   setActivePanel("place-detail");
                 }}
+                onLogTrip={setLogTripFromTrack}
                 onDeleteFile={handleDeleteStandaloneFile}
                 routeHover={routeHover}
               />
@@ -1597,6 +1705,21 @@ function App() {
                 }}
                 onCancel={cancelRouteGuard.requestClose}
                 saving={savingRoute}
+                snapMode={snapMode}
+                onSnapModeChange={setSnapMode}
+              />
+            ) : null
+          }
+          measurePanel={
+            measuring ? (
+              <MeasurePanel
+                points={routeDraft.points}
+                anchorCount={routeDraft.draft.anchors.length}
+                canUndo={routeDraft.canUndo}
+                atCap={routeDraft.atCap}
+                onUndo={routeDraft.undo}
+                onClear={() => routeDraft.reset()}
+                onClose={() => setActivePanel(null)}
                 snapMode={snapMode}
                 onSnapModeChange={setSnapMode}
               />
@@ -1721,8 +1844,23 @@ function App() {
                 wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
               );
           }}
-          drawingRoute={drawingRoute}
-          drawColor={drawColor ?? undefined}
+          onAddPlaceAt={(point) => {
+            setAddPlaceAt(point);
+            setShowAdd(true);
+          }}
+          // The point is the measurement's first, as a press on the map there
+          // would have made it.
+          onMeasureFrom={startMeasuring}
+          selectTrack={(mediaId) => {
+            const way = allWays.find(
+              (each) => each.kind !== "route" && each.id === mediaId,
+            );
+            if (way) openWay(way);
+          }}
+          drawingRoute={drawingRoute || measuring}
+          measuring={measuring}
+          // A measurement has no colour of its own: it draws in the accent.
+          drawColor={measuring ? undefined : (drawColor ?? undefined)}
           drawPoints={routeDraft.points}
           drawAnchorIndices={routeDraft.anchorIndices}
           draft={routeDraft.draft}
@@ -1763,9 +1901,9 @@ function App() {
             setSelectingTopoBbox(false);
             setShowTopo(true);
           }}
-          topoLayers={combinedTopoLayers}
+          topoLayers={mapTopoLayers}
           vectorStyle={vectorStyle}
-          activeLayerId={activeLayerId}
+          activeLayerId={mapLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
           geoPdfPaperAspect={geoPdfPaperAspect}
           geoPdfPaperDimensions={geoPdfPaperDimensions}
@@ -1833,7 +1971,19 @@ function App() {
         baseLayers={BASE_LAYERS}
         activeLayerId={activeLayerId}
         onActiveLayerChange={setActiveLayerId}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={setContoursOverImagery}
         mapView={mapCenter}
+      />
+
+      <FriendInviteDialog
+        enabled={loadsUserData}
+        onFriended={() => {
+          refetchFriends();
+          // A request waiting between the two is accepted by the link, and
+          // its Inbox row is gone on the server.
+          refetchNotifications();
+        }}
       />
 
       <ConfirmDialog
@@ -1849,7 +1999,11 @@ function App() {
         confirmLabel="Discard"
         confirmColor="error"
         onConfirm={cancelRouteGuard.confirmDiscard}
-        onClose={cancelRouteGuard.cancelDiscard}
+        onClose={() => {
+          // Keeping the route also drops whatever was waiting on its discard.
+          afterRouteCancel.current = null;
+          cancelRouteGuard.cancelDiscard();
+        }}
       />
 
       <ConfirmDialog
@@ -1892,6 +2046,27 @@ function App() {
         onStartEmpty={() => setShowOnboarding(false)}
       />
 
+      {/* The trip form, opened from a track's "Log a trip". Mounted only while
+          it is open, so every open starts from the track it was asked for. */}
+      {logTripFromTrack && (
+        <TripLogDialog
+          open={!pickingCoords}
+          onClose={() => setLogTripFromTrack(null)}
+          onSaved={() => {
+            setLogTripFromTrack(null);
+            refetchAfterTripWrite();
+            refetchCurrentUser();
+          }}
+          places={places}
+          fromTrack={logTripFromTrack}
+          customFieldDefs={customFieldDefs}
+          onCustomFieldDefsChange={setCustomFieldDefs}
+          existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+          onPickCoords={startPickingCoords}
+          onPlaceCreated={refetch}
+        />
+      )}
+
       {/* Unified file importer (places + logbooks) */}
       <UnifiedImportDialog
         open={showUnifiedImport && !pickingCoords}
@@ -1923,7 +2098,11 @@ function App() {
       <PlaceDialog
         place={null}
         open={showAdd && !pickingCoords}
-        onClose={() => setShowAdd(false)}
+        initialCoords={addPlaceAt}
+        onClose={() => {
+          setShowAdd(false);
+          setAddPlaceAt(null);
+        }}
         onSaved={refetch}
         onPickCoords={startPickingCoords}
         onCancelPickCoords={cancelPickingCoords}

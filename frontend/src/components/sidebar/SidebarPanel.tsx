@@ -3,6 +3,8 @@ import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
 import {
+  DRAFT_PEEK_REVEAL_PX,
+  isDraftPanel,
   PANEL_TITLES,
   type LogsView,
   type MapsView,
@@ -133,9 +135,11 @@ function SidebarPanel({
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
+  onRetryStandaloneFiles,
   onOpenWay,
   wayDetail,
   drawPanel,
+  measurePanel,
   currentUserId,
   onPickCoords,
   pickingCoords,
@@ -245,6 +249,7 @@ function SidebarPanel({
   placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
+  onRetryStandaloneFiles: () => void;
   /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
   /**
@@ -255,6 +260,7 @@ function SidebarPanel({
    */
   wayDetail: ReactNode;
   drawPanel: ReactNode;
+  measurePanel: ReactNode;
   currentUserId: string | null;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
@@ -310,7 +316,16 @@ function SidebarPanel({
   if (activePanel !== shownPanel) {
     setShownPanel(activePanel);
     if (!collapseToPeek) {
-      setSheetSnap((current) => (current === "peek" ? "half" : current));
+      // An armed drawing tool opens at its peek: its work is on the map, and
+      // the sheet keeps only what is read while drawing. Anything else leaves
+      // a peek for half.
+      setSheetSnap((current) =>
+        isDraftPanel(activePanel)
+          ? "peek"
+          : current === "peek"
+            ? "half"
+            : current,
+      );
     }
   }
 
@@ -351,7 +366,7 @@ function SidebarPanel({
       : PANEL_TITLES[activePanel];
 
   // A page with two views draws its switch under its own hero, so the hero
-  // stays the page's first line (DESIGN.md §2).
+  // stays the page's first line (DESIGN.md).
   const logsViewRail = (
     <ChipRail
       label="Logs view"
@@ -561,6 +576,7 @@ function SidebarPanel({
         )}
         {activePanel === "way-detail" && wayDetail}
         {activePanel === "way-draw" && drawPanel}
+        {activePanel === "measure" && measurePanel}
         {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
@@ -570,6 +586,7 @@ function SidebarPanel({
             placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
+            onRetryStandaloneFiles={onRetryStandaloneFiles}
             places={[...places, ...sharedPlaces]}
             sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}
@@ -584,7 +601,14 @@ function SidebarPanel({
 
   if (isMobile) {
     return (
-      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap} title={title}>
+      <BottomSheet
+        snap={sheetSnap}
+        onSnapChange={setSheetSnap}
+        title={title}
+        peekReveal={
+          isDraftPanel(activePanel) ? DRAFT_PEEK_REVEAL_PX : undefined
+        }
+      >
         {panelContent}
       </BottomSheet>
     );

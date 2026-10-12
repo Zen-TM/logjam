@@ -26,14 +26,16 @@ import { formatSpeedMps } from "@logjam/shared";
 
 import {
   fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  muted,
 } from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
+// The height of one line of each text, as the font draws it (the same estimate
+// the scale bar makes): the chip is a fixed box around them.
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
 const VALUE_LINE = Math.round(fontSize.sm * 1.35);
 
@@ -60,6 +62,8 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
    *  a wakeup nobody sees. */
   active: boolean;
 }) {
+  const styles = useStyles();
+
   const readout = useLiveReadout();
   const [now, setNow] = useState(() => Date.now());
 
@@ -108,7 +112,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // Same translucent warm backing as the scale bar — these sit in one stack
   // over map imagery of any brightness and have to read as one instrument set.
   chip: {
@@ -116,21 +120,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: CHIP_WIDTH,
     height: READOUT_CHIP_HEIGHT,
-    backgroundColor: `${theme.page}CC`,
+    backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
   column: { flex: 1, alignItems: "center" },
-  label: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    lineHeight: LABEL_LINE,
-  },
+  label: { ...muted(theme, textRole.meta) },
   value: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    lineHeight: VALUE_LINE,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
   // A hairline rather than a gap: two centred columns with nothing between them
@@ -138,7 +136,7 @@ const styles = StyleSheet.create({
   divider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
-    marginVertical: spacing(0.75),
+    marginVertical: spacing(1),
     backgroundColor: withAlpha(theme.text, 0.25),
   },
-});
+}));

@@ -1,23 +1,18 @@
 import { useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type TextInputProps,
-} from "react-native";
+import { TextInput, View, type TextInputProps } from "react-native";
 
-import { fontSize, opacity, radius, spacing, theme } from "../theme";
-import { FieldError } from "./FieldError";
-import { fieldLabel } from "./fieldLabel";
+import { radius, spacing, makeStyles, useTheme } from "../theme";
+import { Field } from "./Field";
 
 type TextFieldProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
-  /** This field's validation message (docs/ux-principles.md §11, "Form errors"): drawn
+  /** This field's validation message (shared/DESIGN.md §11, "Form errors"): drawn
    *  under the input, which takes a warning border. Null renders nothing. */
   error?: string | null;
+  /** One plain sentence under the input saying what it means or takes. */
+  hint?: string;
   /**
    * Handle on the underlying input. `autoFocus` is unreliable for a field that
    * mounts inside an animating modal — the window isn't focusable yet, so the
@@ -44,6 +39,7 @@ type TextFieldProps = {
   | "returnKeyType"
   | "multiline"
   | "editable"
+  | "maxLength"
 >;
 
 export function TextField({
@@ -51,15 +47,19 @@ export function TextField({
   value,
   onChangeText,
   error,
+  hint,
   multiline,
   inputRef,
   accessory,
   ...inputProps
 }: TextFieldProps) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // `editable={false}` is a DISABLED field, not a live one that silently
   // ignores taps — same convention as `Row`'s and `IconButton`'s `disabled`
-  // (dim, don't hide). Undeclared `editable` (the common case) stays full
-  // opacity.
+  // (dim, don't hide; `Field` dims). Undeclared `editable` (the common case)
+  // stays full opacity.
   const disabled = inputProps.editable === false;
   // The edge is `lineStrong` at rest and the accent while the field has the
   // keyboard, as on Logjam Web: the field's own well (`field`) is what says
@@ -87,8 +87,7 @@ export function TextField({
     />
   );
   return (
-    <View style={[styles.container, disabled && styles.disabled]}>
-      <Text style={styles.label}>{label}</Text>
+    <Field label={label} hint={hint} error={error} disabled={disabled}>
       {accessory != null ? (
         <View style={styles.inputRow}>
           {input}
@@ -97,24 +96,19 @@ export function TextField({
       ) : (
         input
       )}
-      <FieldError message={error} />
-    </View>
+    </Field>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { gap: spacing(0.5) },
-  // The kit's one disabled dim — see the note above.
-  disabled: { opacity: opacity.disabled },
-  label: fieldLabel,
+const useStyles = makeStyles((theme, textRole) => ({
   input: {
     borderWidth: 1,
     borderColor: theme.lineStrong,
     backgroundColor: theme.field,
     borderRadius: radius.md,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(1.5),
-    fontSize: fontSize.base,
+    ...textRole.body,
     color: theme.text,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
@@ -123,4 +117,4 @@ const styles = StyleSheet.create({
   inputFocused: { borderColor: theme.accent },
   // Findable while scrolling a long form, not only once the line under it is read.
   inputError: { borderColor: theme.warning },
-});
+}));
