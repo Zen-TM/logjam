@@ -42,8 +42,8 @@
 
 /* Where the search has nothing to show: too few characters, or no match. */
 .note {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 2px 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -59,8 +59,8 @@
 }
 
 .inviteLink {
+  composes: body from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
   overflow-wrap: anywhere;
   user-select: all;

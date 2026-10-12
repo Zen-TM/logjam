@@ -13,9 +13,8 @@
      primary of a surface overrides it with the accent. */
   background: var(--color-card);
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-base);
-  font-weight: 600;
+  font-family: inherit;
+  line-height: inherit;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--motion-fast);
@@ -25,11 +24,18 @@
   background: var(--color-card-pressed);
 }
 
+/* A button's label is a row title's size; a compact one is a control's. Exactly
+   one of the two is on the element: two composed roles would be decided by
+   their order in the generated file. */
+.regular {
+  composes: rowTitle from "../textRoles.generated.module.css";
+}
+
 .compact {
+  composes: control from "../textRoles.generated.module.css";
   min-height: var(--control-md);
   min-width: var(--control-md);
   padding: 0 var(--space-1-5);
-  font-size: var(--font-sm);
 }
 
 /* The label on a fill is `onFill`, never the page colour (root CLAUDE.md:

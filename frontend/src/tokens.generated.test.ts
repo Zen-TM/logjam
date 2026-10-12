@@ -15,6 +15,7 @@ import {
   TEXT_ROLES,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
+  webTextRolesCss,
   webTokensCss,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
@@ -34,6 +35,14 @@ const committed = readFileSync(
   "utf8",
 );
 
+const committedRoles = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "textRoles.generated.module.css",
+  ),
+  "utf8",
+);
+
 const kebab = (name: string) =>
   name.replace(/\./g, "-").replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
@@ -50,6 +59,22 @@ describe("tokens.generated.css", () => {
     expect(committed).toBe(webTokensCss());
   });
 
+  it("writes the type roles file the generator writes", () => {
+    expect(committedRoles).toBe(webTextRolesCss());
+  });
+
+  it("declares one class per type role Logjam Web draws", () => {
+    // A role with no `web` spec is Logjam GPS's alone.
+    const expected = Object.entries(TEXT_ROLES)
+      .filter(([, role]) => "web" in role)
+      .map(([name]) => `.${name}`)
+      .sort();
+    const declared = [...committedRoles.matchAll(/^(\.\w+) \{/gm)]
+      .map((m) => m[1])
+      .sort();
+    expect(declared).toEqual(expected);
+  });
+
   const colourNames = Object.keys(THEME_SCHEMES.sandstone.tokens).map(
     (role) => `--color-${kebab(role)}`,
   );
@@ -64,18 +89,6 @@ describe("tokens.generated.css", () => {
       ...Object.keys(RADIUS).map((n) => `--radius-${n}`),
       ...Object.keys(FONT.web).map((n) => `--font-${n}`),
       ...Object.keys(FONT_WEIGHT).map((n) => `--font-weight-${n}`),
-      // A role with no `web` spec is Logjam GPS's alone.
-      ...Object.entries(TEXT_ROLES).flatMap(([n, role]) =>
-        "web" in role
-          ? [
-              `--text-${kebab(n)}-size`,
-              `--text-${kebab(n)}-weight`,
-              ...("uppercase" in role.web
-                ? [`--text-${kebab(n)}-transform`]
-                : []),
-            ]
-          : [],
-      ),
       ...Object.keys(CONTROL.web).map((n) => `--control-${n}`),
       ...Object.keys(MOTION).map((n) => `--motion-${n}`),
       ...Object.keys(OPACITY).map((n) => `--opacity-${n}`),

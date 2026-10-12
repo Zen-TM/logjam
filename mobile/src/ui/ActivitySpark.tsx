@@ -1,14 +1,6 @@
 import { Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  withAlpha,
-  makeStyles,
-  useTheme,
-} from "../theme";
+import { radius, spacing, withAlpha, makeStyles, useTheme } from "../theme";
 
 export type ActivityBucket = {
   /** One- or two-character axis label (month initial, year digits). */
@@ -73,7 +65,7 @@ export function ActivitySpark({
 
 const BAR_HEIGHT = 28;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(0.5) },
   bars: { flexDirection: "row", alignItems: "flex-end", gap: spacing(0.5) },
   column: { flex: 1, alignItems: "stretch", gap: spacing(0.25) },
@@ -86,10 +78,9 @@ const useStyles = makeStyles((theme) => ({
   },
   fill: { borderRadius: radius.sm },
   label: {
+    ...textRole.meta,
     textAlign: "center",
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
   },
-  labelCurrent: { color: theme.text, fontWeight: fontWeight.medium },
-  caption: { color: theme.textMuted, fontSize: fontSize.xs },
+  labelCurrent: { ...textRole.caption, color: theme.text },
+  caption: { ...textRole.meta },
 }));

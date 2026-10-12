@@ -3,6 +3,8 @@ import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
 import {
+  DRAFT_PEEK_REVEAL_PX,
+  isDraftPanel,
   PANEL_TITLES,
   type LogsView,
   type MapsView,
@@ -314,7 +316,16 @@ function SidebarPanel({
   if (activePanel !== shownPanel) {
     setShownPanel(activePanel);
     if (!collapseToPeek) {
-      setSheetSnap((current) => (current === "peek" ? "half" : current));
+      // An armed drawing tool opens at its peek: its work is on the map, and
+      // the sheet keeps only what is read while drawing. Anything else leaves
+      // a peek for half.
+      setSheetSnap((current) =>
+        isDraftPanel(activePanel)
+          ? "peek"
+          : current === "peek"
+            ? "half"
+            : current,
+      );
     }
   }
 
@@ -590,7 +601,14 @@ function SidebarPanel({
 
   if (isMobile) {
     return (
-      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap} title={title}>
+      <BottomSheet
+        snap={sheetSnap}
+        onSnapChange={setSheetSnap}
+        title={title}
+        peekReveal={
+          isDraftPanel(activePanel) ? DRAFT_PEEK_REVEAL_PX : undefined
+        }
+      >
         {panelContent}
       </BottomSheet>
     );

@@ -1560,8 +1560,9 @@ export function getFriendRequests(): Promise<TFriendRequest[]> {
   return apiFetch<TFriendRequest[]>("/friends/requests");
 }
 
-export function sendFriendRequest(addresseeId: string): Promise<void> {
-  return apiFetch<void>("/friends/request", {
+/** Resolves with the friendship row: `friendRequestMadeFriend` reads it. */
+export function sendFriendRequest(addresseeId: string): Promise<unknown> {
+  return apiFetch<unknown>("/friends/request", {
     method: "POST",
     body: { addresseeId },
   });

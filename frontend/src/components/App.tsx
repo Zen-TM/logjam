@@ -1969,7 +1969,15 @@ function App() {
         mapView={mapCenter}
       />
 
-      <FriendInviteDialog enabled={loadsUserData} onFriended={refetchFriends} />
+      <FriendInviteDialog
+        enabled={loadsUserData}
+        onFriended={() => {
+          refetchFriends();
+          // A request waiting between the two is accepted by the link, and
+          // its Inbox row is gone on the server.
+          refetchNotifications();
+        }}
+      />
 
       <ConfirmDialog
         open={cancelRouteGuard.guardOpen}

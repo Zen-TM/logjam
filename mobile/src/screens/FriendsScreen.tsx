@@ -45,6 +45,7 @@ import {
   friendInviteUrl,
   friendRemovedMessage,
   friendRemoveConfirm,
+  friendRequestMadeFriend,
   friendsEmptyKind,
   friendsHeroTitle,
   FRIENDS,
@@ -70,7 +71,7 @@ import {
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -528,6 +529,9 @@ function AddFriendBody({
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [sentIds, setSentIds] = useState<string[]>([]);
+  // Made a friend by sending (they had already asked), shown until the
+  // reloaded list says so itself.
+  const [friendedIds, setFriendedIds] = useState<string[]>([]);
   // The search field's own problem (§8, rule 1).
   const [searchError, setSearchError] = useState<string | null>(null);
   // Not this field's problem — it's the tapped "Add" row's — so it goes in a
@@ -575,8 +579,13 @@ function AddFriendBody({
     async (user: UserSearchResult) => {
       setSendError(null);
       try {
-        await sendFriendRequest(user.id);
-        setSentIds((current) => [...current, user.id]);
+        const friended = friendRequestMadeFriend(
+          await sendFriendRequest(user.id),
+        );
+        (friended ? setFriendedIds : setSentIds)((current) => [
+          ...current,
+          user.id,
+        ]);
         onSent();
       } catch (err) {
         console.error(err);
@@ -628,7 +637,8 @@ function AddFriendBody({
         <Text style={styles.hint}>{copy.searchHint}</Text>
       ) : null}
       {results.map((user) => {
-        const alreadyFriend = existingIds.includes(user.id);
+        const alreadyFriend =
+          existingIds.includes(user.id) || friendedIds.includes(user.id);
         const sent = sentIds.includes(user.id);
         return (
           <Row
@@ -685,7 +695,7 @@ function EmptyPanel({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
@@ -702,5 +712,5 @@ const useStyles = makeStyles((theme) => ({
   menuBody: { gap: spacing(1) },
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  hint: { ...textRole.hint },
 }));

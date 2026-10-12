@@ -143,24 +143,12 @@ describe("opAdvice", () => {
     expect(advice.canRetry).toBe(false);
   });
 
-  it("treats a validation rejection as permanent and shows the server's words", () => {
+  it("treats a validation rejection as permanent and names no hint", () => {
     // Retry on a 400 can only park it a second time, which is what taught users
     // the button does nothing (§7 — a verb that can only refuse is absent). The
-    // server's own message names the field the sheet is already showing, and
-    // there is NO hint: the rows below it are the advice, and a sentence
-    // telling the user to go and do what the next button does is prose that has
-    // not earned its place.
-    const advice = opAdvice(
-      parked({
-        error: {
-          code: 400,
-          message: "Longest abseil must be a number between 0 and 500",
-        },
-      }),
-    );
-    expect(advice.line).toBe(
-      "Longest abseil must be a number between 0 and 500",
-    );
+    // rows below the line are the advice, so there is no hint.
+    const advice = opAdvice(parked({ error: { code: 400 } }));
+    expect(advice.line).toBe("This change can't be saved as it is.");
     expect(advice.canRetry).toBe(false);
     expect(advice.hint).toBeUndefined();
   });
@@ -170,9 +158,7 @@ describe("opAdvice", () => {
     // account answered, and kept answering no, for a day. "Better signal" was
     // written for the old five-tries cap and sends the reader to look for
     // something that was never missing.
-    const refused = opAdvice(
-      parked({ error: { code: 503, message: "upstream" }, attempts: 40 }),
-    );
+    const refused = opAdvice(parked({ error: { code: 503 }, attempts: 40 }));
     expect(refused.line).toBe("Your account kept turning this down for a day.");
     expect(refused.canRetry).toBe(true);
     expect(refused.hint).toBe(
@@ -189,7 +175,7 @@ describe("opAdvice", () => {
       parked({
         entity: "media",
         op: "create",
-        error: { code: 0, message: "This upload keeps failing on this phone." },
+        error: { code: 0 },
       }),
     );
     expect(local.line).toBe("This keeps failing on this phone.");
@@ -198,22 +184,16 @@ describe("opAdvice", () => {
   });
 
   it.each([0, 401, 408, 429, 500, 503])("offers a retry on %i", (code) => {
-    expect(
-      opAdvice(parked({ error: { code, message: "boom" } })).canRetry,
-    ).toBe(true);
+    expect(opAdvice(parked({ error: { code } })).canRetry).toBe(true);
   });
 
   it.each([400, 403, 404, 409, 413, 422])("refuses a retry on %i", (code) => {
-    expect(
-      opAdvice(parked({ error: { code, message: "boom" } })).canRetry,
-    ).toBe(false);
+    expect(opAdvice(parked({ error: { code } })).canRetry).toBe(false);
   });
 
   it("does not use the server's raw words for a transient failure", () => {
     // A 500's message is our infrastructure talking, not domain copy.
-    const advice = opAdvice(
-      parked({ error: { code: 500, message: "ECONNRESET" } }),
-    );
+    const advice = opAdvice(parked({ error: { code: 500 } }));
     expect(advice.line).not.toContain("ECONNRESET");
   });
 
@@ -223,10 +203,152 @@ describe("opAdvice", () => {
   });
 });
 
+describe("opAdvice words a rejection in our own sentence", () => {
+  // Mutation: render the server's text again (put `message` back on
+  // `ParkedOp.error` and return it from `rejectionLine`).
+  const line = (overrides: Partial<ParkedOp>) =>
+    opAdvice(parked(overrides)).line;
+
+  it.each<[string, Partial<ParkedOp>, string]>([
+    [
+      "a place created without a name",
+      {
+        entity: "place",
+        op: "create",
+        fields: { latitude: -33.7, longitude: 150.3 },
+        error: { code: 400 },
+      },
+      "This place needs a name before it can sync.",
+    ],
+    [
+      "a place edit holding a value out of range",
+      {
+        entity: "place",
+        op: "update",
+        fields: { fieldValues: { v_grade: 9 } },
+        error: { code: 400 },
+      },
+      "A value on this place is outside the range it accepts.",
+    ],
+    [
+      "a trip created without a date",
+      {
+        entity: "tripLog",
+        op: "create",
+        fields: { displayName: "x" },
+        error: { code: 400 },
+      },
+      "This trip needs a date before it can sync.",
+    ],
+    [
+      "a trip with a date that is not one",
+      {
+        entity: "tripLog",
+        op: "update",
+        fields: { date: "not a date" },
+        error: { code: 400 },
+      },
+      "The date on this trip isn't a real date.",
+    ],
+    [
+      "a trip naming places",
+      {
+        entity: "tripLog",
+        op: "create",
+        fields: { date: "2026-07-01", placeIds: ["a"] },
+        error: { code: 400 },
+      },
+      "This trip names a place that no longer exists.",
+    ],
+    [
+      "a link to a place that is gone",
+      { entity: "placeLink", op: "create", error: { code: 404 } },
+      "One of the places in this link no longer exists.",
+    ],
+    [
+      "a place type with no name",
+      {
+        entity: "placeType",
+        op: "create",
+        fields: { name: "  " },
+        error: { code: 400 },
+      },
+      "This place type needs a name before it can sync.",
+    ],
+    [
+      "a place type name already taken",
+      {
+        entity: "placeType",
+        op: "update",
+        fields: { name: "Cave" },
+        error: { code: 409 },
+      },
+      "You already have a place type with that name.",
+    ],
+    [
+      "deleting a place type that still has places",
+      { entity: "placeType", op: "delete", error: { code: 409 } },
+      "This place type still has places in it. Move them to another type first.",
+    ],
+    [
+      "deleting a built-in place type",
+      { entity: "placeType", op: "delete", error: { code: 403 } },
+      "Built-in place types can't be deleted.",
+    ],
+    [
+      "an attribute with no name",
+      {
+        entity: "customFieldDef",
+        op: "create",
+        fields: { key: "k", type: "number" },
+        error: { code: 400 },
+      },
+      "This attribute needs a name before it can sync.",
+    ],
+    [
+      "an attribute whose smallest is above its largest",
+      {
+        entity: "customFieldDef",
+        op: "update",
+        fields: { min: 10, max: 2 },
+        error: { code: 400 },
+      },
+      "The smallest value can't be above the largest.",
+    ],
+    [
+      "an attribute that already exists",
+      { entity: "customFieldDef", op: "create", error: { code: 409 } },
+      "You already have an attribute with that name.",
+    ],
+  ])("%s", (_name, overrides, expected) => {
+    expect(line(overrides)).toBe(expected);
+  });
+
+  it("falls back for a refusal it has no sentence for", () => {
+    expect(line({ entity: "route", op: "update", error: { code: 400 } })).toBe(
+      "This change can't be saved as it is.",
+    );
+  });
+
+  it("never prints the server's text, nor the thing's name", () => {
+    // The loader drops the message; a payload that still carries one (an old
+    // row, a hand-built op) must not reach the line either.
+    const op = parked({
+      entity: "place",
+      op: "create",
+      entityName: "Secret Gully",
+      fields: { name: "Secret Gully", latitude: -33.7, longitude: 150.3 },
+      error: { code: 400, message: "Unknown field: Secret Gully" } as never,
+    });
+    const advice = opAdvice(op).line;
+    expect(advice).not.toMatch(/Unknown field|Secret Gully/);
+  });
+});
+
 describe("rejectedFields / salvageableFields", () => {
   const badGrade = parked({
     fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
-    error: { code: 400, message: "V grade must be between 1 and 7" },
+    error: { code: 400 },
   });
 
   it("splits a rejected edit into what the server refused and what it didn't", () => {
@@ -244,7 +366,7 @@ describe("rejectedFields / salvageableFields", () => {
     // it would silently drop fields over a dropped connection.
     const transient = parked({
       fields: { notes: "x", fieldValues: { v_grade: 9 } },
-      error: { code: 503, message: "upstream" },
+      error: { code: 503 },
     });
     expect(rejectedFields(transient)).toEqual([]);
     expect(salvageableFields(transient)).toEqual([]);
@@ -254,7 +376,7 @@ describe("rejectedFields / salvageableFields", () => {
     // Nothing to salvage — the sheet falls back to Discard, which is honest.
     const allBad = parked({
       fields: { fieldValues: { v_grade: 9 } },
-      error: { code: 400, message: "V grade must be between 1 and 7" },
+      error: { code: 400 },
     });
     expect(rejectedFields(allBad)).toEqual(["fieldValues"]);
     expect(salvageableFields(allBad)).toEqual([]);
@@ -263,7 +385,7 @@ describe("rejectedFields / salvageableFields", () => {
   it("offers nothing for a rejection it cannot attribute", () => {
     const unknown = parked({
       fields: { notes: "x" },
-      error: { code: 400, message: "Unknown field: q" },
+      error: { code: 400 },
     });
     expect(salvageableFields(unknown)).toEqual([]);
   });
@@ -276,7 +398,7 @@ describe("rejectedFields / salvageableFields", () => {
         parked({
           entity: "tripLog",
           fields: { hours: -1 },
-          error: { code: 400, message: "x" },
+          error: { code: 400 },
         }),
       ),
     ).toEqual([]);
@@ -333,7 +455,7 @@ describe("opChanges", () => {
     const changes = opChanges(
       parked({
         fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
-        error: { code: 400, message: "V grade must be between 1 and 7" },
+        error: { code: 400 },
       }),
     );
     // `fieldValues` is one field on the wire but is expanded into a line per
@@ -350,7 +472,7 @@ describe("opChanges", () => {
     const changes = opChanges(
       parked({
         fields: { notes: "x" },
-        error: { code: 400, message: "Unknown field: q" },
+        error: { code: 400 },
       }),
     );
     expect(changes.every((change) => !change.rejected)).toBe(true);

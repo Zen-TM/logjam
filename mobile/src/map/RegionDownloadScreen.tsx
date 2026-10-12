@@ -52,7 +52,7 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import { fontSize, spacing, makeStyles } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -70,7 +70,7 @@ import {
 } from "../offline/regionDownloadQueue";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
-import { vectorClipFor } from "../offline/regionTilePlanning";
+import { savesVectorOnly, vectorClipFor } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -406,7 +406,7 @@ export function RegionDownloadScreen({
       .map((source) => source.zMax) ?? [];
   const deepestZoom =
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
-  const vectorOnly = pyramidIds.length === 0;
+  const vectorOnly = savesVectorOnly(vectorClip, pyramidIds.length);
 
   // ONE warning, over the map (DESIGN.md). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
@@ -778,7 +778,8 @@ export function RegionDownloadScreen({
           {/* The honesty the progress screen's back-press warning used to
               carry, in the one place every download now passes through. */}
           <Text style={styles.namingNote}>
-            Downloads pause when Logjam GPS is closed. Watch them in Saved.
+            Downloads keep going after you leave Logjam GPS. Watch them in
+            Saved.
           </Text>
         </View>
       </BottomSheet>
@@ -786,7 +787,7 @@ export function RegionDownloadScreen({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
   hero: { zIndex: 1 },
@@ -814,7 +815,7 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
   },
   namingBody: { gap: spacing(1.5) },
-  namingNote: { color: theme.textMuted, fontSize: fontSize.sm },
+  namingNote: { ...textRole.hint },
   panel: {
     height: PANEL_HEIGHT,
     backgroundColor: theme.page,
@@ -836,8 +837,7 @@ const useStyles = makeStyles((theme) => ({
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
   sourceNote: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...textRole.hint,
     paddingHorizontal: spacing(2),
     paddingTop: spacing(0.5),
   },
@@ -847,5 +847,5 @@ const useStyles = makeStyles((theme) => ({
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailCaption: { color: theme.textMuted, fontSize: fontSize.xs },
+  detailCaption: { ...textRole.meta },
 }));

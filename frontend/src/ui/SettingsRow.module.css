@@ -18,11 +18,11 @@
 }
 
 .rowLabel {
+  composes: label from "../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-5);
   min-width: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
 }
 

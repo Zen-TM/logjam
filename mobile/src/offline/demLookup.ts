@@ -35,6 +35,7 @@ import * as SQLite from "expo-sqlite";
 import {
   clearDemArchives,
   demArchive,
+  demSlopeAt,
   demTileKey,
   demTileUrl,
   readDemArchive,
@@ -250,6 +251,25 @@ export async function sampleElevations(
   { allowNetwork = false }: { allowNetwork?: boolean } = {},
 ): Promise<DemSamples> {
   return sampleDem(positions, (source, wanted) =>
+    readTiles(source, wanted, allowNetwork),
+  );
+}
+
+/**
+ * The slope of the ground at a position in degrees, or null where the fine
+ * DEM has no answer (`demSlopeAt` says why the coarse one is never used).
+ *
+ * Saved areas first, then, when `allowNetwork`, byte ranges of our own
+ * archive on the CDN, the way the map already reads its basemap. Our API is
+ * not asked: its profile route answers along a line, not a window of pixels,
+ * and no third-party host is involved for it to shield.
+ */
+export async function slopeAt(
+  lon: number,
+  lat: number,
+  { allowNetwork = false }: { allowNetwork?: boolean } = {},
+): Promise<number | null> {
+  return demSlopeAt(lon, lat, (source, wanted) =>
     readTiles(source, wanted, allowNetwork),
   );
 }

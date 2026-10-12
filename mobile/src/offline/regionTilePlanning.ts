@@ -73,6 +73,41 @@ export function vectorClipFor(isGuest: boolean): "include" | "none" {
   return isGuest ? "none" : "include";
 }
 
+/**
+ * Is the vector map the whole save? The Detail caption then says so instead of
+ * quoting a pixel scale no raster will have. Never true without the clip: a
+ * guest with no map picked is saving nothing, not the detailed map.
+ * Guard: `regionTilePlanning.test.ts` ("savesVectorOnly").
+ */
+export function savesVectorOnly(
+  vectorClip: "include" | "none",
+  pyramids: number,
+): boolean {
+  return vectorClip === "include" && pyramids === 0;
+}
+
+/**
+ * How a run ended, given what the user asked of it and what its workers
+ * halted on.
+ *
+ * The workers share one halt slot and only look at the user's request between
+ * tiles, so a worker midway through a tile's retries can halt the job for its
+ * own reason after another has already honoured a cancel or a pause. What the
+ * user asked for wins: a cancelled job that ended "paused for a connection"
+ * kept its file and restarted itself on the next reconnect.
+ * Guard: `regionTilePlanning.test.ts` ("settledStop").
+ */
+export function settledStop<Halt extends { kind: string }>(
+  asked: null | "pause" | "cancel",
+  halted: Halt | null,
+): Halt | { kind: "cancelled" } | { kind: "paused"; reason: "user" } | null {
+  if (asked === "cancel") return { kind: "cancelled" };
+  if (asked === "pause" && halted?.kind === "paused") {
+    return { kind: "paused", reason: "user" };
+  }
+  return halted;
+}
+
 export type TileVerdict = "ok" | "gap" | "backoff" | "retry";
 
 /**

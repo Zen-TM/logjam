@@ -22,13 +22,13 @@
 /* Matches a TextField's label; the rail below it carries the same words as
    its own accessible name. */
 .fieldLabel {
-  font-size: var(--font-sm);
+  composes: label from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .hint {
+  composes: hint from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -63,7 +63,7 @@
 }
 
 .muted {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
