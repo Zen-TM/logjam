@@ -1,5 +1,5 @@
 /* Single-series area chart. Grid and axis stay recessive; the only saturated
-   thing is the route's own colour, which carries identity. */
+   thing is the line's own colour, which carries identity. */
 .root {
   /* Anchors the hover marker, which is positioned in chart coordinates. */
   position: relative;
@@ -7,7 +7,7 @@
 
 .chart {
   width: 100%;
-  height: 90px;
+  height: 90px; /* intrinsic: HEIGHT in ProfileChart.tsx */
   display: block;
   touch-action: none;
 }
@@ -27,13 +27,14 @@
 }
 
 /* Hover readout: a dot on the line with its figures beside it. The dot is
-   8px wide, so shifting the row 4px left centres it on the sample. */
+   one space step wide, so shifting the row half a step left centres it on the
+   sample. */
 .marker {
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 4px;
-  transform: translate(-4px, -50%);
+  gap: var(--space-0-5);
+  transform: translate(calc(-1 * var(--space-0-5)), -50%);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -42,12 +43,12 @@
    inside the panel. */
 .markerFlipped {
   flex-direction: row-reverse;
-  transform: translate(calc(-100% + 4px), -50%);
+  transform: translate(calc(-100% + var(--space-0-5)), -50%);
 }
 
 .markerDot {
-  width: 8px;
-  height: 8px;
+  width: var(--space-1);
+  height: var(--space-1);
   border-radius: var(--radius-full);
   border: 1.5px solid var(--color-page);
   flex-shrink: 0;
@@ -61,5 +62,5 @@
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-page) 82%, transparent);
   border-radius: var(--radius-sm);
-  padding: 0 4px;
+  padding: 0 var(--space-0-5);
 }

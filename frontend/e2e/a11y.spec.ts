@@ -489,6 +489,16 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(sendDialog).toHaveCount(0);
+
+    // The recording's own page was under that dialog: its two charts, drawn
+    // from the seeded file. The newest track is a recording, so it has both.
+    await expect(
+      aside.getByRole("img", { name: /^Elevation profile: / }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      aside.getByRole("img", { name: /^Speed profile: / }),
+    ).toBeVisible();
+    await expectNoViolations(page, "aside");
     await aside.getByRole("button", { name: /^Back/ }).click();
 
     // A route's own page: its stats, its colour picker and its place link.
@@ -939,6 +949,31 @@ test.describe("narrow web", () => {
     });
     expect(inside).toBe(true);
     await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+  });
+
+  test("a recording's page: both charts stay inside the phone", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Ways", exact: true }).click();
+    const sheet = page.locator("aside");
+    await sheet
+      .locator("[data-way-kind='track']")
+      .first()
+      .getByRole("button", { name: /^Actions for/ })
+      .click({ timeout: 15_000 });
+    await page.getByRole("menuitem", { name: "Open", exact: true }).click();
+    const speed = sheet.getByRole("img", { name: /^Speed profile: / });
+    await expect(speed).toBeVisible({ timeout: 15_000 });
+    for (const chart of [
+      sheet.getByRole("img", { name: /^Elevation profile: / }),
+      speed,
+    ]) {
+      const box = (await chart.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+    }
+    await expectNoViolations(page, "aside");
   });
 
   test("Measure: the tool's page is the sheet under the map", async ({

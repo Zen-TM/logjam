@@ -17,12 +17,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   computeTrackDetail,
+  toElevationGpsFixes,
+  toElevationLine,
   type GpsFix,
   type RecordedTrackPoint,
   type TrackDetail,
 } from "@logjam/shared";
 
-import { toElevationGpsFixes, toElevationLine } from "./trackLine";
 import { listTrackPoints } from "./tracksDb";
 import { useTrackChangeRefresh } from "./useTrackChangeRefresh";
 

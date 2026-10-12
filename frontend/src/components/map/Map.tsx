@@ -1745,6 +1745,7 @@ function Map({
           // URL retries; same-URL failures stay cached (LAYERS-2).
           if (!cached || cached.url !== entry.displayUrl) {
             const promise = fetchTrackGeoJSON(
+              entry.mediaId,
               entry.displayUrl,
               entry.color,
               entry.stamp,

@@ -16,6 +16,7 @@
 // being looked for most of the time.
 import { Text, View } from "react-native";
 import {
+  elevationSeries,
   formatDistanceM,
   MAP_MEASURE,
   PAIRED_STAT_LABELS,
@@ -24,7 +25,7 @@ import {
 } from "@logjam/shared";
 
 import { fontSize, spacing, makeStyles } from "../theme";
-import { ProfileChart, StatGrid, elevationSeries } from "../ui";
+import { ProfileChart, StatGrid } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
 

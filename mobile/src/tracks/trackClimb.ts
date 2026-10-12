@@ -34,7 +34,7 @@ import { sampleElevationsOffline } from "../offline/demLookup";
 import { canRunNow } from "../offline/networkPolicy";
 import { isOfflineOnly } from "../offline/offlineOnlyMode";
 import { reclimbStandaloneMediaLocal } from "../sync/mediaUpload";
-import { toElevationLine } from "./trackLine";
+import { toElevationLine } from "@logjam/shared";
 import {
   getTrack,
   listTrackPoints,

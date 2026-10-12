@@ -4,8 +4,8 @@
 // route's height profile), but a recorded track's SPEED is the same picture of
 // a different quantity, so the component takes a plain series plus a
 // formatter rather than an ElevationProfile. `elevationSeries` and
-// `speedSeries` below are the two adapters; anything else with a value per
-// metre travelled can add a third.
+// `speedSeries` in `@logjam/shared` are the two adapters; anything else with a
+// value per metre travelled can add a third.
 //
 // Still built from plain Views rather than SVG: react-native-svg is a NATIVE
 // module, so adding it means a new dev-client build and a reinstall on every
@@ -19,6 +19,11 @@
 // Columns are scaled between the profile's own min and max, not from sea
 // level: a place between 700 and 840 m drawn from zero is a flat bar.
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  sameSeries,
+  type ProfilePoint,
+  type ProfileSeries,
+} from "@logjam/shared";
 import {
   PanResponder,
   StyleSheet,
@@ -38,11 +43,6 @@ import {
   useTheme,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
-import {
-  sameSeries,
-  type ProfilePoint,
-  type ProfileSeries,
-} from "./profileSeries";
 
 /**
  * Columns drawn: one per POINT of chart width, capped.
@@ -124,7 +124,7 @@ function toColumns(samples: readonly ProfilePoint[], count: number): Column[] {
  * data costs nothing: ~400 Views per chart, twice a panel, once a second while
  * recording. The comparison is on the SERIES, not on `columns` — they are a
  * pure function of it and the count, and the series is the cheaper thing to
- * compare. Guard: "sameSeries" in profileSeries.test.ts.
+ * compare. Guard: "sameSeries" in shared/src/profileSeries.test.ts.
  */
 const Columns = memo(
   function Columns({

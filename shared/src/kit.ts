@@ -73,9 +73,7 @@ export const KIT_COMPONENTS = {
   ActivitySpark: both,
   StatusPill: both,
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
-  ProfileChart: gps(
-    "the touch-scrubbed elevation and speed chart; Logjam Web draws its profile in components/routes",
-  ),
+  ProfileChart: both,
   Notice: both,
   SyncStatusPills: gps(
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",

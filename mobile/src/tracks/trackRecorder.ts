@@ -38,7 +38,7 @@ import {
 import { startSensorLog, stopSensorLog } from "./sensorLog";
 import { backUpFinishedTrack } from "./trackBackup";
 import { climbFromSavedTerrain } from "./trackClimb";
-import { toElevationGpsFixes, toElevationLine } from "./trackLine";
+import { toElevationGpsFixes, toElevationLine } from "@logjam/shared";
 import { enqueueTrackWrite, resetTrackWriteHealth } from "./trackWriteQueue";
 import {
   addTrackPointSuppression,

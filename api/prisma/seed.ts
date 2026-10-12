@@ -17,6 +17,7 @@ import {
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
+  trackPointsToGpx,
 } from "@logjam/shared";
 import { s3 } from "../src/services/awsClients";
 import { seedId, cid } from "./seedIds";
@@ -37,6 +38,21 @@ import { saveSeedSnapshot } from "../src/__tests__/_seedBaseline";
 // the last point of its own line, and the Wollangambe recording's bbox did not
 // contain its line at all.
 
+/**
+ * When the two seeded recordings ran: stated once, for the row and the file.
+ * Short on purpose. Both lines are about a kilometre, and a longer span is a
+ * pace under `MOVING_SPEED_THRESHOLD_MPS`, which the stats engine reads as
+ * standing still: the speed chart would be a flat zero.
+ */
+const WOLLANGAMBE_RECORDED = {
+  startedAt: "2026-08-02T22:05:00.000Z",
+  endedAt: "2026-08-02T22:30:00.000Z",
+};
+const BELL_CREEK_RECORDED = {
+  startedAt: "2026-05-16T23:40:00.000Z",
+  endedAt: "2026-05-17T00:05:00.000Z",
+};
+
 type SeededFile = {
   key: string;
   body: string;
@@ -52,9 +68,32 @@ function seededFile(
   name: string,
   line: [number, number][],
   format: "gpx" | "kml",
+  /**
+   * Set for a RECORDING: the file is written the way Logjam GPS writes one,
+   * with a time and a height on every fix spread evenly over this span, so its
+   * page has a speed and an elevation profile to draw. The heights are made up.
+   */
+  recorded?: { startedAt: string; endedAt: string },
 ): SeededFile {
-  const body =
-    format === "gpx" ? routeToGpx(name, line) : routeToKml(name, line);
+  const startMs = recorded ? Date.parse(recorded.startedAt) : 0;
+  const stepMs = recorded
+    ? (Date.parse(recorded.endedAt) - startMs) / (line.length - 1)
+    : 0;
+  const body = recorded
+    ? trackPointsToGpx(
+        name,
+        line.map(([lon, lat], i) => ({
+          lon,
+          lat,
+          altitudeM: 640 + 45 * Math.sin(i / 3),
+          accuracyM: 5,
+          timestampMs: Math.round(startMs + i * stepMs),
+          segment: 0,
+        })),
+      )
+    : format === "gpx"
+      ? routeToGpx(name, line)
+      : routeToKml(name, line);
   const lons = line.map(([lon]) => lon);
   const lats = line.map(([, lat]) => lat);
   return {
@@ -1552,12 +1591,14 @@ async function main() {
     "Wollangambe, 2 Aug",
     WOLLANGAMBE_LINE,
     "gpx",
+    WOLLANGAMBE_RECORDED,
   );
   const bellCreekFile = seededFile(
     "media/seed/recording-2026-05-17.gpx",
     "Bell Creek, 17 May",
     BELL_CREEK_LINE,
     "gpx",
+    BELL_CREEK_RECORDED,
   );
   await uploadSeededFiles([
     empressFile,
@@ -1647,12 +1688,14 @@ async function main() {
         metadata: {
           bbox: wollangambeFile.bbox,
           distanceM: wollangambeFile.distanceM,
-          durationMs: 5_400_000,
+          durationMs: 1_500_000,
           elevationGainM: 95,
           elevationLossM: 130,
+          // The finest source, so opening the page finds nothing finer and
+          // writes nothing: the a11y e2e cases must not change the account.
+          elevationSource: "nsw-5m",
           pointCount: wollangambeFile.positionCount,
-          startedAt: "2026-08-02T22:05:00.000Z",
-          endedAt: "2026-08-02T23:35:00.000Z",
+          ...WOLLANGAMBE_RECORDED,
         },
       },
       // BOB's file on the place he shares with alice. This is the only way a
@@ -1694,12 +1737,14 @@ async function main() {
         metadata: {
           bbox: bellCreekFile.bbox,
           distanceM: bellCreekFile.distanceM,
-          durationMs: 3_600_000,
+          durationMs: 1_500_000,
           elevationGainM: 70,
           elevationLossM: 95,
+          // The finest source, so opening the page finds nothing finer and
+          // writes nothing: the a11y e2e cases must not change the account.
+          elevationSource: "nsw-5m",
           pointCount: bellCreekFile.positionCount,
-          startedAt: "2026-05-16T23:40:00.000Z",
-          endedAt: "2026-05-17T00:40:00.000Z",
+          ...BELL_CREEK_RECORDED,
         },
       },
     ],

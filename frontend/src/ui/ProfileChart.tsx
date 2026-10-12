@@ -1,17 +1,19 @@
-// Elevation profile for one line: height against distance travelled.
+// A profile chart: one value against position along a line. Height against
+// distance for a route or a track, speed against time for a track. The twin of
+// Logjam GPS's `ProfileChart`, read under a pointer instead of a finger.
 //
 // A single-series area chart, drawn as inline SVG — no chart library, and none
 // warranted for one filled path. Single series means no legend (the heading
-// names it) and one axis; the fill takes the ROUTE's own colour, because on
-// this map colour identifies the route, and the same route is that colour on
+// names it) and one axis; the fill takes the LINE's own colour, because on
+// this map colour identifies the line, and the same line is that colour on
 // the map beside this panel.
 //
-// The chart is never the only way to read the numbers: gain, loss and the
-// min/max range are stated as text above it, so a reader who cannot resolve
-// the plot still gets every figure.
+// What x and the value MEAN is the series' business (`elevationSeries`,
+// `speedSeries` in `@logjam/shared`): the chart only places them and hands
+// them back to `formatX` and `formatValue` to be read out.
 import { useEffect, useRef, useState } from "react";
-import classes from "./ElevationProfile.module.css";
-import { formatDistanceM, type ElevationSample } from "@logjam/shared";
+import type { ProfileSeries } from "@logjam/shared";
+import classes from "./ProfileChart.module.css";
 
 /** Viewbox units. The SVG scales to its container; these only set the aspect. */
 const WIDTH = 300;
@@ -22,32 +24,38 @@ const AXIS_HEIGHT = 14;
  *  or it would run off the panel. */
 const LABEL_FLIP_AT = 0.6;
 
-type ElevationProfileProps = {
-  samples: ElevationSample[];
-  minM: number | null;
-  maxM: number | null;
-  /** The route's map colour, so plot and map agree on identity. */
+type ProfileChartProps = {
+  series: ProfileSeries;
+  /** Renders a value — the chart knows no units. */
+  formatValue: (value: number) => string;
+  /** Renders a position: metres along, or a time of day. */
+  formatX: (x: number) => string;
+  /** What the chart is, for a reader who cannot see it; the range is added. */
+  label: string;
+  /** The line's map colour, so plot and map agree on identity. */
   color: string;
-  /** Index into `samples` under the cursor, or null on leave. Lets the caller
-   *  mark the same spot on the map — the samples are evenly spaced along the
-   *  route (densifyLine), so an index is a position. */
-  onHoverSampleChange?: (index: number | null) => void;
+  /** Index into `series.points` under the cursor, or null on leave, so the
+   *  caller can mark the same spot on the map. */
+  onHoverPointChange?: (index: number | null) => void;
 };
 
 type PlotPoint = {
   x: number;
   y: number;
   index: number;
-  sample: ElevationSample;
+  /** The series' own x and value, for the readout. */
+  at: number;
+  value: number;
 };
 
-export default function ElevationProfile({
-  samples,
-  minM,
-  maxM,
+export function ProfileChart({
+  series,
+  formatValue,
+  formatX,
+  label,
   color,
-  onHoverSampleChange,
-}: ElevationProfileProps): React.JSX.Element | null {
+  onHoverPointChange,
+}: ProfileChartProps): React.JSX.Element | null {
   const [hovered, setHovered] = useState<PlotPoint | null>(null);
 
   // A pointer emits moves far faster than the screen redraws, and each one
@@ -58,7 +66,7 @@ export default function ElevationProfile({
   // is dropped rather than queued.
   //
   // ABOVE the early return below, with every other hook: a chart with too few
-  // known heights returns null, and a hook after that return runs on some
+  // known values returns null, and a hook after that return runs on some
   // renders and not others.
   const frame = useRef<number | null>(null);
   const pendingX = useRef(0);
@@ -69,26 +77,28 @@ export default function ElevationProfile({
     [],
   );
 
+  const { points, min, max } = series;
   const known: PlotPoint[] = [];
-  const totalM = samples[samples.length - 1]?.distanceM ?? 0;
-  // A flat route would divide by zero; give it a nominal band so the line
+  const startX = points[0]?.x ?? 0;
+  const totalX = (points[points.length - 1]?.x ?? 0) - startX;
+  // A flat line would divide by zero; give it a nominal band so the line
   // lands mid-plot rather than at an edge.
-  const span = (maxM ?? 0) - (minM ?? 0) || 1;
+  const span = (max ?? 0) - (min ?? 0) || 1;
   const plotHeight = HEIGHT - AXIS_HEIGHT;
-  samples.forEach((sample, index) => {
-    if (sample.elevationM == null || minM == null) return;
+  points.forEach((point, index) => {
+    if (point.value == null || min == null) return;
     known.push({
-      x: totalM === 0 ? 0 : (sample.distanceM / totalM) * WIDTH,
-      y:
-        plotHeight - ((sample.elevationM - minM) / span) * (plotHeight - 4) - 2,
+      x: totalX === 0 ? 0 : ((point.x - startX) / totalX) * WIDTH,
+      y: plotHeight - ((point.value - min) / span) * (plotHeight - 4) - 2,
       index,
-      sample,
+      at: point.x,
+      value: point.value,
     });
   });
 
-  // Two known heights is the minimum that makes a line; below that there is
-  // nothing to plot and the text figures above already say so.
-  if (known.length < 2 || minM == null || maxM == null) return null;
+  // Two known values is the minimum that makes a line; below that there is
+  // nothing to plot and the figures around the chart already say so.
+  if (known.length < 2 || min == null || max == null) return null;
 
   const line = known
     .map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`)
@@ -97,7 +107,7 @@ export default function ElevationProfile({
 
   const hover = (point: PlotPoint | null) => {
     setHovered(point);
-    onHoverSampleChange?.(point?.index ?? null);
+    onHoverPointChange?.(point?.index ?? null);
   };
 
   const handleMove = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -132,7 +142,7 @@ export default function ElevationProfile({
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`Elevation profile: ${Math.round(minM)} to ${Math.round(maxM)} metres over ${formatDistanceM(totalM)}`}
+        aria-label={`${label}: ${formatValue(min)} to ${formatValue(max)}`}
         onPointerMove={handleMove}
         onPointerLeave={handleLeave}
       >
@@ -181,9 +191,11 @@ export default function ElevationProfile({
         >
           {/* eslint-disable-next-line no-restricted-syntax -- the series colour is a runtime value of the chart, not a role */}
           <span className={classes.markerDot} style={{ background: color }} />
+          {/* Value first, then where: "51 m at 3.7 km", "4.2 km/h at 2:41 pm".
+              Two bare figures in axis order need the reader to know which axis
+              is which, and a height and a distance are both metres. */}
           <span className={classes.markerLabel}>
-            {formatDistanceM(hovered.sample.distanceM)} ·{" "}
-            {Math.round(hovered.sample.elevationM!)} m
+            {formatValue(hovered.value)} at {formatX(hovered.at)}
           </span>
         </div>
       )}

@@ -12,26 +12,22 @@
 // zero. Distance and climb need no clock and are always there.
 import { Text, View } from "react-native";
 import {
+  elevationSeries,
   formatDistanceM,
-  formatDurationMs,
   formatSpeedMps,
-  MAP_MEASURE,
-  PAIRED_STAT_LABELS,
   pairedStatLayout,
-  speedClockMs,
+  speedSeries,
+  speedTimeFormatter,
+  storedClimbCaption,
+  TRACK_PROFILE_COPY,
+  trackHeights,
+  trackStatRows,
   type ElevationProfile,
   type TrackDetail,
 } from "@logjam/shared";
 
 import { fontSize, spacing, makeStyles } from "../theme";
-import {
-  ProfileChart,
-  StatGrid,
-  elevationSeries,
-  speedSeries,
-  timeOfDayFormatter,
-  type Stat,
-} from "../ui";
+import { ProfileChart, StatGrid, type Stat } from "../ui";
 
 export function TrackStatsBody({
   detail,
@@ -84,7 +80,7 @@ export function TrackStatsBody({
    * the Stats totals and Logjam Web give one figure for one track. Omitted for
    * a live recording and an import, which have nothing stored.
    */
-  storedClimb?: { gainM: number; lossM: number };
+  storedClimb?: { gainM: number; lossM: number; source?: string | null };
 }) {
   const styles = useStyles();
 
@@ -92,148 +88,72 @@ export function TrackStatsBody({
     return (
       <Text style={styles.pending}>
         {loading
-          ? "Reading the track…"
+          ? TRACK_PROFILE_COPY.reading
           : (emptyMessage ?? "No points recorded yet.")}
       </Text>
     );
   }
 
-  const durationMs = elapsedMs ?? detail.durationMs;
-  const timed = detail.movingMs != null;
-  // The DEM profile only when it has no gaps: a hole in the chart can't be
-  // told from the terrain. A recorded track's profile arrives with its gaps
-  // already filled from its own GPS heights, levelled to meet the DEM
-  // (`fillDemFromGps`), and says so in `filledFromGps`; anything still short
-  // of a height falls back to GPS for the whole section.
-  const demComplete =
-    demProfile != null &&
-    demProfile.samples.every((sample) => sample.elevationM != null);
-  const dem = demComplete ? demProfile : null;
-  const elevation = dem ?? detail.elevation;
-  const gainM = storedClimb?.gainM ?? (dem ? dem.gainM : detail.elevationGainM);
-  const lossM = storedClimb?.lossM ?? (dem ? dem.lossM : detail.elevationLossM);
-  const maxM = dem ? dem.maxM : detail.maxAltitudeM;
-  const minM = dem ? dem.minM : detail.minAltitudeM;
-
-  const stats: Stat[] = [];
-  if (timed || elapsedMs != null) {
-    stats.push({ label: "Time", value: formatDurationMs(durationMs) });
-  }
-  stats.push({ label: "Distance", value: formatDistanceM(detail.distanceM) });
-  if (detail.movingMs != null && detail.stoppedMs != null) {
-    stats.push({
-      label: PAIRED_STAT_LABELS.moving,
-      value: formatDurationMs(detail.movingMs),
-    });
-    stats.push({
-      label: PAIRED_STAT_LABELS.stopped,
-      value: formatDurationMs(detail.stoppedMs),
-    });
-  }
-  stats.push({
-    label: PAIRED_STAT_LABELS.ascent,
-    value: `↑ ${Math.round(gainM)} m`,
+  // One source for every height on the panel, and the line saying which:
+  // `trackHeights`, the rule Logjam Web's way page charts by too. The stat
+  // list is `trackStatRows`, shared with that page for the same reason.
+  const heights = trackHeights(detail, demProfile, demLoading ?? false);
+  const { elevation, note: heightsNote } = heights;
+  const stats: Stat[] = trackStatRows(detail, heights, {
+    elapsedMs,
+    storedClimb,
   });
-  stats.push({
-    label: PAIRED_STAT_LABELS.descent,
-    value: `↓ ${Math.round(lossM)} m`,
-  });
-  if (timed) {
-    // Two speeds, because they answer different questions: the first is "how
-    // long did the day take", the second is "how fast do we walk". A trip with
-    // a long lunch has a very different pair, and one number hides that.
-    stats.push({
-      label: PAIRED_STAT_LABELS.avgSpeed,
-      value: formatSpeedMps(detail.averageSpeedMps),
-    });
-    stats.push({
-      label: PAIRED_STAT_LABELS.avgMovingSpeed,
-      value: formatSpeedMps(detail.movingSpeedMps),
-    });
-  }
-  // ONE condition for every height on the panel, deliberately. A series with a
-  // single altitude reading sets a min and a max — the same number twice — and
-  // shipped a "High point 27 m / Low point 27 m" pair directly above the line
-  // saying the track had no altitudes. A lone reading is not a height band and
-  // cannot be drawn, so it says nothing at all.
-  if (elevation && maxM != null && minM != null) {
-    stats.push({
-      label: PAIRED_STAT_LABELS.highPoint,
-      value: `${Math.round(maxM)} m`,
-    });
-    stats.push({
-      label: PAIRED_STAT_LABELS.lowPoint,
-      value: `${Math.round(minM)} m`,
-    });
-  }
 
   const speed = detail.speed;
-  const formatClock = speed
-    ? timeOfDayFormatter(
-        speedClockMs(speed, 0),
-        speedClockMs(speed, speed.samples[speed.samples.length - 1]!.atMs),
-      )
-    : null;
+  const formatClock = speed ? speedTimeFormatter(speed) : null;
 
   return (
     <View style={styles.body}>
       {/* Pairs share a line and a lone stat takes the row (`STAT_PAIRS`), so a
           missing Time or a missing pair cannot slide the rest out of step. */}
       <StatGrid stats={pairedStatLayout(stats)} />
+      {/* The stored climb and the chart below can come from different sources
+          (`storedClimbCaption`), so each says its own. */}
+      {storedClimb ? (
+        <Text style={styles.pending}>
+          {storedClimbCaption(storedClimb.source)}
+        </Text>
+      ) : null}
 
       {elevation ? (
         <View style={styles.chartBlock}>
-          {/* Names BOTH axes. "Elevation" alone left the horizontal one to be
-              inferred, and a reader who assumes it is time reads the whole
-              chart wrong — a long flat section is a plateau, not a rest. */}
-          <Text style={styles.chartLabel}>Elevation vs distance</Text>
+          <Text style={styles.chartLabel}>
+            {TRACK_PROFILE_COPY.elevationTitle}
+          </Text>
           <ProfileChart
             series={elevationSeries(elevation, detail.distanceM)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
             hint="Press or drag for heights."
-            accessibilityLabel="Elevation profile"
+            accessibilityLabel={TRACK_PROFILE_COPY.elevationLabel}
           />
           {/* Which surface these heights came from. Said out loud because the
               two can differ by a lot — a DEM cannot see inside a slot narrower
               than its ~19 m grid, and GPS altitude cannot see a hill smaller
               than its own noise. A number with no provenance gets trusted. */}
-          <Text style={styles.pending}>
-            {demProfile?.filledFromGps && demComplete
-              ? "Terrain data covers part of this track — the rest is from this phone's GPS"
-              : demComplete
-                ? "Heights from terrain data"
-                : demProfile
-                  ? "Terrain data incomplete — heights from this phone's GPS"
-                  : demLoading
-                    ? "Heights from GPS — loading terrain…"
-                    : "Heights from GPS — no terrain data here"}
-          </Text>
+          <Text style={styles.pending}>{heightsNote}</Text>
         </View>
       ) : (
-        <Text style={styles.pending}>
-          {demLoading
-            ? MAP_MEASURE.copy.readingTerrain
-            : detail.maxAltitudeM == null
-              ? "No heights for this track"
-              : "Not enough height readings to chart"}
-        </Text>
+        <Text style={styles.pending}>{heightsNote}</Text>
       )}
 
       {speed && formatClock ? (
         <View style={styles.chartBlock}>
-          {/* And the speed chart's is TIME, not distance — the one place the
-              two charts differ, and the reason each says which. */}
-          <Text style={styles.chartLabel}>Speed vs time</Text>
+          <Text style={styles.chartLabel}>{TRACK_PROFILE_COPY.speedTitle}</Text>
           <ProfileChart
             series={speedSeries(speed)}
             formatValue={formatSpeedMps}
             // The speed series runs on a CLOCK, not a tape measure — its x is
             // time into the recording (see SpeedSample), read out as the time
             // of day it was: "where were we at 2 pm" is the question asked.
-            formatX={(atMs) => formatClock(speedClockMs(speed, atMs))}
+            formatX={formatClock}
             hint="Press or drag for speeds."
-            accessibilityLabel="Speed profile"
+            accessibilityLabel={TRACK_PROFILE_COPY.speedLabel}
           />
         </View>
       ) : null}

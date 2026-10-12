@@ -6,15 +6,15 @@
 // six-hour recording is thinned before it gets there.
 //
 // PRIVACY: these are precise wilderness coordinates. Nothing here logs.
+import type { GpsFix } from "./elevation.js";
+import { MAX_ROUTE_POINTS } from "./routeValidation.js";
 import {
   DISTANCE_SMOOTHING_WINDOW,
   ELEVATION_SMOOTHING_WINDOW,
-  MAX_ROUTE_POINTS,
   movingMean,
   movingMedian,
-  type GpsFix,
   type TrackSeriesPoint,
-} from "@logjam/shared";
+} from "./trackStats.js";
 
 /**
  * Vertices kept for a DEM sample. The DEM is read along the straight lines

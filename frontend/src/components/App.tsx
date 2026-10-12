@@ -1638,6 +1638,10 @@ function App() {
                   standaloneFiles.find((each) => each.id === selectedWay.id) ??
                   null
                 }
+                placeTrack={
+                  placeTracks.find((each) => each.mediaId === selectedWay.id) ??
+                  null
+                }
                 initialVerb={pendingWayVerb}
                 onVerbConsumed={() => setPendingWayVerb(null)}
                 friends={friends}
