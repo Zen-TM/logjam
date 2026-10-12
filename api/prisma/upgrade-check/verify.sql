@@ -10,8 +10,10 @@ SELECT to_regclass('upgrade_check.baseline') IS NOT NULL AS applies \gset
 
 CREATE TEMP TABLE after AS
 SELECT * FROM (VALUES
-  ('place_types', (SELECT count(*) FROM place_types)),
-  ('places',      (SELECT count(*) FROM places))
+  ('users',            (SELECT count(*) FROM users)),
+  ('place_shares',     (SELECT count(*) FROM place_shares)),
+  -- One row per pair now, so the row count IS the pair count.
+  ('friendship_pairs', (SELECT count(*) FROM friendships))
 ) AS t(metric, value);
 
 \echo 'upgrade-check after head migrations (base -> after):'
@@ -21,7 +23,7 @@ SELECT b.metric, b.value AS base, a.value AS after,
  ORDER BY status DESC, b.metric;
 
 DO $$
-DECLARE bad TEXT; moved BIGINT;
+DECLARE bad TEXT; weakened BIGINT;
 BEGIN
   SELECT string_agg(format('%s: %s -> %s', b.metric, b.value, coalesce(a.value::text, 'missing')), '; ')
     INTO bad
@@ -30,44 +32,74 @@ BEGIN
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'upgrade-check: data not carried across: %', bad;
   END IF;
-  SELECT count(*) INTO moved
-    FROM upgrade_check.place_type_of b LEFT JOIN places p USING (id)
-   WHERE p.place_type_id IS DISTINCT FROM b.place_type_id;
-  IF moved > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % place(s) changed type or went missing', moved;
+  -- No pair lost its row, and none ended weaker than its strongest row was:
+  -- a block is still a block, a friendship still a friendship.
+  SELECT count(*) INTO weakened
+    FROM upgrade_check.pair p
+    LEFT JOIN friendships f
+      ON LEAST(f.requester_id, f.addressee_id) = p.lo
+     AND GREATEST(f.requester_id, f.addressee_id) = p.hi
+   WHERE f.id IS NULL
+      OR CASE f.status WHEN 'blocked' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END
+         IS DISTINCT FROM p.strongest;
+  IF weakened > 0 THEN
+    RAISE EXCEPTION 'upgrade-check: % pair(s) lost their friendship row or its status', weakened;
   END IF;
 END $$;
 
--- Fixture-specific outcomes: the earliest of each set kept its name, the
--- later ones took the next FREE suffix, and the index now refuses another.
--- Mutations: drop the rename loop and the migration fails on CREATE INDEX;
--- drop the index and the insert at the bottom is accepted.
-SELECT EXISTS (SELECT 1 FROM users WHERE id = 'upgrade-fixture-owner') AS fixtures \gset
+-- Fixture-specific outcomes. Mutations: drop the merge and the migration
+-- fails on CREATE INDEX; order the survivor by age alone and the lose-ab /
+-- lose-ad rows are the ones kept; drop the promotion and keep-bc is still
+-- pending with its prompt; drop the tombstone insert and the count is 0; drop the index and the insert at the bottom is accepted.
+SELECT EXISTS (SELECT 1 FROM users WHERE id = 'upgrade-fixture-a') AS fixtures \gset
 \if :fixtures
 DO $$
-DECLARE names TEXT[]; untouched BIGINT;
+DECLARE kept TEXT[]; notes TEXT[]; tombstones BIGINT; untouched BIGINT; promoted BIGINT;
 BEGIN
-  SELECT array_agg(name ORDER BY id) INTO names
-    FROM place_types WHERE owner_id = 'upgrade-fixture-owner';
-  IF names IS DISTINCT FROM
-     ARRAY['Cave', 'cave (3)', 'Cave (2)', 'CAVE (4)', 'canyon (2)', 'Hut'] THEN
-    RAISE EXCEPTION 'upgrade-check: fixture place type names wrong: %', names;
+  SELECT array_agg(id ORDER BY id) INTO kept
+    FROM friendships WHERE id LIKE 'upgrade-fixture-%';
+  IF kept IS DISTINCT FROM ARRAY[
+       'upgrade-fixture-keep-ac', 'upgrade-fixture-keep-ba', 'upgrade-fixture-keep-bc',
+       'upgrade-fixture-keep-bd', 'upgrade-fixture-keep-da'] THEN
+    RAISE EXCEPTION 'upgrade-check: wrong fixture friendships survived: %', kept;
   END IF;
-  -- A renamed row is bumped for the delta pull; one left alone is not.
+  -- A survivor is not rewritten: phones already hold it as it is.
   SELECT count(*) INTO untouched
-    FROM place_types
-   WHERE owner_id = 'upgrade-fixture-owner' AND updated_at < '2026-02-01';
-  IF untouched <> 3 THEN
-    RAISE EXCEPTION 'upgrade-check: expected 3 fixture types left untouched, found %', untouched;
+    FROM friendships WHERE id LIKE 'upgrade-fixture-%' AND updated_at < '2026-02-01';
+  IF untouched <> 4 THEN
+    RAISE EXCEPTION 'upgrade-check: expected 4 fixture survivors untouched, found %', untouched;
+  END IF;
+  -- Except the one that was two pending requests: accepted, and bumped for
+  -- the delta pull.
+  SELECT count(*) INTO promoted
+    FROM friendships
+   WHERE id = 'upgrade-fixture-keep-bc' AND status = 'accepted'
+     AND requester_id = 'upgrade-fixture-b' AND updated_at > '2026-02-01';
+  IF promoted <> 1 THEN
+    RAISE EXCEPTION 'upgrade-check: two pending requests did not become one accepted friendship';
+  END IF;
+  SELECT array_agg(id || ' -> ' || (payload->>'friendshipId') ORDER BY id) INTO notes
+    FROM notifications WHERE id LIKE 'upgrade-fixture-%';
+  IF notes IS DISTINCT FROM ARRAY[
+       'upgrade-fixture-keep-1 -> upgrade-fixture-keep-ba',
+       'upgrade-fixture-move-1 -> upgrade-fixture-keep-ac'] THEN
+    RAISE EXCEPTION 'upgrade-check: fixture notifications wrong: %', notes;
+  END IF;
+  -- Both people of each of the four merged rows are told to forget it.
+  SELECT count(DISTINCT (user_id, entity_id)) INTO tombstones
+    FROM sync_tombstones
+   WHERE entity_type = 'friendship' AND entity_id LIKE 'upgrade-fixture-lose-%';
+  IF tombstones <> 8 THEN
+    RAISE EXCEPTION 'upgrade-check: expected 8 friendship tombstones, found %', tombstones;
   END IF;
   BEGIN
-    INSERT INTO place_types (id, owner_id, name, icon_key, color, updated_at)
-    VALUES ('upgrade-fixture-type-7', 'upgrade-fixture-owner', '  hUT', 'map-pin', '#F97316', now());
-    RAISE EXCEPTION 'upgrade-check: the as-read index accepted a duplicate name';
+    INSERT INTO friendships (id, requester_id, addressee_id, status, updated_at)
+    VALUES ('upgrade-fixture-second', 'upgrade-fixture-d', 'upgrade-fixture-b', 'pending', now());
+    RAISE EXCEPTION 'upgrade-check: the pair index accepted a second row the other way round';
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
 END $$;
-\echo 'upgrade-check: fixture duplicates renamed, places kept, index refuses another'
+\echo 'upgrade-check: fixture pairs merged, mutual requests accepted, notifications repointed, tombstones written, index refuses a second row'
 \endif
 
 DROP SCHEMA upgrade_check CASCADE;
