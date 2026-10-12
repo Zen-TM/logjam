@@ -8,6 +8,7 @@
 // things, what was I trying to do, why did it fail, can I fix it, and what
 // happens if I ignore it. Everything below exists to answer one of them.
 import {
+  ATTRIBUTE_NOUN,
   invalidPlaceFields,
   isTransientSyncError,
   SYSTEM_FIELD_DEFS,
@@ -169,16 +170,95 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
         "trying on its own. It stays here until you try again.",
     };
   }
-  return {
-    // The server's own message is domain copy we wrote ("Longest abseil must be
-    // a number between 0 and 500"), so it is worth more than anything generic,
-    // and it names the field the "What you changed" block above it is showing.
-    // No hint: the rows underneath ARE the advice, and a sentence telling the
-    // user to go and do what the next button does is a sentence that has not
-    // earned its place.
-    line: error.message || "This change can't be saved as it is.",
-    canRetry: false,
+  return { line: rejectionLine(op), canRetry: false };
+}
+
+const CANT_SAVE = "This change can't be saved as it is.";
+
+/**
+ * One plain sentence for a refusal about the request, chosen from what the
+ * phone already knows: the entity, the op, the status code and the fields it
+ * sent. The server's own message is never read — it is developer wording, it
+ * can carry a name, and `ParkedOp.error` no longer holds it. Anything we cannot
+ * name falls back to `CANT_SAVE`.
+ *
+ * The lines name a KIND of thing ("place", "trip"), never the user's own text:
+ * which one it is already the row's title.
+ */
+export function rejectionLine(op: ParkedOp): string {
+  const code = op.error?.code;
+  const fields = op.fields ?? {};
+  // Missing means "not sent": an update carries only what it dirtied, so only a
+  // create can be missing a field.
+  const blank = (key: string): boolean => {
+    const value = fields[key];
+    if (value === undefined) return op.op === "create";
+    return typeof value !== "string" || value.trim() === "";
   };
+
+  if (code === 409) {
+    if (op.entity === "placeType") {
+      return op.op === "delete"
+        ? "This place type still has places in it. Move them to another type first."
+        : "You already have a place type with that name.";
+    }
+    if (op.entity === "customFieldDef") {
+      return `You already have an ${ATTRIBUTE_NOUN.one} with that name.`;
+    }
+  }
+  if (code === 403 && op.entity === "placeType" && op.op === "delete") {
+    return "Built-in place types can't be deleted.";
+  }
+  if (code === 404 && op.entity === "placeLink") {
+    return "One of the places in this link no longer exists.";
+  }
+  if (code === 400 && op.op !== "delete") {
+    switch (op.entity) {
+      case "place":
+        if (op.op === "create" && blank("name")) {
+          return "This place needs a name before it can sync.";
+        }
+        if (rejectedFields(op).length > 0) {
+          return "A value on this place is outside the range it accepts.";
+        }
+        break;
+      case "tripLog": {
+        if (op.op === "create" && !fields.date) {
+          return "This trip needs a date before it can sync.";
+        }
+        if (
+          typeof fields.date === "string" &&
+          Number.isNaN(new Date(fields.date).getTime())
+        ) {
+          return "The date on this trip isn't a real date.";
+        }
+        if (Array.isArray(fields.placeIds) && fields.placeIds.length > 0) {
+          return "This trip names a place that no longer exists.";
+        }
+        break;
+      }
+      case "placeType":
+        if (blank("name")) {
+          return "This place type needs a name before it can sync.";
+        }
+        break;
+      case "customFieldDef":
+        if (blank("label")) {
+          return `This ${ATTRIBUTE_NOUN.one} needs a name before it can sync.`;
+        }
+        if (
+          typeof fields.min === "number" &&
+          typeof fields.max === "number" &&
+          fields.min > fields.max
+        ) {
+          return "The smallest value can't be above the largest.";
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return CANT_SAVE;
 }
 
 /**

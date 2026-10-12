@@ -89,7 +89,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -1484,14 +1484,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(1),
   },
   dayLabel: { ...textRole.section, color: theme.textMuted },
-  dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
+  dayCount: { ...textRole.meta },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks
   // clipped. Same treatment as Saved's search.
   searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
   truncation: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...textRole.meta,
     textAlign: "center",
     paddingTop: spacing(1.5),
     paddingHorizontal: spacing(2),
@@ -1517,8 +1516,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // what it replaced.
   actions: { flexDirection: "row", gap: spacing(1) },
   actionHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...textRole.meta,
     textAlign: "center",
     paddingTop: spacing(0.5),
   },

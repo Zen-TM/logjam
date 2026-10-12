@@ -27,6 +27,8 @@ import { formatSpeedMps } from "@logjam/shared";
 import { fontSize, radius, spacing, withAlpha, makeStyles } from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
+// The height of one line of each text, as the font draws it (the same estimate
+// the scale bar makes): the chip is a fixed box around them.
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
 const VALUE_LINE = Math.round(fontSize.sm * 1.35);
 
@@ -116,15 +118,10 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(0.5),
   },
   column: { flex: 1, alignItems: "center" },
-  label: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    lineHeight: LABEL_LINE,
-  },
+  label: { ...textRole.meta },
   value: {
     ...textRole.control,
     color: theme.text,
-    lineHeight: VALUE_LINE,
     fontVariant: ["tabular-nums"],
   },
   // A hairline rather than a gap: two centred columns with nothing between them

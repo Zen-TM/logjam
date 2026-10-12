@@ -65,7 +65,6 @@ import {
 
 import { tripTitle } from "../api/tripTitle";
 import {
-  fontSize,
   radius,
   spacing,
   withAlpha,
@@ -830,7 +829,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(theme.accent, 0.12),
   },
-  rangeText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
+  rangeText: { ...textRole.bodySmall, flex: 1, color: theme.text },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
@@ -848,7 +847,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(0.5),
   },
   yearLabel: { ...textRole.sheetTitle, color: theme.text },
-  yearCount: { color: theme.textMuted, fontSize: fontSize.xs },
+  yearCount: { ...textRole.meta },
   rowTrailing: {
     flexDirection: "row",
     alignItems: "center",
@@ -863,7 +862,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
-  badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
+  badgeText: { ...textRole.meta },
   sheetBody: { gap: spacing(1) },
   presets: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));

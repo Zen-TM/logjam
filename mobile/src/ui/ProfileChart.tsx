@@ -33,15 +33,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  withAlpha,
-  makeStyles,
-  useTheme,
-} from "../theme";
+import { radius, spacing, withAlpha, makeStyles, useTheme } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
 
 /**
@@ -354,8 +346,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     color: theme.text,
     fontVariant: ["tabular-nums"],
   },
-  readoutHint: { color: theme.textMuted, fontSize: fontSize.xs },
-  readoutAt: { color: theme.textMuted, fontWeight: fontWeight.regular },
+  readoutHint: { ...textRole.meta },
+  readoutAt: { ...textRole.hint },
   chart: {
     flexDirection: "row",
     alignItems: "flex-end",
