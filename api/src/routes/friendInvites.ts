@@ -41,8 +41,9 @@ function invalidLink(): AppError {
   return new AppError(404, "This invite link is no longer valid");
 }
 
-/** The live invite a token names, for a caller who is not its inviter. */
-async function resolveInvite(token: unknown, callerId: string) {
+/** The live invite a token names, for a caller who is not its inviter.
+ *  Exported for its guard: friendInvites.unit.test.ts. */
+export async function resolveInvite(token: unknown, callerId: string) {
   if (!isFriendInviteToken(token)) throw invalidLink();
   const invite = await prisma.friendInvite.findUnique({
     where: { tokenHash: hashFriendInviteToken(token) },

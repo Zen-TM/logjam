@@ -576,7 +576,7 @@ function AddFriendDialog({
 /** The other way to add someone: a link to send, for when they are not at
  *  hand to spell a username. The link is shown as well as copied, because a
  *  browser may refuse the clipboard and the link exists only in this reply. */
-function InviteLink({ open }: { open: boolean }) {
+export function InviteLink({ open }: { open: boolean }) {
   const toast = useToast();
   const [link, setLink] = useState<string | null>(null);
   const [live, setLive] = useState(0);
@@ -599,18 +599,27 @@ function InviteLink({ open }: { open: boolean }) {
 
   async function handleCopy() {
     setBusy(true);
+    let url: string;
     try {
       const { token } = await createFriendInvite();
-      const url = friendInviteUrl(window.location.origin, token);
+      url = friendInviteUrl(window.location.origin, token);
       setLink(url);
       setLive((count) => count + 1);
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, copy.inviteFailed));
+      setBusy(false);
+      return;
+    }
+    // Its own failure: the link was made and is on screen to select by hand,
+    // so saying it could not be made sent people back for a second one
+    // (FriendsPanel.render.test.tsx).
+    try {
       await navigator.clipboard.writeText(url);
       toast.success(copy.inviteCopied);
     } catch (err) {
       console.error(err);
-      // With a link on screen the failure was the clipboard's, and the link
-      // can still be selected by hand.
-      toast.error(messageFromError(err, copy.inviteFailed));
+      toast.error(copy.inviteCopyFailed);
     } finally {
       setBusy(false);
     }

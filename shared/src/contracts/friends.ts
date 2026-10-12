@@ -53,6 +53,7 @@ export const FRIENDS = {
     inviteShare: "Share invite link",
     inviteCopied: "Invite link copied.",
     inviteFailed: "Couldn't make an invite link.",
+    inviteCopyFailed: "Couldn't copy the invite link.",
     inviteRevoke: "Turn off my links",
     inviteRevoked: "Your invite links no longer work.",
     inviteRevokeFailed: "Couldn't turn off your invite links.",
