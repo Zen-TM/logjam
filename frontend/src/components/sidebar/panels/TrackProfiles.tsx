@@ -8,9 +8,12 @@
 // figures its row carries already say what the file holds. A file without
 // times has no honest speed, so that chart and the clock figures are absent
 // rather than flat or zero.
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 import {
+  climbFromProfile,
   densifyLineSegments,
+  ELEVATION_TRACK_MAX_SAMPLES,
+  isFinerClimbSource,
   elevationSeries,
   formatDistanceM,
   formatElevationM,
@@ -22,6 +25,7 @@ import {
   TRACK_PROFILE_COPY,
   trackHeights,
   trackStatRows,
+  type TrackClimb,
 } from "@logjam/shared";
 import { useElevationProfile } from "../../../placeUtils";
 import type { RouteHoverChannel } from "../../map/routeHover";
@@ -35,6 +39,7 @@ import classes from "./WayDetailPanel.module.css";
 export default function TrackProfiles({
   source,
   stored,
+  climb,
   color,
   routeHover,
 }: {
@@ -42,6 +47,15 @@ export default function TrackProfiles({
   /** The figures the file's own row carries. They are listed as they are, in
    *  the file's place in the list; the file fills in the rest. */
   stored: Stat[];
+  /**
+   * Set for the viewer's OWN recording, whose stored climb can improve: the
+   * source it was last read from (absent = GPS), and how to store a better
+   * one. Null for an import or anyone else's track, which are never written.
+   */
+  climb: {
+    source: string | undefined;
+    save: (climb: TrackClimb) => void;
+  } | null;
   /** The track's map colour, so the charts and the line agree on identity. */
   color: string | null;
   /** Where a chart's cursor sits, so the map marks it. */
@@ -51,6 +65,24 @@ export default function TrackProfiles({
   const { profile: demProfile, loading: demLoading } = useElevationProfile(
     line.length > 0 ? line : null,
   );
+
+  // The stored climb is the one figure every screen shows, so a finer reading
+  // is not shown beside it: it REPLACES it, here as on the phone that holds
+  // the line (`storeTrackClimb` in Logjam GPS). Offered once per reading; the
+  // stored source then matches and nothing is finer.
+  const offered = useRef<string | null>(null);
+  const saveClimb = useEffectEvent((read: TrackClimb) => climb?.save(read));
+  const storedSource = climb?.source;
+  const canUpgrade = climb !== null;
+  useEffect(() => {
+    const read = canUpgrade ? climbFromProfile(demProfile) : null;
+    if (!read || !isFinerClimbSource(read.elevationSource, storedSource))
+      return;
+    const key = `${source.mediaId}:${read.elevationSource}`;
+    if (offered.current === key) return;
+    offered.current = key;
+    saveClimb(read);
+  }, [canUpgrade, demProfile, storedSource, source.mediaId]);
 
   const heights = useMemo(
     () => (detail ? trackHeights(detail, demProfile, demLoading) : null),
@@ -76,7 +108,10 @@ export default function TrackProfiles({
   // the terrain was read from. A fraction rather than a sample index because
   // the heights may be the track's own GPS ones, which are not sampled at
   // these positions; either way a feature sits at the same fraction along.
-  const positions = useMemo(() => densifyLineSegments(line), [line]);
+  const positions = useMemo(
+    () => densifyLineSegments(line, ELEVATION_TRACK_MAX_SAMPLES),
+    [line],
+  );
   const handleHover = useCallback(
     (index: number | null) => {
       const points = elevation?.points;

@@ -12,9 +12,14 @@ import type {
   MediaOrigin,
   PlaceMergePolicy,
   ElevationProfile,
+  TrackClimb,
   SharableEntityType,
 } from "@logjam/shared";
-import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
+import {
+  ELEVATION_TRACK_MAX_SAMPLES,
+  formatTripPlaceNames,
+  tallyNotifications,
+} from "@logjam/shared";
 import {
   settleReadOverrides,
   withReadOverrides,
@@ -519,7 +524,11 @@ export function getElevationProfile(
     "/elevation/profile",
     {
       method: "POST",
-      body: Array.isArray(line[0]?.[0]) ? { segments: line } : { points: line },
+      // A track asks for the sample ceiling Logjam GPS asks for, so the two
+      // clients read the same climb off the same line.
+      body: Array.isArray(line[0]?.[0])
+        ? { segments: line, maxSamples: ELEVATION_TRACK_MAX_SAMPLES }
+        : { points: line },
     },
   );
 }
@@ -1443,6 +1452,18 @@ export function renameMedia(
     method: "PATCH",
     body: { displayName },
   });
+}
+
+/**
+ * Replaces a recorded track's stored climb. The API takes any valid climb:
+ * the caller sends only one read from a finer source than the stored one
+ * (`isFinerClimbSource`).
+ */
+export function reclimbMedia(
+  id: string,
+  climb: TrackClimb,
+): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}`, { method: "PATCH", body: climb });
 }
 
 export function recolourMedia(id: string, color: string): Promise<MediaItem> {

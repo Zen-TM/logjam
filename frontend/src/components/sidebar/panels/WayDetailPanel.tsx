@@ -55,6 +55,7 @@ import {
   shareEntityWith,
   unshareEntityWith,
   recolourMedia,
+  reclimbMedia,
   renameMedia,
   sendCopyOfMedia,
   type TRoute,
@@ -605,6 +606,20 @@ export default function WayDetailPanel({
           <TrackProfiles
             source={trackSource}
             stored={stats}
+            climb={
+              file?.origin === "track"
+                ? {
+                    source: file.metadata.elevationSource,
+                    // Quiet either way: nobody asked for this, and a reading
+                    // that could not be stored is offered again next time.
+                    save: (read) =>
+                      void reclimbMedia(file.id, read).then(
+                        onChanged,
+                        () => {},
+                      ),
+                  }
+                : null
+            }
             color={shownColour}
             routeHover={routeHover}
           />

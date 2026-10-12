@@ -39,7 +39,12 @@ const trkpts = (timed: boolean) =>
 const gpx = (timed: boolean) =>
   `<?xml version="1.0"?><gpx version="1.1" creator="test"><trk><trkseg>${trkpts(timed)}</trkseg></trk></gpx>`;
 
-function show(mediaId: string, text: string, stored: Stat[] = []) {
+function show(
+  mediaId: string,
+  text: string,
+  stored: Stat[] = [],
+  climb: React.ComponentProps<typeof TrackProfiles>["climb"] = null,
+) {
   const fetchMock = vi.fn(async () => new Response(text));
   vi.stubGlobal("fetch", fetchMock);
   const displayUrl = vi.fn(() => "https://files.test/track");
@@ -48,6 +53,7 @@ function show(mediaId: string, text: string, stored: Stat[] = []) {
     <TrackProfiles
       source={{ mediaId, filename: "walk.gpx", displayUrl }}
       stored={stored}
+      climb={climb}
       color="#F97316"
       routeHover={routeHover}
     />,
@@ -165,6 +171,50 @@ describe("TrackProfiles", () => {
       expect(screen.queryByText(TRACK_PROFILE_COPY.reading)).toBeNull(),
     );
     expect(view.container.textContent).toBe("Size12 kB");
+  });
+
+  // Mutation: drop the `isFinerClimbSource` check and the second case stores.
+  it("stores a climb read from a finer source than the stored one, and only then", async () => {
+    dem.profile = {
+      samples: [
+        { distanceM: 0, elevationM: 400 },
+        { distanceM: 600, elevationM: 480 },
+      ],
+      gainM: 80,
+      lossM: 0,
+      minM: 400,
+      maxM: 480,
+      demSourceIds: ["nsw-5m"],
+      attribution: "Terrain credit",
+    };
+    const save = vi.fn();
+    show("finer", gpx(true), [], { source: "terrarium", save });
+    await screen.findByText("Heights from terrain data");
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      elevationGainM: 80,
+      elevationLossM: 0,
+      elevationSource: "nsw-5m",
+    });
+
+    cleanup();
+    const same = vi.fn();
+    show("same", gpx(true), [], { source: "nsw-5m", save: same });
+    await screen.findByText("Heights from terrain data");
+    expect(same).not.toHaveBeenCalled();
+
+    // A reading with a hole sums a surface and nothing: never stored.
+    cleanup();
+    dem.profile = {
+      ...dem.profile,
+      samples: [
+        { distanceM: 0, elevationM: 400 },
+        { distanceM: 600, elevationM: null },
+      ],
+    };
+    const holed = vi.fn();
+    show("holed", gpx(true), [], { source: undefined, save: holed });
+    await screen.findByText("Terrain data incomplete — heights from GPS");
+    expect(holed).not.toHaveBeenCalled();
   });
 
   it("says so in our own words when the file cannot be read", async () => {
