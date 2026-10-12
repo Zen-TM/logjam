@@ -7,6 +7,7 @@ import {
   linksCanyon,
   MAX_TRIP_TYPES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
+  tripTitle,
 } from "./tripName.js";
 
 describe("formatTripPlaceNames", () => {
@@ -211,5 +212,27 @@ describe("enforceCanyoningTag — dialog round-trips at the cap", () => {
       false,
     );
     expect(saved).toHaveLength(MAX_TRIP_TYPES_PER_TRIP);
+  });
+});
+
+describe("tripTitle", () => {
+  const places = [{ name: "Claustral" }, { name: "Ranon" }];
+
+  // Red if the displayName branch is dropped or ordered after the join.
+  it("prefers an explicit displayName", () => {
+    expect(tripTitle({ displayName: "Big day", places })).toBe("Big day");
+  });
+
+  // Red if a null displayName stops falling through to the joined names.
+  it("joins place names when displayName is null or absent", () => {
+    expect(tripTitle({ displayName: null, places })).toBe(
+      "Claustral and Ranon",
+    );
+    expect(tripTitle({ places })).toBe("Claustral and Ranon");
+  });
+
+  // Red if the final fallback is removed.
+  it("falls back to Untitled trip", () => {
+    expect(tripTitle({ displayName: null, places: [] })).toBe("Untitled trip");
   });
 });

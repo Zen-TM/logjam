@@ -119,6 +119,7 @@ resource "aws_s3_bucket_policy" "audit" {
           }
         }
       },
+      local.deny_insecure_transport["audit"],
     ]
   })
 }

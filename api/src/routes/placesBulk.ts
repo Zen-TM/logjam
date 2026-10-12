@@ -1,6 +1,7 @@
 import { fieldValueSentence } from "./places";
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import { bulkImportLimiter } from "../middleware/rateLimit";
 import prisma from "../services/prisma";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
@@ -135,6 +136,7 @@ type ImportRequest = {
 router.post(
   "/",
   requireAuth,
+  bulkImportLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 

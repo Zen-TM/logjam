@@ -41,7 +41,7 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
 
 // A backticked token with a slash that ends in an extension or a slash. Globs
 // and placeholders (`*`, `<…>`, `NNNN`) are not paths and do not match.
-const PATH = /`([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.[\]-]+)+(?:\.[a-z]+|\/))`/g;
+const PATH = /`([A-Za-z0-9_.+@-]+(?:\/[A-Za-z0-9_.+@[\]-]+)+(?:\.[a-z]+|\/))`/g;
 
 const adrs = readdirSync(decisions).filter(
   (file) => /^\d{4}-.*\.md$/.test(file) && !file.startsWith("0000-"),

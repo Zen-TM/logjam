@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import { bulkImportLimiter } from "../middleware/rateLimit";
 import prisma from "../services/prisma";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
@@ -44,6 +45,7 @@ type ImportRequest = {
 router.post(
   "/",
   requireAuth,
+  bulkImportLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
@@ -77,11 +79,10 @@ router.post(
     const ownedPlaces =
       placeIds.length > 0
         ? await prisma.place.findMany({
-            where: { id: { in: placeIds } },
-            select: { id: true, ownerId: true, placeTypeId: true },
+            where: { id: { in: placeIds }, ownerId: user.id },
+            select: { id: true, placeTypeId: true },
           })
         : [];
-    const ownerById = new Map(ownedPlaces.map((c) => [c.id, c.ownerId]));
     const placeTypeById = new Map(
       ownedPlaces.map((c) => [c.id, c.placeTypeId]),
     );
@@ -119,9 +120,9 @@ router.post(
       // placeId is nullable — a place-less trip is valid.
       let placeId: string | null = null;
       if (t.placeId != null && t.placeId !== "") {
-        const ownerId = ownerById.get(t.placeId);
-        // Someone else's place reads exactly as one that does not exist.
-        if (ownerId !== user.id) {
+        // One sentence for "missing" and "someone else's": a distinct one
+        // would tell a caller which place ids exist.
+        if (!placeTypeById.has(t.placeId)) {
           errors.push({
             index: i,
             error: say`Couldn't find the place for this trip.`,

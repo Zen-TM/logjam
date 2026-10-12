@@ -61,6 +61,12 @@ const SENSITIVE_KEYS = new Set([
   "name",
   "altnames",
   "notes",
+  // Generic free-text keys: a place, trip or media caption can reach a payload
+  // under any of these. Tracing is off, so no span `description` is lost.
+  "description",
+  "summary",
+  "comment",
+  "title",
   "displayname",
   // User-authored field LABELS and values ("permit number", "water level") are
   // as sensitive as notes. `fieldvalues` also carries what used to be the seven

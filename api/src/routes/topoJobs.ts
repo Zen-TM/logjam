@@ -227,7 +227,7 @@ router.post(
     requireShareOwner(
       await getJobRole(user.id, "topoJob", job),
       "topoJob",
-      say`Only the owner can delete this LiDAR map.`,
+      say`Only the owner can start this LiDAR map.`,
     );
     if (job.status !== "uploading")
       throw new AppError(400, say`That upload has already been received.`);

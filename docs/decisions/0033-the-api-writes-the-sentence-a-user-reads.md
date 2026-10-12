@@ -78,8 +78,8 @@ Guards:
   with what the user was doing. A caller that wants its own words for one case
   has no supported way to get them.
 - **Negative:** The response has no machine-readable reason. A client that
-  must behave differently for one refusal can branch only on the status code,
-  and translating the app would mean translating in the API or adding codes
+  must behave differently for one refusal can branch only on the status code
+  (a credit refusal also carries `used`, `quota` and `resetAt`), and translating the app would mean translating in the API or adding codes
   then.
 - **Negative:** Rewording a sentence is an API deploy, and a Logjam GPS build
   already in the field shows whatever the server it reaches sends.

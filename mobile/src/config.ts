@@ -1,5 +1,7 @@
 import packageJson from "../package.json";
 
+import { resolveAuthMode } from "./authMode";
+
 // Runtime config, read from EXPO_PUBLIC_* env at build time (parallels the web
 // VITE_* split: dev vs prod parity via separate env files / EAS profiles).
 // Non-secret values only — Cognito pool/client IDs are public by design; no
@@ -13,9 +15,11 @@ function required(name: string, value: string | undefined): string {
   return value;
 }
 
+const apiUrl = required("EXPO_PUBLIC_API_URL", process.env.EXPO_PUBLIC_API_URL);
+
 export const config = {
-  apiUrl: required("EXPO_PUBLIC_API_URL", process.env.EXPO_PUBLIC_API_URL),
-  authMode: process.env.EXPO_PUBLIC_AUTH_MODE ?? "cognito",
+  apiUrl,
+  authMode: resolveAuthMode(process.env.EXPO_PUBLIC_AUTH_MODE, apiUrl),
   // Which seeded user a fake-auth dev build acts as ("fake-bob-sub").
   // Unset = alice, the historical default. Ignored outside fake auth.
   fakeSub: process.env.EXPO_PUBLIC_FAKE_SUB ?? null,
