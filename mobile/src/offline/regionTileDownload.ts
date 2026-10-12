@@ -41,6 +41,7 @@ import {
   classifyTileResponse,
   deadTileBudget,
   exhaustedTileOutcome,
+  settledStop,
   regionPlanHash,
   regionTileSequence,
   tileUrlFrom,
@@ -461,18 +462,19 @@ export async function runRegionDownload(
     await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
     await flush(true);
 
-    if (halt.stop?.kind === "cancelled") {
+    const stop = settledStop(token.stop, halt.stop);
+    if (stop?.kind === "cancelled") {
       await closeRegionMbtiles(target);
       await deleteRegionFile(spec.id);
       return { status: "cancelled" };
     }
-    if (halt.stop?.kind === "failed") {
+    if (stop?.kind === "failed") {
       await closeRegionMbtiles(target);
-      return { status: "failed", code: halt.stop.code };
+      return { status: "failed", code: stop.code };
     }
-    if (halt.stop?.kind === "paused") {
+    if (stop?.kind === "paused") {
       await closeRegionMbtiles(target);
-      return { status: "paused", reason: halt.stop.reason };
+      return { status: "paused", reason: stop.reason };
     }
 
     // Verify before declaring it usable: every planned tile is accounted for as

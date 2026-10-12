@@ -250,6 +250,11 @@ function installAutoResumeWatchers(): void {
     // A fresh allowance each time the app changes sides: it counts restarts
     // within ONE stretch behind another app.
     backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
+    // And a fresh wait: one that began with Logjam GPS in front would
+    // otherwise run out early behind another app
+    // (regionDownloadQueue.test.ts).
+    if (waitTimer) clearTimeout(waitTimer);
+    waitTimer = null;
     if (state !== "active") {
       syncDownloadService();
       return;
