@@ -8,12 +8,20 @@
 // reports (root privacy rules).
 
 import { haversineMeters } from "./placeGeo.js";
+import { GPS_CLIMB_SOURCE, type DemSamples } from "./demSources.js";
 import {
   ELEVATION_PROFILE_MAX_SAMPLES,
+  buildElevationProfile,
   elevationGainLoss,
+  gpsAlongLine,
+  lineSegmentOf,
   type ElevationProfile,
   type ElevationSample,
+  type GpsFix,
+  type GpsHeight,
+  type SamplePosition,
 } from "./elevation.js";
+import type { RoutePoint } from "./routeValidation.js";
 
 /** A fix as delivered by the platform, before acceptance filtering. */
 export type CandidateFix = {
@@ -236,7 +244,7 @@ function symmetricHalfWidth(
   return Math.min((window - 1) >> 1, index, length - 1 - index);
 }
 
-function movingMean(values: number[], window: number): number[] {
+export function movingMean(values: number[], window: number): number[] {
   if (window <= 1) return values.slice();
   return values.map((_, index) => {
     const half = symmetricHalfWidth(index, values.length, window);
@@ -246,7 +254,7 @@ function movingMean(values: number[], window: number): number[] {
   });
 }
 
-function movingMedian(values: number[], window: number): number[] {
+export function movingMedian(values: number[], window: number): number[] {
   if (window <= 1) return values.slice();
   return values.map((_, index) => {
     const half = symmetricHalfWidth(index, values.length, window);
@@ -428,9 +436,30 @@ export type SpeedSample = { atMs: number; speedMps: number };
 
 export type SpeedProfile = {
   samples: SpeedSample[];
+  /**
+   * Where the recording clock meets the wall clock: one anchor per segment,
+   * in order. Kept beside the samples rather than on them because `atMs`
+   * skips pauses and the samples are thinned, so a time of day interpolated
+   * between two samples either side of a pause would be wrong by up to the
+   * pause's length. Read it through `speedClockMs`.
+   */
+  clock: { atMs: number; timestampMs: number }[];
   maxMps: number;
   averageMps: number;
 };
+
+/**
+ * The wall-clock time (epoch ms) at `atMs` into the recording. Guard: "reads
+ * the time of day at a speed sample" in trackStats.test.ts.
+ */
+export function speedClockMs(profile: SpeedProfile, atMs: number): number {
+  let anchor = profile.clock[0]!;
+  for (const next of profile.clock) {
+    if (next.atMs > atMs) break;
+    anchor = next;
+  }
+  return anchor.timestampMs + (atMs - anchor.atMs);
+}
 
 /**
  * Everything derivable from a stored series, in one pass.
@@ -469,6 +498,35 @@ function decimate<T>(samples: T[], max: number): T[] {
   const out: T[] = [];
   for (let i = 0; i < max; i++) {
     out.push(samples[Math.round((i * (samples.length - 1)) / (max - 1))]!);
+  }
+  return out;
+}
+
+/**
+ * Thin the speed series to `max` samples evenly spaced in TIME, each carrying
+ * the speed of the span it falls in.
+ *
+ * Not `decimate`: that strides by index, and the speed series is a step — a
+ * rest of any length is two samples among hundreds. The stride stepped over
+ * one or both, and the chart drew a ramp, or plain walking speed, across the
+ * longest stop of the day. Sampling the clock gives a stop the share of the
+ * samples it has of the time. Guard: "keeps a long stop flat at zero when the
+ * series is thinned" in trackStats.test.ts.
+ */
+function thinSpeedSteps(samples: SpeedSample[], max: number): SpeedSample[] {
+  if (samples.length <= max || max < 2) return samples;
+  const startMs = samples[0]!.atMs;
+  const totalMs = samples[samples.length - 1]!.atMs - startMs;
+  const out: SpeedSample[] = [];
+  let cursor = 0;
+  for (let i = 0; i < max; i++) {
+    const atMs = startMs + (totalMs * i) / (max - 1);
+    // The LAST sample at or before this instant: where one span ends and the
+    // next begins on the same millisecond, that is the span being entered.
+    while (cursor < samples.length - 1 && samples[cursor + 1]!.atMs <= atMs) {
+      cursor++;
+    }
+    out.push({ atMs, speedMps: samples[cursor]!.speedMps });
   }
   return out;
 }
@@ -522,6 +580,7 @@ export function computeTrackDetail(
   let durationMs = 0;
   let movingMs = 0;
   const rawSpeeds: SpeedSample[] = [];
+  const clock: SpeedProfile["clock"] = [];
   // Distance along the line at each POINT, for the profiles' x axis. It shares
   // the smoothed positions the distance total is built from, so the chart's
   // last x and the headline distance are the same number.
@@ -557,6 +616,9 @@ export function computeTrackDetail(
     // can draw the same answer the stats give rather than a near-zero average.
     const segmentStopped: number[] = [];
     distanceAt[start] = distanceM;
+    if (timed) {
+      clock.push({ atMs: durationMs, timestampMs: segment[0]!.timestampMs! });
+    }
     for (let i = 1; i < segment.length; i++) {
       const stepM = haversineMeters(
         lats[i - 1]!,
@@ -720,7 +782,7 @@ export function computeTrackDetail(
     rawSpeeds.push({ atMs: durationMs, speedMps: 0 });
     rawSpeeds.push({ atMs: totalMs, speedMps: 0 });
   }
-  const speedSamples = decimate(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
+  const speedSamples = thinSpeedSteps(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
   // The headline peak comes from the FULL series, not the decimated chart: a
   // short sprint that falls between the stride's kept indices would otherwise
   // never reach the number, and the chart's y-scale is derived from it.
@@ -758,10 +820,12 @@ export function computeTrackDetail(
       speedSamples.length >= 2
         ? {
             samples: speedSamples,
+            clock,
             maxMps: maxSpeedMps,
             // The series' own mean, which is NOT distance/duration: it weights
-            // every interval equally where the headline average weights them
-            // by time. The chart's own baseline, and nothing else's.
+            // every SAMPLE equally (each interval on a short series, each
+            // instant on a thinned one). The chart's own baseline, and
+            // nothing else's.
             averageMps:
               speedSamples.reduce((sum, s) => sum + s.speedMps, 0) /
               speedSamples.length,
@@ -870,4 +934,190 @@ export function formatDurationMs(durationMs: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+/**
+ * A recorded track's own GPS heights as the source under every DEM: they fill
+ * the samples no DEM could answer, so a track that strays past a saved area
+ * keeps the DEM for the part inside it.
+ *
+ * `gps` is every fix's smoothed height by distance along the line
+ * (`gpsAlongLine`). A profile no DEM answered anywhere, one with nothing to
+ * fill, or a track with no heights comes back untouched.
+ *
+ * - CLIMB (`climbSeries`): a step with a filled sample at either end is
+ *   walked through EVERY fix between the two, in GPS throughout, the way
+ *   `sampleDem` measures any seam in one source. So the offset between GPS
+ *   and the DEM is never counted, and a rise and fall between two samples
+ *   is. GPS is first held still until it has moved `ELEVATION_HYSTERESIS_M`:
+ *   the profile is summed at the DEM's finer threshold, which GPS wander
+ *   would leak through.
+ * - CHART (`heights`): a filled stretch is GPS shifted to meet the DEM at
+ *   both ends. The shift is the offset measured at the DEM sample either
+ *   side, ramped from one to the other along the stretch, so GPS drift
+ *   across it shows as no step at either join.
+ *
+ * Each segment of the line is filled on its own, from its own fixes and its
+ * own DEM samples, and the climb series carries on level from one to the
+ * next: a pause gap was not walked, the same rule `computeTrackDetail` and
+ * `sampleDem` keep. A segment with no GPS heights stays unfilled.
+ */
+export function fillDemFromGps(
+  dem: DemSamples,
+  positions: readonly SamplePosition[],
+  gps: readonly GpsHeight[],
+): DemSamples {
+  if (
+    gps.length === 0 ||
+    dem.heights.every((height) => height == null) ||
+    dem.heights.every((height) => height != null)
+  )
+    return dem;
+
+  const out = {
+    heights: [] as (number | null)[],
+    levelled: [] as (number | null)[],
+    climbSeries: [] as number[],
+    sourceIds: [] as (string | null)[],
+  };
+  let level: number | null = null; // where the climb series has got to
+  for (let start = 0, end = 0; start < positions.length; start = end) {
+    const segment = lineSegmentOf(positions[start]!);
+    while (end < positions.length && lineSegmentOf(positions[end]!) === segment)
+      end++;
+    const part = fillSegmentFromGps(
+      {
+        heights: dem.heights.slice(start, end),
+        levelled: dem.levelled.slice(start, end),
+        sourceIds: dem.sourceIds.slice(start, end),
+      },
+      positions.slice(start, end),
+      gps.filter((fix) => lineSegmentOf(fix) === segment),
+    );
+    const first = part.climbSeries[0];
+    const shift = level != null && first != null ? level - first : 0;
+    out.heights.push(...part.heights);
+    out.sourceIds.push(...part.sourceIds);
+    for (const value of part.levelled)
+      out.levelled.push(value == null ? null : value + shift);
+    for (const value of part.climbSeries) out.climbSeries.push(value + shift);
+    level = out.climbSeries[out.climbSeries.length - 1] ?? level;
+  }
+  return out;
+}
+
+/** `fillDemFromGps` for one segment: its samples, and its fixes only. */
+function fillSegmentFromGps(
+  dem: DemSamples,
+  positions: readonly SamplePosition[],
+  gps: readonly GpsHeight[],
+): DemSamples & { climbSeries: number[] } {
+  const isFill = (i: number) => i >= 0 && dem.heights[i] === null;
+  if (gps.length === 0 || dem.heights.every((height) => height != null))
+    return {
+      ...dem,
+      climbSeries: dem.levelled.filter(
+        (value): value is number => value != null,
+      ),
+    };
+
+  const held: number[] = [];
+  for (const { heightM } of gps) {
+    const hold = held[held.length - 1];
+    held.push(
+      hold == null || Math.abs(heightM - hold) >= ELEVATION_HYSTERESIS_M
+        ? heightM
+        : hold,
+    );
+  }
+
+  // GPS at each sample: between the two fixes either side of it.
+  const gpsAt: number[] = [];
+  let fix = 0;
+  for (const { distanceM } of positions) {
+    while (fix < gps.length - 2 && gps[fix + 1]!.distanceM < distanceM) fix++;
+    const a = gps[fix]!;
+    const b = gps[fix + 1] ?? a;
+    const span = b.distanceM - a.distanceM;
+    const t = span === 0 ? 0 : (distanceM - a.distanceM) / span;
+    gpsAt.push(
+      a.heightM + (b.heightM - a.heightM) * Math.min(1, Math.max(0, t)),
+    );
+  }
+
+  const heights = dem.heights.slice();
+  for (let start = 0; start < heights.length; start++) {
+    if (!isFill(start)) continue;
+    let end = start;
+    while (end + 1 < heights.length && isFill(end + 1)) end++;
+    const offsetAt = (i: number) =>
+      dem.heights[i] == null ? null : dem.heights[i]! - gpsAt[i]!;
+    const before = offsetAt(start - 1);
+    const after = offsetAt(end + 1);
+    const fromM = positions[Math.max(0, start - 1)]!.distanceM;
+    const spanM =
+      positions[Math.min(heights.length - 1, end + 1)]!.distanceM - fromM;
+    for (let i = start; i <= end; i++) {
+      const t = spanM === 0 ? 0 : (positions[i]!.distanceM - fromM) / spanM;
+      const offset =
+        before != null && after != null
+          ? before + (after - before) * t
+          : (before ?? after ?? 0);
+      heights[i] = gpsAt[i]! + offset;
+    }
+    start = end;
+  }
+
+  // The held GPS height at a distance: the last fix at or before it.
+  let reached = 0;
+  const heldAt = (distanceM: number) => {
+    while (reached < gps.length - 1 && gps[reached + 1]!.distanceM <= distanceM)
+      reached++;
+    return held[reached]!;
+  };
+  let level = heights[0]!;
+  const levelled: number[] = [level];
+  const climbSeries: number[] = [level];
+  for (let i = 1; i < heights.length; i++) {
+    if (!isFill(i) && !isFill(i - 1)) {
+      level += dem.levelled[i]! - dem.levelled[i - 1]!;
+    } else {
+      const from = heldAt(positions[i - 1]!.distanceM);
+      const first = reached + 1;
+      const to = heldAt(positions[i]!.distanceM);
+      for (let k = first; k <= reached; k++)
+        climbSeries.push(level + held[k]! - from);
+      level += to - from;
+    }
+    levelled.push(level);
+    climbSeries.push(level);
+  }
+
+  return {
+    heights,
+    levelled,
+    climbSeries,
+    sourceIds: dem.sourceIds.map((id, i) =>
+      isFill(i) ? GPS_CLIMB_SOURCE : (id ?? null),
+    ),
+  };
+}
+
+/**
+ * A recorded track's profile: the DEM where it answers, the track's own GPS
+ * heights where it does not. `gpsFixes` is parallel to `segments`; without it
+ * this is `buildElevationProfile`.
+ */
+export function buildTrackElevationProfile(
+  segments: readonly (readonly RoutePoint[])[],
+  gpsFixes: readonly (readonly GpsFix[])[] | null | undefined,
+  positions: readonly SamplePosition[],
+  dem: DemSamples,
+): ElevationProfile {
+  return buildElevationProfile(
+    positions,
+    gpsFixes
+      ? fillDemFromGps(dem, positions, gpsAlongLine(segments, gpsFixes))
+      : dem,
+  );
 }

@@ -29,11 +29,12 @@ export { Toggle } from "./Toggle";
 export { SwitchRow } from "./SwitchRow";
 export { Notice } from "./Notice";
 export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
-export { BottomSheet } from "./BottomSheet";
+export { BottomSheet, closedSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";
 export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";
 export { TextField } from "./TextField";
+export { Field, FormStack } from "./Field";
 export { TextLink } from "./TextLink";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
 export { ErrorBanner } from "./ErrorBanner";
@@ -43,10 +44,4 @@ export { Screen, ScreenScroll } from "./Screen";
 export { Row } from "./Row";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
-export {
-  elevationSeries,
-  speedSeries,
-  type ProfilePoint,
-  type ProfileSeries,
-} from "./profileSeries";
 export { Toast, type ToastMessage } from "./Toast";

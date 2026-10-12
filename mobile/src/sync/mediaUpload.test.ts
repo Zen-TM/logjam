@@ -62,6 +62,8 @@ vi.mock("expo-crypto", () => ({
   randomUUID: () => "00000000-0000-4000-8000-000000000000",
 }));
 const uploaded: string[] = [];
+/** What the next upload task does instead of succeeding. */
+let uploadOutcome: { status: number } | Error | null = null;
 vi.mock("expo-file-system/legacy", () => ({
   deleteAsync: (path: string) => {
     unlinked.push(path);
@@ -81,6 +83,8 @@ vi.mock("expo-file-system/legacy", () => ({
   ) => ({
     uploadAsync: () => {
       onProgress?.({ totalBytesSent: 1 });
+      if (uploadOutcome instanceof Error) return Promise.reject(uploadOutcome);
+      if (uploadOutcome) return Promise.resolve(uploadOutcome);
       uploaded.push(fileUri);
       return Promise.resolve({ status: 200 });
     },
@@ -89,7 +93,15 @@ vi.mock("expo-file-system/legacy", () => ({
   FileSystemUploadType: { BINARY_CONTENT: "BINARY_CONTENT" },
 }));
 
-const { attachMediaLocal, runMediaCreateOp } = await import("./mediaUpload");
+const {
+  attachMediaLocal,
+  reclimbStandaloneMediaLocal,
+  recolourStandaloneMediaLocal,
+  runMediaCreateOp,
+  runMediaReclimbOp,
+  runMediaRecolourOp,
+} = await import("./mediaUpload");
+const { isNoResponse } = await import("../api/noResponse");
 
 describe("attachMediaLocal", () => {
   beforeEach(() => {
@@ -132,6 +144,7 @@ describe("runMediaCreateOp", () => {
       thumbnailUploadUrl: null,
     });
     canRunNow.mockReset().mockResolvedValue(true);
+    uploadOutcome = null;
   });
 
   const row = {
@@ -158,8 +171,7 @@ describe("runMediaCreateOp", () => {
     // The actual media bytes never moved...
     expect(uploaded).toEqual([]);
     // ...and flush.ts's optimistic bump (attempts already incremented before
-    // calling in) is undone, so waiting for Wi-Fi never counts toward
-    // MEDIA_MAX_ATTEMPTS and never surfaces as a Sync Issue.
+    // calling in) is undone: nothing was sent.
     const reset = calls.find((c) => c.sql.includes("state = 'queued'"));
     expect(reset?.args).toEqual([row.attempts, row.seq]);
   });
@@ -184,5 +196,114 @@ describe("runMediaCreateOp", () => {
     const outcome = await runMediaCreateOp(row);
     expect(outcome).toBe("done");
     expect(uploaded).toEqual(["file:///cache/media-cache/media-1.display"]);
+  });
+
+  // The flush counts a failure against the op unless it is marked as the
+  // link's, and classifies an answer by its status (flush.ts). Mutation: drop
+  // the mark or the status in `putFile` and one of these turns red.
+  it("marks a transfer that died mid-upload as the link's failure", async () => {
+    uploadOutcome = new Error("unexpected end of stream");
+    const err = await runMediaCreateOp(row).catch((thrown: unknown) => thrown);
+    expect(isNoResponse(err)).toBe(true);
+  });
+
+  it("passes on the status S3 answered with, unmarked", async () => {
+    uploadOutcome = { status: 503 };
+    const err = await runMediaCreateOp(row).catch((thrown: unknown) => thrown);
+    expect(isNoResponse(err)).toBe(false);
+    expect((err as { status?: number }).status).toBe(503);
+  });
+});
+
+describe("recolouring a standalone file", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset().mockResolvedValue({});
+  });
+
+  it("paints the row, rewrites a queued create, and queues one PATCH", async () => {
+    await recolourStandaloneMediaLocal("m1", "#3cb44b");
+    const sql = calls.map((c) => c.sql);
+    expect(sql.some((q) => q.startsWith("UPDATE media SET color"))).toBe(true);
+    // A file still waiting to upload must confirm with the new colour, or the
+    // confirm overwrites the local row with the old one.
+    expect(sql.some((q) => q.includes("json_set(fields_json"))).toBe(true);
+    const insert = calls.find(
+      (c) => c.sql.includes("'recolour'") && c.sql.includes("INSERT"),
+    );
+    expect(insert?.args[2]).toBe(JSON.stringify({ color: "#3cb44b" }));
+  });
+
+  it("PATCHes the colour, and drops the op when the file is already gone", async () => {
+    const row = {
+      seq: 3,
+      entity_id: "m1",
+      op: "recolour",
+      fields_json: JSON.stringify({ color: "#3cb44b" }),
+      media_phase: null,
+      attempts: 0,
+    };
+    expect(await runMediaRecolourOp(row)).toBe("done");
+    expect(apiFetch).toHaveBeenCalledWith("/media/m1", {
+      method: "PATCH",
+      body: { color: "#3cb44b" },
+    });
+    apiFetch.mockRejectedValueOnce({ status: 404 });
+    expect(await runMediaRecolourOp(row)).toBe("done");
+  });
+});
+
+describe("replacing a recorded track's climb", () => {
+  const CLIMB = {
+    elevationGainM: 41,
+    elevationLossM: 38,
+    elevationSource: "nsw-5m",
+  };
+  const row = {
+    seq: 4,
+    entity_id: "m1",
+    op: "reclimb",
+    fields_json: JSON.stringify(CLIMB),
+    media_phase: null,
+    attempts: 0,
+  };
+
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset().mockResolvedValue({});
+  });
+
+  it("patches the row, rewrites a queued create, and queues one PATCH", async () => {
+    await reclimbStandaloneMediaLocal("m1", CLIMB);
+    const mirror = calls.find((c) => c.sql.includes("UPDATE media"));
+    // Merged into the stats, never replacing them: the row keeps its extent.
+    expect(mirror?.sql).toContain("json_patch(COALESCE(metadata_json");
+    expect(mirror?.args[0]).toBe(JSON.stringify(CLIMB));
+    // A file still waiting to upload must confirm with the new figures.
+    const create = calls.find((c) => c.sql.includes("op = 'create'"));
+    expect(create?.args[0]).toBe(JSON.stringify({ metadata: CLIMB }));
+    const insert = calls.find(
+      (c) => c.sql.includes("'reclimb'") && c.sql.includes("INSERT"),
+    );
+    expect(insert?.args[2]).toBe(JSON.stringify(CLIMB));
+  });
+
+  it("PATCHes the three fields together", async () => {
+    expect(await runMediaReclimbOp(row)).toBe("done");
+    expect(apiFetch).toHaveBeenCalledWith("/media/m1", {
+      method: "PATCH",
+      body: CLIMB,
+    });
+  });
+
+  // Mutation: stop treating 400 as done and a phone ahead of the API parks a
+  // sync issue for a figure nobody asked for.
+  it("drops the op when the file is gone or the API is too old to take it", async () => {
+    for (const status of [404, 400]) {
+      apiFetch.mockRejectedValueOnce({ status });
+      expect(await runMediaReclimbOp(row)).toBe("done");
+    }
+    apiFetch.mockRejectedValueOnce({ status: 503 });
+    await expect(runMediaReclimbOp(row)).rejects.toEqual({ status: 503 });
   });
 });

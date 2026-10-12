@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  AppState,
-  Linking,
-  Platform,
-  StyleSheet,
-  Text,
-} from "react-native";
+import { Alert, AppState, Linking, Platform, Text } from "react-native";
 import Constants from "expo-constants";
 // SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
 // android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
@@ -19,7 +12,14 @@ import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { storeListingUrl } from "./src/version";
 import { mountsAppShell, useAuth } from "./src/auth/useAuth";
-import { countUnsyncedChanges } from "./src/sync/syncDb";
+import { requestSync } from "./src/sync/syncEngine";
+import { isReachableNow } from "./src/map/connectivity";
+import { countSignOutLosses } from "./src/offline/signOutCounts";
+import {
+  signOutConfirm,
+  signOutConfirmBody,
+  type SignOutConfirm,
+} from "./src/offline/signOutConfirm";
 import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
@@ -29,9 +29,8 @@ import { AppShell } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
-import { LoadingState } from "./src/ui/ScreenStates";
-import { Button } from "./src/ui/Button";
-import { fontSize, spacing, systemBarStyle, theme } from "./src/theme";
+import { Button, LoadingState } from "./src/ui";
+import { makeStyles, muted, spacing, useThemeMode } from "./src/theme";
 
 // The blocked build's only way out (MAPP-001). The rule itself — Android only,
 // from app.json's package id, https so it resolves without the Play app — is
@@ -43,7 +42,58 @@ const storeUrl = storeListingUrl({
   androidPackage: Constants.expoConfig?.android?.package,
 });
 
+type SignOutChoice = "cancel" | "syncFirst" | "signOut";
+
+function askSignOut(confirm: SignOutConfirm): Promise<SignOutChoice> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      confirm.title,
+      signOutConfirmBody(confirm),
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => resolve("cancel"),
+        },
+        ...(confirm.canSyncFirst
+          ? [{ text: "Sync first", onPress: () => resolve("syncFirst") }]
+          : []),
+        {
+          text: "Sign out",
+          style: "destructive" as const,
+          onPress: () => resolve("signOut"),
+        },
+      ],
+      { cancelable: true, onDismiss: () => resolve("cancel") },
+    );
+  });
+}
+
+/**
+ * True when the user has settled it: nothing to lose, or they chose Sign out.
+ * "Sync first" runs a sync and asks again with the counts as they now are.
+ */
+async function confirmSignOut(): Promise<boolean> {
+  for (;;) {
+    const confirm = signOutConfirm(
+      await countSignOutLosses(),
+      await isReachableNow(),
+    );
+    if (!confirm) return true;
+    const choice = await askSignOut(confirm);
+    if (choice === "syncFirst") {
+      await requestSync().catch(console.error);
+      continue;
+    }
+    return choice === "signOut";
+  }
+}
+
 export default function App() {
+  const styles = useStyles();
+  // Light icons on a dark page, dark icons on a light one.
+  const systemBarStyle = useThemeMode() === "dark" ? "light" : "dark";
+
   const minVersionGate = useMinVersionGate();
   const auth = useAuth();
 
@@ -103,7 +153,7 @@ export default function App() {
           <Text style={styles.blockingLine}>
             {warning
               ? `This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`
-              : `This version (${CLIENT_VERSION}) is no longer supported. Minimum supported version is ${minVersionGate.minVersion}. Please update the app to continue.`}
+              : `This version (${CLIENT_VERSION}) is no longer supported. Update Logjam GPS to version ${minVersionGate.minVersion} or later to continue.`}
           </Text>
           {openStore ? (
             <Button
@@ -140,32 +190,12 @@ export default function App() {
             <AppShell
               accountState={auth.accountState}
               onLinkAccount={auth.linkAccount}
-              onSignOut={async () => {
-                // Sign-out wipes the sync mirror AND the outbox (stage8 §9), plus
-                // the offline registry and every downloaded file — unflushed local
-                // changes die with it, so block on a confirmation when any exist.
-                const unsynced = await countUnsyncedChanges();
-                if (unsynced > 0) {
-                  const confirmed = await new Promise<boolean>((resolve) => {
-                    Alert.alert(
-                      "Unsynced changes",
-                      `You have ${unsynced} unsynced change${unsynced === 1 ? "" : "s"} that will be lost. Sign out anyway?`,
-                      [
-                        {
-                          text: "Cancel",
-                          style: "cancel",
-                          onPress: () => resolve(false),
-                        },
-                        {
-                          text: "Sign out",
-                          style: "destructive",
-                          onPress: () => resolve(true),
-                        },
-                      ],
-                      { cancelable: true, onDismiss: () => resolve(false) },
-                    );
-                  });
-                  if (!confirmed) return;
+              onSignOut={async (options) => {
+                // Sign-out wipes this phone's data, and what the account does
+                // not have goes with it: ask once, saying what goes and what
+                // stays (offline/wipedStores.ts declares what that can be).
+                if (!options?.accountDeleted && !(await confirmSignOut())) {
+                  return;
                 }
                 // Unregister the push token BEFORE tokens are cleared (the DELETE
                 // needs an authenticated request); best-effort inside.
@@ -176,7 +206,7 @@ export default function App() {
                   // use this phone would otherwise inherit the remains silently.
                   Alert.alert(
                     "Some data couldn't be removed",
-                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear the app's storage in Android settings to be sure.`,
+                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
                   );
                 }
                 await auth.signOut();
@@ -200,7 +230,7 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   blockingContainer: {
     flex: 1,
     alignItems: "center",
@@ -210,14 +240,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.page,
   },
   blockingTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: "600",
+    ...textRole.title,
     color: theme.text,
   },
   blockingLine: {
-    fontSize: fontSize.sm,
-    color: theme.textMuted,
+    ...muted(theme, textRole.detail),
     textAlign: "center",
   },
   authSafeArea: { flex: 1, backgroundColor: theme.page },
-});
+}));

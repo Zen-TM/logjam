@@ -314,6 +314,7 @@ Then set, for the local stack with fake auth:
 
 ```bash
 EXPO_PUBLIC_API_URL=http://127.0.0.1:8080
+EXPO_PUBLIC_WEB_URL=http://localhost:5173
 EXPO_PUBLIC_AUTH_MODE=fake
 ```
 

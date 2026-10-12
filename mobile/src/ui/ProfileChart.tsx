@@ -4,8 +4,8 @@
 // route's height profile), but a recorded track's SPEED is the same picture of
 // a different quantity, so the component takes a plain series plus a
 // formatter rather than an ElevationProfile. `elevationSeries` and
-// `speedSeries` below are the two adapters; anything else with a value per
-// metre travelled can add a third.
+// `speedSeries` in `@logjam/shared` are the two adapters; anything else with a
+// value per metre travelled can add a third.
 //
 // Still built from plain Views rather than SVG: react-native-svg is a NATIVE
 // module, so adding it means a new dev-client build and a reinstall on every
@@ -18,7 +18,12 @@
 //
 // Columns are scaled between the profile's own min and max, not from sea
 // level: a place between 700 and 840 m drawn from zero is a flat bar.
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  sameSeries,
+  type ProfilePoint,
+  type ProfileSeries,
+} from "@logjam/shared";
 import {
   PanResponder,
   StyleSheet,
@@ -29,15 +34,14 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import {
-  fontSize,
-  fontWeight,
   radius,
   spacing,
-  theme,
   withAlpha,
+  makeStyles,
+  useTheme,
+  muted,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
-import type { ProfilePoint, ProfileSeries } from "./profileSeries";
 
 /**
  * Columns drawn: one per POINT of chart width, capped.
@@ -114,6 +118,53 @@ function toColumns(samples: readonly ProfilePoint[], count: number): Column[] {
   return columns;
 }
 
+/**
+ * The drawn columns, held apart from the chart so a re-render that changed no
+ * data costs nothing: ~400 Views per chart, twice a panel, once a second while
+ * recording. The comparison is on the SERIES, not on `columns` — they are a
+ * pure function of it and the count, and the series is the cheaper thing to
+ * compare. Guard: "sameSeries" in shared/src/profileSeries.test.ts.
+ */
+const Columns = memo(
+  function Columns({
+    columns,
+    min,
+    span,
+  }: {
+    columns: readonly Column[];
+    series: ProfileSeries;
+    min: number;
+    span: number;
+  }) {
+    const styles = useStyles();
+
+    return columns.map((column, index) => (
+      // Non-interactive so the TOUCH lands on the container: locationX is
+      // measured against whichever view received it, and a 16px-wide column
+      // reports a locationX near zero — which read as "you are at the start
+      // of the route" wherever you actually pressed.
+      <View key={index} style={styles.column} pointerEvents="none">
+        {column.value == null ? null : (
+          <View
+            style={[
+              styles.bar,
+              {
+                height:
+                  CHART_HEIGHT *
+                  (MIN_COLUMN_FRACTION +
+                    (1 - MIN_COLUMN_FRACTION) * ((column.value - min) / span)),
+              },
+            ]}
+          />
+        )}
+      </View>
+    ));
+  },
+  (prev, next) =>
+    prev.columns.length === next.columns.length &&
+    sameSeries(prev.series, next.series),
+);
+
 export function ProfileChart({
   series,
   formatValue,
@@ -124,12 +175,15 @@ export function ProfileChart({
   series: ProfileSeries;
   /** Renders the scrubbed value — the chart knows no units. */
   formatValue: (value: number) => string;
-  /** Renders the scrubbed position: metres along, or time into the recording. */
+  /** Renders the scrubbed position: metres along, or a time of day. */
   formatX: (x: number) => string;
   /** Shown until the first scrub, in place of the readout. */
   hint: string;
   accessibilityLabel: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const { min, max } = series;
   const [width, setWidth] = useState(0);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
@@ -245,7 +299,7 @@ export function ProfileChart({
           // units do not settle it, since a height and a distance are both
           // metres. "51 m at 3.7 km" says the same thing in the order the
           // question is asked, costs no extra line, and works unchanged for a
-          // speed against a clock ("4.2 km/h at 1:23").
+          // speed against a clock ("4.2 km/h at 2:41 pm").
           <Text style={styles.readout}>
             {scrubbed.value != null ? formatValue(scrubbed.value) : "—"}
             <Text style={styles.readoutAt}>{"  at  "}</Text>
@@ -264,28 +318,7 @@ export function ProfileChart({
         accessibilityLabel={accessibilityLabel}
         {...responder.panHandlers}
       >
-        {columns.map((column, index) => (
-          // Non-interactive so the TOUCH lands on the container: locationX is
-          // measured against whichever view received it, and a 16px-wide column
-          // reports a locationX near zero — which read as "you are at the start
-          // of the route" wherever you actually pressed.
-          <View key={index} style={styles.column} pointerEvents="none">
-            {column.value == null ? null : (
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    height:
-                      CHART_HEIGHT *
-                      (MIN_COLUMN_FRACTION +
-                        (1 - MIN_COLUMN_FRACTION) *
-                          ((column.value - min) / span)),
-                  },
-                ]}
-              />
-            )}
-          </View>
-        ))}
+        <Columns columns={columns} series={series} min={min} span={span} />
         {/* A hairline rather than a highlighted column: at one column per point
             a recoloured column is a pixel wide and invisible. */}
         {scrubIndex != null && columns.length > 1 ? (
@@ -309,17 +342,19 @@ export function ProfileChart({
   );
 }
 
-const styles = StyleSheet.create({
+/** Centred on its x by pulling it back half its own width. */
+const SCRUB_LINE_WIDTH = 2;
+
+const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: spacing(0.5) },
   readoutRow: { height: 18, justifyContent: "center" },
   readout: {
+    ...textRole.control,
     color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
-  readoutHint: { color: theme.textMuted, fontSize: fontSize.xs },
-  readoutAt: { color: theme.textMuted, fontWeight: fontWeight.regular },
+  readoutHint: { ...muted(theme, textRole.meta) },
+  readoutAt: { ...muted(theme, textRole.detail) },
   chart: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -335,9 +370,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 2,
-    marginLeft: -1,
+    width: SCRUB_LINE_WIDTH,
+    marginLeft: -SCRUB_LINE_WIDTH / 2,
     backgroundColor: theme.text,
   },
   fade: { ...StyleSheet.absoluteFill, top: "55%" },
-});
+}));

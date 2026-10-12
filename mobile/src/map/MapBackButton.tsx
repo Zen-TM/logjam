@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 
 import { IconButton } from "../ui";
-import { scrim, spacing } from "../theme";
+import { ON_SCRIM, scrim, spacing } from "../theme";
 
 /** Width taken by the back button, so a hint beside it can start after it. */
 export const MAP_BACK_SPACE = spacing(2) + 40 + spacing(1);
@@ -24,7 +24,7 @@ export function MapBackButton({
       <IconButton
         icon="back"
         accessibilityLabel="Back"
-        color="#ffffff"
+        color={ON_SCRIM}
         onPress={onPress}
       />
     </View>

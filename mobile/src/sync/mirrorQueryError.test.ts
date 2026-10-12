@@ -8,6 +8,7 @@ const status = (patch: Partial<SyncStatus>): SyncStatus => ({
   lastSyncAt: null,
   errorMessage: null,
   errorKind: null,
+  waitingSince: null,
   ...patch,
 });
 

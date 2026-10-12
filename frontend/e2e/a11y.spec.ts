@@ -23,7 +23,7 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 /**
  * A surface is measured once it has finished ARRIVING.
  *
- * `Dialog` fades itself in (`@starting-style`, DESIGN.md §4), and axe computes
+ * `Dialog` fades itself in (`@starting-style`, DESIGN.md), and axe computes
  * contrast from what is PAINTED — so a check running while the dialog is
  * half-way there measures its colours composited against the page behind it
  * and reports both a shade light. That is not hypothetical: it failed
@@ -42,6 +42,14 @@ async function settled(page: Page) {
 
 async function expectNoViolations(page: Page, include?: string) {
   await settled(page);
+  // MapLibre writes the map's credits once the style's sources have loaded,
+  // well after the canvas is up. A run before then measures a box with no
+  // links in it, which is how their missing underline passed.
+  if (include === "#map") {
+    await expect(
+      page.locator("#map .maplibregl-ctrl-attrib a").first(),
+    ).toBeAttached({ timeout: 15_000 });
+  }
   let builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
   if (include) builder = builder.include(include);
   const { violations } = await builder.analyze();
@@ -91,6 +99,11 @@ test.describe("desktop", () => {
     await addDialog.getByRole("searchbox").fill("car");
     await expect(
       addDialog.getByRole("button", { name: "Add", exact: true }),
+    ).toBeVisible();
+    // The invite link sits under the search. Seen, never pressed: minting one
+    // would write to the account.
+    await expect(
+      addDialog.getByRole("button", { name: "Copy invite link" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
@@ -161,7 +174,7 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "aside");
 
-    // A list opens in place, with the arrow back out (DESIGN.md §2).
+    // A list opens in place, with the arrow back out (DESIGN.md).
     await aside.getByRole("button", { name: /^Place types/ }).click();
     await expect(
       aside.getByRole("heading", { name: "Place types" }),
@@ -170,7 +183,12 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    await aside.getByRole("button", { name: "Add a place type" }).click();
+    // The hero's button and the list's end are one button drawn twice
+    // (UX §9, `listEnd.test.ts`), so the first is the hero's.
+    await aside
+      .getByRole("button", { name: "Add a place type" })
+      .first()
+      .click();
     const typeDialog = page.locator("dialog[open]");
     await expect(
       typeDialog.getByRole("radiogroup", { name: "Icon" }),
@@ -241,10 +259,13 @@ test.describe("desktop", () => {
     ).toBeFocused();
     await expectNoViolations(page, "aside");
 
-    // `exact`, because an accessible name matches as a SUBSTRING by default and
-    // this list is the user's own data: a place called "Closet" is three of the
-    // "Close" buttons on this page (its own row, its ⋯, and the sheet's).
-    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // The sheet's own ×, found through the sheet: the panel keeps its × beside
+    // it (UX §3), and a place called "Closet" would add three more "Close"
+    // substrings (its row, its ⋯).
+    await page
+      .getByRole("region", { name: "Sort and filter" })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
     await page
       .getByRole("button", { name: /^Actions for / })
       .first()
@@ -304,7 +325,7 @@ test.describe("desktop", () => {
       timeout: 15_000,
     });
 
-    // The tile IS the checkbox (DESIGN.md §5), and the bar replaces the rail.
+    // The tile IS the checkbox (DESIGN.md), and the bar replaces the rail.
     await list.getByRole("checkbox").first().click();
     await list.getByRole("button", { name: "Share or export" }).click();
 
@@ -404,11 +425,11 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Logs", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: /trips?$/ }),
+      aside.getByRole("heading", { level: 2, name: "Logs", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md §4).
+    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md).
     const rowMenu = aside
       .getByRole("button", { name: /^Actions for / })
       .first();
@@ -444,7 +465,7 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Ways", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: /lines?$/ }),
+      aside.getByRole("heading", { level: 2, name: "Ways", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
@@ -468,14 +489,24 @@ test.describe("desktop", () => {
       .first()
       .getByRole("button", { name: /^Actions for/ })
       .click();
-    await page.getByRole("menuitem", { name: "Send a copy…" }).click();
+    await page.getByRole("menuitem", { name: "Send a copy" }).click();
     const sendDialog = page.locator("dialog[open]");
     await expect(
       sendDialog.getByRole("button", { name: "Send a copy" }),
-    ).toBeDisabled({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(sendDialog).toHaveCount(0);
+
+    // The recording's own page was under that dialog: its two charts, drawn
+    // from the seeded file. The newest track is a recording, so it has both.
+    await expect(
+      aside.getByRole("img", { name: /^Elevation profile: / }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      aside.getByRole("img", { name: /^Speed profile: / }),
+    ).toBeVisible();
+    await expectNoViolations(page, "aside");
     await aside.getByRole("button", { name: /^Back/ }).click();
 
     // A route's own page: its stats, its colour picker and its place link.
@@ -700,7 +731,7 @@ test.describe("desktop", () => {
 
     // Every row here is new, so the REVIEW step is skipped rather than shown
     // empty: a page with no decisions on it is a click asking the user to agree
-    // that there was nothing to do (docs/ux-principles.md §2).
+    // that there was nothing to do (shared/DESIGN.md §2).
     await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await expect(
       dialog.getByRole("heading", { name: "Confirm import" }),
@@ -709,7 +740,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
 
     // The merge policy is a row that opens a SUB-VIEW, never an accordion
-    // (DESIGN.md §4); its eight switches are named by the field each decides.
+    // (DESIGN.md); its eight switches are named by the field each decides.
     await dialog.getByRole("button", { name: /^Merge settings/ }).click();
     await expect(
       dialog.getByRole("heading", { name: "Merge settings" }),
@@ -738,6 +769,107 @@ test.describe("desktop", () => {
     await expect(
       page.getByRole("button", { name: "Layers", exact: true }),
     ).toBeFocused();
+  });
+
+  test("What is here?: asked by a right-click, drawn at the point", async ({
+    page,
+  }) => {
+    await openApp(page);
+    // The canvas is on screen before the map has loaded and its handlers are
+    // attached; the zoom buttons are enabled once it has.
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const box = (await canvas.boundingBox())!;
+    // A right-click asks wherever it lands, so a seeded pin under the pointer
+    // cannot swallow the press.
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+      button: "right",
+    });
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Add a place here" }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Copy coordinates" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+
+    // Escape closes it, takes the dot with it and gives focus back to the map.
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
+    await expect(canvas).toBeFocused();
+
+    // Reachable without a pointer: Enter on the focused map asks about the
+    // middle of what is visible, and Tab walks the panel's own controls.
+    await page.keyboard.press("Enter");
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("button", { name: "Close" })).toBeFocused();
+  });
+
+  test("Measure: armed from the Tools tray or a point, a page in the panel", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const aside = page.locator("aside");
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const tools = page.getByRole("button", { name: "Tools", exact: true });
+    const tray = page.getByRole("group", { name: "Tools" });
+
+    // Opening the tray leaves focus on its button: Escape closes it from there.
+    await tools.click();
+    await expect(tray).toBeVisible();
+    await expectNoViolations(page, "[role='group'][aria-label='Tools']");
+    await page.keyboard.press("Escape");
+    await expect(tray).toHaveCount(0);
+    await expect(tools).toBeFocused();
+
+    await tools.click();
+    await tray.getByRole("button", { name: "Measure distance" }).click();
+    await expect(tray).toHaveCount(0);
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "Measure distance" }),
+    ).toBeVisible();
+    const status = aside.getByRole("status");
+    await expect(status).toHaveText("Click the map to measure");
+    await expectNoViolations(page, "aside");
+
+    // Without a pointer: Enter on the focused map places a point at the middle
+    // of it, and the arrow keys move the map under that.
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText("1 point");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText("2 points");
+    await expect(aside.locator("dd").first()).toHaveText(/\d (m|km)$/);
+    await expectNoViolations(page, "aside");
+
+    await aside.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(status).toHaveText("Click the map to measure");
+
+    // Nothing is kept, so leaving asks nothing.
+    await aside.getByRole("button", { name: "Close" }).click();
+    await expect(aside.getByRole("heading", { level: 2 })).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+
+    // "Measure from here" on a point arms it with that point already placed.
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+      button: "right",
+    });
+    await page
+      .getByRole("dialog", { name: "This point" })
+      .getByRole("button", { name: "Measure from here" })
+      .click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "Measure distance" }),
+    ).toBeVisible();
+    await expect(aside.getByRole("status")).toHaveText("1 point");
   });
 });
 
@@ -810,6 +942,109 @@ test.describe("narrow web", () => {
     await expect(page.getByRole("menu", { name: "More pages" })).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
   });
+
+  test("What is here?: the panel stays inside the phone", async ({ page }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel).toBeVisible();
+    const inside = await panel.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= window.innerWidth;
+    });
+    expect(inside).toBe(true);
+    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+  });
+
+  test("a recording's page: both charts stay inside the phone", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Ways", exact: true }).click();
+    const sheet = page.locator("aside");
+    await sheet
+      .locator("[data-way-kind='track']")
+      .first()
+      .getByRole("button", { name: /^Actions for/ })
+      .click({ timeout: 15_000 });
+    await page.getByRole("menuitem", { name: "Open", exact: true }).click();
+    const speed = sheet.getByRole("img", { name: /^Speed profile: / });
+    await expect(speed).toBeVisible({ timeout: 15_000 });
+    for (const chart of [
+      sheet.getByRole("img", { name: /^Elevation profile: / }),
+      speed,
+    ]) {
+      const box = (await chart.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+    }
+    await expectNoViolations(page, "aside");
+  });
+
+  // A drawing tool's work is on the map, so its sheet opens at the peek: the
+  // note, the distance and Undo, with the map left to press. Dragging it up (the
+  // keyboard does the same through the grab bar) brings back the rest.
+  for (const tool of [
+    { name: "Measure distance", title: "Measure distance", rest: "Clear" },
+    { name: "Draw a route", title: "Draw a route", rest: "Save" },
+  ]) {
+    test(`${tool.name}: the tool's page opens at the peek, over little of the map`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+      await page.getByRole("button", { name: "Tools", exact: true }).click();
+      await page.getByRole("button", { name: tool.name }).click();
+      const sheet = page.getByRole("complementary", { name: tool.title });
+      await expect(sheet).toBeVisible();
+
+      const height = page.getByRole("slider", { name: "Panel height" });
+      await expect(height).toHaveAttribute("aria-valuetext", "Peek");
+      // Under a quarter of the screen: most of the map is there to press.
+      const top = (await sheet.boundingBox())!.y;
+      expect(top).toBeGreaterThan(844 * 0.7);
+      await expect(
+        sheet.getByText("Distance", { exact: true }),
+      ).toBeInViewport();
+      await expect(
+        sheet.getByRole("button", { name: "Undo" }),
+      ).toBeInViewport();
+      await expect(
+        sheet.getByRole("button", { name: tool.rest, exact: true }),
+      ).toHaveCount(0);
+
+      await page.locator("canvas.maplibregl-canvas").focus();
+      await page.keyboard.press("Enter");
+      await expect(sheet.getByRole("status")).toHaveText("1 point");
+      await expectNoViolations(page, "aside");
+      await expectNoViolations(page, "#map");
+
+      await height.focus();
+      await page.keyboard.press("ArrowUp");
+      await expect(height).toHaveAttribute("aria-valuetext", "Half height");
+      await expect(
+        sheet.getByRole("button", { name: tool.rest, exact: true }),
+      ).toBeVisible();
+      // The sheet slides for 200ms and its footer rides over the tab bar on the
+      // way: measured at rest, as a user sees it.
+      let last = Number.NaN;
+      await expect
+        .poll(
+          async () => {
+            const top = (await sheet.boundingBox())!.y;
+            const still = top === last;
+            last = top;
+            return still;
+          },
+          { intervals: [250] },
+        )
+        .toBe(true);
+      await expectNoViolations(page, "aside");
+    });
+  }
 
   test("a form dialog filling the phone's screen", async ({ page }) => {
     await openApp(page);
@@ -925,9 +1160,10 @@ test.describe("surfaces fake auth never shows", () => {
     await page.getByRole("button", { name: "Sign up", exact: true }).click();
     await expect(page.getByLabel("Confirm password")).toBeVisible();
     await expectNoViolations(page);
-    // A disabled submit is the agreement's own gate, not decoration.
+    // The way in is never disabled: pressing it says what is missing
+    // (shared/DESIGN.md §5).
     const create = page.getByRole("button", { name: "Sign up", exact: true });
-    await expect(create).toBeDisabled();
+    await expect(create).toBeEnabled();
     await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
     await page.getByRole("checkbox", { name: /18 years of age/ }).check();
     await expect(create).toBeEnabled();
@@ -965,13 +1201,18 @@ test.describe("surfaces fake auth never shows", () => {
     await expect(page.locator("nav[aria-label='Pages']")).toHaveCount(0);
     await expectNoViolations(page);
 
-    // The tick is what arms the button, and the button is the only way on —
-    // but this case stops here: agreeing writes consent to the account.
+    // The button is the only way on and is never disabled: pressed without the
+    // tick it asks for the tick, and writes nothing. The case stops there:
+    // agreeing writes consent to the account.
     const agree = page.getByRole("button", { name: "Agree and continue" });
-    await expect(agree).toBeDisabled();
+    await expect(agree).toBeEnabled();
+    await agree.click();
+    await expect(page.getByRole("alert")).toContainText("Tick the box");
+    await expectNoViolations(page);
     await page
       .getByRole("checkbox", { name: /agree to the updated Terms/ })
       .check();
+    await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(agree).toBeEnabled();
     await expect(page.getByRole("button", { name: "Sign out" })).toBeEnabled();
   });

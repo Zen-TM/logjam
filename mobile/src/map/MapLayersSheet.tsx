@@ -10,9 +10,9 @@
 //   Layers   — what is drawn on top of it?
 //   Offline  — what works with no signal?
 //
-// Tabs rather than a second sheet, per DESIGN.md §4: one sheet, content swapped
+// Tabs rather than a second sheet, per DESIGN.md: one sheet, content swapped
 // in place. The rail is pinned, so switching tabs never scrolls the list you are
-// working in out of reach (DESIGN.md §3).
+// working in out of reach (DESIGN.md).
 //
 // The Layers tab is one row PER KIND, not per file: a phone with thirty tracks
 // and a dozen GeoPDFs made that tab a scroll of near-identical switches with no
@@ -35,7 +35,7 @@
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   contractSectionKeys,
@@ -44,7 +44,14 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import {
+  spacing,
+  makeStyles,
+  useTheme,
+  useHues,
+  controlSize,
+  opacity,
+} from "../theme";
 import {
   BottomSheet,
   Row,
@@ -58,7 +65,11 @@ import {
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import type { BasemapId, MapArtifact } from "./sourceResolver";
+import {
+  hasSavedImageryContours,
+  type BasemapId,
+  type MapArtifact,
+} from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -87,7 +98,7 @@ export type LayerToggleEntry = {
   /**
    * Live state worth a second line, and ONLY that: "2 not downloaded yet" on a
    * layer that is drawing less than its count. Never a description of what the
-   * layer is (DESIGN.md §5) — those are what this tab just lost.
+   * layer is (DESIGN.md) — those are what this tab just lost.
    */
   note?: string;
   value: boolean;
@@ -130,6 +141,8 @@ export function MapLayersSheet({
   connectivity,
   basemapId,
   onBasemapChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
   artifacts,
   layers,
   overlays,
@@ -150,6 +163,8 @@ export function MapLayersSheet({
   connectivity: Connectivity;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -170,6 +185,8 @@ export function MapLayersSheet({
   /** The overlays list ends with the way to add one: the existing importer. */
   onImportFile: () => void;
 }) {
+  const styles = useStyles();
+
   const [tab, setTab] = useState<Tab>("basemap");
   const online = connectivity === "online";
 
@@ -180,6 +197,11 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
+        contoursOverImagery={contoursOverImagery}
+        onContoursOverImageryChange={onContoursOverImageryChange}
+        // Offline they come only from saved clips, so the switch is offered
+        // only when some saved area has them with imagery.
+        offersContours={online || hasSavedImageryContours(artifacts)}
         online={online}
       />
     ),
@@ -230,12 +252,21 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
+  contoursOverImagery,
+  onContoursOverImageryChange,
+  offersContours,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  contoursOverImagery: boolean;
+  onContoursOverImageryChange: (on: boolean) => void;
+  offersContours: boolean;
   online: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.body}>
       {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
@@ -250,29 +281,43 @@ function BasemapTab({
         const unavailable = !online && !entry.offlineCapable;
         const active = basemapId === id;
         return (
-          <Row
-            key={entry.id}
-            leading={<BasemapThumb basemapId={id} />}
-            title={entry.name}
-            // Name + sample tile only. The blurbs were a sentence each on six
-            // rows the user scrolls past every time, and the thumbnail already
-            // says what the map looks like far better than the words did. The
-            // subtitle now carries STATE and nothing else — which is why the
-            // one that survives is the offline reason (DESIGN.md §8).
-            subtitle={unavailable ? "Needs a connection" : undefined}
-            disabled={unavailable}
-            onPress={() => onBasemapChange(id)}
-            // No "Showing" pill: the selection is a state of the row, not a
-            // label on it. A filled check on an accent-lit card says it at a
-            // glance, and a downloaded-region pill used to say "Offline" for a
-            // basemap of which one small area is on the phone.
-            right={
-              active ? (
-                <Icon idea="success" size={22} color={theme.accent} />
-              ) : null
-            }
-            selected={active}
-          />
+          <Fragment key={entry.id}>
+            <Row
+              leading={<BasemapThumb basemapId={id} />}
+              title={entry.name}
+              // Name + sample tile only. The blurbs were a sentence each on six
+              // rows the user scrolls past every time, and the thumbnail already
+              // says what the map looks like far better than the words did. The
+              // subtitle now carries STATE and nothing else — which is why the
+              // one that survives is the offline reason (DESIGN.md).
+              subtitle={unavailable ? "Needs a connection" : undefined}
+              disabled={unavailable}
+              onPress={() => onBasemapChange(id)}
+              // No "Showing" pill: the selection is a state of the row, not a
+              // label on it. A filled check on an accent-lit card says it at a
+              // glance, and a downloaded-region pill used to say "Offline" for a
+              // basemap of which one small area is on the phone.
+              right={
+                active ? (
+                  <Icon idea="success" size={22} color={theme.accent} />
+                ) : null
+              }
+              selected={active}
+            />
+            {/* Imagery has no contours of its own; the vector basemap always
+              draws them (shared nswContours.ts). */}
+            {active && id === "six-imagery" && offersContours ? (
+              <SwitchRow
+                title="Contours"
+                description={
+                  online ? undefined : "Only in saved areas that include them"
+                }
+                style={styles.itemRow}
+                checked={contoursOverImagery}
+                onChange={onContoursOverImageryChange}
+              />
+            ) : null}
+          </Fragment>
         );
       })}
     </View>
@@ -282,9 +327,12 @@ function BasemapTab({
 /**
  * One kind of layer: its glyph, how many exist, and a switch. No subtitle — the
  * count IS the state, and the sentence that used to sit there explained a thing
- * the user can see on the map behind the sheet (DESIGN.md §5).
+ * the user can see on the map behind the sheet (DESIGN.md).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const expandable = (entry.children?.length ?? 0) > 0;
 
@@ -382,6 +430,10 @@ function LayersTab({
   onShowOverlaysChange: (next: boolean) => void;
   onImportFile: () => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const [expanded, setExpanded] = useState(false);
   const expandable = overlays.length > 0;
 
@@ -496,6 +548,8 @@ function TopoOverlayList({
   mutedAreas: ReadonlySet<string>;
   onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
 }) {
+  const { assetHue } = useHues();
+
   // Both groupings keep first-seen order, which is the order MapScreen composed
   // the jobs in (newest area first, TOPO_LAYERS order within one).
   const byLayer = useMemo(() => {
@@ -574,6 +628,8 @@ function ItemRow({
   visible: boolean;
   onVisibility: () => void;
 }) {
+  const styles = useStyles();
+
   return (
     <SwitchRow
       leading={<View style={[styles.dot, { backgroundColor: hue }]} />}
@@ -603,6 +659,10 @@ function OfflineTab({
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
+  const styles = useStyles();
+
   const savedRegions = artifacts.filter(
     (artifact) => artifact.kind === "basemap-region",
   );
@@ -654,26 +714,25 @@ function OfflineTab({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
-  // (DESIGN.md §3).
+  // (DESIGN.md).
   rail: { paddingBottom: spacing(1.5) },
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },
   // A row something above it has already decided for.
-  inert: { opacity: 0.4 },
+  inert: { opacity: opacity.disabled },
   // Items hang off their group's row, indented so the hierarchy is visible
   // without a second card colour.
   groupItems: { gap: spacing(0.5), paddingLeft: spacing(2) },
-  itemRow: { minHeight: 48, paddingVertical: spacing(1) },
+  itemRow: { minHeight: controlSize.lg, paddingVertical: spacing(1) },
   dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {
+    ...textRole.control,
     color: theme.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
-});
+}));

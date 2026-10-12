@@ -11,7 +11,7 @@
 // in the same words. Where a word names one client's surface ("find it in
 // Saved"), the other client says its own and notes why at the call site.
 //
-// The COPY lives here, not in the screen (DESIGN.md §7 — an entity's confirm
+// The COPY lives here, not in the screen (DESIGN.md — an entity's confirm
 // sentence is written once, next to the thing that knows the entity). It is
 // per-instance for a file send: only this module has the filename and the
 // sender to put in the sentence.
@@ -30,7 +30,7 @@ export type NotificationInlineAction = {
   kind: NotificationActionKind;
   label: string;
   /**
-   * Non-null means raise this dialog first (DESIGN.md §7 — destructive actions
+   * Non-null means raise this dialog first (DESIGN.md — destructive actions
    * confirm in a dialog, which is where the explanation goes).
    *
    * Both declines carry one, and the friend-request decline carries one even
@@ -42,7 +42,7 @@ export type NotificationInlineAction = {
   confirm: { title: string; body: string; confirmLabel: string } | null;
   /**
    * The sentence shown when this action fails. Ours, not the error's
-   * (DESIGN.md §11) — `messageFromError` falls back to it.
+   * (DESIGN.md) — `messageFromError` falls back to it.
    */
   failure: string;
   /**

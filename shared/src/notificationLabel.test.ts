@@ -39,6 +39,17 @@ describe("notificationLabel", () => {
     ).toEqual({ text: "carol accepted your friend request" });
   });
 
+  it("labels a friend made by an invite link", () => {
+    expect(
+      notificationLabel(
+        notification("friend_request_accepted", {
+          acceptedByUsername: "carol",
+          viaInvite: true,
+        }),
+      ),
+    ).toEqual({ text: "carol used your invite link and is now a friend" });
+  });
+
   it("labels place shares", () => {
     expect(
       notificationLabel(

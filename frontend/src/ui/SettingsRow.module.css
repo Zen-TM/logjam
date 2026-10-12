@@ -6,17 +6,23 @@
   column-gap: var(--space-1-5);
 }
 
-.row[data-disabled] {
+.control {
+  /* The grid's own cell: the wrapper exists so a disabled row can make its
+     control `inert` without dimming or silencing the label beside it. */
+  display: contents;
+}
+
+.row[data-disabled] .control > * {
   opacity: var(--opacity-disabled);
   pointer-events: none;
 }
 
 .rowLabel {
+  composes: detail from "../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-5);
   min-width: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
 }
 

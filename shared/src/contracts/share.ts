@@ -2,7 +2,7 @@
 // `SendCopyDialog.tsx`, Logjam GPS's `sharing/SharePanel.tsx` (both modes).
 //
 // A sentence about what a friend can or cannot do is a claim about the API
-// (docs/ux-principles.md §12): each promise below is checked against the
+// (shared/DESIGN.md §12): each promise below is checked against the
 // routes that grant it, and it is written once so no screen words it again.
 import type { BulkShareItemType } from "../sharing.js";
 import type { ScreenContract } from "./types.js";

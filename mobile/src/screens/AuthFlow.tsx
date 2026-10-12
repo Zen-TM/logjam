@@ -1,29 +1,24 @@
 // The auth forms BEHIND the landing screen: sign up / confirm code / forgot
 // password. Sign-in itself is on the landing screen (`LandingScreen.tsx`) — it
 // is the first thing a fresh install sees, not a tap away — so there is no
-// sign-in form here; a second copy of it is exactly the drift DESIGN.md §5's
+// sign-in form here; a second copy of it is exactly the drift DESIGN.md's
 // "one form per entity" rule exists to stop.
 //
 // State machine lives in useAuth (port of web useAuth.ts); this renders the
 // screen for the current AuthState. All Cognito errors arrive pre-mapped to
 // user-friendly strings via messageFromError/mapAuthError — never raw.
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { Button, ErrorBanner, TextField, TextLink } from "../ui";
+import { spacing, makeStyles, muted } from "../theme";
+import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
 export function AuthFlow({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -46,6 +41,8 @@ export function AuthFlow({ auth }: { auth: Auth }) {
 }
 
 function SignUpForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -59,7 +56,7 @@ function SignUpForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Sign up</Text>
       <TextField
         label="Username"
@@ -90,15 +87,17 @@ function SignUpForm({ auth }: { auth: Auth }) {
         textContentType="newPassword"
       />
       {/* A server refusal (username taken, weak password), directly above
-          the submit it belongs to — never at the top of the form (docs/ux-principles.md §11). */}
+          the submit it belongs to — never at the top of the form (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Create account" onPress={submit} loading={submitting} />
       <TextLink label="Have an account? Sign in" onPress={auth.goToSignIn} />
-    </View>
+    </FormStack>
   );
 }
 
 function ConfirmSignUpForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -118,7 +117,7 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Confirm your email</Text>
       <Text style={styles.hint}>
         We sent a verification code to {auth.pendingUsername}.
@@ -144,11 +143,13 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
       />
       <TextLink label="Resend code" onPress={resend} />
       {resendMessage ? <Text style={styles.hint}>{resendMessage}</Text> : null}
-    </View>
+    </FormStack>
   );
 }
 
 function ForgotPasswordForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -159,7 +160,7 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Reset password</Text>
       <TextField
         label="Email"
@@ -172,11 +173,13 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Send reset code" onPress={submit} loading={submitting} />
       <TextLink label="Back to sign in" onPress={auth.goToSignIn} />
-    </View>
+    </FormStack>
   );
 }
 
 function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
+  const styles = useStyles();
+
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -188,7 +191,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
   };
 
   return (
-    <View style={styles.form}>
+    <FormStack>
       <Text style={styles.heading}>Enter reset code</Text>
       <Text style={styles.hint}>
         We sent a reset code to {auth.pendingUsername}.
@@ -210,11 +213,11 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Reset password" onPress={submit} loading={submitting} />
       <TextLink label="Back to sign in" onPress={auth.goToSignIn} />
-    </View>
+    </FormStack>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
@@ -223,17 +226,11 @@ const styles = StyleSheet.create({
     gap: spacing(2),
   },
   appTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
+    ...textRole.title,
     color: theme.text,
     textAlign: "center",
     marginBottom: spacing(2),
   },
-  form: { gap: spacing(2) },
-  heading: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
-    color: theme.text,
-  },
-  hint: { fontSize: fontSize.sm, color: theme.textMuted },
-});
+  heading: { ...textRole.heading, color: theme.text },
+  hint: { ...muted(theme, textRole.detail) },
+}));

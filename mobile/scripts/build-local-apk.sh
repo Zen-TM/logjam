@@ -34,6 +34,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# config.ts throws at launch when either is unset: fail before the build, not
+# on the device after it.
+for v in EXPO_PUBLIC_API_URL EXPO_PUBLIC_WEB_URL; do
+  grep -qE "^$v=.+" .env || { echo "$v is not set in .env" >&2; exit 1; }
+done
+
 install_apk=1
 [ "${1:-}" = "--no-install" ] && install_apk=0
 

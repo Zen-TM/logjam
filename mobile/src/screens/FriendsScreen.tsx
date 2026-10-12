@@ -1,11 +1,11 @@
 // Friends — "who can I share a place with, and who is waiting on me?"
 //
-// LAYOUT (docs/ux-principles.md §2, §2): hero answers with a count and owns the one
+// LAYOUT (shared/DESIGN.md §2, §2): hero answers with a count and owns the one
 // acquisition action (Add, which opens the username search in a sheet); a pinned
 // rail partitions into Friends / Requests — a true partition, because a pending
 // request is not yet a friendship; one flat list under it. Per-row actions live
 // in an overflow sheet titled with the username, so a mis-tap can't revoke
-// anything (DESIGN.md §5).
+// anything (DESIGN.md).
 //
 // Online-only, deliberately: managing friendships is never a field use case, and
 // the mirror handles the offline propagation of the resulting shares and
@@ -34,15 +34,19 @@ import {
   Alert,
   FlatList,
   RefreshControl,
-  StyleSheet,
+  Share,
   Text,
   View,
 } from "react-native";
 import {
   contractSectionKeys,
   friendAcceptedMessage,
+  friendInviteMessage,
+  friendInviteUrl,
+  friendInvitesLiveLabel,
   friendRemovedMessage,
   friendRemoveConfirm,
+  friendRequestMadeFriend,
   friendsEmptyKind,
   friendsHeroTitle,
   FRIENDS,
@@ -54,19 +58,23 @@ import {
 
 import {
   acceptFriendRequest,
+  createFriendInvite,
   declineFriendRequest,
+  getFriendInvites,
   getFriendRequests,
   getFriends,
   removeFriend,
+  revokeFriendInvites,
   searchUsers,
   sendFriendRequest,
   type Friend,
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
+import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { placeHue, fontSize, spacing, theme } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -95,7 +103,7 @@ const copy = FRIENDS.copy;
 /**
  * One row shape for both populations, so a single renderer covers the list.
  * A request wears the heath hue a shared place wears — it is someone else
- * reaching into your account, which is the same idea (docs/ux-principles.md §8).
+ * reaching into your account, which is the same idea (shared/DESIGN.md §8).
  */
 type FriendItem =
   | { kind: "friend"; key: string; username: string; friendshipId: string }
@@ -110,10 +118,14 @@ export function FriendsScreen({
    * Open the per-friend sharing audit — "what does this person see?". Pushed by
    * the caller so Back returns to this list. Reached by tapping the friend's row
    * body, and also from the row's overflow sheet: the body OPENS and the ⋯ ACTS
-   * (DESIGN.md §5), so a mis-tap lands on a read-only screen rather than near a revoke.
+   * (DESIGN.md), so a mis-tap lands on a read-only screen rather than near a revoke.
    */
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("friends", accountState),
@@ -187,7 +199,7 @@ export function FriendsScreen({
     (item: Extract<FriendItem, { kind: "friend" }>) => {
       setMenuItem(null);
       // A dialog, because the consequence is the point and it is bigger than the
-      // verb suggests (DESIGN.md §5).
+      // verb suggests (DESIGN.md).
       const { confirmTitle, confirmBody } = friendRemoveConfirm(item.username);
       Alert.alert(confirmTitle, confirmBody, [
         { text: "Cancel", style: "cancel" },
@@ -208,7 +220,7 @@ export function FriendsScreen({
   );
 
   // Stable identities so the memoised rows only re-render for a change that is
-  // actually theirs (DESIGN.md §7).
+  // actually theirs (DESIGN.md).
   const openFriend = useCallback(
     (item: FriendItem) => {
       if (item.kind !== "friend") return;
@@ -324,7 +336,7 @@ export function FriendsScreen({
     list: () => (
       <>
         {/* Stays inline with a retry, because a stale list IS the problem and it
-            persists until the fetch works (DESIGN.md §4). */}
+            persists until the fetch works (DESIGN.md). */}
         {loadError ? (
           <View style={styles.banner}>
             <ErrorBanner message={loadError} onRetry={() => void load()} />
@@ -384,12 +396,13 @@ export function FriendsScreen({
         title={copy.addTitle}
       >
         <AddFriendBody
+          open={addOpen}
           existingIds={friends.map((friend) => friend.id)}
           onSent={() => void load()}
         />
       </BottomSheet>
 
-      {/* Per-row actions, titled with the username (DESIGN.md §5). */}
+      {/* Per-row actions, titled with the username (DESIGN.md). */}
       <BottomSheet
         visible={menuItem !== null}
         onClose={() => setMenuItem(null)}
@@ -457,7 +470,7 @@ export function FriendsScreen({
 }
 
 /**
- * The card every list in this app uses (DESIGN.md §5): the row's body opens the thing, the
+ * The card every list in this app uses (DESIGN.md): the row's body opens the thing, the
  * ⋯ opens its actions. A friend opens to their sharing screen — read-only, so
  * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
  * request has nowhere to open to, so both its body and its ⋯ reach the same
@@ -477,6 +490,9 @@ const FriendRow = memo(function FriendRow({
   onOpen: (item: FriendItem) => void;
   onMenu: (item: FriendItem) => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+
   const request = item.kind === "request";
   return (
     <Row
@@ -504,16 +520,24 @@ const FriendRow = memo(function FriendRow({
 // rejected server-side (409) and the message is worth showing. Sent targets are
 // locally marked so the row reflects the pending state without a reload.
 function AddFriendBody({
+  open,
   existingIds,
   onSent,
 }: {
+  open: boolean;
   existingIds: string[];
   onSent: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [sentIds, setSentIds] = useState<string[]>([]);
+  // Made a friend by sending (they had already asked), shown until the
+  // reloaded list says so itself.
+  const [friendedIds, setFriendedIds] = useState<string[]>([]);
   // The search field's own problem (§8, rule 1).
   const [searchError, setSearchError] = useState<string | null>(null);
   // Not this field's problem — it's the tapped "Add" row's — so it goes in a
@@ -561,8 +585,13 @@ function AddFriendBody({
     async (user: UserSearchResult) => {
       setSendError(null);
       try {
-        await sendFriendRequest(user.id);
-        setSentIds((current) => [...current, user.id]);
+        const friended = friendRequestMadeFriend(
+          await sendFriendRequest(user.id),
+        );
+        (friended ? setFriendedIds : setSentIds)((current) => [
+          ...current,
+          user.id,
+        ]);
         onSent();
       } catch (err) {
         console.error(err);
@@ -571,6 +600,62 @@ function AddFriendBody({
     },
     [onSent],
   );
+
+  // The other way to add someone: a link, handed to whichever app the user
+  // sends messages with. It opens Logjam Web, so it works for someone who has
+  // no Logjam GPS. Its failure is this button's, hence the same banner.
+  const [inviting, setInviting] = useState(false);
+  // How many links are out, and the one way to take them back: a link shared
+  // into the wrong chat befriends whoever opens it. `null` once they have
+  // been turned off, which is said where the count was.
+  const [liveInvites, setLiveInvites] = useState<number | null>(0);
+  const [revoking, setRevoking] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getFriendInvites()
+      .then((invites) => {
+        if (!cancelled) setLiveInvites(invites.length);
+      })
+      // The count is a courtesy; sharing works without it.
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+      setLiveInvites(0);
+    };
+  }, [open]);
+
+  const shareInvite = useCallback(async () => {
+    setSendError(null);
+    setInviting(true);
+    try {
+      const { token } = await createFriendInvite();
+      // Counted once it exists, whatever becomes of the share sheet.
+      setLiveInvites((count) => (count ?? 0) + 1);
+      await Share.share({
+        message: friendInviteMessage(friendInviteUrl(config.webUrl, token)),
+      });
+    } catch (err) {
+      console.error(err);
+      setSendError(messageFromError(err, copy.inviteFailed));
+    } finally {
+      setInviting(false);
+    }
+  }, []);
+
+  const revokeInvites = useCallback(async () => {
+    setSendError(null);
+    setRevoking(true);
+    try {
+      await revokeFriendInvites();
+      setLiveInvites(null);
+    } catch (err) {
+      console.error(err);
+      setSendError(messageFromError(err, copy.inviteRevokeFailed));
+    } finally {
+      setRevoking(false);
+    }
+  }, []);
 
   const trimmed = query.trim();
   return (
@@ -594,7 +679,8 @@ function AddFriendBody({
         <Text style={styles.hint}>{copy.searchHint}</Text>
       ) : null}
       {results.map((user) => {
-        const alreadyFriend = existingIds.includes(user.id);
+        const alreadyFriend =
+          existingIds.includes(user.id) || friendedIds.includes(user.id);
         const sent = sentIds.includes(user.id);
         return (
           <Row
@@ -618,12 +704,36 @@ function AddFriendBody({
           />
         );
       })}
+      <Text style={styles.hint}>{copy.inviteHint}</Text>
+      <Button
+        label={copy.inviteShare}
+        icon="link"
+        variant="outlineAccent"
+        disabled={inviting}
+        onPress={() => void shareInvite()}
+      />
+      {liveInvites === null ? (
+        <Text style={styles.hint}>{copy.inviteRevoked}</Text>
+      ) : liveInvites > 0 ? (
+        <View style={styles.liveInvites}>
+          <Text style={[styles.hint, styles.liveInvitesLabel]}>
+            {friendInvitesLiveLabel(liveInvites)}
+          </Text>
+          <Button
+            label={copy.inviteRevoke}
+            variant="ghost"
+            compact
+            loading={revoking}
+            onPress={() => void revokeInvites()}
+          />
+        </View>
+      ) : null}
       {sendError ? <ErrorBanner message={sendError} /> : null}
     </View>
   );
 }
 
-/** Per-bucket and actionable (docs/ux-principles.md §11). */
+/** Per-bucket and actionable (shared/DESIGN.md §11). */
 function EmptyPanel({
   kind,
   onAdd,
@@ -632,22 +742,18 @@ function EmptyPanel({
   onAdd: () => void;
 }) {
   if (kind === "noRequests") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{copy.noRequestsTitle}</Text>
-      </View>
-    );
+    return <EmptyState title={copy.noRequestsTitle} />;
   }
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
-      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
-      <Button label={copy.addTitle} icon="addFriend" onPress={onAdd} />
-    </View>
+    <EmptyState
+      title={copy.firstRunTitle}
+      hint={copy.firstRunBody}
+      action={{ label: copy.addTitle, icon: "addFriend", onPress: onAdd }}
+    />
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
@@ -664,17 +770,7 @@ const styles = StyleSheet.create({
   menuBody: { gap: spacing(1) },
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
-  empty: {
-    alignItems: "center",
-    gap: spacing(1.5),
-    paddingVertical: spacing(6),
-  },
-  emptyTitle: { color: theme.text, fontSize: fontSize.base },
-  emptyHint: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-    paddingHorizontal: spacing(2),
-  },
-});
+  liveInvites: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  liveInvitesLabel: { flex: 1 },
+  hint: { ...muted(theme, textRole.detail) },
+}));

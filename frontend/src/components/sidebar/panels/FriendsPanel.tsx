@@ -3,13 +3,13 @@
 // The page answers with a count and owns the one acquisition action: Add, which
 // opens the username search in a dialog rather than sitting above the list. The
 // old panel led with that search box, so the first thing on the page was a way
-// to look for people who are not on it (docs/ux-principles.md §2, and Logjam GPS's
+// to look for people who are not on it (shared/DESIGN.md §2, and Logjam GPS's
 // FriendsScreen, which settled this shape).
 //
 // One pinned rail partitions All / Friends / Requests — a true partition,
 // because a pending request is not a friendship yet — over one flat list.
 //
-// A friend's row OPENS their sharing audit, and its ⋯ ACTS (DESIGN.md §5): the audit is
+// A friend's row OPENS their sharing audit, and its ⋯ ACTS (DESIGN.md): the audit is
 // read-only, so a mis-tap there costs nothing, while Remove friend stays behind
 // the menu. A request has nowhere to open to, so it carries Accept and Decline
 // on the card's own footer line.
@@ -34,7 +34,10 @@ import {
   contractSectionKeys,
   FRIENDS,
   friendAcceptedMessage,
+  friendInviteUrl,
+  friendInvitesLiveLabel,
   friendRemovedMessage,
+  friendRequestMadeFriend,
   friendsRemovedMessage,
   friendsRemoveConfirm,
   friendRemoveConfirm,
@@ -68,6 +71,9 @@ import {
 } from "../../../ui";
 import type { TFriend, TFriendRequest, TSearchUser } from "../../../placeUtils";
 import {
+  createFriendInvite,
+  getFriendInvites,
+  revokeFriendInvites,
   searchUsers,
   sendFriendRequest,
   acceptFriendRequest,
@@ -247,7 +253,7 @@ function FriendsPanel({
     ),
     buckets: () => (
       // The selection bar takes the rail's slot at the rail's height, so the
-      // list does not move when a selection starts (DESIGN.md §5).
+      // list does not move when a selection starts (DESIGN.md).
       <div className={classes.rails}>
         {selecting ? (
           <SelectionBar
@@ -302,7 +308,7 @@ function FriendsPanel({
                       <Button
                         compact
                         variant="filled"
-                        disabled={busyId === request.id}
+                        busy={busyId === request.id}
                         onClick={() =>
                           void runAction(
                             request.id,
@@ -318,6 +324,7 @@ function FriendsPanel({
                         compact
                         variant="outline"
                         disabled={busyId === request.id}
+                        disabledReason="Replying…"
                         onClick={() =>
                           void runAction(
                             request.id,
@@ -405,6 +412,7 @@ function FriendsPanel({
         friends={friends}
         onClose={() => setAddOpen(false)}
         onSent={onRefetchFriends}
+        onFriended={onRefetchNotifications}
       />
 
       <ConfirmDialog
@@ -435,22 +443,31 @@ function FriendsPanel({
 
 /** Username search → friend request. Already-a-friend and already-pending are
  *  refused server-side with a 409 whose message is worth showing, so the row
- *  stays and the error arrives as a toast. */
-function AddFriendDialog({
+ *  stays and the error arrives as a toast. A request to someone who had
+ *  already asked makes a friend there and then: `onFriended`, because their
+ *  request's prompt has just left the inbox.
+ *  Exported for FriendsPanel.render.test.tsx. */
+export function AddFriendDialog({
   open,
   friends,
   onClose,
   onSent,
+  onFriended,
 }: {
   open: boolean;
   friends: TFriend[];
   onClose: () => void;
   onSent: () => void;
+  onFriended: () => void;
 }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TSearchUser[]>([]);
   const [sentIds, setSentIds] = useState<ReadonlySet<string>>(new Set());
+  // Made a friend by sending, shown until the refetched list says so itself.
+  const [friendedIds, setFriendedIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [sendingId, setSendingId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -462,6 +479,7 @@ function AddFriendDialog({
       setQuery("");
       setResults([]);
       setSentIds(new Set());
+      setFriendedIds(new Set());
     }
   }
 
@@ -498,10 +516,18 @@ function AddFriendDialog({
   async function handleSend(user: TSearchUser) {
     setSendingId(user.id);
     try {
-      await sendFriendRequest(user.id);
+      const friended = friendRequestMadeFriend(
+        await sendFriendRequest(user.id),
+      );
       // Mark the row rather than dropping it: a search with several matches can
       // keep going, and the pill is what says the request went.
-      setSentIds((prev) => new Set(prev).add(user.id));
+      (friended ? setFriendedIds : setSentIds)((prev) =>
+        new Set(prev).add(user.id),
+      );
+      if (friended) {
+        toast.success(friendAcceptedMessage(user.username));
+        onFriended();
+      }
       onSent();
     } catch (err) {
       console.error(err);
@@ -511,7 +537,10 @@ function AddFriendDialog({
     }
   }
 
-  const friendIds = new Set(friends.map((friend) => friend.id));
+  const friendIds = new Set([
+    ...friends.map((friend) => friend.id),
+    ...friendedIds,
+  ]);
   const typed = query.trim();
 
   return (
@@ -551,6 +580,7 @@ function AddFriendDialog({
                     variant="outline"
                     busy={sendingId === user.id}
                     disabled={sendingId !== null}
+                    disabledReason="Sending…"
                     onClick={() => void handleSend(user)}
                   >
                     {copy.add}
@@ -560,8 +590,107 @@ function AddFriendDialog({
             />
           ))
         )}
+        <InviteLink open={open} />
       </div>
     </Dialog>
+  );
+}
+
+/** The other way to add someone: a link to send, for when they are not at
+ *  hand to spell a username. The link goes to the clipboard and is shown only
+ *  when the browser refuses that: it exists only in this reply, so the page
+ *  is then the one place left to take it from. */
+export function InviteLink({ open }: { open: boolean }) {
+  const toast = useToast();
+  const [link, setLink] = useState<string | null>(null);
+  const [live, setLive] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getFriendInvites()
+      .then((invites) => {
+        if (!cancelled) setLive(invites.length);
+      })
+      // The count is a courtesy; the buttons work without it.
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+      setLink(null);
+    };
+  }, [open]);
+
+  async function handleCopy() {
+    setBusy(true);
+    let url: string;
+    try {
+      const { token } = await createFriendInvite();
+      url = friendInviteUrl(window.location.origin, token);
+      setLink(null);
+      setLive((count) => count + 1);
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, copy.inviteFailed));
+      setBusy(false);
+      return;
+    }
+    // Its own failure: the link was made, so saying it could not be made sent
+    // people back for a second one. It is put on screen to select by hand
+    // (FriendsPanel.render.test.tsx).
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(copy.inviteCopied);
+    } catch (err) {
+      console.error(err);
+      setLink(url);
+      toast.error(copy.inviteCopyFailed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRevoke() {
+    setBusy(true);
+    try {
+      await revokeFriendInvites();
+      setLink(null);
+      setLive(0);
+      toast.success(copy.inviteRevoked);
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, copy.inviteRevokeFailed));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={classes.invite}>
+      <p className={classes.note}>{copy.inviteHint}</p>
+      <Button
+        variant="outline"
+        icon="link"
+        busy={busy}
+        onClick={() => void handleCopy()}
+      >
+        {copy.inviteCopy}
+      </Button>
+      {link && <p className={classes.inviteLink}>{link}</p>}
+      {live > 0 && (
+        <p className={classes.note}>
+          {friendInvitesLiveLabel(live)}{" "}
+          <Button
+            compact
+            disabled={busy}
+            disabledReason="Working…"
+            onClick={() => void handleRevoke()}
+          >
+            {copy.inviteRevoke}
+          </Button>
+        </p>
+      )}
+    </div>
   );
 }
 

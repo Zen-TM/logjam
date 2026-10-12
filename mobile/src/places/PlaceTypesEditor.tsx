@@ -30,24 +30,28 @@ import { useCallback, useState } from "react";
 import {
   Alert,
   Pressable,
-  StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
 } from "react-native";
 import {
   drawsYoursHeading,
+  isSystemPlaceTypeId,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameError,
   SETTINGS_LIST,
+  stepAfterPlaceTypeSave,
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
-import { listMirrorPlaces } from "../sync/mirrorStore";
+import { placeTypeFormKey } from "./placeTypeDraft";
+import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
 import {
   createPlaceTypeLocal,
   deletePlaceTypeLocal,
@@ -56,21 +60,23 @@ import {
 import {
   Button,
   ErrorBanner,
+  Field,
+  FormStack,
   Row,
   SectionHeader,
   TextField,
   Icon,
   ColourField,
 } from "../ui";
-import { fieldLabel } from "../ui/fieldLabel";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
 const copy = SETTINGS_LIST.copy;
 
-/** A type nobody owns is a built-in: not renameable, not deletable. Same rule
- *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
+/** A built-in: not renameable, not deletable. By pinned id, never by a missing
+ *  owner: a type made on this phone has no owner here until it syncs
+ *  (`sync/placeTypeCreate.test.ts`). */
 export function isSystemPlaceType(type: MirrorPlaceType): boolean {
-  return type.ownerId === null;
+  return isSystemPlaceTypeId(type.id);
 }
 
 export function PlaceTypeList({
@@ -80,6 +86,8 @@ export function PlaceTypeList({
   types: MirrorPlaceType[];
   onEdit: (type: MirrorPlaceType) => void;
 }) {
+  const styles = useStyles();
+
   // BUILT-INS LAST, the same way the attribute list orders itself: the user's
   // own types are the half with verbs on them, and the three that ship with the
   // app are a footnote to that. Note this is the EDITOR's order only — the
@@ -89,7 +97,7 @@ export function PlaceTypeList({
   const own = types.filter((type) => !isSystemPlaceType(type));
   const builtIn = types.filter(isSystemPlaceType);
   return (
-    <View style={styles.body}>
+    <View style={styles.list}>
       {drawsYoursHeading(own.length, builtIn.length) ? (
         <SectionHeader title={copy.yours} count={own.length} />
       ) : null}
@@ -115,28 +123,39 @@ export function PlaceTypeList({
   );
 }
 
+/** A type the form has just made: enough to title and scope what follows. */
+export type NewPlaceType = { id: string; name: string };
+
 /**
  * Add or change one type — a body and a pinned footer, like
  * `useCustomFieldForm` and for the same reason: the icon grid is tall enough
  * that a save button inside the scroll would not be on screen.
  */
 export function usePlaceTypeForm({
+  open,
   editing,
   onSaved,
   onDone,
+  onAdded,
 }: {
+  /** Whether the host is showing the form: each open starts a fresh draft
+   *  (`placeTypeFormKey`). */
+  open: boolean;
   /** null = adding. */
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
   onDone: () => void;
+  /** The type just made, for the host to open its attributes on
+   *  (`stepAfterPlaceTypeSave`). Called instead of `onSaved` and `onDone`:
+   *  the sheet stays up, and its new title is the confirmation. */
+  onAdded: (type: NewPlaceType) => void;
 }): { body: ReactNode; footer: ReactNode } {
-  const formKey = editing?.id ?? "__new__";
+  const theme = useTheme();
+  const styles = useStyles();
+
+  const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
-  if (seededFor !== formKey) {
-    setSeededFor(formKey);
-    setDraft(seedDraft(editing));
-  }
   const [saving, setSaving] = useState(false);
   // The name check (attributed to the Name field) and a save/delete failure
   // (attributable to no single control, so it is the footer's `ErrorBanner`)
@@ -145,18 +164,35 @@ export function usePlaceTypeForm({
   // the Name label.
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  if (seededFor !== formKey) {
+    setSeededFor(formKey);
+    setDraft(seedDraft(editing));
+    // A fresh form has no complaints: the last one's "A type needs a name."
+    // was waiting under an untouched Name field.
+    setError(null);
+    setFormError(null);
+  }
   const { cellSize, onGridLayout } = useGridCellSize();
 
   const save = useCallback(async () => {
     const name = draft.name.trim();
-    if (!name) {
-      setError("A type needs a name.");
-      return;
-    }
     setError(null);
     setFormError(null);
     setSaving(true);
     try {
+      // Checked against the mirror, so it holds offline. The server keeps a
+      // pushed duplicate under another name rather than refusing it, so this
+      // is the only place the user is told.
+      const nameError = placeTypeNameError(
+        name,
+        await listMirrorPlaceTypes(),
+        editing,
+      );
+      if (nameError) {
+        setError(nameError);
+        return;
+      }
+      let added: NewPlaceType | null = null;
       if (editing) {
         // Field-scoped, so a rename on this phone does not clobber a recolour
         // made on another one.
@@ -167,20 +203,24 @@ export function usePlaceTypeForm({
         if (Object.keys(changes).length > 0) {
           await updatePlaceTypeLocal(editing.id, changes);
         }
-        onSaved("Type updated.");
       } else {
-        await createPlaceTypeLocal({
+        const id = await createPlaceTypeLocal({
           name,
           iconKey: draft.iconKey,
           color: draft.color,
         });
-        onSaved("Type added.");
+        added = { id, name };
       }
+      if (added && stepAfterPlaceTypeSave(added !== null) === "attributes") {
+        onAdded(added);
+        return;
+      }
+      onSaved(added ? "Type added." : "Type updated.");
       onDone();
     } catch (err) {
       console.error(err);
       // The sheet is still open here (onDone only runs on success) — a toast
-      // would render under it and never be seen (docs/ux-principles.md §11), so this is the
+      // would render under it and never be seen (shared/DESIGN.md §11), so this is the
       // footer's banner, not a toast. A local write, so this is a broken
       // database rather than a missing connection — do not offer a network
       // explanation for something reconnecting cannot fix.
@@ -188,7 +228,7 @@ export function usePlaceTypeForm({
     } finally {
       setSaving(false);
     }
-  }, [draft, editing, onDone, onSaved]);
+  }, [draft, editing, onAdded, onDone, onSaved]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
@@ -240,17 +280,18 @@ export function usePlaceTypeForm({
   }, [editing, onDone, onSaved]);
 
   const body = (
-    <View style={styles.body}>
+    <FormStack>
       <TextField
         label="Name"
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
-          // The empty-name requirement is checked on Save (docs/ux-principles.md §11); once
+          // The name is checked on Save (shared/DESIGN.md §11); once
           // shown it clears the moment the field it's about is edited.
           if (error) setError(null);
         }}
         error={error}
+        maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
         autoCapitalize="sentences"
       />
 
@@ -258,33 +299,38 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <Text style={fieldLabel}>Icon</Text>
-      <View style={styles.grid} onLayout={onGridLayout}>
-        {/* Nothing until the row has been measured — one frame, and the
+      <Field label="Icon">
+        <View style={styles.grid} onLayout={onGridLayout}>
+          {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
-        {cellSize == null
-          ? null
-          : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
-              <Pressable
-                key={iconKey}
-                accessibilityRole="button"
-                accessibilityLabel={iconKey}
-                accessibilityState={{ selected: draft.iconKey === iconKey }}
-                onPress={() => setDraft((current) => ({ ...current, iconKey }))}
-                style={[
-                  styles.cell,
-                  cellSize,
-                  draft.iconKey === iconKey ? styles.cellChosen : null,
-                ]}
-              >
-                <Icon
-                  idea={placeTypeGlyph(iconKey)}
-                  size={20}
-                  color={draft.iconKey === iconKey ? theme.accent : theme.text}
-                />
-              </Pressable>
-            ))}
-      </View>
+          {cellSize == null
+            ? null
+            : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
+                <Pressable
+                  key={iconKey}
+                  accessibilityRole="button"
+                  accessibilityLabel={iconKey}
+                  accessibilityState={{ selected: draft.iconKey === iconKey }}
+                  onPress={() =>
+                    setDraft((current) => ({ ...current, iconKey }))
+                  }
+                  style={[
+                    styles.cell,
+                    cellSize,
+                    draft.iconKey === iconKey ? styles.cellChosen : null,
+                  ]}
+                >
+                  <Icon
+                    idea={placeTypeGlyph(iconKey)}
+                    size={20}
+                    color={
+                      draft.iconKey === iconKey ? theme.accent : theme.text
+                    }
+                  />
+                </Pressable>
+              ))}
+        </View>
+      </Field>
 
       <ColourField
         label="Colour"
@@ -306,29 +352,22 @@ export function usePlaceTypeForm({
           onPress={confirmDelete}
         />
       ) : null}
-    </View>
+    </FormStack>
   );
 
   const footer = (
-    <View style={styles.footer}>
+    <FormStack>
       {/* Not attributable to one control (a local write failing, or the
           places-in-use check itself failing) — the banner sits directly above
-          Save, same as every other form (docs/ux-principles.md §11). */}
+          Save, same as every other form (shared/DESIGN.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
-      <View style={styles.actions}>
-        <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-        </View>
-        <View style={styles.action}>
-          <Button
-            label={editing ? "Save" : "Add type"}
-            icon="done"
-            loading={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      </View>
-    </View>
+      <Button
+        label={editing ? "Save" : "Add type"}
+        icon="done"
+        loading={saving}
+        onPress={() => void save()}
+      />
+    </FormStack>
   );
 
   return { body, footer };
@@ -385,19 +424,19 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
 
 const GRID_GAP = spacing(1);
 
-const styles = StyleSheet.create({
-  body: { gap: spacing(1) },
-  footer: { gap: spacing(1) },
-  actions: { flexDirection: "row", gap: spacing(1) },
-  action: { flex: 1 },
+const useStyles = makeStyles((theme, textRole) => ({
+  list: { gap: spacing(1) },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
+  // A chosen cell changes its edge's colour, never its width: Fabric drops a
+  // rounded card's children when a border width changes (mobile/DESIGN.md §7).
   cell: {
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: theme.line,
+    borderWidth: 2,
+    borderColor: "transparent",
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
-  cellChosen: { borderWidth: 2, borderColor: theme.accent },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+  cellChosen: { borderColor: theme.accent },
+  hint: { ...muted(theme, textRole.detail) },
+}));

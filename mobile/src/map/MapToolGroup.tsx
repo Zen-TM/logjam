@@ -5,25 +5,25 @@
 // CHROME_BOTTOM that is deliberately a constant (mapChrome.ts) — growing
 // upward walks the tools into the search pill, and growing the column itself
 // is exactly the "every pinned element is a piece of map the user can't see"
-// tax docs/ux-principles.md §11 warns about. One button costs one button's worth of map no
+// tax shared/DESIGN.md §11 warns about. One button costs one button's worth of map no
 // matter how many tools live behind it.
 //
 // The group closes as soon as a tool arms: the HUD in the top notice stack is
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
 import { useEffect, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Pressable, View } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
-import type { IconIdea } from "@logjam/shared";
+import { MAP_MEASURE, MAP_MEASURE_ICON, type IconIdea } from "@logjam/shared";
 
-import { theme } from "../theme";
+import { makeStyles, useTheme } from "../theme";
 import { Icon } from "../ui";
 
 export type MapTool = "measure" | "route";
 
 const TOOLS: { id: MapTool; label: string; icon: IconIdea }[] = [
-  { id: "measure", label: "Measure distance", icon: "measure" },
+  { id: "measure", label: MAP_MEASURE.title, icon: MAP_MEASURE_ICON },
   { id: "route", label: "Draw a route", icon: "draw" },
 ];
 
@@ -49,6 +49,9 @@ export function MapToolGroup({
   onToggleOpen: () => void;
   onPickTool: (tool: MapTool) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   // Each tool slides out from directly UNDER the + button, one after the
   // next, and translateX runs on the native driver — no width animation, no
   // fade.
@@ -132,7 +135,11 @@ export function MapToolGroup({
             ]}
             onPress={() => onPickTool(tool.id)}
           >
-            <Icon idea={tool.icon} size={FAB_ICON} color={theme.text} />
+            <Icon
+              idea={tool.icon}
+              size={FAB_ICON}
+              color={activeTool === tool.id ? theme.onFill : theme.text}
+            />
           </Pressable>
         </Animated.View>
       ))}
@@ -151,14 +158,14 @@ export function MapToolGroup({
         <Icon
           idea={open ? "close" : "add"}
           size={FAB_ICON}
-          color={theme.text}
+          color={open || activeTool ? theme.onFill : theme.text}
         />
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // The group occupies exactly one button's width in the column. Every
   // child (each tool, the +) is its own ABSOLUTE sibling so opening the
   // group can't widen the row: laid out in flow, growth pushed the whole
@@ -212,4 +219,4 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   armedToolSlot: { zIndex: 2, elevation: 2 },
-});
+}));

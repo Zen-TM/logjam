@@ -27,7 +27,7 @@ import { scratchFileUri } from "../offline/localStores";
  */
 export async function fileSizeBytes(uri: string): Promise<number> {
   const info = await FileSystem.getInfoAsync(uri);
-  if (!info.exists) throw new Error("Logjam couldn't open that file.");
+  if (!info.exists) throw new Error("Logjam GPS couldn't open that file.");
   return info.size ?? 0;
 }
 
