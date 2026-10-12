@@ -2,24 +2,30 @@
 // along.
 //
 // The elevation hook keys its request on `JSON.stringify(points)` and
-// re-densifies whatever it is given, so handing it a six-hour recording means
-// stringifying thousands of coordinate pairs on every render and sampling
-// detail far below the DEM's own ~19 m/px. A couple of hundred vertices is
-// already finer than the surface being read.
+// re-densifies whatever it is given, and the API takes a bounded line, so a
+// six-hour recording is thinned before it gets there.
 //
 // PRIVACY: these are precise wilderness coordinates. Nothing here logs.
 import {
   ELEVATION_SMOOTHING_WINDOW,
+  MAX_ROUTE_POINTS,
   movingMedian,
+  type GpsFix,
   type TrackSeriesPoint,
 } from "@logjam/shared";
 
 /**
- * Vertices kept for a DEM sample. `densifyLine` resamples to
- * ELEVATION_PROFILE_MAX_SAMPLES (256) evenly spaced positions anyway, so more
- * input than this buys nothing but string length.
+ * Vertices kept for a DEM sample. The DEM is read along the straight lines
+ * between them, so the fewer there are the more a long track's line cuts
+ * across the gullies and spurs the walked line went around: at 200 a 20 km
+ * day had a vertex every 100 m.
+ *
+ * Short of what `POST /elevation/profile` takes (`MAX_ROUTE_POINTS`) on
+ * purpose: every segment keeps at least two vertices whatever its share, so a
+ * track with many short segments runs over this figure, and a line the API
+ * refuses is one the public tiles get asked about instead.
  */
-export const MAX_ELEVATION_VERTICES = 200;
+export const MAX_ELEVATION_VERTICES = Math.floor(MAX_ROUTE_POINTS * 0.8);
 
 /** Consecutive runs of points sharing a `segment`, single-point runs dropped. */
 function segmentRuns(
@@ -70,15 +76,16 @@ export function toElevationLine(
 }
 
 /**
- * The GPS height at every vertex `toElevationLine` keeps, in the same shape:
+ * Every fix's GPS height, placed among the vertices `toElevationLine` keeps:
  * what fills the stretches no saved terrain covers (`fillDemFromGps` in
- * shared/src/trackStats.ts). Median-smoothed over the WHOLE segment before
- * the stride, the way the track's own GPS climb is, so a kept vertex is not
- * one raw fix's spike. Null where the segment has no height near the vertex.
+ * shared/src/trackStats.ts). ALL the fixes, not only the kept ones, so a
+ * filled stretch's climb is summed from everything the phone recorded.
+ * Median-smoothed per segment the way the track's own GPS climb is. A fix
+ * that carried no height is left out.
  */
-export function toElevationHeights(
+export function toElevationGpsFixes(
   points: readonly TrackSeriesPoint[],
-): (number | null)[][] {
+): GpsFix[][] {
   return strided(points).map(({ run, kept }) => {
     const withHeight = run.flatMap((point, i) =>
       point.altitudeM != null && Number.isFinite(point.altitudeM) ? [i] : [],
@@ -87,8 +94,14 @@ export function toElevationHeights(
       withHeight.map((i) => run[i]!.altitudeM!),
       ELEVATION_SMOOTHING_WINDOW,
     );
-    const heightAt = new Map(withHeight.map((i, k) => [i, smoothed[k]!]));
-    return kept.map((i) => heightAt.get(i) ?? null);
+    let k = 0;
+    return withHeight.map((i, n) => {
+      while (k < kept.length - 2 && kept[k + 1]! <= i) k++;
+      return {
+        vertex: k + (i - kept[k]!) / (kept[k + 1]! - kept[k]!),
+        heightM: smoothed[n]!,
+      };
+    });
   });
 }
 

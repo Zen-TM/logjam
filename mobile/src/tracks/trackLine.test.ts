@@ -3,7 +3,7 @@ import type { RecordedTrackPoint } from "@logjam/shared";
 
 import {
   MAX_ELEVATION_VERTICES,
-  toElevationHeights,
+  toElevationGpsFixes,
   toElevationLine,
 } from "./trackLine";
 
@@ -84,35 +84,37 @@ describe("toElevationLine", () => {
   });
 });
 
-describe("toElevationHeights", () => {
+describe("toElevationGpsFixes", () => {
   const climbing = (count: number, segment: number, lonBase: number) =>
     run(count, segment, lonBase).map((point, i) => ({
       ...point,
       altitudeM: 500 + i,
     }));
 
-  // Mutation: stride the two differently and every height is paired with
-  // another vertex's position.
-  it("has one height for every vertex the line keeps", () => {
+  // Mutation: keep only the fixes the line keeps and a filled stretch of a
+  // long recording is summed from a fraction of what the phone recorded.
+  it("carries every fix, placed among the vertices the line keeps", () => {
     const points = [...climbing(5000, 0, 150.2), ...climbing(4, 1, 150.9)];
     const line = toElevationLine(points);
-    const heights = toElevationHeights(points);
-    expect(heights.map((segment) => segment.length)).toEqual(
-      line.map((segment) => segment.length),
-    );
-    expect(heights[0]![0]).toBe(500);
-    expect(heights[0]![heights[0]!.length - 1]).toBe(500 + 4999);
+    const fixes = toElevationGpsFixes(points);
+    expect(fixes.map((segment) => segment.length)).toEqual([5000, 4]);
+    expect(line[0]!.length).toBeLessThan(5000);
+    expect(fixes[0]![0]).toEqual({ vertex: 0, heightM: 500 });
+    expect(fixes[0]![4999]!.vertex).toBe(line[0]!.length - 1);
+    expect(fixes[1]![3]!.vertex).toBe(line[1]!.length - 1);
+    // In walked order, and never past the last vertex.
+    const places = fixes[0]!.map((fix) => fix.vertex);
+    expect(places.every((at, i) => i === 0 || at > places[i - 1]!)).toBe(true);
   });
 
-  it("smooths a single fix's spike out before it is kept", () => {
+  it("smooths a single fix's spike out", () => {
     const points = climbing(5, 0, 150.2);
     points[2] = { ...points[2]!, altitudeM: 9000 };
-    expect(
-      Math.max(...toElevationHeights(points)[0]!.map((h) => h!)),
-    ).toBeLessThan(600);
+    const heights = toElevationGpsFixes(points)[0]!.map((fix) => fix.heightM);
+    expect(Math.max(...heights)).toBeLessThan(600);
   });
 
-  it("is null at a vertex whose fix carried no height", () => {
-    expect(toElevationHeights(run(3, 0, 150.2))).toEqual([[null, null, null]]);
+  it("leaves out a fix that carried no height", () => {
+    expect(toElevationGpsFixes(run(3, 0, 150.2))).toEqual([[]]);
   });
 });

@@ -247,6 +247,12 @@ export type DemSamples = {
    * `heights` when one source answered throughout.
    */
   levelled: (number | null)[];
+  /**
+   * What climb and descent are summed from when it is finer than `levelled`:
+   * a track's GPS stretches carry every fix, not one value per sample
+   * (`fillDemFromGps` in trackStats.ts). Absent means `levelled`.
+   */
+  climbSeries?: number[];
 };
 
 function covers(source: DemSource, position: SamplePosition): boolean {

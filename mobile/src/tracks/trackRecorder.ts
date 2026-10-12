@@ -38,7 +38,7 @@ import {
 import { startSensorLog, stopSensorLog } from "./sensorLog";
 import { backUpFinishedTrack } from "./trackBackup";
 import { climbFromSavedTerrain } from "./trackClimb";
-import { toElevationHeights, toElevationLine } from "./trackLine";
+import { toElevationGpsFixes, toElevationLine } from "./trackLine";
 import { enqueueTrackWrite, resetTrackWriteHealth } from "./trackWriteQueue";
 import {
   addTrackPointSuppression,
@@ -562,7 +562,7 @@ export async function finishTrackRecording(
     // asks the network later (`trackClimb.ts`).
     ...(await climbFromSavedTerrain(
       toElevationLine(points),
-      toElevationHeights(points),
+      toElevationGpsFixes(points),
     )),
     durationMs: trackDurationMs(track, endedAt.getTime()),
   };

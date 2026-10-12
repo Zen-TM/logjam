@@ -13,9 +13,11 @@ import {
   ELEVATION_PROFILE_MAX_SAMPLES,
   buildElevationProfile,
   elevationGainLoss,
-  heightsAlongLine,
+  gpsAlongLine,
   type ElevationProfile,
   type ElevationSample,
+  type GpsFix,
+  type GpsHeight,
   type SamplePosition,
 } from "./elevation.js";
 import type { RoutePoint } from "./routeValidation.js";
@@ -938,85 +940,111 @@ export function formatDurationMs(durationMs: number): string {
  * the samples no DEM could answer, so a track that strays past a saved area
  * keeps the DEM for the part inside it.
  *
- * `gps` holds a smoothed GPS height per sample, null where the track has
- * none. A profile no DEM answered anywhere, or one with nothing to fill, comes
- * back untouched.
+ * `gps` is every fix's smoothed height by distance along the line
+ * (`gpsAlongLine`). A profile no DEM answered anywhere, one with nothing to
+ * fill, or a track with no heights comes back untouched.
  *
- * - CLIMB (`levelled`): a step with a GPS sample at either end is measured in
- *   GPS at both ends, the way `sampleDem` measures any seam in one source, so
- *   the offset between GPS and the DEM is never counted. GPS is first held
- *   still until it has moved `ELEVATION_HYSTERESIS_M`: the profile is summed
- *   at the DEM's finer threshold, which GPS wander would leak through.
- * - CHART (`heights`): each filled stretch is GPS shifted by the offset
- *   measured at the DEM samples either side of it, so it meets the DEM rather
- *   than sitting a geoid's height off it.
+ * - CLIMB (`climbSeries`): a step with a filled sample at either end is
+ *   walked through EVERY fix between the two, in GPS throughout, the way
+ *   `sampleDem` measures any seam in one source. So the offset between GPS
+ *   and the DEM is never counted, and a rise and fall between two samples
+ *   is. GPS is first held still until it has moved `ELEVATION_HYSTERESIS_M`:
+ *   the profile is summed at the DEM's finer threshold, which GPS wander
+ *   would leak through.
+ * - CHART (`heights`): a filled stretch is GPS shifted to meet the DEM at
+ *   both ends. The shift is the offset measured at the DEM sample either
+ *   side, ramped from one to the other along the stretch, so GPS drift
+ *   across it shows as no step at either join.
  */
 export function fillDemFromGps(
   dem: DemSamples,
-  gps: readonly (number | null)[],
+  positions: readonly SamplePosition[],
+  gps: readonly GpsHeight[],
 ): DemSamples {
-  const isFill = (i: number) => dem.heights[i] == null && gps[i] != null;
+  const isFill = (i: number) => i >= 0 && dem.heights[i] === null;
   if (
-    !dem.heights.some((height) => height != null) ||
-    !dem.heights.some((_, i) => isFill(i))
+    gps.length === 0 ||
+    dem.heights.every((height) => height == null) ||
+    dem.heights.every((height) => height != null)
   )
     return dem;
 
-  const held: (number | null)[] = [];
-  let hold: number | null = null;
-  for (const value of gps) {
-    if (
-      value != null &&
-      (hold == null || Math.abs(value - hold) >= ELEVATION_HYSTERESIS_M)
-    )
-      hold = value;
-    held.push(hold);
+  const held: number[] = [];
+  for (const { heightM } of gps) {
+    const hold = held[held.length - 1];
+    held.push(
+      hold == null || Math.abs(heightM - hold) >= ELEVATION_HYSTERESIS_M
+        ? heightM
+        : hold,
+    );
   }
 
-  const mean = (values: number[]) =>
-    values.reduce((sum, value) => sum + value, 0) / values.length;
-  const offsets = dem.heights.map((height, i) =>
-    height != null && gps[i] != null ? height - gps[i]! : null,
-  );
-  const known = (values: (number | null | undefined)[]) =>
-    values.filter((value): value is number => value != null);
-  const everywhere = known(offsets);
+  // GPS at each sample: between the two fixes either side of it.
+  const gpsAt: number[] = [];
+  let fix = 0;
+  for (const { distanceM } of positions) {
+    while (fix < gps.length - 2 && gps[fix + 1]!.distanceM < distanceM) fix++;
+    const a = gps[fix]!;
+    const b = gps[fix + 1] ?? a;
+    const span = b.distanceM - a.distanceM;
+    const t = span === 0 ? 0 : (distanceM - a.distanceM) / span;
+    gpsAt.push(
+      a.heightM + (b.heightM - a.heightM) * Math.min(1, Math.max(0, t)),
+    );
+  }
+
   const heights = dem.heights.slice();
   for (let start = 0; start < heights.length; start++) {
     if (!isFill(start)) continue;
     let end = start;
-    while (isFill(end + 1)) end++;
-    const beside = known([offsets[start - 1], offsets[end + 1]]);
-    const offset =
-      beside.length > 0
-        ? mean(beside)
-        : everywhere.length > 0
-          ? mean(everywhere)
-          : 0;
-    for (let i = start; i <= end; i++) heights[i] = gps[i]! + offset;
+    while (end + 1 < heights.length && isFill(end + 1)) end++;
+    const offsetAt = (i: number) =>
+      dem.heights[i] == null ? null : dem.heights[i]! - gpsAt[i]!;
+    const before = offsetAt(start - 1);
+    const after = offsetAt(end + 1);
+    const fromM = positions[Math.max(0, start - 1)]!.distanceM;
+    const spanM =
+      positions[Math.min(heights.length - 1, end + 1)]!.distanceM - fromM;
+    for (let i = start; i <= end; i++) {
+      const t = spanM === 0 ? 0 : (positions[i]!.distanceM - fromM) / spanM;
+      const offset =
+        before != null && after != null
+          ? before + (after - before) * t
+          : (before ?? after ?? 0);
+      heights[i] = gpsAt[i]! + offset;
+    }
     start = end;
   }
 
-  const levelled: (number | null)[] = heights.map(() => null);
-  let previous = -1;
-  for (let i = 0; i < heights.length; i++) {
-    if (heights[i] == null) continue;
-    if (previous < 0) levelled[i] = heights[i]!;
-    else {
-      const inDem = !isFill(i) && !isFill(previous);
-      const step = inDem
-        ? dem.levelled[i]! - dem.levelled[previous]!
-        : held[i] != null && held[previous] != null
-          ? held[i]! - held[previous]!
-          : 0;
-      levelled[i] = levelled[previous]! + step;
+  // The held GPS height at a distance: the last fix at or before it.
+  let reached = 0;
+  const heldAt = (distanceM: number) => {
+    while (reached < gps.length - 1 && gps[reached + 1]!.distanceM <= distanceM)
+      reached++;
+    return held[reached]!;
+  };
+  let level = heights[0]!;
+  const levelled: number[] = [level];
+  const climbSeries: number[] = [level];
+  for (let i = 1; i < heights.length; i++) {
+    if (!isFill(i) && !isFill(i - 1)) {
+      level += dem.levelled[i]! - dem.levelled[i - 1]!;
+    } else {
+      const from = heldAt(positions[i - 1]!.distanceM);
+      const first = reached + 1;
+      const to = heldAt(positions[i]!.distanceM);
+      for (let k = first; k <= reached; k++)
+        climbSeries.push(level + held[k]! - from);
+      level += to - from;
     }
-    previous = i;
+    levelled.push(level);
+    climbSeries.push(level);
   }
 
   return {
     heights,
     levelled,
+    climbSeries,
     sourceIds: dem.sourceIds.map((id, i) =>
       isFill(i) ? GPS_CLIMB_SOURCE : (id ?? null),
     ),
@@ -1025,19 +1053,19 @@ export function fillDemFromGps(
 
 /**
  * A recorded track's profile: the DEM where it answers, the track's own GPS
- * heights where it does not. `gpsHeights` is parallel to `segments`; without
- * it this is `buildElevationProfile`.
+ * heights where it does not. `gpsFixes` is parallel to `segments`; without it
+ * this is `buildElevationProfile`.
  */
 export function buildTrackElevationProfile(
   segments: readonly (readonly RoutePoint[])[],
-  gpsHeights: readonly (readonly (number | null)[])[] | null | undefined,
+  gpsFixes: readonly (readonly GpsFix[])[] | null | undefined,
   positions: readonly SamplePosition[],
   dem: DemSamples,
 ): ElevationProfile {
   return buildElevationProfile(
     positions,
-    gpsHeights
-      ? fillDemFromGps(dem, heightsAlongLine(segments, gpsHeights, positions))
+    gpsFixes
+      ? fillDemFromGps(dem, positions, gpsAlongLine(segments, gpsFixes))
       : dem,
   );
 }

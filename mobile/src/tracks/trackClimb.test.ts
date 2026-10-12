@@ -171,7 +171,12 @@ describe("the climb from the terrain saved on the phone", () => {
         sourceIds: heights.map((height) => (height == null ? null : "nsw-5m")),
       };
     });
-    const read = await climbFromSavedTerrain(LINE, [[640, 640]]);
+    const read = await climbFromSavedTerrain(LINE, [
+      [
+        { vertex: 0, heightM: 640 },
+        { vertex: 1, heightM: 640 },
+      ],
+    ]);
     expect(read?.elevationSource).toBe("gps");
     expect(read?.elevationGainM).toBeGreaterThan(0);
   });

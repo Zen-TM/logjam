@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
+import { ELEVATION_TRACK_MAX_SAMPLES } from "@logjam/shared";
+
 import { useElevationProfile } from "../map/useElevationProfile";
 import { spacing, useTheme } from "../theme";
 import {
@@ -109,7 +111,7 @@ export function RecordingSheet({
   // since the last accepted fix is counted as stopped rather than as nothing
   // (computeTrackDetail's `recordedMs`). Standing still is exactly when this
   // panel gets opened, and it is the case where the two disagree most.
-  const { detail, loading, line, gpsHeights } = useTrackDetail(
+  const { detail, loading, line, gpsFixes } = useTrackDetail(
     activeTrack?.id ?? null,
     open,
     elapsedMs,
@@ -120,7 +122,11 @@ export function RecordingSheet({
   // running recording does not re-sample the DEM on every written batch.
   const { profile: demProfile, loading: demLoading } = useElevationProfile(
     line,
-    { allowNetwork, gpsHeights },
+    {
+      allowNetwork,
+      gpsFixes,
+      maxSamples: ELEVATION_TRACK_MAX_SAMPLES,
+    },
   );
 
   const handlePauseResume = useCallback(() => {

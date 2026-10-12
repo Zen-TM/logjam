@@ -52,10 +52,10 @@ Proposal: #359.
   from, so a track partly on a coarse source is offered again when a finer
   one reaches it. Absent means GPS heights. A recorded track's own GPS heights
   are the source under every DEM: `fillDemFromGps` in
-  `shared/src/trackStats.ts` fills the positions no DEM answers, measures
-  each join in GPS at both ends, and holds GPS still until it has moved
-  `ELEVATION_HYSTERESIS_M` so its wander is not summed at the DEM's
-  threshold. Such a climb is labelled `gps`. `upgradeTrackClimbs` in
+  `shared/src/trackStats.ts` fills the positions no DEM answers, sums each
+  filled stretch and its joins from every GPS fix, in GPS throughout, and
+  holds GPS still until it has moved `ELEVATION_HYSTERESIS_M` so its wander
+  is not summed at the DEM's threshold. Such a climb is labelled `gps`. `upgradeTrackClimbs` in
   `mobile/src/tracks/trackClimb.ts` asks again on the first sync cycle after
   the finish, and after that only when the ids or `coverage` in
   `DEM_SOURCES` change; nothing polls. It reads saved terrain and

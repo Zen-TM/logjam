@@ -39,6 +39,7 @@ import {
   buildTrackElevationProfile,
   densifyLineSegments,
   type DemSamples,
+  type GpsFix,
   type ElevationProfile,
 } from "@logjam/shared";
 
@@ -67,21 +68,30 @@ export type ElevationState = {
  * reach the source that could have completed it. Null only when nothing
  * anywhere is known.
  *
- * `gpsHeights` is a recorded track's own height at each vertex. Where no
- * source completes the profile they fill its gaps, so a track that strays
- * past a saved area keeps the DEM for the part inside it.
+ * `gpsFixes` are a recorded track's own heights. Where no source completes
+ * the profile they fill its gaps, so a track that strays past a saved area
+ * keeps the DEM for the part inside it.
+ *
+ * `maxSamples` is the ceiling a track asks for (`ELEVATION_TRACK_MAX_SAMPLES`).
+ * An API older than the field ignores it and answers at the default.
  */
 async function profileFromDem(
   segments: readonly (readonly [number, number][])[],
   sources: { api: boolean; tiles: boolean },
-  gpsHeights?: readonly (readonly (number | null)[])[] | null,
+  {
+    gpsFixes,
+    maxSamples,
+  }: {
+    gpsFixes?: readonly (readonly GpsFix[])[] | null;
+    maxSamples?: number;
+  } = {},
 ): Promise<ElevationProfile | null> {
-  const positions = densifyLineSegments(segments);
+  const positions = densifyLineSegments(segments, maxSamples);
   const buildElevationProfile = (
     at: typeof positions,
     dem: DemSamples,
   ): ElevationProfile =>
-    buildTrackElevationProfile(segments, gpsHeights, at, dem);
+    buildTrackElevationProfile(segments, gpsFixes, at, dem);
 
   const saved = await sampleElevations(positions);
   if (saved.heights.every((value) => value != null)) {
@@ -95,7 +105,7 @@ async function profileFromDem(
     try {
       return await apiFetch<ElevationProfile>("/elevation/profile", {
         method: "POST",
-        body: { segments },
+        body: { segments, ...(maxSamples ? { maxSamples } : {}) },
       });
     } catch {
       // A deployed API older than this app has no such route, and a flaky link
@@ -115,11 +125,14 @@ export function useElevationProfile(
   segments: readonly (readonly [number, number][])[],
   {
     allowNetwork = true,
-    gpsHeights = null,
+    gpsFixes = null,
+    maxSamples,
   }: {
     allowNetwork?: boolean;
-    /** A recorded track's GPS height per vertex of `segments`, to fill gaps. */
-    gpsHeights?: readonly (readonly (number | null)[])[] | null;
+    /** A recorded track's GPS heights along `segments`, to fill gaps. */
+    gpsFixes?: readonly (readonly GpsFix[])[] | null;
+    /** A track's higher sample ceiling; a drawn line leaves it out. */
+    maxSamples?: number;
   } = {},
 ): ElevationState {
   const [profile, setProfile] = useState<ElevationProfile | null>(null);
@@ -133,13 +146,21 @@ export function useElevationProfile(
   // only changes every few dozen points — serialising it per render was the
   // single largest per-tick cost here.
   const geometryKey = useMemo(
-    () => (totalPoints >= 2 ? JSON.stringify({ segments, gpsHeights }) : null),
-    [segments, gpsHeights, totalPoints],
+    () => (totalPoints >= 2 ? JSON.stringify(segments) : null),
+    [segments, totalPoints],
   );
   // Guards against a slow response for an older line landing after a newer
   // one — without it, undoing a point could leave the pre-undo profile on
   // screen.
   const latestKey = useRef<string | null>(null);
+  // Every fix of a long recording: too much to put in the key, and it changes
+  // only when the line does. Declared before the effect below, so it is
+  // written first. A set that no longer matches the line fills nothing
+  // (`gpsAlongLine`).
+  const latestGpsFixes = useRef(gpsFixes);
+  useEffect(() => {
+    latestGpsFixes.current = gpsFixes;
+  }, [gpsFixes]);
 
   // No line, no profile: cleared during render rather than from the effect.
   if (!geometryKey && (profile !== null || loading)) {
@@ -153,16 +174,13 @@ export function useElevationProfile(
 
     const timer = setTimeout(() => {
       setLoading(true);
-      const { segments, gpsHeights } = JSON.parse(geometryKey) as {
-        segments: [number, number][][];
-        gpsHeights: (number | null)[][] | null;
-      };
+      const segments = JSON.parse(geometryKey) as [number, number][][];
       void (async () => {
         try {
           const built = await profileFromDem(
             segments,
             planElevationSources({ allowNetwork, isGuest }),
-            gpsHeights,
+            { gpsFixes: latestGpsFixes.current, maxSamples },
           );
           if (latestKey.current === geometryKey) setProfile(built);
         } catch {
@@ -178,7 +196,7 @@ export function useElevationProfile(
     }, ELEVATION_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [geometryKey, allowNetwork, isGuest]);
+  }, [geometryKey, allowNetwork, isGuest, maxSamples]);
 
   return { profile, loading };
 }

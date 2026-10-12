@@ -7,7 +7,8 @@ import {
   buildElevationProfile,
   climbFromProfile,
   densifyLineSegments,
-  heightsAlongLine,
+  gpsAlongLine,
+  type GpsHeight,
   type SamplePosition,
 } from "./elevation.js";
 import type { RoutePoint } from "./routeValidation.js";
@@ -18,31 +19,32 @@ const dem = (heights: (number | null)[]): DemSamples => ({
   levelled: heights.slice(),
   sourceIds: heights.map((height) => (height == null ? null : "nsw-5m")),
 });
-const positions = (count: number): SamplePosition[] =>
+const every = (stepM: number, count: number): SamplePosition[] =>
   Array.from({ length: count }, (_, i) => ({
     lon: 150.4,
     lat: -33.5,
-    distanceM: i * 25,
+    distanceM: i * stepM,
   }));
+/** One fix per height, `stepM` apart. */
+const fixes = (stepM: number, heights: number[]): GpsHeight[] =>
+  heights.map((heightM, i) => ({ distanceM: i * stepM, heightM }));
 
 describe("fillDemFromGps", () => {
   // The track climbs 78 m in all; GPS reads 22 m above the DEM throughout.
   const left = dem([500, 510, 520, null, null, null]);
-  const gps = [522, 532, 542, 560, 580, 600];
+  const at = every(25, 6);
+  const gps = fixes(25, [522, 532, 542, 560, 580, 600]);
 
   // Mutation: step from the DEM height to the GPS height at the join and the
   // 22 m between the two surfaces is counted as climb (100 m, not 78).
   it("counts the climb past the DEM's edge, and not the offset at the join", () => {
-    const profile = buildElevationProfile(
-      positions(6),
-      fillDemFromGps(left, gps),
-    );
+    const profile = buildElevationProfile(at, fillDemFromGps(left, at, gps));
     expect(profile.gainM).toBeCloseTo(78, 6);
     expect(profile.lossM).toBe(0);
   });
 
   it("keeps the DEM where it answered and names GPS where it did not", () => {
-    const filled = fillDemFromGps(left, gps);
+    const filled = fillDemFromGps(left, at, gps);
     expect(filled.heights.slice(0, 3)).toEqual([500, 510, 520]);
     expect(filled.sourceIds).toEqual([
       "nsw-5m",
@@ -56,59 +58,82 @@ describe("fillDemFromGps", () => {
 
   // Mutation: chart the GPS heights as read and the line jumps 22 m at the
   // edge of the saved area, and the high point is 22 m too high.
-  it("charts the filled stretch shifted to meet the DEM", () => {
-    expect(fillDemFromGps(left, gps).heights.slice(3)).toEqual([538, 558, 578]);
+  it("charts a stretch past the DEM's edge shifted to meet it", () => {
+    expect(fillDemFromGps(left, at, gps).heights.slice(3)).toEqual([
+      538, 558, 578,
+    ]);
   });
 
-  it("takes the offset from both sides of a stretch inside the DEM", () => {
-    // GPS drifted from 20 m high to 30 m high across the gap.
-    const filled = fillDemFromGps(dem([500, null, 500]), [520, 525, 530]);
-    expect(filled.heights[1]).toBe(500);
+  // GPS drifted from 20 m high to 30 m high across the gap.
+  // Mutation: shift the stretch by one figure and the 10 m of drift shows as
+  // a step where it meets the DEM.
+  it("ramps the shift across a stretch inside the DEM, so neither join steps", () => {
+    const filled = fillDemFromGps(
+      dem([500, null, null, 500]),
+      every(25, 4),
+      fixes(25, [520, 525, 528, 530]),
+    );
+    expect(filled.heights[1]).toBeCloseTo(525 - 20 - 10 / 3, 6);
+    expect(filled.heights[2]).toBeCloseTo(528 - 20 - 20 / 3, 6);
   });
 
   // Mutation: use the GPS heights without holding them still and their
   // wander, here 7 to 9 m a sample, is summed at the DEM's 5 m threshold.
   it("does not count GPS wander on level ground", () => {
     const flat = dem([500, 500, null, null, null, null, null, null, 500]);
-    const wander = [521, 520, 520, 527, 519, 526, 518, 527, 520];
+    const wander = fixes(25, [521, 520, 520, 527, 519, 526, 518, 527, 520]);
     const profile = buildElevationProfile(
-      positions(9),
-      fillDemFromGps(flat, wander),
+      every(25, 9),
+      fillDemFromGps(flat, every(25, 9), wander),
     );
     expect(profile.gainM).toBe(0);
     expect(profile.lossM).toBe(0);
   });
 
-  it("leaves a sample with neither a DEM nor a GPS height empty", () => {
-    const filled = fillDemFromGps(dem([500, null, null]), [520, null, 540]);
-    expect(filled.heights[1]).toBeNull();
-    expect(filled.heights[2]).toBe(520);
+  // Samples a kilometre apart, with a 60 m rise and fall between each pair.
+  // Mutation: sum the stretch from one GPS height per sample and all of it is
+  // lost: every sample reads 520.
+  it("sums a filled stretch from every fix, not one height per sample", () => {
+    const sparse = every(1000, 3);
+    const profile = buildElevationProfile(
+      sparse,
+      fillDemFromGps(
+        dem([500, null, null]),
+        sparse,
+        fixes(500, [520, 580, 520, 580, 520]),
+      ),
+    );
+    expect(profile.gainM).toBe(120);
+    expect(profile.lossM).toBe(120);
+    expect(profile.samples).toHaveLength(3);
   });
 
-  it("returns a profile untouched when there is nothing to fill or no DEM at all", () => {
+  it("returns a profile untouched when there is nothing to fill it with or from", () => {
     const whole = dem([500, 510]);
-    expect(fillDemFromGps(whole, [520, 530])).toBe(whole);
+    expect(fillDemFromGps(whole, every(25, 2), fixes(25, [520, 530]))).toBe(
+      whole,
+    );
     const none = dem([null, null]);
-    expect(fillDemFromGps(none, [520, 530])).toBe(none);
+    expect(fillDemFromGps(none, every(25, 2), fixes(25, [520, 530]))).toBe(
+      none,
+    );
+    expect(fillDemFromGps(left, at, [])).toBe(left);
   });
 
   // Mutation: label a filled climb with its DEM and the upgrade pass never
   // replaces the stretch that came from GPS.
   it("makes a climb that is stored as GPS", () => {
-    const profile = buildElevationProfile(
-      positions(6),
-      fillDemFromGps(left, gps),
-    );
+    const profile = buildElevationProfile(at, fillDemFromGps(left, at, gps));
     expect(profile.filledFromGps).toBe(true);
     expect(profile.demSourceIds).toEqual(["nsw-5m"]);
     expect(climbFromProfile(profile)?.elevationSource).toBe("gps");
     expect(
-      buildElevationProfile(positions(3), dem([1, 2, 3])).filledFromGps,
+      buildElevationProfile(every(25, 3), dem([1, 2, 3])).filledFromGps,
     ).toBeUndefined();
   });
 });
 
-describe("heightsAlongLine", () => {
+describe("gpsAlongLine", () => {
   const first: RoutePoint[] = [
     [150.4, -33.5],
     [150.41, -33.5],
@@ -118,45 +143,44 @@ describe("heightsAlongLine", () => {
     [150.6, -33.5],
     [150.61, -33.5],
   ];
+  const lengthM = (line: RoutePoint[]) => {
+    const at = densifyLineSegments([line]);
+    return at[at.length - 1]!.distanceM;
+  };
 
-  it("reads a height between the two vertices a position lies between", () => {
-    const at = densifyLineSegments([first]);
-    const heights = heightsAlongLine([first], [[0, 100, 200]], at);
-    const totalM = at[at.length - 1]!.distanceM;
-    at.forEach((position, i) =>
-      expect(heights[i]).toBeCloseTo((position.distanceM / totalM) * 200, 3),
-    );
-  });
-
-  // Mutation: interpolate across the join and a pause gap's two sides bleed
-  // into each other.
-  it("never blends the two sides of a gap between segments", () => {
-    const at = densifyLineSegments([first, second]);
-    const heights = heightsAlongLine(
-      [first, second],
+  it("places a fix between the two vertices it was recorded between", () => {
+    const placed = gpsAlongLine(
+      [first],
       [
-        [0, 0, 0],
-        [1000, 1000],
+        [
+          { vertex: 0, heightM: 1 },
+          { vertex: 0.5, heightM: 2 },
+          { vertex: 2, heightM: 3 },
+        ],
       ],
-      at,
     );
-    expect(new Set(heights)).toEqual(new Set([0, 1000]));
-    expect(heights[0]).toBe(0);
-    expect(heights[heights.length - 1]).toBe(1000);
+    expect(placed.map((fix) => fix.heightM)).toEqual([1, 2, 3]);
+    expect(placed[0]!.distanceM).toBe(0);
+    expect(placed[1]!.distanceM).toBeCloseTo(lengthM(first) / 4, 3);
+    expect(placed[2]!.distanceM).toBeCloseTo(lengthM(first), 3);
   });
 
-  it("lends a vertex with no height its neighbour's", () => {
-    const at = densifyLineSegments([second]);
-    expect(
-      heightsAlongLine([second], [[null, 640]], at).every((h) => h === 640),
-    ).toBe(true);
+  // Mutation: restart the distance at each segment and the second segment's
+  // fixes land on the first one's samples.
+  it("carries on from the walked length of the segments before", () => {
+    const placed = gpsAlongLine(
+      [first, second],
+      [[{ vertex: 2, heightM: 1 }], [{ vertex: 1, heightM: 2 }]],
+    );
+    expect(placed[1]!.distanceM).toBeCloseTo(
+      lengthM(first) + lengthM(second),
+      3,
+    );
   });
 
-  it("is all null when the heights do not match the line", () => {
-    const at = densifyLineSegments([first]);
-    expect(heightsAlongLine([first], [[0, 100]], at)).toEqual(
-      at.map(() => null),
-    );
+  it("is empty when the fixes do not match the line", () => {
+    expect(gpsAlongLine([first, second], [[]])).toEqual([]);
+    expect(gpsAlongLine([first], [[{ vertex: 2.5, heightM: 1 }]])).toEqual([]);
   });
 });
 
@@ -169,7 +193,17 @@ describe("buildTrackElevationProfile", () => {
   const half = dem(at.map((_, i) => (i < at.length / 2 ? 600 : null)));
 
   it("fills from the track's heights when it is given them", () => {
-    const profile = buildTrackElevationProfile([line], [[620, 620]], at, half);
+    const profile = buildTrackElevationProfile(
+      [line],
+      [
+        [
+          { vertex: 0, heightM: 620 },
+          { vertex: 1, heightM: 620 },
+        ],
+      ],
+      at,
+      half,
+    );
     expect(profile.filledFromGps).toBe(true);
     expect(profile.samples.every((sample) => sample.elevationM === 600)).toBe(
       true,

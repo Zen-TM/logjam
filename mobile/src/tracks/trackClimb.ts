@@ -18,12 +18,14 @@
 import { AppState } from "react-native";
 import {
   DEM_SOURCES,
+  ELEVATION_TRACK_MAX_SAMPLES,
   buildTrackElevationProfile,
   climbFromProfile,
   densifyLineSegments,
   isFinerClimbSource,
   type DemSource,
   type ElevationProfile,
+  type GpsFix,
   type TrackClimb,
 } from "@logjam/shared";
 
@@ -70,7 +72,7 @@ const TRACKS_PER_PASS = 3;
 
 /**
  * The climb from the terrain SAVED ON THIS PHONE. Where it covers only part
- * of the line, `gpsHeights` (the track's own, per vertex) fill the rest and
+ * of the line, `gpsFixes` (the track's own heights) fill the rest and
  * the climb is labelled GPS, so the upgrade pass still replaces it. Null when
  * a sample is left with no height at all. No request: this runs at the finish
  * tap, in a place with no signal as often as not. Never throws: a track must
@@ -78,14 +80,17 @@ const TRACKS_PER_PASS = 3;
  */
 export async function climbFromSavedTerrain(
   segments: readonly (readonly [number, number][])[],
-  gpsHeights?: readonly (readonly (number | null)[])[],
+  gpsFixes?: readonly (readonly GpsFix[])[],
 ): Promise<TrackClimb | null> {
   try {
-    const positions = densifyLineSegments(segments);
+    const positions = densifyLineSegments(
+      segments,
+      ELEVATION_TRACK_MAX_SAMPLES,
+    );
     return climbFromProfile(
       buildTrackElevationProfile(
         segments,
-        gpsHeights,
+        gpsFixes,
         positions,
         await sampleElevationsOffline(positions),
       ),
@@ -156,7 +161,7 @@ export async function upgradeTrackClimbs(): Promise<number> {
         const answered = climbFromProfile(
           await apiFetch<ElevationProfile>("/elevation/profile", {
             method: "POST",
-            body: { segments },
+            body: { segments, maxSamples: ELEVATION_TRACK_MAX_SAMPLES },
           }),
         );
         if (

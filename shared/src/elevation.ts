@@ -39,6 +39,17 @@ export const ELEVATION_PROFILE_MAX_SAMPLES = 256;
 export const ELEVATION_SAMPLE_SPACING_M = 25;
 
 /**
+ * The sample ceiling for a recorded or imported TRACK, which is asked for by
+ * name (`maxSamples` on `POST /elevation/profile`). At the default ceiling a
+ * 20 km day is read every 80 m: its climb under-reads, and a 5 m DEM is
+ * wasted on it. This keeps the 25 m spacing out to about 51 km.
+ *
+ * ponytail: one request, however long the track. Past ~51 km the spacing
+ * widens again; send the line in pieces if that ever matters.
+ */
+export const ELEVATION_TRACK_MAX_SAMPLES = 2048;
+
+/**
  * Hysteresis threshold for DEM-derived gain/loss.
  *
  * Deliberately far below trackStats' ELEVATION_HYSTERESIS_M (15 m). That one
@@ -238,53 +249,57 @@ export function densifyLineSegments(
   return positions;
 }
 
+/** A recorded track's GPS height at one fix, placed along its elevation line. */
+export type GpsFix = {
+  /**
+   * Where the fix sits among its segment's vertices: 2 is the third vertex,
+   * 2.5 a fix recorded halfway between the third and the fourth.
+   */
+  vertex: number;
+  heightM: number;
+};
+
+/** A GPS height at a distance along the line, in walked order. */
+export type GpsHeight = { distanceM: number; heightM: number };
+
 /**
- * The height at each position, read off heights known at a line's vertices.
+ * Every fix's height against the distance `densifyLineSegments` gives the
+ * same line, so a fix and a sample position can be compared.
  *
- * `heights` is parallel to `segments`. Distances are measured the way
- * `densifyLineSegments` measures them, so a position it placed lands between
- * the two vertices it was placed between, and nothing is interpolated across
- * the gap between two segments. A vertex with no height lends its
- * neighbour's. All null when the two shapes disagree.
+ * `fixes` is parallel to `segments`, each in walked order. A line thinned to
+ * a few vertices still carries every fix between them, which is what lets a
+ * stretch be summed from all its fixes. Empty when the two shapes disagree.
  */
-export function heightsAlongLine(
+export function gpsAlongLine(
   segments: readonly (readonly RoutePoint[])[],
-  heights: readonly (readonly (number | null)[])[],
-  positions: readonly SamplePosition[],
-): (number | null)[] {
-  const none = positions.map(() => null);
-  if (
-    segments.length !== heights.length ||
-    segments.some((seg, k) => seg.length !== heights[k]!.length)
-  )
-    return none;
-  // Every kept vertex in walked order, with its distance from the start. The
-  // last vertex of one segment and the first of the next share a distance.
-  const atM: number[] = [];
-  const heightM: (number | null)[] = [];
-  let totalM = 0;
-  segments.forEach((seg, k) => {
-    if (seg.length < 2) return;
-    seg.forEach((point, i) => {
-      if (i > 0) {
-        const before = seg[i - 1]!;
-        totalM += haversineMeters(before[1], before[0], point[1], point[0]);
-      }
-      atM.push(totalM);
-      heightM.push(heights[k]![i] ?? null);
-    });
-  });
-  if (atM.length < 2) return none;
-  let j = 0;
-  return positions.map(({ distanceM }) => {
-    while (j < atM.length - 2 && atM[j + 1]! < distanceM) j++;
-    const a = heightM[j]!;
-    const b = heightM[j + 1]!;
-    if (a == null || b == null) return a ?? b;
-    const span = atM[j + 1]! - atM[j]!;
-    const t = span === 0 ? 0 : (distanceM - atM[j]!) / span;
-    return a + (b - a) * Math.min(1, Math.max(0, t));
-  });
+  fixes: readonly (readonly GpsFix[])[],
+): GpsHeight[] {
+  if (segments.length !== fixes.length) return [];
+  const out: GpsHeight[] = [];
+  let offsetM = 0;
+  for (let k = 0; k < segments.length; k++) {
+    const seg = segments[k]!;
+    if (seg.length < 2) continue;
+    const atM: number[] = [0];
+    for (let i = 1; i < seg.length; i++) {
+      const a = seg[i - 1]!;
+      const b = seg[i]!;
+      atM.push(atM[i - 1]! + haversineMeters(a[1], a[0], b[1], b[0]));
+    }
+    for (const { vertex, heightM } of fixes[k]!) {
+      if (!(vertex >= 0 && vertex <= seg.length - 1)) return [];
+      const before = Math.min(Math.floor(vertex), seg.length - 2);
+      out.push({
+        distanceM:
+          offsetM +
+          atM[before]! +
+          (vertex - before) * (atM[before + 1]! - atM[before]!),
+        heightM,
+      });
+    }
+    offsetM += atM[atM.length - 1]!;
+  }
+  return out;
 }
 
 /**
@@ -372,7 +387,7 @@ export function buildElevationProfile(
   }));
   const known = heights.filter((value): value is number => value != null);
   const { gainM, lossM } = elevationGainLoss(
-    levelled,
+    ("climbSeries" in dem ? dem.climbSeries : undefined) ?? levelled,
     DEM_ELEVATION_HYSTERESIS_M,
   );
   const used = new Set(sourceIds);

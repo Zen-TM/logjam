@@ -16,7 +16,12 @@
 // looking at the file you tapped.
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
+import {
+  ELEVATION_TRACK_MAX_SAMPLES,
+  messageFromError,
+  TRACK_COLORS,
+  trackColorName,
+} from "@logjam/shared";
 
 import { spacing, useTheme, useHues } from "../theme";
 import { BottomSheet, closedSheet, ColourField, RenameForm, Row } from "../ui";
@@ -88,9 +93,7 @@ export function ImportOptionsSheet({
   );
   const { profile: demProfile, loading: demLoading } = useElevationProfile(
     line,
-    {
-      allowNetwork,
-    },
+    { allowNetwork, maxSamples: ELEVATION_TRACK_MAX_SAMPLES },
   );
 
   const shareRowProps = useShareRowProps(online);
