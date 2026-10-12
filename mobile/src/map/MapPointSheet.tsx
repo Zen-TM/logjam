@@ -23,7 +23,7 @@ import {
   type MapPointVerbId,
 } from "@logjam/shared";
 
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { useElevationProfile } from "./useElevationProfile";
 
@@ -169,5 +169,5 @@ function PointDetail({
 
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
-  note: { ...textRole.hint },
+  note: { ...muted(theme, textRole.detail) },
 }));

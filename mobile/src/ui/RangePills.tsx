@@ -85,7 +85,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     gap: spacing(0.25),
   },
-  value: { ...textRole.bodySmall, color: theme.textMuted },
+  value: { ...textRole.detail, color: theme.textMuted },
   // Active is said by weight and by the clear button beside it, never by an
   // intent colour: words are `text`.
   valueActive: { ...textRole.control, color: theme.text },

@@ -721,7 +721,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     marginRight: -spacing(1),
   },
   title: {
-    ...textRole.sheetTitle,
+    ...textRole.heading,
     flex: 1,
     color: theme.text,
   },

@@ -33,7 +33,7 @@ import {
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { radius, spacing, makeStyles } from "../theme";
+import { radius, spacing, makeStyles, muted } from "../theme";
 import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
@@ -232,10 +232,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   appTitle: { ...textRole.title, color: theme.text },
   tagline: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     textAlign: "center",
   },
-  heading: { ...textRole.metric, color: theme.text },
-  body: { ...textRole.note },
+  heading: { ...textRole.heading, color: theme.text },
+  body: { ...muted(theme, textRole.paragraph) },
   secondary: { gap: spacing(0.5) },
 }));

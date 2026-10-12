@@ -24,7 +24,7 @@ import {
   routeLengthM,
 } from "@logjam/shared";
 
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import { ProfileChart, StatGrid } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -100,11 +100,11 @@ export function RouteStatsBody({
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  chartLabel: { ...textRole.section, color: theme.textMuted },
+  chartLabel: { ...muted(theme, textRole.section), color: theme.textMuted },
   body: { gap: spacing(1.5) },
   band: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     fontVariant: ["tabular-nums"],
   },
-  pending: { ...textRole.hint },
+  pending: { ...muted(theme, textRole.detail) },
 }));

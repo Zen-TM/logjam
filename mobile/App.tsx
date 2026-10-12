@@ -30,7 +30,7 @@ import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { Button, LoadingState } from "./src/ui";
-import { makeStyles, spacing, useThemeMode } from "./src/theme";
+import { makeStyles, muted, spacing, useThemeMode } from "./src/theme";
 
 // The blocked build's only way out (MAPP-001). The rule itself — Android only,
 // from app.json's package id, https so it resolves without the Play app — is
@@ -244,7 +244,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     color: theme.text,
   },
   blockingLine: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     textAlign: "center",
   },
   authSafeArea: { flex: 1, backgroundColor: theme.page },

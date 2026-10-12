@@ -94,6 +94,7 @@ import {
   useTheme,
   useHues,
   opacity,
+  muted,
 } from "../theme";
 import {
   BottomSheet,
@@ -2786,7 +2787,7 @@ function PulseSlot({
 
 const useStyles = makeStyles((theme, textRole) => ({
   addButton: { alignItems: "center", gap: spacing(0.5) },
-  addReason: { ...textRole.hint },
+  addReason: { ...muted(theme, textRole.detail) },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
@@ -2827,7 +2828,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // Small and honest: the constraint is real, but it is a footnote to the
   // cards above it, not a warning banner.
   downloadNote: {
-    ...textRole.meta,
+    ...muted(theme, textRole.meta),
     paddingHorizontal: spacing(0.5),
   },
 }));

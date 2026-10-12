@@ -72,7 +72,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { requestSync } from "../sync/syncEngine";
-import { spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   EmptyState,
@@ -857,7 +857,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(1),
   },
   note: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
-  noteText: { ...textRole.hint },
+  noteText: { ...muted(theme, textRole.detail) },
   banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
   list: { flex: 1 },
   listContent: {
@@ -866,5 +866,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
   },
   menuBody: { gap: spacing(1) },
-  menuNote: { ...textRole.hint },
+  menuNote: { ...muted(theme, textRole.detail) },
 }));

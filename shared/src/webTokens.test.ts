@@ -57,21 +57,13 @@ describe("webTokensCss", () => {
     const roles = webTextRolesCss();
     for (const [name, spec] of Object.entries(TEXT_ROLES)) {
       const rule = blockOf(roles, `.${name}`);
-      if (!("web" in spec)) {
-        expect(roles, `${name} is Logjam GPS's alone`).not.toContain(
-          `.${name} `,
-        );
-        continue;
-      }
-      expect(spec.web.size in FONT.web).toBe(true);
-      expect(rule.get("font-size")).toBe(`var(--font-${spec.web.size})`);
-      expect(rule.get("font-weight")).toBe(
-        `var(--font-weight-${spec.web.weight})`,
-      );
+      expect(spec.size in FONT.web).toBe(true);
+      expect(rule.get("font-size")).toBe(`var(--font-${spec.size})`);
+      expect(rule.get("font-weight")).toBe(`var(--font-weight-${spec.weight})`);
       expect(rule.get("text-transform") === "uppercase").toBe(
-        "uppercase" in spec.web,
+        "uppercase" in spec,
       );
-      expect(rule.get("line-height") === "1.5").toBe("leading" in spec.web);
+      expect(rule.get("line-height") === "1.5").toBe("leading" in spec);
     }
   });
 

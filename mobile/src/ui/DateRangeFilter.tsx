@@ -71,7 +71,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "space-between",
   },
   label: { ...textRole.control, color: theme.text },
-  value: { ...textRole.bodySmall, color: theme.textMuted },
+  value: { ...textRole.detail, color: theme.textMuted },
   // Words are text-coloured; the weight says it is set.
   valueActive: { ...textRole.control, color: theme.text },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },

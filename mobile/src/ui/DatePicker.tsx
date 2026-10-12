@@ -532,7 +532,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
-  dayText: { ...textRole.bodySmall, color: theme.text },
+  dayText: { ...textRole.detail, color: theme.text },
   selectedText: { ...textRole.control, color: theme.onFill },
   disabledText: { color: withAlpha(theme.textMuted, 0.45) },
   // Four rows of four, sized to match the six day rows so switching grids
@@ -557,5 +557,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  yearText: { ...textRole.bodySmall, color: theme.text },
+  yearText: { ...textRole.detail, color: theme.text },
 }));

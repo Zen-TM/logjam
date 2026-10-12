@@ -16,7 +16,7 @@ import {
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import {
   countFieldValues,
@@ -602,7 +602,7 @@ function typeLabel(type: TripLogCustomFieldType): string {
 
 const useStyles = makeStyles((theme, textRole) => ({
   list: { gap: spacing(1) },
-  hint: { ...textRole.hint },
+  hint: { ...muted(theme, textRole.detail) },
   boundsRow: { flexDirection: "row", gap: spacing(1) },
   bound: { flex: 1 },
 }));

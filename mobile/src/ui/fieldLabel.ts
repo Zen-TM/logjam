@@ -1,4 +1,5 @@
-import type { TextRoles } from "../theme";
+import type { ThemeTokens } from "@logjam/shared";
+import { muted, type TextRoles } from "../theme";
 
 /**
  * The label of a field or a control inside a form or a filter sheet: sentence
@@ -8,4 +9,5 @@ import type { TextRoles } from "../theme";
  * copies it under a heading reads as a second heading, and the two stop saying
  * which is which. Guard: `fieldLabel.test.ts`.
  */
-export const fieldLabel = (textRole: TextRoles) => textRole.label;
+export const fieldLabel = (theme: ThemeTokens, textRole: TextRoles) =>
+  muted(theme, textRole.detail);

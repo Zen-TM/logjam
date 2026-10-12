@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-import { formRhythm, opacity, makeStyles } from "../theme";
+import { formRhythm, opacity, makeStyles, muted } from "../theme";
 import { FieldError } from "./FieldError";
 import { fieldLabel } from "./fieldLabel";
 
@@ -59,7 +59,7 @@ export function FormStack({ children }: { children: React.ReactNode }) {
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  label: fieldLabel(textRole),
+  label: fieldLabel(theme, textRole),
   field: { gap: formRhythm.label },
   stack: { gap: formRhythm.field },
   disabled: { opacity: opacity.disabled },
@@ -69,5 +69,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "space-between",
     gap: formRhythm.field,
   },
-  hint: textRole.hint,
+  hint: muted(theme, textRole.detail),
 }));

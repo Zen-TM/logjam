@@ -28,7 +28,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
   useMirrorPlaces,
@@ -277,7 +277,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
     gap: spacing(1),
   },
-  muted: { ...textRole.hint },
+  muted: { ...muted(theme, textRole.detail) },
   notes: {
     ...textRole.paragraph,
     color: theme.text,

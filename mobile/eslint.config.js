@@ -24,7 +24,7 @@ const MAP_LABEL_TEXT = {
 const FONT_RULE = {
   selector: `Property[key.name=/${FONT_PROPS}/], Property[key.value=/${FONT_PROPS}/], JSXAttribute[name.name=/${FONT_PROPS}/]`,
   message:
-    "A text style is a role: ...textRole.<name> (body, hint, meta, control, …) from makeStyles((theme, textRole) => …). A size, weight or line height is chosen in TEXT_ROLES (shared/src/designTokens.ts), never on a screen; if no role is the text's kind, add one there (mobile/DESIGN.md §1).",
+    "A text style is a role: ...textRole.<name> (body, detail, meta, control, …) from makeStyles((theme, textRole) => …). A size, weight or line height is chosen in TEXT_ROLES (shared/src/designTokens.ts), never on a screen; take the role that is the text's size and weight (mobile/DESIGN.md §1).",
 };
 
 // Gotchas of Logjam GPS that a selector can hold (mobile/DESIGN.md §4, §1).

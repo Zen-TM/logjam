@@ -45,7 +45,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
-import { spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   BottomSheet,
   Hero,
@@ -938,7 +938,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // Matches the SelectionBar it swaps with, so the list below cannot move.
   railHint: { height: CHIP_RAIL_HEIGHT, justifyContent: "center" },
   railHintText: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
   },
   list: { flex: 1 },
   listContent: {
@@ -947,9 +947,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
   },
   menuBody: { gap: spacing(1) },
-  menuCause: { ...textRole.hint },
+  menuCause: { ...muted(theme, textRole.detail) },
   valueBlock: { gap: spacing(0.25) },
-  menuLabel: { ...textRole.meta },
+  menuLabel: { ...muted(theme, textRole.meta) },
   menuValue: { ...textRole.body, color: theme.text },
   // The line the rejection is about, so two changes over one complaint stop
   // being a guessing game.

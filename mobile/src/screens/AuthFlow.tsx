@@ -11,7 +11,7 @@ import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
@@ -231,6 +231,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     textAlign: "center",
     marginBottom: spacing(2),
   },
-  heading: { ...textRole.metric, color: theme.text },
-  hint: { ...textRole.hint },
+  heading: { ...textRole.heading, color: theme.text },
+  hint: { ...muted(theme, textRole.detail) },
 }));

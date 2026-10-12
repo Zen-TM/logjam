@@ -35,7 +35,14 @@ import {
 } from "react-native";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
-import { hitSlop, radius, spacing, makeStyles, useTheme } from "../theme";
+import {
+  hitSlop,
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  muted,
+} from "../theme";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -368,7 +375,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingRight: spacing(1.5),
   },
   input: {
-    ...textRole.field,
+    ...textRole.body,
     flex: 1,
     color: theme.text,
     paddingVertical: spacing(1),
@@ -385,7 +392,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(1.5),
   },
   status: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
   },
@@ -402,6 +409,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1.5),
   },
   savedText: { flex: 1 },
-  resultKind: { ...textRole.meta },
-  resultText: { ...textRole.hint, color: theme.text },
+  resultKind: { ...muted(theme, textRole.meta) },
+  resultText: { ...muted(theme, textRole.detail), color: theme.text },
 }));

@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import * as Updates from "expo-updates";
 import { Text, View } from "react-native";
 
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import { Button } from "./Button";
 
 interface Props {
@@ -83,7 +83,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     textAlign: "center",
   },
   message: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     textAlign: "center",
   },
 }));

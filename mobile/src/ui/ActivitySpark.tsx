@@ -1,6 +1,13 @@
 import { Text, View } from "react-native";
 
-import { radius, spacing, withAlpha, makeStyles, useTheme } from "../theme";
+import {
+  radius,
+  spacing,
+  withAlpha,
+  makeStyles,
+  useTheme,
+  muted,
+} from "../theme";
 
 export type ActivityBucket = {
   /** One- or two-character axis label (month initial, year digits). */
@@ -78,9 +85,9 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   fill: { borderRadius: radius.sm },
   label: {
-    ...textRole.meta,
+    ...muted(theme, textRole.meta),
     textAlign: "center",
   },
   labelCurrent: { ...textRole.caption, color: theme.text },
-  caption: { ...textRole.meta },
+  caption: { ...muted(theme, textRole.meta) },
 }));

@@ -66,7 +66,7 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import { useTracks } from "../tracks/useTracks";
-import { spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   ActivitySpark,
   Chip,
@@ -579,15 +579,15 @@ const useStyles = makeStyles((theme, textRole) => ({
   // rows has to repeat that or its rows sit flush against each other.
   section: { gap: spacing(1) },
   metric: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
-  metricSuffix: { ...textRole.hint },
+  metricSuffix: { ...muted(theme, textRole.detail) },
   rail: { flexDirection: "row", gap: spacing(0.5), paddingRight: spacing(2) },
   block: { marginTop: spacing(1) },
   caption: {
-    ...textRole.meta,
+    ...muted(theme, textRole.meta),
     marginTop: spacing(0.5),
   },
   cadence: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     marginTop: spacing(0.25),
   },
   rowValue: { ...textRole.rowTitle, color: theme.text },
@@ -600,6 +600,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "baseline",
     marginBottom: spacing(0.5),
   },
-  meterName: { ...textRole.bodySmall, color: theme.text },
-  meterValue: { ...textRole.meta },
+  meterName: { ...textRole.detail, color: theme.text },
+  meterValue: { ...muted(theme, textRole.meta) },
 }));

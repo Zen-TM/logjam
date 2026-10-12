@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -97,7 +97,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   eyebrow: {
-    ...textRole.section,
+    ...muted(theme, textRole.section),
     letterSpacing: 1,
   },
   // The back button sits on the eyebrow line and hangs into the horizontal
@@ -117,8 +117,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   // step above body text, not a billboard. The `display` size is reserved for
   // a screen whose whole purpose IS the number.
   value: {
-    ...textRole.metric,
+    ...textRole.heading,
     color: theme.text,
   },
-  valueSuffix: { ...textRole.hint, color: theme.textMuted },
+  valueSuffix: { ...muted(theme, textRole.detail), color: theme.textMuted },
 }));

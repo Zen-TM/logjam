@@ -18,7 +18,7 @@ import {
   fontWeight,
   radius,
   spacing,
-  textRolesFor,
+  textRoles,
   textScale,
   touchTargetMin,
 } from "./theme";
@@ -63,32 +63,29 @@ describe("theme parity with @logjam/shared", () => {
   });
 
   // `textRole.<name>` is the role's size and weight from the shared scale, in
-  // this launch's text scale. Mutation that turns it red: change a role's
-  // `size` in `TEXT_ROLES` without the style following, e.g. hand `title` the
-  // `fontSize.lg` in `theme.ts`.
+  // this launch's text scale, and nothing else: colour is the screen's.
+  // Mutation that turns it red: change a role's `size` in `TEXT_ROLES` without
+  // the style following, e.g. hand `title` the `fontSize.lg` in `theme.ts`.
   it("draws every type role at the size and weight the shared table names", () => {
-    // Not the launch scheme: a muted role follows the scheme it is asked for.
-    const theme = THEME_SCHEMES[THEME_SCHEME_ORDER.at(-1)!].tokens;
-    const textRole = textRolesFor(theme);
-    const drawn = Object.entries(TEXT_ROLES).flatMap(([name, spec]) =>
-      "gps" in spec ? [[name, spec.gps] as const] : [],
+    expect(Object.keys(textRoles).sort()).toEqual(
+      Object.keys(TEXT_ROLES).sort(),
     );
-    expect(Object.keys(textRole).sort()).toEqual(
-      drawn.map(([name]) => name).sort(),
-    );
-    for (const [name, spec] of drawn) {
-      const role: Record<string, string | true> = spec;
-      const style = textRole[name as keyof typeof textRole];
-      expect(style.fontSize).toBe(
-        Math.round(FONT.gps[role.size as keyof typeof FONT.gps] * textScale),
-      );
-      expect(style.fontWeight).toBe(
-        String(FONT_WEIGHT[role.weight as keyof typeof FONT_WEIGHT]),
-      );
+    for (const [name, role] of Object.entries(TEXT_ROLES)) {
+      const style = textRoles[name as keyof typeof textRoles];
+      expect(style.fontSize).toBe(Math.round(FONT.gps[role.size] * textScale));
+      expect(style.fontWeight).toBe(String(FONT_WEIGHT[role.weight]));
       expect(style.textTransform === "uppercase").toBe("uppercase" in role);
-      expect(style.color === theme.textMuted).toBe("muted" in role);
       // Only a role that says so sets its lines apart; the rest take the font's own.
       expect(style.lineHeight !== undefined).toBe("leading" in role);
+      expect(Object.keys(style).sort()).toEqual(
+        Object.keys(style)
+          .filter((k) =>
+            ["fontSize", "fontWeight", "lineHeight", "textTransform"].includes(
+              k,
+            ),
+          )
+          .sort(),
+      );
     }
   });
 });

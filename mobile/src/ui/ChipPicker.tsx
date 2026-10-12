@@ -8,6 +8,7 @@ import {
   makeStyles,
   useTheme,
   controlSize,
+  muted,
 } from "../theme";
 import { Chip, type ChipOption } from "./Chip";
 import { FieldError } from "./FieldError";
@@ -122,7 +123,7 @@ export function ChipPicker({
 
 const useStyles = makeStyles((theme, textRole) => ({
   wrap: { gap: formRhythm.label },
-  hint: { ...textRole.hint },
+  hint: { ...muted(theme, textRole.detail) },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   input: {
     minWidth: 120,
@@ -133,7 +134,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     backgroundColor: theme.field,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
-    ...textRole.field,
+    ...textRole.body,
     color: theme.text,
   },
 }));

@@ -118,8 +118,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
             ) : state.kind === "failed" &&
               !isRetryableFailure(
                 state.code,
-              ) ? // Retrying a rejected area, or an endpoint that is down, repeats
-            // the same failure; the row's sentence says what to do instead.
+              ) ? // the same failure; the row's sentence says what to do instead. // Retrying a rejected area, or an endpoint that is down, repeats
             null : (
               <Button
                 label="Resume"

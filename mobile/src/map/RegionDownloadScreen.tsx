@@ -52,7 +52,7 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import { spacing, makeStyles } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -814,7 +814,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
   },
   namingBody: { gap: spacing(1.5) },
-  namingNote: { ...textRole.hint },
+  namingNote: { ...muted(theme, textRole.detail) },
   panel: {
     height: PANEL_HEIGHT,
     backgroundColor: theme.page,
@@ -836,7 +836,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
   sourceNote: {
-    ...textRole.hint,
+    ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(2),
     paddingTop: spacing(0.5),
   },
@@ -846,5 +846,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailCaption: { ...textRole.meta },
+  detailCaption: { ...muted(theme, textRole.meta) },
 }));

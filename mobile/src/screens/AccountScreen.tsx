@@ -44,7 +44,7 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import { spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -632,15 +632,15 @@ function DeleteAccountForm({
 
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
-  email: { ...textRole.hint },
+  email: { ...muted(theme, textRole.detail) },
   body: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
-  meterLabel: { ...textRole.bodySmall, color: theme.text },
+  meterLabel: { ...textRole.detail, color: theme.text },
   meterHint: { color: theme.textMuted },
   form: { gap: spacing(1.5) },
-  formHint: { ...textRole.hint },
+  formHint: { ...muted(theme, textRole.detail) },
   version: {
-    ...textRole.meta,
+    ...muted(theme, textRole.meta),
     paddingTop: spacing(1),
   },
-  guestNote: { ...textRole.note },
+  guestNote: { ...muted(theme, textRole.paragraph) },
 }));
