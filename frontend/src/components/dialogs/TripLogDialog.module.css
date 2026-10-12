@@ -33,7 +33,7 @@
 
 /* Matches a TextField's label; the row below it is named by its own text. */
 .fieldLabel {
-  font-size: var(--font-sm);
+  composes: label from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -71,8 +71,8 @@
 }
 
 .muted {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

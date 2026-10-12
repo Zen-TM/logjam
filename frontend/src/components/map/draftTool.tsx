@@ -3,7 +3,8 @@
 // one interaction, so the parts that would otherwise be written twice are here.
 import { useEffect, useState } from "react";
 import { MAP_MEASURE, MAP_SNAP_OPTIONS, type SnapMode } from "@logjam/shared";
-import { Select } from "../../ui";
+import { IconButton, Select } from "../../ui";
+import classes from "./draftTool.module.css";
 
 /** How long the line must sit still before its terrain is read. A profile per
  *  placed vertex would be one request per click; this asks once the user pauses,
@@ -82,5 +83,44 @@ export function SnapSelect({
         </option>
       ))}
     </Select>
+  );
+}
+
+/**
+ * What a drawing tool's page keeps at its peek (narrow web opens it there, so
+ * the map is free to press): one line, the line's distance and Undo. Both
+ * tools draw it in place of their body and footer; dragging the sheet up
+ * brings the rest back. The note is a live region, as the page's own hint is.
+ */
+export function DraftPeek({
+  note,
+  distance,
+  onUndo,
+  undoDisabled,
+  undoReason,
+}: {
+  note: string;
+  distance: string;
+  onUndo: () => void;
+  undoDisabled: boolean;
+  undoReason: string;
+}) {
+  return (
+    <div className={classes.peek}>
+      <p className={classes.note} role="status">
+        {note}
+      </p>
+      <p className={classes.figure}>
+        <span className={classes.figureLabel}>{MAP_MEASURE.copy.distance}</span>
+        <span className={classes.figureValue}>{distance}</span>
+      </p>
+      <IconButton
+        icon="undo"
+        label="Undo"
+        onClick={onUndo}
+        disabled={undoDisabled}
+        disabledReason={undoReason}
+      />
+    </div>
   );
 }

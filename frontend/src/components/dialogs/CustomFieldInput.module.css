@@ -10,12 +10,12 @@
 }
 
 .railLabel {
-  font-size: var(--font-sm);
+  composes: label from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .railHint {
+  composes: hint from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }

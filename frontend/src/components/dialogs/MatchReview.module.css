@@ -23,8 +23,7 @@
 }
 
 .incomingLabel {
-  font-size: var(--font-base);
-  font-weight: 600;
+  composes: rowTitle from "../../textRoles.generated.module.css";
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
@@ -59,16 +58,16 @@
 }
 
 .optionLabel {
+  composes: label from "../../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
-  font-size: var(--font-sm);
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .optionMeta {
+  composes: hint from "../../textRoles.generated.module.css";
   flex: none;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }

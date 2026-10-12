@@ -12,7 +12,8 @@ import {
 } from "@logjam/shared";
 import { useElevationProfile } from "../../placeUtils";
 import { Button, FieldError, Hero, IconButton, StatGrid } from "../../ui";
-import { SnapSelect, useSettledLine, useUndoKey } from "./draftTool";
+import { DraftPeek, SnapSelect, useSettledLine, useUndoKey } from "./draftTool";
+import { useSheetAtPeek } from "../sidebar/sheetSnap";
 // The route tool's page, minus what only a kept line has: one layout for both.
 import classes from "../routes/RouteDrawPanel.module.css";
 
@@ -48,6 +49,7 @@ export function MeasurePanel({
   const hasLine = points.length >= 2;
   const { profile, loading } = useElevationProfile(useSettledLine(points));
   useUndoKey(onUndo);
+  const atPeek = useSheetAtPeek();
 
   const terrain = hasLine ? profile : null;
   const range = mapMeasureRange(terrain);
@@ -71,56 +73,72 @@ export function MeasurePanel({
     <div className={classes.root}>
       <Hero title={MAP_MEASURE.title} onClose={onClose} />
 
-      <div className={classes.body}>
-        <p className={classes.hint} role="status">
-          {anchorCount === 0
-            ? MAP_MEASURE_START_NOTE.web
-            : mapMeasurePointsLabel(anchorCount)}
-        </p>
-
-        <StatGrid
-          stats={pairedStatLayout(mapMeasureFacts({ points, terrain }))}
+      {atPeek ? (
+        <DraftPeek
+          note={
+            anchorCount === 0
+              ? MAP_MEASURE_START_NOTE.web
+              : mapMeasurePointsLabel(anchorCount)
+          }
+          distance={mapMeasureFacts({ points, terrain })[0].value}
+          onUndo={onUndo}
+          undoDisabled={!canUndo}
+          undoReason="Nothing to undo"
         />
+      ) : (
+        <>
+          <div className={classes.body}>
+            <p className={classes.hint} role="status">
+              {anchorCount === 0
+                ? MAP_MEASURE_START_NOTE.web
+                : mapMeasurePointsLabel(anchorCount)}
+            </p>
 
-        {range && <p className={classes.band}>{range} above sea level</p>}
-        {hasLine && !profile && loading && (
-          <p className={classes.note}>{copy.readingTerrain}</p>
-        )}
+            <StatGrid
+              stats={pairedStatLayout(mapMeasureFacts({ points, terrain }))}
+            />
 
-        {atCap && (
-          <FieldError
-            message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
-          />
-        )}
-      </div>
+            {range && <p className={classes.band}>{range} above sea level</p>}
+            {hasLine && !profile && loading && (
+              <p className={classes.note}>{copy.readingTerrain}</p>
+            )}
 
-      <footer className={classes.actions}>
-        <SnapSelect value={snapMode} onChange={onSnapModeChange} />
-        <div className={classes.buttons}>
-          {mapMeasureVerbs("web").map((verb) =>
-            verb.id === "clear" ? (
-              <Button
-                key={verb.id}
-                compact
-                onClick={verbs[verb.id].run}
-                disabled={verbs[verb.id].disabled}
-                disabledReason={verbs[verb.id].reason}
-              >
-                {verb.label}
-              </Button>
-            ) : (
-              <IconButton
-                key={verb.id}
-                icon={verb.icon}
-                label={verb.label}
-                onClick={verbs[verb.id].run}
-                disabled={verbs[verb.id].disabled}
-                disabledReason={verbs[verb.id].reason}
+            {atCap && (
+              <FieldError
+                message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
               />
-            ),
-          )}
-        </div>
-      </footer>
+            )}
+          </div>
+
+          <footer className={classes.actions}>
+            <SnapSelect value={snapMode} onChange={onSnapModeChange} />
+            <div className={classes.buttons}>
+              {mapMeasureVerbs("web").map((verb) =>
+                verb.id === "clear" ? (
+                  <Button
+                    key={verb.id}
+                    compact
+                    onClick={verbs[verb.id].run}
+                    disabled={verbs[verb.id].disabled}
+                    disabledReason={verbs[verb.id].reason}
+                  >
+                    {verb.label}
+                  </Button>
+                ) : (
+                  <IconButton
+                    key={verb.id}
+                    icon={verb.icon}
+                    label={verb.label}
+                    onClick={verbs[verb.id].run}
+                    disabled={verbs[verb.id].disabled}
+                    disabledReason={verbs[verb.id].reason}
+                  />
+                ),
+              )}
+            </div>
+          </footer>
+        </>
+      )}
     </div>
   );
 }

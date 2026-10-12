@@ -61,7 +61,7 @@ export function Button({
       className={[
         classes.button,
         classes[variant],
-        compact && classes.compact,
+        compact ? classes.compact : classes.regular,
         className,
       ]
         .filter(Boolean)
