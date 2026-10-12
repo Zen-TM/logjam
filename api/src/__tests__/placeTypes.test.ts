@@ -272,7 +272,7 @@ describe("reserved keys are refused", () => {
         .send({ field: { key: "v_grade", label: "V grade", type: "integer" } }),
     );
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/reserved/i);
+    expect(res.body.error).toMatch(/built-in/i);
     // A bare "that key is taken" leaves the user renaming by trial and error.
     expect(res.body.error).toMatch(/try/i);
   });

@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { malformed } from "../middleware/errorHandler";
 import {
   VECTOR_STYLE_DEFAULTS,
   validateVectorStyleSettings,
@@ -30,10 +30,7 @@ router.put(
     const user = await getUser(req.user!.sub);
     const validation = validateVectorStyleSettings(req.body);
     if (!validation.ok) {
-      throw new AppError(
-        400,
-        `Invalid vector style: ${validation.errors.join("; ")}`,
-      );
+      throw malformed(`Invalid vector style: ${validation.errors.join("; ")}`);
     }
     const updated = await prisma.user.update({
       where: { id: user.id },

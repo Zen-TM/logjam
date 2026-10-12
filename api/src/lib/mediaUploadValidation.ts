@@ -1,5 +1,6 @@
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import {
+  say,
   MEDIA_SIZE_CAPS,
   categoryHasThumbnail,
   type MediaCategory,
@@ -12,7 +13,7 @@ export interface ValidatedUploadSizes {
 
 function assertPositiveInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    throw new AppError(400, `${field} must be a positive integer`);
+    throw malformed(`${field} must be a positive integer`);
   }
   return value;
 }
@@ -35,13 +36,13 @@ export function validateUploadSizes(
     const limitMb = Math.round(cap / 1024 / 1024);
     throw new AppError(
       413,
-      `File exceeds the ${limitMb} MB limit for ${category}s`,
+      say`That file is too big. The limit is ${limitMb} MB.`,
     );
   }
 
   if (!categoryHasThumbnail(category)) {
     if (thumbnailSizeBytes !== undefined && thumbnailSizeBytes !== null) {
-      throw new AppError(400, `${category}s do not carry a thumbnail`);
+      throw malformed(`${category}s do not carry a thumbnail`);
     }
     return { sizeBytes: size, thumbnailSizeBytes: null };
   }
@@ -53,7 +54,7 @@ export function validateUploadSizes(
   );
   if (thumbSize > thumbCap) {
     const limitMb = Math.round(thumbCap / 1024 / 1024);
-    throw new AppError(413, `Thumbnail exceeds the ${limitMb} MB limit`);
+    throw malformed(`Thumbnail exceeds the ${limitMb} MB limit`, 413);
   }
   return { sizeBytes: size, thumbnailSizeBytes: thumbSize };
 }

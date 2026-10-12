@@ -6,6 +6,7 @@ import {
   createClipTokenStore,
   pmtilesExtractArgs,
   validateRegionClipRequest,
+  AREA_TOO_LARGE,
 } from "./regionClip";
 import { redactPaths } from "./logger";
 
@@ -111,7 +112,8 @@ describe("validateRegionClipRequest", () => {
     const result = validateRegionClipRequest(weird);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).not.toMatch(/150|33|99/);
+      expect(result.error.message).not.toMatch(/150|33|99/);
+      expect(result.error.devDetail).not.toMatch(/150|33|99/);
     }
   });
 });
@@ -203,7 +205,10 @@ describe("validateRegionClipRequest, for a DEM archive", () => {
     for (const demSourceId of ["terrarium", "nope", 7]) {
       expect(
         validateRegionClipRequest({ ...BLUE_MOUNTAINS, demSourceId }),
-      ).toEqual({ ok: false, error: "Unknown elevation source" });
+      ).toMatchObject({
+        ok: false,
+        error: { devDetail: "Unknown elevation source" },
+      });
     }
   });
 });
@@ -257,5 +262,14 @@ describe("pmtilesExtractArgs", () => {
         "--maxzoom=15",
       ]);
     }
+  });
+});
+
+// Logjam GPS builds from before the server's sentence was shown as it is tell
+// an oversized area from one outside NSW by these two words (ADR 0022: a build
+// is supported for three months). Mutation: reword AREA_TOO_LARGE without them.
+describe("the oversized-area sentence", () => {
+  it('still says "too large"', () => {
+    expect(AREA_TOO_LARGE).toContain("too large");
   });
 });

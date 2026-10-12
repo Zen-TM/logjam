@@ -1,3 +1,4 @@
+import { say } from "@logjam/shared";
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
@@ -23,12 +24,13 @@ router.get(
 
     const placeId = getParam(req.params.placeId);
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
 
     const role = await getPlaceRole(user.id, place);
     // 404 (not 403) so the status is no existence oracle for a place the
     // caller cannot see — matches GET /places/:id (requirePlaceAccess).
-    if (role === "none") throw new AppError(404, "Place not found");
+    if (role === "none")
+      throw new AppError(404, say`Couldn't find that place.`);
     if (role === "shared") {
       // Trip logs are owner-private (hybrid sharing model).
       res.json([]);

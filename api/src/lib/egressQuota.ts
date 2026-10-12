@@ -1,5 +1,5 @@
 import prisma from "../services/prisma";
-import { currentMonthStart, nextMonthReset } from "@logjam/shared";
+import { say, currentMonthStart, nextMonthReset } from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
 import type { DbClient } from "./storageQuota";
 
@@ -33,7 +33,11 @@ export async function getEgressUsage(userId: string, db: DbClient = prisma) {
       egressPeriodStart: true,
     },
   });
-  if (!user) throw new AppError(404, "User not found");
+  if (!user)
+    throw new AppError(
+      404,
+      say`Couldn't find your account. Sign out, then sign in again.`,
+    );
 
   // Reads must apply the same lazy reset the sweeper's write does, or a user
   // whose sweep has not run since the 1st would keep seeing last month's total
@@ -107,10 +111,14 @@ export async function assertHasEgressQuota(
 ): Promise<void> {
   const { used, quota, resetAt } = await getEgressUsage(userId, db);
   if (used >= quota) {
-    throw new AppError(429, "Monthly download allowance exhausted", {
-      used: used.toString(),
-      quota: quota.toString(),
-      resetAt,
-    });
+    throw new AppError(
+      429,
+      say`You've used all of this month's download allowance.`,
+      {
+        used: used.toString(),
+        quota: quota.toString(),
+        resetAt,
+      },
+    );
   }
 }

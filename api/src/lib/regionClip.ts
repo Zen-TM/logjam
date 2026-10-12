@@ -7,7 +7,9 @@
 // in this process's memory until the clip is streamed or expires. It must
 // never appear in URLs, filenames, error messages, or persisted storage.
 import { randomUUID } from "crypto";
+import { AppError, malformed } from "../middleware/errorHandler";
 import {
+  say,
   DEM_SOURCES,
   MAX_REGION_AREA_KM2,
   NSW_CONTOURS,
@@ -43,22 +45,32 @@ export type RegionClipRequest = {
   archive?: { id: string; archivePath: string };
 };
 
+/** Where the map Logjam holds ends. */
+const AREA_OUTSIDE = say`That area is outside the map Logjam has. Choose one in NSW.`;
+/**
+ * Logjam GPS builds from before the server's sentence was shown as it is look
+ * for "too large" in it to tell this refusal from the one above; keep those
+ * words while such a build is supported (regionClip.unit.test.ts).
+ */
+export const AREA_TOO_LARGE = say`That area is too large. Choose a smaller one.`;
+
 export type RegionClipValidation =
   | { ok: true; value: RegionClipRequest }
-  | { ok: false; error: string };
+  | { ok: false; error: AppError };
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
 /**
- * Validate a clip request body. Error strings are static — they must never
- * echo the submitted coordinates (they end up in client-visible responses,
- * which is fine, but also potentially in logs).
+ * Validate a clip request body. Sentences and details are static — they must
+ * never echo the submitted coordinates (they end up in client-visible
+ * responses, which is fine, but also potentially in logs).
  */
 export function validateRegionClipRequest(body: unknown): RegionClipValidation {
   const b = body as Record<string, unknown> | null;
-  if (!b || typeof b !== "object") return { ok: false, error: "Invalid body" };
+  if (!b || typeof b !== "object")
+    return { ok: false, error: malformed("Invalid body") };
   const { west, south, east, north } = b;
   if (
     !isFiniteNumber(west) ||
@@ -66,10 +78,13 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
     !isFiniteNumber(east) ||
     !isFiniteNumber(north)
   ) {
-    return { ok: false, error: "Region bounds must be numbers" };
+    return { ok: false, error: malformed("Region bounds must be numbers") };
   }
   if (!(west < east) || !(south < north)) {
-    return { ok: false, error: "Region bounds are empty or inverted" };
+    return {
+      ok: false,
+      error: malformed("Region bounds are empty or inverted"),
+    };
   }
   const bbox: RegionBbox = { west, south, east, north };
 
@@ -80,12 +95,12 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
     north < ARCHIVE_BOUNDS.south ||
     south > ARCHIVE_BOUNDS.north
   ) {
-    return { ok: false, error: "Region is outside the map archive coverage" };
+    return { ok: false, error: new AppError(400, AREA_OUTSIDE) };
   }
 
   const [widthKm, heightKm] = regionEdgesKm(bbox);
   if (widthKm * heightKm > MAX_CLIP_AREA_KM2) {
-    return { ok: false, error: "Region is too large" };
+    return { ok: false, error: new AppError(400, AREA_TOO_LARGE) };
   }
 
   let maxzoom = MAX_CLIP_ZOOM;
@@ -96,7 +111,7 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
       b.maxzoom < 1 ||
       b.maxzoom > MAX_CLIP_ZOOM
     ) {
-      return { ok: false, error: "Invalid maxzoom" };
+      return { ok: false, error: malformed("Invalid maxzoom") };
     }
     maxzoom = b.maxzoom;
   }
@@ -104,7 +119,7 @@ export function validateRegionClipRequest(body: unknown): RegionClipValidation {
   if (b.demSourceId !== undefined) {
     const dem = DEM_SOURCES.find((source) => source.id === b.demSourceId);
     if (!dem || dem.archivePath == null) {
-      return { ok: false, error: "Unknown elevation source" };
+      return { ok: false, error: malformed("Unknown elevation source") };
     }
     return {
       ok: true,

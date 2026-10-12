@@ -42,6 +42,13 @@ describe("requireAuth — fake mode", () => {
   });
 });
 
+/** The AppError requireAuth hands to the error handler, which answers. */
+function refusal(req: AuthenticatedRequest): unknown {
+  const next = vi.fn();
+  requireAuth(req, mockRes().res, next as NextFunction);
+  return next.mock.calls[0]?.[0];
+}
+
 describe("requireAuth — cognito mode", () => {
   beforeEach(() => {
     process.env.AUTH_MODE = "cognito";
@@ -49,11 +56,10 @@ describe("requireAuth — cognito mode", () => {
 
   it("401s when the authorization header is missing", () => {
     const req = { headers: {} } as AuthenticatedRequest;
-    const { res, status, json } = mockRes();
-    requireAuth(req, res, vi.fn() as NextFunction);
-    expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({
-      error: "Missing or invalid authorization header",
+    expect(refusal(req)).toMatchObject({
+      statusCode: 401,
+      message: "Your sign-in has expired. Sign in again.",
+      devDetail: "Missing or invalid authorization header",
     });
   });
 
@@ -64,10 +70,11 @@ describe("requireAuth — cognito mode", () => {
     const req = {
       headers: { authorization: "Bearer x" },
     } as AuthenticatedRequest;
-    const { res, status, json } = mockRes();
-    requireAuth(req, res, vi.fn() as NextFunction);
-    expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Invalid or expired token" });
+    expect(refusal(req)).toMatchObject({
+      statusCode: 401,
+      message: "Your sign-in has expired. Sign in again.",
+      devDetail: "Invalid or expired token",
+    });
   });
 
   it("rejects a non-id token (access token)", () => {
@@ -82,10 +89,11 @@ describe("requireAuth — cognito mode", () => {
     const req = {
       headers: { authorization: "Bearer x" },
     } as AuthenticatedRequest;
-    const { res, status, json } = mockRes();
-    requireAuth(req, res, vi.fn() as NextFunction);
-    expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Invalid token type" });
+    expect(refusal(req)).toMatchObject({
+      statusCode: 401,
+      message: "Your sign-in has expired. Sign in again.",
+      devDetail: "Invalid token type",
+    });
   });
 
   it("rejects an id token missing identity claims", () => {
@@ -95,11 +103,10 @@ describe("requireAuth — cognito mode", () => {
     const req = {
       headers: { authorization: "Bearer x" },
     } as AuthenticatedRequest;
-    const { res, status, json } = mockRes();
-    requireAuth(req, res, vi.fn() as NextFunction);
-    expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({
-      error: "Token is missing required identity claims",
+    expect(refusal(req)).toMatchObject({
+      statusCode: 401,
+      message: "Your sign-in has expired. Sign in again.",
+      devDetail: "Token is missing required identity claims",
     });
   });
 

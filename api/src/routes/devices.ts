@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 
 // Device push-token registry (Stage 3 mobile). Tokens are Expo push tokens —
@@ -30,10 +30,10 @@ router.post(
       token.length === 0 ||
       token.length > TOKEN_MAX_LENGTH
     ) {
-      throw new AppError(400, "Invalid token");
+      throw malformed("Invalid token");
     }
     if (typeof platform !== "string" || !VALID_PLATFORMS.has(platform)) {
-      throw new AppError(400, "Invalid platform");
+      throw malformed("Invalid platform");
     }
 
     const device = await prisma.deviceToken.upsert({
@@ -54,7 +54,7 @@ router.delete(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const token = req.params.token;
-    if (typeof token !== "string") throw new AppError(400, "Invalid token");
+    if (typeof token !== "string") throw malformed("Invalid token");
     await prisma.deviceToken.deleteMany({
       where: { token, userId: user.id },
     });

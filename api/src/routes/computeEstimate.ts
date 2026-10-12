@@ -11,7 +11,7 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { getMonthlyCreditUsage } from "../lib/computeCredits";
@@ -22,6 +22,7 @@ import {
 } from "../lib/runtimeEstimates";
 import { directlySharedIds } from "../lib/shareAccess";
 import {
+  say,
   estimateCredits,
   validateGeoPdfConfig,
   EXPORT_FORMAT_RULES,
@@ -56,8 +57,7 @@ router.post(
 
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new AppError(
-        400,
+      throw malformed(
         parsed.error.issues[0]?.message ?? "Invalid estimate request",
       );
     }
@@ -84,7 +84,7 @@ router.post(
           },
           select: { tileCount: true },
         });
-        if (!job) throw new AppError(404, "Source job not found");
+        if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
         estimatedSeconds = await estimateExportSeconds(
           request.format,
           request.bundling,
@@ -97,7 +97,7 @@ router.post(
         const configError = validateGeoPdfConfig(
           request.config as GeoPdfConfig,
         );
-        if (configError) throw new AppError(400, configError);
+        if (configError) throw malformed(configError);
         estimatedSeconds = await estimateGeoPdfSeconds(
           request.config as GeoPdfConfig,
         );

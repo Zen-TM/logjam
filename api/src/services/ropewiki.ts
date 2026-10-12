@@ -1,5 +1,5 @@
 import { parse } from "csv-parse/sync";
-import { SOURCES_FIELD_KEY } from "@logjam/shared";
+import { SOURCES_FIELD_KEY, say } from "@logjam/shared";
 
 import { AppError } from "../middleware/errorHandler";
 
@@ -365,7 +365,12 @@ export async function fetchAndParseRopeWiki(): Promise<{
     // 502, not a bare Error: an upstream refusal is not an internal fault, and
     // errorHandler turns anything non-AppError into a generic 500 that tells
     // the user nothing (this is exactly how the Cloudflare block presented).
-    throw new AppError(502, `RopeWiki returned HTTP ${response.status}`);
+    throw new AppError(
+      502,
+      say`RopeWiki didn't answer. Try again later.`,
+      undefined,
+      `RopeWiki returned HTTP ${response.status}`,
+    );
   }
 
   return parseRopeWikiCsv(await response.text());

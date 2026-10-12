@@ -27,6 +27,7 @@ import { Router, Response } from "express";
 
 import { Prisma } from "@prisma/client";
 import {
+  say,
   normalizeUserUiPreferences,
   type BulkShareItemType,
   type SharableEntityType,
@@ -34,7 +35,7 @@ import {
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { parseClientSuppliedId } from "../lib/clientSuppliedId";
@@ -70,7 +71,7 @@ function isEntityType(
 function parseCopyCount(value: unknown): number {
   if (value === undefined || value === null) return 0;
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new AppError(400, "copyCount must be a non-negative integer");
+    throw malformed("copyCount must be a non-negative integer");
   }
   return value;
 }
@@ -85,7 +86,7 @@ router.post(
     const items = parseBulkShareItems(body.items);
     const copyCount = parseCopyCount(body.copyCount);
     if (items.length === 0 && copyCount === 0) {
-      throw new AppError(400, "A bulk share must contain something");
+      throw malformed("A bulk share must contain something");
     }
     // REQUIRED, unlike the optional batchId on a file-send confirm: this endpoint
     // exists to be the grouped action, and a batch of notifications with no key
@@ -93,15 +94,15 @@ router.post(
     // the feature is for. UUIDv4-shaped, like every other client-minted id
     // (lib/clientSuppliedId.ts).
     const batchId = parseClientSuppliedId(body.batchId, "batchId");
-    if (!batchId) throw new AppError(400, "batchId is required");
+    if (!batchId) throw malformed("batchId is required");
 
     const recipientIds = await parseFriendRecipientIds({
       senderId: user.id,
       value: body.recipientIds,
       maxRecipients: MAX_RECIPIENTS,
-      tooManyMessage: `You can share with at most ${MAX_RECIPIENTS} friends at once`,
-      selfMessage: "You cannot share with yourself",
-      notFriendsMessage: "You can only share with friends",
+      tooManyMessage: say`You can share with up to ${MAX_RECIPIENTS} friends at once.`,
+      selfMessage: say`You can't share with yourself.`,
+      notFriendsMessage: say`You can only share with friends.`,
     });
 
     // ── What is actually the sender's to give ──────────────────────────────

@@ -129,8 +129,12 @@ describe("POST /friends/request", () => {
     });
 
     it.each([
-      [{ ...theirs, status: "blocked" }, 403, "Unable to send friend request"],
-      [{ ...theirs, status: "accepted" }, 409, "Already friends"],
+      [
+        { ...theirs, status: "blocked" },
+        403,
+        "Couldn't send that friend request.",
+      ],
+      [{ ...theirs, status: "accepted" }, 409, "You're already friends."],
       [
         {
           id: "f-1",
@@ -139,7 +143,7 @@ describe("POST /friends/request", () => {
           status: "pending",
         },
         409,
-        "Friend request already pending",
+        "A friend request between you is already waiting.",
       ],
     ])("refuses over %o", async (row, statusCode, message) => {
       found(row);

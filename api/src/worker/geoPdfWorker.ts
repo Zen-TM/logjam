@@ -30,10 +30,10 @@ import {
   validateVectorStyleSettings,
   VECTOR_STYLE_DEFAULTS,
   normalizeUserUiPreferences,
+  say,
 } from "@logjam/shared";
 
-const GENERIC_FAILURE_MESSAGE =
-  "GeoPDF generation failed. Submit a new job to retry.";
+const GENERIC_FAILURE_MESSAGE = say`This GeoPDF couldn't be made. Make it again to try again.`;
 
 /** Build the S3 key for a job's rendered PDF. Pure (unit-test target). */
 export function resultKeyFor(jobId: string): string {

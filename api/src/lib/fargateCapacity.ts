@@ -1,5 +1,5 @@
 import prisma from "../services/prisma";
-import { WORKER_SPECS, type WorkerKind } from "@logjam/shared";
+import { say, WORKER_SPECS, type WorkerKind } from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "./env";
 import { logger } from "./logger";
@@ -85,7 +85,7 @@ export async function assertGlobalCapacity(
     );
     throw new AppError(
       429,
-      "The system is at capacity right now. Please try again in a few minutes.",
+      say`Logjam is busy right now. Try again in a few minutes.`,
     );
   }
 }

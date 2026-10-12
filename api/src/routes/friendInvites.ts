@@ -17,7 +17,11 @@
 // Every way a token can fail gives the same 404, so a response cannot tell a
 // spent link from one that never existed. Guard: __tests__/friendInvites.test.ts.
 import { Router, Response } from "express";
-import { FRIEND_INVITE_TTL_DAYS, isFriendInviteToken } from "@logjam/shared";
+import {
+  say,
+  FRIEND_INVITE_TTL_DAYS,
+  isFriendInviteToken,
+} from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -38,7 +42,7 @@ const router = Router();
 const TTL_MS = FRIEND_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 function invalidLink(): AppError {
-  return new AppError(404, "This invite link is no longer valid");
+  return new AppError(404, say`This invite link no longer works.`);
 }
 
 /** The live invite a token names, for a caller who is not its inviter.
@@ -56,7 +60,7 @@ export async function resolveInvite(token: unknown, callerId: string) {
   if (!invite || invite.expiresAt <= new Date()) throw invalidLink();
   // The caller's own link tells them nothing they do not know.
   if (invite.inviter.id === callerId)
-    throw new AppError(400, "This is your own invite link");
+    throw new AppError(400, say`This is your own invite link.`);
   const friendship = await prisma.friendship.findFirst({
     where: {
       OR: [

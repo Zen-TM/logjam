@@ -28,7 +28,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { s3 } from "../services/awsClients";
 import { getEnv } from "../lib/env";
 import { assertHasEgressQuota } from "../lib/egressQuota";
@@ -55,6 +55,7 @@ import {
   sendableExtension,
 } from "../lib/fileSendAccess";
 import {
+  say,
   FILE_SEND_MAX_BYTES,
   FILE_SEND_SOURCE_KINDS,
   MEDIA_ORIGINS,
@@ -74,7 +75,7 @@ const MAX_RECIPIENTS_PER_SEND = 25;
 
 function parseSourceKind(value: unknown): FileSendSourceKind {
   const match = FILE_SEND_SOURCE_KINDS.find((kind) => kind === value);
-  if (!match) throw new AppError(400, "Unknown sourceKind");
+  if (!match) throw malformed("Unknown sourceKind");
   return match;
 }
 
@@ -93,9 +94,9 @@ async function parseRecipientIds(
     senderId,
     value,
     maxRecipients: MAX_RECIPIENTS_PER_SEND,
-    tooManyMessage: `A file can be sent to at most ${MAX_RECIPIENTS_PER_SEND} friends at once`,
-    selfMessage: "You cannot send a file to yourself",
-    notFriendsMessage: "You can only send files to friends",
+    tooManyMessage: say`You can send a file to up to ${MAX_RECIPIENTS_PER_SEND} friends at once.`,
+    selfMessage: say`You can't send a file to yourself.`,
+    notFriendsMessage: say`You can only send files to friends.`,
   });
 }
 
@@ -167,7 +168,7 @@ router.post(
     });
     if (existing) {
       if (existing.senderId !== user.id) {
-        throw new AppError(404, "That file isn't available any more.");
+        throw new AppError(404, say`That file isn't available any more.`);
       }
       res.status(200).json(toSentView(existing));
       return;
@@ -183,12 +184,18 @@ router.post(
       );
       sizeBytes = head.ContentLength ?? 0;
     } catch {
-      throw new AppError(400, "File has not been uploaded yet");
+      throw new AppError(
+        400,
+        say`That file didn't finish uploading. Try again.`,
+      );
     }
     if (sizeBytes > FILE_SEND_MAX_BYTES) {
       await deleteS3KeysBestEffort(MEDIA_BUCKET, [key]);
       const limitMb = Math.round(FILE_SEND_MAX_BYTES / 1024 / 1024);
-      throw new AppError(413, `A sent file must be under ${limitMb} MB`);
+      throw new AppError(
+        413,
+        say`That file is too big to send. The limit is ${limitMb} MB.`,
+      );
     }
 
     const recorded = await recordSend({
@@ -274,10 +281,14 @@ async function recordSend(args: {
       await incrementStorageUsed(senderId, args.sizeBytes, tx);
       const { used, quota } = await getStorageUsage(senderId, tx);
       if (used > quota) {
-        throw new AppError(507, "Storage quota exceeded", {
-          used: used.toString(),
-          quota: quota.toString(),
-        });
+        throw new AppError(
+          507,
+          say`Your storage is full. Delete something to make room.`,
+          {
+            used: used.toString(),
+            quota: quota.toString(),
+          },
+        );
       }
       const created = await tx.fileSend.create({
         data: {
@@ -373,7 +384,7 @@ router.post(
     const user = await resolveUser(req.user!.sub);
     const body = req.body ?? {};
     if (typeof body.mediaId !== "string") {
-      throw new AppError(400, "mediaId is required");
+      throw malformed("mediaId is required");
     }
     const recipientIds = await parseRecipientIds(user.id, body.recipientIds);
 
@@ -384,7 +395,7 @@ router.post(
         origin: { in: [...MEDIA_ORIGINS] },
       },
     });
-    if (!media) throw new AppError(404, "File not found");
+    if (!media) throw new AppError(404, say`Couldn't find that file.`);
     const sourceKind = parseSourceKind(media.origin);
 
     const extension = sendableExtension(media.filename);
@@ -397,7 +408,10 @@ router.post(
     );
     if (media.fileSizeBytes > BigInt(FILE_SEND_MAX_BYTES)) {
       const limitMb = Math.round(FILE_SEND_MAX_BYTES / 1024 / 1024);
-      throw new AppError(413, `A sent file must be under ${limitMb} MB`);
+      throw new AppError(
+        413,
+        say`That file is too big to send. The limit is ${limitMb} MB.`,
+      );
     }
     await assertHasStorageQuota(user.id, media.fileSizeBytes);
 
@@ -413,7 +427,8 @@ router.post(
         }),
       );
     } catch (err) {
-      if (isMissingObjectError(err)) throw new AppError(404, "File not found");
+      if (isMissingObjectError(err))
+        throw new AppError(404, say`Couldn't find that file.`);
       throw err;
     }
 
@@ -541,7 +556,7 @@ async function loadRecipientRow(userId: string, fileSendId: string) {
     where: recipientRowWhere(userId, fileSendId),
     include: { fileSend: true },
   });
-  if (!row) throw new AppError(404, "That file isn't available any more.");
+  if (!row) throw new AppError(404, say`That file isn't available any more.`);
   return row;
 }
 
@@ -560,7 +575,7 @@ router.post(
     // declined recipient is refused while the same bytes stay downloadable for
     // everyone else on the send.
     if (!canRecipientDownload(row, row.fileSend)) {
-      throw new AppError(404, "That file isn't available any more.");
+      throw new AppError(404, say`That file isn't available any more.`);
     }
 
     // Deliberately NOT deleting the object here, and there is no "everyone has
@@ -613,7 +628,7 @@ router.post(
       });
       logger.warn({ fileSendId }, "file_send_object_missing");
       // The same 404 a stranger's id gets: nothing here may confirm more.
-      throw new AppError(404, "That file isn't available any more.");
+      throw new AppError(404, say`That file isn't available any more.`);
     }
 
     // The sender's allowance pays for this: the object lives under

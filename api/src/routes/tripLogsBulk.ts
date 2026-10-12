@@ -1,13 +1,19 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import { resolveUser } from "../lib/resolveUser";
 import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
 import { parseTripTypes, parseDisplayName } from "./tripLogsGlobal";
-import { enforceCanyoningTag, linksCanyon } from "@logjam/shared";
+import {
+  MALFORMED_REQUEST_SENTENCE,
+  enforceCanyoningTag,
+  linksCanyon,
+  say,
+  type UserSentence,
+} from "@logjam/shared";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
@@ -44,20 +50,21 @@ router.post(
     const body = req.body as ImportRequest;
 
     if (!body.importBatchId || typeof body.importBatchId !== "string") {
-      throw new AppError(400, "importBatchId is required");
+      throw malformed("importBatchId is required");
     }
     if (!Array.isArray(body.trips) || body.trips.length === 0) {
-      throw new AppError(400, "trips array is required");
+      throw malformed("trips array is required");
     }
     if (body.trips.length > BULK_IMPORT_LIMIT) {
       throw new AppError(
         413,
-        `Cannot import more than ${BULK_IMPORT_LIMIT} trip logs at once`,
+        say`You can import up to ${BULK_IMPORT_LIMIT} trips at a time.`,
       );
     }
 
     // ---- Phase 1: Validate ALL rows before ANY write ----
-    const errors: { index: number; error: string }[] = [];
+    // Logjam Web shows each as "Row N: error".
+    const errors: { index: number; error: UserSentence }[] = [];
 
     // Ownership-check all non-null placeIds.
     const placeIds = Array.from(
@@ -95,17 +102,17 @@ router.post(
       const t = body.trips[i];
 
       if (typeof t.sourcePlaceName !== "string") {
-        errors.push({ index: i, error: "sourcePlaceName is required" });
+        errors.push({ index: i, error: MALFORMED_REQUEST_SENTENCE });
         continue;
       }
 
       if (!t.date) {
-        errors.push({ index: i, error: "date is required" });
+        errors.push({ index: i, error: say`A trip needs a date.` });
         continue;
       }
       const date = new Date(t.date);
       if (isNaN(date.getTime())) {
-        errors.push({ index: i, error: "invalid date" });
+        errors.push({ index: i, error: say`The date isn't a real date.` });
         continue;
       }
 
@@ -113,12 +120,12 @@ router.post(
       let placeId: string | null = null;
       if (t.placeId != null && t.placeId !== "") {
         const ownerId = ownerById.get(t.placeId);
-        if (ownerId === undefined) {
-          errors.push({ index: i, error: "place not found" });
-          continue;
-        }
+        // Someone else's place reads exactly as one that does not exist.
         if (ownerId !== user.id) {
-          errors.push({ index: i, error: "not the place owner" });
+          errors.push({
+            index: i,
+            error: say`Couldn't find the place for this trip.`,
+          });
           continue;
         }
         placeId = t.placeId;
@@ -280,12 +287,12 @@ router.post(
 
     const { ids } = req.body as { ids: unknown };
     if (!Array.isArray(ids) || ids.length === 0) {
-      throw new AppError(400, "ids array is required");
+      throw malformed("ids array is required");
     }
     if (ids.length > BULK_DELETE_LIMIT) {
       throw new AppError(
         413,
-        `Cannot delete more than ${BULK_DELETE_LIMIT} trip logs at once`,
+        say`You can delete up to ${BULK_DELETE_LIMIT} trips at a time.`,
       );
     }
 

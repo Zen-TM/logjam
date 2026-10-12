@@ -1,9 +1,11 @@
+import { fieldValueSentence } from "./places";
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
+  say,
   asFieldValues,
   defaultPlaceMergePolicy,
   isValidLatitude,
@@ -15,6 +17,8 @@ import {
   validateFieldValues,
   type PlaceMergePolicy,
   type TripLogCustomFieldDef,
+  MALFORMED_REQUEST_SENTENCE,
+  type UserSentence,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
@@ -43,7 +47,8 @@ type BulkPlaceInput = {
   fieldValues?: Record<string, unknown>;
 };
 
-type BulkError = { rowIndex: number; message: string };
+// Logjam Web shows each as "Row N: message".
+type BulkError = { rowIndex: number; message: UserSentence };
 
 function validateInput(
   input: BulkPlaceInput,
@@ -56,20 +61,20 @@ function validateInput(
   // isn't the CSV line once unparseable rows are filtered client-side). A prefix
   // here produced the double "Row 1: Row 0: ..." index seen in the UI (IMPORT-7).
   if (!input.name || typeof input.name !== "string" || !input.name.trim()) {
-    errors.push({ rowIndex, message: "name is required" });
+    errors.push({ rowIndex, message: say`A place needs a name.` });
     return false;
   }
   if (!isValidLatitude(input.latitude)) {
     errors.push({
       rowIndex,
-      message: `latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
+      message: say`The latitude isn't a number from ${LATITUDE_RANGE.min} to ${LATITUDE_RANGE.max}.`,
     });
     return false;
   }
   if (!isValidLongitude(input.longitude)) {
     errors.push({
       rowIndex,
-      message: `longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
+      message: say`The longitude isn't a number from ${LONGITUDE_RANGE.min} to ${LONGITUDE_RANGE.max}.`,
     });
     return false;
   }
@@ -77,9 +82,9 @@ function validateInput(
   // type, which is the same check POST/PATCH /places runs — so this import path
   // cannot drift from them. It used to re-implement the grade ranges inline and
   // omit pitches/longest/hours entirely, letting negatives through here.
-  const message = validateFieldValues(asFieldValues(input.fieldValues), defs);
-  if (message) {
-    errors.push({ rowIndex, message });
+  const values = asFieldValues(input.fieldValues);
+  if (validateFieldValues(values, defs)) {
+    errors.push({ rowIndex, message: fieldValueSentence(values, defs) });
     return false;
   }
   return true;
@@ -136,15 +141,15 @@ router.post(
     const body = req.body as ImportRequest;
 
     if (!body.importBatchId || typeof body.importBatchId !== "string") {
-      throw new AppError(400, "importBatchId is required");
+      throw malformed("importBatchId is required");
     }
     if (!Array.isArray(body.rows) || body.rows.length === 0) {
-      throw new AppError(400, "rows array is required");
+      throw malformed("rows array is required");
     }
     if (body.rows.length > BULK_IMPORT_LIMIT) {
       throw new AppError(
         413,
-        `Cannot import more than ${BULK_IMPORT_LIMIT} places at once`,
+        say`You can import up to ${BULK_IMPORT_LIMIT} places at a time.`,
       );
     }
 
@@ -176,21 +181,21 @@ router.post(
       if (!row.data || !row.resolution) {
         errors.push({
           rowIndex: i,
-          message: "data and resolution are required",
+          message: MALFORMED_REQUEST_SENTENCE,
         });
         continue;
       }
       if (row.resolution.kind !== "create" && row.resolution.kind !== "merge") {
         errors.push({
           rowIndex: i,
-          message: 'resolution.kind must be "create" or "merge"',
+          message: MALFORMED_REQUEST_SENTENCE,
         });
         continue;
       }
       if (row.resolution.kind === "merge" && !row.resolution.placeId) {
         errors.push({
           rowIndex: i,
-          message: "resolution.placeId is required for merge",
+          message: MALFORMED_REQUEST_SENTENCE,
         });
         continue;
       }
@@ -249,7 +254,7 @@ router.post(
         if (!target) {
           errors.push({
             rowIndex: row.rowIndex,
-            message: "target place not found",
+            message: say`The place to merge into no longer exists.`,
           });
           continue;
         }
@@ -474,7 +479,7 @@ router.post(
       ) {
         throw new AppError(
           409,
-          "Some of these places already exist or were just added. Reload your places and try the import again.",
+          say`Some of these places already exist or were just added. Reload your places and try the import again.`,
         );
       }
       throw err;
@@ -505,12 +510,12 @@ router.post(
 
     const { ids } = req.body as { ids: unknown };
     if (!Array.isArray(ids) || ids.length === 0) {
-      throw new AppError(400, "ids array is required");
+      throw malformed("ids array is required");
     }
     if (ids.length > BULK_DELETE_LIMIT) {
       throw new AppError(
         413,
-        `Cannot delete more than ${BULK_DELETE_LIMIT} places at once`,
+        say`You can delete up to ${BULK_DELETE_LIMIT} places at a time.`,
       );
     }
 

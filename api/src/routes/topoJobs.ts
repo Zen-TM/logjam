@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { TOPO_LAYERS } from "../constants/topoLayers";
@@ -10,6 +10,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
 import {
+  say,
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
@@ -127,11 +128,11 @@ router.post(
     // fits in the body budget.
     if (jobName !== undefined && jobName !== null) {
       if (typeof jobName !== "string")
-        throw new AppError(400, "jobName must be a string");
+        throw malformed("jobName must be a string");
       if (jobName.length > TOPO_JOB_NAME_MAX_LENGTH)
         throw new AppError(
           400,
-          `jobName must be at most ${TOPO_JOB_NAME_MAX_LENGTH} characters`,
+          say`A LiDAR map's name can be up to ${TOPO_JOB_NAME_MAX_LENGTH} characters.`,
         );
     }
 
@@ -151,8 +152,7 @@ router.post(
     if (settings !== undefined && settings !== null) {
       const validation = validateRasterTemplateSettings(settings);
       if (!validation.ok) {
-        throw new AppError(
-          400,
+        throw malformed(
           `Invalid topo settings: ${validation.errors.join("; ")}`,
         );
       }
@@ -166,8 +166,7 @@ router.post(
     if (autoExport !== undefined && autoExport !== null) {
       const validation = validateAutoExportSettings(autoExport);
       if (!validation.ok) {
-        throw new AppError(
-          400,
+        throw malformed(
           `Invalid auto-export settings: ${validation.errors.join("; ")}`,
         );
       }
@@ -224,14 +223,14 @@ router.post(
     const jobId = getParam(req.params.id);
 
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
-    if (!job) throw new AppError(404, "Job not found");
+    if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
     requireShareOwner(
       await getJobRole(user.id, "topoJob", job),
       "topoJob",
-      "Only the owner can delete this job",
+      say`Only the owner can delete this LiDAR map.`,
     );
     if (job.status !== "uploading")
-      throw new AppError(400, "Job is not awaiting upload");
+      throw new AppError(400, say`That upload has already been received.`);
 
     // Verify the S3 object was actually uploaded
     let objectSize: number;
@@ -241,12 +240,18 @@ router.post(
       );
       objectSize = head.ContentLength ?? 0;
     } catch {
-      throw new AppError(400, "ZIP file has not been uploaded yet");
+      throw new AppError(
+        400,
+        say`That ZIP didn't finish uploading. Try again.`,
+      );
     }
 
     // Reject an oversized upload before reading/extracting it (compressed cap).
     if (objectSize > MAX_INPUT_ZIP_COMPRESSED_BYTES) {
-      throw new AppError(413, "Uploaded ZIP exceeds the maximum allowed size.");
+      throw new AppError(
+        413,
+        say`That ZIP is larger than Logjam can take. Choose a smaller area.`,
+      );
     }
 
     // Re-validate ZIP central directory from S3 (range-GET last 64 KB).
@@ -274,13 +279,13 @@ router.post(
       if (zipStats.uncompressedBytes > MAX_INPUT_ZIP_UNCOMPRESSED_BYTES) {
         throw new AppError(
           413,
-          "ZIP uncompressed size exceeds the maximum allowed for processing.",
+          say`That ZIP holds more data than Logjam can process. Choose a smaller area.`,
         );
       }
       verifiedTileCount = zipStats.tileCount || null;
     } catch (e) {
       if (e instanceof ElvisZipError) {
-        throw new AppError(400, e.message);
+        throw new AppError(400, e.sentence);
       }
       throw e;
     }
@@ -322,7 +327,7 @@ router.post(
         },
       });
       if (flipped.count === 0) {
-        throw new AppError(400, "Job is not awaiting upload");
+        throw new AppError(400, say`That upload has already been received.`);
       }
     });
 
@@ -353,10 +358,10 @@ router.post(
           where: { id: jobId },
           data: {
             status: "failed",
-            errorMessage: "Failed to launch processing task.",
+            errorMessage: say`Couldn't start this LiDAR map. Try again.`,
           },
         });
-        throw new AppError(500, "Failed to launch topo job");
+        throw new AppError(500, say`Couldn't start that LiDAR map. Try again.`);
       }
     }
 
@@ -486,7 +491,7 @@ router.get(
       where: { id: getParam(req.params.id) },
       select: { ...TOPO_JOB_SELECT, s3OutputKeys: true },
     });
-    if (!job) throw new AppError(404, "Job not found");
+    if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
     // Was a 403, which confirmed the id existed to anyone who guessed it.
     // shareAccess gives a stranger the same 404 a missing id gets.
     requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
@@ -508,11 +513,11 @@ router.delete(
     const user = await getUser(req.user!.sub);
     const jobId = getParam(req.params.id);
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
-    if (!job) throw new AppError(404, "Job not found");
+    if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
     requireShareOwner(
       await getJobRole(user.id, "topoJob", job),
       "topoJob",
-      "Only the owner can delete this job",
+      say`Only the owner can delete this LiDAR map.`,
     );
 
     // A running export is actively reading this job's COGs from
@@ -524,7 +529,7 @@ router.delete(
     if (runningExports > 0) {
       throw new AppError(
         409,
-        "An export of this job is currently running. Try again when it finishes.",
+        say`An export of this LiDAR map is running. Try again when it finishes.`,
       );
     }
 
@@ -536,7 +541,7 @@ router.delete(
       // a missed StopTask only costs Fargate time.
       await prisma.topoJob.updateMany({
         where: { id: jobId, status: { in: ["pending", "processing"] } },
-        data: { status: "failed", errorMessage: "Canceled by user." },
+        data: { status: "failed", errorMessage: say`You cancelled this.` },
       });
       if (job.ecsTaskArn) {
         try {
@@ -563,7 +568,7 @@ router.delete(
       where: { id: jobId },
       select: { outputBytes: true },
     });
-    if (!fresh) throw new AppError(404, "Job not found");
+    if (!fresh) throw new AppError(404, say`Couldn't find that LiDAR map.`);
 
     // S3-first (ARCH-004): delete the objects before the DB row and the quota
     // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
@@ -584,8 +589,7 @@ router.delete(
         where: { status: "queued", sourceJobIds: { has: jobId } },
         data: {
           status: "failed",
-          errorMessage:
-            "A source topo job was deleted before the export started.",
+          errorMessage: say`A LiDAR map this export needed was deleted before it started.`,
         },
       });
       // Share.entityId is polymorphic, so Postgres cannot cascade: without

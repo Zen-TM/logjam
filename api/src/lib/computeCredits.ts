@@ -1,5 +1,6 @@
 import prisma from "../services/prisma";
 import {
+  say,
   currentMonthStart,
   nextMonthReset,
   WORKER_SPECS,
@@ -148,10 +149,14 @@ export async function assertHasCredits(
     // Only used/quota/resetAt: AppErrorDetails is a deliberate whitelist
     // (errorHandler.ts) and the projected cost is not worth widening it for —
     // clients get the same number up front from POST /compute-estimate.
-    throw new AppError(429, "Monthly compute allowance exhausted", {
-      used: usage.used,
-      quota: usage.quota,
-      resetAt: usage.resetAt,
-    });
+    throw new AppError(
+      429,
+      say`You've used all of this month's processing credits.`,
+      {
+        used: usage.used,
+        quota: usage.quota,
+        resetAt: usage.resetAt,
+      },
+    );
   }
 }

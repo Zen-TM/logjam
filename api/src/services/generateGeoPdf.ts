@@ -1,3 +1,4 @@
+import { say } from "@logjam/shared";
 import path from "path";
 import {
   createCanvas,
@@ -333,7 +334,7 @@ export async function generateGeoPdf(
   if (mapCanvasBytes > MAX_CANVAS_BYTES) {
     throw new AppError(
       400,
-      "Requested export is too large. Try a smaller paper size or lower scale.",
+      say`That GeoPDF is too large to make. Try a smaller paper size or a smaller area.`,
     );
   }
 

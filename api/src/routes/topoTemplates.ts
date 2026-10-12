@@ -1,10 +1,11 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import {
+  say,
   RASTER_TEMPLATE_DEFAULTS,
   AUTO_EXPORT_DEFAULTS,
   validateRasterTemplateSettings,
@@ -60,7 +61,7 @@ router.get(
     const user = await getUser(req.user!.sub);
     const template = await prisma.topoTemplate.findUnique({ where: { id } });
     if (!template || template.userId !== user.id) {
-      throw new AppError(404, "Template not found");
+      throw new AppError(404, say`Couldn't find that template.`);
     }
     res.json({ ...template, isSystem: false });
   },
@@ -75,24 +76,18 @@ router.post(
     const { name, config, autoExport } = req.body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
-      throw new AppError(400, "name is required");
+      throw new AppError(400, say`A template needs a name.`);
     }
     const validation = validateRasterTemplateSettings(config);
     if (!validation.ok) {
-      throw new AppError(
-        400,
-        `Invalid topo settings: ${validation.errors.join("; ")}`,
-      );
+      throw malformed(`Invalid topo settings: ${validation.errors.join("; ")}`);
     }
 
     let autoExportConfig: object | undefined;
     if (autoExport !== undefined && autoExport !== null) {
       const v = validateAutoExportSettings(autoExport);
       if (!v.ok) {
-        throw new AppError(
-          400,
-          `Invalid auto-export settings: ${v.errors.join("; ")}`,
-        );
+        throw malformed(`Invalid auto-export settings: ${v.errors.join("; ")}`);
       }
       autoExportConfig = v.value as object;
     }
@@ -116,27 +111,26 @@ router.patch(
   async (req: AuthenticatedRequest, res: Response) => {
     const id = getParam(req.params.id);
     if (id === DEFAULT_TEMPLATE_ID) {
-      throw new AppError(400, "The Default template is read-only");
+      throw new AppError(400, say`The Default template can't be changed.`);
     }
     const user = await getUser(req.user!.sub);
     const existing = await prisma.topoTemplate.findUnique({ where: { id } });
     if (!existing || existing.userId !== user.id) {
-      throw new AppError(404, "Template not found");
+      throw new AppError(404, say`Couldn't find that template.`);
     }
 
     const { name, config, autoExport } = req.body;
     const data: { name?: string; config?: object; autoExport?: object } = {};
     if (name !== undefined) {
       if (typeof name !== "string" || name.trim().length === 0) {
-        throw new AppError(400, "name must be a non-empty string");
+        throw new AppError(400, say`A template needs a name.`);
       }
       data.name = name.trim();
     }
     if (config !== undefined) {
       const validation = validateRasterTemplateSettings(config);
       if (!validation.ok) {
-        throw new AppError(
-          400,
+        throw malformed(
           `Invalid topo settings: ${validation.errors.join("; ")}`,
         );
       }
@@ -145,10 +139,7 @@ router.patch(
     if (autoExport !== undefined && autoExport !== null) {
       const v = validateAutoExportSettings(autoExport);
       if (!v.ok) {
-        throw new AppError(
-          400,
-          `Invalid auto-export settings: ${v.errors.join("; ")}`,
-        );
+        throw malformed(`Invalid auto-export settings: ${v.errors.join("; ")}`);
       }
       data.autoExport = v.value as object;
     }
@@ -165,12 +156,12 @@ router.delete(
   async (req: AuthenticatedRequest, res: Response) => {
     const id = getParam(req.params.id);
     if (id === DEFAULT_TEMPLATE_ID) {
-      throw new AppError(400, "The Default template cannot be deleted");
+      throw new AppError(400, say`The Default template can't be deleted.`);
     }
     const user = await getUser(req.user!.sub);
     const existing = await prisma.topoTemplate.findUnique({ where: { id } });
     if (!existing || existing.userId !== user.id) {
-      throw new AppError(404, "Template not found");
+      throw new AppError(404, say`Couldn't find that template.`);
     }
     await prisma.topoTemplate.delete({ where: { id } });
     res.status(204).end();

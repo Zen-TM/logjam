@@ -17,10 +17,11 @@ import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
+  say,
   validateRoutePayload,
   parseRouteColor,
   parseRoutePoints,
@@ -56,7 +57,7 @@ const router = Router();
 // /places, /trips and /waypoints).
 const LIST_TAKE = 500;
 
-const NOT_FOUND = "Route not found";
+const NOT_FOUND = say`Couldn't find that route.`;
 
 /** Load a route for a mutation, or throw. none → 404, sharee → 403. */
 async function requireOwnedRoute(userId: string, id: string) {
@@ -65,7 +66,7 @@ async function requireOwnedRoute(userId: string, id: string) {
   requireShareOwner(
     await getRouteRole(userId, route),
     "route",
-    "Only the owner can change this route",
+    say`Only the owner can change this route.`,
   );
   return route;
 }
@@ -124,11 +125,11 @@ router.post(
     const body = req.body ?? {};
 
     const validationError = validateRoutePayload(body, { requireCore: true });
-    if (validationError) throw new AppError(400, validationError);
+    if (validationError) throw malformed(validationError);
     // Re-parse for the normalised (rounded, elevation-stripped) points; the
     // validator above has already proved the shape.
     const parsed = parseRoutePoints(body.points);
-    if ("error" in parsed) throw new AppError(400, parsed.error);
+    if ("error" in parsed) throw malformed(parsed.error);
 
     const placeId = (await resolveRoutePlaceId(user.id, body.placeId)) ?? null;
 
@@ -279,14 +280,14 @@ router.patch(
 
     const body = req.body ?? {};
     const validationError = validateRoutePayload(body, { requireCore: false });
-    if (validationError) throw new AppError(400, validationError);
+    if (validationError) throw malformed(validationError);
 
     const color = parseRouteColor(body.color) ?? undefined;
     let points: [number, number][] | undefined;
     let anchors: number[] | typeof Prisma.DbNull | undefined;
     if (body.points !== undefined) {
       const parsed = parseRoutePoints(body.points);
-      if ("error" in parsed) throw new AppError(400, parsed.error);
+      if ("error" in parsed) throw malformed(parsed.error);
       points = parsed.points;
       // Anchors travel with the geometry they index. A PATCH that moves points
       // without sending anchors clears them, which reads as "no record" — never

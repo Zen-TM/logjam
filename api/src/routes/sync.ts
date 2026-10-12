@@ -12,14 +12,14 @@
 import { Router, Response, NextFunction } from "express";
 import { Prisma, type Place } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
-import { readMediaMetadata, SYSTEM_FIELD_DEFS } from "@logjam/shared";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import {
   assertValidPlaceType,
   createPlaceType,
   defsForPlaceType,
   deletePlaceType,
+  placeTypeInUse,
   requireOwnPlaceType,
   updatePlaceType,
   resolvePlaceTypeId,
@@ -28,6 +28,9 @@ import { getEnv } from "../lib/env";
 import { logger } from "../lib/logger";
 import { resolveUser } from "../lib/resolveUser";
 import {
+  say,
+  readMediaMetadata,
+  SYSTEM_FIELD_DEFS,
   decodeSyncCursor,
   encodeSyncCursor,
   enforceCanyoningTag,
@@ -43,7 +46,6 @@ import {
   pushOpDependencies,
   asFieldValues,
   linksCanyon,
-  validatePlacePayload,
   type TripLogCustomFieldDef,
   validateRoutePayload,
   canonicalLinkPair,
@@ -63,7 +65,7 @@ import {
   serializeTrip,
   tripPlacesInclude,
 } from "./tripLogsGlobal";
-import { validatePlaceTextFields } from "./places";
+import { placePayloadRefusal, validatePlaceTextFields } from "./places";
 import { strandValuesOnTypeChange } from "../lib/placeCopy";
 import { serializeSharedPlace } from "../lib/placeVisibility";
 import {
@@ -116,7 +118,7 @@ export function requireClientHeader(
       { reason: value ? "malformed" : "missing" },
       "sync_client_rejected",
     );
-    throw new AppError(400, "x-logjam-client header is required");
+    throw malformed("x-logjam-client header is required");
   }
   const [, clientPlatform, clientVersion] = match;
   logger.info(
@@ -168,7 +170,7 @@ router.get(
         limit < 1 ||
         limit > SYNC_DELTA_MAX_LIMIT
       ) {
-        throw new AppError(400, `limit must be 1..${SYNC_DELTA_MAX_LIMIT}`);
+        throw malformed(`limit must be 1..${SYNC_DELTA_MAX_LIMIT}`);
       }
     }
 
@@ -793,7 +795,7 @@ function assertKnownFields(
 ): void {
   for (const key of Object.keys(fields)) {
     if (!allowed.has(key)) {
-      throw new AppError(400, `Unknown field: ${key}`);
+      throw malformed(`Unknown field: ${key}`);
     }
   }
 }
@@ -862,36 +864,36 @@ const PUSH_OPS: Record<PushOp["entity"], Set<string>> = Object.fromEntries(
 
 export function parsePushOp(raw: unknown, index: number): PushOp {
   if (typeof raw !== "object" || raw === null) {
-    throw new AppError(400, `ops[${index}] must be an object`);
+    throw malformed(`ops[${index}] must be an object`);
   }
   const { opId, entity, op, id, baseUpdatedAt, fields } = raw as Record<
     string,
     unknown
   >;
   if (typeof opId !== "string" || opId.length === 0 || opId.length > 64) {
-    throw new AppError(400, `ops[${index}].opId is required`);
+    throw malformed(`ops[${index}].opId is required`);
   }
   if (typeof entity !== "string" || !(entity in PUSH_OPS)) {
-    throw new AppError(400, `ops[${index}].entity is invalid`);
+    throw malformed(`ops[${index}].entity is invalid`);
   }
   if (typeof op !== "string" || !PUSH_OPS[entity as PushOp["entity"]].has(op)) {
-    throw new AppError(400, `ops[${index}].op is invalid for ${entity}`);
+    throw malformed(`ops[${index}].op is invalid for ${entity}`);
   }
   if (!isUuidV4(id)) {
-    throw new AppError(400, `ops[${index}].id must be a UUIDv4`);
+    throw malformed(`ops[${index}].id must be a UUIDv4`);
   }
   if (
     baseUpdatedAt !== undefined &&
     (typeof baseUpdatedAt !== "string" ||
       Number.isNaN(Date.parse(baseUpdatedAt)))
   ) {
-    throw new AppError(400, `ops[${index}].baseUpdatedAt must be an ISO date`);
+    throw malformed(`ops[${index}].baseUpdatedAt must be an ISO date`);
   }
   if (
     fields !== undefined &&
     (typeof fields !== "object" || fields === null || Array.isArray(fields))
   ) {
-    throw new AppError(400, `ops[${index}].fields must be an object`);
+    throw malformed(`ops[${index}].fields must be an object`);
   }
   return {
     opId,
@@ -918,7 +920,7 @@ export const opDependencies = pushOpDependencies;
 function tripDateFromPush(value: unknown): Date {
   const parsed = new Date(value as string);
   if (Number.isNaN(parsed.getTime()))
-    throw new AppError(400, "date is invalid");
+    throw new AppError(400, say`The date on this trip isn't a real date.`);
   return new Date(
     Date.UTC(
       parsed.getUTCFullYear(),
@@ -966,8 +968,8 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // divergence here is the SEC-001 failure mode, and a mistyped free-text field
   // that reaches Prisma throws a non-AppError, which the per-op catch re-throws
   // and 500s the WHOLE batch (a poison pill that never drains).
-  const validationError = validatePlaceTextFields(fields);
-  if (validationError) throw new AppError(400, validationError);
+  const textRefusal = validatePlaceTextFields(fields);
+  if (textRefusal) throw textRefusal;
 
   if (op.op === "create") {
     if (
@@ -975,12 +977,12 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       fields.latitude === undefined ||
       fields.longitude === undefined
     ) {
-      throw new AppError(400, "name, latitude, and longitude are required");
+      throw malformed("name, latitude, and longitude are required");
     }
     const existing = await prisma.place.findUnique({ where: { id: op.id } });
     if (existing) {
       if (existing.ownerId !== userId)
-        throw new AppError(404, "Place not found");
+        throw new AppError(404, say`Couldn't find that place.`);
       return { opId: op.opId, status: "alreadyApplied", row: existing };
     }
     if (await createAlreadyTombstoned(userId, "place", op.id)) {
@@ -991,11 +993,11 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     // divergence here is the SEC-001 failure mode. The field-value bounds come
     // from the definitions in force for the type, so they can only be resolved
     // once the type is.
-    const createError = validatePlacePayload(fields, {
+    const createError = placePayloadRefusal(fields, {
       requireCoords: true,
       defs: await defsForPlaceType(userId, typeId),
     });
-    if (createError) throw new AppError(400, createError);
+    if (createError) throw createError;
 
     const place = await prisma.place.create({
       data: {
@@ -1019,7 +1021,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // Deleted-or-foreign → the same 404 the REST PATCH gives (client parks as
   // deadRemote; delete-wins per §6).
   if (!place || place.ownerId !== userId)
-    throw new AppError(404, "Place not found");
+    throw new AppError(404, say`Couldn't find that place.`);
 
   // A type change is a legal edit (miscategorising is inevitable, and
   // delete-and-recreate would lose media, route, links and trips). Values the
@@ -1030,11 +1032,11 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     fields.placeTypeId !== undefined
       ? await resolvePlaceTypeId(userId, fields.placeTypeId)
       : place.placeTypeId;
-  const updateError = validatePlacePayload(fields, {
+  const updateError = placePayloadRefusal(fields, {
     requireCoords: false,
     defs: await defsForPlaceType(userId, typeId),
   });
-  if (updateError) throw new AppError(400, updateError);
+  if (updateError) throw updateError;
 
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,
@@ -1112,14 +1114,14 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
   assertKnownFields(fields, TRIP_FIELDS);
 
   if (op.op === "create") {
-    if (!fields.date) throw new AppError(400, "date is required");
+    if (!fields.date) throw new AppError(400, say`A trip needs a date.`);
     const existing = await prisma.tripLog.findUnique({
       where: { id: op.id },
       include: tripPlacesInclude,
     });
     if (existing) {
       if (existing.userId !== userId)
-        throw new AppError(404, "Trip log not found");
+        throw new AppError(404, say`Couldn't find that trip.`);
       return {
         opId: op.opId,
         status: "alreadyApplied",
@@ -1168,7 +1170,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     },
   });
   if (!trip || trip.userId !== userId)
-    throw new AppError(404, "Trip log not found");
+    throw new AppError(404, say`Couldn't find that trip.`);
 
   const resolvedPlaceIds =
     fields.placeIds !== undefined
@@ -1289,10 +1291,10 @@ async function applyPlaceLinkOp(
   const first = fields.aPlaceId;
   const second = fields.bPlaceId;
   if (typeof first !== "string" || typeof second !== "string") {
-    throw new AppError(400, "aPlaceId and bPlaceId are required");
+    throw malformed("aPlaceId and bPlaceId are required");
   }
   if (first === second) {
-    throw new AppError(400, "A place cannot be linked to itself");
+    throw new AppError(400, say`A place can't be linked to itself.`);
   }
   const { aPlaceId, bPlaceId } = canonicalLinkPair(first, second);
 
@@ -1305,11 +1307,12 @@ async function applyPlaceLinkOp(
   const owned = await prisma.place.count({
     where: { id: { in: [aPlaceId, bPlaceId] }, ownerId: userId },
   });
-  if (owned !== 2) throw new AppError(404, "Place not found");
+  if (owned !== 2) throw new AppError(404, say`Couldn't find that place.`);
 
   const existing = await prisma.placeLink.findUnique({ where: { id: op.id } });
   if (existing) {
-    if (existing.ownerId !== userId) throw new AppError(404, "Link not found");
+    if (existing.ownerId !== userId)
+      throw new AppError(404, say`Couldn't find that link.`);
     return { opId: op.opId, status: "alreadyApplied", row: existing };
   }
   if (await createAlreadyTombstoned(userId, "placeLink", op.id)) {
@@ -1371,7 +1374,7 @@ async function applyRouteOp(userId: string, op: PushOp): Promise<PushOpResult> {
   const validationError = validateRoutePayload(fields, {
     requireCore: op.op === "create",
   });
-  if (validationError) throw new AppError(400, validationError);
+  if (validationError) throw malformed(validationError);
 
   let points: [number, number][] | undefined;
   // Anchors travel with the geometry they index, exactly as in PATCH
@@ -1381,7 +1384,7 @@ async function applyRouteOp(userId: string, op: PushOp): Promise<PushOpResult> {
   let anchors: number[] | typeof Prisma.DbNull | undefined;
   if (fields.points !== undefined) {
     const parsed = parseRoutePoints(fields.points);
-    if ("error" in parsed) throw new AppError(400, parsed.error);
+    if ("error" in parsed) throw malformed(parsed.error);
     points = parsed.points;
     anchors = parseAnchorsOrNull(fields.anchors, parsed.points.length);
   }
@@ -1391,7 +1394,7 @@ async function applyRouteOp(userId: string, op: PushOp): Promise<PushOpResult> {
     const existing = await prisma.route.findUnique({ where: { id: op.id } });
     if (existing) {
       if (existing.ownerId !== userId)
-        throw new AppError(404, "Route not found");
+        throw new AppError(404, say`Couldn't find that route.`);
       return { opId: op.opId, status: "alreadyApplied", row: existing };
     }
     if (await createAlreadyTombstoned(userId, "route", op.id)) {
@@ -1440,7 +1443,7 @@ async function applyRouteOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // A sharee may see this route but never edit it — same 404 as a stranger,
   // so the status can't distinguish "yours" from "someone else's".
   if (!route || route.ownerId !== userId)
-    throw new AppError(404, "Route not found");
+    throw new AppError(404, say`Couldn't find that route.`);
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,
     route.updatedAt,
@@ -1546,7 +1549,7 @@ const CUSTOM_FIELD_DEF_UPDATE_FIELDS = new Set([
 function parsePlaceTypeIds(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((id) => typeof id !== "string")) {
-    throw new AppError(400, "placeTypeIds must be an array of ids");
+    throw malformed("placeTypeIds must be an array of ids");
   }
   return value as string[];
 }
@@ -1615,16 +1618,13 @@ async function applyPlaceTypeOp(
         select: { id: true },
       });
       if (system) {
-        throw new AppError(403, "Built-in place types cannot be deleted.");
+        throw new AppError(403, say`Built-in place types can't be deleted.`);
       }
       return { opId: op.opId, status: "alreadyApplied" };
     }
     const result = await deletePlaceType(userId, op.id);
     if (!result.ok) {
-      throw new AppError(
-        409,
-        `That type still has ${result.placeCount} place${result.placeCount === 1 ? "" : "s"} in it. Move them to another type first.`,
-      );
+      throw new AppError(409, placeTypeInUse(result.placeCount));
     }
     await writeTombstones(
       prisma,
@@ -1643,7 +1643,7 @@ async function applyPlaceTypeOp(
     if (existing) {
       // Foreign id gets the same 404 a missing one would — no existence oracle.
       if (existing.ownerId !== userId) {
-        throw new AppError(404, "Place type not found");
+        throw new AppError(404, say`Couldn't find that place type.`);
       }
       return { opId: op.opId, status: "alreadyApplied", row: existing };
     }
@@ -1700,7 +1700,7 @@ async function applyCustomFieldDefOp(
     // (strip the value off every place carrying the key) had already run, the
     // definition came back on the next pull, and the values did not.
     if (SYSTEM_FIELD_DEF_IDS.has(op.id)) {
-      throw new AppError(404, "Custom field not found");
+      throw new AppError(404, say`Couldn't find that attribute.`);
     }
     // Strips the orphaned values off every trip log / place that carried one
     // and writes the tombstone, in one transaction (lib/customFieldDefs.ts).
@@ -1723,7 +1723,7 @@ async function applyCustomFieldDefOp(
     if (existing) {
       // Foreign id gets the same 404 a missing one would — no existence oracle.
       if (existing.ownerId !== userId) {
-        throw new AppError(404, "Custom field not found");
+        throw new AppError(404, say`Couldn't find that attribute.`);
       }
       return { opId: op.opId, status: "alreadyApplied", row: existing };
     }
@@ -1731,7 +1731,7 @@ async function applyCustomFieldDefOp(
       return { opId: op.opId, status: "alreadyApplied" };
     }
     if (!isCustomFieldEntity(fields.entity)) {
-      throw new AppError(400, "Invalid entity");
+      throw malformed("Invalid entity");
     }
     // EACH BOUND INDEPENDENTLY. Gating on both dropped every one-sided bound
     // on its way through this path — and one-sided is the normal case for a
@@ -1777,7 +1777,7 @@ async function applyCustomFieldDefOp(
   const current = await prisma.customFieldDef.findFirst({
     where: { id: op.id, ownerId: userId },
   });
-  if (!current) throw new AppError(404, "Custom field not found");
+  if (!current) throw new AppError(404, say`Couldn't find that attribute.`);
 
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,
@@ -1825,13 +1825,16 @@ router.post(
       ops?: unknown;
     };
     if (protocol !== SYNC_PROTOCOL) {
-      throw new AppError(400, `protocol must be ${SYNC_PROTOCOL}`);
+      throw new AppError(
+        400,
+        say`This version of Logjam is too old to sync. Update it to keep your changes.`,
+      );
     }
     if (!Array.isArray(ops) || ops.length === 0) {
-      throw new AppError(400, "ops array is required");
+      throw malformed("ops array is required");
     }
     if (ops.length > SYNC_PUSH_MAX_OPS) {
-      throw new AppError(413, `At most ${SYNC_PUSH_MAX_OPS} ops per push`);
+      throw malformed(`At most ${SYNC_PUSH_MAX_OPS} ops per push`, 413);
     }
     const parsed = ops.map((raw, index) => parsePushOp(raw, index));
 

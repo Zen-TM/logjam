@@ -19,6 +19,7 @@
 // number", "water level"). Nothing here logs a label, a key, or a value.
 import { Prisma } from "@prisma/client";
 import {
+  say,
   customFieldDefFromRow,
   customFieldDefsFromRows,
   isReservedFieldKey,
@@ -32,7 +33,7 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
 import {
   customFieldDefDeleteTombstones,
@@ -283,11 +284,10 @@ function assertScopingFitsEntity(
   scoping: { placeTypeIds?: string[]; tripTypes?: string[] },
 ): void {
   if (entity === "place" && scoping.tripTypes?.length) {
-    throw new AppError(400, "tripTypes only applies to trip attributes");
+    throw malformed("tripTypes only applies to trip attributes");
   }
   if (entity === "tripLog" && scoping.placeTypeIds?.length) {
-    throw new AppError(
-      400,
+    throw malformed(
       "placeTypeIds only applies to place attributes; a trip attribute is scoped by tripTypes",
     );
   }
@@ -353,7 +353,7 @@ export function assertValidDef(
   what = "custom field",
 ): TripLogCustomFieldDef {
   if (!isTripLogCustomFieldDef(def)) {
-    throw new AppError(400, `Invalid ${what}`);
+    throw malformed(`Invalid ${what}`);
   }
   return def;
 }
@@ -451,7 +451,7 @@ export async function createFieldDef(
     ) {
       throw new AppError(
         409,
-        `A field with the key "${def.key}" already exists.`,
+        say`You already have an attribute with that name.`,
       );
     }
     throw e;
@@ -485,7 +485,7 @@ export async function updateFieldDef(
   });
   // 404, not 403: an id the caller does not own must not be confirmed to
   // exist. Definitions are per-user, so there is no sharee case here.
-  if (!existing) throw new AppError(404, "Custom field not found");
+  if (!existing) throw new AppError(404, say`Couldn't find that attribute.`);
   assertScopingFitsEntity(existing.entity, patch);
 
   const merged = {

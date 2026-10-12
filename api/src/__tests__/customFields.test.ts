@@ -220,7 +220,7 @@ describe("custom-fields route (fake auth)", () => {
           }),
       );
       expect(res.status, key).toBe(400);
-      expect(res.body.error).toContain("/custom-fields/");
+      expect(res.body.detail).toContain("/custom-fields/");
     }
   });
 

@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { malformed, fault } from "../middleware/errorHandler";
 import { ropeWikiHeavyLimiter } from "../middleware/rateLimit";
 import { resolveUser as loadUser } from "../lib/resolveUser";
 import {
@@ -109,21 +109,14 @@ async function applyAutoLinkAndCreate(
     const updates = toAutoLink.map((p) => {
       const rawFresh = parsedByRwId.get(p.ropeWikiId);
       if (!rawFresh)
-        throw new AppError(
-          500,
-          `Missing parsed RopeWiki place for id ${p.ropeWikiId}`,
-        );
+        throw fault(`Missing parsed RopeWiki place for id ${p.ropeWikiId}`);
       if (!p.bestPlaceId)
-        throw new AppError(
-          500,
+        throw fault(
           `Auto-link proposal for RopeWiki id ${p.ropeWikiId} has no bestPlaceId`,
         );
       const existing = existingByPlaceId.get(p.bestPlaceId);
       if (!existing)
-        throw new AppError(
-          500,
-          `Missing existing place for id ${p.bestPlaceId}`,
-        );
+        throw fault(`Missing existing place for id ${p.bestPlaceId}`);
       const fresh = withOzUltimate(rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
       const { ropeWikiOwnedFields, fieldValues, ropeWikiId } = merged;
@@ -144,17 +137,14 @@ async function applyAutoLinkAndCreate(
   const review: ReviewCandidatePayload[] = toReview.map((p) => {
     const rw = parsedByRwId.get(p.ropeWikiId);
     if (!rw)
-      throw new AppError(
-        500,
-        `Missing parsed RopeWiki place for id ${p.ropeWikiId}`,
-      );
+      throw fault(`Missing parsed RopeWiki place for id ${p.ropeWikiId}`);
     return {
       ropeWikiId: p.ropeWikiId,
       rw,
       candidates: p.candidates.map((s) => {
         const existing = existingByPlaceId.get(s.placeId);
         if (!existing)
-          throw new AppError(500, `Missing existing place for id ${s.placeId}`);
+          throw fault(`Missing existing place for id ${s.placeId}`);
         return {
           placeId: existing.id,
           name: existing.name,
@@ -249,12 +239,12 @@ router.post(
 
     const decisions = req.body?.decisions;
     if (!Array.isArray(decisions) || decisions.length === 0) {
-      throw new AppError(400, "decisions must be a non-empty array");
+      throw malformed("decisions must be a non-empty array");
     }
     if (decisions.length > APPLY_DECISION_LIMIT) {
-      throw new AppError(
-        413,
+      throw malformed(
         `Cannot apply more than ${APPLY_DECISION_LIMIT} decisions at once`,
+        413,
       );
     }
     const normalized: ApplyDecision[] = decisions.map((d, i) => {
@@ -262,13 +252,10 @@ router.post(
         typeof d?.ropeWikiId !== "number" ||
         !["link", "create", "skip"].includes(d?.action)
       ) {
-        throw new AppError(400, `Invalid decision at index ${i}`);
+        throw malformed(`Invalid decision at index ${i}`);
       }
       if (d.action === "link" && typeof d.targetPlaceId !== "string") {
-        throw new AppError(
-          400,
-          `link decision at index ${i} missing targetPlaceId`,
-        );
+        throw malformed(`link decision at index ${i} missing targetPlaceId`);
       }
       return {
         ropeWikiId: d.ropeWikiId,

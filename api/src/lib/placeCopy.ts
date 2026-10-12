@@ -10,6 +10,7 @@
 // copy flow gets its type picker, and a second implementation of "which type
 // does this land in" is exactly the drift §2.6 rule 1 exists to prevent.
 
+import { say } from "@logjam/shared";
 import type { ForeignFieldValue, TripLogCustomFieldDef } from "@logjam/shared";
 import {
   asFieldValues,
@@ -18,7 +19,7 @@ import {
   reconcileCopiedFieldValues,
 } from "@logjam/shared";
 
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed, fault } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
 import {
   createPlaceType,
@@ -58,13 +59,17 @@ export async function resolveCopyPlaceType(
 ): Promise<CopyTypeResolution> {
   if (requested !== undefined && requested !== null) {
     if (typeof requested !== "string" || requested.length === 0) {
-      throw new AppError(400, "placeTypeId is required");
+      throw malformed("placeTypeId is required");
     }
     const chosen = await prisma.placeType.findFirst({
       where: { id: requested, ...visiblePlaceTypeWhere(recipientId) },
       select: { id: true },
     });
-    if (!chosen) throw new AppError(400, "Unknown place type");
+    if (!chosen)
+      throw new AppError(
+        400,
+        say`That place type no longer exists. Choose another.`,
+      );
     return { placeTypeId: chosen.id, created: false };
   }
 
@@ -75,7 +80,7 @@ export async function resolveCopyPlaceType(
   // A place whose type row vanished cannot be copied into a guess. This cannot
   // happen through the API (a type holding places refuses to be deleted), so it
   // is a 500-shaped situation reported as one rather than papered over.
-  if (!source) throw new AppError(500, "The place's type is missing");
+  if (!source) throw fault("The place's type is missing");
 
   if (source.ownerId === null)
     return { placeTypeId: source.id, created: false };

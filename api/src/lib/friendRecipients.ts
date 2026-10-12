@@ -14,8 +14,9 @@
 // PRIVACY: the failure is 403 for both an unknown user id and an existing
 // non-friend, and the friendship is checked BEFORE any user-row lookup, so the
 // status cannot distinguish "no such user" from "not your friend" (PRIV-101).
+import { type UserSentence } from "@logjam/shared";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 
 /**
  * Validate a recipient id list. Returns the ids, deduped, order not preserved
@@ -35,12 +36,12 @@ export async function parseFriendRecipientIds({
   senderId: string;
   value: unknown;
   maxRecipients: number;
-  tooManyMessage: string;
-  selfMessage: string;
-  notFriendsMessage: string;
+  tooManyMessage: UserSentence;
+  selfMessage: UserSentence;
+  notFriendsMessage: UserSentence;
 }): Promise<string[]> {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new AppError(400, "recipientIds is required");
+    throw malformed("recipientIds is required");
   }
   if (value.length > maxRecipients) {
     throw new AppError(400, tooManyMessage);
@@ -49,7 +50,7 @@ export async function parseFriendRecipientIds({
   if (
     !ids.every((id): id is string => typeof id === "string" && id.length > 0)
   ) {
-    throw new AppError(400, "recipientIds must be user ids");
+    throw malformed("recipientIds must be user ids");
   }
   if (ids.includes(senderId)) {
     throw new AppError(400, selfMessage);

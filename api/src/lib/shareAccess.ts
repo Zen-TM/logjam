@@ -21,10 +21,15 @@
 // 403, because for them the id's existence is not a secret.
 import { Prisma } from "@prisma/client";
 
-import { isSharableEntityType, type SharableEntityType } from "@logjam/shared";
+import {
+  isSharableEntityType,
+  type SharableEntityType,
+  type UserSentence,
+  say,
+} from "@logjam/shared";
 
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { directShareRevokeTombstones, writeTombstones } from "./syncTombstones";
 
 /**
@@ -35,10 +40,10 @@ import { directShareRevokeTombstones, writeTombstones } from "./syncTombstones";
 export type ShareRole = "owner" | "shared" | "none";
 
 /** Per-type "not found" text. Deliberately the same string a real miss gets. */
-const NOT_FOUND_MESSAGE: Record<SharableEntityType, string> = {
-  route: "Route not found",
-  topoJob: "Topo job not found",
-  geoPdfJob: "GeoPDF job not found",
+const NOT_FOUND_MESSAGE: Record<SharableEntityType, UserSentence> = {
+  route: say`Couldn't find that route.`,
+  topoJob: say`Couldn't find that LiDAR map.`,
+  geoPdfJob: say`Couldn't find that GeoPDF.`,
 };
 
 /**
@@ -152,7 +157,7 @@ export function requireShareAccess(
 export function requireShareOwner(
   role: ShareRole,
   entityType: SharableEntityType,
-  forbiddenMessage: string,
+  forbiddenMessage: UserSentence,
 ): void {
   if (role === "none") throw new AppError(404, NOT_FOUND_MESSAGE[entityType]);
   if (role !== "owner") throw new AppError(403, forbiddenMessage);
@@ -219,7 +224,7 @@ export async function requireEntityOwner(
   userId: string,
   entityType: SharableEntityType,
   entityId: string,
-  forbiddenMessage: string,
+  forbiddenMessage: UserSentence,
 ): Promise<{ ownerId: string }> {
   const loaded = await loadEntityRole(userId, entityType, entityId);
   if (!loaded) throw new AppError(404, NOT_FOUND_MESSAGE[entityType]);
@@ -385,7 +390,7 @@ export async function directShareeIds(
 /** Narrow an untrusted `entityType` from a request path/body, or 400. */
 export function parseSharableEntityType(value: unknown): SharableEntityType {
   if (!isSharableEntityType(value)) {
-    throw new AppError(400, "Unknown share entity type");
+    throw malformed("Unknown share entity type");
   }
   return value;
 }

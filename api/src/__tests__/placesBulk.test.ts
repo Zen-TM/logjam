@@ -64,9 +64,13 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     // PLACE_NUMERIC_CONSTRAINTS / range constants (single source of truth with
     // POST/PATCH /places) — labels are the shared field labels.
     expect(res.body.errors).toEqual([
-      { rowIndex: 1, message: "name is required" },
-      { rowIndex: 2, message: "latitude must be a number between -90 and 90" },
-      { rowIndex: 3, message: "V grade must be between 1 and 7" },
+      { rowIndex: 1, message: "A place needs a name." },
+      { rowIndex: 2, message: "The latitude isn't a number from -90 to 90." },
+      {
+        rowIndex: 3,
+        message:
+          "The value for “V grade” is outside what that attribute accepts.",
+      },
     ]);
 
     const listRes = await request(API_URL).get("/places").set(AUTH);
@@ -208,7 +212,9 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       expect(res.body.errors).toHaveLength(1);
       expect(res.body.errors[0].rowIndex).toBe(0);
       // Same message shape as the nonexistent-id case — must not leak ownership.
-      expect(res.body.errors[0].message).toContain("target place not found");
+      expect(res.body.errors[0].message).toContain(
+        "merge into no longer exists",
+      );
 
       const after = await prisma.place.findUnique({
         where: { id: foreign.id },

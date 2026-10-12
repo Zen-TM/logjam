@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwksClient from "jwks-rsa";
 import jwt from "jsonwebtoken";
+import { say } from "@logjam/shared";
+import { AppError } from "../lib/appError";
 
 // Fail fast at module load if AUTH_MODE=fake would bypass Cognito in a non-dev runtime.
 // Three independent signals — any one is sufficient to refuse:
@@ -79,6 +81,16 @@ const FAKE_ACTORS: Record<string, { email: string; username: string }> = {
   "fake-carol-sub": { email: "carol@local", username: "carol" },
 };
 
+/** Every way a token fails reads the same to the user; the log says which. */
+function signInAgain(detail: string): AppError {
+  return new AppError(
+    401,
+    say`Your sign-in has expired. Sign in again.`,
+    undefined,
+    detail,
+  );
+}
+
 export function requireAuth(
   req: AuthenticatedRequest,
   res: Response,
@@ -111,7 +123,7 @@ export function requireAuth(
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Missing or invalid authorization header" });
+    next(signInAgain("Missing or invalid authorization header"));
     return;
   }
 
@@ -129,7 +141,7 @@ export function requireAuth(
     },
     (err, decoded) => {
       if (err) {
-        res.status(401).json({ error: "Invalid or expired token" });
+        next(signInAgain("Invalid or expired token"));
         return;
       }
 
@@ -139,7 +151,7 @@ export function requireAuth(
       // same JWKS under the same issuer but lack identity claims (email,
       // preferred_username). Only ID tokens establish identity here.
       if (payload.token_use !== "id") {
-        res.status(401).json({ error: "Invalid token type" });
+        next(signInAgain("Invalid token type"));
         return;
       }
 
@@ -154,9 +166,7 @@ export function requireAuth(
         typeof username !== "string" ||
         username.length === 0
       ) {
-        res
-          .status(401)
-          .json({ error: "Token is missing required identity claims" });
+        next(signInAgain("Token is missing required identity claims"));
         return;
       }
 

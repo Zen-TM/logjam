@@ -1,3 +1,4 @@
+import { say } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 
@@ -16,6 +17,10 @@ export async function resolveUser(cognitoSub: string) {
   const user = await prisma.user.findUnique({
     where: { cognitoId: cognitoSub },
   });
-  if (!user) throw new AppError(404, "User not found");
+  if (!user)
+    throw new AppError(
+      404,
+      say`Couldn't find your account. Sign out, then sign in again.`,
+    );
   return user;
 }

@@ -11,11 +11,12 @@
 // reconciliation at all.
 //
 // PRIVACY: a type's name is user-authored text. Nothing here logs one.
+import { say } from "@logjam/shared";
 import { Router, Response } from "express";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { userPatchLimiter } from "../middleware/rateLimit";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { getParam } from "../lib/getParam";
 import prisma from "../services/prisma";
@@ -23,6 +24,7 @@ import {
   assertValidPlaceType,
   createPlaceType,
   deletePlaceType,
+  placeTypeInUse,
   requireOwnPlaceType,
   updatePlaceType,
   visiblePlaceTypeWhere,
@@ -126,10 +128,7 @@ router.delete(
     const id = getParam(req.params.id);
     const result = await deletePlaceType(user.id, id);
     if (!result.ok) {
-      throw new AppError(
-        409,
-        `That type still has ${result.placeCount} place${result.placeCount === 1 ? "" : "s"} in it. Move them to another type first.`,
-      );
+      throw new AppError(409, placeTypeInUse(result.placeCount));
     }
     await writeTombstones(
       prisma,
@@ -154,7 +153,7 @@ router.post(
     const to =
       typeof req.body?.placeTypeId === "string" ? req.body.placeTypeId : "";
     if (!to || to === from)
-      throw new AppError(400, "A different placeTypeId is required");
+      throw malformed("A different placeTypeId is required");
 
     const [source, target] = await Promise.all([
       prisma.placeType.findFirst({
@@ -164,7 +163,8 @@ router.post(
         where: { id: to, ...visiblePlaceTypeWhere(user.id) },
       }),
     ]);
-    if (!source || !target) throw new AppError(404, "Place type not found");
+    if (!source || !target)
+      throw new AppError(404, say`Couldn't find that place type.`);
 
     // Values the new type does not carry are NOT destroyed — they stay in
     // `fieldValues`, which the "render any key that already has a value" rule

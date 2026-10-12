@@ -16,9 +16,9 @@
 // handler both call it.
 
 import { Prisma } from "@prisma/client";
-import { parseRouteAnchors } from "@logjam/shared";
+import { say, parseRouteAnchors } from "@logjam/shared";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { writeTombstones, routeUnlinkTombstones } from "./syncTombstones";
 
 /**
@@ -137,11 +137,11 @@ export async function resolveRoutePlaceId(
   if (placeId === undefined) return undefined;
   if (placeId === null) return null;
   if (typeof placeId !== "string") {
-    throw new AppError(400, "placeId must be a string or null");
+    throw malformed("placeId must be a string or null");
   }
   const owned = await prisma.place.count({
     where: { id: placeId, ownerId: userId },
   });
-  if (owned !== 1) throw new AppError(400, "Place not found");
+  if (owned !== 1) throw new AppError(400, say`Couldn't find that place.`);
   return placeId;
 }

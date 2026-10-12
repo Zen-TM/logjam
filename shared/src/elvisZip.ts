@@ -29,12 +29,21 @@ export function regionNameFromSurvey(survey: string): string {
   return survey.match(/^[A-Za-z]+/)?.[0] ?? survey;
 }
 
+import { say, type UserSentence } from "./userSentence.js";
+
+const NOT_A_ZIP = say`That file isn't a ZIP. Choose the ZIP that ELVIS sent you.`;
+const TRUNCATED = say`Logjam couldn't read that ZIP. It may be damaged, so download it from ELVIS again.`;
+const NO_USABLE_FILES = say`That ZIP has no point clouds or elevation rasters in it.`;
+
 export class ElvisZipError extends Error {
   code: ElvisZipErrorCode;
-  constructor(code: ElvisZipErrorCode, message: string) {
-    super(message);
+  /** What the person who chose the ZIP reads, on Logjam Web and from the API. */
+  sentence: UserSentence;
+  constructor(code: ElvisZipErrorCode, sentence: UserSentence) {
+    super(sentence);
     this.name = "ElvisZipError";
     this.code = code;
+    this.sentence = sentence;
   }
 }
 
@@ -88,7 +97,7 @@ export function parseZipCentralDirectory(
   totalFileSize: number,
 ): ZipEntry[] {
   if (tailBytes.length < 22) {
-    throw new ElvisZipError("NOT_A_ZIP", "Not a valid ZIP file (too small).");
+    throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
   }
 
   // Search backward for EOCD signature (0x06054b50) — handles zip comments up to tail length
@@ -105,10 +114,7 @@ export function parseZipCentralDirectory(
     }
   }
   if (eocdPos === -1) {
-    throw new ElvisZipError(
-      "NOT_A_ZIP",
-      "Not a valid ZIP file (EOCD signature not found). Make sure you have selected an ELVIS ZIP.",
-    );
+    throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
   }
 
   const cdSize = tailView.getUint32(eocdPos + 12, true);
@@ -118,18 +124,12 @@ export function parseZipCentralDirectory(
   // cdOffset is absolute; our tailBytes start at: totalFileSize - tailBytes.length
   const tailStart = totalFileSize - tailBytes.length;
   if (cdOffset < tailStart || cdOffset + cdSize > totalFileSize) {
-    throw new ElvisZipError(
-      "TRUNCATED",
-      "ZIP central directory is larger than the scan window. The file may be corrupted.",
-    );
+    throw new ElvisZipError("TRUNCATED", TRUNCATED);
   }
 
   const cdRelStart = cdOffset - tailStart;
   if (cdRelStart + cdSize > tailBytes.length) {
-    throw new ElvisZipError(
-      "TRUNCATED",
-      "ZIP central directory is larger than the scan window. The file may be corrupted.",
-    );
+    throw new ElvisZipError("TRUNCATED", TRUNCATED);
   }
 
   const dec = new TextDecoder();
@@ -161,7 +161,7 @@ export function parseZipCentralDirectory(
  */
 export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   if (entries.length === 0) {
-    throw new ElvisZipError("EMPTY_ZIP", "The ZIP file contains no entries.");
+    throw new ElvisZipError("EMPTY_ZIP", say`That ZIP is empty.`);
   }
 
   let lazCount = 0;
@@ -180,7 +180,7 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
     if (isUnsafeZipEntryName(entry.filename)) {
       throw new ElvisZipError(
         "UNSAFE_PATH",
-        "The ZIP contains an unsafe file path (absolute or parent-directory traversal) and was rejected.",
+        say`That ZIP has a file path Logjam won't open. Download it from ELVIS again.`,
       );
     }
     uncompressedBytes += entry.uncompressedSize;
@@ -228,13 +228,13 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   }
 
   if (lazCount === 0 && demCount === 0) {
-    const derivativeNote =
-      derivativeTifCount > 0
-        ? ` (${derivativeTifCount} derivative raster${derivativeTifCount > 1 ? "s" : ""} such as hillshade were found but are not usable)`
-        : "";
     throw new ElvisZipError(
       "NO_USABLE_FILES",
-      `No usable files found in ZIP. Expected .laz/.las point clouds and/or .tif DEM rasters.${derivativeNote}`,
+      derivativeTifCount === 0
+        ? NO_USABLE_FILES
+        : derivativeTifCount === 1
+          ? say`${NO_USABLE_FILES} It has 1 derivative raster, such as a hillshade, which Logjam can't use.`
+          : say`${NO_USABLE_FILES} It has ${derivativeTifCount} derivative rasters, such as hillshades, which Logjam can't use.`,
     );
   }
 

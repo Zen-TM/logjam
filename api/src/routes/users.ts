@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { Prisma, User } from "@prisma/client";
 import { z } from "zod";
 import {
+  say,
   normalizeThemeSchemeId,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
@@ -13,7 +14,7 @@ import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
 import { cognitoIdp } from "../services/awsClients";
@@ -111,7 +112,7 @@ export async function createUserForSignup(params: {
         if (racing) return racing;
         throw new AppError(
           409,
-          "An account exists for this email address. Contact support if you believe this is an error.",
+          say`An account already exists for this email address. Contact support if that isn't yours.`,
         );
       }
 
@@ -134,18 +135,16 @@ export async function createUserForSignup(params: {
   }
 
   // Unreachable: each loop iteration returns or throws.
-  throw new AppError(500, "Failed to provision user");
+  throw new AppError(500, say`Couldn't set up your account. Try again.`);
 }
 
 const usernameSchema = z
   .string()
   .trim()
-  .min(3, "Username must be at least 3 characters")
-  .max(32, "Username must be at most 32 characters")
-  .regex(
-    /^[A-Za-z0-9_.-]+$/,
-    "Username may only contain letters, numbers, underscores, dots, and dashes",
-  );
+  .min(3)
+  .max(32)
+  .regex(/^[A-Za-z0-9_.-]+$/);
+const USERNAME_RULE = say`A username is 3 to 32 letters, numbers, dots, dashes or underscores.`;
 
 const router = Router();
 
@@ -252,7 +251,7 @@ router.get(
         if (!canRebind) {
           throw new AppError(
             409,
-            "An account exists for this email address. Contact support if you believe this is an error.",
+            say`An account already exists for this email address. Contact support if that isn't yours.`,
           );
         }
 
@@ -284,7 +283,7 @@ router.get(
         ) {
           throw new AppError(
             409,
-            "That email is already linked to another account.",
+            say`That email is already linked to another account.`,
           );
         }
         throw e;
@@ -342,8 +341,7 @@ router.patch(
       "placeCustomFields",
     ] as const) {
       if ((req.body as Record<string, unknown>)[legacy] !== undefined) {
-        throw new AppError(
-          400,
+        throw malformed(
           `${legacy} is no longer accepted here — use /custom-fields/:entity.`,
         );
       }
@@ -366,7 +364,7 @@ router.patch(
         typeof consentVersion !== "string" ||
         consentVersion !== CURRENT_CONSENT_VERSION
       ) {
-        throw new AppError(400, "Invalid consentVersion");
+        throw malformed("Invalid consentVersion");
       }
       updates.consentVersion = consentVersion;
       updates.consentedAt = new Date();
@@ -375,10 +373,7 @@ router.patch(
     if (username !== undefined) {
       const parsed = usernameSchema.safeParse(username);
       if (!parsed.success) {
-        throw new AppError(
-          400,
-          parsed.error.issues[0]?.message ?? "Invalid username",
-        );
+        throw new AppError(400, USERNAME_RULE);
       }
       updates.username = parsed.data;
     }
@@ -397,27 +392,27 @@ router.patch(
           ? undefined
           : normalizeThemeSchemeId(themeSchemeId);
       if (themeSchemeId !== undefined && nextThemeSchemeId == null) {
-        throw new AppError(400, "Invalid themeSchemeId");
+        throw malformed("Invalid themeSchemeId");
       }
       if (
         notifications !== undefined &&
         !isNotificationPreferences(notifications)
       ) {
-        throw new AppError(400, "Invalid notifications");
+        throw malformed("Invalid notifications");
       }
       if (
         autoDownloadGeoPdfs !== undefined &&
         typeof autoDownloadGeoPdfs !== "boolean"
       ) {
-        throw new AppError(400, "Invalid autoDownloadGeoPdfs");
+        throw malformed("Invalid autoDownloadGeoPdfs");
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
-        throw new AppError(400, "Invalid copyPlaceMedia");
+        throw malformed("Invalid copyPlaceMedia");
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
         if (!normalized) {
-          throw new AppError(400, "Invalid importMergePolicy");
+          throw malformed("Invalid importMergePolicy");
         }
       }
 
@@ -446,7 +441,7 @@ router.patch(
     }
 
     if (Object.keys(updates).length === 0) {
-      throw new AppError(400, "No valid update fields provided");
+      throw malformed("No valid update fields provided");
     }
 
     let updated;
@@ -462,9 +457,9 @@ router.patch(
       ) {
         const target = (e.meta?.target as string[] | undefined) ?? [];
         if (target.includes("username")) {
-          throw new AppError(409, "Username taken.");
+          throw new AppError(409, say`That username is taken. Choose another.`);
         }
-        throw new AppError(409, "Conflict updating profile.");
+        throw new AppError(409, say`Couldn't save your profile. Try again.`);
       }
       throw e;
     }

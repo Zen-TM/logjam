@@ -263,7 +263,7 @@ describe("a place type's name is the user's only one of it", () => {
   it("words the form's refusal, and lets a legacy duplicate keep its name", () => {
     expect(placeTypeNameError("  ", types)).toBe("A place type needs a name.");
     expect(placeTypeNameError("canyon ", types)).toBe(
-      'You already have a place type called "canyon".',
+      "You already have a place type called “canyon”.",
     );
     expect(placeTypeNameError("Cave", types)).toBeNull();
     const legacy = { id: "own-2", name: "canyon" };

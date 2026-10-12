@@ -1,3 +1,4 @@
+import { say } from "@logjam/shared";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -13,7 +14,11 @@ export async function getStorageUsage(userId: string, db: DbClient = prisma) {
     where: { id: userId },
     select: { storageUsedBytes: true, storageQuotaBytes: true },
   });
-  if (!user) throw new AppError(404, "User not found");
+  if (!user)
+    throw new AppError(
+      404,
+      say`Couldn't find your account. Sign out, then sign in again.`,
+    );
   return { used: user.storageUsedBytes, quota: user.storageQuotaBytes };
 }
 
@@ -30,10 +35,14 @@ export async function assertHasStorageQuota(
 ) {
   const { used, quota } = await getStorageUsage(userId, db);
   if (used >= quota || used + pendingBytes > quota) {
-    throw new AppError(507, "Storage quota exceeded", {
-      used: used.toString(),
-      quota: quota.toString(),
-    });
+    throw new AppError(
+      507,
+      say`Your storage is full. Delete something to make room.`,
+      {
+        used: used.toString(),
+        quota: quota.toString(),
+      },
+    );
   }
 }
 

@@ -10,11 +10,12 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import {
+  say,
   EXPORT_FORMAT_RULES,
   RASTER_LAYERS,
   validateExportRequest,
@@ -123,8 +124,7 @@ router.post(
 
     const parsed = exportRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new AppError(
-        400,
+      throw malformed(
         parsed.error.issues[0]?.message ?? "Invalid export request",
       );
     }
@@ -133,7 +133,7 @@ router.post(
     const layers = parsed.data.layers as TopoLayerKey[];
 
     const v = validateExportRequest({ format, bundling, layers });
-    if (!v.ok) throw new AppError(400, v.error);
+    if (!v.ok) throw malformed(v.error);
 
     // Read-access check on every source job — owned OR directly shared with
     // the caller, the same OR arm the list endpoints use. A recipient can
@@ -152,17 +152,23 @@ router.post(
       },
     });
     if (jobs.length !== sourceJobIds.length) {
-      throw new AppError(404, "One or more source jobs not found");
+      throw new AppError(404, say`Couldn't find one of those LiDAR maps.`);
     }
     for (const j of jobs) {
       if (j.status !== "complete") {
-        throw new AppError(400, `Job ${j.id} is not complete`);
+        throw new AppError(
+          400,
+          say`One of those LiDAR maps isn't finished yet.`,
+        );
       }
       // A job without a footprint (legacy / failed-but-marked-complete) crashes
       // the export worker at render_composite_* ("No source-job footprints
       // available"). Reject here; re-running the job recomputes the footprint.
       if (j.footprint === null) {
-        throw new AppError(400, "Re-run this job to enable exports");
+        throw new AppError(
+          400,
+          say`This LiDAR map was made before exports existed. Make it again to export it.`,
+        );
       }
     }
 
@@ -177,7 +183,10 @@ router.post(
       for (const layer of requestedRasterLayers) {
         const match = outputs.find((o) => o.name === layer);
         if (!match?.cogKey) {
-          throw new AppError(400, "Re-run this job to enable exports");
+          throw new AppError(
+            400,
+            say`This LiDAR map was made before exports existed. Make it again to export it.`,
+          );
         }
       }
     }
@@ -246,7 +255,7 @@ router.get(
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
-    if (!row) throw new AppError(404, "Export not found");
+    if (!row) throw new AppError(404, say`Couldn't find that export.`);
     // An export artefact is one of the largest single objects the app serves,
     // and this endpoint exists to re-mint an expired URL — i.e. it is the
     // deliberate "download it again" action. Owner-scoped above, so the caller
@@ -270,9 +279,12 @@ router.delete(
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
-    if (!row) throw new AppError(404, "Export not found");
+    if (!row) throw new AppError(404, say`Couldn't find that export.`);
     if (row.status === "queued" || row.status === "running") {
-      throw new AppError(409, "Cannot delete an in-progress export");
+      throw new AppError(
+        409,
+        say`An export that is still running can't be deleted.`,
+      );
     }
 
     // Delete the S3 object and reclaim the storage quota in the same

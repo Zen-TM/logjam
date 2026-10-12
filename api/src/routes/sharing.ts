@@ -1,9 +1,9 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
-import { normalizeUserUiPreferences } from "@logjam/shared";
+import { say, normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { getPlaceRole, requirePlaceOwnerAccess } from "../lib/placeAccess";
@@ -21,16 +21,15 @@ router.post(
 
     const placeId = getParam(req.params.id);
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
     await requirePlaceOwnerAccess(
       user.id,
       place,
-      "Only the owner can share a place",
+      say`Only the owner can share this place.`,
     );
 
     const { sharedWithUserId } = req.body;
-    if (!sharedWithUserId)
-      throw new AppError(400, "sharedWithUserId is required");
+    if (!sharedWithUserId) throw malformed("sharedWithUserId is required");
 
     // Friendship FIRST, target-user lookup second. Probing arbitrary internal
     // user ids used to answer 404 for an unknown id and 403 for an existing
@@ -47,21 +46,21 @@ router.post(
       },
     });
     if (!friendship)
-      throw new AppError(403, "You can only share places with friends");
+      throw new AppError(403, say`You can only share with friends.`);
 
     // Unreachable given the friendship above; kept so a missing row fails loud
     // rather than reading preferences off undefined.
     const targetUser = await prisma.user.findUnique({
       where: { id: sharedWithUserId },
     });
-    if (!targetUser) throw new AppError(404, "Target user not found");
+    if (!targetUser) throw new AppError(404, say`Couldn't find that person.`);
 
     // Prevent duplicate shares
     const existing = await prisma.placeShare.findFirst({
       where: { placeId, sharedWithId: sharedWithUserId },
     });
     if (existing)
-      throw new AppError(409, "Place already shared with this user");
+      throw new AppError(409, say`You've already shared this place with them.`);
 
     const notifyRecipient = normalizeUserUiPreferences(targetUser.uiPreferences)
       .notifications.shareInApp;
@@ -134,16 +133,18 @@ router.delete(
     // "place X is shared with user Y" from "it is not". The owner decision
     // derives from placeAccess (getPlaceRole), never an inline owner check.
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
 
     const isSharer = (await getPlaceRole(user.id, place)) === "owner";
     const isSharee = targetUserId === user.id;
-    if (!isSharer && !isSharee) throw new AppError(404, "Place not found");
+    if (!isSharer && !isSharee)
+      throw new AppError(404, say`Couldn't find that place.`);
 
     const share = await prisma.placeShare.findFirst({
       where: { placeId, sharedWithId: targetUserId },
     });
-    if (!share) throw new AppError(404, "Share not found");
+    if (!share)
+      throw new AppError(404, say`This isn't shared with them any more.`);
 
     // Revoke the share AND remove the recipient's place_shared notification
     // for this place in one transaction (PRIV-001). The read-time filter would
@@ -201,11 +202,11 @@ router.get(
 
     const placeId = getParam(req.params.id);
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
     await requirePlaceOwnerAccess(
       user.id,
       place,
-      "Only the owner can view shares",
+      say`Only the owner can see who this is shared with.`,
     );
 
     const shares = await prisma.placeShare.findMany({

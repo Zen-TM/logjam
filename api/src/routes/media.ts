@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
@@ -33,6 +33,7 @@ import {
   parseClientSuppliedId,
 } from "../lib/clientSuppliedId";
 import {
+  say,
   mediaCategory,
   categoryHasThumbnail,
   isMediaOrigin,
@@ -81,23 +82,23 @@ function parseLinkTarget(body: Record<string, unknown>): {
     linkedType !== "tripLog" &&
     linkedType !== "none"
   ) {
-    throw new AppError(400, "Invalid linkedType");
+    throw malformed("Invalid linkedType");
   }
   if (origin !== undefined && origin !== null && !isMediaOrigin(origin)) {
-    throw new AppError(400, "Invalid origin");
+    throw malformed("Invalid origin");
   }
   const parsedOrigin = isMediaOrigin(origin) ? origin : null;
   if (linkedType === "none") {
     if (linkedId !== undefined && linkedId !== null) {
-      throw new AppError(400, "A standalone file must not carry a linkedId");
+      throw malformed("A standalone file must not carry a linkedId");
     }
     if (parsedOrigin === null) {
-      throw new AppError(400, "A standalone file requires an origin");
+      throw malformed("A standalone file requires an origin");
     }
     return { linkedType, linkedId: null, origin: parsedOrigin };
   }
   if (typeof linkedId !== "string" || !linkedId) {
-    throw new AppError(400, "linkedId is required");
+    throw malformed("linkedId is required");
   }
   return { linkedType, linkedId, origin: parsedOrigin };
 }
@@ -111,19 +112,19 @@ async function assertOwnsTarget(
   linkedId: string | null,
 ) {
   if (linkedType === "none") return;
-  if (linkedId === null) throw new AppError(400, "linkedId is required");
+  if (linkedId === null) throw malformed("linkedId is required");
   if (linkedType === "place") {
     const place = await prisma.place.findUnique({
       where: { id: linkedId },
       select: { id: true, ownerId: true },
     });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
     // none → 404 (no existence oracle for places the caller can't see);
     // sharee → 403 (legitimately sees the place, just can't attach media).
     await requirePlaceOwnerAccess(
       userId,
       place,
-      "Only the owner can attach media",
+      say`Only the owner can add files to this place.`,
     );
   } else if (linkedType === "tripLog") {
     const trip = await prisma.tripLog.findUnique({
@@ -133,9 +134,9 @@ async function assertOwnsTarget(
     // Trip logs are owner-private (no sharing): a non-owner gets the same 404 as
     // a missing trip so the status is not an existence oracle for trip-log IDs.
     if (!trip || trip.userId !== userId)
-      throw new AppError(404, "Trip log not found");
+      throw new AppError(404, say`Couldn't find that trip.`);
   } else {
-    throw new AppError(400, "Invalid linkedType");
+    throw malformed("Invalid linkedType");
   }
 }
 
@@ -159,7 +160,8 @@ async function assertPlaceTrackSlotFree(
       ...(ignoreMediaId ? { id: { not: ignoreMediaId } } : {}),
     },
   });
-  if (existing > 0) throw new AppError(409, "This place already has a track");
+  if (existing > 0)
+    throw new AppError(409, say`This place already has a track.`);
 }
 
 /**
@@ -170,13 +172,13 @@ async function assertPlaceTrackSlotFree(
 function parseMediaDisplayName(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string")
-    throw new AppError(400, "displayName must be a string");
+    throw malformed("displayName must be a string");
   const trimmed = value.trim();
   if (!trimmed) return null;
   if (trimmed.length > MEDIA_DISPLAY_NAME_MAX) {
     throw new AppError(
       400,
-      `displayName must be ${MEDIA_DISPLAY_NAME_MAX} characters or fewer`,
+      say`A file's name can be up to ${MEDIA_DISPLAY_NAME_MAX} characters.`,
     );
   }
   return trimmed;
@@ -190,7 +192,7 @@ function parseTrackClimbOr400(body: Record<string, unknown>) {
   try {
     return parseTrackClimb(body);
   } catch (err) {
-    if (err instanceof MediaMetadataError) throw new AppError(400, err.message);
+    if (err instanceof MediaMetadataError) throw malformed(err.message);
     throw err;
   }
 }
@@ -201,7 +203,7 @@ function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
   try {
     return parseMediaMetadata(origin, value);
   } catch (err) {
-    if (err instanceof MediaMetadataError) throw new AppError(400, err.message);
+    if (err instanceof MediaMetadataError) throw malformed(err.message);
     throw err;
   }
 }
@@ -218,20 +220,20 @@ function validateMediaType(
     typeof rawFilename !== "string" ||
     !rawFilename.trim()
   ) {
-    throw new AppError(400, "filename and mediaType are required");
+    throw malformed("filename and mediaType are required");
   }
   const mediaType = rawMediaType;
   const filename = rawFilename;
   const category = mediaCategory(mediaType);
   if (!category)
-    throw new AppError(400, `Unsupported media type: ${mediaType}`);
+    throw new AppError(400, say`Logjam can't take that kind of file.`);
   // Clients report inconsistent MIME types for GPX/KML/GeoJSON, so require a
   // matching extension to pin down the format.
   if (category === "track") {
     const ext = filename.split(".").pop()?.toLowerCase();
     const expected = MEDIA_EXTENSION_BY_MIME[mediaType];
     if (ext !== expected)
-      throw new AppError(400, `Track file must have a .${expected} extension`);
+      throw malformed(`Track file must have a .${expected} extension`);
   }
   return { category, mediaType, filename };
 }
@@ -275,7 +277,11 @@ router.post(
         where: { id: clientMediaId },
       });
       if (existing) {
-        assertClientIdReplayable(existing.ownerId, user.id, "Media not found");
+        assertClientIdReplayable(
+          existing.ownerId,
+          user.id,
+          say`Couldn't find that file.`,
+        );
         res.status(200).json(await toMediaItem(existing));
         return;
       }
@@ -347,7 +353,7 @@ router.post(
     const existing = await prisma.media.findUnique({ where: { id: mediaId } });
     if (existing) {
       if (existing.ownerId !== user.id)
-        throw new AppError(404, "Media not found");
+        throw new AppError(404, say`Couldn't find that file.`);
       res.status(200).json(await toMediaItem(existing));
       return;
     }
@@ -365,7 +371,10 @@ router.post(
       );
       displayBytes = head.ContentLength ?? 0;
     } catch {
-      throw new AppError(400, "File has not been uploaded yet");
+      throw new AppError(
+        400,
+        say`That file didn't finish uploading. Try again.`,
+      );
     }
     if (displayBytes > MEDIA_SIZE_CAPS[category]) {
       // Best-effort orphan cleanup; the size-limit AppError below is the
@@ -375,7 +384,7 @@ router.post(
       const limitMb = Math.round(MEDIA_SIZE_CAPS[category] / 1024 / 1024);
       throw new AppError(
         413,
-        `File exceeds the ${limitMb} MB limit for ${category}s`,
+        say`That file is too big. The limit is ${limitMb} MB.`,
       );
     }
 
@@ -388,7 +397,7 @@ router.post(
         thumbnailBytes = head.ContentLength ?? 0;
       } catch {
         await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey]);
-        throw new AppError(400, "Thumbnail has not been uploaded yet");
+        throw malformed("Thumbnail has not been uploaded yet");
       }
     }
 
@@ -404,10 +413,14 @@ router.post(
         await incrementStorageUsed(user.id, totalBytes, tx);
         const { used, quota } = await getStorageUsage(user.id, tx);
         if (used > quota) {
-          throw new AppError(507, "Storage quota exceeded", {
-            used: used.toString(),
-            quota: quota.toString(),
-          });
+          throw new AppError(
+            507,
+            say`Your storage is full. Delete something to make room.`,
+            {
+              used: used.toString(),
+              quota: quota.toString(),
+            },
+          );
         }
 
         let assignedColor: string | null = null;
@@ -497,13 +510,10 @@ router.post(
       ids.length === 0 ||
       ids.some((id) => typeof id !== "string")
     ) {
-      throw new AppError(400, "ids array is required");
+      throw malformed("ids array is required");
     }
     if (ids.length > DOWNLOAD_URLS_MAX_IDS) {
-      throw new AppError(
-        413,
-        `At most ${DOWNLOAD_URLS_MAX_IDS} ids per request`,
-      );
+      throw malformed(`At most ${DOWNLOAD_URLS_MAX_IDS} ids per request`, 413);
     }
 
     const rows = await prisma.media.findMany({
@@ -631,7 +641,7 @@ router.patch(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const hasClimb = CLIMB_FIELDS.some((field) => field in body);
     if (!("displayName" in body) && !("color" in body) && !hasClimb) {
-      throw new AppError(400, "displayName, color or a climb is required");
+      throw malformed("displayName, color or a climb is required");
     }
     const data: {
       displayName?: string | null;
@@ -644,8 +654,7 @@ router.patch(
     }
     if ("color" in body) {
       const color = parseRouteColor(body.color);
-      if (color === null)
-        throw new AppError(400, "color must be a palette colour");
+      if (color === null) throw malformed("color must be a palette colour");
       data.color = color;
     }
 
@@ -654,17 +663,14 @@ router.patch(
     const media = await prisma.media.findFirst({
       where: { id, ownerId: user.id },
     });
-    if (!media) throw new AppError(404, "Media not found");
+    if (!media) throw new AppError(404, say`Couldn't find that file.`);
     if (media.origin === null) {
-      throw new AppError(
-        400,
-        "Only an import or a recorded track can be edited",
-      );
+      throw malformed("Only an import or a recorded track can be edited");
     }
 
     if (climb) {
       if (media.origin !== "track") {
-        throw new AppError(400, "Only a recorded track has a climb");
+        throw malformed("Only a recorded track has a climb");
       }
       data.metadata = {
         ...readMediaMetadata(media.origin, media.metadata),
@@ -702,13 +708,13 @@ router.patch(
     if (linkedType !== "place" && linkedType !== "none") {
       // Deliberately narrower than parseLinkTarget: a file is linked to a
       // place or to nothing. Trip logs hold attachments, not ways.
-      throw new AppError(400, 'linkedType must be "place" or "none"');
+      throw malformed('linkedType must be "place" or "none"');
     }
     if (linkedType === "place" && (typeof linkedId !== "string" || !linkedId)) {
-      throw new AppError(400, "linkedId is required");
+      throw malformed("linkedId is required");
     }
     if (linkedType === "none" && linkedId !== undefined && linkedId !== null) {
-      throw new AppError(400, "Unlinking must not carry a linkedId");
+      throw malformed("Unlinking must not carry a linkedId");
     }
     const nextLinkedId = linkedType === "place" ? (linkedId as string) : null;
 
@@ -719,16 +725,13 @@ router.patch(
     const media = await prisma.media.findFirst({
       where: { id, ownerId: user.id },
     });
-    if (!media) throw new AppError(404, "Media not found");
+    if (!media) throw new AppError(404, say`Couldn't find that file.`);
     if (media.origin === null) {
-      throw new AppError(
-        400,
-        "Only an import or a recorded track can be linked",
-      );
+      throw malformed("Only an import or a recorded track can be linked");
     }
 
     const category = mediaCategory(media.mediaType);
-    if (!category) throw new AppError(400, "Unsupported media type");
+    if (!category) throw malformed("Unsupported media type");
     await assertOwnsTarget(user.id, linkedType, nextLinkedId);
     await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, id);
 
@@ -780,7 +783,7 @@ router.delete(
     const media = await prisma.media.findFirst({
       where: { id, ownerId: user.id },
     });
-    if (!media) throw new AppError(404, "Media not found");
+    if (!media) throw new AppError(404, say`Couldn't find that file.`);
 
     // S3-first (ARCH-004): blobs go before the row, so an S3 failure leaves
     // the row (and therefore the keys) intact for a retried DELETE. The row

@@ -115,7 +115,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
 
     await expect(getRopeWikiCanyons()).rejects.toMatchObject({
       statusCode: 503,
-      message: expect.stringContaining("reference/ropewiki-nsw.csv"),
+      devDetail: expect.stringContaining("reference/ropewiki-nsw.csv"),
     });
   });
 
@@ -165,7 +165,7 @@ describe("getRopeWikiCanyons — fresh=true live path", () => {
 
     await expect(getRopeWikiCanyons(true)).rejects.toMatchObject({
       statusCode: 502,
-      message: expect.stringContaining("HTTP 403"),
+      devDetail: expect.stringContaining("HTTP 403"),
     });
   });
 });

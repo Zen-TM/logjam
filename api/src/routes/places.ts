@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
 import {
   applyPlaceLinks,
@@ -40,10 +40,14 @@ import {
   parseClientSuppliedId,
 } from "../lib/clientSuppliedId";
 import {
+  say,
+  quote,
+  invalidFieldValueKeys,
   asFieldValues,
   normalizeUserUiPreferences,
   TRACK_MIME_TYPES,
   validatePlacePayload,
+  type UserSentence,
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
@@ -72,39 +76,92 @@ export function validatePlaceTextFields(payload: {
   altNames?: unknown;
   notes?: unknown;
   attributes?: unknown;
-}): string | null {
+}): AppError | null {
   const { name, altNames, notes, attributes } = payload;
 
   if (name !== undefined) {
-    if (typeof name !== "string") return "name must be a string";
-    if (name.trim().length === 0) return "name is required";
+    if (typeof name !== "string") return malformed("name must be a string");
+    if (name.trim().length === 0)
+      return new AppError(400, say`A place needs a name.`);
     if (name.length > PLACE_NAME_MAX_LENGTH)
-      return `name must be at most ${PLACE_NAME_MAX_LENGTH} characters`;
+      return new AppError(
+        400,
+        say`A place's name can be up to ${PLACE_NAME_MAX_LENGTH} characters.`,
+      );
   }
 
   if (altNames !== undefined && altNames !== null) {
-    if (!Array.isArray(altNames)) return "altNames must be an array of strings";
+    if (!Array.isArray(altNames))
+      return malformed("altNames must be an array of strings");
     if (altNames.length > PLACE_MAX_ALT_NAMES)
-      return `altNames must have at most ${PLACE_MAX_ALT_NAMES} entries`;
+      return new AppError(
+        400,
+        say`A place can have up to ${PLACE_MAX_ALT_NAMES} other names.`,
+      );
     for (const alt of altNames) {
       if (typeof alt !== "string")
-        return "altNames must be an array of strings";
+        return malformed("altNames must be an array of strings");
       if (alt.length > PLACE_NAME_MAX_LENGTH)
-        return `altNames entries must be at most ${PLACE_NAME_MAX_LENGTH} characters`;
+        return new AppError(
+          400,
+          say`Each of a place's other names can be up to ${PLACE_NAME_MAX_LENGTH} characters.`,
+        );
     }
   }
 
   // notes is deliberately uncapped in length (trip beta can be long); the 1 MB
   // body cap is its ceiling. Only the type matters for the 500-vs-400 bug.
   if (notes !== undefined && notes !== null && typeof notes !== "string")
-    return "notes must be a string or null";
+    return malformed("notes must be a string or null");
 
   if (attributes !== undefined && attributes !== null) {
     if (typeof attributes !== "object" || Array.isArray(attributes))
-      return "attributes must be an object";
+      return malformed("attributes must be an object");
   }
 
   return null;
+}
+
+type PlacePayloadOpts = Parameters<typeof validatePlacePayload>[1];
+
+/**
+ * `validatePlacePayload` as a refusal. Both clients run the same check before
+ * they send, so a coordinate or a shape fails only in a broken request. A
+ * field value can fail honestly (its attribute's bounds changed on another
+ * device), and that sentence names the attribute: a label is the user's own
+ * words, so it is quoted and never becomes the developer detail, which is
+ * logged (`placeFields.unit.test.ts`).
+ */
+export function placePayloadRefusal(
+  payload: Parameters<typeof validatePlacePayload>[0],
+  opts: PlacePayloadOpts,
+): AppError | null {
+  const error = validatePlacePayload(payload, opts);
+  if (error === null) return null;
+  const withoutValues = validatePlacePayload(payload, {
+    ...opts,
+    defs: undefined,
+  });
+  if (withoutValues !== null) return malformed(withoutValues);
+  return new AppError(
+    400,
+    fieldValueSentence(payload.fieldValues, opts.defs ?? []),
+  );
+}
+
+/** Which attribute refused its value, for the owner of both to read. */
+export function fieldValueSentence(
+  values: unknown,
+  defs: NonNullable<PlacePayloadOpts["defs"]>,
+): UserSentence {
+  const key =
+    values && typeof values === "object" && !Array.isArray(values)
+      ? invalidFieldValueKeys(values as Record<string, unknown>, defs)[0]
+      : undefined;
+  const label = defs.find((def) => def.key === key)?.label;
+  return label === undefined
+    ? say`A value on this place is outside what its attribute accepts.`
+    : say`The value for ${quote(label)} is outside what that attribute accepts.`;
 }
 
 const router = Router();
@@ -284,7 +341,7 @@ router.post(
     } = req.body;
 
     if (!name || latitude === undefined || longitude === undefined) {
-      throw new AppError(400, "name, latitude, and longitude are required");
+      throw malformed("name, latitude, and longitude are required");
     }
 
     // A place must have a type. Defaulting silently to Canyon would put a
@@ -295,12 +352,12 @@ router.post(
     // Validate coordinates and the type's field values (PLACE-1/PLACE-2). The
     // bounds come from the DEFINITIONS in force for this type, so a user's own
     // bounded field is enforced exactly as a grade always was.
-    const validationError =
-      validatePlacePayload(req.body, {
+    const refusal =
+      placePayloadRefusal(req.body, {
         requireCoords: true,
         defs: await defsForPlaceType(user.id, typeId),
       }) ?? validatePlaceTextFields(req.body);
-    if (validationError) throw new AppError(400, validationError);
+    if (refusal) throw refusal;
 
     // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
     // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
@@ -310,7 +367,11 @@ router.post(
         where: { id: clientId },
       });
       if (existing) {
-        assertClientIdReplayable(existing.ownerId, user.id, "Place not found");
+        assertClientIdReplayable(
+          existing.ownerId,
+          user.id,
+          say`Couldn't find that place.`,
+        );
         res.status(200).json(existing);
         return;
       }
@@ -383,7 +444,7 @@ router.post(
 
     const placeId = getParam(req.params.id);
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
 
     // Owner and share recipients may copy (hybrid model: the place record
     // itself is visible to sharees).
@@ -525,7 +586,7 @@ router.get(
       where: { id: placeId },
       select: { ownerId: true },
     });
-    if (!stub) throw new AppError(404, "Place not found");
+    if (!stub) throw new AppError(404, say`Couldn't find that place.`);
 
     const role = await requirePlaceAccess(user.id, {
       id: placeId,
@@ -538,7 +599,7 @@ router.get(
     // their media; share recipients receive place-level media only.
     if (isOwner) {
       const place = await prisma.place.findUnique({ where: { id: placeId } });
-      if (!place) throw new AppError(404, "Place not found");
+      if (!place) throw new AppError(404, say`Couldn't find that place.`);
 
       // Join-based lookup (Place no longer has a direct tripLogs relation —
       // trips link via TripLogPlace, possibly to several places). Mirrors
@@ -579,7 +640,7 @@ router.get(
     }
 
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
     const placeMedia = await prisma.media.findMany({
       where: { linkedType: "place", linkedId: placeId },
       orderBy: { createdAt: "asc" },
@@ -605,11 +666,11 @@ router.patch(
       where: { id: getParam(req.params.id) },
     });
 
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
     await requirePlaceOwnerAccess(
       user.id,
       place,
-      "Only the owner can edit a place",
+      say`Only the owner can change this place.`,
     );
 
     const {
@@ -637,12 +698,12 @@ router.patch(
     // requireCoords:false — PATCH may omit fields; only validate what's present.
     // Against the definitions of the type it is BECOMING, or a retype that also
     // writes a value is judged by the questions it is leaving behind.
-    const validationError =
-      validatePlacePayload(req.body, {
+    const refusal =
+      placePayloadRefusal(req.body, {
         requireCoords: false,
         defs: await defsForPlaceType(user.id, typeId),
       }) ?? validatePlaceTextFields(req.body);
-    if (validationError) throw new AppError(400, validationError);
+    if (refusal) throw refusal;
 
     // Values the NEW type has no definition for are PARKED in `foreignFields`
     // rather than destroyed or left where nothing renders them (§2.6). The
@@ -714,11 +775,11 @@ router.delete(
       where: { id: getParam(req.params.id) },
     });
 
-    if (!place) throw new AppError(404, "Place not found");
+    if (!place) throw new AppError(404, say`Couldn't find that place.`);
     await requirePlaceOwnerAccess(
       user.id,
       place,
-      "Only the owner can delete a place",
+      say`Only the owner can delete this place.`,
     );
 
     const id = getParam(req.params.id);

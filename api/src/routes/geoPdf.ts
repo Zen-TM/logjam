@@ -10,10 +10,11 @@
 // api/src/worker/geoPdfWorker.ts) that renders the PDF, uploads it to S3, and
 // notifies the user when ready.
 
+import { say } from "@logjam/shared";
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
@@ -158,15 +159,14 @@ router.post(
     const config = req.body as GeoPdfConfig;
     const configError = validateGeoPdfConfig(config);
     if (configError) {
-      throw new AppError(400, configError);
+      throw malformed(configError);
     }
     // GEOPDF-1: the shared validator enforces numbers + N>S/E>W but not
     // coordinate ranges — reject out-of-range extents here so a worker task
     // can never be burned rendering a nonsense region.
     const { north, south, east, west } = config.extent;
     if (north > 90 || south < -90 || east > 180 || west < -180) {
-      throw new AppError(
-        400,
+      throw malformed(
         "Invalid extent: latitudes must be within -90..90 and longitudes within -180..180",
       );
     }
@@ -212,7 +212,7 @@ router.post(
       if (inFlight >= MAX_IN_FLIGHT_PER_USER) {
         throw new AppError(
           429,
-          `Too many concurrent GeoPDF jobs (limit ${MAX_IN_FLIGHT_PER_USER})`,
+          say`You can make ${MAX_IN_FLIGHT_PER_USER} GeoPDFs at a time. Wait for one to finish.`,
         );
       }
       return tx.geoPdfJob.create({
@@ -250,10 +250,10 @@ router.post(
           where: { id: job.id },
           data: {
             status: "failed",
-            errorMessage: "Failed to launch GeoPDF job.",
+            errorMessage: say`Couldn't start this GeoPDF. Try again.`,
           },
         });
-        throw new AppError(500, "Failed to launch GeoPDF job");
+        throw new AppError(500, say`Couldn't start that GeoPDF. Try again.`);
       }
     }
 
@@ -330,7 +330,7 @@ router.get(
     const row = await prisma.geoPdfJob.findUnique({
       where: { id: getParam(req.params.id) },
     });
-    if (!row) throw new AppError(404, "GeoPDF job not found");
+    if (!row) throw new AppError(404, say`Couldn't find that GeoPDF.`);
     // Owner or share recipient; a stranger gets the same 404 a missing id gets.
     // The presigned download below rides this decision — a sharee may download,
     // which is the whole point of sharing a rendered PDF.
@@ -363,14 +363,17 @@ router.delete(
     const row = await prisma.geoPdfJob.findUnique({
       where: { id: getParam(req.params.id) },
     });
-    if (!row) throw new AppError(404, "GeoPDF job not found");
+    if (!row) throw new AppError(404, say`Couldn't find that GeoPDF.`);
     requireShareOwner(
       await getJobRole(user.id, "geoPdfJob", row),
       "geoPdfJob",
-      "Only the owner can delete this GeoPDF",
+      say`Only the owner can delete this GeoPDF.`,
     );
     if (row.status === "queued" || row.status === "running") {
-      throw new AppError(409, "Cannot delete an in-progress GeoPDF job");
+      throw new AppError(
+        409,
+        say`A GeoPDF that is still being made can't be deleted.`,
+      );
     }
 
     // Delete the S3 object and reclaim the storage quota in the same
