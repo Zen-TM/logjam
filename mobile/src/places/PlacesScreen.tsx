@@ -103,6 +103,7 @@ import {
   LoadingState,
   ErrorState,
   Row,
+  Chip,
   ChipRail,
   SelectionBar,
   SyncStatusPills,
@@ -139,9 +140,6 @@ type Bucket = "all" | PlaceStatus;
  *  `ChipRail` keys its chips by value. No place type can collide with
  *  it — an id is a UUID. */
 const ALL_TYPES = "all";
-/** The rail's trailing ACTION chip. Not a type id and cannot collide with one:
- *  every real id is a UUID. */
-const NEW_TYPE = "__new_type__";
 
 /** A place plus the tallies the shared predicate reads off `_count`. */
 type Countable = MirrorPlace & {
@@ -536,24 +534,6 @@ export function PlacesScreen({
       withoutType.length,
     ],
   );
-  /**
-   * What the rail actually draws: the type chips, then a way to make one.
-   *
-   * "There is no tab for the kind of place I'm looking at" is where a user
-   * notices they want a new type, and Settings is three taps and a different
-   * mental mode away. The chip is drawn last so it never moves as types come
-   * and go, and it is an action rather than a selectable value — `selectType`
-   * intercepts it (DESIGN.md: a control that changes mode says so by what it
-   * does, not by looking different).
-   */
-  const railOptions: ChipOption<string>[] = useMemo(
-    () => [
-      ...typeOptions,
-      { value: NEW_TYPE, label: copy.newType, icon: "add" },
-    ],
-    [typeOptions],
-  );
-
   /** Null once a tab is doing the saying. */
   const typeLabelOf = useCallback(
     (typeId: string) =>
@@ -564,13 +544,6 @@ export function PlacesScreen({
   );
 
   const selectType = useCallback((next: string) => {
-    // The last chip is an ACTION, not a filter state — it opens the form and
-    // leaves the selection where it was, so a user who changes their mind
-    // comes back to the tab they were on.
-    if (next === NEW_TYPE) {
-      setSheet("placeTypeForm");
-      return;
-    }
     setFilters((current) => ({
       ...current,
       placeTypeId: next === ALL_TYPES ? null : next,
@@ -834,9 +807,24 @@ export function PlacesScreen({
         >
           <ChipRail
             scroll
-            options={railOptions}
+            options={typeOptions}
             value={filters.placeTypeId ?? ALL_TYPES}
             onChange={selectType}
+            // A way to make a type, drawn last so it never moves as types come
+            // and go. "There is no tab for the kind of place I'm looking at" is
+            // where a user notices they want one, and Settings is three taps
+            // and a different mental mode away. An ACTION, not a filter value
+            // (DESIGN.md: a control that changes mode says so by what it
+            // does, not by looking different): a dashed chip leaves the
+            // selection where it was.
+            trailing={
+              <Chip
+                label={copy.newType}
+                icon="add"
+                dashed
+                onPress={() => setSheet("placeTypeForm")}
+              />
+            }
           />
         </View>
       </>

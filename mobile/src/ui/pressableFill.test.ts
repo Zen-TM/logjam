@@ -34,6 +34,32 @@ describe("a button wears the pressable fill", () => {
   });
 });
 
+// The "add one" chip at the end of a rail or vocabulary is a dashed, unfilled
+// outline on both clients (Logjam Web's `Chip dashed`), so it never reads as one
+// more value to pick. Mutation: drop `dashed` from the Places rail's trailing
+// chip or from ChipPicker's Add chip; or make the Chip's `dashed` style paint a
+// fill.
+describe("an add chip is dashed", () => {
+  it("is a Chip prop that draws an edge and no fill", () => {
+    const chip = source("Chip.tsx");
+    const dashed = chip.slice(chip.indexOf("  dashed: {"));
+    expect(dashed).toContain('borderStyle: "dashed"');
+    expect(dashed.slice(0, dashed.indexOf("},"))).toContain(
+      'backgroundColor: "transparent"',
+    );
+  });
+
+  it("is what every add chip passes", () => {
+    const picker = source("ChipPicker.tsx");
+    expect(picker).toMatch(/icon="add"\s+dashed/);
+    const places = readFileSync(
+      new URL("../places/PlacesScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(places).toMatch(/icon="add"\s+dashed/);
+  });
+});
+
 describe("a selected chip is not a button", () => {
   it("leads with a check as well as its fill", () => {
     expect(source("Chip.tsx")).toContain('<Icon idea="done"');
