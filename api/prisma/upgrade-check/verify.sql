@@ -49,12 +49,12 @@ END $$;
 
 -- Fixture-specific outcomes. Mutations: drop the merge and the migration
 -- fails on CREATE INDEX; order the survivor by age alone and the lose-ab /
--- lose-ad rows are the ones kept; drop the tombstone insert and the count is
--- 0; drop the index and the insert at the bottom is accepted.
+-- lose-ad rows are the ones kept; drop the promotion and keep-bc is still
+-- pending with its prompt; drop the tombstone insert and the count is 0; drop the index and the insert at the bottom is accepted.
 SELECT EXISTS (SELECT 1 FROM users WHERE id = 'upgrade-fixture-a') AS fixtures \gset
 \if :fixtures
 DO $$
-DECLARE kept TEXT[]; notes TEXT[]; tombstones BIGINT; untouched BIGINT;
+DECLARE kept TEXT[]; notes TEXT[]; tombstones BIGINT; untouched BIGINT; promoted BIGINT;
 BEGIN
   SELECT array_agg(id ORDER BY id) INTO kept
     FROM friendships WHERE id LIKE 'upgrade-fixture-%';
@@ -66,14 +66,22 @@ BEGIN
   -- A survivor is not rewritten: phones already hold it as it is.
   SELECT count(*) INTO untouched
     FROM friendships WHERE id LIKE 'upgrade-fixture-%' AND updated_at < '2026-02-01';
-  IF untouched <> 5 THEN
-    RAISE EXCEPTION 'upgrade-check: expected 5 fixture survivors untouched, found %', untouched;
+  IF untouched <> 4 THEN
+    RAISE EXCEPTION 'upgrade-check: expected 4 fixture survivors untouched, found %', untouched;
+  END IF;
+  -- Except the one that was two pending requests: accepted, and bumped for
+  -- the delta pull.
+  SELECT count(*) INTO promoted
+    FROM friendships
+   WHERE id = 'upgrade-fixture-keep-bc' AND status = 'accepted'
+     AND requester_id = 'upgrade-fixture-b' AND updated_at > '2026-02-01';
+  IF promoted <> 1 THEN
+    RAISE EXCEPTION 'upgrade-check: two pending requests did not become one accepted friendship';
   END IF;
   SELECT array_agg(id || ' -> ' || (payload->>'friendshipId') ORDER BY id) INTO notes
     FROM notifications WHERE id LIKE 'upgrade-fixture-%';
   IF notes IS DISTINCT FROM ARRAY[
        'upgrade-fixture-keep-1 -> upgrade-fixture-keep-ba',
-       'upgrade-fixture-keep-2 -> upgrade-fixture-keep-bc',
        'upgrade-fixture-move-1 -> upgrade-fixture-keep-ac'] THEN
     RAISE EXCEPTION 'upgrade-check: fixture notifications wrong: %', notes;
   END IF;
@@ -91,7 +99,7 @@ BEGIN
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
 END $$;
-\echo 'upgrade-check: fixture pairs merged, notifications repointed, tombstones written, index refuses a second row'
+\echo 'upgrade-check: fixture pairs merged, mutual requests accepted, notifications repointed, tombstones written, index refuses a second row'
 \endif
 
 DROP SCHEMA upgrade_check CASCADE;

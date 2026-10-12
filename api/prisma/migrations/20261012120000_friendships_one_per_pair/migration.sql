@@ -17,8 +17,9 @@ LOCK TABLE "friendships" IN SHARE ROW EXCLUSIVE MODE;
 
 -- Pairs that already have more than one row keep one. THE SURVIVOR: a block
 -- beats an accepted row, which beats a pending one; of two with the same
--- status, the older. The survivor is not changed in any way, so a block keeps
--- its direction and a friendship keeps its id and its dates.
+-- status, the older. A survivor keeps its id and its direction (so a block
+-- stays the block it was), and is changed in one case only, below: two
+-- pending requests, one each way.
 CREATE TEMP TABLE "friendship_merge" AS
 SELECT r."id" AS loser_id, r."requester_id", r."addressee_id",
        r.survivor_id, r.survivor_status
@@ -36,6 +37,24 @@ SELECT r."id" AS loser_id, r."requester_id", r."addressee_id",
     )
   ) AS r
  WHERE r.rn > 1;
+
+-- Two pending requests, one each way: both people asked, so they are friends.
+-- The older row is accepted, and `updated_at` moves so the delta pull carries
+-- the new status to phones already past this cursor. Both prompts go: there
+-- is nothing left to answer. Neither person is sent "X accepted your request":
+-- nobody accepted anything, and whether to notify is a preference the API
+-- reads with defaults this SQL does not have. The friend is in their list.
+UPDATE "friendships" AS f
+   SET "status" = 'accepted', "updated_at" = CURRENT_TIMESTAMP
+  FROM "friendship_merge" AS m
+ WHERE f."id" = m.survivor_id
+   AND m.survivor_status = 'pending';
+
+DELETE FROM "notifications" AS n
+ USING "friendship_merge" AS m
+ WHERE n."type" = 'friend_request'
+   AND n."payload"->>'friendshipId' = m.survivor_id
+   AND m.survivor_status = 'pending';
 
 -- Notifications are the only rows that name a friendship id (shares are keyed
 -- by the two users). "X accepted your request" stays true of the surviving

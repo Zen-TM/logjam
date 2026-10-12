@@ -41,7 +41,7 @@ INSERT INTO friendships (id, requester_id, addressee_id, status, created_at, upd
   -- two accepted: the older
   ('upgrade-fixture-keep-ac', 'upgrade-fixture-a', 'upgrade-fixture-c', 'accepted', '2026-01-01', '2026-01-01'),
   ('upgrade-fixture-lose-ca', 'upgrade-fixture-c', 'upgrade-fixture-a', 'accepted', '2026-01-02', '2026-01-02'),
-  -- two pending: the older
+  -- two pending: the older, ACCEPTED, because both asked
   ('upgrade-fixture-keep-bc', 'upgrade-fixture-b', 'upgrade-fixture-c', 'pending',  '2026-01-01', '2026-01-01'),
   ('upgrade-fixture-lose-cb', 'upgrade-fixture-c', 'upgrade-fixture-b', 'pending',  '2026-01-02', '2026-01-02'),
   -- a block beats an OLDER accepted
@@ -50,13 +50,14 @@ INSERT INTO friendships (id, requester_id, addressee_id, status, created_at, upd
   -- a pair with one row is left alone
   ('upgrade-fixture-keep-bd', 'upgrade-fixture-b', 'upgrade-fixture-d', 'accepted', '2026-01-01', '2026-01-01');
 
--- Same convention: keep-* stays as written, lose-* is deleted, and move-*
--- stays but now names the surviving row.
+-- Same convention: keep-* stays as written, lose-* is deleted (lose-4 is the
+-- prompt for the request that the merge accepts), and move-* stays but now
+-- names the surviving row.
 INSERT INTO notifications (id, user_id, type, payload) VALUES
   ('upgrade-fixture-lose-1', 'upgrade-fixture-b', 'friend_request',          '{"friendshipId": "upgrade-fixture-lose-ab", "requesterId": "upgrade-fixture-a"}'),
   ('upgrade-fixture-keep-1', 'upgrade-fixture-b', 'friend_request_accepted', '{"friendshipId": "upgrade-fixture-keep-ba", "acceptedById": "upgrade-fixture-a"}'),
   ('upgrade-fixture-move-1', 'upgrade-fixture-c', 'friend_request_accepted', '{"friendshipId": "upgrade-fixture-lose-ca", "acceptedById": "upgrade-fixture-a"}'),
-  ('upgrade-fixture-keep-2', 'upgrade-fixture-c', 'friend_request',          '{"friendshipId": "upgrade-fixture-keep-bc", "requesterId": "upgrade-fixture-b"}'),
+  ('upgrade-fixture-lose-4', 'upgrade-fixture-c', 'friend_request',          '{"friendshipId": "upgrade-fixture-keep-bc", "requesterId": "upgrade-fixture-b"}'),
   ('upgrade-fixture-lose-2', 'upgrade-fixture-b', 'friend_request',          '{"friendshipId": "upgrade-fixture-lose-cb", "requesterId": "upgrade-fixture-c"}'),
   ('upgrade-fixture-lose-3', 'upgrade-fixture-a', 'friend_request_accepted', '{"friendshipId": "upgrade-fixture-lose-ad", "acceptedById": "upgrade-fixture-d"}');
 \endif
@@ -66,11 +67,14 @@ CREATE SCHEMA upgrade_check;
 
 -- Every pair that had a row, and the strongest thing any of its rows said
 -- (0 blocked, 1 accepted, 2 pending). The merge must leave each pair exactly
--- one row, saying that.
+-- one row, saying that; except that a pair with only pending rows, and more
+-- than one, ends accepted.
 CREATE TABLE upgrade_check.pair AS
 SELECT LEAST(requester_id, addressee_id) AS lo,
        GREATEST(requester_id, addressee_id) AS hi,
-       min(CASE status WHEN 'blocked' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END) AS strongest,
+       CASE WHEN count(*) > 1 AND bool_and(status = 'pending') THEN 1
+            ELSE min(CASE status WHEN 'blocked' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END)
+       END AS strongest,
        count(*) AS row_count
   FROM friendships
  GROUP BY 1, 2;
