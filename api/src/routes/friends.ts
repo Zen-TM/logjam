@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
@@ -43,6 +44,34 @@ export async function wantsInAppNotification(
   });
   if (!target) return false;
   return normalizeUserUiPreferences(target.uiPreferences).notifications[key];
+}
+
+/** A write refused by a unique index. For a friendship that is
+ *  `friendships_pair_key`: the other of two racing writes for the same pair
+ *  landed first. Guard: friendPairRace.unit.test.ts. */
+export function isUniqueViolation(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
+  );
+}
+
+/** Why `userId` cannot send `otherId` a request: the row already between
+ *  them, either way round. Returns when there is none. */
+async function refuseExistingFriendship(userId: string, otherId: string) {
+  const existing = await prisma.friendship.findFirst({
+    where: {
+      OR: [
+        { requesterId: userId, addresseeId: otherId },
+        { requesterId: otherId, addresseeId: userId },
+      ],
+    },
+  });
+  if (!existing) return;
+  if (existing.status === "blocked")
+    throw new AppError(403, "Unable to send friend request");
+  if (existing.status === "accepted")
+    throw new AppError(409, "Already friends");
+  throw new AppError(409, "Friend request already pending");
 }
 
 const router = Router();
@@ -123,24 +152,7 @@ router.post(
     });
     if (!addressee) throw new AppError(404, "User not found");
 
-    // Check for any existing friendship or pending request in either direction
-    const existing = await prisma.friendship.findFirst({
-      where: {
-        OR: [
-          { requesterId: user.id, addresseeId },
-          { requesterId: addresseeId, addresseeId: user.id },
-        ],
-      },
-    });
-
-    if (existing) {
-      if (existing.status === "accepted")
-        throw new AppError(409, "Already friends");
-      if (existing.status === "pending")
-        throw new AppError(409, "Friend request already pending");
-      if (existing.status === "blocked")
-        throw new AppError(403, "Unable to send friend request");
-    }
+    await refuseExistingFriendship(user.id, addresseeId);
 
     const notifyAddressee = await wantsInAppNotification(
       addresseeId,
@@ -149,29 +161,37 @@ router.post(
 
     // Create friendship first so the notification can reference its real ID
     // atomically inside the same transaction.
-    const friendship = await prisma.$transaction(async (tx) => {
-      const created = await tx.friendship.create({
-        data: {
-          requesterId: user.id,
-          addresseeId,
-          status: "pending",
-        },
-      });
-      if (notifyAddressee) {
-        // Reference IDs only — username is resolved at read time (PRIV-005).
-        await tx.notification.create({
+    const friendship = await prisma
+      .$transaction(async (tx) => {
+        const created = await tx.friendship.create({
           data: {
-            userId: addresseeId,
-            type: "friend_request",
-            payload: {
-              friendshipId: created.id,
-              requesterId: user.id,
-            },
+            requesterId: user.id,
+            addresseeId,
+            status: "pending",
           },
         });
-      }
-      return created;
-    });
+        if (notifyAddressee) {
+          // Reference IDs only — username is resolved at read time (PRIV-005).
+          await tx.notification.create({
+            data: {
+              userId: addresseeId,
+              type: "friend_request",
+              payload: {
+                friendshipId: created.id,
+                requesterId: user.id,
+              },
+            },
+          });
+        }
+        return created;
+      })
+      .catch(async (err: unknown) => {
+        if (!isUniqueViolation(err)) throw err;
+        // The pair got its row between the check above and this insert.
+        await refuseExistingFriendship(user.id, addresseeId);
+        // And lost it again before the re-read: nothing was made either way.
+        throw new AppError(409, "Friend request already pending");
+      });
     if (notifyAddressee) {
       // Best-effort push after commit; generic title + opaque IDs only
       // (privacy rule — see services/push.ts).

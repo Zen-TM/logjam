@@ -371,6 +371,10 @@ model Friendship {
   addressee   User     @relation("addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
   requester   User     @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
 
+  /// Two people have one row, whichever of them asked. That is a second
+  /// unique index, on the unordered pair (LEAST, GREATEST of the two ids),
+  /// and raw SQL only: Prisma cannot declare an index on an expression. See
+  /// 20261012120000_friendships_one_per_pair.
   @@unique([requesterId, addresseeId])
   @@index([addresseeId])
   @@map("friendships")
