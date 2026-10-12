@@ -38,7 +38,8 @@ export type ChipOption<T extends string = string> = {
  * Active fills with `hue` (default accent) and draws its label and glyph in
  * `onFill`; inactive, the glyph is `textMuted` — a hue is only ever a fill,
  * never a glyph on a surface. A `count` rides as a trailing badge, an `icon`
- * leads.
+ * leads. `dashed` is the "add one" chip at the end of a vocabulary (the same
+ * prop and look as Logjam Web's): no fill, a dashed muted edge, muted words.
  */
 export function Chip({
   label,
@@ -48,6 +49,7 @@ export function Chip({
   icon,
   count,
   starred = false,
+  dashed = false,
   onPress,
 }: {
   label: string;
@@ -58,6 +60,7 @@ export function Chip({
   count?: number;
   /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
   starred?: boolean;
+  dashed?: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -75,6 +78,7 @@ export function Chip({
       style={({ pressed }) => [
         styles.chip,
         active && { backgroundColor: tint, borderColor: tint },
+        dashed && styles.dashed,
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
@@ -94,7 +98,8 @@ export function Chip({
         style={[
           styles.label,
           active && styles.labelActive,
-          disabled && styles.labelDisabled,
+          dashed && styles.labelMuted,
+          disabled && styles.labelMuted,
         ]}
       >
         {label}
@@ -146,7 +151,14 @@ const useStyles = makeStyles((theme, textRole) => ({
   // was 3.7:1 (root CLAUDE.md, "Text or a glyph ON a colour fill uses a dark
   // ink").
   labelActive: { color: theme.onFill },
-  labelDisabled: { color: theme.textMuted },
+  labelMuted: { color: theme.textMuted },
+  // The add chip is not a value of the rail, so it does not wear a value's
+  // card: an outline of its own kind, the way Logjam Web draws it.
+  dashed: {
+    backgroundColor: "transparent",
+    borderStyle: "dashed",
+    borderColor: theme.textMuted,
+  },
   // A fixed box with a radius of exactly half of it, and a background that is
   // always set (`badgeActive` makes it transparent, never absent): see
   // `halfRadius` for why a 999 radius came back square once another chip was
