@@ -374,7 +374,8 @@ function PlacesVisited({
             }
             trailing={
               <span className={classes.metric}>
-                <b>{entry.logged}</b> of {entry.total}
+                <b className={classes.metricValue}>{entry.logged}</b> of{" "}
+                {entry.total}
               </span>
             }
             footer={
@@ -456,7 +457,8 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
       trailing={
         display.metric && (
           <span className={classes.metric}>
-            <b>{display.metric.value}</b> {display.metric.suffix}
+            <b className={classes.metricValue}>{display.metric.value}</b>{" "}
+            {display.metric.suffix}
           </span>
         )
       }

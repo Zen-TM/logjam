@@ -29,8 +29,10 @@ Copy from: `src/ui/` (the kit); `PlacesPanel.tsx` with `PlaceFilterSheet.tsx`
 - **`--radius-full` is a circle on a square box only**; anything
   stadium-shaped is `--radius-pill`.
 
-- **A text style is a role** from `TEXT_ROLES`: `--text-<role>-size` and
-  `-weight`, never a `--font-*` and a weight written by hand.
+- **A text style is a role** from `TEXT_ROLES`: `composes: <role> from
+  "…/textRoles.generated.module.css"`, never a `font-size` or `font-weight`
+  written by hand (`textRoles.test.ts`). Put one role on an element; a
+  variant that changes the role is its own class.
 
 Radius: `sm` swatch or checkbox; `md` tile, icon button, menu item, field;
 `lg` row, card, map button; `xl` popover, sheet; `pill` anything text-shaped

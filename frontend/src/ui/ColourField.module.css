@@ -106,8 +106,8 @@
 
 /* The field's own clothes, in a monospace face so the eight digits line up. */
 .hex {
+  composes: field from "../textRoles.generated.module.css";
   composes: input from "./TextField.module.css";
   min-height: var(--control-md);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--font-sm);
 }

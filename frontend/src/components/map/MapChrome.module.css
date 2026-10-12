@@ -66,6 +66,7 @@
 }
 
 .trayItem {
+  composes: control from "../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -75,9 +76,8 @@
   border-radius: var(--radius-pill);
   background: var(--color-page);
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-family: inherit;
+  line-height: inherit;
   white-space: nowrap;
   box-shadow: var(--shadow-float);
   cursor: pointer;

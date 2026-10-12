@@ -59,6 +59,7 @@
 }
 
 .notice {
+  composes: body from "../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -68,7 +69,6 @@
   border-radius: var(--radius-pill);
   background: var(--color-page);
   color: var(--color-text);
-  font-size: var(--font-sm);
   max-width: 100%;
   box-shadow: var(--shadow-float);
 }

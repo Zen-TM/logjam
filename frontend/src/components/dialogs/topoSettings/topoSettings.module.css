@@ -21,8 +21,8 @@
 /* A sentence a tab genuinely needs — what the numbers under it MEAN, never a
    description of the controls themselves (operator, 2026-09-18). */
 .helpText {
+  composes: hint from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -45,16 +45,16 @@
 }
 
 .head {
+  composes: hint from "../../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .fixedCell {
-  font-size: var(--font-sm);
+  composes: body from "../../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
@@ -130,10 +130,10 @@
 }
 
 .scaleEnd {
+  composes: hint from "../../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -156,7 +156,7 @@
 }
 
 .formationName {
-  font-size: var(--font-sm);
+  composes: body from "../../../textRoles.generated.module.css";
   color: var(--color-text);
 }
 
@@ -169,8 +169,8 @@
 
 /* Why the format the user just picked refuses what they had chosen. */
 .exportNote {
+  composes: hint from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
