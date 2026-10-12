@@ -11,7 +11,7 @@
 }
 
 .note {
-  composes: body from "../../textRoles.generated.module.css";
+  composes: note from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 6px;

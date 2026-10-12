@@ -108,9 +108,8 @@
 }
 
 .notes {
-  composes: body from "../../../textRoles.generated.module.css";
+  composes: paragraph from "../../../textRoles.generated.module.css";
   margin: 0;
-  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

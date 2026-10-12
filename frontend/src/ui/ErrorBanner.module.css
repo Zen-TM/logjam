@@ -1,5 +1,5 @@
 .banner {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: bodySmall from "../textRoles.generated.module.css";
   display: flex;
   align-items: flex-start;
   gap: var(--space-1);

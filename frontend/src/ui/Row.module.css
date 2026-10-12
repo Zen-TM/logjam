@@ -106,7 +106,7 @@
 }
 
 .trailing {
-  composes: hint from "../textRoles.generated.module.css";
+  composes: meta from "../textRoles.generated.module.css";
   gap: var(--space-0-5);
   color: var(--color-text-muted);
 }

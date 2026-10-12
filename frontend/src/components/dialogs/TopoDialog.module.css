@@ -117,7 +117,7 @@
 }
 
 .summaryValue {
-  composes: hint from "../../textRoles.generated.module.css";
+  composes: bodySmall from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text);
   overflow-wrap: anywhere;
