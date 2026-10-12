@@ -9,10 +9,15 @@
 // null), and nothing else. System types are global — one row shared by every
 // user — which is what makes a shared or copied place of a system type resolve
 // for its recipient with no reconciliation at all.
-import { Prisma } from "@prisma/client";
+import { Prisma, type PlaceType } from "@prisma/client";
 import {
+  freePlaceTypeName,
   isPlaceTypeColor,
   isPlaceTypeIconKey,
+  nameKey,
+  PLACE_TYPE_NAME_MAX_LENGTH,
+  placeTypeNameTaken,
+  placeTypeNameTakenError,
   type CustomFieldEntity,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -148,8 +153,6 @@ export function assertValidPlaceType(input: {
   };
 }
 
-export const PLACE_TYPE_NAME_MAX_LENGTH = 60;
-
 /**
  * The user's own type row, or a 404.
  *
@@ -169,11 +172,72 @@ export async function requireOwnPlaceType(userId: string, id: string) {
   return type;
 }
 
+/**
+ * What a write does when the name it asks for is taken (`placeTypeNameTaken`:
+ * compared as a person reads it, built-ins included).
+ *
+ * REST refuses with a 409: the user is looking at the form and can pick
+ * another. The sync push renames to the next free "name (2)": that write was
+ * made with no signal, where refusing it parks an op the user can only
+ * discard — and discarding a type's create discards the places made of it
+ * (`freePlaceTypeName`). Guard: `src/__tests__/placeTypes.test.ts`.
+ */
+export type OnNameTaken = "refuse" | "rename";
+
+async function settlePlaceTypeName(
+  userId: string,
+  name: string,
+  onTaken: OnNameTaken,
+  exceptId?: string,
+): Promise<string> {
+  const types = await prisma.placeType.findMany({
+    where: visiblePlaceTypeWhere(userId),
+    select: { id: true, name: true },
+  });
+  if (!placeTypeNameTaken(name, types, exceptId)) return name;
+  if (onTaken === "refuse") {
+    throw new AppError(409, placeTypeNameTakenError(name));
+  }
+  return freePlaceTypeName(name, types, exceptId);
+}
+
+/** The database's unique indexes (the exact name, and the name as read), lost
+ *  to a concurrent write between the check above and the insert. */
+function isNameRace(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+  );
+}
+
+/** Same answer as the check. Guard: `prisma/upgrade-check/verify.sql`. */
+function rethrowNameRace(e: unknown, name: string): never {
+  if (isNameRace(e)) throw new AppError(409, placeTypeNameTakenError(name));
+  throw e;
+}
+
+/**
+ * May a write that lost the race settle its name again? Only one that renames,
+ * and once: the second look sees the row that won and takes the next free
+ * name, where a 409 would park the push (`OnNameTaken`). Once, because the
+ * index on a create's id answers with the same code and never clears.
+ * Guard: `placeTypes.unit.test.ts`.
+ */
+function retriesNameRace(
+  e: unknown,
+  onNameTaken: OnNameTaken,
+  raced: boolean,
+): boolean {
+  return onNameTaken === "rename" && !raced && isNameRace(e);
+}
+
 export async function createPlaceType(
   userId: string,
   id: string | undefined,
   input: PlaceTypeInput,
-) {
+  onNameTaken: OnNameTaken = "refuse",
+  raced = false,
+): Promise<PlaceType> {
+  const name = await settlePlaceTypeName(userId, input.name, onNameTaken);
   const position =
     input.position ??
     (await prisma.placeType.count({ where: { ownerId: userId } }));
@@ -182,26 +246,48 @@ export async function createPlaceType(
       data: {
         ...(id ? { id } : {}),
         ownerId: userId,
-        name: input.name,
+        name,
         iconKey: input.iconKey,
         color: input.color,
         position,
       },
     });
   } catch (e) {
-    if (
-      e instanceof Prisma.PrismaClientKnownRequestError &&
-      e.code === "P2002"
-    ) {
-      // The name is unique per owner because §2.6's copy reconciliation matches
-      // an incoming type BY NAME. Two types called "Campsite" would make that
-      // match ambiguous, so it is refused here rather than resolved later.
-      throw new AppError(
-        409,
-        `You already have a type called "${input.name}".`,
-      );
+    if (retriesNameRace(e, onNameTaken, raced)) {
+      return createPlaceType(userId, id, input, onNameTaken, true);
     }
-    throw e;
+    rethrowNameRace(e, name);
+  }
+}
+
+/**
+ * Write a validated result over a type the user owns.
+ *
+ * The name is checked only when it MOVES to one that reads differently: a
+ * recolour of a type whose name already collides (rows from before the rule)
+ * must still save, and so must fixing a name's capitals.
+ */
+export async function updatePlaceType(
+  userId: string,
+  current: { id: string; name: string },
+  merged: PlaceTypeInput,
+  onNameTaken: OnNameTaken = "refuse",
+  raced = false,
+): Promise<PlaceType> {
+  const name =
+    nameKey(merged.name) === nameKey(current.name)
+      ? merged.name
+      : await settlePlaceTypeName(userId, merged.name, onNameTaken, current.id);
+  try {
+    return await prisma.placeType.update({
+      where: { id: current.id },
+      data: { ...merged, name },
+    });
+  } catch (e) {
+    if (retriesNameRace(e, onNameTaken, raced)) {
+      return updatePlaceType(userId, current, merged, onNameTaken, true);
+    }
+    rethrowNameRace(e, name);
   }
 }
 

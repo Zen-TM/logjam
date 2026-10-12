@@ -1,4 +1,4 @@
-/* Layout only; the kit does the look (DESIGN.md §6). The values here match
+/* Layout only; the kit does the look (DESIGN.md). The values here match
    TripLogDialog's — the two forms are the same shape and were drifting apart
    is what the shared sub-components exist to prevent. */
 .form {
@@ -22,13 +22,13 @@
 /* Matches a TextField's label; the rail below it carries the same words as
    its own accessible name. */
 .fieldLabel {
-  font-size: var(--font-sm);
+  composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .hint {
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -63,7 +63,7 @@
 }
 
 .muted {
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }

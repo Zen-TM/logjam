@@ -65,8 +65,8 @@ half the screen.
 
 **Every region download also saves the DEM, and that is not optional.** The plan
 in `shared/src/mapRegionEstimate.ts` appends a `terrarium` source
-(`DEM_SOURCE_ID`) to every run: one flat level at `DEM_TILE_ZOOM`, priced into
-the same size estimate, tile cap and free-space check as the basemaps, and
+(`DEM_SOURCE_ID`) to every run: one flat level at `TERRARIUM.sampleZoom`, priced
+into the same size estimate, tile cap and free-space check as the basemaps, and
 enqueued as an ordinary `tile-pyramid` job whose `zMin === zMax`. It lands as a
 `dem-region` artifact — same group id as the run, so Saved shows it inside the
 area's card and deleting the area takes it — which the resolver never draws.
@@ -76,6 +76,13 @@ the phone loses signal, which is the trip the download exists for. The reader is
 into `useElevationProfile` LOCAL FIRST: saved regions answer, and only a line
 nothing on disk covers goes to the API. That also gives a guest elevation, which
 the API path never could.
+
+- **Update 2026-10-11: a signed-in run also saves one clip of each DEM archive
+  the area touches** (`planDemDownload` in the same file), fetched like the
+  vector basemap's clip and filed as a second `dem-region` artifact under that
+  source's id. A guest saves the worldwide tiles only. The worldwide tiles are still
+  saved with every area, which is what holds this decision up. Everything else
+  above stands.
 
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by

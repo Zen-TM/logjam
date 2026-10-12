@@ -10,33 +10,10 @@ SELECT to_regclass('upgrade_check.baseline') IS NOT NULL AS applies \gset
 
 CREATE TEMP TABLE after AS
 SELECT * FROM (VALUES
-  ('users',             (SELECT count(*) FROM users)),
-  -- The base has no waypoints, so every place is a migrated canyon.
-  ('places',            (SELECT count(*) FROM places
-                          WHERE place_type_id = 'b0000000-0000-4000-8000-000000000001')),
-  ('place_shares',      (SELECT count(*) FROM place_shares)),
-  ('trip_logs',         (SELECT count(*) FROM trip_logs)),
-  ('trip_log_places',   (SELECT count(*) FROM trip_log_places)),
-  ('friendships',       (SELECT count(*) FROM friendships)),
-  ('notifications',     (SELECT count(*) FROM notifications)),
-  ('place_shared_notes',(SELECT count(*) FROM notifications
-                          WHERE type = 'place_shared' AND payload ? 'placeId' AND NOT payload ? 'canyonId')),
-  ('media',             (SELECT count(*) FROM media)),
-  ('media_on_places',   (SELECT count(*) FROM media WHERE linked_type = 'place')),
-  ('geo_pdf_marker_cfg',(SELECT count(*) FROM geo_pdf_templates
-                          WHERE config ? 'placeMarkers' AND NOT config ? 'canyonMarkers')),
-  ('user_field_defs',   (SELECT count(*) FROM custom_field_defs WHERE owner_id IS NOT NULL)),
-  ('v_grade',           (SELECT count(*) FROM places WHERE field_values ? 'v_grade')),
-  ('a_grade',           (SELECT count(*) FROM places WHERE field_values ? 'a_grade')),
-  ('commitment',        (SELECT count(*) FROM places WHERE field_values ? 'commitment')),
-  ('quality',           (SELECT count(*) FROM places WHERE field_values ? 'quality')),
-  ('hours',             (SELECT count(*) FROM places WHERE field_values ? 'hours')),
-  ('num_abseils',       (SELECT count(*) FROM places WHERE field_values ? 'num_abseils')),
-  ('longest_abseil',    (SELECT count(*) FROM places WHERE field_values ? 'longest_abseil')),
-  ('_sources',          (SELECT count(*) FROM places WHERE field_values ? '_sources')),
-  ('custom_values',     (SELECT count(*) FROM places, jsonb_object_keys(field_values) AS k
-                          WHERE k NOT IN ('v_grade', 'a_grade', 'commitment', 'quality', 'hours',
-                                          'num_abseils', 'longest_abseil', '_sources')))
+  ('users',            (SELECT count(*) FROM users)),
+  ('place_shares',     (SELECT count(*) FROM place_shares)),
+  -- One row per pair now, so the row count IS the pair count.
+  ('friendship_pairs', (SELECT count(*) FROM friendships))
 ) AS t(metric, value);
 
 \echo 'upgrade-check after head migrations (base -> after):'
@@ -46,7 +23,7 @@ SELECT b.metric, b.value AS base, a.value AS after,
  ORDER BY status DESC, b.metric;
 
 DO $$
-DECLARE bad TEXT;
+DECLARE bad TEXT; weakened BIGINT;
 BEGIN
   SELECT string_agg(format('%s: %s -> %s', b.metric, b.value, coalesce(a.value::text, 'missing')), '; ')
     INTO bad
@@ -55,29 +32,74 @@ BEGIN
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'upgrade-check: data not carried across: %', bad;
   END IF;
+  -- No pair lost its row, and none ended weaker than its strongest row was:
+  -- a block is still a block, a friendship still a friendship.
+  SELECT count(*) INTO weakened
+    FROM upgrade_check.pair p
+    LEFT JOIN friendships f
+      ON LEAST(f.requester_id, f.addressee_id) = p.lo
+     AND GREATEST(f.requester_id, f.addressee_id) = p.hi
+   WHERE f.id IS NULL
+      OR CASE f.status WHEN 'blocked' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END
+         IS DISTINCT FROM p.strongest;
+  IF weakened > 0 THEN
+    RAISE EXCEPTION 'upgrade-check: % pair(s) lost their friendship row or its status', weakened;
+  END IF;
 END $$;
 
--- Fixture-specific outcomes: the reserved-key collisions were renamed with
--- their values, not overwritten or dropped.
-SELECT EXISTS (SELECT 1 FROM users WHERE id = 'upgrade-fixture-owner') AS fixtures \gset
+-- Fixture-specific outcomes. Mutations: drop the merge and the migration
+-- fails on CREATE INDEX; order the survivor by age alone and the lose-ab /
+-- lose-ad rows are the ones kept; drop the promotion and keep-bc is still
+-- pending with its prompt; drop the tombstone insert and the count is 0; drop the index and the insert at the bottom is accepted.
+SELECT EXISTS (SELECT 1 FROM users WHERE id = 'upgrade-fixture-a') AS fixtures \gset
 \if :fixtures
 DO $$
-DECLARE fv JSONB; defs TEXT[];
+DECLARE kept TEXT[]; notes TEXT[]; tombstones BIGINT; untouched BIGINT; promoted BIGINT;
 BEGIN
-  SELECT field_values INTO fv FROM places WHERE id = 'upgrade-fixture-graded';
-  SELECT array_agg(key ORDER BY key) INTO defs
-    FROM custom_field_defs WHERE owner_id = 'upgrade-fixture-owner';
-  IF fv ->> 'capacity_2' IS DISTINCT FROM '5' OR fv ? 'capacity'
-     OR fv ->> 'has_water_2' IS DISTINCT FROM 'true' OR fv ? 'has_water'
-     OR fv ->> 'rope' IS DISTINCT FROM '60'
-     OR fv ->> 'v_grade' IS DISTINCT FROM '3' OR fv ->> 'longest_abseil' IS DISTINCT FROM '25.5' THEN
-    RAISE EXCEPTION 'upgrade-check: fixture place field_values wrong: %', fv;
+  SELECT array_agg(id ORDER BY id) INTO kept
+    FROM friendships WHERE id LIKE 'upgrade-fixture-%';
+  IF kept IS DISTINCT FROM ARRAY[
+       'upgrade-fixture-keep-ac', 'upgrade-fixture-keep-ba', 'upgrade-fixture-keep-bc',
+       'upgrade-fixture-keep-bd', 'upgrade-fixture-keep-da'] THEN
+    RAISE EXCEPTION 'upgrade-check: wrong fixture friendships survived: %', kept;
   END IF;
-  IF defs IS DISTINCT FROM ARRAY['capacity_2', 'has_water_2', 'party', 'rope'] THEN
-    RAISE EXCEPTION 'upgrade-check: fixture field definitions wrong: %', defs;
+  -- A survivor is not rewritten: phones already hold it as it is.
+  SELECT count(*) INTO untouched
+    FROM friendships WHERE id LIKE 'upgrade-fixture-%' AND updated_at < '2026-02-01';
+  IF untouched <> 4 THEN
+    RAISE EXCEPTION 'upgrade-check: expected 4 fixture survivors untouched, found %', untouched;
   END IF;
+  -- Except the one that was two pending requests: accepted, and bumped for
+  -- the delta pull.
+  SELECT count(*) INTO promoted
+    FROM friendships
+   WHERE id = 'upgrade-fixture-keep-bc' AND status = 'accepted'
+     AND requester_id = 'upgrade-fixture-b' AND updated_at > '2026-02-01';
+  IF promoted <> 1 THEN
+    RAISE EXCEPTION 'upgrade-check: two pending requests did not become one accepted friendship';
+  END IF;
+  SELECT array_agg(id || ' -> ' || (payload->>'friendshipId') ORDER BY id) INTO notes
+    FROM notifications WHERE id LIKE 'upgrade-fixture-%';
+  IF notes IS DISTINCT FROM ARRAY[
+       'upgrade-fixture-keep-1 -> upgrade-fixture-keep-ba',
+       'upgrade-fixture-move-1 -> upgrade-fixture-keep-ac'] THEN
+    RAISE EXCEPTION 'upgrade-check: fixture notifications wrong: %', notes;
+  END IF;
+  -- Both people of each of the four merged rows are told to forget it.
+  SELECT count(DISTINCT (user_id, entity_id)) INTO tombstones
+    FROM sync_tombstones
+   WHERE entity_type = 'friendship' AND entity_id LIKE 'upgrade-fixture-lose-%';
+  IF tombstones <> 8 THEN
+    RAISE EXCEPTION 'upgrade-check: expected 8 friendship tombstones, found %', tombstones;
+  END IF;
+  BEGIN
+    INSERT INTO friendships (id, requester_id, addressee_id, status, updated_at)
+    VALUES ('upgrade-fixture-second', 'upgrade-fixture-d', 'upgrade-fixture-b', 'pending', now());
+    RAISE EXCEPTION 'upgrade-check: the pair index accepted a second row the other way round';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
 END $$;
-\echo 'upgrade-check: fixture collisions renamed with their values'
+\echo 'upgrade-check: fixture pairs merged, mutual requests accepted, notifications repointed, tombstones written, index refuses a second row'
 \endif
 
 DROP SCHEMA upgrade_check CASCADE;

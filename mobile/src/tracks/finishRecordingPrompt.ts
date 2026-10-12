@@ -3,7 +3,7 @@
 // The recording can be finished from the sheet's button and from a long press
 // on the record button, and the two must ask the same question in the same
 // words: a destructive-adjacent confirm that is worded differently depending on
-// how you got there teaches the user to stop reading it (DESIGN.md §5).
+// how you got there teaches the user to stop reading it (DESIGN.md).
 //
 // It is also where finishing a recording is REPORTED, because it is the one
 // place both callers already funnel through: the one-time "this is backed up

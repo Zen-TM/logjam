@@ -1,5 +1,5 @@
 /* Who can see this, and how to take it back. Layout only — every control is
-   the kit's (DESIGN.md §4, §9). */
+   the kit's (DESIGN.md). */
 
 .body {
   display: flex;
@@ -17,25 +17,25 @@
 /* What pressing a name will do, said before anything is pressed. Tinted with
    the accent rather than the warning: this grant comes back off. */
 .promise {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
   border-left-width: 3px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  font-size: var(--font-sm);
   line-height: 1.45;
 }
 
 /* A dead end inside a section: nobody left to share with, or nobody matching. */
 .note {
+  composes: detail from "../../textRoles.generated.module.css";
   margin: 2px 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
 /* The + at the end of a grantable row. Decoration, not a control — the whole
-   card is the button (DESIGN.md §5), and a second target here would put two
+   card is the button (DESIGN.md), and a second target here would put two
    ways to do one thing on one line. */
 .grantMark {
   display: flex;

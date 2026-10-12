@@ -148,6 +148,22 @@ export function placesFilterNote(
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+/**
+ * Whether a place type gets a tab on the type rail.
+ *
+ * A built-in earns its tab with its first place: a canyoner is not offered a
+ * Campsite tab they have never used. A type the user made has one from the
+ * moment it exists, empty or not: they made it on purpose, and a type that
+ * shows up nowhere after "Type added." reads as a save that failed.
+ */
+export function placeTypeHasTab(type: {
+  builtIn: boolean;
+  /** Places of this type in the whole collection, not the filtered view. */
+  places: number;
+}): boolean {
+  return !type.builtIn || type.places > 0;
+}
+
 export type PlacesEmptyKind = "firstRun" | "filtered" | PlaceStatus;
 
 /**

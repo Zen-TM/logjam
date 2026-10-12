@@ -11,6 +11,11 @@ cut: [docs/operations/mobile-release.md](docs/operations/mobile-release.md).
 
 ## [Unreleased]
 
+### Added
+
+- Friends: share an invite link from Add a friend, so someone can become a
+  friend without being searched for by username.
+
 ## [0.1.0]
 
 The first release. Before it, Logjam GPS was installed only as test builds.

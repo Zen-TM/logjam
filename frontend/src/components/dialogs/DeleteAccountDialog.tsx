@@ -14,7 +14,7 @@ import classes from "./DeleteAccountDialog.module.css";
 
 /**
  * The one irreversible thing in the app, and the only place a typed phrase
- * guards a button (DESIGN.md §5). Everything else destructive is undoable, or
+ * guards a button (DESIGN.md). Everything else destructive is undoable, or
  * loses one row; this ends the account, in both Cognito and our own database.
  *
  * The phrase is "delete <username>" rather than "DELETE": it cannot be typed by
@@ -86,7 +86,11 @@ function DeleteAccountForm({
       alert
       footer={
         <>
-          <Button onClick={onClose} disabled={deleting}>
+          <Button
+            onClick={onClose}
+            disabled={deleting}
+            disabledReason="Deleting…"
+          >
             Cancel
           </Button>
           <Button
@@ -95,6 +99,7 @@ function DeleteAccountForm({
             variant="destructive"
             busy={deleting}
             disabled={!inputMatches}
+            disabledReason="Type the phrase above to confirm"
           >
             {ACCOUNT.copy.deleteAccount}
           </Button>

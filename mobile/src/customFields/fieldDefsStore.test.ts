@@ -204,6 +204,41 @@ describe("saveFieldDefs", () => {
     ]);
   });
 
+  // The phone has no reorder control, so every save hands back the stored
+  // order. Writing `position = index` anyway renumbered rows the user never
+  // touched whenever the stored positions were not 0..n: after a delete, or
+  // with built-ins sorted in between. Each renumber is an update the server
+  // can answer with a conflict nobody can act on.
+  // Mutation: write `position` whenever it differs from the list index.
+  it("leaves positions alone when the order is the stored order", async () => {
+    const grade: ScopedCustomFieldDef = {
+      ...party,
+      key: "grade",
+      label: "Grade",
+      ownerId: null,
+    };
+    // A gap at 1 (a deleted row) and a built-in between the user's two.
+    defRows = [
+      row(water, "tripLog", 0),
+      row(grade, "tripLog", 2),
+      row(party, "tripLog", 4),
+    ];
+    await saveFieldDefs("tripLog", [{ ...water, label: "Flow" }, grade, party]);
+    expect(updated).toEqual([{ id: "row-water", fields: { label: "Flow" } }]);
+  });
+
+  it("adds a field without renumbering the ones before it", async () => {
+    const depth: ScopedCustomFieldDef = {
+      ...party,
+      key: "depth",
+      label: "Depth",
+    };
+    defRows = [row(water, "tripLog", 3), row(party, "tripLog", 7)];
+    await saveFieldDefs("tripLog", [water, party, depth]);
+    expect(created).toHaveLength(1);
+    expect(updated).toEqual([]);
+  });
+
   it("deletes a field the caller dropped", async () => {
     defRows = [row(water, "tripLog", 0), row(party, "tripLog", 1)];
     await saveFieldDefs("tripLog", [water]);
@@ -424,5 +459,48 @@ describe("a built-in definition is not the account's to change", () => {
       { ...builtIn, label: "Mine now", appliesToAllTypes: true },
     ]);
     expect([...created, ...updated]).toEqual([]);
+  });
+});
+
+// A definition made on this phone has no owner id until the server sends the
+// row back: the local INSERT has no column value for it. Reading that NULL as
+// "built-in" made a field the user had just added impossible to edit or delete
+// until the next pull, and for a guest for ever. The save reported success and
+// wrote nothing. Mutation: `row.ownerId === null` alone as the built-in test.
+describe("a definition made on this phone, not yet synced", () => {
+  const unsynced: ScopedCustomFieldDef = { ...water, ownerId: null };
+
+  it("is renamed and rescoped by a whole-list save", async () => {
+    defRows = [row(unsynced, "place", 0)];
+    await saveFieldDefs("place", [
+      {
+        ...unsynced,
+        label: "Water",
+        appliesToAllTypes: false,
+        placeTypeIds: ["type-cave"],
+      },
+    ]);
+    expect(updated).toEqual([
+      {
+        id: "row-water",
+        fields: {
+          label: "Water",
+          appliesToAllTypes: false,
+          placeTypeIds: ["type-cave"],
+        },
+      },
+    ]);
+  });
+
+  it("is deleted by a whole-list save that omits it", async () => {
+    defRows = [row(unsynced, "place", 0)];
+    await saveFieldDefs("place", []);
+    expect(deleted).toEqual(["row-water"]);
+  });
+
+  it("can be deleted on its own", async () => {
+    defRows = [row(unsynced, "place", 0)];
+    await expect(removeFieldDef("place", "water")).resolves.toBe(0);
+    expect(deleted).toEqual(["row-water"]);
   });
 });

@@ -5,7 +5,7 @@
 //
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
-import type { RegionBbox, RegionTilePlan } from "@logjam/shared";
+import { type RegionBbox, type RegionTilePlan } from "@logjam/shared";
 
 import { hashKey } from "../map/sourceResolver";
 
@@ -59,6 +59,55 @@ export function tileUrlFrom(
     .replace("{x}", String(x));
 }
 
+/**
+ * Does the vector map come with this area?
+ *
+ * It rides along with every region a signed-in user saves, as the DEM does:
+ * it is a few megabytes, and without it the Vector map is blank out there and
+ * the route and measure tools stop snapping to tracks. A guest cannot have it
+ * (the clip is cut by an authed API call). No area is larger than the clip
+ * endpoint cuts: `checkRegionCaps` refuses it for everyone.
+ * Guard: `regionTilePlanning.test.ts` ("vectorClipFor").
+ */
+export function vectorClipFor(isGuest: boolean): "include" | "none" {
+  return isGuest ? "none" : "include";
+}
+
+/**
+ * Is the vector map the whole save? The Detail caption then says so instead of
+ * quoting a pixel scale no raster will have. Never true without the clip: a
+ * guest with no map picked is saving nothing, not the detailed map.
+ * Guard: `regionTilePlanning.test.ts` ("savesVectorOnly").
+ */
+export function savesVectorOnly(
+  vectorClip: "include" | "none",
+  pyramids: number,
+): boolean {
+  return vectorClip === "include" && pyramids === 0;
+}
+
+/**
+ * How a run ended, given what the user asked of it and what its workers
+ * halted on.
+ *
+ * The workers share one halt slot and only look at the user's request between
+ * tiles, so a worker midway through a tile's retries can halt the job for its
+ * own reason after another has already honoured a cancel or a pause. What the
+ * user asked for wins: a cancelled job that ended "paused for a connection"
+ * kept its file and restarted itself on the next reconnect.
+ * Guard: `regionTilePlanning.test.ts` ("settledStop").
+ */
+export function settledStop<Halt extends { kind: string }>(
+  asked: null | "pause" | "cancel",
+  halted: Halt | null,
+): Halt | { kind: "cancelled" } | { kind: "paused"; reason: "user" } | null {
+  if (asked === "cancel") return { kind: "cancelled" };
+  if (asked === "pause" && halted?.kind === "paused") {
+    return { kind: "paused", reason: "user" };
+  }
+  return halted;
+}
+
 export type TileVerdict = "ok" | "gap" | "backoff" | "retry";
 
 /**
@@ -89,4 +138,24 @@ export function classifyTileResponse(
  */
 export function deadTileBudget(totalTiles: number): number {
   return Math.max(10, Math.floor(totalTiles * 0.01));
+}
+
+/**
+ * What a tile that has used up its retries means.
+ *
+ * A download keeps running when the app leaves the foreground, for as long as
+ * Android lets the process run. The one thing that can go wrong back there is
+ * the OS withholding the network from a process that is still alive, and that
+ * is not the provider failing: the job parks (the queue re-queues it on the
+ * next foreground edge) instead of spending its dead-tile budget on it.
+ * With no connection at all it is neither: the job waits for the connection,
+ * which the queue bounds behind another app (`mayResumeOnReconnect`).
+ * Guard: `regionTilePlanning.test.ts` ("exhaustedTileOutcome").
+ */
+export function exhaustedTileOutcome(
+  appState: string,
+  online: boolean,
+): "dead" | "park" | "offline" {
+  if (!online) return "offline";
+  return appState === "active" ? "dead" : "park";
 }

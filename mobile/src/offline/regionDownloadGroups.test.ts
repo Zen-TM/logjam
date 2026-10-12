@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { DEM_SOURCE_ID, type DownloadableTileSourceId } from "@logjam/shared";
 
-import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
+import {
+  downloadNotice,
+  groupRegionJobs,
+  mayResumeOnReconnect,
+  regionGroupToastText,
+} from "./regionDownloadGroups";
 import type { RegionJob, RegionJobState } from "./regionDownloadQueue";
 
 function job(
@@ -148,5 +153,67 @@ describe("regionGroupToastText", () => {
     expect(regionGroupToastText({ ...base, ready: 0, unfinished: 3 })).toBe(
       "Blue Gum Forest · nothing saved · 3 maps didn't finish",
     );
+  });
+});
+
+// The battery guard for a download behind another app
+// (docs/decisions/0013). Mutations: drop `backgroundResumesLeft > 0` from
+// either function and the "no restarts left" lines go red; the service then
+// holds the process up, or the radio keeps being woken, for as long as the
+// signal flaps.
+describe("downloadNotice", () => {
+  it("is up, with the run's progress, while there is work in hand", () => {
+    expect(
+      downloadNotice(
+        [
+          job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+          job(
+            "b",
+            "run-1",
+            { kind: "downloading" },
+            { tilesDone: 1, tilesTotal: 2 },
+          ),
+        ],
+        0,
+      ),
+    ).toEqual({ text: "75% saved", percent: 75, waiting: false });
+    expect(
+      downloadNotice([job("a", "run-1", { kind: "queued" })], 0),
+    ).not.toBeNull();
+  });
+
+  it("waits for a connection only while restarts are left", () => {
+    const paused = [
+      job("a", "run-1", { kind: "paused", reason: "connectivity" }),
+    ];
+    expect(downloadNotice(paused, 1)).toMatchObject({
+      text: "Waiting for a connection",
+      waiting: true,
+    });
+    expect(downloadNotice(paused, 0)).toBeNull();
+  });
+
+  it("is down for anything only the user can move, and never names the area", () => {
+    for (const state of [
+      { kind: "paused", reason: "user" },
+      { kind: "paused", reason: "background" },
+      { kind: "paused", reason: "provider-backoff" },
+      { kind: "failed", code: "unknown" },
+      { kind: "ready", gaps: 0, failed: 0 },
+    ] as RegionJobState[]) {
+      expect(downloadNotice([job("a", "run-1", state)], 3)).toBeNull();
+    }
+    expect(downloadNotice([], 3)).toBeNull();
+    expect(
+      downloadNotice([job("a", "run-1", { kind: "downloading" })], 3)?.text,
+    ).not.toContain("Blue Gum Forest");
+  });
+});
+
+describe("mayResumeOnReconnect", () => {
+  it("always restarts in front, and behind another app only while restarts are left", () => {
+    expect(mayResumeOnReconnect("active", 0)).toBe(true);
+    expect(mayResumeOnReconnect("background", 1)).toBe(true);
+    expect(mayResumeOnReconnect("background", 0)).toBe(false);
   });
 });

@@ -51,6 +51,10 @@ function parseDesignTokens() {
   const src = readFileSync(designTokensPath, "utf8");
   const ink = /export const INK = "(#[0-9A-Fa-f]{6})";/.exec(src);
   if (!ink) throw new Error("INK not found in designTokens.ts");
+  const onScrim = /export const ON_SCRIM = "(#[0-9A-Fa-f]{6})";/.exec(src);
+  if (!onScrim) throw new Error("ON_SCRIM not found in designTokens.ts");
+  const scrimHeavy = /export const SCRIM = \{[\s\S]*?heavy: "rgba\(0,0,0,([0-9.]+)\)"/.exec(src);
+  if (!scrimHeavy) throw new Error("SCRIM.heavy not found in designTokens.ts");
   const hues = (name) => {
     const block = new RegExp(`export const ${name} = \\{([\\s\\S]*?)\\} as const;`).exec(src);
     if (!block) throw new Error(`${name} not found in designTokens.ts`);
@@ -60,6 +64,8 @@ function parseDesignTokens() {
   };
   return {
     ink: ink[1],
+    onScrim: onScrim[1],
+    scrimHeavyAlpha: Number(scrimHeavy[1]),
     assetHues: hues("ASSET_HUES"),
     statusHues: hues("PLACE_STATUS_HUES"),
     tripTypeHues: hues("TRIP_TYPE_OPEN_HUES"),
@@ -128,7 +134,7 @@ const PLACE_TYPE_COLORS = parsePaletteColors();
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
 const FRIEND_AVATAR_HUES = parseFriendAvatarHues();
-const { ink: INK, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
+const { ink: INK, onScrim: ON_SCRIM, scrimHeavyAlpha: SCRIM_HEAVY_ALPHA, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
 // Every identity hue. An identity hue is only ever a FILL — a tile with an
 // `onFill` glyph, an active chip with an `onFill` label, a swatch, a mark on
 // the map — never a glyph, line or text on a theme surface, so the label on it
@@ -198,6 +204,14 @@ function pairsFor({ mode, tokens: t }) {
       bg: color,
       min: 4.5,
     })),
+    // Words on a scrim (a picker's hint, a pending-upload badge) are white in
+    // every scheme; the worst ground under the veil is a white map.
+    {
+      name: "ON_SCRIM on scrim.heavy over a white map (picker hint, badge text)",
+      fg: ON_SCRIM,
+      bg: tint("#000000", SCRIM_HEAVY_ALPHA, "#FFFFFF"),
+      min: 4.5,
+    },
     // ── Washes: a tint of a role laid over a surface ──
     // An "on" icon button wears the same wash with a `text` glyph: an accent
     // glyph on a wash of itself fell to 2.7:1 on the light page.

@@ -15,7 +15,7 @@
 // a GeoPDF the moment it is ready, but only on Wi-Fi, has nothing to pick.
 //
 // The storage row is a POINTER, not a duplicate. Saved is the inventory screen
-// and owns the per-item actions (DESIGN.md §5 — the three verbs follow the asset
+// and owns the per-item actions (DESIGN.md — the three verbs follow the asset
 // wherever it is listed); re-listing downloads here would be a second place for
 // them to go stale.
 //
@@ -69,7 +69,7 @@ import { spacing } from "../../theme";
 /**
  * `needs` names the auto-download switch a row is meaningless without: a data
  * allowance for work that isn't happening governs nothing, so those rows go
- * dead with the reason in place of their subtitle (DESIGN.md §8). Sync has no
+ * dead with the reason in place of their subtitle (DESIGN.md). Sync has no
  * such switch — it always runs — so it has none.
  */
 const METERED_ROWS: {
@@ -276,8 +276,7 @@ export function OfflineSettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  // Clears the Hint's own negative top margin (it is built to tuck under the
-  // control it belongs to) and sets this one off from the row above, which it
-  // is a note about the page for rather than a note about that row.
-  footnote: { paddingTop: spacing(2.5), paddingBottom: spacing(1) },
+  // Sets this one off from the row above, which it is a note about the page
+  // for rather than a note about that row.
+  footnote: { paddingTop: spacing(2), paddingBottom: spacing(1) },
 });

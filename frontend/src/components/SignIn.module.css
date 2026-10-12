@@ -50,10 +50,10 @@
 }
 
 .subtitle {
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   text-align: center;
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 /* The two ticks and the pair of links that belong with them. */
@@ -65,8 +65,8 @@
 
 /* Lined up with the checkbox text above it, not with its box. */
 .legal {
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0 0 0 30px;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -74,7 +74,7 @@
  * Accent clears 4.5:1 on the page (4.55) and fails it on a card in all four
  * schemes (3.63–4.05), and it sits at 1.2:1 against the muted sentence it lives
  * in — so colour alone would not identify it either (1.4.1), which is what the
- * underline is for. Measured: scripts/wcag-contrast.mjs, DESIGN.md §10. */
+ * underline is for. Measured: scripts/wcag-contrast.mjs, DESIGN.md. */
 .legal a {
   color: var(--color-text);
   text-decoration: underline;
@@ -87,13 +87,14 @@
 }
 
 .switchText {
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   text-align: center;
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 .successBanner {
+  composes: body from "../textRoles.generated.module.css";
   margin: 0;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
@@ -102,7 +103,6 @@
    * the ratio the flat page colour does. `text` on the same wash is
    * 5.24–6.72:1, and the pair is in the contrast script under it. */
   color: var(--color-text);
-  font-size: var(--font-sm);
   text-align: center;
 }
 

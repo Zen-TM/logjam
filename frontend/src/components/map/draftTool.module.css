@@ -1,0 +1,38 @@
+/* What a drawing tool keeps at its peek: a note, the distance, Undo. It fills
+   the sheet's remaining height so the row is centred whatever the pointer's
+   hero is. */
+.peek {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: 0 var(--gutter);
+}
+
+.note {
+  composes: detail from "../../textRoles.generated.module.css";
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0;
+}
+
+.figureLabel {
+  composes: meta from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+.figureValue {
+  composes: rowTitle from "../../textRoles.generated.module.css";
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

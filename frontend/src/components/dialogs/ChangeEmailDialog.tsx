@@ -56,8 +56,9 @@ function ChangeEmailForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The address is this one field's problem, so it is reported under it
-  // (docs/ux-principles.md §11) — before Cognito is called at all.
+  // (shared/DESIGN.md §11) — before Cognito is called at all.
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
   // Captured when the code is sent, so the verify step can name the address it
   // went to even while the field is being retyped.
   const [pendingEmail, setPendingEmail] = useState("");
@@ -120,7 +121,10 @@ function ChangeEmailForm({
 
   async function handleConfirm() {
     const trimmedCode = code.trim();
-    if (!trimmedCode) return;
+    if (!trimmedCode) {
+      setCodeError("Enter the code we sent you.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -153,21 +157,19 @@ function ChangeEmailForm({
           </Button>
         ) : (
           <>
-            <Button onClick={onClose} disabled={busy}>
+            <Button onClick={onClose} disabled={busy} disabledReason="Working…">
               Cancel
             </Button>
             {stage === "verify" && (
-              <Button onClick={handleResend} disabled={busy}>
+              <Button
+                onClick={handleResend}
+                disabled={busy}
+                disabledReason="Working…"
+              >
                 Resend code
               </Button>
             )}
-            <Button
-              type="submit"
-              form={formId}
-              variant="filled"
-              busy={busy}
-              disabled={stage === "input" ? !newEmail.trim() : !code.trim()}
-            >
+            <Button type="submit" form={formId} variant="filled" busy={busy}>
               {stage === "input"
                 ? ACCOUNT.copy.sendCode
                 : ACCOUNT.copy.confirmEmail}
@@ -215,7 +217,11 @@ function ChangeEmailForm({
             <TextField
               label={ACCOUNT.copy.verificationCode}
               value={code}
-              onChange={(event) => setCode(event.target.value)}
+              onChange={(event) => {
+                setCode(event.target.value);
+                setCodeError(null);
+              }}
+              error={codeError}
               maxLength={10}
               inputMode="numeric"
               autoComplete="one-time-code"

@@ -8,7 +8,7 @@
 // Local storage is untouched by that distinction: guest mutations still write
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import {
   DarkTheme,
@@ -17,6 +17,7 @@ import {
   type NavigationContainerRef,
 } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
+import type { SignOutHandler } from "./offline/signOutConfirm";
 import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -34,12 +35,11 @@ import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import {
-  activeThemeSchemeId,
-  persistThemeSchemeId,
+  makeThemed,
+  setThemeSchemeId,
   spacing,
-  theme,
-  themeMode,
-  withAlpha,
+  useTheme,
+  useThemeMode,
 } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
@@ -74,8 +74,7 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { LoadingState } from "./ui/ScreenStates";
-import { Icon } from "./ui";
+import { Icon, LoadingState } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -88,19 +87,25 @@ function alertFinishRouteFirst(): void {
   );
 }
 
-const baseNavigationTheme = themeMode === "dark" ? DarkTheme : DefaultTheme;
-const navigationTheme = {
-  ...baseNavigationTheme,
-  colors: {
-    ...baseNavigationTheme.colors,
-    primary: theme.accent,
-    background: theme.page,
-    card: theme.card,
-    text: theme.text,
-    border: theme.line,
-    notification: theme.accent,
-  },
-};
+function useNavigationTheme() {
+  const theme = useTheme();
+  const base = useThemeMode() === "dark" ? DarkTheme : DefaultTheme;
+  return useMemo(
+    () => ({
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: theme.accent,
+        background: theme.page,
+        card: theme.card,
+        text: theme.text,
+        border: theme.line,
+        notification: theme.accent,
+      },
+    }),
+    [base, theme],
+  );
+}
 
 type MapStackParams = {
   // `focus` = "show on map" from Saved, or the resolved extent of a trip's
@@ -259,7 +264,7 @@ const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
 /** `@react-navigation/bottom-tabs`' own TABBAR_HEIGHT_UIKIT, which it does not export. */
 const TAB_BAR_BASE_HEIGHT = 49;
-const TAB_BAR_TOP_PAD = spacing(0.75);
+const TAB_BAR_TOP_PAD = spacing(0.5);
 
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which
@@ -279,13 +284,17 @@ function placeFocus(place: { latitude: number; longitude: number }) {
   };
 }
 
-const stackScreenOptions = {
-  headerStyle: { backgroundColor: theme.card },
-  headerTintColor: theme.text,
-  contentStyle: { backgroundColor: theme.page },
-} as const;
+const useStackScreenOptions = makeThemed(
+  (theme) =>
+    ({
+      headerStyle: { backgroundColor: theme.card },
+      headerTintColor: theme.text,
+      contentStyle: { backgroundColor: theme.page },
+    }) as const,
+);
 
 function MapStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <MapStack.Navigator screenOptions={stackScreenOptions}>
       <MapStack.Screen name="MapView" options={{ headerShown: false }}>
@@ -353,7 +362,7 @@ function MapStackNav() {
           />
         )}
       </MapStack.Screen>
-      {/* Its own hero owns the back affordance (DESIGN.md §2). */}
+      {/* Its own hero owns the back affordance (DESIGN.md). */}
       <MapStack.Screen
         name="MapRegionDownload"
         options={{ headerShown: false }}
@@ -380,7 +389,7 @@ function MapStackNav() {
         )}
       </MapStack.Screen>
       {/* Place and trip detail both carry their own Hero, which owns the
-          back affordance (DESIGN.md §2). */}
+          back affordance (DESIGN.md). */}
       <MapStack.Screen name="MapPlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PlaceDetailScreen
@@ -436,6 +445,7 @@ function MapStackNav() {
 }
 
 function SavedStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <SavedStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header: SavedScreen leads with its own Hero. */}
@@ -554,10 +564,11 @@ function SavedStackNav() {
 }
 
 function PlacesStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <PlacesStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header on any of these: each screen leads with its own
-          Hero (DESIGN.md §2). */}
+          Hero (DESIGN.md). */}
       <PlacesStack.Screen name="PlaceList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <PlacesScreen
@@ -676,10 +687,11 @@ function PlacesStackNav() {
 }
 
 function TripsStackNav() {
+  const stackScreenOptions = useStackScreenOptions();
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
       {/* Logs and trip detail both carry their own Hero, so the native
-          header is off and the hero owns the back affordance (DESIGN.md §2). */}
+          header is off and the hero owns the back affordance (DESIGN.md). */}
       <TripsStack.Screen name="TripList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <LogsScreen
@@ -782,8 +794,12 @@ export function AppShell({
 }: {
   accountState: AccountState;
   onLinkAccount: () => void;
-  onSignOut: () => void;
+  onSignOut: SignOutHandler;
 }) {
+  const theme = useTheme();
+  const navigationTheme = useNavigationTheme();
+  const stackScreenOptions = useStackScreenOptions();
+
   const isGuest = accountState === "guest";
   const userQuery = useApiQuery(
     fetchCurrentUser,
@@ -831,17 +847,13 @@ export function AppShell({
     return registerTopoAutoDownload();
   }, [isGuest]);
 
-  // Mirror the account's theme choice onto this device, so a scheme picked in the
-  // browser (or on another phone) is what this app opens in next launch. The
-  // device copy is what `theme.ts` reads at module-eval time; see DESIGN.md §12.
+  // Take the account's theme choice, so a scheme picked in the browser (or on
+  // another phone) is the one this app is painted in. Keyed on the ACCOUNT's
+  // value only: a scheme just picked on this phone must not be undone by the
+  // copy this query fetched before the pick.
   useEffect(() => {
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
-    if (
-      isThemeSchemeId(accountScheme) &&
-      accountScheme !== activeThemeSchemeId
-    ) {
-      persistThemeSchemeId(accountScheme);
-    }
+    if (isThemeSchemeId(accountScheme)) setThemeSchemeId(accountScheme);
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
 
   useEffect(() => {
@@ -975,7 +987,7 @@ export function AppShell({
               headerShown: false,
               tabBarStyle: {
                 backgroundColor: theme.card,
-                borderTopColor: withAlpha(theme.text, 0.25),
+                borderTopColor: theme.line,
                 borderTopWidth: 1,
                 // Breathing room between the border and the icons. The library's
                 // bar is iOS-sized (49pt plus the bottom inset) and sits the icons
@@ -1044,7 +1056,7 @@ export function AppShell({
               {() => (
                 <MoreStack.Navigator screenOptions={stackScreenOptions}>
                   {/* Every screen here except Settings leads with its own
-                  Hero, which owns the back affordance (DESIGN.md §2).
+                  Hero, which owns the back affordance (DESIGN.md).
                   Settings is a plain settings list, so it keeps the native
                   header — the rule that a bare-label hero is the pattern being
                   replaced cuts both ways. */}
@@ -1226,7 +1238,7 @@ export function AppShell({
                     )}
                   </MoreStack.Screen>
                   {/* Settings and its sub-pages are plain preference lists, so they
-                  keep the native header and its back button (DESIGN.md §2). */}
+                  keep the native header and its back button (DESIGN.md). */}
                   <MoreStack.Screen
                     name="Settings"
                     options={{ title: "Settings" }}

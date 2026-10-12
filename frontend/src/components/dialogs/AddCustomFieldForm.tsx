@@ -91,15 +91,15 @@ function AddCustomFieldForm({
   // any of its single-line inputs would submit the *dialog* — saving the trip
   // or place the user is still filling in, which is not what "Enter" means
   // while you're typing a field label. Swallow it and run the sub-form's own
-  // primary action instead, guarded by the same condition as the Add button so
-  // Enter can't add a field the button wouldn't.
+  // primary action instead, guarded by the same busy state as the Add button so
+  // Enter can't add a field twice.
   //
   // Bound to the text inputs rather than the wrapper: the type select does its
   // own Enter handling, and a container-level handler would fire on top of it.
   function handleFieldKeyDown(event: React.KeyboardEvent) {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    if (adding || !label.trim()) return;
+    if (adding) return;
     onAdd();
   }
 
@@ -217,16 +217,15 @@ function AddCustomFieldForm({
       {error && <ErrorBanner message={error} />}
       {!asDialogBody && (
         <div className={classes.actionsRow}>
-          <Button compact onClick={onCancel} disabled={adding}>
-            Cancel
-          </Button>
           <Button
             compact
-            variant="filled"
-            busy={adding}
-            disabled={!label.trim()}
-            onClick={onAdd}
+            onClick={onCancel}
+            disabled={adding}
+            disabledReason="Adding…"
           >
+            Cancel
+          </Button>
+          <Button compact variant="filled" busy={adding} onClick={onAdd}>
             Add attribute
           </Button>
         </div>

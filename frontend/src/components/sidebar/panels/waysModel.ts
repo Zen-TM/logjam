@@ -2,7 +2,7 @@
 // what a "way" is, which kinds exist, and how four sources become one list.
 //
 // Ways answers "what lines have I got?" — routes I drew, tracks I recorded,
-// files I imported (docs/ux-principles.md §2). Logjam GPS answers the same question on its
+// files I imported (shared/DESIGN.md §2). Logjam GPS answers the same question on its
 // Saved tab, and its vocabulary is the one used here: `CATEGORY_META` in
 // `mobile/src/saved/savedKeys.ts` names them Routes, Tracks and Imports.
 //
@@ -234,7 +234,7 @@ export function wayMatchesSearch(way: WayItem, query: string): boolean {
 /**
  * How many ways each chip would show, applying every axis BUT its own — so a
  * chip's count answers "how many would I get if I pressed this" rather than
- * restating the current view (docs/ux-principles.md §8).
+ * restating the current view (shared/DESIGN.md §8).
  */
 export function wayKindCounts(
   ways: readonly WayItem[],

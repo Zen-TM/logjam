@@ -48,7 +48,10 @@ export type ParkedOp = {
    * was deleted server-side under a pending edit (§6 delete-wins). */
   state: "blocked" | "deadRemote";
   fields: Record<string, unknown> | null;
-  error: { code: number; message: string } | null;
+  /** The refusal's status code and nothing else. The server's own sentence is
+   *  developer wording that can carry a name, so it is dropped as the row is
+   *  loaded and no screen can render it (`syncIssueDisplay.ts` writes the line). */
+  error: { code: number } | null;
   attempts: number;
   createdAt: string;
   /**
@@ -68,7 +71,7 @@ export type ParkedOp = {
    * rebuilt from the phone's own copy plus the pending edit, but only while
    * that copy is still here — the next delta pull applies the tombstone and
    * takes it. Resolved on the LIST so the verb is absent rather than failing
-   * at the tap (DESIGN.md §5).
+   * at the tap (DESIGN.md).
    */
   hasLocalRow: boolean;
 };
@@ -138,7 +141,7 @@ export async function listParkedOps(): Promise<ParkedOp[]> {
       state: row.state as "blocked" | "deadRemote",
       fields,
       error: row.error_json
-        ? (JSON.parse(row.error_json) as { code: number; message: string })
+        ? { code: (JSON.parse(row.error_json) as { code: number }).code }
         : null,
       attempts: row.attempts,
       createdAt: row.created_at,
@@ -205,7 +208,7 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     const entity = row.entity;
     const field = row.field;
     // Resolved on the LIST, not at the tap: a verb that cannot act has to be
-    // ABSENT (DESIGN.md §5), and the bulk bar's "N restore" tally has to be true before
+    // ABSENT (DESIGN.md), and the bulk bar's "N restore" tally has to be true before
     // anyone presses anything. Shelf tables are tens of rows, not thousands.
     const target = await shelfTarget(entity, row.entity_id, field);
     const shelvedValue = row.shelved_json ? JSON.parse(row.shelved_json) : null;
@@ -525,7 +528,7 @@ export async function retryWithoutFields(
 }
 
 /**
- * Recreate from a deadRemote op (DESIGN.md §4): the server deleted the row, but the
+ * Recreate from a deadRemote op (DESIGN.md): the server deleted the row, but the
  * user's edits are still here — one tap re-creates the entity with a FRESH id
  * and then discards the dead op.
  *

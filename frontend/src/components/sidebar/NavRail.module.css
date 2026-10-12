@@ -41,6 +41,7 @@
 }
 
 .item {
+  composes: caption from "../../textRoles.generated.module.css";
   position: relative;
   flex: none;
   width: 76px;
@@ -55,9 +56,8 @@
   border-radius: var(--radius-lg);
   background: transparent;
   color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--font-xs);
-  font-weight: 600;
+  font-family: inherit;
+  line-height: inherit;
   cursor: pointer;
 }
 
@@ -91,6 +91,7 @@
 }
 
 .badge {
+  composes: caption from "../../textRoles.generated.module.css";
   position: absolute;
   top: 2px;
   left: 44px;
@@ -104,8 +105,6 @@
   border-radius: var(--radius-pill);
   background: var(--color-warning);
   color: var(--color-on-fill);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 /* Narrow web (≤768px): Logjam GPS's tab bar. It sits ABOVE the bottom sheet

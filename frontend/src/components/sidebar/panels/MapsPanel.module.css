@@ -1,5 +1,5 @@
 /* Maps gives the panel body its full height: the hero and the view switch are
-   pinned, and only the list scrolls (DESIGN.md §2). Shared by both views and
+   pinned, and only the list scrolls (DESIGN.md). Shared by both views and
    the topo style sheet, which are one page. */
 .root {
   flex: 1;
@@ -65,8 +65,8 @@
 
 /* A sentence about a section, in the hint's voice. */
 .note {
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -80,9 +80,9 @@
 }
 
 .loading {
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;
   text-align: center;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 
@@ -108,7 +108,7 @@
 }
 
 .head {
-  font-size: var(--font-xs);
+  composes: meta from "../../../textRoles.generated.module.css";
   color: var(--color-text-muted);
   text-align: center;
   white-space: nowrap;
@@ -122,7 +122,7 @@
 }
 
 .rowName {
-  font-size: var(--font-sm);
+  composes: body from "../../../textRoles.generated.module.css";
   color: var(--color-text);
 }
 
@@ -131,7 +131,7 @@
    controls, then an ellipsis. The FULL string is still the switch's accessible
    description, so nothing is lost to a reader. */
 .rowHint {
-  font-size: var(--font-xs);
+  composes: detail from "../../../textRoles.generated.module.css";
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
   overflow: hidden;
