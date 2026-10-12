@@ -82,6 +82,9 @@ export function trackBackupMetadata(
     durationMs: track.durationMs,
     elevationGainM: track.elevationGainM,
     elevationLossM: track.elevationLossM,
+    ...(track.elevationSource
+      ? { elevationSource: track.elevationSource }
+      : {}),
     pointCount: points.length,
     startedAt: track.startedAt,
     endedAt: track.endedAt,

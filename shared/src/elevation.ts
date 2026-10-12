@@ -15,7 +15,11 @@
 // helpers never log, and callers must keep points out of logs and error
 // messages (root privacy rules).
 
-import { DEM_SOURCES, type DemSamples } from "./demSources.js";
+import {
+  DEM_SOURCES,
+  GPS_CLIMB_SOURCE,
+  type DemSamples,
+} from "./demSources.js";
 import { haversineMeters } from "./placeGeo.js";
 import type { RoutePoint } from "./routeValidation.js";
 
@@ -33,6 +37,17 @@ export const ELEVATION_PROFILE_MAX_SAMPLES = 256;
  * ELEVATION_PROFILE_MAX_SAMPLES first and sample more coarsely.
  */
 export const ELEVATION_SAMPLE_SPACING_M = 25;
+
+/**
+ * The sample ceiling for a recorded or imported TRACK, which is asked for by
+ * name (`maxSamples` on `POST /elevation/profile`). At the default ceiling a
+ * 20 km day is read every 80 m: its climb under-reads, and a 5 m DEM is
+ * wasted on it. This keeps the 25 m spacing out to about 51 km.
+ *
+ * ponytail: one request, however long the track. Past ~51 km the spacing
+ * widens again; send the line in pieces if that ever matters.
+ */
+export const ELEVATION_TRACK_MAX_SAMPLES = 2048;
 
 /**
  * Hysteresis threshold for DEM-derived gain/loss.
@@ -69,6 +84,11 @@ export type ElevationProfile = {
    * first. Absent on a profile from an API that predates it.
    */
   demSourceIds?: string[];
+  /**
+   * True when a recorded track's own GPS heights stand in where no DEM had
+   * one (`fillDemFromGps` in trackStats.ts). Its climb is then stored as GPS.
+   */
+  filledFromGps?: boolean;
 };
 
 /** A position to sample, with its distance along the line. */
@@ -229,6 +249,59 @@ export function densifyLineSegments(
   return positions;
 }
 
+/** A recorded track's GPS height at one fix, placed along its elevation line. */
+export type GpsFix = {
+  /**
+   * Where the fix sits among its segment's vertices: 2 is the third vertex,
+   * 2.5 a fix recorded halfway between the third and the fourth.
+   */
+  vertex: number;
+  heightM: number;
+};
+
+/** A GPS height at a distance along the line, in walked order. */
+export type GpsHeight = { distanceM: number; heightM: number };
+
+/**
+ * Every fix's height against the distance `densifyLineSegments` gives the
+ * same line, so a fix and a sample position can be compared.
+ *
+ * `fixes` is parallel to `segments`, each in walked order. A line thinned to
+ * a few vertices still carries every fix between them, which is what lets a
+ * stretch be summed from all its fixes. Empty when the two shapes disagree.
+ */
+export function gpsAlongLine(
+  segments: readonly (readonly RoutePoint[])[],
+  fixes: readonly (readonly GpsFix[])[],
+): GpsHeight[] {
+  if (segments.length !== fixes.length) return [];
+  const out: GpsHeight[] = [];
+  let offsetM = 0;
+  for (let k = 0; k < segments.length; k++) {
+    const seg = segments[k]!;
+    if (seg.length < 2) continue;
+    const atM: number[] = [0];
+    for (let i = 1; i < seg.length; i++) {
+      const a = seg[i - 1]!;
+      const b = seg[i]!;
+      atM.push(atM[i - 1]! + haversineMeters(a[1], a[0], b[1], b[0]));
+    }
+    for (const { vertex, heightM } of fixes[k]!) {
+      if (!(vertex >= 0 && vertex <= seg.length - 1)) return [];
+      const before = Math.min(Math.floor(vertex), seg.length - 2);
+      out.push({
+        distanceM:
+          offsetM +
+          atM[before]! +
+          (vertex - before) * (atM[before + 1]! - atM[before]!),
+        heightM,
+      });
+    }
+    offsetM += atM[atM.length - 1]!;
+  }
+  return out;
+}
+
 /**
  * Accumulate gain and loss through a hysteresis filter: track the extreme
  * reached since the last committed turn, and commit a leg only once the swing
@@ -314,7 +387,7 @@ export function buildElevationProfile(
   }));
   const known = heights.filter((value): value is number => value != null);
   const { gainM, lossM } = elevationGainLoss(
-    levelled,
+    ("climbSeries" in dem ? dem.climbSeries : undefined) ?? levelled,
     DEM_ELEVATION_HYSTERESIS_M,
   );
   const used = new Set(sourceIds);
@@ -327,5 +400,43 @@ export function buildElevationProfile(
     demSourceIds: DEM_SOURCES.map((source) => source.id).filter((id) =>
       used.has(id),
     ),
+    ...(used.has(GPS_CLIMB_SOURCE) ? { filledFromGps: true } : {}),
+  };
+}
+
+/** A track's climb and descent, with the source they were read from. */
+export type TrackClimb = {
+  elevationGainM: number;
+  elevationLossM: number;
+  /** One of `CLIMB_SOURCES`. */
+  elevationSource: string;
+};
+
+/**
+ * The climb a DEM profile gives a track, or null when it cannot give one.
+ *
+ * A sample with no height at all would sum a surface and nothing into one
+ * figure, so such a profile gives no climb.
+ *
+ * The source recorded is the COARSEST any sample came from, so a track that
+ * leaves the fine DEM's footprint for a while is offered again when the fine
+ * one grows to cover it. That is GPS for a profile whose gaps the track's own
+ * heights filled. A profile that does not say (an API older than
+ * `demSourceIds`) is taken as the coarsest DEM for the same reason.
+ */
+export function climbFromProfile(
+  profile: ElevationProfile | null,
+): TrackClimb | null {
+  if (!profile || profile.samples.length < 2) return null;
+  if (profile.samples.some((sample) => sample.elevationM == null)) return null;
+  const known = DEM_SOURCES.map((source) => source.id);
+  const used = known.filter((id) => profile.demSourceIds?.includes(id));
+  const read = used.length > 0 ? used : known;
+  return {
+    elevationGainM: profile.gainM,
+    elevationLossM: profile.lossM,
+    elevationSource: profile.filledFromGps
+      ? GPS_CLIMB_SOURCE
+      : read[read.length - 1]!,
   };
 }

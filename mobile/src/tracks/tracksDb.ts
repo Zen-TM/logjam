@@ -11,6 +11,7 @@ import type {
   CandidateFix,
   FixRejection,
   RecordedTrackPoint,
+  TrackClimb,
   TrackStats,
 } from "@logjam/shared";
 
@@ -33,6 +34,11 @@ export type Track = {
   durationMs: number;
   elevationGainM: number;
   elevationLossM: number;
+  /**
+   * Where the two figures above were read from (`CLIMB_SOURCES`); null is GPS
+   * heights. Written only WITH the figures, so it cannot describe other ones.
+   */
+  elevationSource: string | null;
   /** Rows in `track_point`. Written ONLY by `appendTrackPoints`. */
   pointCount: number;
   startedAt: string;
@@ -88,6 +94,7 @@ type TrackRow = {
   durationMs: number;
   elevationGainM: number;
   elevationLossM: number;
+  elevationSource: string | null;
   pointCount: number;
   startedAt: string;
   endedAt: string | null;
@@ -109,6 +116,7 @@ function rowToTrack(row: TrackRow): Track {
     durationMs: row.durationMs,
     elevationGainM: row.elevationGainM,
     elevationLossM: row.elevationLossM,
+    elevationSource: row.elevationSource,
     pointCount: row.pointCount,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
@@ -145,6 +153,48 @@ export async function listTracksNeedingBackup(): Promise<Track[]> {
      ORDER BY endedAt ASC`,
   );
   return rows.map(rowToTrack);
+}
+
+/**
+ * Finished recordings whose climb could come from a finer source than the one
+ * stored, newest first — what the upgrade pass works through
+ * (`tracks/trackClimb.ts`). A track already on `finestSource` is never
+ * selected, nor one the network had nothing finer for under `sourcesKey`.
+ */
+export async function listTracksDueClimbUpgrade(
+  finestSource: string,
+  sourcesKey: string,
+  limit: number,
+): Promise<Track[]> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<TrackRow>(
+    `SELECT * FROM track
+     WHERE state = 'done' AND pointCount > 1
+       AND (elevationSource IS NULL OR elevationSource != ?)
+       AND elevationCheckedFor IS NOT ?
+     ORDER BY endedAt DESC
+     LIMIT ?`,
+    finestSource,
+    sourcesKey,
+    limit,
+  );
+  return rows.map(rowToTrack);
+}
+
+/**
+ * Note that the network had no finer climb for this track under `sourcesKey`.
+ * Does not bump `updatedAt` or notify: nothing a screen shows has changed.
+ */
+export async function markTrackClimbChecked(
+  id: string,
+  sourcesKey: string,
+): Promise<void> {
+  const db = await getOfflineDb();
+  await db.runAsync(
+    "UPDATE track SET elevationCheckedFor = ? WHERE id = ?",
+    sourcesKey,
+    id,
+  );
 }
 
 /** The single recording/paused track, if any. */
@@ -209,7 +259,16 @@ export async function updateTrack(
       | "color"
       | "mediaId"
     >
-  > & { stats?: TrackStats },
+  > & {
+    /**
+     * `elevationSource` says where the climb in these stats was read from, and
+     * is written with them every time: stats without one are the recorder's
+     * own GPS figures, so the column goes back to null.
+     */
+    stats?: TrackStats & { elevationSource?: string | null };
+    /** A climb read again from a finer source; every other stat stays. */
+    climb?: TrackClimb;
+  },
 ): Promise<void> {
   const db = await getOfflineDb();
   const sets: string[] = ["updatedAt = ?"];
@@ -258,14 +317,25 @@ export async function updateTrack(
     // before a batch landed would clobber the increment and leave the row
     // claiming fewer points than the table holds — which the map layer reads as
     // "the series was rewritten" and answers with a full reload.
+    // The check mark goes with the figures it was about: a recording
+    // continued and finished again is a longer line nobody has asked about.
     sets.push(
-      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?",
+      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?, elevationSource = ?, elevationCheckedFor = NULL",
     );
     args.push(
       patch.stats.distanceM,
       patch.stats.durationMs,
       patch.stats.elevationGainM,
       patch.stats.elevationLossM,
+      patch.stats.elevationSource ?? null,
+    );
+  }
+  if (patch.climb !== undefined) {
+    sets.push("elevationGainM = ?, elevationLossM = ?, elevationSource = ?");
+    args.push(
+      patch.climb.elevationGainM,
+      patch.climb.elevationLossM,
+      patch.climb.elevationSource,
     );
   }
   await db.runAsync(

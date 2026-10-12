@@ -128,6 +128,7 @@ import {
 } from "./PlacePinsLayer";
 import { SpeedElevationChip, READOUT_CHIP_HEIGHT } from "./SpeedElevationChip";
 import { sampleElevations } from "../offline/demLookup";
+import { setOfflineOnly as setOfflineOnlyMode } from "../offline/offlineOnlyMode";
 import {
   deriveSpeedMps,
   publishLiveReadout,
@@ -857,6 +858,7 @@ export function MapScreen({
   const offlineOnlyRef = useRef(offlineOnly);
   useLayoutEffect(() => {
     offlineOnlyRef.current = offlineOnly;
+    setOfflineOnlyMode(offlineOnly);
   });
   const { artifacts } = useMapArtifacts();
   // Bundled glyph/sprite install (§8.3). Map render is gated below until it

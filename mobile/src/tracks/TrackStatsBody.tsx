@@ -40,6 +40,7 @@ export function TrackStatsBody({
   emptyMessage,
   demProfile,
   demLoading,
+  storedClimb,
 }: {
   detail: TrackDetail | null;
   loading: boolean;
@@ -77,6 +78,13 @@ export function TrackStatsBody({
    */
   demProfile?: ElevationProfile | null;
   demLoading?: boolean;
+  /**
+   * A FINISHED recording's stored climb and descent (`tracks/trackClimb.ts`).
+   * Shown instead of this panel's own reading, so the sheet, the Saved list,
+   * the Stats totals and Logjam Web give one figure for one track. Omitted for
+   * a live recording and an import, which have nothing stored.
+   */
+  storedClimb?: { gainM: number; lossM: number };
 }) {
   const styles = useStyles();
 
@@ -92,17 +100,18 @@ export function TrackStatsBody({
 
   const durationMs = elapsedMs ?? detail.durationMs;
   const timed = detail.movingMs != null;
-  // One source for every height on the panel — DEM only when it has no gaps.
-  // A DEM with even one uncovered sample would draw a hole in a chart the
-  // reader can't tell from the terrain, so a partial DEM falls back to GPS for
-  // the whole section rather than mixing two surfaces.
+  // The DEM profile only when it has no gaps: a hole in the chart can't be
+  // told from the terrain. A recorded track's profile arrives with its gaps
+  // already filled from its own GPS heights, levelled to meet the DEM
+  // (`fillDemFromGps`), and says so in `filledFromGps`; anything still short
+  // of a height falls back to GPS for the whole section.
   const demComplete =
     demProfile != null &&
     demProfile.samples.every((sample) => sample.elevationM != null);
   const dem = demComplete ? demProfile : null;
   const elevation = dem ?? detail.elevation;
-  const gainM = dem ? dem.gainM : detail.elevationGainM;
-  const lossM = dem ? dem.lossM : detail.elevationLossM;
+  const gainM = storedClimb?.gainM ?? (dem ? dem.gainM : detail.elevationGainM);
+  const lossM = storedClimb?.lossM ?? (dem ? dem.lossM : detail.elevationLossM);
   const maxM = dem ? dem.maxM : detail.maxAltitudeM;
   const minM = dem ? dem.minM : detail.minAltitudeM;
 
@@ -190,13 +199,15 @@ export function TrackStatsBody({
               than its ~19 m grid, and GPS altitude cannot see a hill smaller
               than its own noise. A number with no provenance gets trusted. */}
           <Text style={styles.pending}>
-            {demComplete
-              ? "Heights from terrain data"
-              : demProfile
-                ? "Terrain data incomplete — heights from this phone's GPS"
-                : demLoading
-                  ? "Heights from GPS — loading terrain…"
-                  : "Heights from GPS — no terrain data here"}
+            {demProfile?.filledFromGps && demComplete
+              ? "Terrain data covers part of this track — the rest is from this phone's GPS"
+              : demComplete
+                ? "Heights from terrain data"
+                : demProfile
+                  ? "Terrain data incomplete — heights from this phone's GPS"
+                  : demLoading
+                    ? "Heights from GPS — loading terrain…"
+                    : "Heights from GPS — no terrain data here"}
           </Text>
         </View>
       ) : (

@@ -2,20 +2,32 @@
 // along.
 //
 // The elevation hook keys its request on `JSON.stringify(points)` and
-// re-densifies whatever it is given, so handing it a six-hour recording means
-// stringifying thousands of coordinate pairs on every render and sampling
-// detail far below the DEM's own ~19 m/px. A couple of hundred vertices is
-// already finer than the surface being read.
+// re-densifies whatever it is given, and the API takes a bounded line, so a
+// six-hour recording is thinned before it gets there.
 //
 // PRIVACY: these are precise wilderness coordinates. Nothing here logs.
-import type { TrackSeriesPoint } from "@logjam/shared";
+import {
+  DISTANCE_SMOOTHING_WINDOW,
+  ELEVATION_SMOOTHING_WINDOW,
+  MAX_ROUTE_POINTS,
+  movingMean,
+  movingMedian,
+  type GpsFix,
+  type TrackSeriesPoint,
+} from "@logjam/shared";
 
 /**
- * Vertices kept for a DEM sample. `densifyLine` resamples to
- * ELEVATION_PROFILE_MAX_SAMPLES (256) evenly spaced positions anyway, so more
- * input than this buys nothing but string length.
+ * Vertices kept for a DEM sample. The DEM is read along the straight lines
+ * between them, so the fewer there are the more a long track's line cuts
+ * across the gullies and spurs the walked line went around: at 200 a 20 km
+ * day had a vertex every 100 m.
+ *
+ * Short of what `POST /elevation/profile` takes (`MAX_ROUTE_POINTS`) on
+ * purpose: every segment keeps at least two vertices whatever its share, so a
+ * track with many short segments runs over this figure, and a line the API
+ * refuses is one the public tiles get asked about instead.
  */
-export const MAX_ELEVATION_VERTICES = 200;
+export const MAX_ELEVATION_VERTICES = Math.floor(MAX_ROUTE_POINTS * 0.8);
 
 /** Consecutive runs of points sharing a `segment`, single-point runs dropped. */
 function segmentRuns(
@@ -60,6 +72,60 @@ function segmentRuns(
 export function toElevationLine(
   points: readonly TrackSeriesPoint[],
 ): [number, number][][] {
+  return strided(points).map(({ run, kept }) => {
+    // The positions distance is measured along (`computeTrackDetail`), not
+    // the raw fixes: a fix that jitters sideways up a gorge wall reads the
+    // wall's height, and the DEM counts it as climb. Measured on a recorded
+    // canyon day with a true net fall of 846 m: raw fixes read 725 m up and
+    // 1,576 m down at this vertex budget, averaged ones 96 m and 943 m.
+    // ponytail: a five-fix mean, the same stopgap distance uses. A properly
+    // cleaned line replaces both.
+    const lons = movingMean(
+      run.map((point) => point.lon),
+      DISTANCE_SMOOTHING_WINDOW,
+    );
+    const lats = movingMean(
+      run.map((point) => point.lat),
+      DISTANCE_SMOOTHING_WINDOW,
+    );
+    return kept.map((i) => [lons[i]!, lats[i]!]);
+  });
+}
+
+/**
+ * Every fix's GPS height, placed among the vertices `toElevationLine` keeps:
+ * what fills the stretches no saved terrain covers (`fillDemFromGps` in
+ * shared/src/trackStats.ts). ALL the fixes, not only the kept ones, so a
+ * filled stretch's climb is summed from everything the phone recorded.
+ * Median-smoothed per segment the way the track's own GPS climb is. A fix
+ * that carried no height is left out.
+ */
+export function toElevationGpsFixes(
+  points: readonly TrackSeriesPoint[],
+): GpsFix[][] {
+  return strided(points).map(({ run, kept }) => {
+    const withHeight = run.flatMap((point, i) =>
+      point.altitudeM != null && Number.isFinite(point.altitudeM) ? [i] : [],
+    );
+    const smoothed = movingMedian(
+      withHeight.map((i) => run[i]!.altitudeM!),
+      ELEVATION_SMOOTHING_WINDOW,
+    );
+    let k = 0;
+    return withHeight.map((i, n) => {
+      while (k < kept.length - 2 && kept[k + 1]! <= i) k++;
+      return {
+        vertex: k + (i - kept[k]!) / (kept[k + 1]! - kept[k]!),
+        heightM: smoothed[n]!,
+      };
+    });
+  });
+}
+
+/** Each segment, with the indices of the vertices the stride keeps. */
+function strided(
+  points: readonly TrackSeriesPoint[],
+): { run: TrackSeriesPoint[]; kept: number[] }[] {
   if (points.length < 2) return [];
   const runs = segmentRuns(points);
   const totalPoints = runs.reduce((count, run) => count + run.length, 0);
@@ -72,11 +138,9 @@ export function toElevationLine(
         Math.round((MAX_ELEVATION_VERTICES * run.length) / totalPoints),
       ),
     );
-    const line: [number, number][] = [];
-    for (let i = 0; i < quota; i++) {
-      const point = run[Math.round((i * (run.length - 1)) / (quota - 1))]!;
-      line.push([point.lon, point.lat]);
-    }
-    return line;
+    const kept: number[] = [];
+    for (let i = 0; i < quota; i++)
+      kept.push(Math.round((i * (run.length - 1)) / (quota - 1)));
+    return { run, kept };
   });
 }
