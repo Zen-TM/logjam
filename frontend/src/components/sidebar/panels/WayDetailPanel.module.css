@@ -28,6 +28,24 @@
   font-size: var(--font-sm);
 }
 
+/* A track's stat grid, split by the line that says where its climb came from.
+   The gap is the grid's own, so the two halves read as one grid. */
+.statGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+/* Inset as a stat cell is, so it lines up under the figures it is about. */
+.statCaption {
+  margin: 0;
+  padding: 0 var(--space-1-5) var(--space-1);
+  /* A cell's own invisible border, or the text sits a pixel left of theirs. */
+  border-inline: 1px solid transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
 /* The height band: a figure, so it reads with the stats above it. */
 .band {
   margin: 0;

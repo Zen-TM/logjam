@@ -39,6 +39,7 @@ import { ProfileChart, SectionHeader, StatGrid, type Stat } from "../../../ui";
 import classes from "./WayDetailPanel.module.css";
 
 const ASCENT = PAIRED_STAT_LABELS.ascent;
+const DESCENT = PAIRED_STAT_LABELS.descent;
 
 export default function TrackProfiles({
   source,
@@ -181,16 +182,27 @@ export default function TrackProfiles({
       ...stored.filter((stat) => !listed.has(stat.label)),
     ];
   }, [detail, heights, stored]);
-  const grid = stats.length > 0 && (
-    <>
+  // The stored climb and the chart below can come from different sources
+  // (`storedClimbCaption`), so each says its own: the climb's line sits
+  // directly under the two cells it is about, which splits the grid there.
+  const captionAfter =
+    climb && stored.some((stat) => stat.label === ASCENT)
+      ? stats.findIndex((stat) => stat.label === DESCENT) + 1
+      : 0;
+  const grid =
+    stats.length === 0 ? null : captionAfter === 0 ? (
       <StatGrid stats={pairedStatLayout(stats)} />
-      {/* The stored climb and the chart below can come from different sources
-          (`storedClimbCaption`), so each says its own. */}
-      {climb && stored.some((stat) => stat.label === ASCENT) && (
-        <p className={classes.note}>{storedClimbCaption(climb.source)}</p>
-      )}
-    </>
-  );
+    ) : (
+      <div className={classes.statGroup}>
+        <StatGrid stats={pairedStatLayout(stats.slice(0, captionAfter))} />
+        <p className={classes.statCaption}>
+          {storedClimbCaption(climb?.source)}
+        </p>
+        {captionAfter < stats.length && (
+          <StatGrid stats={pairedStatLayout(stats.slice(captionAfter))} />
+        )}
+      </div>
+    );
 
   if (loading || error || !detail || !heights)
     return (

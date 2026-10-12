@@ -194,9 +194,15 @@ describe("TrackProfiles", () => {
     });
     // The chart and the stored figures each name their own source.
     await screen.findByText("Heights from NSW 5 m terrain data");
-    expect(
-      screen.getByText("Ascent and descent from 30 m terrain data"),
-    ).toBeTruthy();
+    // Directly under the two cells it is about, before the rest of the grid.
+    const caption = screen.getByText(
+      "Ascent and descent from 30 m terrain data",
+    );
+    const before = caption.previousElementSibling!.querySelectorAll("dt");
+    expect(before[before.length - 1]!.textContent).toBe("Descent");
+    expect(caption.nextElementSibling?.querySelector("dt")?.textContent).toBe(
+      "Avg speed",
+    );
     expect(save).toHaveBeenCalledExactlyOnceWith({
       elevationGainM: 80,
       elevationLossM: 0,

@@ -72,6 +72,31 @@ Proposal: #359.
   archive rebuilt inside an unchanged `coverage` re-asks nothing, and a
   source with no declared footprint (a LiDAR job's DEM) must change the key
   itself when it gains ground. Everything else above stands.
+- **Update 2026-10-12: Logjam Web replaces a stored climb too, and each
+  figure says its source.** A finished recording's Ascent and Descent are the
+  stored figures on every screen of both clients; no screen shows its own
+  reading beside them. A track's page on Logjam Web
+  (`frontend/src/components/sidebar/panels/TrackProfiles.tsx`) reads the
+  terrain for its chart anyway, so when that reading is complete and
+  `isFinerClimbSource` says its source beats the stored one, the page sends
+  it (`reclimbMedia` in `frontend/src/placeUtils.ts`), for the viewer's own
+  recording only: never an import, never a shared track. It builds the
+  request as `upgradeTrackClimbs` does (`toElevationLine` in
+  `shared/src/trackLine.ts`, `ELEVATION_TRACK_MAX_SAMPLES`), so both clients
+  store the same figure for one source. The stored climb and the chart under
+  it can still come from different sources (a phone offline on coarse saved
+  terrain), so the line under the two figures names the stored source
+  (`storedClimbCaption` in `shared/src/profileSeries.ts`) and the chart's
+  line names its own in the same words. Guards:
+  `frontend/src/components/sidebar/panels/TrackProfiles.test.tsx` ("stores a
+  climb read from a finer source"), `shared/src/profileSeries.test.ts`
+  ("names every source a climb can be stored from"). Cost: opening a page
+  can write; `PATCH /media/:id` accepts any valid climb from the owner, so
+  "finer only" is held by each client and not by the API; and the phone that
+  recorded the track shows its own row, which learns of the web's write only
+  when its own pass reaches the same answer. A climb stored before the
+  arithmetic changed is still replaced by nothing. Everything else above
+  stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS
@@ -131,5 +156,16 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   as a seven-day wait and removed before merge: a track outside NSW would be
   sent to the API every week for good, for an answer that changes only when
   the source list does.
+- **Show Logjam Web's own terrain reading on a track's page** (2026-10-12).
+  Always the best data the page can get. Rejected because the Ways list, the
+  Stats totals and Logjam GPS would show the stored figure beside it, which
+  is the disagreement the stored climb exists to end.
+- **Leave replacing a stored climb to the phone that holds the line**
+  (2026-10-12). One writer. Rejected because a track that reached the account
+  from a phone no longer in use is never read again by anything.
+- **Have the API compute the climb when the file is uploaded** (2026-10-12).
+  It holds both the file and the DEM, so no client would need a pass. Not
+  taken: a larger change, and a phone offline must still store a figure of
+  its own at the finish.
 - **Choose the source in each client.** Rejected by 0020: deciding twice is
   how the two clients drifted before.

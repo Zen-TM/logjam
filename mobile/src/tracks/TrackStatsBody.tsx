@@ -15,6 +15,7 @@ import {
   elevationSeries,
   formatDistanceM,
   formatSpeedMps,
+  PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedSeries,
   speedTimeFormatter,
@@ -104,6 +105,13 @@ export function TrackStatsBody({
     storedClimb,
   });
 
+  // The stored climb and the chart below can come from different sources
+  // (`storedClimbCaption`), so each says its own: the climb's line sits
+  // directly under the two cells it is about, which splits the grid there.
+  const captionAfter = storedClimb
+    ? stats.findIndex((stat) => stat.label === PAIRED_STAT_LABELS.descent) + 1
+    : 0;
+
   const speed = detail.speed;
   const formatClock = speed ? speedTimeFormatter(speed) : null;
 
@@ -111,14 +119,19 @@ export function TrackStatsBody({
     <View style={styles.body}>
       {/* Pairs share a line and a lone stat takes the row (`STAT_PAIRS`), so a
           missing Time or a missing pair cannot slide the rest out of step. */}
-      <StatGrid stats={pairedStatLayout(stats)} />
-      {/* The stored climb and the chart below can come from different sources
-          (`storedClimbCaption`), so each says its own. */}
-      {storedClimb ? (
-        <Text style={styles.pending}>
-          {storedClimbCaption(storedClimb.source)}
-        </Text>
-      ) : null}
+      {captionAfter === 0 ? (
+        <StatGrid stats={pairedStatLayout(stats)} />
+      ) : (
+        <View style={styles.statGroup}>
+          <StatGrid stats={pairedStatLayout(stats.slice(0, captionAfter))} />
+          <Text style={styles.statCaption}>
+            {storedClimbCaption(storedClimb?.source)}
+          </Text>
+          {captionAfter < stats.length ? (
+            <StatGrid stats={pairedStatLayout(stats.slice(captionAfter))} />
+          ) : null}
+        </View>
+      )}
 
       {elevation ? (
         <View style={styles.chartBlock}>
@@ -165,5 +178,13 @@ const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1.5) },
   chartBlock: { gap: spacing(0.5) },
   chartLabel: { ...textRole.section, color: theme.textMuted },
+  // The gap is the grid's own, so the two halves read as one grid, and the
+  // caption is inset as a stat cell is.
+  statGroup: { gap: spacing(1) },
+  statCaption: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    paddingHorizontal: spacing(1.5),
+  },
   pending: { color: theme.textMuted, fontSize: fontSize.sm },
 }));
