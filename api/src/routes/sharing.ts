@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -68,13 +69,24 @@ router.post(
 
     // Create the share and (optionally) notification in a transaction
     const share = await prisma.$transaction(async (tx) => {
-      const created = await tx.placeShare.create({
-        data: {
-          placeId,
-          sharedById: user.id,
-          sharedWithId: sharedWithUserId,
-        },
-      });
+      const created = await tx.placeShare
+        .create({
+          data: {
+            placeId,
+            sharedById: user.id,
+            sharedWithId: sharedWithUserId,
+          },
+        })
+        .catch((err: unknown) => {
+          // A concurrent grant of the same pair won the race past the
+          // pre-check; the unique key stopped this one.
+          if (
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === "P2002"
+          )
+            throw new AppError(409, "Place already shared with this user");
+          throw err;
+        });
       // The delta's shared-place visibility is a WHERE-restriction layered on
       // `updatedAt > since`, so GRANTING visibility moves no watermark and the
       // place is simply not in the recipient's next page. A sharee who had
