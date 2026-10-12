@@ -114,11 +114,10 @@ const useStyles = makeStyles((theme, textRole) => ({
     color: theme.text,
   },
   // The metric is supporting information, not the point of the screen: one
-  // step above body text, not a billboard. The `display` size is reserved for
-  // a screen whose whole purpose IS the number.
+  // step above body text, not a billboard.
   value: {
     ...textRole.heading,
     color: theme.text,
   },
-  valueSuffix: { ...muted(theme, textRole.detail), color: theme.textMuted },
+  valueSuffix: { ...muted(theme, textRole.detail) },
 }));

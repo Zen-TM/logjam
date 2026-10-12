@@ -391,7 +391,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(1),
   },
   // On a scrim, so white in every scheme (shared/DESIGN.md §7).
-  hintText: { ...muted(theme, textRole.detail), color: ON_SCRIM },
+  hintText: { ...textRole.detail, color: ON_SCRIM },
   actions: {
     position: "absolute",
     left: 0,

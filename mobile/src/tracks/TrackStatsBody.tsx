@@ -177,7 +177,7 @@ export function TrackStatsBody({
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1.5) },
   chartBlock: { gap: spacing(0.5) },
-  chartLabel: { ...muted(theme, textRole.section), color: theme.textMuted },
+  chartLabel: { ...muted(theme, textRole.section) },
   // The gap is the grid's own, so the two halves read as one grid, and the
   // caption is inset as a stat cell is.
   statGroup: { gap: spacing(1) },

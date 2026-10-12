@@ -410,5 +410,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   savedText: { flex: 1 },
   resultKind: { ...muted(theme, textRole.meta) },
-  resultText: { ...muted(theme, textRole.detail), color: theme.text },
+  resultText: { ...textRole.detail, color: theme.text },
 }));

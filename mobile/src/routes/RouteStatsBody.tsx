@@ -100,7 +100,7 @@ export function RouteStatsBody({
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  chartLabel: { ...muted(theme, textRole.section), color: theme.textMuted },
+  chartLabel: { ...muted(theme, textRole.section) },
   body: { gap: spacing(1.5) },
   band: {
     ...muted(theme, textRole.detail),

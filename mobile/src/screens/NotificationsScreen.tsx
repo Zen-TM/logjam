@@ -1483,7 +1483,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     backgroundColor: theme.page,
     paddingVertical: spacing(1),
   },
-  dayLabel: { ...muted(theme, textRole.section), color: theme.textMuted },
+  dayLabel: { ...muted(theme, textRole.section) },
   dayCount: { ...muted(theme, textRole.meta) },
   // The field carries its own right pad because the rail has none — the bucket
   // chips are meant to scroll off the edge; an input running into it just looks
