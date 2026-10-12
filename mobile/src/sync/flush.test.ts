@@ -304,6 +304,8 @@ describe("who owns a rejection", () => {
   it("does not count requests that never got an answer against the op", async () => {
     // Four sends that timed out, then one the server refused for now. Counting
     // sends parked this op on the first refusal after a bad stretch of signal.
+    // Mutation: park a refused op once its `attempts` reach
+    // SYNC_GIVE_UP_FAILURES.
     rows = [{ ...pushRow(1), attempts: 4 }];
     rejections.set("op-1", { code: 503, message: "upstream unavailable" });
 
