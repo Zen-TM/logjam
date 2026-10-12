@@ -811,5 +811,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.lg,
   },
-  searchInput: { ...textRole.body, flex: 1, color: theme.text },
+  searchInput: { ...textRole.field, flex: 1, color: theme.text },
 }));

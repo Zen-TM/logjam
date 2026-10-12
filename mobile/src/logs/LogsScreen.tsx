@@ -811,7 +811,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
   },
-  searchInput: { ...textRole.body, flex: 1, color: theme.text },
+  searchInput: { ...textRole.field, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   rail: {
     paddingLeft: spacing(2),

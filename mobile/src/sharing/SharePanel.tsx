@@ -890,7 +890,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     minHeight: controlSize.lg,
   },
   searchInput: {
-    ...textRole.body,
+    ...textRole.field,
     flex: 1,
     color: theme.text,
     paddingVertical: spacing(1),
