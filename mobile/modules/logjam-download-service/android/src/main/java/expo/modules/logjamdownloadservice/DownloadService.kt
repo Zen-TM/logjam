@@ -34,18 +34,25 @@ import android.os.PowerManager
 class DownloadService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
 
+  // What the notification says now. A Cancel press arrives as an intent with
+  // no text of its own, and must not blank the notification while the queue
+  // winds the download down.
+  private var title = ""
+  private var text = ""
+  private var percent = -1
+
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     // ALWAYS, and first, on the stop path too: startForegroundService() obliges
     // the service to call startForeground() within seconds or the app is
     // killed, and a stop can arrive before the start has been delivered.
-    val notification = buildNotification(
-      this,
-      intent?.getStringExtra(EXTRA_TITLE) ?: "",
-      intent?.getStringExtra(EXTRA_TEXT) ?: "",
-      intent?.getIntExtra(EXTRA_PERCENT, -1) ?: -1,
-    )
+    if (intent?.hasExtra(EXTRA_TITLE) == true) {
+      title = intent.getStringExtra(EXTRA_TITLE) ?: ""
+      text = intent.getStringExtra(EXTRA_TEXT) ?: ""
+      percent = intent.getIntExtra(EXTRA_PERCENT, -1)
+    }
+    val notification = buildNotification(this, title, text, percent)
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         startForeground(
@@ -62,7 +69,15 @@ class DownloadService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    if (intent == null || intent.action == ACTION_STOP) {
+    // Cancel, pressed on the notification. The queue in JS owns the downloads,
+    // so it is asked, and it stops this service when they are gone. With no JS
+    // left to ask there is nothing downloading either: stop.
+    val cancel = if (intent?.action == ACTION_CANCEL) onCancel else null
+    if (cancel != null) {
+      cancel()
+      return START_NOT_STICKY
+    }
+    if (intent == null || intent.action == ACTION_STOP || intent.action == ACTION_CANCEL) {
       stopForeground(STOP_FOREGROUND_REMOVE)
       stopSelf()
       return START_NOT_STICKY
@@ -75,6 +90,9 @@ class DownloadService : Service() {
   }
 
   fun update(title: String, text: String, percent: Int) {
+    this.title = title
+    this.text = text
+    this.percent = percent
     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     manager.notify(NOTIFICATION_ID, buildNotification(this, title, text, percent))
     holdCpu()
@@ -107,6 +125,7 @@ class DownloadService : Service() {
 
   companion object {
     const val ACTION_STOP = "expo.modules.logjamdownloadservice.STOP"
+    const val ACTION_CANCEL = "expo.modules.logjamdownloadservice.CANCEL"
     const val EXTRA_TITLE = "title"
     const val EXTRA_TEXT = "text"
     const val EXTRA_PERCENT = "percent"
@@ -117,6 +136,10 @@ class DownloadService : Service() {
 
     @Volatile
     var instance: DownloadService? = null
+
+    /** Set by the module while a JS runtime is there to cancel the downloads. */
+    @Volatile
+    var onCancel: (() -> Unit)? = null
 
     fun buildNotification(
       context: Context,
@@ -158,6 +181,20 @@ class DownloadService : Service() {
           ),
         )
       }
+      // The download outlives the app's screen, so the way to end it has to be
+      // where the download still shows: here.
+      builder.addAction(
+        Notification.Action.Builder(
+          null,
+          "Cancel",
+          PendingIntent.getService(
+            context,
+            1,
+            Intent(context, DownloadService::class.java).setAction(ACTION_CANCEL),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+          ),
+        ).build(),
+      )
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
       }

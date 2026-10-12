@@ -16,6 +16,7 @@ class LogjamDownloadServiceModule : Module() {
   /** A start has been sent and no stop since, whether or not it has landed yet. */
   private var started = false
   private var timersTask: Int? = null
+  private val cancelPressed: () -> Unit = { sendEvent("onCancel", emptyMap<String, Any?>()) }
 
   // React Native stops delivering JS timers while the activity is paused,
   // unless a headless task is running. The tile loop's rate limiter, timeouts
@@ -43,6 +44,11 @@ class LogjamDownloadServiceModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("LogjamDownloadService")
+
+    // The notification's Cancel, handed to the queue in JS.
+    Events("onCancel")
+
+    OnCreate { DownloadService.onCancel = cancelPressed }
 
     Function("show") { title: String, text: String, percent: Int ->
       val context = appContext.reactContext ?: return@Function
@@ -75,7 +81,11 @@ class LogjamDownloadServiceModule : Module() {
     // that was downloading and builds a new module with `started` false, so
     // nothing in the new runtime could take down a service the old one left
     // up: its notification stayed over a download that no longer existed.
-    OnDestroy { stopService() }
+    OnDestroy {
+      // Only our own: after a reload the next module may already be listening.
+      if (DownloadService.onCancel === cancelPressed) DownloadService.onCancel = null
+      stopService()
+    }
   }
 
   private fun stopService() {

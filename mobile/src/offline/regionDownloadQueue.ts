@@ -264,6 +264,22 @@ function installAutoResumeWatchers(): void {
     // they were waiting for has already come and gone.
     resumeJobsPausedBy("connectivity");
   });
+  // Cancel on the notification, which is the only control left once Logjam GPS
+  // is off the screen. It ends what the notification stands for: the work in
+  // hand and the jobs waiting for a connection. A job the user paused, or one
+  // that failed, is not what "Downloading maps" was showing.
+  LogjamDownloadService?.addListener("onCancel", () => {
+    for (const job of jobs) {
+      const { state } = job;
+      if (
+        state.kind === "queued" ||
+        state.kind === "downloading" ||
+        (state.kind === "paused" && state.reason === "connectivity")
+      ) {
+        cancelRegionDownload(job.spec.id);
+      }
+    }
+  });
   // Every connectivity change, not just offline → online: Wi-Fi arriving
   // while cellular is already up is what a Wi-Fi-only job is waiting for.
   NetInfo.addEventListener((state) => {
