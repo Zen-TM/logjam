@@ -69,20 +69,28 @@ class LogjamDownloadServiceModule : Module() {
       }
     }
 
-    Function("stop") {
-      val context = appContext.reactContext
-      if (context != null && started) {
-        started = false
-        keepTimers(false)
-        // Through onStartCommand rather than stopService(): a stop that beats the
-        // start to the service would otherwise skip startForeground() and crash.
-        try {
-          context.startService(
-            Intent(context, DownloadService::class.java).setAction(DownloadService.ACTION_STOP),
-          )
-        } catch (e: Exception) {
-          context.stopService(Intent(context, DownloadService::class.java))
-        }
+    Function("stop") { stopService() }
+
+    // A JS reload (the error screen's Reload, a dev reload) ends the queue
+    // that was downloading and builds a new module with `started` false, so
+    // nothing in the new runtime could take down a service the old one left
+    // up: its notification stayed over a download that no longer existed.
+    OnDestroy { stopService() }
+  }
+
+  private fun stopService() {
+    val context = appContext.reactContext
+    if (context != null && started) {
+      started = false
+      keepTimers(false)
+      // Through onStartCommand rather than stopService(): a stop that beats the
+      // start to the service would otherwise skip startForeground() and crash.
+      try {
+        context.startService(
+          Intent(context, DownloadService::class.java).setAction(DownloadService.ACTION_STOP),
+        )
+      } catch (e: Exception) {
+        context.stopService(Intent(context, DownloadService::class.java))
       }
     }
   }
