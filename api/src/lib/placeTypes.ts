@@ -9,7 +9,7 @@
 // null), and nothing else. System types are global — one row shared by every
 // user — which is what makes a shared or copied place of a system type resolve
 // for its recipient with no reconciliation at all.
-import { Prisma } from "@prisma/client";
+import { Prisma, type PlaceType } from "@prisma/client";
 import {
   freePlaceTypeName,
   isPlaceTypeColor,
@@ -202,13 +202,32 @@ async function settlePlaceTypeName(
 }
 
 /** The database's unique indexes (the exact name, and the name as read), lost
- *  to a concurrent write between the check above and the insert. Same answer
- *  as the check. Guard: `prisma/upgrade-check/verify.sql`. */
+ *  to a concurrent write between the check above and the insert. */
+function isNameRace(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+  );
+}
+
+/** Same answer as the check. Guard: `prisma/upgrade-check/verify.sql`. */
 function rethrowNameRace(e: unknown, name: string): never {
-  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-    throw new AppError(409, placeTypeNameTakenError(name));
-  }
+  if (isNameRace(e)) throw new AppError(409, placeTypeNameTakenError(name));
   throw e;
+}
+
+/**
+ * May a write that lost the race settle its name again? Only one that renames,
+ * and once: the second look sees the row that won and takes the next free
+ * name, where a 409 would park the push (`OnNameTaken`). Once, because the
+ * index on a create's id answers with the same code and never clears.
+ * Guard: `placeTypes.unit.test.ts`.
+ */
+function retriesNameRace(
+  e: unknown,
+  onNameTaken: OnNameTaken,
+  raced: boolean,
+): boolean {
+  return onNameTaken === "rename" && !raced && isNameRace(e);
 }
 
 export async function createPlaceType(
@@ -216,7 +235,8 @@ export async function createPlaceType(
   id: string | undefined,
   input: PlaceTypeInput,
   onNameTaken: OnNameTaken = "refuse",
-) {
+  raced = false,
+): Promise<PlaceType> {
   const name = await settlePlaceTypeName(userId, input.name, onNameTaken);
   const position =
     input.position ??
@@ -233,6 +253,9 @@ export async function createPlaceType(
       },
     });
   } catch (e) {
+    if (retriesNameRace(e, onNameTaken, raced)) {
+      return createPlaceType(userId, id, input, onNameTaken, true);
+    }
     rethrowNameRace(e, name);
   }
 }
@@ -249,7 +272,8 @@ export async function updatePlaceType(
   current: { id: string; name: string },
   merged: PlaceTypeInput,
   onNameTaken: OnNameTaken = "refuse",
-) {
+  raced = false,
+): Promise<PlaceType> {
   const name =
     nameKey(merged.name) === nameKey(current.name)
       ? merged.name
@@ -260,6 +284,9 @@ export async function updatePlaceType(
       data: { ...merged, name },
     });
   } catch (e) {
+    if (retriesNameRace(e, onNameTaken, raced)) {
+      return updatePlaceType(userId, current, merged, onNameTaken, true);
+    }
     rethrowNameRace(e, name);
   }
 }

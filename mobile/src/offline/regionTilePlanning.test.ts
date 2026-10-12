@@ -7,6 +7,8 @@ import {
   exhaustedTileOutcome,
   regionPlanHash,
   regionTileSequence,
+  savesVectorOnly,
+  settledStop,
   tileUrlFrom,
   vectorClipFor,
 } from "./regionTilePlanning";
@@ -113,6 +115,47 @@ describe("vectorClipFor", () => {
   it("rides along for a signed-in user, never for a guest", () => {
     expect(vectorClipFor(false)).toBe("include");
     expect(vectorClipFor(true)).toBe("none");
+  });
+});
+
+// Mutation: ignore the clip and the second line goes red. A guest who
+// deselects the only map then reads "Detailed map only" under the note saying
+// the detailed map needs an account.
+describe("savesVectorOnly", () => {
+  it("is the vector map with no raster picked, and never a save without it", () => {
+    expect(savesVectorOnly("include", 0)).toBe(true);
+    expect(savesVectorOnly("none", 0)).toBe(false);
+    expect(savesVectorOnly("include", 1)).toBe(false);
+  });
+});
+
+describe("settledStop", () => {
+  // Two workers run a job. One sees the cancel and stops; the other is midway
+  // through a tile's retries and halts the job as paused for a connection.
+  // Mutation: return what the workers halted on and the first line goes red.
+  // The partial file is then kept and the job resumes itself on reconnect.
+  it("lets a cancel win over whatever a worker halted on", () => {
+    const cancelled = { kind: "cancelled" };
+    expect(
+      settledStop("cancel", { kind: "paused", reason: "connectivity" }),
+    ).toEqual(cancelled);
+    expect(settledStop("cancel", { kind: "failed" })).toEqual(cancelled);
+    expect(settledStop("cancel", null)).toEqual(cancelled);
+  });
+
+  // Mutation: keep the worker's reason. A download the user paused is then
+  // restarted by the next reconnect.
+  it("keeps a pause the user asked for the user's", () => {
+    expect(
+      settledStop("pause", { kind: "paused", reason: "connectivity" }),
+    ).toEqual({ kind: "paused", reason: "user" });
+  });
+
+  it("is what the workers halted on when nobody asked", () => {
+    const failed = { kind: "failed" };
+    expect(settledStop(null, failed)).toBe(failed);
+    expect(settledStop("pause", failed)).toBe(failed);
+    expect(settledStop("pause", null)).toBeNull();
   });
 });
 

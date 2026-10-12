@@ -220,7 +220,9 @@ async function noteUnanswered(): Promise<void> {
   }
   const ms =
     (typeof stored.ms === "number" ? stored.ms : 0) +
-    (gap <= UNANSWERED_GAP_MAX_MS ? gap : 0);
+    // A clock set back between two failures is a negative gap, and adding
+    // it took time off the count (syncEngine.test.ts).
+    (gap > 0 && gap <= UNANSWERED_GAP_MAX_MS ? gap : 0);
   const since =
     typeof stored.since === "string"
       ? stored.since
