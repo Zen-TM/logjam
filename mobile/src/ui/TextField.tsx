@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { TextInput, View, type TextInputProps } from "react-native";
 
-import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
+import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Field } from "./Field";
 
 type TextFieldProps = {
@@ -100,7 +100,7 @@ export function TextField({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   input: {
     borderWidth: 1,
     borderColor: theme.lineStrong,
@@ -108,7 +108,7 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.md,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(1.5),
-    fontSize: fontSize.base,
+    ...textRole.field,
     color: theme.text,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },

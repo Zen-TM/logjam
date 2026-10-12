@@ -48,7 +48,7 @@ import {
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-import { fontSize, radius, spacing, makeStyles, useTheme } from "../theme";
+import { radius, spacing, makeStyles, useTheme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
 import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
@@ -420,7 +420,7 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
 
 const GRID_GAP = spacing(1);
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   list: { gap: spacing(1) },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
   // A chosen cell changes its edge's colour, never its width: Fabric drops a
@@ -434,5 +434,5 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "center",
   },
   cellChosen: { borderColor: theme.accent },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  hint: { ...textRole.hint },
 }));

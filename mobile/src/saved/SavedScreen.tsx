@@ -88,7 +88,6 @@ import {
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import {
-  fontSize,
   radius,
   spacing,
   makeStyles,
@@ -2828,8 +2827,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // Small and honest: the constraint is real, but it is a footnote to the
   // cards above it, not a warning banner.
   downloadNote: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...textRole.meta,
     paddingHorizontal: spacing(0.5),
   },
 }));

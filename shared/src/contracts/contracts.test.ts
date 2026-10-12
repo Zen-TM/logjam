@@ -47,6 +47,7 @@ import {
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
   friendRemoveConfirm,
+  friendRequestMadeFriend,
   friendsRemoveConfirm,
   friendSharesEmptyTitle,
   friendSharesNote,
@@ -492,6 +493,14 @@ describe("friends", () => {
     expect(kind(2, 1, "all")).toBeNull();
   });
 
+  it("knows a sent request that made a friend from one still waiting", () => {
+    expect(friendRequestMadeFriend({ id: "f", status: "accepted" })).toBe(true);
+    expect(friendRequestMadeFriend({ id: "f", status: "pending" })).toBe(false);
+    // An older API answers the same row; anything else is not a friend.
+    expect(friendRequestMadeFriend(undefined)).toBe(false);
+    expect(friendRequestMadeFriend(null)).toBe(false);
+  });
+
   it("says removing a friend ends sharing both ways", () => {
     expect(friendRemoveConfirm("abel").confirmTitle).toBe("Remove abel?");
     expect(friendRemoveConfirm("abel").confirmBody).toContain("both ways");
@@ -745,6 +754,29 @@ describe("the map point panel", () => {
     expect(facts[3].value).toMatch(/^N 0°$|^N 360°$|^N \d+°$/);
   });
 
+  // Mutation: show a dash or a zero for an unknown slope, and a point outside
+  // the fine DEM reads as flat ground.
+  it("shows a slope only when one is known, after the other figures", () => {
+    const base = {
+      point,
+      elevation: { state: "known", metres: 412.4 },
+      from: { latitude: -33.66, longitude: 150.35 },
+    } as const;
+    expect(mapPointFacts({ ...base, slopeDegrees: 37.6 }).at(-1)).toEqual({
+      key: "slope",
+      label: "Slope",
+      value: "38°",
+    });
+    expect(mapPointFacts({ ...base, slopeDegrees: 0 }).at(-1)!.value).toBe(
+      "0°",
+    );
+    for (const facts of [
+      mapPointFacts({ ...base, slopeDegrees: null }),
+      mapPointFacts(base),
+    ])
+      expect(facts.map((fact) => fact.key)).not.toContain("slope");
+  });
+
   it("says why there is no height rather than showing a dash", () => {
     const unavailable = mapPointFacts({
       point,
@@ -791,6 +823,7 @@ describe("the map point panel", () => {
       point,
       elevation: { state: "unavailable" },
       from: { latitude: -33.66, longitude: 150.34 },
+      slopeDegrees: 12,
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");

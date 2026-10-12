@@ -145,8 +145,8 @@ export const makeStyles = <T extends NamedStyles<T> | NamedStyles<unknown>>(
  * out of. `resolveTextScale` therefore clamps the COMBINED figure to
  * `MAX_COMBINED_TEXT_SCALE` and returns what is left for us to apply.
  *
- * Applied at launch, unlike the scheme: `fontSize`, `lineHeight` and the sizes
- * in `textRole` are module constants every style reads (DESIGN.md).
+ * Applied at launch, unlike the scheme: the sizes in `textRole` are module
+ * constants every style reads (DESIGN.md).
  */
 export const TEXT_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
 export type TextScale = (typeof TEXT_SCALES)[number];
@@ -267,39 +267,42 @@ export const fontWeight = {
   bold: weight(FONT_WEIGHT.bold),
 } as const;
 
-/** One of `TEXT_ROLES`' styles, spread into a text style: `...textRole.title`. */
+/** Line height of a role that sets its lines apart (`leading` in `TEXT_ROLES`). */
+const leading = scaled(22);
+
+/** One of the type roles' styles, spread into a text style: `...textRole.title`. */
 type TextRoleStyle = {
   fontSize: number;
   fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
+  lineHeight?: number;
   textTransform?: "uppercase";
   color?: string;
 };
 export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 /** The type roles in one scheme, for a reader outside a component. */
-export const textRolesFor = perScheme(
-  (theme) =>
-    Object.fromEntries(
-      Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
-        if (!("gps" in spec)) return [];
-        const role = spec.gps as {
-          size: keyof typeof fontSize;
-          weight: keyof typeof fontWeight;
-          uppercase?: true;
-          muted?: true;
-        };
-        // The one place a size and a weight are written together.
-        // eslint-disable-next-line no-restricted-syntax
-        const style: TextRoleStyle = {
-          fontSize: fontSize[role.size],
-          fontWeight: fontWeight[role.weight],
-          ...(role.uppercase ? { textTransform: "uppercase" } : {}),
-          ...(role.muted ? { color: theme.textMuted } : {}),
-        };
-        return [[name, style]];
-      }),
-    ) as TextRoles,
-);
-export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
+export const textRolesFor = perScheme((theme) => {
+  return Object.fromEntries(
+    Object.entries(TEXT_ROLES).flatMap(([name, spec]) => {
+      if (!("gps" in spec)) return [];
+      const role: {
+        size: keyof typeof fontSize;
+        weight: keyof typeof fontWeight;
+        uppercase?: true;
+        muted?: true;
+        leading?: true;
+      } = spec.gps;
+      // The one place a size and a weight are written together.
+      const style: TextRoleStyle = {
+        fontSize: fontSize[role.size],
+        fontWeight: fontWeight[role.weight],
+        ...(role.leading ? { lineHeight: leading } : {}),
+        ...(role.uppercase ? { textTransform: "uppercase" } : {}),
+        ...(role.muted ? { color: theme.textMuted } : {}),
+      };
+      return [[name, style]];
+    }),
+  ) as TextRoles;
+});
 
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
 export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";

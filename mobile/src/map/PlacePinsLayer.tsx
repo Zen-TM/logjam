@@ -26,6 +26,8 @@ import {
   MAP_INK,
 } from "@logjam/shared";
 
+import { PIN_LABEL_TEXT } from "./mapLabelText";
+
 /**
  * The ink, exported because rows and chips elsewhere match the map.
  *
@@ -58,8 +60,7 @@ export const PLACE_LABEL_EXPR = [
 
 const LABEL_STYLE = {
   textField: PLACE_LABEL_EXPR as unknown as string,
-  textFont: ["Noto Sans Medium"],
-  textSize: 12,
+  ...PIN_LABEL_TEXT,
   // Drawn on the basemap, not the page, so fixed whatever the scheme.
   textColor: MAP_INK.label,
   textHaloColor: MAP_INK.casing,

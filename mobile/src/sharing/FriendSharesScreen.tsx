@@ -72,7 +72,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { requestSync } from "../sync/syncEngine";
-import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
+import { spacing, makeStyles, useTheme, useHues } from "../theme";
 import {
   BottomSheet,
   EmptyState,
@@ -847,7 +847,7 @@ function ShareCardMenu({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Both children are CHIP_RAIL_HEIGHT tall by construction, which is
   // what keeps the list still when the bar swaps in (DESIGN.md).
@@ -857,7 +857,7 @@ const useStyles = makeStyles((theme) => ({
     paddingBottom: spacing(1),
   },
   note: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
-  noteText: { color: theme.textMuted, fontSize: fontSize.sm, lineHeight: 17 },
+  noteText: { ...textRole.hint },
   banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
   list: { flex: 1 },
   listContent: {
@@ -866,5 +866,5 @@ const useStyles = makeStyles((theme) => ({
     paddingBottom: spacing(4),
   },
   menuBody: { gap: spacing(1) },
-  menuNote: { color: theme.textMuted, fontSize: fontSize.sm },
+  menuNote: { ...textRole.hint },
 }));

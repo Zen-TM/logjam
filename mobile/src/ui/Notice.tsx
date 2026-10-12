@@ -1,13 +1,6 @@
 import { Text, View } from "react-native";
 
-import {
-  fontSize,
-  radius,
-  spacing,
-  makeStyles,
-  useTheme,
-  controlSize,
-} from "../theme";
+import { radius, spacing, makeStyles, useTheme, controlSize } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 /**
@@ -56,7 +49,7 @@ export function Notice({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   notice: {
     alignSelf: "center",
     maxWidth: "100%",
@@ -75,8 +68,8 @@ const useStyles = makeStyles((theme) => ({
   // `flexShrink`, not `flex: 1`: the notice hugs its words until they wrap.
   text: {
     flexShrink: 1,
+    ...textRole.bodySmall,
     color: theme.text,
-    fontSize: fontSize.sm,
     textAlign: "center",
   },
 }));

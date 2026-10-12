@@ -35,12 +35,19 @@ export const MAP_POINT = {
     // one to show them.
     { key: "distance" },
     { key: "bearing" },
+    {
+      key: "slope",
+      on: "gps",
+      reason:
+        "A slope needs nine heights from the fine DEM. Logjam GPS reads DEM tiles itself; Logjam Web gets heights from the API's profile route, which answers along a line.",
+    },
   ],
   copy: {
     position: "Position",
     elevation: "Elevation",
     distance: "Distance",
     bearing: "Bearing",
+    slope: "Slope",
     elevationChecking: "Checking…",
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.
@@ -140,7 +147,7 @@ export type MapPointElevation =
   | { state: "unavailable" };
 
 export type MapPointFact = {
-  key: "position" | "elevation" | "distance" | "bearing";
+  key: "position" | "elevation" | "distance" | "bearing" | "slope";
   label: string;
   value: string;
   /** Takes the whole line. */
@@ -157,14 +164,16 @@ export function mapPointPosition(point: MapPointCoord): string {
 /**
  * The figures for a point, in order. `from` is the viewer's own fix, or null
  * when the device has none: distance and bearing are then left out rather than
- * asked for.
+ * asked for. `slopeDegrees` is `demSlopeAt`'s answer: null or absent wherever
+ * the fine DEM cannot tell, and then there is no slope figure at all.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
   elevation: MapPointElevation;
   from: MapPointCoord | null;
+  slopeDegrees?: number | null;
 }): MapPointFact[] {
-  const { point, elevation, from } = input;
+  const { point, elevation, from, slopeDegrees } = input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -212,5 +221,11 @@ export function mapPointFacts(input: {
       },
     );
   }
+  if (slopeDegrees != null)
+    facts.push({
+      key: "slope",
+      label: copy.slope,
+      value: `${Math.round(slopeDegrees)}°`,
+    });
   return facts;
 }

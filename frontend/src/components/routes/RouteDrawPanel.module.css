@@ -25,28 +25,28 @@
 }
 
 .hint {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 .note {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-sm);
 }
 
 .band {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
 }
 
 .attribution {
+  composes: meta from "../../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-xs);
   font-style: italic;
   line-height: 1.3;
 }

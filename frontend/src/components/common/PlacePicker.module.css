@@ -27,6 +27,7 @@
 }
 
 .option {
+  composes: body from "../../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: 10px;
@@ -34,7 +35,6 @@
   padding: 0 10px;
   border-radius: var(--radius-md);
   color: var(--color-text);
-  font-size: var(--font-sm);
   cursor: pointer;
 }
 
@@ -62,8 +62,8 @@
 }
 
 .status {
+  composes: body from "../../textRoles.generated.module.css";
   margin: 0;
   padding: 8px 10px;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }

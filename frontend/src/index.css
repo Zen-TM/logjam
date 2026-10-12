@@ -36,10 +36,6 @@
   --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
   /* The narrow-web sheet's top edge, over the map. */
   --shadow-sheet: 0 -4px 12px rgba(0, 0, 0, 0.3);
-
-  /* Type relative to its parent, for a label inside a label. */
-  --text-xs: 0.75em;
-  --text-sm: 0.85em;
 }
 
 /* The reset. Every width in this app is written as though padding and border

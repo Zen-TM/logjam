@@ -21,6 +21,8 @@ import {
   type VectorStyleSettings,
 } from "@logjam/shared";
 
+import { topoLabelText } from "./mapLabelText";
+
 export type TopoVectorLayerDef = {
   /** Suffix appended to the per-overlay layer id ("minor", "road-label", …). */
   suffix: string;
@@ -31,17 +33,6 @@ export type TopoVectorLayerDef = {
   /** MLRN camelCase style object (paint + layout merged). */
   style: Record<string, unknown>;
 };
-
-const TEXT_FONT = ["Noto Sans Medium"];
-
-// Base label-size bump matching the web live map (WEB_LABEL_BASE_SCALE — the
-// export bakers deliberately diverge with their own larger base).
-const LABEL_BASE_SCALE = 1.75;
-
-function labelTextSize(scale: number): unknown[] {
-  const s = scale * LABEL_BASE_SCALE;
-  return ["interpolate", ["linear"], ["zoom"], 14, 9 * s, 18, 12 * s];
-}
 
 function lineWidthInterp(widthZ18: number): unknown[] {
   const { z12, z18 } = featureLineWidthStops(widthZ18);
@@ -77,7 +68,7 @@ const CONTOUR_MINOR_FILTER = [
 ];
 
 function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
-  const sizeExpr = labelTextSize(vs.labelScale ?? 1);
+  const labelText = topoLabelText(vs.labelScale ?? 1);
   return [
     {
       suffix: "minor",
@@ -108,8 +99,7 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       minzoom: 12,
       style: {
         textField: ["concat", ["to-string", ["get", "elev"]], "m"],
-        textFont: TEXT_FONT,
-        textSize: sizeExpr,
+        ...labelText,
         symbolPlacement: "line",
         // LAZ-derived contours are very knobbly — 150° lets labels place
         // along wiggly runs at low zoom (web parity, see Map.tsx).
@@ -124,7 +114,7 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
 
 function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
   const feat = (key: OsmFeatureKey) => vs.features[key];
-  const sizeExpr = labelTextSize(vs.labelScale ?? 1);
+  const labelText = topoLabelText(vs.labelScale ?? 1);
   const defs: TopoVectorLayerDef[] = [];
 
   // Line features (waterway/track/road) + power + building fill.
@@ -208,8 +198,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       minzoom: 12,
       style: {
         textField: ["coalesce", ["get", "name"], ["get", "ref"], ""],
-        textFont: TEXT_FONT,
-        textSize: sizeExpr,
+        ...labelText,
         symbolPlacement: "line",
         textMaxAngle: 60,
         textColor: rgbaCssFromHex(feat(key).colour),
@@ -265,8 +254,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       minzoom: 12,
       style: {
         textField,
-        textFont: TEXT_FONT,
-        textSize: sizeExpr,
+        ...labelText,
         textAnchor: "top",
         textOffset: [0, 0.8],
         textOptional: true,

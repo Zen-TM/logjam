@@ -77,9 +77,9 @@
 }
 
 .swatchLabel {
+  composes: label from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
 }
 

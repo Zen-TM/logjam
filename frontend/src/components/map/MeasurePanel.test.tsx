@@ -7,6 +7,7 @@ import {
   mapPointVerbs,
 } from "@logjam/shared";
 import { PANEL_TITLES } from "../sidebar/panels";
+import { SheetSnapContext } from "../sidebar/sheetSnap";
 import { MeasurePanel } from "./MeasurePanel";
 
 const terrain = vi.hoisted(() => ({
@@ -36,7 +37,10 @@ const line: [number, number][] = [
   [150.35, -33.65],
 ];
 
-function draw(over: Partial<Parameters<typeof MeasurePanel>[0]> = {}) {
+function draw(
+  over: Partial<Parameters<typeof MeasurePanel>[0]> = {},
+  snap: "peek" | "half" | null = null,
+) {
   const props = {
     points: [] as [number, number][],
     anchorCount: 0,
@@ -49,7 +53,11 @@ function draw(over: Partial<Parameters<typeof MeasurePanel>[0]> = {}) {
     onSnapModeChange: vi.fn(),
     ...over,
   };
-  render(<MeasurePanel {...props} />);
+  render(
+    <SheetSnapContext.Provider value={snap}>
+      <MeasurePanel {...props} />
+    </SheetSnapContext.Provider>,
+  );
   return props;
 }
 
@@ -99,6 +107,29 @@ describe("the measure tool's page", () => {
           (button) => button.textContent || button.getAttribute("aria-label"),
         ),
     ).toEqual(["Close", undo.label, clear.label]);
+  });
+
+  // Narrow web opens a drawing tool at the sheet's peek, which is a title and
+  // one row (`DraftPeek`, shared with the route tool). Mutation that turns it
+  // red: draw the body and footer at the peek too.
+  it("keeps the note, the distance and Undo at the sheet's peek, and the rest above it", () => {
+    const props = draw({ points: line, anchorCount: 2, canUndo: true }, "peek");
+    expect(screen.getByRole("status").textContent).toBe("2 points");
+    expect(screen.getByText("Distance").nextSibling?.textContent).toBe(
+      "1.1 km",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(props.onUndo).toHaveBeenCalledTimes(1);
+    expect(
+      screen
+        .getAllByRole("button")
+        .map(
+          (button) => button.textContent || button.getAttribute("aria-label"),
+        ),
+    ).toEqual(["Close", "Undo"]);
+    cleanup();
+    draw({ points: line, anchorCount: 2, canUndo: true }, "half");
+    expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
   });
 
   it("undoes on Ctrl+Z, as the route tool does", () => {
