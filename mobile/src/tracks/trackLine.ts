@@ -7,8 +7,10 @@
 //
 // PRIVACY: these are precise wilderness coordinates. Nothing here logs.
 import {
+  DISTANCE_SMOOTHING_WINDOW,
   ELEVATION_SMOOTHING_WINDOW,
   MAX_ROUTE_POINTS,
+  movingMean,
   movingMedian,
   type GpsFix,
   type TrackSeriesPoint,
@@ -70,9 +72,24 @@ function segmentRuns(
 export function toElevationLine(
   points: readonly TrackSeriesPoint[],
 ): [number, number][][] {
-  return strided(points).map(({ run, kept }) =>
-    kept.map((i) => [run[i]!.lon, run[i]!.lat]),
-  );
+  return strided(points).map(({ run, kept }) => {
+    // The positions distance is measured along (`computeTrackDetail`), not
+    // the raw fixes: a fix that jitters sideways up a gorge wall reads the
+    // wall's height, and the DEM counts it as climb. Measured on a recorded
+    // canyon day with a true net fall of 846 m: raw fixes read 725 m up and
+    // 1,576 m down at this vertex budget, averaged ones 96 m and 943 m.
+    // ponytail: a five-fix mean, the same stopgap distance uses. A properly
+    // cleaned line replaces both.
+    const lons = movingMean(
+      run.map((point) => point.lon),
+      DISTANCE_SMOOTHING_WINDOW,
+    );
+    const lats = movingMean(
+      run.map((point) => point.lat),
+      DISTANCE_SMOOTHING_WINDOW,
+    );
+    return kept.map((i) => [lons[i]!, lats[i]!]);
+  });
 }
 
 /**

@@ -84,6 +84,20 @@ describe("toElevationLine", () => {
   });
 });
 
+describe("the positions toElevationLine reads the DEM at", () => {
+  // Mutation: keep the raw fixes and one that jitters up a gorge wall is read
+  // at the wall's height, which the DEM profile counts as climb.
+  it("are averaged over the fixes either side, the way distance is", () => {
+    const points = run(5, 0, 150.2);
+    points[2] = { ...points[2]!, lat: -33.6 + 0.001 };
+    const line = toElevationLine(points)[0]!;
+    expect(line[2]![1]).toBeCloseTo(-33.6 + 0.0002, 9);
+    // The ends stay where they were measured.
+    expect(line[0]).toEqual([150.2, -33.6]);
+    expect(line[4]![1]).toBeCloseTo(-33.6, 9);
+  });
+});
+
 describe("toElevationGpsFixes", () => {
   const climbing = (count: number, segment: number, lonBase: number) =>
     run(count, segment, lonBase).map((point, i) => ({

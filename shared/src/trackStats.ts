@@ -243,7 +243,7 @@ function symmetricHalfWidth(
   return Math.min((window - 1) >> 1, index, length - 1 - index);
 }
 
-function movingMean(values: number[], window: number): number[] {
+export function movingMean(values: number[], window: number): number[] {
   if (window <= 1) return values.slice();
   return values.map((_, index) => {
     const half = symmetricHalfWidth(index, values.length, window);
