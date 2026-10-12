@@ -574,8 +574,9 @@ function AddFriendDialog({
 }
 
 /** The other way to add someone: a link to send, for when they are not at
- *  hand to spell a username. The link is shown as well as copied, because a
- *  browser may refuse the clipboard and the link exists only in this reply. */
+ *  hand to spell a username. The link goes to the clipboard and is shown only
+ *  when the browser refuses that: it exists only in this reply, so the page
+ *  is then the one place left to take it from. */
 export function InviteLink({ open }: { open: boolean }) {
   const toast = useToast();
   const [link, setLink] = useState<string | null>(null);
@@ -603,7 +604,7 @@ export function InviteLink({ open }: { open: boolean }) {
     try {
       const { token } = await createFriendInvite();
       url = friendInviteUrl(window.location.origin, token);
-      setLink(url);
+      setLink(null);
       setLive((count) => count + 1);
     } catch (err) {
       console.error(err);
@@ -611,14 +612,15 @@ export function InviteLink({ open }: { open: boolean }) {
       setBusy(false);
       return;
     }
-    // Its own failure: the link was made and is on screen to select by hand,
-    // so saying it could not be made sent people back for a second one
+    // Its own failure: the link was made, so saying it could not be made sent
+    // people back for a second one. It is put on screen to select by hand
     // (FriendsPanel.render.test.tsx).
     try {
       await navigator.clipboard.writeText(url);
       toast.success(copy.inviteCopied);
     } catch (err) {
       console.error(err);
+      setLink(url);
       toast.error(copy.inviteCopyFailed);
     } finally {
       setBusy(false);

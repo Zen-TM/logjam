@@ -46,6 +46,24 @@ describe("the invite link in the Add dialog", () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(toast.error).toHaveBeenCalledWith(FRIENDS.copy.inviteCopyFailed);
-    expect(screen.getByText(/\/invite|A{43}/)).toBeTruthy();
+    expect(screen.getByText(/A{43}/)).toBeTruthy();
+  });
+
+  // Mutation: show the link whenever one is made.
+  it("keeps the link off the page when it reached the clipboard", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: () => Promise.resolve() },
+    });
+    render(<InviteLink open />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: FRIENDS.copy.inviteCopy }),
+    );
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(FRIENDS.copy.inviteCopied),
+    );
+    expect(screen.queryByText(/A{43}/)).toBeNull();
   });
 });
