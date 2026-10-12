@@ -112,7 +112,7 @@ export async function createUserForSignup(params: {
         if (racing) return racing;
         throw new AppError(
           409,
-          say`An account already exists for this email address. Contact support if that isn't yours.`,
+          say`An account already exists for this email address. Contact support if you think that's a mistake.`,
         );
       }
 
@@ -251,7 +251,7 @@ router.get(
         if (!canRebind) {
           throw new AppError(
             409,
-            say`An account already exists for this email address. Contact support if that isn't yours.`,
+            say`An account already exists for this email address. Contact support if you think that's a mistake.`,
           );
         }
 

@@ -49,10 +49,13 @@ export type RegionClipRequest = {
 const AREA_OUTSIDE = say`That area is outside the map Logjam has. Choose one in NSW.`;
 /**
  * Logjam GPS builds from before the server's sentence was shown as it is look
- * for "too large" in it to tell this refusal from the one above; keep those
- * words while such a build is supported (regionClip.unit.test.ts).
+ * for "too large" in it to tell these two refusals from the one above; keep
+ * those words while such a build is supported (regionClip.unit.test.ts).
  */
 export const AREA_TOO_LARGE = say`That area is too large. Choose one up to ${Math.round(Math.sqrt(MAX_REGION_AREA_KM2))} km across.`;
+
+/** The area is within the cap, and the map cut from it still is not. */
+export const CLIP_TOO_LARGE = say`That area is too large to download in one go. Choose a smaller one.`;
 
 export type RegionClipValidation =
   | { ok: true; value: RegionClipRequest }

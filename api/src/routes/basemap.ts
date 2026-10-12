@@ -28,7 +28,7 @@ import {
   createClipTokenStore,
   pmtilesExtractArgs,
   validateRegionClipRequest,
-  AREA_TOO_LARGE,
+  CLIP_TOO_LARGE,
 } from "../lib/regionClip";
 
 const router = Router();
@@ -139,7 +139,7 @@ router.post(
       const { size } = await fs.stat(outPath);
       if (size > MAX_CLIP_OUTPUT_BYTES) {
         await fs.unlink(outPath);
-        throw new AppError(413, AREA_TOO_LARGE);
+        throw new AppError(413, CLIP_TOO_LARGE);
       }
       const { token, expiresAt } = clipTokens.issue({
         path: outPath,

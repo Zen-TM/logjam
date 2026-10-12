@@ -260,11 +260,7 @@ router.post(
     const addressee = await prisma.user.findUnique({
       where: { id: addresseeId },
     });
-    if (!addressee)
-      throw new AppError(
-        404,
-        say`Couldn't find your account. Sign out, then sign in again.`,
-      );
+    if (!addressee) throw new AppError(404, say`Couldn't find that person.`);
 
     // Lost to a racing request or redeem for the same pair: go again, and
     // this attempt reads the row that won, so a race ends where the same two

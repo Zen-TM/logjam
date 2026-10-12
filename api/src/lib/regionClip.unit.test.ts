@@ -7,6 +7,7 @@ import {
   pmtilesExtractArgs,
   validateRegionClipRequest,
   AREA_TOO_LARGE,
+  CLIP_TOO_LARGE,
 } from "./regionClip";
 import { redactPaths } from "./logger";
 
@@ -267,9 +268,10 @@ describe("pmtilesExtractArgs", () => {
 
 // Logjam GPS builds from before the server's sentence was shown as it is tell
 // an oversized area from one outside NSW by these two words (ADR 0022: a build
-// is supported for three months). Mutation: reword AREA_TOO_LARGE without them.
-describe("the oversized-area sentence", () => {
-  it('still says "too large"', () => {
+// is supported for three months). Mutation: reword either sentence without them.
+describe("the oversized-area sentences", () => {
+  it('still say "too large"', () => {
     expect(AREA_TOO_LARGE).toContain("too large");
+    expect(CLIP_TOO_LARGE).toContain("too large");
   });
 });
