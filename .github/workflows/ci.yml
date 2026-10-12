@@ -342,6 +342,12 @@ jobs:
       - name: Install
         working-directory: mobile
         run: npm ci
+      # Fails when an expo-* pin drifts from the SDK's own (a patch release
+      # lands between Dependabot rounds); fix with `npx expo install --fix`.
+      # Some checks call the Expo API; with EXPO_OFFLINE=1 they are skipped.
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
       - name: Lint
         working-directory: mobile
         run: npm run lint
