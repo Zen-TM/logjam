@@ -8,18 +8,29 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FRIENDS } from "@logjam/shared";
 
-import { InviteLink } from "./FriendsPanel";
+import { sendFriendRequest } from "../../../placeUtils";
+import { AddFriendDialog, InviteLink } from "./FriendsPanel";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   getFriendInvites: vi.fn(async () => []),
+  searchUsers: vi.fn(async () => [{ id: "carol-id", username: "carol" }]),
+  sendFriendRequest: vi.fn(),
   createFriendInvite: vi.fn(async () => ({
     token: "A".repeat(43),
     expiresAt: "2026-10-19T00:00:00.000Z",
   })),
 }));
+
+// jsdom has no modal dialogs.
+HTMLDialogElement.prototype.showModal = function () {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function () {
+  this.removeAttribute("open");
+};
 
 afterEach(() => {
   cleanup();
@@ -65,5 +76,48 @@ describe("the invite link in the Add dialog", () => {
       expect(toast.success).toHaveBeenCalledWith(FRIENDS.copy.inviteCopied),
     );
     expect(screen.queryByText(/A{43}/)).toBeNull();
+  });
+});
+
+// POST /friends/request answers with the friendship row, accepted when the
+// other person had already asked. Mutation: mark every sent row "Requested".
+describe("sending a request from the Add dialog", () => {
+  async function send(row: { status: string }) {
+    vi.mocked(sendFriendRequest).mockResolvedValue(row);
+    const onFriended = vi.fn();
+    render(
+      <AddFriendDialog
+        open
+        friends={[]}
+        onClose={() => {}}
+        onSent={() => {}}
+        onFriended={onFriended}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(FRIENDS.copy.searchField), {
+      target: { value: "carol" },
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: FRIENDS.copy.add }),
+    );
+    return onFriended;
+  }
+
+  it("shows a friend when they had already asked", async () => {
+    const onFriended = await send({ status: "accepted" });
+
+    expect(await screen.findByText(FRIENDS.copy.pillFriend)).toBeTruthy();
+    expect(screen.queryByText(FRIENDS.copy.pillRequested)).toBeNull();
+    expect(toast.success).toHaveBeenCalledWith("carol is now a friend.");
+    // Their request's prompt has gone from the inbox.
+    expect(onFriended).toHaveBeenCalled();
+  });
+
+  it("shows a request when they had not", async () => {
+    const onFriended = await send({ status: "pending" });
+
+    expect(await screen.findByText(FRIENDS.copy.pillRequested)).toBeTruthy();
+    expect(onFriended).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

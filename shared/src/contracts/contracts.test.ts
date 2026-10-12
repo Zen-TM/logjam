@@ -47,6 +47,7 @@ import {
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
   friendRemoveConfirm,
+  friendRequestMadeFriend,
   friendsRemoveConfirm,
   friendSharesEmptyTitle,
   friendSharesNote,
@@ -490,6 +491,14 @@ describe("friends", () => {
     expect(kind(2, 0, "requests")).toBe("noRequests");
     expect(kind(0, 1, "friends")).toBe("firstRun");
     expect(kind(2, 1, "all")).toBeNull();
+  });
+
+  it("knows a sent request that made a friend from one still waiting", () => {
+    expect(friendRequestMadeFriend({ id: "f", status: "accepted" })).toBe(true);
+    expect(friendRequestMadeFriend({ id: "f", status: "pending" })).toBe(false);
+    // An older API answers the same row; anything else is not a friend.
+    expect(friendRequestMadeFriend(undefined)).toBe(false);
+    expect(friendRequestMadeFriend(null)).toBe(false);
   });
 
   it("says removing a friend ends sharing both ways", () => {

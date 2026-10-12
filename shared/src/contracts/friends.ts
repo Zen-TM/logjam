@@ -94,6 +94,15 @@ export function friendAcceptedMessage(username: string): string {
   return `${username} is now a friend.`;
 }
 
+/**
+ * Whether sending a request made a friend. POST /friends/request answers
+ * with the friendship row, and that row is already accepted when the other
+ * person had asked first: the Add row then says Friend, not Requested.
+ */
+export function friendRequestMadeFriend(response: unknown): boolean {
+  return (response as { status?: unknown } | null)?.status === "accepted";
+}
+
 /** How many links are out, beside the button that turns them off. */
 export function friendInvitesLiveLabel(count: number): string {
   return `${count} ${count === 1 ? "link" : "links"} not used yet.`;

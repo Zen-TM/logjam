@@ -31,7 +31,7 @@ import {
   hashFriendInviteToken,
   mintFriendInviteToken,
 } from "../lib/friendInviteToken";
-import { wantsInAppNotification } from "./friends";
+import { isUniqueViolation, wantsInAppNotification } from "./friends";
 
 const router = Router();
 
@@ -146,6 +146,86 @@ router.post(
   },
 );
 
+/** Spend a link once. Throws P2002 when another write gives the pair its row
+ *  between `resolveInvite`'s read and the insert; the transaction rolls back,
+ *  so the link is still unspent. */
+async function redeemInvite(token: unknown, callerId: string) {
+  const { invite, friendship } = await resolveInvite(token, callerId);
+  const inviter = invite.inviter;
+
+  // Already friends: nothing to do, and the link is left for whoever it was
+  // really meant for.
+  if (friendship?.status === "accepted") {
+    return { ...inviter, friendshipId: friendship.id };
+  }
+
+  const notifyInviter = await wantsInAppNotification(
+    inviter.id,
+    "friendRequestInApp",
+  );
+
+  const friendshipId = await prisma.$transaction(async (tx) => {
+    // The delete IS the spend: of two openers racing, one deletes a row and
+    // the other deletes none.
+    const spent = await tx.friendInvite.deleteMany({
+      where: { id: invite.id, expiresAt: { gt: new Date() } },
+    });
+    if (spent.count !== 1) throw invalidLink();
+
+    let id: string;
+    if (friendship) {
+      // A request was already waiting between the two, either way round.
+      // Both have now said yes, so it is accepted and its prompt goes.
+      id = friendship.id;
+      await tx.friendship.update({
+        where: { id },
+        data: { status: "accepted" },
+      });
+      await tx.notification.deleteMany({
+        where: {
+          type: "friend_request",
+          payload: { path: ["friendshipId"], equals: id },
+        },
+      });
+    } else {
+      const created = await tx.friendship.create({
+        data: {
+          requesterId: inviter.id,
+          addresseeId: callerId,
+          status: "accepted",
+        },
+      });
+      id = created.id;
+    }
+    if (notifyInviter) {
+      // The type an accepted request writes, so every supported build of
+      // Logjam GPS already draws it (ADR 0022); `viaInvite` lets a build
+      // that knows it word the row for a link. Ids only; the username is
+      // resolved at read time.
+      await tx.notification.create({
+        data: {
+          userId: inviter.id,
+          type: "friend_request_accepted",
+          payload: {
+            friendshipId: id,
+            acceptedById: callerId,
+            viaInvite: true,
+          },
+        },
+      });
+    }
+    return id;
+  });
+  if (notifyInviter) {
+    void sendPushToUser(inviter.id, {
+      type: "friend_request_accepted",
+      friendshipId,
+    });
+  }
+
+  return { ...inviter, friendshipId };
+}
+
 // ── POST /friends/invites/redeem ──────────────────────────────
 // Spend a link: the caller and its inviter are friends from here.
 router.post(
@@ -154,84 +234,14 @@ router.post(
   friendInviteRedeemLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    const { invite, friendship } = await resolveInvite(
-      req.body?.token,
-      user.id,
-    );
-    const inviter = invite.inviter;
-
-    // Already friends: nothing to do, and the link is left for whoever it was
-    // really meant for.
-    if (friendship?.status === "accepted") {
-      res.json({ ...inviter, friendshipId: friendship.id });
-      return;
-    }
-
-    const notifyInviter = await wantsInAppNotification(
-      inviter.id,
-      "friendRequestInApp",
-    );
-
-    const friendshipId = await prisma.$transaction(async (tx) => {
-      // The delete IS the spend: of two openers racing, one deletes a row and
-      // the other deletes none.
-      const spent = await tx.friendInvite.deleteMany({
-        where: { id: invite.id, expiresAt: { gt: new Date() } },
-      });
-      if (spent.count !== 1) throw invalidLink();
-
-      let id: string;
-      if (friendship) {
-        // A request was already waiting between the two, either way round.
-        // Both have now said yes, so it is accepted and its prompt goes.
-        id = friendship.id;
-        await tx.friendship.update({
-          where: { id },
-          data: { status: "accepted" },
-        });
-        await tx.notification.deleteMany({
-          where: {
-            type: "friend_request",
-            payload: { path: ["friendshipId"], equals: id },
-          },
-        });
-      } else {
-        const created = await tx.friendship.create({
-          data: {
-            requesterId: inviter.id,
-            addresseeId: user.id,
-            status: "accepted",
-          },
-        });
-        id = created.id;
-      }
-      if (notifyInviter) {
-        // The type an accepted request writes, so every supported build of
-        // Logjam GPS already draws it (ADR 0022); `viaInvite` lets a build
-        // that knows it word the row for a link. Ids only; the username is
-        // resolved at read time.
-        await tx.notification.create({
-          data: {
-            userId: inviter.id,
-            type: "friend_request_accepted",
-            payload: {
-              friendshipId: id,
-              acceptedById: user.id,
-              viaInvite: true,
-            },
-          },
-        });
-      }
-      return id;
+    const token = req.body?.token;
+    // Lost to a racing request or redeem for the same pair: go again, and
+    // this time `resolveInvite` finds the row that won (or its block).
+    const friend = await redeemInvite(token, user.id).catch((err: unknown) => {
+      if (!isUniqueViolation(err)) throw err;
+      return redeemInvite(token, user.id);
     });
-    if (notifyInviter) {
-      void sendPushToUser(inviter.id, {
-        type: "friend_request_accepted",
-        friendshipId,
-      });
-    }
-
-    res.json({ ...inviter, friendshipId });
+    res.json(friend);
   },
 );
 
