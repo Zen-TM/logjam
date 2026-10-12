@@ -11,15 +11,17 @@
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import {
+  climbFromProfile,
   messageFromError,
   TRACK_COLORS,
   trackColorName,
   wayVerbIcon,
   wayVerbLabel,
   type TrackPass,
+  ELEVATION_TRACK_MAX_SAMPLES,
 } from "@logjam/shared";
 
 import { fontSize, spacing, makeStyles, useTheme, useHues } from "../theme";
@@ -34,6 +36,7 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
 import { passedHereText } from "./passedHere";
+import { storeTrackClimb } from "./trackClimb";
 import { TrackStatsBody } from "./TrackStatsBody";
 import { useTrackDetail } from "./useTrackDetail";
 
@@ -118,7 +121,7 @@ export function TrackOptionsSheet({
   // The stats read the whole series back, so they run only while that sub-mode
   // is actually open — the same `enabled` gate `useTrackDetail` exists for
   // (mobile/CLAUDE.md, Battery).
-  const { detail, loading, line } = useTrackDetail(
+  const { detail, loading, line, gpsFixes } = useTrackDetail(
     track?.id ?? null,
     visible && showingStats && track != null,
     track?.durationMs,
@@ -127,8 +130,19 @@ export function TrackOptionsSheet({
     line,
     {
       allowNetwork,
+      gpsFixes,
+      maxSamples: ELEVATION_TRACK_MAX_SAMPLES,
     },
   );
+
+  // The profile this panel has just read is the same reading the upgrade pass
+  // would make, already paid for: store it if it beats what the row holds, so
+  // the figure below and every other screen move together.
+  const trackId = track?.id ?? null;
+  useEffect(() => {
+    if (trackId == null || !showingStats) return;
+    void storeTrackClimb(trackId, climbFromProfile(demProfile)).catch(() => {});
+  }, [trackId, showingStats, demProfile]);
 
   const passedHere =
     passes && track
@@ -281,6 +295,10 @@ export function TrackOptionsSheet({
             elapsedMs={track.durationMs}
             demProfile={demProfile}
             demLoading={demLoading}
+            storedClimb={{
+              gainM: track.elevationGainM,
+              lossM: track.elevationLossM,
+            }}
           />
         </View>
       ) : (

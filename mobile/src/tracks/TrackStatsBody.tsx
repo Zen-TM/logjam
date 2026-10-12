@@ -35,6 +35,7 @@ export function TrackStatsBody({
   emptyMessage,
   demProfile,
   demLoading,
+  storedClimb,
 }: {
   detail: TrackDetail | null;
   loading: boolean;
@@ -72,6 +73,13 @@ export function TrackStatsBody({
    */
   demProfile?: ElevationProfile | null;
   demLoading?: boolean;
+  /**
+   * A FINISHED recording's stored climb and descent (`tracks/trackClimb.ts`).
+   * Shown instead of this panel's own reading, so the sheet, the Saved list,
+   * the Stats totals and Logjam Web give one figure for one track. Omitted for
+   * a live recording and an import, which have nothing stored.
+   */
+  storedClimb?: { gainM: number; lossM: number };
 }) {
   const styles = useStyles();
 
@@ -90,7 +98,10 @@ export function TrackStatsBody({
   // list is `trackStatRows`, shared with that page for the same reason.
   const heights = trackHeights(detail, demProfile, demLoading ?? false);
   const { elevation, note: heightsNote } = heights;
-  const stats: Stat[] = trackStatRows(detail, heights, elapsedMs);
+  const stats: Stat[] = trackStatRows(detail, heights, {
+    elapsedMs,
+    storedClimb,
+  });
 
   const speed = detail.speed;
   const formatClock = speed ? speedTimeFormatter(speed) : null;

@@ -157,13 +157,15 @@ export function trackHeights(
       : detail.maxAltitudeM == null
         ? "No heights for this track"
         : "Not enough height readings to chart"
-    : dem
-      ? "Heights from terrain data"
-      : demProfile
-        ? "Terrain data incomplete — heights from GPS"
-        : demLoading
-          ? "Heights from GPS — loading terrain…"
-          : "Heights from GPS — no terrain data here";
+    : dem?.filledFromGps
+      ? "Terrain data covers part of this track — the rest is from GPS"
+      : dem
+        ? "Heights from terrain data"
+        : demProfile
+          ? "Terrain data incomplete — heights from GPS"
+          : demLoading
+            ? "Heights from GPS — loading terrain…"
+            : "Heights from GPS — no terrain data here";
   return { dem, elevation, note };
 }
 
@@ -181,13 +183,23 @@ export function trackHeights(
 export function trackStatRows(
   detail: TrackDetail,
   heights: Pick<ReturnType<typeof trackHeights>, "dem" | "elevation">,
-  /** Wall-clock elapsed, for a LIVE recording: see `recordedDurationMs`. */
-  elapsedMs?: number,
+  options: {
+    /** Wall-clock elapsed, for a LIVE recording: see `recordedDurationMs`. */
+    elapsedMs?: number;
+    /**
+     * A FINISHED recording's stored climb and descent. Listed instead of this
+     * reading, so the track's page, the Saved list, the Stats totals and both
+     * clients give one figure for one track. Omitted for a live recording and
+     * an import, which have nothing stored.
+     */
+    storedClimb?: { gainM: number; lossM: number } | null;
+  } = {},
 ): { label: string; value: string }[] {
   const { dem, elevation } = heights;
+  const { elapsedMs, storedClimb } = options;
   const timed = detail.movingMs != null;
-  const gainM = dem ? dem.gainM : detail.elevationGainM;
-  const lossM = dem ? dem.lossM : detail.elevationLossM;
+  const gainM = storedClimb?.gainM ?? (dem ? dem.gainM : detail.elevationGainM);
+  const lossM = storedClimb?.lossM ?? (dem ? dem.lossM : detail.elevationLossM);
   const maxM = dem ? dem.maxM : detail.maxAltitudeM;
   const minM = dem ? dem.minM : detail.minAltitudeM;
   const L = PAIRED_STAT_LABELS;
