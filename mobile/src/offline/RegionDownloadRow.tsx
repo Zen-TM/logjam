@@ -18,7 +18,11 @@ import {
   resumeRegionDownload,
   type RegionJob,
 } from "./regionDownloadQueue";
-import { canPause, isRetryableFailure } from "./regionJobStatus";
+import {
+  canPause,
+  isRetryableFailure,
+  regionRejectedLine,
+} from "./regionJobStatus";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
   const theme = useTheme();
@@ -38,9 +42,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "provider-errors":
           return "Too many tiles wouldn't load. Try again later.";
         case "region-rejected":
-          return state.detail === "too-large"
-            ? "Pick a smaller area — up to 40 km across."
-            : "Pick an area inside NSW.";
+          return regionRejectedLine(state.detail);
         case "source-unavailable":
           // Not the phone's fault and not fixable by retrying, so it doesn't
           // say "try again" — this is the vector clip's 5xx.

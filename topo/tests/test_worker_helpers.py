@@ -67,31 +67,26 @@ class _FakeConn:
     _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
 )
 class TestSafeErrorMessage(unittest.TestCase):
-    def test_called_process_error_is_generic_with_job_id(self):
-        msg = safe_error_message(subprocess.CalledProcessError(1, "pdal"))
-        self.assertIn("subprocess failed", msg)
-        self.assertIn(worker.JOB_ID, msg)
+    # The owner reads this in both clients (shared/DESIGN.md §11): no tool's
+    # name, no id. Which step failed is in CloudWatch.
+    def test_a_failed_step_names_no_tool_and_no_id(self):
+        for error in (
+            subprocess.CalledProcessError(1, "pdal"),
+            RuntimeError("tippecanoe blew up"),
+            RuntimeError("pipeline.py exited with code 1"),
+            ValueError("???"),
+        ):
+            msg = safe_error_message(error)
+            self.assertEqual(msg, worker.GENERIC_FAILURE)
+            self.assertNotIn(worker.JOB_ID, msg)
+            self.assertNotRegex(msg, r"subprocess|pipeline|tippecanoe|tiles")
 
     def test_memory_error(self):
-        self.assertIn("out of memory", safe_error_message(MemoryError()))
-        self.assertIn("out of memory", safe_error_message(RuntimeError("exit code -9")))
-
-    def test_tippecanoe_runtime_error(self):
-        self.assertIn(
-            "vector tiles", safe_error_message(RuntimeError("tippecanoe blew up"))
-        )
-
-    def test_pipeline_runtime_error(self):
-        self.assertIn(
-            "topo pipeline",
-            safe_error_message(RuntimeError("pipeline.py exited with code 1")),
-        )
+        self.assertIn("too big", safe_error_message(MemoryError()))
+        self.assertIn("too big", safe_error_message(RuntimeError("exit code -9")))
 
     def test_os_error_points_at_input(self):
-        self.assertIn("input LiDAR", safe_error_message(OSError("bad zip")))
-
-    def test_unknown_error_is_generic(self):
-        self.assertIn("Processing failed", safe_error_message(ValueError("???")))
+        self.assertIn("LiDAR data", safe_error_message(OSError("bad zip")))
 
 
 @unittest.skipUnless(

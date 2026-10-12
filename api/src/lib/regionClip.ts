@@ -52,7 +52,7 @@ const AREA_OUTSIDE = say`That area is outside the map Logjam has. Choose one in 
  * for "too large" in it to tell this refusal from the one above; keep those
  * words while such a build is supported (regionClip.unit.test.ts).
  */
-export const AREA_TOO_LARGE = say`That area is too large. Choose a smaller one.`;
+export const AREA_TOO_LARGE = say`That area is too large. Choose one up to ${Math.round(Math.sqrt(MAX_REGION_AREA_KM2))} km across.`;
 
 export type RegionClipValidation =
   | { ok: true; value: RegionClipRequest }

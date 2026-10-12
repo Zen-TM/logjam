@@ -6,6 +6,7 @@ import {
   isJobFinished,
   isJobSettled,
   isJobStalled,
+  regionRejectedLine,
 } from "./regionJobStatus";
 
 // Two regressions, one file. (1) `Done` was gated on ready|failed, so a job
@@ -59,5 +60,24 @@ describe("pause", () => {
   it("is offered on a tile pyramid and hidden on the one-shot clip", () => {
     expect(canPause(job({ kind: "downloading" }))).toBe(true);
     expect(canPause(job({ kind: "downloading" }, "http-file"))).toBe(false);
+  });
+});
+
+// The server says which of its two refusals this is, in a sentence for the
+// user; the phone used to look for "too large" inside it. Mutation: return
+// "Pick an area inside NSW." whatever `detail` holds.
+describe("regionRejectedLine", () => {
+  it("shows the server's sentence as it is", () => {
+    expect(
+      regionRejectedLine(
+        "That area is too large. Choose one up to 40 km across.",
+      ),
+    ).toBe("That area is too large. Choose one up to 40 km across.");
+  });
+
+  it("still reads a job that failed before the sentence was kept", () => {
+    expect(regionRejectedLine("too-large")).toMatch(/smaller area/);
+    expect(regionRejectedLine("outside-nsw")).toMatch(/inside NSW/);
+    expect(regionRejectedLine(undefined)).toMatch(/inside NSW/);
   });
 });

@@ -12,7 +12,18 @@ log = logging.getLogger("export_worker.context")
 
 
 class RenderError(Exception):
-    """User-visible export failure. Worker echoes the message into the email."""
+    """An export that failed. The message is for a developer: it is logged, and
+    the export's owner reads the worker's generic sentence instead."""
+
+
+class ExportTooLarge(RenderError):
+    """The one render failure its owner can fix. `SENTENCE` is what they read,
+    in both clients and in the email (shared/DESIGN.md §11)."""
+
+    SENTENCE = (
+        "This export covers too large an area. Choose a smaller area, or split "
+        "it into smaller exports."
+    )
 
 
 RASTER_LAYERS = {"hillshade", "vegetation", "slope"}

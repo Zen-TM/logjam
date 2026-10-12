@@ -152,19 +152,17 @@ async function sendBatch(
       console.error(`sync push rejected as too large (${batch.length} ops)`);
     }
     if (batch.length === 1) {
-      // The envelope 400 says nothing the UI can show, and the op's Sync Issue
-      // deliberately stays generic — but a developer needs the server's actual
-      // reason without pulling the outbox DB off the device.
+      // The server's sentence is written for the user, and is the op's Sync
+      // Issue line. A developer wants the reason too, without pulling the
+      // outbox DB off the device: it is in the API's log under the request.
+      const sentence = (err as { serverMessage?: string }).serverMessage;
       console.error(
         `sync push refused op ${batch[0].op.entity}/${batch[0].op.op}:`,
-        (err as { serverMessage?: string }).serverMessage ?? status,
+        sentence ?? status,
       );
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
-        JSON.stringify({
-          code: status,
-          message: "Couldn't send this change. Try again or discard it.",
-        }),
+        JSON.stringify({ code: status, sentence }),
         seqs[0],
       );
       notifyMirrorChanged();
@@ -284,7 +282,13 @@ async function applyOpResult(
       return true;
     }
     case "rejected": {
-      const error = result.error ?? { code: 400, message: "rejected" };
+      // `sentence`, not the wire's `message`: a row parked by a build from
+      // before the server wrote for the user holds a developer's `message`,
+      // and the Sync Issues screen must not show that one (syncIssues.ts).
+      const error = {
+        code: result.error?.code ?? 400,
+        sentence: result.error?.message,
+      };
       const isGone = error.code === 404 && entry.op.op !== "create";
       // A rejection the server may answer differently next time is OURS to
       // retry, not the user's. Parking every rejection put "Try again" in

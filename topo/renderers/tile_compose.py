@@ -59,7 +59,7 @@ from pipeline import (  # noqa: E402
     render_features_tile,
 )
 
-from .context import RenderContext, RenderError, RASTER_LAYERS
+from .context import ExportTooLarge, RenderContext, RenderError, RASTER_LAYERS
 
 log = logging.getLogger("export_worker.tile_compose")
 
@@ -174,20 +174,14 @@ def _composite_tile_coords(geom, max_tiles: int) -> List[Tuple[int, int, int]]:
             for x, y in tiles_for_bbox(minx, miny, maxx, maxy, z):
                 examined += 1
                 if examined > candidate_limit:
-                    raise RenderError(
-                        "Export area is too large: the footprint spans too wide an "
-                        "extent. Reduce the area or split it into smaller exports."
-                    )
+                    raise ExportTooLarge("footprint spans too wide an extent")
                 key = (z, x, y)
                 if key in coords:
                     continue
                 if prepared.intersects(box(*tile_to_bbox(x, y, z))):
                     coords.add(key)
         if len(coords) > max_tiles:
-            raise RenderError(
-                f"Export area is too large: it would generate over {max_tiles:,} "
-                "map tiles. Reduce the area or split it into smaller exports."
-            )
+            raise ExportTooLarge(f"would generate over {max_tiles:,} map tiles")
     return list(coords)
 
 

@@ -16,6 +16,7 @@ import {
 } from "@logjam/shared";
 
 import { getMirrorPlace } from "./mirrorStore";
+import { parkedError, type ParkedError } from "./parkedError";
 import {
   canKeepBothField,
   canRestoreField,
@@ -48,10 +49,7 @@ export type ParkedOp = {
    * was deleted server-side under a pending edit (§6 delete-wins). */
   state: "blocked" | "deadRemote";
   fields: Record<string, unknown> | null;
-  /** The refusal's status code and nothing else. The server's own sentence is
-   *  developer wording that can carry a name, so it is dropped as the row is
-   *  loaded and no screen can render it (`syncIssueDisplay.ts` writes the line). */
-  error: { code: number } | null;
+  error: ParkedError | null;
   attempts: number;
   createdAt: string;
   /**
@@ -140,9 +138,7 @@ export async function listParkedOps(): Promise<ParkedOp[]> {
       entityId: row.entity_id,
       state: row.state as "blocked" | "deadRemote",
       fields,
-      error: row.error_json
-        ? { code: (JSON.parse(row.error_json) as { code: number }).code }
-        : null,
+      error: row.error_json ? parkedError(row.error_json) : null,
       attempts: row.attempts,
       createdAt: row.created_at,
       entityName:

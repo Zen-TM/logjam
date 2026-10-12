@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -42,6 +41,7 @@ import psycopg2
 import psycopg2.extras
 
 from renderers import (
+    ExportTooLarge,
     RenderContext,
     RenderError,
     render_mbtiles,
@@ -64,15 +64,23 @@ logging.basicConfig(
 )
 log = logging.getLogger("export_worker")
 
-_PATH_RE = re.compile(r"(/[^\s:'\"]+)+")
+# The sentence the export's owner reads in both clients and in the email
+# (shared/DESIGN.md §11). Why a render failed is a developer's detail: it is
+# raw stderr from ogr2ogr, gdal_translate or tippecanoe, with temp paths in it,
+# and stays in the worker's log.
+GENERIC_FAILURE = (
+    "This export couldn't be made. Start it again, and contact support if it "
+    "keeps failing."
+)
 
 
-def _scrub_paths(message: str) -> str:
-    """Strip absolute filesystem paths (temp dirs, internal files) from a
-    user-facing error so subprocess stderr can't leak /tmp/... or /app/... into
-    the failure email or the notification shown in the dialog. The
-    human-readable prefix (e.g. 'tippecanoe (features) failed:') survives."""
-    return _PATH_RE.sub("<path>", message)
+def failure_sentence(error: Exception) -> str:
+    """What the owner reads for a failed export: never the exception's text."""
+    return (
+        ExportTooLarge.SENTENCE
+        if isinstance(error, ExportTooLarge)
+        else GENERIC_FAILURE
+    )
 
 
 AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
@@ -307,11 +315,10 @@ def main():
     except RenderError as e:
         raw = str(e)
         log.error(f"RenderError: {raw}")  # full detail stays in worker logs
-        error_msg = _scrub_paths(raw)  # path-free for DB notification + email
+        error_msg = failure_sentence(e)
     except Exception as e:
         log.error(f"Unexpected failure: {e}", exc_info=True)
-        # Keep raw exception out of the user-facing error message.
-        error_msg = "Export failed. Contact support with export ID " + EXPORT_JOB_ID
+        error_msg = failure_sentence(e)
 
     # Terminal write guarded on `running` (Design L1). On success the storage
     # charge shares the same commit as the status flip (ARCH-003) — never a
@@ -322,7 +329,7 @@ def main():
             EXPORT_JOB_ID,
             "failed",
             expected_status="running",
-            error_message=error_msg or "Unknown failure",
+            error_message=error_msg or GENERIC_FAILURE,
             completed_at=datetime.now(timezone.utc),
         )
         ok = False
@@ -364,7 +371,7 @@ def main():
                 "format": export_job["format"],
                 "jobName": job_name,
                 "status": "completed" if ok else "failed",
-                "errorMessage": None if ok else (error_msg or "Unknown failure"),
+                "errorMessage": None if ok else (error_msg or GENERIC_FAILURE),
             },
         )
         # Push — generic title + opaque IDs only (format/status/error stay in

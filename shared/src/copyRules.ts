@@ -108,6 +108,23 @@ export function apiSentenceViolations(text: string): string[] {
   return hits;
 }
 
+/**
+ * A client reading INTO the API's sentence (§11): searching it, comparing it,
+ * cutting it up. It is shown as it is; a client that needs to tell two
+ * refusals apart asks for a status or a field, never for words.
+ */
+const READS_SERVER_SENTENCE =
+  /\bserverMessage\s*(?:\?\.|\.)\s*(?:includes|match|startsWith|endsWith|indexOf|search|split|replace|slice|toLowerCase)\b|\bserverMessage\s*[!=]==?\s*["'`]/;
+
+/** The lines of a client source file that parse the API's sentence. */
+export function serverSentenceParses(source: string): number[] {
+  return source
+    .split("\n")
+    .flatMap((line, index) =>
+      READS_SERVER_SENTENCE.test(line) ? [index + 1] : [],
+    );
+}
+
 /** JSX attributes and object properties whose string is words a user reads. */
 const COPY_PROPS = new Set([
   "label",

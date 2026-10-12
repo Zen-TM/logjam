@@ -3,7 +3,12 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { copySay, copyViolations, userFacingStrings } from "@logjam/shared";
+import {
+  copySay,
+  copyViolations,
+  serverSentenceParses,
+  userFacingStrings,
+} from "@logjam/shared";
 
 // The words a user reads on Logjam Web keep the copy rules of
 // shared/DESIGN.md §12 (`COPY_RULES` in @logjam/shared): no "Retry", "the app",
@@ -156,6 +161,21 @@ describe("copy on Logjam Web", () => {
               ),
           )
         : [],
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  // The API writes its refusals for the user and `messageFromError` shows them
+  // as they are (shared/DESIGN.md §11). Mutation: branch on
+  // `err.serverMessage?.includes("too large")` anywhere in this client.
+  it("never reads into the API's sentence", () => {
+    expect(
+      serverSentenceParses('if (e.serverMessage?.includes("x")) {}'),
+    ).toEqual([1]);
+    const offenders = sources(SRC).flatMap((path) =>
+      serverSentenceParses(readFileSync(path, "utf8")).map(
+        (line) => `${relative(SRC, path)}:${line}`,
+      ),
     );
     expect(offenders).toEqual([]);
   });

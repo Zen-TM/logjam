@@ -9,6 +9,7 @@ import {
   MAP_MEASURE_START_NOTE,
   MAP_SNAP_OPTIONS,
   mapMeasureVerbs,
+  serverSentenceParses,
   userFacingStrings,
 } from "@logjam/shared";
 
@@ -142,6 +143,21 @@ describe("copy on Logjam GPS", () => {
         )
         .map((text) => `${relative(SRC, path)} writes "${text}"`);
     });
+    expect(offenders).toEqual([]);
+  });
+
+  // The API writes its refusals for the user and `messageFromError` shows them
+  // as they are (shared/DESIGN.md §11). Mutation: branch on
+  // `err.serverMessage?.includes("too large")` anywhere in this client.
+  it("never reads into the API's sentence", () => {
+    expect(
+      serverSentenceParses('if (e.serverMessage?.includes("x")) {}'),
+    ).toEqual([1]);
+    const offenders = sources(SRC).flatMap((path) =>
+      serverSentenceParses(readFileSync(path, "utf8")).map(
+        (line) => `${relative(SRC, path)}:${line}`,
+      ),
+    );
     expect(offenders).toEqual([]);
   });
 });

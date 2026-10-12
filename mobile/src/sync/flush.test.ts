@@ -289,6 +289,11 @@ describe("who owns a rejection", () => {
 
     expect(rows[0].state).toBe("blocked");
     expect(summary.retrying).toBe(0);
+    // Kept as `sentence`: what the Sync Issues screen shows as it is.
+    expect(JSON.parse(String(rows[0].error_json))).toEqual({
+      code: 409,
+      sentence: "This place already has a track.",
+    });
   });
 
   it("still parks an edit whose row was deleted, however the code classifies", async () => {
