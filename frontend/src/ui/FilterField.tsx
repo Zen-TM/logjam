@@ -30,7 +30,9 @@ export function FilterField({
         <span id={labelId} className={classes.label}>
           {label}
         </span>
-        <span className={classes.summary} data-active={active}>
+        <span
+          className={`${classes.summary} ${active ? classes.summaryActive : classes.summaryIdle}`}
+        >
           {summary}
         </span>
         {active && (

@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { makeStyles, makeThemed, radius, spacing } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { PILL_HEIGHT } from "./pill";
 
@@ -29,6 +29,10 @@ export function StatusPill({
    */
   hue?: string;
 }) {
+  const styles = useStyles();
+  const TONE_TEXT = useToneText();
+  const TONE_GLYPH = useToneGlyph();
+  const TONE_DOT = useToneDot();
   const dot = hue ?? TONE_DOT[tone];
   return (
     <View style={styles.base}>
@@ -50,29 +54,35 @@ export function StatusPill({
 
 // Words are `text` or `textMuted`, never an intent colour (as on Logjam Web):
 // the dot or the glyph says the tone.
-const TONE_TEXT: Record<PillTone, string> = {
-  accent: theme.text,
-  outline: theme.textMuted,
-  warning: theme.text,
-  muted: theme.textMuted,
-};
+const useToneText = makeThemed(
+  (theme): Record<PillTone, string> => ({
+    accent: theme.text,
+    outline: theme.textMuted,
+    warning: theme.text,
+    muted: theme.textMuted,
+  }),
+);
 
-const TONE_GLYPH: Record<PillTone, string> = {
-  accent: theme.accent,
-  outline: theme.textMuted,
-  warning: theme.warning,
-  muted: theme.textMuted,
-};
+const useToneGlyph = makeThemed(
+  (theme): Record<PillTone, string> => ({
+    accent: theme.accent,
+    outline: theme.textMuted,
+    warning: theme.warning,
+    muted: theme.textMuted,
+  }),
+);
 
 // The tones with something to say get a dot; the quiet ones do not.
-const TONE_DOT: Record<PillTone, string | undefined> = {
-  accent: theme.accent,
-  outline: undefined,
-  warning: theme.warning,
-  muted: undefined,
-};
+const useToneDot = makeThemed(
+  (theme): Record<PillTone, string | undefined> => ({
+    accent: theme.accent,
+    outline: undefined,
+    warning: theme.warning,
+    muted: undefined,
+  }),
+);
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
@@ -83,5 +93,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
-  label: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-});
+  label: { ...textRole.caption },
+}));

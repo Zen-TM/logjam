@@ -4,6 +4,7 @@
 
 /* The one surface that inverts, so it reads as not-page. */
 .tip {
+  composes: meta from "../textRoles.generated.module.css";
   position: fixed;
   inset: auto;
   margin: 0;
@@ -13,9 +14,20 @@
   border-radius: var(--radius-md);
   background: var(--color-inverse);
   color: var(--color-on-inverse);
-  font-size: var(--font-xs);
-  font-weight: 400;
   line-height: 1.35;
   white-space: normal;
   box-shadow: var(--shadow-float);
+}
+
+/* The 8px between a control and its tip is part of the tip for the pointer, so
+   a slow hand crossing it never leaves both (WCAG 1.4.13, hoverable). A popover
+   clips its overflow by default, which would clip this too. */
+.tip {
+  overflow: visible;
+}
+
+.tip::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--space-1));
 }

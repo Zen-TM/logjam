@@ -14,6 +14,9 @@
 // location data: never log a parsed metadata object, and never put one in an
 // error message (the parse errors below name FIELDS, never values).
 
+import { isClimbSource } from "./demSources.js";
+import type { TrackClimb } from "./elevation.js";
+
 /** [west, south, east, north] — the extent of an import or a recording. */
 export type MediaBbox = [number, number, number, number];
 
@@ -49,6 +52,12 @@ export type TrackMetadata = {
   durationMs: number;
   elevationGainM: number;
   elevationLossM: number;
+  /**
+   * Where the two figures above were read from (`CLIMB_SOURCES` in
+   * demSources.ts). Absent on a row written before this existed, which means
+   * GPS heights.
+   */
+  elevationSource?: string;
   pointCount: number;
   /** ISO 8601. */
   startedAt: string;
@@ -145,6 +154,25 @@ function requireBbox(source: Record<string, unknown>): MediaBbox {
 }
 
 /**
+ * A replacement climb for a recorded track: both figures and their source,
+ * together, because a figure from one source labelled with another is the
+ * thing the source exists to prevent. Throws `MediaMetadataError`.
+ */
+export function parseTrackClimb(value: unknown): TrackClimb {
+  const source = requireObject(value);
+  if (!isClimbSource(source.elevationSource)) {
+    throw new MediaMetadataError(
+      "metadata.elevationSource is not a known source",
+    );
+  }
+  return {
+    elevationGainM: requireNonNegative(source, "elevationGainM"),
+    elevationLossM: requireNonNegative(source, "elevationLossM"),
+    elevationSource: source.elevationSource,
+  };
+}
+
+/**
  * Validate metadata for a write. Throws `MediaMetadataError` (the API turns it
  * into a 400) rather than dropping bad fields — a silently-emptied stats object
  * shows up as a track with no distance and no way to tell why.
@@ -177,6 +205,11 @@ export function parseMediaMetadata(
     // Gain and loss are both magnitudes; a negative loss would double-count.
     elevationGainM: requireNonNegative(source, "elevationGainM"),
     elevationLossM: requireNonNegative(source, "elevationLossM"),
+    // Optional, and an id this build does not know is dropped like an unknown
+    // key: the figures then read as GPS, the coarsest claim there is.
+    ...(isClimbSource(source.elevationSource)
+      ? { elevationSource: source.elevationSource }
+      : {}),
     pointCount: requireNonNegative(source, "pointCount"),
     startedAt: requireIsoTimestamp(source, "startedAt"),
     endedAt: requireIsoTimestamp(source, "endedAt"),

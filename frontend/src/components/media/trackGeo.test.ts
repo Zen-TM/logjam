@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseTrackGeoJSON } from "./trackGeo";
+import { parseTrackGeoJSON, trackGeoCacheKey } from "./trackGeo";
 
 const GPX = `<?xml version="1.0"?>
 <gpx version="1.1" creator="test">
@@ -89,5 +89,23 @@ describe("parseTrackGeoJSON", () => {
     expect(() =>
       parseTrackGeoJSON("<foo></foo>", null, { placeId: "c" }),
     ).toThrow(/Unrecognised track format/);
+  });
+});
+
+describe("trackGeoCacheKey", () => {
+  const entry = { mediaId: "m1", color: "#e6194b", stamp: { mediaId: "m1" } };
+
+  // The colour is baked into the parsed features, so a recolour that reused the
+  // cached entry kept drawing the old line until the page was reloaded.
+  it("changes when the file's colour changes", () => {
+    expect(trackGeoCacheKey(entry)).not.toBe(
+      trackGeoCacheKey({ ...entry, color: "#469990" }),
+    );
+  });
+
+  it("keeps a linked file's two layers apart", () => {
+    expect(trackGeoCacheKey(entry)).not.toBe(
+      trackGeoCacheKey({ ...entry, stamp: { placeId: "p1" } }),
+    );
   });
 });

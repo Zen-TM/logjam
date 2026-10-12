@@ -7,7 +7,7 @@
 // row itself: per-row actions live behind the sheet there precisely so a mis-tap
 // cannot revoke anything).
 //
-// LAYOUT (docs/ux-principles.md §2, §2, §7): hero counts what this friend can see; the rail
+// LAYOUT (shared/DESIGN.md §2, §2, §7): hero counts what this friend can see; the rail
 // is a two-chip partition — the two directions are genuinely different sets,
 // not a filter over one — and the multi-select bar swaps into that rail at the
 // same height, so the list cannot jump. Rows carry a ⋯ that becomes the
@@ -37,14 +37,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
 
 import {
   buildShareCards,
@@ -79,7 +72,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { requestSync } from "../sync/syncEngine";
-import { placeHue, fontSize, spacing, theme } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   EmptyState,
@@ -148,6 +141,10 @@ export function FriendSharesScreen({
   /** Open a place's detail page. Pushed in the caller's stack, so Back returns here. */
   onOpenPlace: (placeId: string) => void;
 }) {
+  const theme = useTheme();
+  const { placeHue } = useHues();
+  const styles = useStyles();
+
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("friends", accountState),
@@ -207,7 +204,7 @@ export function FriendSharesScreen({
   // A row a group verb can act on. Forward: all of them (unshare and re-share
   // apply to every row). Received: anything that can be copied or removed —
   // which, for a row visible through a shared place, is neither, so it answers
-  // a long press with its reason rather than a checkbox (DESIGN.md §5).
+  // a long press with its reason rather than a checkbox (DESIGN.md).
   const isSelectable = useCallback(
     (card: FriendShareCard) =>
       direction === "theySee" || card.copyable || card.removable,
@@ -599,7 +596,7 @@ export function FriendSharesScreen({
         <Fragment key={key}>{page[key]()}</Fragment>
       ))}
 
-      {/* Per-row verbs, titled with the item (DESIGN.md §5). */}
+      {/* Per-row verbs, titled with the item (DESIGN.md). */}
       <BottomSheet
         visible={sheetCard !== null}
         onClose={() => setSheetCard(null)}
@@ -693,6 +690,8 @@ function ShareCardRow({
   onOpen: (card: FriendShareCard) => void;
   onToggle: (card: FriendShareCard) => void;
 }) {
+  const { placeHue } = useHues();
+
   const openOrToggle = () =>
     selecting && selectable ? onToggle(card) : onOpen(card);
   return (
@@ -746,10 +745,13 @@ function ShareCardMenu({
   onCopyAndRemove: (card: FriendShareCard) => void;
   onRemove: (card: FriendShareCard) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   const kind = SHARE_KIND_LABEL[card.row.entityType];
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking
-  // for and not find (DESIGN.md §8, `useShareRowProps`'s rule).
+  // for and not find (DESIGN.md, `useShareRowProps`'s rule).
   const offline = { disabled: true, subtitle: "Needs a connection" } as const;
   const live = { disabled: busy };
   return (
@@ -845,17 +847,17 @@ function ShareCardMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Both children are CHIP_RAIL_HEIGHT tall by construction, which is
-  // what keeps the list still when the bar swaps in (DESIGN.md §5).
+  // what keeps the list still when the bar swaps in (DESIGN.md).
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1),
   },
   note: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
-  noteText: { color: theme.textMuted, fontSize: fontSize.sm, lineHeight: 17 },
+  noteText: { ...muted(theme, textRole.detail) },
   banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
   list: { flex: 1 },
   listContent: {
@@ -864,5 +866,5 @@ const styles = StyleSheet.create({
     paddingBottom: spacing(4),
   },
   menuBody: { gap: spacing(1) },
-  menuNote: { color: theme.textMuted, fontSize: fontSize.sm },
-});
+  menuNote: { ...muted(theme, textRole.detail) },
+}));

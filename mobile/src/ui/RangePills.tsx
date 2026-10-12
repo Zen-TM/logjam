@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
 import { IconButton } from "./IconButton";
 import {
@@ -33,6 +33,8 @@ export function RangePills({
   prefix?: string;
   onChange: (next: NumberRange | null) => void;
 }) {
+  const styles = useStyles();
+
   const [min, max] = bounds;
   const stops: number[] = [];
   for (let stop = min; stop <= max; stop += 1) stops.push(stop);
@@ -70,26 +72,22 @@ export function RangePills({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { gap: spacing(0.75) },
+const useStyles = makeStyles((theme, textRole) => ({
+  wrap: { gap: spacing(1) },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  label: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  label: { ...textRole.control, color: theme.text },
   valueGroup: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(0.25),
   },
-  value: { color: theme.textMuted, fontSize: fontSize.sm },
+  value: { ...textRole.detail, color: theme.textMuted },
   // Active is said by weight and by the clear button beside it, never by an
   // intent colour: words are `text`.
-  valueActive: { color: theme.text, fontWeight: fontWeight.medium },
-  pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
-});
+  valueActive: { ...textRole.control, color: theme.text },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
+}));

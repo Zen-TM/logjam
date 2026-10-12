@@ -66,15 +66,21 @@ function SendCopyDialog({
     }
   }
 
-  const toggle = (id: string, on: boolean) =>
+  const toggle = (id: string, on: boolean) => {
+    setError(null);
     setPicked((prev) => {
       const next = new Set(prev);
       if (on) next.add(id);
       else next.delete(id);
       return next;
     });
+  };
 
   const handleSend = async () => {
+    if (picked.size === 0) {
+      setError("Pick a friend to send the copy to.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -139,14 +145,14 @@ function SendCopyDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy} disabledReason="Sending…">
             Cancel
           </Button>
           {friends.length > 0 && (
             <Button
               variant="filled"
               onClick={() => void handleSend()}
-              disabled={busy || picked.size === 0}
+              busy={busy}
             >
               {sendCopyLabel(picked.size)}
             </Button>

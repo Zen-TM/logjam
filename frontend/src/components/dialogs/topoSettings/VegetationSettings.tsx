@@ -143,14 +143,13 @@ export default function VegetationSettings({ value, onChange }: Props) {
             compact
             variant="outline"
             className={styles.resetButton}
-            disabled={!value.weightsEnabled}
             onClick={() => patch({ formationWeights: { ...DEFAULT_WEIGHTS } })}
           >
             Reset to defaults
           </Button>
         </div>
         {/* A table: one heading over the numbers, not the range repeated on
-            twelve rows (DESIGN.md §6). */}
+            twelve rows (DESIGN.md). */}
         <div className={styles.formationTable}>
           <span />
           <span className={styles.head}>0–5</span>

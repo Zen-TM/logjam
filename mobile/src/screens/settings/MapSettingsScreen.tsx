@@ -11,7 +11,7 @@
 // layer style and re-renders immediately.
 //
 // WHY NO SNAP PICKER: snapping governs what the NEXT TAP of a drafting tool
-// does, so it belongs in that tool's HUD where it already lives (DESIGN.md §2 —
+// does, so it belongs in that tool's HUD where it already lives (DESIGN.md —
 // tool behaviour goes with the tool, not in a settings page).
 //
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
@@ -82,7 +82,7 @@ import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
 // The action key stays `waypoint` (it is a stored preference), the WORD does
 // not: a waypoint is a place of the Marker type now, and this screen and the
-// long-press sheet are one vocabulary (DESIGN.md §2).
+// long-press sheet are one vocabulary (DESIGN.md).
 const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask each time",
   waypoint: "Drop a marker",

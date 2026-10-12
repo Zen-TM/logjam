@@ -5,7 +5,7 @@
 // surface renders — the place screen, Saved's item sheet, the route sheet and
 // the map's waypoint sheet. It exists for the reason assetActions.ts exists:
 // two surfaces offering the same verb is how the two copies of "what does
-// unsharing mean" drift apart (DESIGN.md §5). The API calls differ (places
+// unsharing mean" drift apart (DESIGN.md). The API calls differ (places
 // keep /places/:id/share, every other kind uses /shares), so they arrive as
 // props; everything else — load, grant, revoke-with-confirm, busy state, the
 // offline gate, the error copy — lives here once.
@@ -16,12 +16,12 @@
 // ONLINE-ONLY, deliberately. Sharing is not an outbox operation: the outbox
 // carries entity mutations, and queueing a permission grant to fire later
 // would tell the user they had shared something when they had not. Offline the
-// door is closed WITH ITS REASON in place of the subtitle (DESIGN.md §8)
+// door is closed WITH ITS REASON in place of the subtitle (DESIGN.md)
 // rather than hidden, so the feature does not appear to come and go.
 //
 // PRIVACY: recipients and friends are username-only (server-enforced). Error
 // copy is OURS, never the server's message — interpolating a response into a
-// row is how a place name reaches a screenshot (docs/ux-principles.md §13).
+// row is how a place name reaches a screenshot (shared/DESIGN.md §13).
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert } from "react-native";
 
@@ -32,7 +32,7 @@ import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
 import { Avatar, ErrorBanner, IconButton, Row } from "../ui";
-import { theme } from "../theme";
+import { useTheme } from "../theme";
 
 /**
  * The three endpoints, for whichever kind this is.
@@ -197,6 +197,8 @@ export function RecipientRows({
   sharing: Sharing;
   recipients?: ShareRecipient[];
 }) {
+  const theme = useTheme();
+
   return (
     <>
       {recipients.map((recipient) => (

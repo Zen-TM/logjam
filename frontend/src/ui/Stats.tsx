@@ -47,8 +47,7 @@ export function ActivitySpark({
               )}
             </div>
             <span
-              className={classes.axis}
-              data-current={bucket.current || undefined}
+              className={`${classes.axis} ${bucket.current ? classes.axisCurrent : classes.axisIdle}`}
             >
               {bucket.label}
             </span>

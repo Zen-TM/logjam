@@ -15,10 +15,10 @@
 // finishing must not need the panel found first. Wet hands, cold hands, and
 // nothing in this app is worse than a recording that will not stop.
 import { useEffect, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Pressable, View } from "react-native";
 
 import { SEARCH_SIZE } from "../map/mapChrome";
-import { radius, theme } from "../theme";
+import { radius, makeStyles } from "../theme";
 
 /** One breath. Slow on purpose: at the map's scale this reads as alive rather
  *  than as an alarm, and it is a redraw every two seconds, not every frame of
@@ -47,6 +47,8 @@ export function RecordButton({
   /** Absent while nothing is recording — there is nothing to finish. */
   onLongPress?: () => void;
 }) {
+  const styles = useStyles();
+
   const recording = state === "recording";
   const [pulse] = useState(() => new Animated.Value(0));
 
@@ -122,7 +124,7 @@ export function RecordButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   // Mirrors MapSearchBar's pill: the two corners of the map's top edge have to
   // read as one family, not as a button and a lookalike.
   //
@@ -162,4 +164,4 @@ const styles = StyleSheet.create({
     borderRadius: CORE / 2,
     backgroundColor: theme.warning,
   },
-});
+}));

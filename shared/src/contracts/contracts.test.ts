@@ -17,6 +17,20 @@ import {
   statsUnderActivitiesNote,
   WAY_VERBS,
   wayVerbLabel,
+  wayVerbIcon,
+  mapMeasureFacts,
+  mapMeasurePointsLabel,
+  mapMeasureRange,
+  mapMeasureVerbs,
+  MAP_MEASURE,
+  MAP_MEASURE_START_NOTE,
+  MAP_MEASURE_VERBS,
+  MAP_SNAP_OPTIONS,
+  mapPointFacts,
+  mapPointVerbs,
+  MAP_POINT,
+  MAP_POINT_NO_FIX_NOTE,
+  MAP_POINT_VERBS,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_OVERLAY_REFINEMENTS,
@@ -33,6 +47,7 @@ import {
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
   friendRemoveConfirm,
+  friendRequestMadeFriend,
   friendsRemoveConfirm,
   friendSharesEmptyTitle,
   friendSharesNote,
@@ -57,6 +72,7 @@ import {
   placesEmptyState,
   placesFilterNote,
   placesHeroTitle,
+  placeTypeHasTab,
   placeVerbIds,
   placeVerbs,
   SCREEN_CONTRACTS,
@@ -67,6 +83,8 @@ import {
   tripsFilterNote,
   tripsHeroTitle,
   tripVerbs,
+  NEW_TYPE_ATTRIBUTES,
+  stepAfterPlaceTypeSave,
 } from "./index.js";
 
 describe("every screen contract", () => {
@@ -163,6 +181,15 @@ describe("the places list", () => {
     expect(placesHeroTitle(0)).toBe("No places yet");
     expect(placesHeroTitle(1)).toBe("1 place");
     expect(placesHeroTitle(37)).toBe("37 places");
+  });
+
+  // "I added a type and no tab appeared": a type the user made is on the rail
+  // from the moment it exists. Mutation: `places > 0` alone.
+  it("gives a type the user made a tab before it holds a place", () => {
+    expect(placeTypeHasTab({ builtIn: false, places: 0 })).toBe(true);
+    expect(placeTypeHasTab({ builtIn: false, places: 4 })).toBe(true);
+    expect(placeTypeHasTab({ builtIn: true, places: 0 })).toBe(false);
+    expect(placeTypeHasTab({ builtIn: true, places: 1 })).toBe(true);
   });
 
   it("announces hidden filters, then a sort that is not the default", () => {
@@ -466,6 +493,14 @@ describe("friends", () => {
     expect(kind(2, 1, "all")).toBeNull();
   });
 
+  it("knows a sent request that made a friend from one still waiting", () => {
+    expect(friendRequestMadeFriend({ id: "f", status: "accepted" })).toBe(true);
+    expect(friendRequestMadeFriend({ id: "f", status: "pending" })).toBe(false);
+    // An older API answers the same row; anything else is not a friend.
+    expect(friendRequestMadeFriend(undefined)).toBe(false);
+    expect(friendRequestMadeFriend(null)).toBe(false);
+  });
+
   it("says removing a friend ends sharing both ways", () => {
     expect(friendRemoveConfirm("abel").confirmTitle).toBe("Remove abel?");
     expect(friendRemoveConfirm("abel").confirmBody).toContain("both ways");
@@ -516,6 +551,14 @@ describe("settings", () => {
     expect(drawsYoursHeading(2, 3)).toBe(true);
     expect(drawsYoursHeading(0, 3)).toBe(false);
     expect(drawsYoursHeading(2, 0)).toBe(false);
+  });
+
+  // Red when adding a type goes back to the list (`return "list"` for both):
+  // the new type's attributes are then a separate trip through Settings.
+  it("leads a new place type into its attributes, and a changed one back", () => {
+    expect(stepAfterPlaceTypeSave(true)).toBe("attributes");
+    expect(stepAfterPlaceTypeSave(false)).toBe("list");
+    expect(NEW_TYPE_ATTRIBUTES.done).toBe("Done");
   });
 
   it("says what deleting a type or an attribute costs", () => {
@@ -605,6 +648,17 @@ describe("a way's verbs", () => {
     );
   });
 
+  // One verb, one word and one glyph on both clients, and the same word and
+  // glyph a place's own "log a trip" wears (shared/DESIGN.md §6).
+  it("declares Log a trip once, with the trip glyph", () => {
+    expect(wayVerbLabel("logTrip", "web")).toBe("Log a trip");
+    expect(wayVerbLabel("logTrip", "gps")).toBe("Log a trip");
+    expect(wayVerbIcon("logTrip")).toBe(
+      placeVerbs("web", "row", true).find((verb) => verb.id === "logTrip")!
+        .icon,
+    );
+  });
+
   it("marks a dialog with an ellipsis on Logjam Web only", () => {
     expect(wayVerbLabel("share", "web")).toBe("Share…");
     expect(wayVerbLabel("share", "gps")).toBe("Share");
@@ -662,5 +716,201 @@ describe("the map's overlays list", () => {
   it("refines only rows that exist", () => {
     for (const row of Object.keys(MAP_OVERLAY_REFINEMENTS))
       expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toContain(row);
+  });
+});
+
+// What a press on empty map answers, on both clients (shared/DESIGN.md §3).
+describe("the map point panel", () => {
+  const point = { latitude: -33.65, longitude: 150.35 };
+
+  it("shows where it is and how high, and nothing from a fix it lacks", () => {
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "known", metres: 412.4 },
+      from: null,
+    });
+    expect(facts.map((fact) => [fact.key, fact.value])).toEqual([
+      ["position", "-33.65000, 150.35000"],
+      ["elevation", "412 m"],
+    ]);
+    // The position takes the line and can be copied; the rest do not.
+    expect(facts[0]).toMatchObject({ span: true, copyable: true });
+  });
+
+  it("adds distance and bearing only from a fix the device already has", () => {
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "checking" },
+      from: { latitude: -33.66, longitude: 150.35 },
+    });
+    expect(facts.map((fact) => fact.key)).toEqual([
+      "position",
+      "elevation",
+      "distance",
+      "bearing",
+    ]);
+    expect(facts[1].value).toBe("Checking…");
+    expect(facts[2].value).toMatch(/^1\.1 km$|^1,?1\d\d m$/);
+    expect(facts[3].value).toMatch(/^N 0°$|^N 360°$|^N \d+°$/);
+  });
+
+  // Mutation: show a dash or a zero for an unknown slope, and a point outside
+  // the fine DEM reads as flat ground.
+  it("shows a slope only when one is known, after the other figures", () => {
+    const base = {
+      point,
+      elevation: { state: "known", metres: 412.4 },
+      from: { latitude: -33.66, longitude: 150.35 },
+    } as const;
+    expect(mapPointFacts({ ...base, slopeDegrees: 37.6 }).at(-1)).toEqual({
+      key: "slope",
+      label: "Slope",
+      value: "38°",
+    });
+    expect(mapPointFacts({ ...base, slopeDegrees: 0 }).at(-1)!.value).toBe(
+      "0°",
+    );
+    for (const facts of [
+      mapPointFacts({ ...base, slopeDegrees: null }),
+      mapPointFacts(base),
+    ])
+      expect(facts.map((fact) => fact.key)).not.toContain("slope");
+  });
+
+  it("says why there is no height rather than showing a dash", () => {
+    const unavailable = mapPointFacts({
+      point,
+      elevation: { state: "unavailable" },
+      from: null,
+    });
+    expect(unavailable[1].value).toBe("Needs a connection");
+  });
+
+  // Mutation: give a verb `on: "web"` with no client that draws it, or two
+  // clients the same verb under one id with different words.
+  it("gives each client its own verbs, in order, each with a reason", () => {
+    expect(mapPointVerbs("web").map((verb) => verb.id)).toEqual([
+      "addPlace",
+      "measure",
+      "copy",
+    ]);
+    expect(mapPointVerbs("gps").map((verb) => verb.id)).toEqual([
+      "navigate",
+      "dropMarker",
+    ]);
+    for (const verb of MAP_POINT_VERBS)
+      expect(verb.reason.length).toBeGreaterThan(0);
+    // The words Logjam GPS's sheet showed before the contract existed.
+    expect(mapPointVerbs("gps")).toEqual([
+      {
+        id: "navigate",
+        icon: "navigateTo",
+        label: "Navigate to this point",
+        subtitle: "Live distance and bearing — nothing saved",
+      },
+      {
+        id: "dropMarker",
+        icon: "flag",
+        label: "Drop a marker here",
+        subtitle: "Saved, and synced",
+      },
+    ]);
+  });
+
+  it("keeps its sections and facts in step", () => {
+    const keys = MAP_POINT.sections.map((section) => section.key);
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "unavailable" },
+      from: { latitude: -33.66, longitude: 150.34 },
+      slopeDegrees: 12,
+    });
+    expect(facts.map((fact) => fact.key)).toEqual(keys);
+    expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");
+    expect(MAP_POINT_NO_FIX_NOTE.gps).toContain("locate button");
+  });
+
+  // Mutation: give the point panel's verb words of its own.
+  it("arms the measure tool in the tool's own words", () => {
+    const verb = mapPointVerbs("web").find((each) => each.id === "measure");
+    expect(verb).toMatchObject({
+      label: MAP_MEASURE.copy.fromHere,
+      icon: "measure",
+    });
+  });
+});
+
+// The measure tool both clients draw: the same figures from the same points.
+describe("the measure tool", () => {
+  // ~1.11 km due north, then the same again due east of there.
+  const line: [number, number][] = [
+    [150.35, -33.66],
+    [150.35, -33.65],
+    [150.362, -33.65],
+  ];
+  const terrain = { gainM: 212.4, lossM: 87.6, minM: 411.7, maxM: 655.2 };
+
+  // Mutation: measure the straight line between the ends instead of the path.
+  it("measures along every leg, and shows a dash until there is a line", () => {
+    const fact = (points: [number, number][]) =>
+      mapMeasureFacts({ points, terrain: null });
+    expect(fact([])).toEqual([
+      { key: "distance", label: "Distance", value: "—" },
+    ]);
+    expect(fact(line.slice(0, 1))[0].value).toBe("—");
+    expect(fact(line.slice(0, 2))[0].value).toBe("1.1 km");
+    expect(fact(line)[0].value).toBe("2.2 km");
+  });
+
+  it("adds ascent and descent only once the terrain has been read", () => {
+    const facts = mapMeasureFacts({ points: line, terrain });
+    expect(facts.map((fact) => [fact.key, fact.value, fact.spoken])).toEqual([
+      ["distance", "2.2 km", undefined],
+      ["ascent", "↑ 212 m", "Ascent 212 metres"],
+      ["descent", "↓ 88 m", "Descent 88 metres"],
+    ]);
+    expect(facts.map((fact) => fact.key)).toEqual(
+      MAP_MEASURE.sections.map((section) => section.key),
+    );
+  });
+
+  it("gives the ground's range only when the terrain covered the line", () => {
+    expect(mapMeasureRange(terrain)).toBe("412–655 m");
+    expect(mapMeasureRange({ ...terrain, minM: null })).toBeNull();
+    expect(mapMeasureRange(null)).toBeNull();
+  });
+
+  it("counts the user's points", () => {
+    expect(mapMeasurePointsLabel(1)).toBe("1 point");
+    expect(mapMeasurePointsLabel(3)).toBe("3 points");
+  });
+
+  // Mutation: drop `on: "gps"` from `leave`, or its reason.
+  it("gives both clients undo and clear, and a reason for the verb only one has", () => {
+    expect(mapMeasureVerbs("web").map((verb) => verb.id)).toEqual([
+      "undo",
+      "clear",
+    ]);
+    expect(mapMeasureVerbs("gps").map((verb) => verb.id)).toEqual([
+      "undo",
+      "clear",
+      "leave",
+    ]);
+    for (const verb of MAP_MEASURE_VERBS)
+      expect("on" in verb, verb.id).toBe("reason" in verb);
+    expect(MAP_MEASURE_START_NOTE.web).toBe("Click the map to measure");
+    expect(MAP_MEASURE_START_NOTE.gps).toBe("Tap the map to measure");
+  });
+});
+
+describe("the snap words", () => {
+  it("name every snap mode once", () => {
+    expect(MAP_SNAP_OPTIONS.map((option) => option.value)).toEqual([
+      "off",
+      "trails",
+      "waterways",
+      "both",
+    ]);
+    expect(new Set(MAP_SNAP_OPTIONS.map((o) => o.label)).size).toBe(4);
   });
 });

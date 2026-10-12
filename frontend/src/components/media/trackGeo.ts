@@ -96,12 +96,73 @@ export function parseTrackGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
+/**
+ * The cache key for one parsed track file on one map layer: id, stamp AND
+ * colour. The colour is stamped into the features at parse time, so it has to
+ * be part of the key or a recolour keeps drawing the old line.
+ */
+export function trackGeoCacheKey(entry: {
+  mediaId: string;
+  color: string | null;
+  stamp: TrackFeatureStamp;
+}): string {
+  return `${entry.mediaId}|${entry.color}|${JSON.stringify(entry.stamp)}`;
+}
+
+/** How many files' text to keep: the lines drawn on the map plus the page
+ *  being read. A file past it is fetched again when next asked for. */
+const MAX_TRACK_TEXTS = 60;
+
+/** Insertion order is the eviction order. In memory only, gone with the tab:
+ *  this is the user's location history and is never written down or logged. */
+const trackTexts = new Map<string, Promise<string>>();
+
+/**
+ * A track file's text, downloaded once per tab however many readers want it:
+ * the map draws the line and the way page charts it, and each presigned
+ * download is counted against the egress meter.
+ *
+ * Keyed by media id, not URL: a row's bytes never change (a recording finished
+ * again is a new row, `mobile/src/tracks/trackBackup.ts`) while its presigned
+ * URL rotates on every listing. `displayUrl` is only called on a miss, so a
+ * reader with no URL in hand mints one only when it has to. A failed download
+ * is forgotten, so the next ask tries again.
+ */
+export function fetchTrackText(
+  mediaId: string,
+  displayUrl: () => string | Promise<string>,
+): Promise<string> {
+  const cached = trackTexts.get(mediaId);
+  if (cached) return cached;
+  const text = (async () => {
+    const res = await fetch(await displayUrl());
+    if (!res.ok) throw new Error(`Couldn't fetch track (${res.status})`);
+    return res.text();
+  })();
+  trackTexts.set(mediaId, text);
+  text.catch(() => {
+    if (trackTexts.get(mediaId) === text) trackTexts.delete(mediaId);
+  });
+  while (trackTexts.size > MAX_TRACK_TEXTS) {
+    trackTexts.delete(trackTexts.keys().next().value!);
+  }
+  return text;
+}
+
+/** Test seam: a tab reload is the only reset the app needs. */
+export function clearTrackTexts(): void {
+  trackTexts.clear();
+}
+
 export async function fetchTrackGeoJSON(
+  mediaId: string,
   displayUrl: string,
   color: string | null,
   stamp: TrackFeatureStamp,
 ): Promise<GeoJSON.FeatureCollection> {
-  const res = await fetch(displayUrl);
-  if (!res.ok) throw new Error(`Couldn't fetch track (${res.status})`);
-  return parseTrackGeoJSON(await res.text(), color, stamp);
+  return parseTrackGeoJSON(
+    await fetchTrackText(mediaId, () => displayUrl),
+    color,
+    stamp,
+  );
 }

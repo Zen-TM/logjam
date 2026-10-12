@@ -29,18 +29,14 @@
 }
 
 .title {
+  composes: section from "../textRoles.generated.module.css";
+  composes: twoLines from "./TwoLines.module.css";
   padding: var(--space-0-5) var(--space-1) var(--space-0-5);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .item {
+  composes: body from "../textRoles.generated.module.css";
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -50,8 +46,8 @@
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-sm);
+  font-family: inherit;
+  line-height: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -88,12 +84,14 @@
 }
 
 .hint {
-  font: inherit;
-  font-size: var(--font-xs);
+  composes: detail from "../textRoles.generated.module.css";
+  font-family: inherit;
+  line-height: inherit;
   color: var(--color-text-muted);
 }
 
 .badge {
+  composes: caption from "../textRoles.generated.module.css";
   min-width: 18px;
   height: 18px;
   box-sizing: border-box;
@@ -104,8 +102,6 @@
   border-radius: var(--radius-pill);
   background: var(--color-warning);
   color: var(--color-on-fill);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .separator {
@@ -124,6 +120,19 @@
 
 .popover:focus-visible {
   outline: none;
+}
+
+/* Sized by its contents: the colour pickers. The default is 372px because the
+   Layers list is the usual tenant, and a block of swatches in that width is a
+   strip of dead space with the × far from them. The × sits in the corner and
+   the contents keep their own margin. */
+.fit {
+  width: max-content;
+  padding: 0 var(--space-1-5) var(--space-1-5);
+}
+
+.fit .bar {
+  margin-inline: calc(-1 * var(--space-1-5));
 }
 
 /* The way out: a × at the top right, above the content, so it never covers it. */

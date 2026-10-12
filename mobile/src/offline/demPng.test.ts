@@ -1,6 +1,6 @@
 // Decoder check against a REAL tile, not a synthetic one: the fixture is the
-// z13 terrarium tile over Blue Gum Forest / Grose Valley, committed beside this
-// test (`__fixtures__/terrarium-z13-7516-4911.png`).
+// z13 terrarium tile over Blue Gum Forest / Grose Valley, committed in
+// `shared/src/__fixtures__/` because the API's reader is tested on it too.
 //
 // Expected heights come from an independent decode of the same file (Python
 // zlib + the PNG spec's filters), not from this decoder — a self-referential
@@ -14,7 +14,12 @@ import { DEM_TILE_SIZE, demSampleValue } from "@logjam/shared";
 import { decodeDemPng } from "./demPng";
 
 const TILE = new Uint8Array(
-  readFileSync(join(__dirname, "__fixtures__/terrarium-z13-7516-4911.png")),
+  readFileSync(
+    join(
+      __dirname,
+      "../../../shared/src/__fixtures__/terrarium-z13-7516-4911.png",
+    ),
+  ),
 );
 
 describe("decodeDemPng", () => {

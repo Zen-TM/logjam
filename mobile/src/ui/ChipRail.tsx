@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { spacing, theme, withAlpha } from "../theme";
+import { spacing, withAlpha, useTheme } from "../theme";
 import { Chip, CHIP_HEIGHT, type ChipOption } from "./Chip";
 
 // A single-line (`scroll`) control is exactly one chip tall — re-exported so
@@ -24,16 +24,22 @@ export const CHIP_RAIL_HEIGHT = CHIP_HEIGHT;
 // `scroll` for a one-line horizontal rail — use it when the options are a
 // filter over a list below (a rail reads as "pick a view", a wrapped block
 // reads as "pick a setting") and the count can grow.
+//
+// `trailing` is drawn after the options, inside the scroller (an "add" chip: a
+// `Chip` with `dashed`). It is an action, not an option, so it is never the
+// value and never nudged into view — the same prop as Logjam Web's.
 export function ChipRail<T extends string>({
   options,
   value,
   onChange,
   scroll = false,
+  trailing,
 }: {
   options: ChipOption<T>[];
   value: T;
   onChange: (next: T) => void;
   scroll?: boolean;
+  trailing?: React.ReactNode;
 }) {
   const chips = options.map((option) => (
     <Chip
@@ -48,8 +54,18 @@ export function ChipRail<T extends string>({
     />
   ));
 
-  if (!scroll) return <View style={styles.group}>{chips}</View>;
-  return <Rail value={value}>{chips}</Rail>;
+  if (!scroll)
+    return (
+      <View style={styles.group}>
+        {chips}
+        {trailing}
+      </View>
+    );
+  return (
+    <Rail value={value} trailing={trailing}>
+      {chips}
+    </Rail>
+  );
 }
 
 // A rail moves only as far as it must to show the selected chip WHOLE, and not
@@ -61,9 +77,11 @@ export function ChipRail<T extends string>({
 function Rail<T extends string>({
   value,
   children,
+  trailing,
 }: {
   value: T;
   children: React.ReactNode[];
+  trailing?: React.ReactNode;
 }) {
   const scrollRef = useRef<ScrollView>(null);
   const offsets = useRef(new Map<number, { x: number; width: number }>());
@@ -142,6 +160,7 @@ function Rail<T extends string>({
             {chip}
           </View>
         ))}
+        {trailing}
       </ScrollView>
       {overflow.start ? <EdgeFade side="start" /> : null}
       {overflow.end ? <EdgeFade side="end" /> : null}
@@ -153,6 +172,8 @@ function Rail<T extends string>({
 // than slicing a chip in half. Without it a rail whose chips happen to end
 // flush at the screen edge looks like the complete set.
 function EdgeFade({ side }: { side: "start" | "end" }) {
+  const theme = useTheme();
+
   const solid = side === "end";
   return (
     <LinearGradient

@@ -167,6 +167,7 @@ function OpenDialog({
           label="Close"
           onClick={onClose}
           disabled={!dismissible}
+          disabledReason="Wait for this to finish"
         />
       </header>
       {toolbar && <div className={classes.toolbar}>{toolbar}</div>}

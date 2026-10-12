@@ -1,5 +1,5 @@
 /* Friends gives the panel body its full height: the hero and the rail are
-   pinned, and only the list scrolls (DESIGN.md §2). */
+   pinned, and only the list scrolls (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;
@@ -42,7 +42,26 @@
 
 /* Where the search has nothing to show: too few characters, or no match. */
 .note {
+  composes: detail from "../../../textRoles.generated.module.css";
   margin: 2px 0;
-  font-size: var(--font-sm);
   color: var(--color-text-muted);
+}
+
+/* The invite link, under the search: a second way in, so it sits apart. */
+.invite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1-5);
+  border-top: var(--hairline);
+}
+
+.inviteLink {
+  composes: body from "../../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  user-select: all;
 }

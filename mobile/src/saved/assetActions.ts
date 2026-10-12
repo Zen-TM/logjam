@@ -1,5 +1,5 @@
 // The three verbs every saved asset supports — *show on map*, *rename*,
-// *delete* — as one descriptor per kind (DESIGN.md §5: uniformity is the
+// *delete* — as one descriptor per kind (DESIGN.md: uniformity is the
 // feature).
 //
 // This exists because SEVERAL surfaces offer them, and two copies of "what does
@@ -43,6 +43,7 @@ import { deleteVectorImport } from "../imports/vectorImports";
 import {
   deleteMediaLocal,
   linkStandaloneMediaLocal,
+  recolourStandaloneMediaLocal,
   renameStandaloneMediaLocal,
 } from "../sync/mediaUpload";
 import {
@@ -67,6 +68,7 @@ import {
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
   exportFilename,
+  mediaDisplayName,
   removeShareConfirm,
   sharedRowVisibility,
   trackPointsToGpx,
@@ -76,6 +78,11 @@ import {
 } from "@logjam/shared";
 import { removeSharedEntity } from "../sharing/removeShare";
 import { exportStoredFile, exportTrack } from "../fileExport";
+import {
+  recordedTrackSource,
+  syncedTrackSource,
+  type TripTrackSource,
+} from "../tracks/tripTrackSource";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 // Narrow imports rather than the namespace: this module is pure descriptors
 // and the only filesystem work in it is the track scratch file below.
@@ -212,6 +219,14 @@ export type AssetActions = {
    */
   attachToPlace?: (placeId: string) => Promise<unknown>;
   /**
+   * Present on a track that can be attached to a trip: "Log a trip" opens the
+   * trip form on the track's day, and the track goes with the trip. The track
+   * and how to attach it, not a callback, for the reason `editableRouteId` is
+   * an id: the form is a sheet of the screen's, not this descriptor's. Absent
+   * on a recording with fewer than two points.
+   */
+  logTrip?: TripTrackSource;
+  /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
    * A LIST rather than the old `(format: ExportFormat) => …`, because the two
@@ -335,13 +350,14 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     // Renaming an import is a change to the FILE, not to this phone's view of
     // it, so it goes through the media row and reaches every device.
     rename: (name) => renameStandaloneMediaLocal(imported.id, name),
+    setColor: (color) => recolourStandaloneMediaLocal(imported.id, color),
     exports: [
       ...originalRow,
       // A GeoJSON source ships its own bytes; anything else ships the derived
       // collection, which is all the GeoJSON there is. Withheld entirely when
       // NEITHER is on this phone — a file that synced as a row but has not been
       // downloaded here has nothing to export, and the row that can only fail
-      // is absent rather than offered (DESIGN.md §5).
+      // is absent rather than offered (DESIGN.md).
       ...(geoJsonSource(imported, sourceFormat)
         ? [
             {
@@ -402,6 +418,10 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
     locatable: bbox !== null,
     resolveBbox: async () => bbox,
     rename: (name) => renameStandaloneMediaLocal(file.id, name),
+    // The file is a recording of the account's own, so it can go into a trip
+    // like one made here: its bytes are fetched once if they are not on the
+    // phone (`needsConnection` says so, for the sheet that offers it).
+    logTrip: syncedTrackSource({ ...file, title: mediaDisplayName(file) }),
     delete: {
       confirmTitle: "Delete this recording?",
       confirmBody:
@@ -488,6 +508,8 @@ export function trackActions(track: Track): AssetActions {
     resolveBbox: async () => bboxOfPoints(await listTrackPoints(track.id)),
     rename: (name) => updateTrack(track.id, { name }),
     setColor: (color: string) => updateTrack(track.id, { color }),
+    // Attaching writes the points out as a GPX, which needs a line to write.
+    ...(track.pointCount >= 2 ? { logTrip: recordedTrackSource(track) } : {}),
     // A recording is an observation and stays immutable; this makes a SEPARATE
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS

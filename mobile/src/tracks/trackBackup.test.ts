@@ -72,6 +72,7 @@ function finishedTrack(overrides: Partial<Track> = {}): Track {
     durationMs: 7_200_000,
     elevationGainM: 310,
     elevationLossM: 295,
+    elevationSource: null,
     pointCount: 2,
     startedAt: STARTED,
     endedAt: ENDED,
@@ -125,6 +126,17 @@ describe("the stats a backed-up recording carries", () => {
       startedAt: STARTED,
       endedAt: ENDED,
     });
+  });
+
+  // The source travels with the figures it describes; a row without one sends
+  // none, which every reader takes as GPS.
+  it("says where the climb came from when the row knows", () => {
+    expect(
+      trackBackupMetadata(
+        finishedTrack({ elevationSource: "nsw-5m" }),
+        points(),
+      ).elevationSource,
+    ).toBe("nsw-5m");
   });
 
   // Every field is required server-side and a negative one is a 400, which

@@ -1,0 +1,20 @@
+/* Layout only: the popover, the figures and the rows are the kit's. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* Wide enough for "Draw a route from here" and a coordinate on one line. */
+  min-width: calc(var(--space-6) * 5);
+}
+
+.note {
+  composes: paragraph from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.verbs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}

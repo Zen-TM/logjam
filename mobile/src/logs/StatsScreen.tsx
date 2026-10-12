@@ -1,6 +1,6 @@
 // Logbook stats — the retrospective half of the Logs tab.
 //
-// THE ONE QUESTION (docs/ux-principles.md §2): "am I getting out, and is it going
+// THE ONE QUESTION (shared/DESIGN.md §2): "am I getting out, and is it going
 // anywhere?" Logs itself already answers "what have I done?" with a count, a
 // spark and the list, so this screen must not lead with a trip count — it leads
 // with DAYS OUT, which is the number the list cannot give you, and the sections
@@ -29,7 +29,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -66,12 +66,13 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import { useTracks } from "../tracks/useTracks";
-import { fontSize, fontWeight, spacing, theme, withAlpha } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   ActivitySpark,
   Chip,
   EmptyState,
   Hero,
+  Meter,
   Row,
   ScreenScroll,
   SectionHeader,
@@ -93,6 +94,8 @@ export function StatsScreen({
   onBack: () => void;
   onOpenActivity: (activity: string) => void;
 }) {
+  const styles = useStyles();
+
   const tripsQuery = useMirrorTrips();
   const placesQuery = useMirrorPlaces();
   const placeTypesQuery = useMirrorPlaceTypes();
@@ -269,6 +272,8 @@ function Spark({
   range: LogbookRange;
   activity: string | null;
 }) {
+  const styles = useStyles();
+
   const { buckets } = statsSpark(stats, range);
   const { busiest, lines } = statsCadence(stats, activity);
 
@@ -294,6 +299,8 @@ function Headline({
   /** True when a range pill narrower than "All time" is selected. */
   bounded: boolean;
 }) {
+  const styles = useStyles();
+
   // Every label says what it counts (`statsHeadline` has the reasons).
   return (
     <View style={styles.block}>
@@ -309,6 +316,9 @@ function Activities({
   stats: LogbookStats;
   onOpenActivity: (activity: string) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+
   if (stats.activityTallies.length === 0) return null;
   const multiTagged = activityTalliesOverlap(stats);
   return (
@@ -317,6 +327,7 @@ function Activities({
       {stats.activityTallies.map((tally) => {
         const meta = tripTypeMeta(
           tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
+          theme,
         );
         return (
           <Row
@@ -346,6 +357,8 @@ function Activities({
  * The row reads "29 of 31", so the header only has to name the verb.
  */
 function PlacesVisited({ stats }: { stats: LogbookStats }) {
+  const styles = useStyles();
+
   if (stats.completion.length === 0) return null;
   return (
     <View style={styles.section}>
@@ -359,24 +372,13 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
                 {entry.logged} of {entry.total}
               </Text>
             </View>
-            <View style={styles.meterTrack}>
-              <View
-                style={[
-                  styles.meterFill,
-                  {
-                    // `flexGrow` rather than a percentage width: a zero-logged
-                    // type still has to render its track, and a 0 % width child
-                    // inside a rounded, clipped bar is the empty-card trap
-                    // DESIGN.md warns about.
-                    flexGrow: Math.max(entry.logged, 0),
-                    backgroundColor: entry.color,
-                  },
-                ]}
-              />
-              <View
-                style={{ flexGrow: Math.max(entry.total - entry.logged, 0) }}
-              />
-            </View>
+            <Meter
+              segments={[
+                { label: entry.name, value: entry.logged, hue: entry.color },
+              ]}
+              total={entry.total}
+              legend={false}
+            />
           </View>
         ))}
         {stats.mostReturned ? (
@@ -413,6 +415,8 @@ function OnFoot({
   }[];
   range: LogbookRange;
 }) {
+  const styles = useStyles();
+
   // A recording with no distance has nothing to say — an armed-and-cancelled
   // recorder would otherwise render a grid of zeros, the same reason
   // `TrackStatsBody` omits a cell rather than showing 0.
@@ -473,6 +477,8 @@ function AttributeSections({
   stats: LogbookStats;
   tripOnly?: boolean;
 }) {
+  const styles = useStyles();
+
   const groups = tripOnly ? [] : stats.placeFieldStats;
   const underActivities = stats.tripFieldsUnderActivities;
   if (
@@ -557,6 +563,8 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
  *  read as disconnected from the words explaining it — this puts the word that
  *  names it in the same breath, and lets the subtitle be about something else. */
 function RowMetric({ value, suffix }: { value: string; suffix: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.metric}>
       <Text style={styles.rowValue}>{value}</Text>
@@ -565,30 +573,24 @@ function RowMetric({ value, suffix }: { value: string; suffix: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   // `ScreenScroll` gaps its own direct children; a section wrapping several
   // rows has to repeat that or its rows sit flush against each other.
   section: { gap: spacing(1) },
   metric: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
-  metricSuffix: { color: theme.textMuted, fontSize: fontSize.sm },
+  metricSuffix: { ...muted(theme, textRole.detail) },
   rail: { flexDirection: "row", gap: spacing(0.5), paddingRight: spacing(2) },
   block: { marginTop: spacing(1) },
   caption: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...muted(theme, textRole.meta),
     marginTop: spacing(0.5),
   },
   cadence: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...muted(theme, textRole.detail),
     marginTop: spacing(0.25),
   },
-  rowValue: {
-    color: theme.text,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
+  rowValue: { ...textRole.rowTitle, color: theme.text },
   // Read-only, so it sits on the page: a card fill would say "press me".
   completion: { gap: spacing(1) },
   meterRow: { marginBottom: spacing(1) },
@@ -598,14 +600,6 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     marginBottom: spacing(0.5),
   },
-  meterName: { color: theme.text, fontSize: fontSize.sm },
-  meterValue: { color: theme.textMuted, fontSize: fontSize.xs },
-  meterTrack: {
-    flexDirection: "row",
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
-    backgroundColor: withAlpha(theme.text, 0.08),
-  },
-  meterFill: { borderRadius: 4 },
-});
+  meterName: { ...textRole.detail, color: theme.text },
+  meterValue: { ...muted(theme, textRole.meta) },
+}));

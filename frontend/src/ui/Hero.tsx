@@ -63,6 +63,7 @@ export function Hero({
           label="Close"
           onClick={close}
           disabled={closeDisabled}
+          disabledReason="Wait for this to finish"
         />
       )}
     </header>
@@ -103,7 +104,8 @@ export function Meter({ segments }: { segments: readonly MeterSegment[] }) {
             style={{ "--segment-hue": segment.hue } as CSSProperties}
           >
             <span className={classes.dot} aria-hidden />
-            {segment.label} <b>{segment.value}</b>
+            {segment.label}{" "}
+            <b className={classes.legendValue}>{segment.value}</b>
           </li>
         ))}
       </ul>

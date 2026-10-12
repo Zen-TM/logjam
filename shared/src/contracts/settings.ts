@@ -2,7 +2,7 @@
 // `PlaceTypeSection.tsx` and `CustomFieldSection.tsx`, Logjam GPS's
 // `screens/SettingsScreen.tsx`, `places/PlaceTypesEditor.tsx` and
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
-// has no hero (docs/ux-principles.md §2).
+// has no hero (shared/DESIGN.md §2).
 import type { NotificationPreferences } from "../themeSchemes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { ScreenContract } from "./types.js";
@@ -43,6 +43,27 @@ export function ownAttributeCountLabel(own: number): string {
   if (own === 0) return "None yet";
   return `${own} ${own === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
 }
+
+/**
+ * Where saving a place type leads. ADDING one leads into the attributes a
+ * place of it will ask for: a new type nearly always wants its own, and the
+ * moment it is made is when the user knows what they are. One press skips it.
+ * A change to an existing type goes back to the list it was opened from.
+ */
+export function stepAfterPlaceTypeSave(
+  wasAdding: boolean,
+): "attributes" | "list" {
+  return wasAdding ? "attributes" : "list";
+}
+
+/** That step: the attributes a place of the new type shows (`defsForType`)
+ *  under the title its place page gives them (`placeAttributesTitle`), a way
+ *  to add one already scoped to it, and the way past. */
+export const NEW_TYPE_ATTRIBUTES = {
+  /** Shown while none of the user's own attributes is on the type yet. */
+  hint: "Add what you record at a place of this type, like a depth or a grade. You can add more later from any place.",
+  done: "Done",
+} as const;
 
 export type NotificationPreferenceGroup = "email" | "inApp";
 

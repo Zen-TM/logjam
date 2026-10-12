@@ -32,7 +32,10 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
 // Map.tsx pulls in maplibre and a Vite virtual module; the dialog reads only
 // its base-layer list.
 vi.mock("../map/Map", () => ({
-  BASE_LAYERS: [{ id: "six-topo", name: "Topo", kind: "raster", tiles: [] }],
+  BASE_LAYERS: [
+    { id: "six-topo", name: "Topo", kind: "raster", tiles: [] },
+    { id: "six-imagery", name: "Imagery", kind: "raster", tiles: [] },
+  ],
 }));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
@@ -65,7 +68,7 @@ function dialog({
   ...props
 }: {
   open: boolean;
-  onSelectOnMap?: () => void;
+  onSelectOnMap?: (...args: unknown[]) => void;
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   initialTemplateId?: string | null;
@@ -138,5 +141,35 @@ describe("GeoPdfDialog, across a Select on map round trip", () => {
       dialog({ open: true, editingTemplate: template, templateMode: true }),
     );
     expect(titleBox().value).toBe("From the template");
+  });
+});
+
+// "Draw the area on the map" opens the map on the base layer chosen HERE, so the
+// frame sits on what will be printed (shared/DESIGN.md §11), and the latest
+// pick wins on every visit. App holds it only for the length of the framing and
+// never writes the user's own layer (`geoPdfFraming.test.ts`).
+//
+// Mutation: stop passing `selectedBaseLayer` as the fifth argument, or pass the
+// `activeLayerId` prop instead.
+describe("GeoPdfDialog, drawing the area", () => {
+  it("hands the map the base layer chosen in the dialog, each visit", () => {
+    const handed: unknown[] = [];
+    render(
+      dialog({
+        open: true,
+        onSelectOnMap: (...args) => handed.push(args[4]),
+      }),
+    );
+    const draw = () =>
+      fireEvent.click(screen.getByRole("button", { name: /Draw the area/ }));
+
+    // Seeded from the map's own layer, until something else is picked.
+    draw();
+    fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
+    draw();
+    fireEvent.click(screen.getByRole("radio", { name: "Topo" }));
+    draw();
+
+    expect(handed).toEqual(["six-topo", "six-imagery", "six-topo"]);
   });
 });

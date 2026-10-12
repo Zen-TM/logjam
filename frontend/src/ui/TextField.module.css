@@ -1,17 +1,18 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: var(--form-label);
 }
 
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {
-  font-size: var(--font-sm);
+  composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
 
 .input {
+  composes: body from "../textRoles.generated.module.css";
   min-height: var(--control-lg);
   box-sizing: border-box;
   padding: 0 var(--space-1);
@@ -19,8 +20,8 @@
   border: 1px solid var(--color-line-strong);
   background: var(--color-field);
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-base);
+  font-family: inherit;
+  line-height: inherit;
 }
 
 .input::placeholder {
@@ -55,8 +56,8 @@
 }
 
 .hint {
+  composes: detail from "../textRoles.generated.module.css";
   margin: 0;
-  font-size: var(--font-xs);
   color: var(--color-text-muted);
 }
 
@@ -109,13 +110,14 @@
 }
 
 .searchInput {
+  composes: body from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   border: none;
   background: transparent;
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-sm);
+  font-family: inherit;
+  line-height: inherit;
 }
 
 .searchInput::placeholder {
@@ -132,7 +134,7 @@
 .rangeField {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: var(--form-label);
 }
 
 .rangeHead {
@@ -147,8 +149,8 @@
 }
 
 .rangeValue {
+  composes: body from "../textRoles.generated.module.css";
   flex: none;
-  font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
 }
@@ -161,8 +163,8 @@
 }
 
 .rangeEnd {
+  composes: meta from "../textRoles.generated.module.css";
   flex: none;
-  font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
