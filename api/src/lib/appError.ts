@@ -29,7 +29,8 @@ export class AppError extends Error {
     message: UserSentence,
     details?: AppErrorDetails,
     /** What went wrong, in a developer's words: the shape of the request or
-     *  the state of the system, never a value from it (it is logged). */
+     *  the state of the system. It is logged, so never a place's name, a
+     *  coordinate, a tag, or a field's value or label. */
     public devDetail?: string,
   ) {
     super(message);
