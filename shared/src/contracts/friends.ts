@@ -53,6 +53,7 @@ export const FRIENDS = {
     inviteShare: "Share invite link",
     inviteCopied: "Invite link copied.",
     inviteFailed: "Couldn't make an invite link.",
+    inviteCopyFailed: "Couldn't copy the invite link.",
     inviteRevoke: "Turn off my links",
     inviteRevoked: "Your invite links no longer work.",
     inviteRevokeFailed: "Couldn't turn off your invite links.",
@@ -91,6 +92,15 @@ export function friendsEmptyKind(state: {
 
 export function friendAcceptedMessage(username: string): string {
   return `${username} is now a friend.`;
+}
+
+/**
+ * Whether sending a request made a friend. POST /friends/request answers
+ * with the friendship row, and that row is already accepted when the other
+ * person had asked first: the Add row then says Friend, not Requested.
+ */
+export function friendRequestMadeFriend(response: unknown): boolean {
+  return (response as { status?: unknown } | null)?.status === "accepted";
 }
 
 /** How many links are out, beside the button that turns them off. */

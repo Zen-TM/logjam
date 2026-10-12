@@ -56,7 +56,6 @@ import {
   spacing,
   makeStyles,
   useTheme,
-  muted,
 } from "../theme";
 import { Button } from "../ui";
 import {

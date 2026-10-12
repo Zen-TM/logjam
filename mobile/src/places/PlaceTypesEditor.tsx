@@ -156,10 +156,6 @@ export function usePlaceTypeForm({
   const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
   const [seededFor, setSeededFor] = useState(formKey);
-  if (seededFor !== formKey) {
-    setSeededFor(formKey);
-    setDraft(seedDraft(editing));
-  }
   const [saving, setSaving] = useState(false);
   // The name check (attributed to the Name field) and a save/delete failure
   // (attributable to no single control, so it is the footer's `ErrorBanner`)
@@ -168,6 +164,14 @@ export function usePlaceTypeForm({
   // the Name label.
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  if (seededFor !== formKey) {
+    setSeededFor(formKey);
+    setDraft(seedDraft(editing));
+    // A fresh form has no complaints: the last one's "A type needs a name."
+    // was waiting under an untouched Name field.
+    setError(null);
+    setFormError(null);
+  }
   const { cellSize, onGridLayout } = useGridCellSize();
 
   const save = useCallback(async () => {

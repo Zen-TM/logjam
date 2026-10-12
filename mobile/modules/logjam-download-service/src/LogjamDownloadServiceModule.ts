@@ -8,7 +8,10 @@ import { AppRegistry } from "react-native";
 // Android only. Optional, so a build without it (iOS, a test) downloads exactly
 // as before: in the foreground, for as long as the process runs.
 
-declare class LogjamDownloadServiceModule extends NativeModule {
+declare class LogjamDownloadServiceModule extends NativeModule<{
+  /** Cancel was pressed on the notification. */
+  onCancel: () => void;
+}> {
   /**
    * Start the service, or change what its notification says. `percent` below 0
    * hides the progress bar. Neither string may carry an area name: the
