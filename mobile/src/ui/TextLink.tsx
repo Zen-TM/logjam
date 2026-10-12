@@ -1,6 +1,6 @@
 import { Pressable, Text } from "react-native";
 
-import { fontSize, hitSlop, spacing, makeStyles } from "../theme";
+import { hitSlop, spacing, makeStyles } from "../theme";
 
 /** A small text link, centred under the content it follows. Text-coloured
  *  and underlined, never accent: words are never an intent colour. */
@@ -25,11 +25,11 @@ export function TextLink({
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   link: { alignSelf: "center", padding: spacing(1) },
   text: {
+    ...textRole.bodySmall,
     color: theme.text,
-    fontSize: fontSize.sm,
     textDecorationLine: "underline",
   },
 }));

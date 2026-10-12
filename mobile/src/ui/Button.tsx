@@ -2,7 +2,6 @@ import { ActivityIndicator, Pressable, Text } from "react-native";
 
 import {
   controlSize,
-  fontSize,
   opacity,
   radius,
   slopTo,
@@ -139,5 +138,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   pressedFilled: { opacity: 0.85 },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.rowTitle },
-  labelCompact: { fontSize: fontSize.sm },
+  labelCompact: { ...textRole.control },
 }));

@@ -66,7 +66,7 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import { useTracks } from "../tracks/useTracks";
-import { fontSize, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import {
   ActivitySpark,
   Chip,
@@ -579,17 +579,15 @@ const useStyles = makeStyles((theme, textRole) => ({
   // rows has to repeat that or its rows sit flush against each other.
   section: { gap: spacing(1) },
   metric: { flexDirection: "row", alignItems: "baseline", gap: spacing(0.5) },
-  metricSuffix: { color: theme.textMuted, fontSize: fontSize.sm },
+  metricSuffix: { ...textRole.hint },
   rail: { flexDirection: "row", gap: spacing(0.5), paddingRight: spacing(2) },
   block: { marginTop: spacing(1) },
   caption: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
+    ...textRole.meta,
     marginTop: spacing(0.5),
   },
   cadence: {
-    color: theme.textMuted,
-    fontSize: fontSize.sm,
+    ...textRole.hint,
     marginTop: spacing(0.25),
   },
   rowValue: { ...textRole.rowTitle, color: theme.text },
@@ -602,6 +600,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "baseline",
     marginBottom: spacing(0.5),
   },
-  meterName: { color: theme.text, fontSize: fontSize.sm },
-  meterValue: { color: theme.textMuted, fontSize: fontSize.xs },
+  meterName: { ...textRole.bodySmall, color: theme.text },
+  meterValue: { ...textRole.meta },
 }));

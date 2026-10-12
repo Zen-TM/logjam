@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef } from "react";
 import { Text, View } from "react-native";
 
-import { fontSize, spacing, makeStyles, useTheme } from "../theme";
+import { spacing, makeStyles, useTheme } from "../theme";
 import { SheetErrorReveal } from "./BottomSheet";
 import { Icon } from "./Icon";
 
@@ -43,8 +43,8 @@ export function FieldError({ message }: { message?: string | null }) {
   );
 }
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.5) },
   // The glyph sits on the first line of the text, whatever the text size.
-  error: { flex: 1, fontSize: fontSize.sm, color: theme.text },
+  error: { ...textRole.bodySmall, flex: 1, color: theme.text },
 }));

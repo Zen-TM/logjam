@@ -13,14 +13,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import {
-  fontSize,
-  radius,
-  spacing,
-  makeStyles,
-  useTheme,
-  controlSize,
-} from "../theme";
+import { radius, spacing, makeStyles, useTheme, controlSize } from "../theme";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -806,7 +799,7 @@ function PlacePicker({
 
 const useStyles = makeStyles((theme, textRole) => ({
   pickerBody: { gap: spacing(1) },
-  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  hint: { ...textRole.hint },
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
