@@ -43,6 +43,7 @@ import {
   friendAcceptedMessage,
   friendInviteMessage,
   friendInviteUrl,
+  friendInvitesLiveLabel,
   friendRemovedMessage,
   friendRemoveConfirm,
   friendRequestMadeFriend,
@@ -59,9 +60,11 @@ import {
   acceptFriendRequest,
   createFriendInvite,
   declineFriendRequest,
+  getFriendInvites,
   getFriendRequests,
   getFriends,
   removeFriend,
+  revokeFriendInvites,
   searchUsers,
   sendFriendRequest,
   type Friend,
@@ -393,6 +396,7 @@ export function FriendsScreen({
         title={copy.addTitle}
       >
         <AddFriendBody
+          open={addOpen}
           existingIds={friends.map((friend) => friend.id)}
           onSent={() => void load()}
         />
@@ -516,9 +520,11 @@ const FriendRow = memo(function FriendRow({
 // rejected server-side (409) and the message is worth showing. Sent targets are
 // locally marked so the row reflects the pending state without a reload.
 function AddFriendBody({
+  open,
   existingIds,
   onSent,
 }: {
+  open: boolean;
   existingIds: string[];
   onSent: () => void;
 }) {
@@ -599,11 +605,33 @@ function AddFriendBody({
   // sends messages with. It opens Logjam Web, so it works for someone who has
   // no Logjam GPS. Its failure is this button's, hence the same banner.
   const [inviting, setInviting] = useState(false);
+  // How many links are out, and the one way to take them back: a link shared
+  // into the wrong chat befriends whoever opens it. `null` once they have
+  // been turned off, which is said where the count was.
+  const [liveInvites, setLiveInvites] = useState<number | null>(0);
+  const [revoking, setRevoking] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getFriendInvites()
+      .then((invites) => {
+        if (!cancelled) setLiveInvites(invites.length);
+      })
+      // The count is a courtesy; sharing works without it.
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+      setLiveInvites(0);
+    };
+  }, [open]);
+
   const shareInvite = useCallback(async () => {
     setSendError(null);
     setInviting(true);
     try {
       const { token } = await createFriendInvite();
+      // Counted once it exists, whatever becomes of the share sheet.
+      setLiveInvites((count) => (count ?? 0) + 1);
       await Share.share({
         message: friendInviteMessage(friendInviteUrl(config.webUrl, token)),
       });
@@ -612,6 +640,20 @@ function AddFriendBody({
       setSendError(messageFromError(err, copy.inviteFailed));
     } finally {
       setInviting(false);
+    }
+  }, []);
+
+  const revokeInvites = useCallback(async () => {
+    setSendError(null);
+    setRevoking(true);
+    try {
+      await revokeFriendInvites();
+      setLiveInvites(null);
+    } catch (err) {
+      console.error(err);
+      setSendError(messageFromError(err, copy.inviteRevokeFailed));
+    } finally {
+      setRevoking(false);
     }
   }, []);
 
@@ -670,6 +712,22 @@ function AddFriendBody({
         disabled={inviting}
         onPress={() => void shareInvite()}
       />
+      {liveInvites === null ? (
+        <Text style={styles.hint}>{copy.inviteRevoked}</Text>
+      ) : liveInvites > 0 ? (
+        <View style={styles.liveInvites}>
+          <Text style={[styles.hint, styles.liveInvitesLabel]}>
+            {friendInvitesLiveLabel(liveInvites)}
+          </Text>
+          <Button
+            label={copy.inviteRevoke}
+            variant="ghost"
+            compact
+            loading={revoking}
+            onPress={() => void revokeInvites()}
+          />
+        </View>
+      ) : null}
       {sendError ? <ErrorBanner message={sendError} /> : null}
     </View>
   );
@@ -712,5 +770,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   menuBody: { gap: spacing(1) },
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
+  liveInvites: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  liveInvitesLabel: { flex: 1 },
   hint: { ...textRole.hint },
 }));
