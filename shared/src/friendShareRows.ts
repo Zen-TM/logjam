@@ -2,11 +2,9 @@
 // gets.
 //
 // Shared, because both clients draw this screen and the asymmetry below is the
-// part that must not be re-derived: Logjam Web's audit listed PLACES only and
-// answered "what does Bob see?" with a subset, while the payload had carried
-// his routes, topos and GeoPDFs all along. It lived in mobile/src/sharing until
-// Logjam Web's friends work (2026-09-18), already free of React Native imports
-// — which is what made it testable there and movable here.
+// part that must not be re-derived: the payload carries routes, topos and
+// GeoPDFs alongside places. Free of React Native imports so both clients can
+// use it.
 //
 // THE TWO DIRECTIONS ARE NOT MIRROR IMAGES, and the asymmetry is the whole
 // design:
@@ -54,7 +52,7 @@ export type FriendShareCard = {
   title: string;
   /** "Place · shared 12 Aug" — kind first, because kind is what a mixed list needs. */
   subtitle: string;
-  /** Copying it into my own account is possible (places only, today). */
+  /** Copying it into my own account is possible. */
   copyable: boolean;
   /** Dropping my access would actually change what I can see. */
   removable: boolean;
@@ -98,10 +96,10 @@ function capitalise(word: string): string {
 /**
  * Build the cards for one direction.
  *
- * The "this also rides a shared place" answer comes from the ROW (the server
- * sets `alsoViaPlace`), not from the local mirror. Deriving it here was right
- * only once the mirror had pulled the linked row — before that, the same
- * waypoint offered a Remove that the next delta pull would have undone.
+ * The "this also rides a shared place" answer comes from the row (the server
+ * sets `alsoViaPlace`), not from the local mirror: deriving it from the local
+ * mirror is only valid once the linked row is pulled, otherwise a delta pull
+ * could undo the removal.
  */
 export function buildShareCards(
   rows: FriendShareRow[],
@@ -203,10 +201,7 @@ export function removeAllConfirm(args: {
     body:
       `${things} ${one ? "is" : "are"} removed from your account, on every device. ` +
       `${args.friendName} keeps the ${one ? "original" : "originals"}.` +
-      // "place" was right while places were the only copyable kind; a route
-      // copies now, and naming the wrong kind in the one sentence that offers
-      // the safe alternative is how a user decides the alternative isn't for
-      // them.
+      // Phrasing works for both places and routes.
       (args.copyableCount === 0
         ? ""
         : one
@@ -215,7 +210,6 @@ export function removeAllConfirm(args: {
   };
 }
 
-/** What a bulk copy did, in one sentence. */
 /**
  * The line under Remove in a row's sheet. NOT `removeShareConfirm(...).title` —
  * that is a question ("Remove shared place?"), and a question reads as an
@@ -243,9 +237,8 @@ export function copyConfirm(args: {
   /**
    * The owner's username, where the surface knows it. The item sheets do NOT —
    * a mirrored place or route carries an `ownerId` and no name — so this is
-   * optional and the fallback is spelled in both positions below. Passing the
-   * literal "the owner" instead is what put a lowercase word at the start of a
-   * sentence on the device.
+   * optional and the fallback is spelled in both positions below, capitalized
+   * when starting a sentence.
    */
   friendName?: string | null;
   /** The single row's name, when only one is being copied. */

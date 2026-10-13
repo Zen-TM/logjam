@@ -67,7 +67,7 @@ describe("buildShareCards", () => {
     expect(cards.map((card) => card.removable)).toEqual([false, false]);
   });
 
-  // Both ROW kinds copy into the account now (`isCopyableSharedRow`); the two
+  // Both row kinds copy into the account (`isCopyableSharedRow`); the two
   // job kinds do not, because their copy is the device download.
   it("offers copy on a received place and a received route", () => {
     const cards = buildShareCards([PLACE, ROUTE], {
@@ -127,8 +127,8 @@ describe("shareSelectionCountLabel", () => {
   });
 
   it("tallies the copyable subset when it differs from the total", () => {
-    // A topo is the uncopyable kind now that routes copy — its keep is the
-    // device download, not an account copy.
+    // A topo is uncopyable — its keep is the device download, not an
+    // account copy.
     expect(shareSelectionCountLabel(received([PLACE, TOPO]), "youSee")).toBe(
       "2 selected · 1 copyable",
     );
@@ -197,7 +197,7 @@ describe("removeAllConfirm", () => {
     expect(confirm.body).not.toContain("permanently");
   });
 
-  // "1 item are removed" shipped to the device and read as a bug in the app.
+  // Verb agrees with the count.
   it("agrees its verb with the count", () => {
     expect(
       removeAllConfirm({ count: 1, friendName: FRIEND, copyableCount: 0 }).body,
@@ -211,8 +211,7 @@ describe("removeAllConfirm", () => {
     ).toContain("bob keeps the original.");
   });
 
-  // "1 of them" needs a THEM: with one row selected there is nothing to be one
-  // OF, and the sentence read as a counting error on the device.
+  // With one row selected there is nothing to be one of; omit "of them".
   it('does not say "1 of them" about a single row', () => {
     const body = removeAllConfirm({
       count: 1,
@@ -322,9 +321,8 @@ describe("copyConfirm", () => {
     expect(confirm.body).toContain("stay if bob stops sharing");
   });
 
-  // FOUND ON THE EMULATOR. The item sheets know no username, and passing the
-  // literal "the owner" put a lower-case word at the start of a sentence:
-  // "…stops sharing. the owner's original is untouched."
+  // When item sheets know no username, "the owner" starts a sentence and must
+  // be capitalised: "The owner's original is untouched."
   it("capitalises the unnamed owner where it starts a sentence", () => {
     const body = copyConfirm({
       count: 1,
@@ -401,8 +399,7 @@ describe("copyAndRemoveOutcomeMessage", () => {
   });
 });
 
-// A subtitle under a verb states the consequence. It used to be the confirm's
-// own TITLE — a question sitting under the button that asks it.
+// A subtitle under a verb states the consequence as a statement, not a question.
 describe("removeRowSubtitle", () => {
   it("is a statement, not a question", () => {
     const subtitle = removeRowSubtitle({
