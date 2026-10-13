@@ -207,5 +207,5 @@ any of these change in `mobile/`:
 `google-services.json` is left out of the hash (`mobile/.fingerprintignore`),
 so its contents, or its absence, do not change the runtime version.
 
-It does not change for a change to the app's own JavaScript or TypeScript,
+It does not change for a change to Logjam GPS's own JavaScript or TypeScript,
 `shared/`, or assets the bundle imports: that is what an update can carry.

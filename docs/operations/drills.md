@@ -113,7 +113,7 @@ secret `PLAN_FINGERPRINT_KEY`. Use a harmless one-tag change in
       "is not the plan on the PR" and applies nothing. This works only if the
       hand edit shows up in the plan at merge, so pick a resource with that
       attribute in Terraform.
-- [ ] **Drift on a resource the PR updates** (the case #268 found). After the
+- [ ] **Drift on a resource the PR updates**. After the
       plan comment posts, add a tag by hand to the resource the PR is
       updating, then merge.
   - With `PLAN_VALUE_CHECK` = `report`: the apply goes ahead, and the result
@@ -136,7 +136,7 @@ Time: ____ Surprises: ____
 
 ### 2026-10-02: maintainer and Lead (Claude), first full drill
 
-**Change under test:** the whole mechanism (Phase 3: deploy guards, `rollback.yml`, smoke, auto-rollback, `rollback-compat`, the plan fingerprint).
+**Change under test:** the whole mechanism (deploy guards, `rollback.yml`, smoke, auto-rollback, `rollback-compat`, the plan fingerprint).
 
 **Rollback workflow** (dispatch to green):
 
