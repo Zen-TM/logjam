@@ -2,11 +2,9 @@
 // back?"
 //
 // The tallies are a StatGrid — a label over its value is how every other
-// figure in this app is read, and the comma sentence it replaces ("3 created,
-// 26 merged, 2 skipped.") made the reader parse prose to find one number.
-// Nothing is behind a disclosure: the merge list used to sit in a closed
-// accordion, which is the shape DESIGN.md rules out twice over — the answer
-// the reader came for cannot be a click away.
+// figure in Logjam Web is read, without having to parse prose to find a
+// number. Nothing is behind a disclosure (DESIGN.md): the answer the reader
+// came for cannot be a click away.
 import { Button, SectionHeader, StatGrid, type Stat } from "../../ui";
 import classes from "./ImportResultSummary.module.css";
 
@@ -46,7 +44,7 @@ export type ImportResultSummaryProps = {
   /**
    * Non-fatal per-row/per-field coercion notices (e.g. a non-numeric value that
    * was left empty). Shown, but styled as advisories rather than errors — the
-   * rows they refer to were still imported (IMPORT-5).
+   * rows they refer to were still imported.
    */
   warnings?: string[];
 
