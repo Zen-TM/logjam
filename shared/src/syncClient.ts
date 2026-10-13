@@ -1,21 +1,20 @@
-// Stage 8 client sync engine — the pure core (stage8-sync.md §8.2, §8.3,
-// §8.5). Everything here is deterministic and storage-agnostic: the mobile
-// flush engine maps SQLite outbox rows into these shapes, applies the
-// returned plans, and owns all I/O. Web PWA adoption is a stated maybe
-// (§13.4) — nothing in this file may assume React Native.
+// Client sync engine — the pure core. Everything here is deterministic and
+// storage-agnostic: the Logjam GPS flush engine maps SQLite outbox rows into
+// these shapes, applies the returned plans, and owns all I/O. Nothing in
+// this file may assume React Native.
 import {
   pushOpDependencies,
   type SyncConflictReceipt,
   type SyncPushOp,
 } from "./sync.js";
 
-/** Outbox op lifecycle (§9 outbox.state). `queued` is flushable; `inflight`
- * is mid-flush (crash recovery resets it to queued — replay is safe by
- * §8.1's idempotency); `retrying` is a rejection the SERVER may answer
- * differently next time, waiting for the next cycle; `blocked` is parked on a
- * terminal rejection; `deadRemote` is parked because the server row was
- * deleted (§6 delete-wins). Media macro-ops additionally persist three-phase
- * progress (§7.1) in `mediaPhase`, not in `state`. */
+/** Outbox op lifecycle. `queued` is flushable; `inflight` is mid-flush (crash
+ * recovery resets it to queued — replay is safe because writes are idempotent);
+ * `retrying` is a rejection the SERVER may answer differently next time,
+ * waiting for the next cycle; `blocked` is parked on a terminal rejection;
+ * `deadRemote` is parked because the server row was deleted (delete-wins). Media
+ * macro-ops additionally persist three-phase progress in `mediaPhase`, not in
+ * `state`. */
 export type OutboxState =
   | "queued"
   | "inflight"
@@ -27,7 +26,7 @@ export type OutboxState =
  * Whether a rejection is about THIS REQUEST or about the moment it was made.
  *
  * One declaration, two readers, and they must agree: the flush engine uses it
- * to decide whether to retry an op by itself, and the mobile Sync issues
+ * to decide whether to retry an op by itself, and the Logjam GPS Sync issues
  * screen uses it to decide whether to offer the user a Retry at all. If the
  * two ever disagreed, the screen would either offer a button for something the
  * engine had already given up on, or park an op the engine would have fixed.
@@ -91,7 +90,7 @@ export function shouldGiveUpOnSyncOp(
 }
 
 export type OutboxEntry = {
-  /** Local monotonic FIFO sequence — never reordered (§8.2). */
+  /** Local monotonic FIFO sequence — never reordered. */
   seq: number;
   state: OutboxState;
   /** Push attempts made. Nonzero means the op HAS been sent, so the server
@@ -100,7 +99,7 @@ export type OutboxEntry = {
   op: SyncPushOp;
 };
 
-// ── Enqueue coalescing (§8.2) ────────────────────────────────────────────────
+// ── Enqueue coalescing ───────────────────────────────────────────────────────
 //
 // Coalescing must never reorder ops. The only allowed folds:
 //  - update into a still-queued create for the same row (fold moves the
@@ -111,9 +110,8 @@ export type OutboxEntry = {
 //    delete; update+delete → drop updates, keep delete);
 //  - a notification read-state op (markRead / markUnread) supersedes a queued
 //    one for the same row, and is dropped when the queue tail already says the
-//    same thing. It used to be a plain duplicate-drop, which was only right
-//    while the bit was monotonic; with mark-as-unread the LAST op wins, and a
-//    read→unread→read run must not leave the first two on the queue.
+//    same thing. With mark-as-unread the LAST op wins, and a read→unread→read
+//    run must not leave the first two on the queue.
 // Ops not in `queued` state (inflight/parked) are never coalesced into — the
 // server may already have seen them.
 
@@ -209,7 +207,7 @@ export function planOutboxEnqueue(
   return { dropSeqs: [], append: incoming };
 }
 
-// ── Flush batch selection (§8.3 dependency closure) ─────────────────────────
+// ── Flush batch selection (dependency closure) ──────────────────────────────
 //
 // A batch is the next ≤ max queued ops, in seq order, skipping any op that
 // depends (pushOpDependencies) on an entity id owned by a parked op OR by an
@@ -264,7 +262,7 @@ export function selectFlushBatch(
   return { ready, deferred };
 }
 
-// ── Conflict receipts — client-side self-conflict filter (§6, §8.5) ─────────
+// ── Conflict receipts — client-side self-conflict filter ────────────────────
 //
 // CONTRACT (mirrors conflictReceipts in api/src/routes/sync.ts): the server
 // has no per-field history, so it over-reports — a receipt means "this is
@@ -312,11 +310,11 @@ export function filterSelfConflicts(
   });
 }
 
-// ── Rebase-on-pull (§8.5) ────────────────────────────────────────────────────
+// ── Rebase-on-pull ───────────────────────────────────────────────────────────
 //
 // Mirror rows hold server-confirmed state; dirty local edits live as outbox
 // ops. The effective row the UI renders = server row + pending dirty fields
-// replayed over it. On delta upsert the mobile side calls collectDirtyFields
+// replayed over it. On delta upsert Logjam GPS calls collectDirtyFields
 // for the row and re-applies them on top of the fresh server state, so
 // fields NOT locally dirty always track the server.
 
@@ -345,7 +343,7 @@ export function rebaseRow(
   return { ...serverRow, ...dirtyFields };
 }
 
-// ── Retry backoff (§8.3) ─────────────────────────────────────────────────────
+// ── Retry backoff ────────────────────────────────────────────────────────────
 
 export const SYNC_BACKOFF_MIN_MS = 1_000;
 export const SYNC_BACKOFF_MAX_MS = 300_000;

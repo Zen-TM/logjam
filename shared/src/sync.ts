@@ -1,7 +1,5 @@
-// Stage 8 sync protocol — shared vocabulary for the API and the mobile
-// client (the TOPO_LAYERS-style single source; see .claude/mobile-plan/
-// stage8-sync.md). PR-1 defines the tombstone entity vocabulary; the delta /
-// push protocol types land with their endpoints.
+// Sync protocol — shared vocabulary for the API and Logjam GPS
+// (single source of truth for sync entity types, records, cursors, and payloads).
 
 /**
  * Entity types that participate in delta sync and therefore in the
@@ -24,9 +22,9 @@ export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
 
 /**
  * Strict UUIDv4 shape — the only accepted form for client-minted entity ids
- * (§3.5: idempotency backbone). The mobile client mints with this shape and
- * the API rejects anything else with 400; both sides validate against this
- * single definition.
+ * (idempotency backbone). The mobile client mints with this shape and the API
+ * rejects anything else with 400; both sides validate against this single
+ * definition.
  */
 export const UUID_V4_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -35,7 +33,7 @@ export function isUuidV4(value: unknown): value is string {
   return typeof value === "string" && UUID_V4_REGEX.test(value);
 }
 
-// ── Protocol constants (§4, §8, §10) ─────────────────────────────────────────
+// ── Protocol constants ───────────────────────────────────────────────────────
 
 export const SYNC_PROTOCOL = 1;
 export const SYNC_DELTA_DEFAULT_LIMIT = 500;
@@ -50,11 +48,11 @@ export const SYNC_PUSH_MAX_OPS = 50;
  */
 export const SYNC_OVERLAP_MS = 60_000;
 
-/** The `changes` keys of a delta response, in the fixed budget-fill order
- * (§4.4). Order matters only for client convenience — places before the
- * trips that embed their names, and custom field definitions before both,
- * since a place's and a trip's stored values are keyed by them and a screen
- * that applies a page mid-pull would otherwise have values it cannot label.
+/** The `changes` keys of a delta response, in the fixed budget-fill order.
+ * Order matters only for client convenience — places before the trips that
+ * embed their names, and custom field definitions before both, since a
+ * place's and a trip's stored values are keyed by them and a screen that
+ * applies a page mid-pull would otherwise have values it cannot label.
  *
  * TYPES COME FIRST, ahead of the definitions, because a definition points at
  * the types it is scoped to: a defs page applied before its types would carry
@@ -83,10 +81,10 @@ export type DeltaEntityKey = (typeof DELTA_ENTITY_ORDER)[number];
  */
 export const SYNC_DELTA_ROUTE_LIMIT = 50;
 
-// ── Push op wire shape (§8.1) ────────────────────────────────────────────────
+// ── Push op wire shape ───────────────────────────────────────────────────────
 
 /** Entities the push endpoint accepts. Media is deliberately absent — the
- * three-phase presign flow owns media creation (§7.1).
+ * three-phase presign flow owns media creation.
  *
  * A notification has no create (the server raises them) and no update beyond
  * its read bit, so it carries three ops: the read bit in both directions and a
@@ -105,13 +103,9 @@ export const SYNC_PUSH_OPS_BY_ENTITY = {
   // A place<->place LINK. Create and delete only, and NO UPDATE — a link has
   // no fields to change.
   //
-  // A first-class entity rather than a `linkedPlaceIds` array on the place row,
-  // and the difference matters: `waypoint.canyonIds` was a whole-list field,
-  // safe only because the relationship was one-sided. A SYMMETRIC link edited
-  // from both ends means two devices clobber each other. The codebase already
-  // learned this — fieldDefsStore.ts documents that moving definitions from a
-  // whole-list PATCH to per-row writes is what made "two devices that each add
-  // a field now both keep it".
+  // A first-class entity rather than a `linkedPlaceIds` array on the place row.
+  // A symmetric link edited from both ends with a whole-list field would mean
+  // two devices clobber each other; per-row link records allow concurrent additions.
   placeLink: ["create", "delete"],
   tripLog: ["create", "update", "delete"],
   route: ["create", "update", "delete"],
@@ -137,7 +131,7 @@ export type SyncPushOp = {
   /** Entity id (client-minted UUIDv4 for creates). */
   id: string;
   /** Updates only: server updatedAt the edit was based on — conflict
-   * DETECTION only, never resolution (§6). */
+   * DETECTION only, never resolution. */
   baseUpdatedAt?: string;
   /** Create: full payload; update: dirty fields only. */
   fields?: Record<string, unknown>;
@@ -170,7 +164,7 @@ export type SyncPushResponse = {
  * batch, or already server-side): its own target for update/delete, plus any
  * place references in its fields. Both ends use it — the server for
  * dependencyFailed propagation, the client for the flush engine's
- * dependency-closure skip (§8.3).
+ * dependency-closure skip.
  */
 export function pushOpDependencies(op: SyncPushOp): string[] {
   const deps: string[] = [];
@@ -194,12 +188,12 @@ export function pushOpDependencies(op: SyncPushOp): string[] {
   return deps;
 }
 
-// ── Delta wire shapes (§4.1) ─────────────────────────────────────────────────
+// ── Delta wire shapes ────────────────────────────────────────────────────────
 //
 // Client-side view of the delta serializers in api/src/routes/sync.ts —
 // dates arrive as ISO strings. The server builds these from Prisma rows, so
 // the shapes are mirrored here, not imported there; syncBoundary.test.ts
-// (integration) is the drift guard. Additive-only on protocol 1 (§10.3):
+// (integration) is the drift guard. Additive-only on protocol 1:
 // clients must tolerate unknown extra keys (preserved via extra_json in the
 // mobile mirror, never round-tripped).
 
@@ -218,7 +212,7 @@ export type SyncDeltaPlaceRow = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
-  /** Metres, or null. Folded in with the waypoints in phase 1c. */
+  /** Metres, or null. */
   elevation: number | null;
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
    *  grade columns and the free-form `attributes` blob. */
@@ -316,20 +310,19 @@ export type SyncDeltaRouteRow = {
    */
   anchors: number[] | null;
   /** Owner rows only: a share fan-out is owner-private derived cardinality
-   *  (root CLAUDE.md), so a recipient's copy of a row never carries one. */
+   *  (root AGENTS.md), so a recipient's copy of a row never carries one. */
   sharedCount?: number;
   createdAt: string;
   updatedAt: string;
 };
 
-/** Metadata only — blobs come via POST /media/download-urls (§7.3).
+/** Metadata only — blobs come via POST /media/download-urls.
  *
  * `linkedId` is null on a standalone file (`linkedType: "none"`): the user's
  * own import or recording, which belongs to no place. `metadata` is what lets
  * such a row be LISTED without downloading the blob — see mediaMetadata.ts.
  *
- * Keysets on `updatedAt`, not `createdAt`: a media row used to be immutable, so
- * creation time was a sufficient watermark. Linking a file to a place (and
+ * Keysets on `updatedAt`, not `createdAt`: linking a file to a place (and
  * unlinking it again) mutates the row, and a createdAt keyset would never
  * redeliver it — the other device would keep showing a stale parent forever. */
 export type SyncDeltaMediaRow = {
@@ -404,7 +397,7 @@ export type SyncDeltaCustomFieldDefRow = {
  *
  * `type` is deliberately NOT narrowed to `SyncEntityType`: a server newer than
  * this client can name an entity the client has never heard of, and that is an
- * ordinary additive protocol change (§10.3), not corruption. Callers narrow
+ * ordinary additive protocol change, not corruption. Callers narrow
  * with `isKnownSyncEntityType` and ignore the rest — see `applyTombstone`.
  */
 export type SyncDeltaTombstone = {
@@ -448,7 +441,7 @@ export type SyncDeltaResponse = {
 //
 // PRIVACY: messages name FIELDS ONLY, never values — a row carries place
 // names and coordinates and these messages reach logs.
-// Unknown extra keys are ALLOWED (protocol §10.3 is additive-only).
+// Unknown extra keys are ALLOWED (protocol 1 is additive-only).
 
 export class SyncRowError extends Error {
   constructor(message: string) {
@@ -592,11 +585,8 @@ const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
 const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   // NULL for a SYSTEM definition — global, owned by no one, and the same shape
-  // a system place type has. Requiring a string here dropped all NINE system
-  // definitions off every delta page a phone pulled: the grades arrived on
-  // places with no definition to label or bound them, and `defsForType`
-  // answered "no fields" for a canyon. Found by running the app (2026-09-10),
-  // invisible to every unit test because they all built rows by hand.
+  // a system place type has. Without this, system definitions are omitted and
+  // places arrive with no definitions to label or bound their fields.
   ownerId: nullable(isString),
   entity: isString,
   key: isString,
@@ -608,9 +598,9 @@ const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
   // `placeTypeIds`, `tripTypes` and `appliesToAllTypes` are
   // deliberately UNCHECKED, and therefore optional: a row from a server that
   // predates the scoping fields is still a definition, and rejecting it would
-  // take its whole delta page down (§10.3 is additive). A client reads them
-  // with a default of "no types, not all", which renders the definition on no
-  // form rather than on every one — the safe direction.
+  // take its whole delta page down (the protocol is additive). A client reads
+  // them with a default of "no types, not all", which renders the definition
+  // on no form rather than on every one — the safe direction.
   createdAt: isString,
   updatedAt: isString,
 };
@@ -686,7 +676,7 @@ export function parseSyncDeltaShareRow(value: unknown): SyncDeltaShareRow {
  * Shape check only — `entity` and `type` are validated against their allowed
  * values by `isTripLogCustomFieldDef` at the point the row becomes a
  * definition, so an unknown field type from a NEWER server reaches the mirror
- * intact (protocol §10.3 is additive) instead of failing the whole page.
+ * intact (the protocol is additive) instead of failing the whole page.
  */
 export function parseSyncDeltaCustomFieldDefRow(
   value: unknown,
@@ -712,13 +702,10 @@ export function parseSyncDeltaFriendshipRow(
  * A tombstone names a row to delete, so a malformed one is as dangerous as a
  * malformed row — `type` decides WHICH table the delete cascades through.
  *
- * SHAPE is checked here; the VOCABULARY is not. `type` used to be validated
- * against `SYNC_ENTITY_TYPES`, which made every addition to that list a
- * breaking change for clients already in the field: the server emitted a
- * tombstone for a new entity, the parser called it invalid, and the phone told
- * its user it had "dropped N unreadable rows from a delta page" — a data-loss
- * warning for a row it correctly had nothing to do with. Adding
- * `customFieldDef` produced exactly that on a 0.1.0 build.
+ * SHAPE is checked here; the VOCABULARY is not. Validating `type` against
+ * `SYNC_ENTITY_TYPES` would make every addition to that list a breaking
+ * change for clients already in the field when the server emits a tombstone
+ * for an entity added in a newer version.
  *
  * An unknown type is a NEWER SERVER, not corruption. It is parsed, and
  * `applyTombstone` ignores it (there is no local table it could name).
@@ -730,11 +717,11 @@ export function parseSyncDeltaTombstone(value: unknown): SyncDeltaTombstone {
   });
 }
 
-// ── Cursor codec (§4.2) ──────────────────────────────────────────────────────
+// ── Cursor codec ─────────────────────────────────────────────────────────────
 //
 // The cursor is server-minted and opaque to the client (stored + returned
 // verbatim), but the codec lives in shared/ because it is pure, unit-tested,
-// and §11 puts the protocol's TypeScript in one place. Unsigned by design:
+// and keeps the protocol's TypeScript in one place. Unsigned by design:
 // the delta query is per-user scoped server-side regardless of cursor
 // contents, so tampering can only change which of your own rows re-download.
 
@@ -750,7 +737,7 @@ export type SyncCursor = {
   /** Watermark: entities changed strictly after this ISO instant. */
   ts: string;
   /** Server epoch the cursor was minted under (defaults to 1 when absent) —
-   * mismatch with the server's current epoch forces resetRequired (§10.5). */
+   * mismatch with the server's current epoch forces resetRequired. */
   e?: number;
   /** Present only mid-pagination (hasMore pages). */
   k?: SyncCursorKeysets;
@@ -801,7 +788,7 @@ export function encodeSyncCursor(cursor: SyncCursor): string {
 
 /**
  * Decode + validate a cursor string. Returns null on ANY malformation —
- * the server treats null as resetRequired (§4.3), never as an error.
+ * the server treats null as resetRequired, never as an error.
  */
 export function decodeSyncCursor(value: string): SyncCursor | null {
   const json = base64UrlDecode(value);

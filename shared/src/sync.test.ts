@@ -107,7 +107,7 @@ describe("SYNC_ENTITY_TYPES", () => {
     expect(SYNC_ENTITY_TYPES).toEqual([
       "place",
       // A place TYPE is a synced entity of its own: it is created, renamed and
-      // deleted OFFLINE like every other user-made row (§2.9), which an
+      // deleted OFFLINE like every other user-made row, which an
       // online-only path could not do — and would break guest installs, which
       // never reach the server at all until they link.
       "placeType",
@@ -116,8 +116,7 @@ describe("SYNC_ENTITY_TYPES", () => {
       "placeShare",
       // A place<->place LINK. Its own entity rather than an array on the place
       // row: a SYMMETRIC relationship edited from both ends means two devices
-      // clobber each other, which is why `waypoint.canyonIds` could be a
-      // whole-list field and this cannot.
+      // clobber each other if stored as a whole-list field.
       "placeLink",
       "friendship",
       "route",
@@ -127,12 +126,9 @@ describe("SYNC_ENTITY_TYPES", () => {
 });
 
 // A tombstone naming an entity this build has never heard of is a NEWER
-// SERVER, not corruption. Validating `type` against SYNC_ENTITY_TYPES made
-// every addition to that list a breaking change for phones already in the
-// field: adding `customFieldDef` made a 0.1.0 build report "dropped 12
-// unreadable row(s) from a delta page" — a data-loss warning about rows it
-// correctly had nothing to do with. Caught on-device, not by this suite, which
-// is why the test exists now.
+// SERVER, not corruption. Validating `type` against SYNC_ENTITY_TYPES would make
+// every addition to that list a breaking change for older clients, producing
+// false data-loss warnings about unknown entity types.
 describe("parseSyncDeltaTombstone", () => {
   it("accepts every known entity type", () => {
     for (const type of SYNC_ENTITY_TYPES) {
@@ -207,11 +203,9 @@ describe("delta row parsers", () => {
   };
 
   // A SYSTEM row belongs to no account, and there are two kinds of them: the
-  // three place types and the nine field definitions. `ownerId: isString` on
-  // the definition spec dropped all nine off every delta page a phone pulled —
-  // the grades arrived on places with nothing to label or bound them — and no
-  // test saw it, because every test on both sides built its rows by hand.
-  // Ground truth for this now lives in `api/src/__tests__/syncBoundary.test.ts`,
+  // three place types and the nine field definitions. Both arrive with null
+  // ownerId so that system definitions and types are not dropped.
+  // Ground truth for this lives in `api/src/__tests__/syncBoundary.test.ts`,
   // which parses what the live server actually sends.
   it("accepts a global row, whichever kind it is, with a null owner", () => {
     const systemType = {
