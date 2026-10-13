@@ -66,8 +66,8 @@
 }
 
 /* A line holding the one button that leads somewhere else. Centred and given
-   room on both sides: against the left edge it read as a stray control rather
-   than a way out of the form (operator, 2026-09-18). */
+   room on both sides: against the left edge it reads as a stray control rather
+   than a way out of the form. */
 .errandLine {
   display: flex;
   align-items: center;
