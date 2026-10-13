@@ -21,8 +21,8 @@ Outputs (in ./output/):
   - features.mbtiles
   - slope.mbtiles
   - contours.mbtiles
-  Stage 2: composite is no longer produced at job time — the export worker
-  builds it on demand against the user's current vector style.
+  Composite is built on demand by the export worker against the user's
+  current vector style (not produced at job time).
 
 Usage:
   python pipeline.py /path/to/elvis_download.zip [--workers N] [--output ./output]
@@ -416,7 +416,6 @@ SVTM_FORMATION_MU: Dict[str, float] = {
     "Alpine Complex": 1.4,
 }
 
-# Hillshade defaults (formerly inline in gdaldem hillshade calls).
 HILLSHADE_DEFAULTS = {
     "colour": "#ffffffff",  # tint applied to greyscale luminance (#RRGGBBAA)
     "azimuth": 315,  # sun direction (NW)
@@ -425,7 +424,6 @@ HILLSHADE_DEFAULTS = {
     "multidirectional": False,  # blend multiple sun angles
 }
 
-# Vegetation render defaults (formerly inline in render_vegetation_tile).
 VEGETATION_DEFAULTS = {
     "sparseColour": "#90ee90ff",  # alpha ignored — alphaMin used
     "denseColour": "#006400ff",  # alpha ignored — alphaMax used
@@ -460,7 +458,6 @@ CONTOUR_ZOOM_INTERVALS_DEFAULT = [
     (17, 18, 5, 10),
 ]
 
-# Contour colour defaults (formerly inline in render_contours_tile).
 CONTOUR_DEFAULTS = {
     "majorColour": (80, 60, 40, 220),
     "minorColour": (120, 90, 60, 160),
@@ -471,8 +468,7 @@ CONTOUR_DEFAULTS = {
 # How many stored contour-width units make one pixel at z18. Mirrors
 # CONTOUR_WIDTH_UNITS_PER_PX in shared/src/topoSettings.ts: a contour and an OSM
 # feature line asked for the same width must be the same line, in the composite
-# bake as on the live map. This bake had its own divisor (zoom / 16 / 6), which
-# made a baked contour half again as thick as the one the user tuned on screen.
+# bake as on the live map.
 CONTOUR_WIDTH_UNITS_PER_PX = 8
 
 # Contour smoothing. Raw gdal_contour output on a LiDAR DTM is extremely knobbly
@@ -1063,8 +1059,8 @@ def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max
 # Step 1 – Extract and inspect the ELVIS ZIP
 # ---------------------------------------------------------------------------
 
-# Pipeline mode constants. Mode B (DEM + LAZ) was removed: when a point cloud is
-# present we always run Mode C and ignore any bundled DEM ("LAZ wins").
+# Pipeline mode constants. When a point cloud is present, Mode C runs and
+# any bundled DEM is ignored ("LAZ wins", tests/test_zip_extract.py).
 MODE_LAZ_ONLY = "C"  # Full PDAL DTM + DSM (point cloud present — preferred)
 MODE_DEM_ONLY = "A"  # Pre-built DEM only, no point cloud – no vegetation layer
 
@@ -1368,8 +1364,7 @@ def reproject_raster_to_web_mercator(
     rotated edge, so the triangular gaps left by rotating an axis-aligned native
     grid into Web Mercator stay nodata (transparent) instead of being fabricated
     into "spaghetti". srcNodata/dstNodata propagate the hole value. Idempotent on
-    already-3857 input (a same-CRS resample). Mirrors the warp `merge_dem_tiles`
-    used to do inline.
+    already-3857 input (a same-CRS resample).
     """
     gdal.Warp(
         dst_path,
@@ -1688,10 +1683,9 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     else:
         merged = unary_union(polys)
         # Keep every component large enough to be real data; drop only stray-point
-        # noise (components below a fraction of the largest). Deleting all but the
-        # largest used to erase entire valid lobes where ground returns were
-        # locally sparse. Rebuild each kept component from its exterior ring to
-        # drop interior holes.
+        # noise (components below a fraction of the largest): taking only the
+        # largest would erase valid lobes where ground returns are locally sparse.
+        # Rebuild each kept component from its exterior ring to drop interior holes.
         components = (
             list(merged.geoms) if merged.geom_type == "MultiPolygon" else [merged]
         )
@@ -2388,7 +2382,7 @@ def _combine_scrub_strata(
     weight_low: float,
     weight_high: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Pure arithmetic core of the weighted-strata NRD combine (B.3).
+    """Pure arithmetic core of the weighted-strata NRD combine.
 
     Returns (total_near, raw_nrd):
       - total_near = low + high + below — the shared, UNSPLIT confidence
@@ -2414,7 +2408,7 @@ def _density_normalized_min_pulses(
     reference_all_returns: float,
     base_min_pulses: float,
 ) -> Tuple[float, float, float]:
-    """Pure arithmetic core of the B.2 density-normalized confidence-mask threshold.
+    """Pure arithmetic core of the density-normalized confidence-mask threshold.
 
     `nominal_all` is the median of the positive (>0) cells of the all-return
     count raster — falls back to `reference_all_returns` when there are no
@@ -2728,7 +2722,7 @@ def fetch_osm_features(
                     endpoint, data={"data": query}, headers=headers, timeout=180
                 )
                 resp.raise_for_status()
-                # Decoded INSIDE the retry loop (STP-003): a mirror answering
+                # Decoded INSIDE the retry loop: a mirror answering
                 # 200 with an HTML interstitial is a mirror failure, not a job
                 # failure — rotate to the next endpoint instead of raising out
                 # of a function whose contract is "degrade to an empty layer".
@@ -3136,14 +3130,14 @@ def _load_contour_index(path: str) -> tuple:
     bounding boxes, so each tile queries only the lines near it instead of
     rescanning every feature in the whole job.
 
-    Without this, render_contours_tile iterated all features per tile → the
-    render phase was O(tiles × features), and since both grow with coverage
-    area it scaled ~O(area²) (the source of the multi-hour large-job renders).
+    Without this, render_contours_tile would iterate all features per tile →
+    rendering would be O(tiles × features), and since both grow with coverage
+    area it would scale ~O(area²).
 
     Returns (feature_records, tree) where feature_records[i] is
     (feature, coords) aligned with the i-th box inserted into the tree. The
-    tree's envelope query reproduces the previous bbox-vs-tile±pad reject
-    exactly (both keep features whose bounding box intersects the query box).
+    tree's envelope query reproduces the bbox-vs-tile±pad reject exactly
+    (both keep features whose bounding box intersects the query box).
     Cached per-process, like _load_geojson.
     """
     cached = _contour_index_cache.get(path)
@@ -3404,7 +3398,7 @@ def render_features_tile(
         return img
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
-    # This tile's index, used to claim line-label anchors (see draw_tile_label).
+    # This tile's index, used to claim line-label anchors (see tile_label_box).
     tile_x, tile_y = lon_lat_to_tile(
         (lon_min + lon_max) / 2.0, (lat_min + lat_max) / 2.0, zoom
     )
@@ -3555,7 +3549,7 @@ def render_contours_tile(
     draw = ImageDraw.Draw(img)
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
-    # This tile's index, used to claim line-label anchors (see draw_tile_label).
+    # This tile's index, used to claim line-label anchors (see tile_label_box).
     tile_x, tile_y = lon_lat_to_tile(
         (lon_min + lon_max) / 2.0, (lat_min + lat_max) / 2.0, zoom
     )
@@ -3791,8 +3785,8 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
         "contours": contour_img,
     }
 
-    # Individual layers — composite is built on demand by the export worker
-    # in Stage 2; the renderer no longer emits a composite tile.
+    # Individual layers — composite is built on demand by the export worker;
+    # the renderer does not emit a composite tile.
     for lname in cfg.layers:
         png = img_to_png(layer_imgs[lname])
         if png is not None:
@@ -3804,9 +3798,9 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
 def generate_all_tiles(cfg: RenderConfig, workers: int):
     """Iterate over all zoom levels and tiles, render in parallel, write MBTiles.
 
-    Stage 2: composite MBTiles is no longer produced at job time. Composite
-    output is built on demand by the export worker against the latest vector
-    style. Per-layer raster MBTiles are still emitted because they are the
+    Composite MBTiles is not produced at job time; composite output is built
+    on demand by the export worker against the latest vector style. Per-layer
+    raster MBTiles are still emitted because they are the
     source for both the in-app PMTiles (vector layers from tippecanoe, raster
     layers from these MBTiles) and the canonical-source COG conversion
     (worker.py converts the styled MBTiles → COG via GDAL's MBTiles driver).
@@ -4054,9 +4048,9 @@ def main():
             "Comma-separated list of layers to generate "
             "(hillshade, vegetation, features, slope, contours). "
             "Defaults to 'all'. Per-layer `enabled` flags in "
-            "--settings-json also disable layers. As of Stage 2 "
-            "composite is no longer produced at job time — the "
-            "export worker builds it on demand."
+            "--settings-json also disable layers. Composite is not "
+            "produced at job time — the export worker builds it "
+            "on demand."
         ),
     )
     parser.add_argument(
@@ -4338,7 +4332,7 @@ def main():
             requested = {l.strip().lower() for l in args.layers.split(",") if l.strip()}
             if "composite" in requested:
                 log.warning(
-                    "--layers 'composite' is a no-op since Stage 2; "
+                    "--layers 'composite' is a no-op; "
                     "composites are built on demand by the export worker. Ignoring."
                 )
                 requested.discard("composite")

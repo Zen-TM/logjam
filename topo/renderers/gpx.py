@@ -57,7 +57,7 @@ def render_gpx(ctx: RenderContext) -> Path:
     # include the 'features' layer, so this branch should never reach a user.
     if "features" not in ctx.layers:
         raise RenderError("GPX export requires the 'features' layer")
-    # Stage 2 release: contours-as-GPX is rejected upstream
+    # Contours-as-GPX is rejected upstream
     # (EXPORT_FORMAT_RULES.gpx.allowVector but only features makes sense).
 
     src = ctx.geojson_path(job["id"], "features")
