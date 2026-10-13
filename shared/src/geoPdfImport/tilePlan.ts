@@ -1,4 +1,4 @@
-// Deterministic raster tile plan for a GeoPDF import (Stage 6 §3.4).
+// Deterministic raster tile plan for a GeoPDF import.
 //
 // Pure function of (GeoTransform, clip polygon): the import pipeline replays
 // the identical plan on resume, so tile order and warp payloads must be
@@ -67,8 +67,8 @@ export function estimateGeoPdfImport(plan: TilePlan): GeoPdfImportEstimate {
  * The resume checkpoint the pipeline writes into the MBTiles, and the whole of
  * what a resume is allowed to trust.
  *
- * `zMax` alone was the entire validity test, and zMax is the one thing a
- * planner change is LEAST likely to move: the tile list is derived from the clip
+ * Validating `zMax` alone is insufficient, because zMax is the one thing a
+ * planner change is least likely to move: the tile list is derived from the clip
  * polygon, the mercator extent, the mesh grid and the pad, any of which can
  * change its length and order while zMax stays put.
  */
@@ -201,7 +201,7 @@ function segmentsIntersect(a1: XY, a2: XY, b1: XY, b2: XY): boolean {
   return d1 > 0 !== d2 > 0 && d3 > 0 !== d4 > 0;
 }
 
-/** Coarse tile-rect vs clip-polygon intersection in mercator space (§3.4.3). */
+/** Coarse tile-rect vs clip-polygon intersection in mercator space. */
 function tileIntersectsClip(
   bounds: { x0: number; y0: number; x1: number; y1: number },
   clipMerc: XY[],
@@ -343,10 +343,9 @@ export function buildTilePlan(
   zMin = Math.max(Z_MIN_FLOOR, zMin - ZOOM_OUT_HEADROOM);
 
   // Tile list at zMax over the CLIP's own extent, clip-filtered (see
-  // `tilesIntersecting`). It used to range over `transform.wgs84Bounds`, which
-  // is baked from the neatline — so any caller passing a clip larger than the
-  // neatline silently lost the tiles outside it. Production passes the matching
-  // polygon today; the coupling is the bug.
+  // `tilesIntersecting`), rather than `transform.wgs84Bounds` (which is baked
+  // from the neatline): ranging over wgs84Bounds would silently lose tiles
+  // whenever a caller passes a clip larger than the neatline.
   const tileSpan = worldSize / 2 ** zMax;
 
   // Source pad: 2 source px in page units.
