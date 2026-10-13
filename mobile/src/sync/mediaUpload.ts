@@ -1,4 +1,4 @@
-// Offline media capture → upload (stage8-sync.md §7.1). An "attach photo"
+// Offline media capture → upload. An "attach photo"
 // copies the full-res image + a client-generated JPEG thumbnail into
 // app-private storage, writes a pendingUpload mirror row, and enqueues one
 // media.create outbox op. The flush engine (flush.ts) runs the three-phase
@@ -80,16 +80,15 @@ async function fileSize(uri: string): Promise<number> {
 }
 
 /**
- * MOT-005/D6: a picker/camera source is safe (and, since nothing else
- * declares or wipes it, necessary) to delete once `attachMediaLocal` has
- * copied it. A path under one of OUR declared stores is not that — it's an
- * asset whose lifecycle is governed elsewhere, e.g. a vector import's
- * `sourcePath` reused by `saved/assetActions.ts`'s "attach to place" (the
- * app's only kept original of a lossy GPX/KML derivation — see mobile/
- * CLAUDE.md "Imports keep their ORIGINAL BYTES"). `localStores.test.ts`
- * guarantees nothing outside `localStores.ts` names a filesystem root, so
- * anything NOT under one of these prefixes can only be a native module's own
- * cache path.
+ * A picker/camera source is safe (and, since nothing else declares or wipes
+ * it, necessary) to delete once `attachMediaLocal` has copied it. A path under
+ * one of OUR declared stores is not that — it's an asset whose lifecycle is
+ * governed elsewhere, e.g. a vector import's `sourcePath` reused by
+ * `saved/assetActions.ts`'s "attach to place" (the app's only kept original of
+ * a lossy GPX/KML derivation — see mobile/AGENTS.md "Imports keep their
+ * ORIGINAL BYTES"). `localStores.test.ts` guarantees nothing outside
+ * `localStores.ts` names a filesystem root, so anything NOT under one of
+ * these prefixes can only be a native module's own cache path.
  */
 function isOwnedStorePath(uri: string): boolean {
   return WIPED_DIRS.some((dir) => uri.startsWith(dir));
@@ -160,11 +159,11 @@ export async function attachMediaLocal(
       }
     }
 
-    // MOT-005/D6: the source has now been fully copied (display) and read
-    // (thumbnail extraction, if any) — delete it unless it's a path this app
-    // already owns the lifecycle of elsewhere (see isOwnedStorePath). A
-    // picker/camera source left alive here lives outside every declared
-    // store and outside the account-transition wipe until now.
+    // The source has been fully copied (display) and read (thumbnail
+    // extraction, if any) — delete it unless it's a path this app already owns
+    // the lifecycle of elsewhere (see isOwnedStorePath). A picker/camera source
+    // left alive here would live outside every declared store and outside the
+    // account-transition wipe.
     if (!isOwnedStorePath(file.uri)) {
       await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(
         () => {},
@@ -215,11 +214,11 @@ export async function attachMediaLocal(
       );
     });
   } catch (err) {
-    // Anything between the first copy and the committed row (a manipulator
-    // failure, an unreadable video, a rejected insert) used to strand the
-    // bytes on disk: nothing sweeps MEDIA_CACHE_DIR except the
-    // account-transition wipe, so an orphaned full-res photo lived for the
-    // life of the install.
+    // Clean up partial files: anything between the first copy and the
+    // committed row (a manipulator failure, an unreadable video, a rejected
+    // insert) would strand the bytes on disk. Nothing sweeps MEDIA_CACHE_DIR
+    // except the account-transition wipe, so an orphaned full-res photo would
+    // live for the life of the install.
     await FileSystem.deleteAsync(displayPath, { idempotent: true }).catch(
       () => {},
     );
@@ -493,7 +492,7 @@ export async function linkStandaloneMediaLocal(
   scheduleMutationSync();
 }
 
-// ── flush-side: the three-phase resumable flow (§7.1) ───────────────────────
+// ── flush-side: the three-phase resumable flow ─────────────────────────────
 
 export type MediaOpRow = {
   seq: number;
@@ -555,13 +554,11 @@ async function putFile(
   fileUri: string,
   contentType: string,
 ): Promise<void> {
-  // Guarded, not bare: `uploadAsync` has no timeout, so the Pixel-9
-  // connect()-hang this helper exists for parked a media op forever with the
-  // sync pump waiting on it (MAPP-006 — the finding fixed the Send-a-copy and
-  // GeoPDF legs; these media legs are the same call on a sibling surface, and
-  // mobile/CLAUDE.md's rule is that a second caller inherits the first's
-  // guards). A first-byte timeout throws, so the op fails and retries like any
-  // other transient error instead of hanging.
+  // Guarded, not bare: `uploadAsync` has no timeout, so without one the
+  // Pixel-9 connect()-hang would park a media op forever with the sync pump
+  // waiting on it (mobile/AGENTS.md's rule is that a second caller inherits the
+  // first's guards). A first-byte timeout throws, so the op fails and retries
+  // like any other transient error instead of hanging.
   //
   // A throw from the task is the transfer dying without an answer from S3 (the
   // file itself was checked in phase 0), so it is marked as the link's failure;
@@ -584,7 +581,7 @@ async function finalizeConfirmed(
   mediaId: string,
   confirmed: ConfirmedMedia,
 ): Promise<void> {
-  // The uploaded local files become the offline cache blobs (§7.3).
+  // The uploaded local files become the offline cache blobs.
   // The server owns the colour: it picks the next one avoiding collisions
   // across every device, which this phone cannot see. The local row carried a
   // guess so the line drew immediately, and this is where the two reconcile —
@@ -662,12 +659,10 @@ export async function runMediaCreateOp(
   } catch (err) {
     const status = (err as { status?: number }).status;
     // Park only what a retry can never fix; rethrow the rest for the engine's
-    // backoff. The old test was `>= 400 && < 600 && !== 500`, which swept in
-    // 502/503/504 (an API deploy), 429 (rate limit) and 401 (an expired
-    // token) — so six photos attached in a place became six sync issues
-    // needing six manual Retry taps the moment the user hit a mid-deploy API.
-    // flush.ts classifies those same statuses as transient; this is the copy
-    // that disagreed.
+    // backoff. Checking broad 4xx/5xx ranges would sweep in 502/503/504 (an
+    // API deploy), 429 (rate limit) and 401 (an expired token) — creating
+    // unnecessary sync issues needing manual Retry taps. Classification aligns
+    // with isTransientSyncError in flush.ts.
     if (typeof status === "number" && PERMANENT_PRESIGN_STATUSES.has(status)) {
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
@@ -685,7 +680,7 @@ export async function runMediaCreateOp(
     return "done";
   }
 
-  // MOT-006: presign above is a few hundred bytes of JSON, fine on the
+  // Presign above is a few hundred bytes of JSON, fine on the
   // `sync` allowance it always rode; the PUTs below are the actual media
   // bytes (up to 30 MB an image, 500 MB a video) and answer to their own
   // metered gate instead. Not allowed right now is not a failure — undo
@@ -826,7 +821,7 @@ export async function runMediaReclimbOp(
 /**
  * Link a standalone file to a place as its way, or unlink it.
  *
- * This is what replaced uploading a COPY of an import into a place. The local
+ * Links or unlinks a standalone file without uploading a duplicate copy. The local
  * mirror row has already moved (the UI showed the change immediately), so a
  * success needs no further write; a 404 means the file is gone and the op has
  * nothing left to do. A 409 is the place's track slot being taken by
@@ -903,10 +898,11 @@ function messageForBlock(status: number): string {
 export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
   const db = await getSyncDb();
   const cancelled = await withSyncTransaction(db, async () => {
-    // Media ops bypass `planOutboxEnqueue`, so its delete-cancellation never
-    // ran here: deleting a photo whose upload was still queued uploaded the
-    // whole file (presign → PUT → confirm, possibly on metered data) and then
-    // deleted it server-side again. Same "never sent" test the planner uses —
+    // Media ops bypass `planOutboxEnqueue`, so its delete-cancellation does
+    // not run automatically here: without explicit cancellation, deleting a
+    // photo whose upload is still queued would upload the whole file
+    // (presign → PUT → confirm, possibly on metered data) and then delete it
+    // server-side again. Same "never sent" test the planner uses —
     // queued, no attempt, no phase started — and the server has nothing to
     // delete, so the local row and its blobs go straight away.
     const pendingCreate = await db.getFirstAsync<{ seq: number }>(

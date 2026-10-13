@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
-// The Stage 7 → Stage 8 waypoint promotion, which since the phase 1c fold
-// lands the legacy rows as PLACES of the system Marker type. Two SQLite FILES
-// are involved (logjam-offline.db holds the legacy rows, logjam.db the mirror
-// + outbox), so no transaction can span the "insert the new row" / "delete the
-// legacy row" pair. A kill in that window used to promote the row AGAIN on the
-// next launch — the user saw duplicates, both queued for push. The fix is a
-// deterministic id: the promoted place keeps the legacy one.
+// Waypoint promotion lands legacy offline rows as PLACES of the system Marker
+// type. Two SQLite files are involved (logjam-offline.db holds the legacy rows,
+// logjam.db the mirror + outbox), so no transaction can span the "insert the
+// new row" / "delete the legacy row" pair. A kill in that window must not promote
+// the row again on the next launch: the promoted place keeps the legacy id
+// deterministically so duplicates are avoided.
 
 type Call = { sql: string; args: unknown[] };
 

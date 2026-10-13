@@ -1,16 +1,15 @@
-// The ONE declaration of what logjam.db holds (stage8-sync.md §9).
+// The ONE declaration of what logjam.db holds.
 //
 // Everything that needs to know the shape of the sync database derives from
 // this file: the CREATE statements, both wipes, and the schema-version reset.
-// That is the point — `routes` was added to the schema and never joined
-// MIRROR_TABLES, so sign-out left the previous user's route geometry (their
-// coordinates through places) on the phone, and a forced resync left stale
-// rows behind. A list maintained beside the DDL drifts from it; a list the DDL
-// is BUILT from cannot.
+// That is the point — a separate table list would risk leaving route geometry
+// (coordinates through places) on the phone across sign-out or leaving stale
+// rows behind on forced resync. A list maintained beside the DDL drifts from
+// it; a list the DDL is BUILT from cannot.
 //
 // PRIVACY: mirror rows carry place names and coordinates. The wipe derived
 // here is the privacy boundary between two users of one phone
-// (mobile/CLAUDE.md) — a new table must be unable to escape it.
+// (mobile/AGENTS.md) — a new table must be unable to escape it.
 
 /**
  * `mirror` — server-authoritative rows this device caches. Rebuildable from a
@@ -37,10 +36,9 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     columns: { key: "TEXT PRIMARY KEY", value: "TEXT NOT NULL" },
   },
   {
-    // FIFO outbox (§8.2). base_fields_json is an addition over the spec DDL:
-    // the enqueue path snapshots the server-confirmed value of each newly
-    // dirtied field so the flush engine can drop self-conflict receipts (§6
-    // over-report contract) without reconstructing history.
+    // FIFO outbox: base_fields_json snapshots the server-confirmed value of
+    // each newly dirtied field so the flush engine can drop self-conflict
+    // receipts without reconstructing history.
     name: "outbox",
     kind: "local",
     columns: {
@@ -87,8 +85,8 @@ export const SYNC_TABLES: readonly TableSchema[] = [
   },
   // Mirrors: typed columns for list/filter/map-critical fields; extra_json
   // preserves server fields this app version doesn't know (additive protocol
-  // §10.3 — display-only, never round-tripped). Columns hold the EFFECTIVE row
-  // (server state + local dirty fields materialized, §8.5) so reads are plain
+  // — display-only, never round-tripped). Columns hold the EFFECTIVE row
+  // (server state + local dirty fields materialized) so reads are plain
   // SQL; dirty_fields_json lists the locally-dirty field names for
   // rebase-on-pull.
   {
@@ -103,13 +101,10 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       alt_names_json: "TEXT",
       place_type_id: "TEXT NOT NULL DEFAULT ''",
       notes: "TEXT",
-      // Folded in from `waypoints` in phase 1c, along with the rows. `symbol`
-      // did NOT come with them: the icon is the place TYPE's now.
+      // Elevation for the place. The icon belongs to the place type.
       elevation: "REAL",
-      // The seven grade columns and `attributes_json` collapsed into ONE JSON
-      // column, keyed by definition key. That is the whole shape change of the
-      // rework on this side: a campsite and a canyon are the same row now, and
-      // the difference is which keys are in here.
+      // JSON column keyed by custom field definition key: campsite and
+      // canyon places share the same row structure differentiated by keys.
       field_values_json: "TEXT",
       // The definitions that label the values above, for a place of a type the
       // VIEWER does not own — a place shared with them. Absent otherwise,
@@ -167,15 +162,11 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     // deleting a field is now the same offline-capable write path as creating
     // a place, for a guest and for a linked user alike.
     //
-    // `owner_id` IS NULL for a SYSTEM definition — the seven canyon grades and
+    // `owner_id` IS NULL for a SYSTEM definition — the canyon grades and
     // their kin are global rows belonging to no account, exactly like a system
-    // place type. It used to have no column at all, on the premise that "every
-    // definition the server sends is the caller's own"; the delta has sent both
-    // kinds since the types landed, so the phone could not tell them apart and
-    // offered Rename and Delete on a built-in field. Deleting one stripped its
-    // value off every place in the account while the server no-opped the def
-    // delete — the definition came back on the next pull and the values did
-    // not. There is no `sync_role`: a definition is never SHARED with anyone.
+    // place type. System definitions are not editable: the phone must not
+    // offer Rename or Delete on built-in fields. There is no `sync_role`: a
+    // definition is never SHARED with anyone.
     //
     // PRIVACY: `label` is user-authored text about their canyoning. It is in
     // the mirror, so it is inside the sign-out wipe derived from SYNC_TABLES —
@@ -331,7 +322,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     },
   },
   {
-    // Last GET /notifications verbatim (§4.7: refetch-and-cache, not
+    // Last GET /notifications verbatim (refetch-and-cache, not
     // cursor-synced). Server-derived, so it is a mirror table: it goes in both
     // wipes and is rebuilt by a refetch.
     name: "notifications_cache",
@@ -358,8 +349,7 @@ export function tableSchema(name: string): TableSchema | undefined {
  * a column added in the same schema bump then runs against the OLD table and
  * fails with "no such column", which aborts the whole exec and so stops the
  * rebuild that would have fixed it. The mirror is then permanently stale and
- * every delta write fails. Found on device (2026-09-04) the first time a new
- * mirror column got an index; `syncDb.test.ts` pins the ordering.
+ * every delta write fails; `syncDb.test.ts` pins the ordering.
  */
 export function createSchemaSql(kind?: TableKind): string {
   return SYNC_TABLES.filter(
