@@ -47,8 +47,8 @@ describe("buildPushMessages — privacy invariant", () => {
     expect(pushTitleFor("unknown_future_type")).toBe("Logjam notification");
   });
 
-  // APIC-002: a failed GeoPDF used to push "GeoPDF finished" — the push carries
-  // no status field, so the type is the only thing that can carry the outcome.
+  // The push carries no status field, so the type is the only thing that can
+  // carry the outcome.
   it("gives a failed GeoPDF its own title, distinct from the success one", () => {
     expect(pushTitleFor("geo_pdf_failed")).toBe("GeoPDF failed");
     expect(pushTitleFor("geo_pdf_failed")).not.toBe(
