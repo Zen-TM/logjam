@@ -61,7 +61,6 @@ export default function MediaUpload({
     : "Photos, videos, GPX/KML";
   const locked = Boolean(disabled) || Boolean(disabledReason) || busy;
 
-  // Whether a resolved file's category is allowed by the `category` prop.
   function categoryAllowed(
     resolvedCategory: "image" | "video" | "track",
   ): boolean {

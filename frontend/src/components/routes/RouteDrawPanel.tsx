@@ -1,23 +1,15 @@
 // The route tool, as a PAGE rather than a card over the map.
 //
-// It floated over the map until 2026-09-17, and two things were wrong with
-// that. Its container spanned the map's full width to centre itself, so the
-// dead strip either side swallowed clicks and anchors could not be dropped
-// there; and even fixed, a panel sitting on the canvas is in the way of the one
-// gesture the mode exists for (operator).
+// Drawing happens where a route's figures already live: the 380px panel,
+// which the map is inset for. Nothing floats over the map canvas, so the
+// whole canvas receives clicks, and the page shows the route's figures and
+// elevation profile as it is drawn. On narrow screens the panel is the
+// bottom sheet, with no second placement to maintain.
 //
-// So drawing happens where a route's numbers already live: the 380px panel,
-// which the map is already inset for. Nothing floats, the whole canvas takes
-// clicks, and the page can afford to show the line's figures and its elevation
-// profile AS IT IS DRAWN — which the card never had room for. On narrow web the
-// panel is the bottom sheet, so this is also the bottom bar the operator
-// floated, with no second placement to maintain.
-//
-// It is the same shape as a way's detail page on purpose: the controls, then
-// the stats, then the profile. One before the route exists and one after.
-// CONTROLS COME FIRST because they change what the next click does, while the
-// stats describe what the last one produced — a control below the readout it
-// governs reads as a footnote to it (operator, 2026-09-17).
+// It is the same shape as a way's detail page: controls, then stats, then
+// profile. One before the route exists and one after. Controls come first
+// because they change what the next click does, while the stats describe
+// what the line currently holds.
 import { useEffect, useMemo, useState } from "react";
 import {
   elevationSeries,
@@ -72,16 +64,14 @@ type RouteDrawPanelProps = {
   onClear: () => void;
   /** Flip which way the line runs. A BUTTON, not a menu item: it changes the
    *  geometry on screen, so it belongs beside the other edits to it rather than
-   *  behind a menu on a page you have left (operator, 2026-09-17). */
+   *  behind a menu on a page you have left. */
   onReverse: () => void;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
-  /** Where along the draft the elevation cursor sits, so the map marks it —
-   *  the same gesture a saved route's page offers, which stopped working the
-   *  moment the tool became a page of its own (operator, 2026-09-17). A
+  /** Where along the draft the elevation cursor sits, so the map marks it. A
    *  channel rather than a callback into App state, because it changes many
    *  times a second (`map/routeHover.ts`). */
   routeHover: RouteHoverChannel;
@@ -115,7 +105,7 @@ export function RouteDrawPanel({
   const { profile, loading: profileLoading } = useElevationProfile(settled);
 
   // Ctrl+Z / Cmd+Z, because this is a drawing tool and that is what the gesture
-  // means everywhere else (operator, 2026-09-17).
+  // means everywhere else.
   useUndoKey(onUndo);
   const atPeek = useSheetAtPeek();
 
@@ -172,7 +162,7 @@ export function RouteDrawPanel({
             else to say. At zero points every figure is an em-dash anyway, and
             this is exactly when someone needs telling what the map is for; it
             goes the moment the first point lands, so nothing below it ever
-            moves again (operator, 2026-09-17). */}
+            moves again. */}
             {anchorCount === 0 && (
               <p className={classes.hint} role="status">
                 Click the map to place the first point.
@@ -265,7 +255,7 @@ export function RouteDrawPanel({
             in the FOOTER, with the other controls that change the next click,
             rather than above figures it says nothing about. The footer is one
             row taller for it, and the body above is then the same page a saved
-            way shows (operator, 2026-09-17). */}
+            way shows. */}
             <SnapSelect
               value={snapMode}
               disabled={saving}
