@@ -2,7 +2,8 @@
 // binding lives in initSentry.ts).
 //
 // Mirrors api/src/lib/logger.ts: no place coordinates or names may leave the
-// device in a crash report (root CLAUDE.md privacy rule). Three layers:
+// device in a crash report (root AGENTS.md privacy rule; guard:
+// mobile/src/sentry/scrubEvent.test.ts). Three layers:
 //   1. redactTilePathPatterns semantics — strip URLs, decimal lat/lng pairs
 //      and z/x/y tile triples from every free-text field (a tile index at z18
 //      localises to ~150 m).
@@ -12,8 +13,8 @@
 //      in breadcrumb data, extra, or contexts (parallel to logger.ts
 //      redactPaths, but recursive because Sentry payloads are free-form).
 //
-// This module must ship BEFORE any Sentry init does (PROGRESS.md: reporter
-// without scrubber = build-breaker).
+// The scrubber guards crash reports before Sentry init runs (ADR 0004; guard:
+// mobile/src/sentry/scrubEvent.test.ts).
 
 // A decimal lat/lng pair in free text — "-33.5621, 150.4017", "[150.40,-33.56]"
 // and the GeoJSON-ish forms in between. Keyed redaction (SENSITIVE_KEYS) cannot
@@ -23,7 +24,7 @@
 //
 // Four decimal places (~11 m) is the floor: below that the false-positive rate
 // on ordinary numbers (timings, versions, ratios) costs more debuggability than
-// the ~1 km it would protect. Anything the app formats from a real GPS fix has
+// the ~1 km it would protect. Anything Logjam GPS formats from a real GPS fix has
 // more precision than that, not less.
 const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
 
@@ -69,8 +70,8 @@ const SENSITIVE_KEYS = new Set([
   "title",
   "displayname",
   // User-authored field LABELS and values ("permit number", "water level") are
-  // as sensitive as notes. `fieldvalues` also carries what used to be the seven
-  // grade columns, so this one key now covers everything a place records about
+  // as sensitive as notes. `fieldvalues` also carries the seven grade
+  // attributes, so this one key now covers everything a place records about
   // itself.
   "fieldvalues",
   "customfields",

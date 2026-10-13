@@ -70,10 +70,12 @@ const FIELD_LABEL: Record<string, string> = {
 };
 
 /**
- * Fields whose VALUE must never be rendered, whatever the op happens to carry.
- * A parked place create holds latitude/longitude, and this screen is exactly the
- * kind of page that ends up in a screenshot attached to a bug report — which is
- * the reason shared/DESIGN.md §13 keeps coordinates off lists entirely.
+ * Fields whose VALUE must never be rendered (guard:
+ * mobile/src/screens/syncIssueDisplay.test.ts), whatever the op happens to
+ * carry. A parked place create holds latitude/longitude, and this screen is
+ * exactly the kind of page that ends up in a screenshot attached to a bug
+ * report — which is the reason shared/DESIGN.md §13 keeps coordinates off lists
+ * entirely.
  */
 const UNRENDERABLE_FIELDS = new Set(["latitude", "longitude"]);
 
@@ -93,9 +95,7 @@ function opName(op: ParkedOp): string | null {
 
 /**
  * The row's headline: what the user tried to do, as a sentence about their
- * thing rather than a log line about ours. It used to read
- * `Attachment “Davies.kml” — upload`, which is an entity, a name and a verb in
- * the order the database holds them, and says nothing about what went wrong.
+ * thing rather than a log line about database columns.
  */
 export function opTitle(op: ParkedOp): string {
   const name = opName(op);
@@ -125,7 +125,7 @@ export function opTitle(op: ParkedOp): string {
 export type IssueAdvice = {
   /** One sentence: why it failed, in terms the reader can act on. */
   line: string;
-  /** False when trying again can only park it a second time (§7 — a verb that
+  /** False when trying again can only park it a second time (shared/DESIGN.md §7 — a verb that
    *  can only refuse is ABSENT, not disabled). */
   canRetry: boolean;
   /** What to do about it, for the sheet, where there is room for a second
@@ -158,9 +158,8 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
     //
     // It only reaches this screen after the account has answered no for a day
     // (`shouldGiveUpOnSyncOp`, applied in flush.ts), and the copy says exactly
-    // that. It used to send the reader to find better signal, which was
-    // written for a five-tries cap that a minute of bad signal could reach;
-    // an unanswered send no longer counts at all.
+    // that. Blaming signal would be misleading, as an unanswered send does not
+    // park here.
     return {
       line: "Your account kept turning this down for a day.",
       canRetry: true,
@@ -180,9 +179,8 @@ const CANT_SAVE = "This change can't be saved as it is.";
 /**
  * Whether "Recreate" will actually recreate something, rather than quietly
  * discarding (`recreateFromDeadRemote` falls back to a discard for anything it
- * cannot rebuild). The row used to be offered for EVERY deadRemote op with the
- * subtitle "Saves what you typed as a new one" — which for a place or a trip
- * was a button that deleted the change instead.
+ * cannot rebuild). Recreating an entity without payload or mirror row would
+ * delete the change instead.
  *
  * Places only. A CREATE op carries its whole payload; an UPDATE carries only
  * what it dirtied, so that rebuild needs the phone's own copy of the row.
@@ -210,7 +208,8 @@ export function canRecreate(op: ParkedOp): boolean {
  *
  * Empty means "can't tell", not "nothing is wrong" — an unknown-field rejection
  * or a server-side rule looks exactly like this, and the caller must offer
- * nothing rather than re-send an edit that will park again.
+ * nothing (guard: mobile/src/screens/syncIssueDisplay.test.ts) rather than
+ * re-send an edit that will park again.
  */
 export function rejectedFields(op: ParkedOp): string[] {
   if (op.state !== "blocked" || op.entity !== "place" || !op.fields) return [];
@@ -237,11 +236,9 @@ export function salvageableFields(op: ParkedOp): string[] {
 /**
  * The fields the op was carrying, for reading — "your changes" named.
  *
- * Every sentence on this screen used to be ABOUT a change without ever saying
- * what it was: "Couldn't save your changes to Butterbox Canyon" over a cause
- * and two verbs, with the actual edit — the thing the user has to decide the
- * fate of — nowhere on the page. An op holds exactly that (`fields` is the
- * dirty set for an update, the payload for a create), so it is shown.
+ * Shows the actual edit the user must decide the fate of (`fields` is the
+ * dirty set for an update, the payload for a create) rather than only a
+ * generic error sentence.
  *
  * PRIVACY: values go through `previewValue`, which refuses coordinates; a
  * create op carries them and this screen is the one that ends up in a
@@ -368,11 +365,11 @@ export function shelfTitle(entry: ShelfEntry): string {
 
 /**
  * Whether a field's label takes a plural verb — "your notes WERE overwritten",
- * "your water grade WAS". Read off the shipped row on the emulator, where every
- * singular field was claiming "were".
+ * "your water grade WAS". Singular fields use "was" while plural fields use
+ * "were".
  *
  * Derived from the label rather than hand-listed, because a second list of
- * fields is a list that drifts from `FIELD_LABEL` (root CLAUDE.md). Every
+ * fields is a list that drifts from `FIELD_LABEL` (root AGENTS.md). Every
  * plural label we write ends in "s" and no singular one does — checked in
  * `syncIssueDisplay.test.ts` across the whole map, so a future label that
  * breaks the rule (a "status", say) fails there rather than on someone's phone.
@@ -529,7 +526,7 @@ export function bulkDiscardBody({
  * The line SHEDS the total when both verbs are live, and that is measured, not
  * stylistic: with two extras the bar holds five controls, and
  * "2 selected · 1 retry · 1 restore" truncated to "2 selected · 1 retry · …" on
- * a Pixel — losing the one tally the user could not otherwise work out. The
+ * small screens — losing the one tally the user could not otherwise work out. The
  * total is legible from the ticks; what each button will touch is not.
  */
 export function selectionCountLabel({

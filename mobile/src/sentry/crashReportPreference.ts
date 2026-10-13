@@ -1,9 +1,9 @@
 // Whether crash reports may leave this device.
 //
-// Root CLAUDE.md: "No analytics/telemetry leaving user account." A guest has no
+// Root AGENTS.md: "No analytics/telemetry leaving user account." A guest has no
 // account, so shipping their crashes to Sentry has nothing to leave *to* — the
 // rule can only be honoured by asking. `CrashReportConsent` asks ONCE, the first
-// time the app itself is reached (guest or signed in), **defaulting to off**,
+// time Logjam GPS itself is reached (guest or signed in), **defaulting to off**,
 // and Sentry does not initialise until it is answered.
 //
 // No install is treated as having consented. One with a stored identity and no
@@ -30,7 +30,8 @@ export function readCrashReportChoice(): CrashReportChoice {
 
 /**
  * Synchronous: `initSentry` runs at module scope from `index.ts`, before any
- * `await` exists. Only an explicit "on" enables the reporter — a missing store,
+ * `await` exists. Only an explicit "on" enables the reporter (guard:
+ * mobile/src/sentry/crashReportPreference.test.ts) — a missing store,
  * a corrupt value and a fresh install all read as OFF (fail-safe, unlike the
  * app lock's deliberately-off default which trades privacy for field friction).
  */

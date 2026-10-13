@@ -1,4 +1,4 @@
-// "Is my work safe?" — the one question DESIGN.md says an offline-first app
+// "Is my work safe?" — the one question shared/DESIGN.md says an offline-first app
 // owes the user, answered in one sentence for the More hub's hero.
 //
 // Pure so the copy rules are testable: every branch here is a claim about the
@@ -7,7 +7,7 @@
 // the outbox, reads as a bug the first time the user notices.
 //
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
-// error message (§11 — failure copy is ours, not the error's).
+// error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
 export type SyncTone = "ok" | "pending" | "problem";
 
@@ -72,7 +72,8 @@ export function relativeTime(iso: string, now: number): string {
   if (Number.isNaN(then)) return "at an unknown time";
   const elapsed = now - then;
   // A clock that jumped (timezone change, NTP correction) must not produce
-  // "in -3 minutes"; treat any future stamp as just now.
+  // "in -3 minutes" (guard: mobile/src/screens/syncHealth.test.ts); treat any
+  // future stamp as just now.
   if (elapsed < MINUTE_MS) return "just now";
   if (elapsed < HOUR_MS) {
     const minutes = Math.floor(elapsed / MINUTE_MS);
@@ -140,7 +141,8 @@ function lastSyncDetail(lastSyncAt: string | null, now: number): string {
 
 /**
  * The subtitle of More's "Account sync issues" row. It answers for ISSUES
- * only: with none it used to say "Everything's synced", directly under a hero
+ * only: with none it does not say "Everything's synced" (guard:
+ * mobile/src/screens/syncHealth.test.ts), directly under a hero
  * line saying a change had been waiting since Tuesday. Whether everything is
  * synced is the hero's sentence to say, and this row cannot know it.
  */
@@ -233,8 +235,9 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     };
   }
 
-  // 2. A cycle is actually running. Only claim this while there is a link —
-  //    "Syncing…" with no signal is the optimistic label §10 forbids.
+  // 2. A cycle is actually running. Only claim this while there is a link
+  //    (guard: mobile/src/screens/syncHealth.test.ts) — "Syncing…" with no
+  //    signal is the optimistic label shared/DESIGN.md §10 forbids.
   if (state === "syncing" && online) {
     if (pendingCount >= BULK_UPLOAD_THRESHOLD) {
       return {

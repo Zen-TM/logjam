@@ -2,7 +2,7 @@
 // he let me see?"
 //
 // Sharing is AUTHORED per item, from that item's own sheet, so nothing else in
-// the app can answer the question from the person's side. Reached by tapping a
+// Logjam GPS can answer the question from the person's side. Reached by tapping a
 // friend on the Friends screen (a row in that friend's overflow sheet, not the
 // row itself: per-row actions live behind the sheet there precisely so a mis-tap
 // cannot revoke anything).
@@ -14,9 +14,8 @@
 // checkbox in the same 40pt box.
 //
 // THE TWO DIRECTIONS GET DIFFERENT VERBS, and `friendShareRows.ts` (shared) owns which
-// and why. Forward: share these with someone else (the existing bulk-share
-// sheet, unchanged) and unshare them. Received: save a copy of a place, and
-// remove my own access. There is NO delete anywhere on this screen, in the bar
+// and why. Forward: share these with someone else (the bulk-share sheet) and
+// unshare them. Received: save a copy of a place, and remove my own access. There is NO delete anywhere on this screen, in the bar
 // or in a sheet — every other verb here ends a RELATIONSHIP, while delete would
 // end the record for me and for everyone else I had shared it with, off a
 // screen scoped to one person. It belongs on Places and Saved, where a row
@@ -103,7 +102,7 @@ const copy = FRIEND_SHARES.copy;
 
 /**
  * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four
- * the rest of the app draws for them.
+ * the rest of Logjam GPS draws for them.
  */
 const SHARE_KIND_ICON = {
   place: "place",
@@ -801,7 +800,7 @@ function ShareCardMenu({
           the glyph of the row directly above: these lists are scanned by
           glyph, and giving the irreversible verb the same one as the
           recoverable verb beside it is how a user taps the wrong one. Not
-          `download`, which everywhere else in this app means BYTES ONTO THIS
+          `download`, which everywhere else in Logjam GPS means BYTES ONTO THIS
           DEVICE (Save as GPX/KML, region downloads, the auto-download
           settings) — in the route sheet it would be the third `download` in
           one list, two rows under "Save as KML". Archiving is exactly this
