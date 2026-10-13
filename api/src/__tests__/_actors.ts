@@ -24,8 +24,9 @@ export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
 // carol is shared nothing (the stranger).
 export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
 
-// What bob shares WITH alice — bob's "Coin Slot" place (see
-// friendShares.test.ts).
+// What bob shares WITH alice — bob's "Coin Slot" place. Named here rather than
+// assumed absent: assert against these instead of against `[]` (see
+// friendShares.test.ts), so a seed change fails loudly here.
 export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
 /** Bob's own Marker place, shared with nobody — the seed's "6" space is the
  *  waypoint space: waypoint ids are preserved as place ids. */

@@ -242,7 +242,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
 // CLI entrypoint: read the job ID from the env var the Fargate launch path
 // and `make geo-pdf-run` pass, then delegate to the shared processor.
 async function main(): Promise<number> {
-  const jobId = getEnv().GEO_PDF_JOB_ID;
+  const jobId = process.env.GEO_PDF_JOB_ID;
   if (!jobId) {
     logger.error("geo_pdf_worker_missing_job_id");
     return 1;
