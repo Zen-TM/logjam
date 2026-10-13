@@ -1,9 +1,9 @@
 name: Deploy Frontend
 
 # Gated on CI: fires only after the `CI` workflow (ci.yml) completes
-# successfully for a push to main (mirrors deploy-api.yml, INF-004). A red CI
+# successfully for a push to main (mirrors deploy-api.yml). A red CI
 # on that push means the deploy job's `if:` guard is false, so a failing
-# test/lint/typecheck can no longer ship a build. The guard excludes
+# test/lint/typecheck cannot ship a build. The guard excludes
 # pull_request CI runs (event == 'push'), so it does not double-fire.
 # workflow_run always uses this file as it exists on the default branch.
 #

@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # Register a new revision of an ECS task definition pinned to one exact image.
 #
-# INF-009. The four Fargate task defs shipped with `image = ...:latest`, and
+# The four Fargate task defs in Terraform declare `:latest` as a baseline, but
 # `latest` is a moving tag: a partial CI push, a re-run, or a hand `docker push`
 # silently changes what the next RunTask launches, with nothing in the task def
-# recording which build actually ran. api/ already deploys by sha (the EB
-# Dockerrun is rewritten with it); the workers did not.
+# recording which build actually ran.
 #
 # So after CI pushes an image tagged with the commit sha, it calls this once per
 # affected family. RunTask resolves a family name to its latest ACTIVE revision
 # (api/src/lib/env.ts holds the family names, no revisions), so the revision
 # registered here is the one that launches, and `aws ecs describe-task-definition`
-# on any past task now names the commit that built it.
+# on any task names the commit that built it.
 #
 # The live task def is the input, not a committed JSON template: Terraform still
 # owns the env vars, roles and sizing in infra/terraform/envs/prod/ecs.tf. Only

@@ -1,8 +1,8 @@
-# Pinned project name. Without it Compose uses the directory name, so a
-# worktree got its own project: an empty DB and MiniStack when nothing else
-# ran, and "port is already allocated" on 5432 when the main checkout's stack
-# did. Every checkout now shares one stack and its volumes (logjam_postgres-data,
-# logjam_ministack-data), which is what the main checkout already used.
+# Pinned project name. Without it Compose uses the directory name, so each
+# worktree would get its own project: an empty DB and MiniStack when nothing else
+# runs, and "port is already allocated" on 5432 when another stack runs.
+# All worktrees share one stack and its volumes (logjam_postgres-data,
+# logjam_ministack-data).
 name: logjam
 
 services:

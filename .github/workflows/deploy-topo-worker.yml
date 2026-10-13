@@ -1,9 +1,9 @@
 name: Deploy Topo Worker
 
 # Gated on CI: fires only after the `CI` workflow (ci.yml) completes
-# successfully for a push to main (mirrors deploy-api.yml, INF-004). A red CI
+# successfully for a push to main (mirrors deploy-api.yml). A red CI
 # on that push means the deploy job's `if:` guard is false, so a failing
-# test can no longer poison the image the next on-demand RunTask launches.
+# test cannot poison the image the next on-demand RunTask launches.
 # The guard excludes pull_request CI runs (event == 'push'), so it does not
 # double-fire. workflow_run always uses this file as it exists on the default
 # branch.
@@ -15,8 +15,7 @@ name: Deploy Topo Worker
 #
 # This scoping matters more here than for the other deploys: topo/Dockerfile
 # builds from external upstreams, so every needless rebuild is another roll of
-# the upstream dice — which is exactly how prod's worker got rebuilt twice for
-# changes that touched no topo code at all.
+# the upstream dice.
 #
 # No smoke test or automatic rollback: these are on-demand tasks with nothing
 # listening to probe. Roll back by hand with rollback.yml (target: worker).
@@ -116,7 +115,7 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      # INF-009: point both topo-worker task definitions at the image just
+      # Point both topo-worker task definitions at the image just
       # pushed, by sha, so a RunTask launches this commit rather than whatever
       # the moving `:latest` tag resolves to. Nothing here waits on it — these
       # are on-demand workers with no service to roll — so the pin is the whole
