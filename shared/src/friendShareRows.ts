@@ -201,7 +201,8 @@ export function removeAllConfirm(args: {
     body:
       `${things} ${one ? "is" : "are"} removed from your account, on every device. ` +
       `${args.friendName} keeps the ${one ? "original" : "originals"}.` +
-      // Phrasing works for both places and routes.
+      // Naming the wrong kind in the one sentence that offers the safe
+      // alternative is how a user decides the alternative isn't for them.
       (args.copyableCount === 0
         ? ""
         : one
