@@ -98,7 +98,7 @@ export function PrivacySettingsScreen() {
           icon="private"
           title="App lock"
           // No trailing pill beside the switch: the switch is already the
-          // trailing element, and a pill next to it was what forced this
+          // trailing element, and a pill next to it would force this
           // sentence to ellipsise.
           subtitle="Asks for your fingerprint or PIN each time Logjam GPS opens."
           value={appLockEnabled}
@@ -110,7 +110,8 @@ export function PrivacySettingsScreen() {
           title="Send crash reports"
           // Names what is scrubbed, because "anonymous" alone is a claim the
           // user has no way to check and this app's whole premise is that
-          // place locations don't leave it (scrubEvent.ts does the work).
+          // place locations don't leave it (scrubEvent.ts does the work,
+          // guard: `mobile/src/sentry/scrubEvent.test.ts`).
           subtitle="Place names and coordinates are removed before sending. Takes effect next launch."
           value={crashReports}
           ready

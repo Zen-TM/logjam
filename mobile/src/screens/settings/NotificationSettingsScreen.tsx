@@ -13,7 +13,7 @@
 // the phone rather than about the account, so it sits under its own header.
 //
 // PRIVACY: booleans and a permission state. Push payloads themselves carry
-// opaque ids only (mobile/CLAUDE.md).
+// opaque ids only (mobile/AGENTS.md, guard: `api/src/services/push.unit.test.ts`).
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Linking } from "react-native";
 import * as Notifications from "expo-notifications";
@@ -73,7 +73,7 @@ export function NotificationSettingsScreen() {
     useState<NotificationPreferences | null>(null);
   // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
   // user, so a preference edited on another device and pulled in by a refetch
-  // while this screen stayed mounted was silently dropped. Keying on the
+  // while this screen stays mounted would be silently dropped. Keying on the
   // serialized value (rather than the object, which a refetch mints fresh every
   // time) is also what keeps an in-flight optimistic toggle from being clobbered
   // by an identical server answer.
@@ -117,7 +117,7 @@ export function NotificationSettingsScreen() {
   const [pushAllowed, setPushAllowed] = useState<boolean | null>(null);
   // Whether Android will still show its dialog. This screen is the one place
   // that asks: a POST_NOTIFICATIONS prompt at cold start lands over a blank
-  // screen, and a denial there is permanent for the install (MRUN-004).
+  // screen, and a denial there is permanent for the install.
   const [canAskPush, setCanAskPush] = useState(false);
   useEffect(() => {
     const read = () => {

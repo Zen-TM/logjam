@@ -161,9 +161,9 @@ export function MoreScreen({
       </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.menu}>
-        {/* The ONE "something is waiting on you" signal. Files a friend sent
-            used to have a row of their own here; they are answered inline in
-            the inbox now, so their waiting count is part of this one. */}
+        {/* The one "something is waiting on you" signal. Files a friend sent
+            are answered inline in the inbox, so their waiting count is part of
+            this one. */}
         <Row
           icon="notifications"
           title="Inbox"

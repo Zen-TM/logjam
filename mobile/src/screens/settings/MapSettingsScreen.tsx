@@ -114,16 +114,15 @@ const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
  * It also says whether the value is REAL or the fallback, which is otherwise
  * unobservable — the app derives the true declination from a location fix
  * (heading.ts, `learnDeclination`) and quietly uses a single NSW constant until
- * it gets one. "Which of those am I on" was a question nothing on the device
- * could answer.
+ * it gets one. "Which of those am I on" is otherwise a question nothing on the
+ * device can answer.
  */
 /**
  * What the compass itself is reporting, under the control that depends on it.
  *
- * Provisional in the sense that every threshold above it was set from very
- * little data — this line is how that gets fixed. It is also the only place a
- * user can find out whether the app thinks their compass is healthy, which for
- * a navigation app should not have been missing.
+ * Provisional in the sense that every threshold above it is set from little
+ * data — this line is how that gets tuned. It is also the only place a user
+ * can find out whether the app thinks their compass is healthy.
  */
 function compassHint(): string {
   return `Compass: ${lastCompassDiagnostics()}`;
@@ -219,7 +218,7 @@ export function MapSettingsScreen() {
   // Switch animates to the new position the moment it is pressed, then snaps
   // back to whatever `value` still says on the next render — so an await
   // between the press and the state, even one that resolves immediately with
-  // the permission already granted, drew on → off → on. Moving first and
+  // the permission already granted, would draw on → off → on. Moving first and
   // reverting on refusal means the only animation the user sees is the one
   // their thumb asked for.
   const toggleCompass = useCallback(async () => {
@@ -233,7 +232,7 @@ export function MapSettingsScreen() {
   }, [compassEnabled, stored]);
 
   // Same shape as the compass toggle above, and for a stronger reason: this
-  // one needs a POSITION, so a switch that went on and showed two dashes
+  // one needs a POSITION, so a switch that goes on and shows two dashes
   // forever is exactly what one permission prompt avoids.
   const toggleSpeedElevation = useCallback(async () => {
     const next = !speedElevation;

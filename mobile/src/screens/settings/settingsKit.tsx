@@ -58,11 +58,11 @@ export function PreferenceRow({
  * A single choice from a small vocabulary: the label above, the chips under it,
  * and — only where it earns its place — a line about the current pick.
  *
- * Two rules for that line, both learned by writing it badly first. It belongs to
- * the VALUE, not to the group: a sentence describing a setting the user is not
- * on is worse than no sentence. And it exists only where the label and the chip
- * leave a real question — six hints that each restated "press and hold the map
- * to…" taught the user nothing and buried the two hints that did.
+ * Two rules for that line: it belongs to the VALUE, not to the group (a
+ * sentence describing a setting the user is not on is worse than no sentence),
+ * and it exists only where the label and the chip leave a real question
+ * (repeating the prompt in every hint teaches the user nothing and buries the
+ * hints that inform).
  */
 export function ChoiceGroup<T extends string>({
   label,
