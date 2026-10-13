@@ -13,7 +13,7 @@ import {
 import { NSW_5M, TERRARIUM, type SamplePosition } from "@logjam/shared";
 
 // The archive source is read from the CDN base, which the unit env leaves
-// unset: these tests then see the worldwide source alone, as before. The
+// unset: these tests then see the worldwide source alone. The
 // parity case for the archive sets it.
 const envOverride = vi.hoisted(() => ({}) as { TOPO_CDN_BASE_URL?: string });
 vi.mock("../lib/env", async (original) => {
