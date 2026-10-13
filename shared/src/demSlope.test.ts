@@ -145,8 +145,8 @@ describe("demSlopeAt", () => {
   });
 
   // Mutation: sample down the whole source list like a height does, and both
-  // cases below show a slope from the 30 m tiles, which the accuracy check
-  // found wrong by more than 5° at four points in ten.
+  // cases below show a slope from the 30 m tiles, which are inaccurate by more
+  // than 5° at four points in ten.
   it("shows nothing rather than a slope from the coarse worldwide tiles", async () => {
     const asked: string[] = [];
     // Hobart: outside the fine source's coverage.
