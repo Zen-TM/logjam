@@ -50,9 +50,8 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
 
 /**
  * The words a JSX child expression can put on screen: `{a ? "x" : \`y ${n}\`}`.
- * `userFacingStrings` reads JSX text and the string props that carry words; a
- * string reaching the screen as a child expression's branch was outside that
- * net (a `tile` count sat there), so it is read here.
+ * `userFacingStrings` reads JSX text and the string props that carry words;
+ * strings reaching the screen as child expression branches are read here.
  */
 function childExpressionStrings(
   path: string,

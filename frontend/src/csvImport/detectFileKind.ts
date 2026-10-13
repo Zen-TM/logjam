@@ -1,5 +1,5 @@
 // Decides whether a dropped file looks like a place list or a logbook (trip
-// logs), per plan §7a. Pure heuristic over the parsed headers (and, for the
+// logs). Pure heuristic over the parsed headers (and, for the
 // disambiguating cases, a peek at the rows). The user can override the result.
 //
 // Rules:

@@ -48,8 +48,7 @@ describe("wayVerbs", () => {
     );
   });
 
-  // The endpoint has existed since sharing shipped; nothing on the web offered
-  // it, so a sharee's only way to keep a route was export-and-reimport.
+  // A sharee can keep a route without export-and-reimport.
   it("lets a sharee take their own copy of a route", () => {
     expect(ids(route({ shared: true }))).toContain("copy");
   });
@@ -58,8 +57,7 @@ describe("wayVerbs", () => {
     expect(ids(route())).not.toContain("copy");
   });
 
-  // It was a button in the detail body, which is the one place a verb may not
-  // be (operator, 2026-09-17) — and it read as a leftover from another app.
+  // Verbs belong in the menu, not in the detail body.
   it("offers Remove on a way shared directly with you", () => {
     expect(ids(route({ shared: true }))).toContain("removeShare");
   });
@@ -106,7 +104,7 @@ describe("wayVerbs", () => {
     expect(ids(importFile({ shared: true }))).not.toContain("copy");
   });
 
-  // It is a button in the draw tool now: it changes the geometry you are
+  // Reverse is a button in the draw tool: it changes the geometry you are
   // looking at, so it belongs beside the other edits to that geometry.
   it("keeps Reverse out of every menu", () => {
     expect(ids(route())).not.toContain("reverse");
@@ -118,7 +116,7 @@ describe("wayVerbs", () => {
   });
 
   // `POST /shares` admits route, topoJob and geoPdfJob (`SHARABLE_ENTITY_TYPES`),
-  // so a file has nothing to share: Share… on one opened no dialog. Mutation:
+  // so a file has nothing to share. Mutation:
   // drop the `WAY_SHARE_VERB` test from the share verb in `wayVerbs`.
   it("offers Share… on a route and on no kind of file", () => {
     expect(ids(route())).toContain("share");
@@ -167,8 +165,7 @@ describe("wayVerbs", () => {
   });
 
   // Export writes a new file out of geometry the page holds; a file's bytes are
-  // in S3, so getting them back is a download — and nothing offered it, so an
-  // imported GPX could never be taken out again.
+  // in S3, so getting them back is a download.
   it("offers a download of a file and an export of a route, never both", () => {
     expect(ids(importFile())).toContain("download");
     expect(ids(importFile())).not.toContain("exportGpx");
@@ -242,7 +239,7 @@ describe("wayProperties", () => {
     expect(wayProperties(route({ shared: true })).colour).toBe(false);
   });
 
-  // PATCH /media/:id takes a palette colour since imports became recolourable.
+  // PATCH /media/:id takes a palette colour for recolouring imports.
   it("lets the owner change an import's colour and nobody else", () => {
     expect(wayProperties(importFile()).colour).toBe(true);
     expect(wayProperties(importFile({ shared: true })).colour).toBe(false);
@@ -259,8 +256,8 @@ describe("wayProperties", () => {
     expect(wayProperties(importFile({ shared: true })).place).toBe(true);
   });
 
-  // The Layers overlays draw these files now, so a per-item switch buried on a
-  // detail page has nothing left to do (operator, 2026-09-17).
+  // The Layers overlays draw these files, so a per-item switch buried on a
+  // detail page has nothing left to do.
   it("has no per-item visibility switch left to offer", () => {
     expect(wayProperties(importFile())).not.toHaveProperty("visibility");
   });

@@ -3,10 +3,10 @@ import type { TNotification } from "@logjam/shared";
 /**
  * Read state the user has just changed, shown before the server confirms it.
  *
- * Marking a row used to wait for the PATCH and then for a refetch of the whole
- * inbox before the row, the hero and the rail's badge changed — long enough to
- * read as lag. Logjam GPS patches its cache first for the same reason. An
- * override lives until a fetch agrees with it, or until its write fails.
+ * Waiting for the PATCH and a refetch of the whole inbox before updating the row,
+ * the hero and the rail's badge would read as lag. Logjam GPS patches its cache
+ * first for the same reason. An override lives until a fetch agrees with it, or
+ * until its write fails.
  */
 export type ReadOverrides = ReadonlyMap<string, boolean>;
 
