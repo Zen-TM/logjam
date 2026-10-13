@@ -1,9 +1,8 @@
 // "Place routes" — every route attachment on the account, drawn at once.
 //
-// Web parity (its map has a place-tracks layer); mobile until now could only
-// show one route at a time, transiently, from a place's own screen. This is the
-// standing layer version, and it lives behind a toggle in the layers sheet
-// because it is a lot of ink to add to a map unasked.
+// Logjam Web parity (its map has a place-tracks layer): this standing layer
+// version lives behind a toggle in the layers sheet because it is a lot of
+// ink to add to a map unasked.
 //
 // ONE GeoJSONSource, not one per route: each parsed file's features are merged into
 // a single collection carrying a `routeColor` property, and the line layers read

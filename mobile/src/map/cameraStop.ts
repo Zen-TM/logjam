@@ -6,10 +6,10 @@ import type { CameraStop } from "@maplibre/maplibre-react-native";
 // duration animated. The native prop now declares
 // `WithDefault<NativeEasingMode, "none">` (CameraNativeComponent.ts), so the
 // same stop teleports — observed on device as an instant snap when switching
-// between follow and course-up, and it applied equally to the place-search
+// between follow and course-up, and applies equally to the place-search
 // recentre, the fix recentre and the north-up reset.
 //
-// Pure, and its own module, so the rule has a test: MapScreen's `setCameraStop`
+// Pure, and its own module, so the rule has a test (cameraStop.test.ts): MapScreen's `setCameraStop`
 // is a callback inside a 4000-line component that cannot be imported without a
 // native map.
 export function withDefaultEasing(stop: CameraStop): CameraStop {

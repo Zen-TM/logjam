@@ -1,6 +1,6 @@
-// Mounts the generated Protomaps basemap layer set as MLRN components
-// (map-sources.md spike S6 / stage4a §8.1): the shell style stays empty, the
-// resolver supplies the source, and these layers bind to it declaratively.
+// Mounts the generated Protomaps basemap layer set as MLRN components:
+// the shell style stays empty, the resolver supplies the source, and these
+// layers bind to it declaratively.
 //
 // The generated set's `background` layer mounts at the bottom of the band
 // (land colour under the tiles), above the shell's own background at index 0,
@@ -31,10 +31,9 @@ function layerComponent(
   // go in through MLRN's legacy `style` prop — a different arm of LayerProps
   // than the spec-shaped one, which is why the bag can't be typed piecewise.
   // The generator (scripts/basemap/generate-style.mjs) and this call have to
-  // move together when that prop goes in MLRN v12. The filter is `as never`
-  // for the same reason it always was: FilterSpecification is a stricter tuple
-  // type than the generated JSON can express, and the values come straight
-  // from @protomaps/basemaps.
+  // move together when that prop goes in MLRN v12. The filter is `as never`:
+  // FilterSpecification is a stricter tuple type than the generated JSON can
+  // express, and the values come straight from @protomaps/basemaps.
   const props = {
     id,
     layerIndex,
@@ -74,8 +73,8 @@ export const ProtomapsLayers = memo(function ProtomapsLayers({
 }) {
   // Layer ids must be unique across the whole map, and offline this component
   // mounts ONCE PER DOWNLOADED REGION — every stack emitting the same fixed
-  // `pm-background`, `pm-water`, … meant the second saved vector region
-  // collided with the first and never drew. The source id is already unique
+  // `pm-background`, `pm-water`, … would mean the second saved vector region
+  // collides with the first and never draws. The source id is already unique
   // per region, so it seeds the prefix.
   const idPrefix = `pm-${sourceID}`;
   return (

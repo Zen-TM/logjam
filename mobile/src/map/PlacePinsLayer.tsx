@@ -9,7 +9,7 @@
 // looks like — the same rule `assetActions.ts` follows for verbs.
 //
 // PRIVACY: place names and coordinates come from the authed API and the local
-// mirror, and are NEVER baked into a tile (root CLAUDE.md). Both sources here
+// mirror, and are NEVER baked into a tile (root AGENTS.md). Both sources here
 // are client-side GeoJSON handed straight to MapLibre; nothing about them is
 // logged or sent anywhere.
 import { memo } from "react";
@@ -31,16 +31,17 @@ import { PIN_LABEL_TEXT } from "./mapLabelText";
 /**
  * The ink, exported because rows and chips elsewhere match the map.
  *
- * `OWNED_PLACE_COLOR` is no longer what a pin is drawn in — a pin's fill is
- * its TYPE's colour now, and this is the fallback for a place whose type this
- * device has not pulled yet, plus the hue of the "My places" row. It is the
- * Canyon type's own colour rather than a literal, because a fallback that does
- * not appear in the palette is a thirteenth colour nothing checks.
+ * `OWNED_PLACE_COLOR` is the fallback for a place whose type this
+ * device has not pulled yet (a pin's fill is otherwise its TYPE's colour),
+ * plus the hue of the "My places" row. It is the Canyon type's own colour
+ * rather than a literal, because a fallback that does not appear in the
+ * palette is a thirteenth colour nothing checks.
  *
- * Ownership moved to the RING, which is the axis that has only two values, and
- * `SHARED_PLACE_COLOR` is RESERVED — never a type colour, or a shared Marker
- * would be a dot and a ring of the same hue. It is re-exported here because
- * every map file already imports its ink from this module.
+ * Ownership is shown on the RING, which is the axis that has only two values,
+ * and `SHARED_PLACE_COLOR` is RESERVED — never a type colour (guard:
+ * shared/src/placeTypes.test.ts), or a shared Marker would be a dot and a
+ * ring of the same hue. It is re-exported here because every map file already
+ * imports its ink from this module.
  */
 export const OWNED_PLACE_COLOR = SYSTEM_PLACE_TYPES[0].color;
 export { SHARED_PLACE_COLOR };
@@ -93,7 +94,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
    * Distinguishes two mounted copies. MLRN freezes a layer's id on first
    * render and throws if a fiber is later rendered with a different one — two
    * maps alive at once with the same layer ids is the shape of that crash
-   * (mobile/CLAUDE.md), so the second map passes its own prefix.
+   * (ADR 0015), so the second map passes its own prefix.
    */
   idPrefix?: string;
 }) {
@@ -105,9 +106,9 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
         onPress={onPress}
       >
         {/* A RING SET APART FROM THE DOT, not a bigger, heavier dot.
-            "Shared" used to be drawn as a 9 px disc under a 3 px stroke — 12 px
-            across against an owned pin's 7.5 — so the one kind of place the
-            user did not make shouted louder than everything they did. The
+            Drawing shared places as a heavier dot (e.g. 12 px across
+            against an owned pin's 7.5) would make the one kind of place the
+            user did not create shout louder than everything they did. The
             weight is the problem, not the ink: this draws the SAME dot an owned
             place gets and hangs a thin halo around it, which reads as a mark ON
             a pin rather than as a louder pin.
@@ -122,12 +123,12 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           key={`${idPrefix}shared-place-halos`}
           type="circle"
           id={`${idPrefix}shared-place-halos`}
-          // FILL = TYPE, RING = SHARED (§2.8). Colour used to encode ownership
-          // and now cannot: it is saying which KIND of place this is, on both
-          // maps, for every type the user has invented. So "someone shared this
-          // with me" is the ring, which is the axis with two values — and here
-          // it is only the ring: the fill is transparent so the halo adds no
-          // mass of its own, whatever it is drawn over.
+          // FILL = TYPE, RING = SHARED (§2.8). Colour cannot encode ownership:
+          // it says which KIND of place this is, on both maps, for every type
+          // the user has invented. So "someone shared this with me" is the ring,
+          // which is the axis with two values — and here it is only the ring:
+          // the fill is transparent so the halo adds no mass of its own,
+          // whatever it is drawn over.
           style={{
             circleRadius: 9,
             circleOpacity: 0,
@@ -158,10 +159,9 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           // the owned label, being the higher layer, wins every time and the
           // shared place loses both its dot and its name. The offset keeps
           // the pair legible; `textAllowOverlap` is what stops the one the
-          // user cannot otherwise see from being the one that is dropped. It
-          // dropped from 2.6em with the pin: the label hung off a 12 px disc
-          // that is now a 6 px dot, and an offset measured for the old one left
-          // the name floating away from its pin.
+          // user cannot otherwise see from being the one that is dropped. The
+          // label hangs off a 6 px dot; an offset measured for a larger pin
+          // would leave the name floating away from its pin.
           style={{
             ...LABEL_STYLE,
             textOffset: [0, 2.0],

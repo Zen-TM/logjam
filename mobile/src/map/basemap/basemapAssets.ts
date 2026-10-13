@@ -1,4 +1,4 @@
-// First-launch installer for the bundled glyph/sprite assets (stage 4a §8.3).
+// First-launch installer for the bundled glyph/sprite assets.
 //
 // assets/basemap/basemap-assets.zip (vendored by scripts/basemap/fetch-assets.sh,
 // pinned to a protomaps/basemaps-assets commit) is extracted once into

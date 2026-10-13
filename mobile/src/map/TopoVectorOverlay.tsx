@@ -1,6 +1,7 @@
 // Renders one vector topo overlay's layer stack (contours or OSM features)
-// against a resolved PMTiles source — the mobile counterpart of the web's
-// structural layer creation, driven entirely by buildTopoVectorLayerDefs.
+// against a resolved PMTiles source — the Logjam GPS counterpart of Logjam
+// Web's structural layer creation, driven entirely by
+// buildTopoVectorLayerDefs.
 import { memo, useMemo } from "react";
 import {
   Images,
@@ -50,10 +51,10 @@ function layerFor(
 ) {
   const id = `${idPrefix}-${def.suffix}`;
   // One cast for the whole prop bag: buildTopoVectorLayerDefs emits one merged
-  // camelCase style object (web parity), not the spec's paint/layout split, so
-  // it goes in through MLRN's legacy `style` prop — which types as a different
-  // arm of LayerProps than the spec-shaped one. See ProtomapsLayers for the
-  // v12 note.
+  // camelCase style object (parity with Logjam Web), not the spec's
+  // paint/layout split, so it goes in through MLRN's legacy `style` prop —
+  // which types as a different arm of LayerProps than the spec-shaped one.
+  // See ProtomapsLayers for the v12 note.
   const props = {
     id,
     beforeId,

@@ -10,9 +10,9 @@
 // scrim panels and the outline are all `pointerEvents="none"`, so the map keeps
 // its own pan and pinch EVERYWHERE, dimmed or not: coarse positioning is done
 // by moving the map, and the handles only shape the box. Getting this wrong is
-// subtle — the panels went a long time swallowing every touch outside the
-// selection, which left the map draggable only through the bright rectangle and
-// read as the screen being half frozen.
+// subtle: without it, the panels would swallow every touch outside the
+// selection, leaving the map draggable only through the bright rectangle and
+// making the screen appear half frozen.
 import { MAP_INK } from "@logjam/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
@@ -53,7 +53,7 @@ export function SelectionFrame({
   // move calls `onChange`, so if the responders depended on that callback's
   // IDENTITY, a parent passing an inline arrow (`(next) => setFrame(...)`)
   // would rebuild them on every single frame of the gesture and the handles
-  // would be impossible to drag. Which is exactly what happened.
+  // would be impossible to drag.
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     latest.current = insets;
@@ -96,11 +96,11 @@ export function SelectionFrame({
   // leave a hairline of undimmed map between them. Rounded first, they meet
   // exactly and the rounding is a no-op.
   //
-  // (The previous fix — one view whose BORDERS were the scrim — had no seam but
-  // two worse faults: its bounds covered the selection as well, so the map
-  // under it stopped panning and zooming, and RN miters adjacent borders, so
-  // the four translucent edges double-painted at the corners and the scrim came
-  // out darker there than along the sides.)
+  // (An alternative of one view whose BORDERS are the scrim has no seam but two
+  // faults: its bounds cover the selection as well, so the map under it stops
+  // panning and zooming, and RN miters adjacent borders, double-painting the
+  // four translucent edges at the corners so the scrim appears darker there
+  // than along the sides.)
   const snap = PixelRatio.roundToNearestPixel;
   const boxWidth = snap(width);
   const boxHeight = snap(height);
@@ -122,15 +122,16 @@ export function SelectionFrame({
           inside a dark one would dim the selection too.
 
           Every panel is positioned by left/top/width/height off the snapped
-          numbers above — never by `bottom: 0` or `right: 0`, which is how the
-          bottom panel used to reach the frame's lower edge by different
-          arithmetic from the side panels and round away from them.
+          numbers above — never by `bottom: 0` or `right: 0`, which would
+          reach the frame's lower edge by different arithmetic from the side
+          panels and round away from them.
 
           `pointerEvents="none"` on every one of them, and it is load-bearing.
           The parent is `box-none`, which stops the parent being a touch target
-          but leaves its CHILDREN as targets — so the panels were eating every
-          touch that landed outside the selection, and the map could only be
-          panned and pinched through the small bright rectangle in the middle.
+          but leaves its CHILDREN as targets — without this, the panels would
+          eat every touch landing outside the selection, so the map could only
+          be panned and pinched through the small bright rectangle in the
+          middle.
           The scrim says "not this"; it should not also mean "not here". */}
       <View
         pointerEvents="none"
@@ -249,7 +250,7 @@ const useStyles = makeStyles((theme) => ({
   // Deliberately a black scrim, like the sheet scrims: the dimmed area is
   // "not this", and a scheme tint over a map reads as a colour cast. The four
   // panels never overlap, so the alpha composites exactly once everywhere —
-  // any overlap would show as a darker band where two panels met.
+  // any overlap would show as a darker band where two panels meet.
   dim: { position: "absolute", backgroundColor: scrim.light },
   outline: {
     position: "absolute",

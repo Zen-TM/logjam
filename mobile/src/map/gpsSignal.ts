@@ -1,15 +1,15 @@
 // Whether the position under the location arrow is still worth trusting.
 //
-// The arrow is the one thing on this map a person acts on directly, and until
-// this existed it looked exactly the same whether the fix behind it was two
+// The arrow is the one thing on this map a person acts on directly, and without
+// this check it looks exactly the same whether the fix behind it is two
 // seconds old or two hours: walking into a slot place takes the sky away, the
 // watcher simply stops being called, and the last fix stays drawn — confident,
 // coloured, and increasingly a lie. Losing a signal is the ABSENCE of an event,
 // so nothing but a clock can notice it; this module is the rule, and the ticker
 // that runs it lives in MapScreen next to the watcher it judges.
 //
-// RN-free and pure so the rule is testable, because the fault it exists to
-// catch cannot be reproduced at a desk: you have to lose the sky to see it.
+// RN-free and pure so the rule is testable (gpsSignal.test.ts), because the fault
+// it exists to catch cannot be reproduced at a desk: you have to lose the sky to see it.
 //
 // PRIVACY: takes a timestamp and an accuracy RADIUS. No coordinate enters this
 // module and none is published from it.
@@ -25,8 +25,8 @@
  * This is only answerable because the watcher no longer carries a
  * `distanceInterval`: Android ANDs it with `timeInterval`, so with one set a
  * phone standing still produces NO callbacks at all, and "standing still" and
- * "no signal" would be the same observation. The 5 m displacement filter moved
- * into JS (see the watcher) so the dot and camera behave as they always did.
+ * "no signal" would be the same observation. The 5 m displacement filter is
+ * handled in JS (see the watcher) so the dot and camera stay still while stationary.
  */
 export const FIX_STALE_MS = 20_000;
 
@@ -43,11 +43,11 @@ export const FIX_STALE_MS = 20_000;
 export const FIX_COARSE_M = 100;
 
 /**
- * The displacement filter the OS used to apply, now applied here.
+ * Displacement filter applied to location fixes in JS.
  *
- * Same 5 m as the `distanceInterval` it replaces, and for the same reason: GPS
- * wander alone would otherwise walk the dot around a stationary user and, in a
- * follow mode, drag the camera with it.
+ * Replaces `distanceInterval` with the same 5 m threshold: GPS wander alone
+ * would otherwise walk the dot around a stationary user and, in a follow mode,
+ * drag the camera with it.
  */
 export const FIX_MOVE_MIN_M = 5;
 
@@ -65,7 +65,7 @@ export type FixLiveness = {
    *  watcher does is apply `getLastKnownPositionAsync`, which indoors or after a
    *  drive with location off can be hours old and hundreds of km away). */
   atMs: number;
-  /** Metres, 68% confidence. Null when the platform didn't say. */
+  /** Metres, 68% confidence. Null when the platform does not report it. */
   accuracyM: number | null;
 };
 
