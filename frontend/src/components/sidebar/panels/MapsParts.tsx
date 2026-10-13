@@ -16,12 +16,8 @@ import classes from "./MapsPanel.module.css";
  * "Being made": every job the user is still waiting on, PINNED under the list
  * rather than heading it.
  *
- * It was the first section of the list, which put the page's most conditional
- * content in its most valuable space — empty almost always, one or two rows the
- * rest of the time — and it went out of sight the moment the list was scrolled,
- * which is where the waiting is happening (operator, 2026-09-18). Pinned, it
- * costs nothing while there is nothing, and it is visible from every tab: the
- * job whose progress you came back to check is not on a tab of its own.
+ * Pinned under the list keeps this conditional content visible while scrolling
+ * and across tabs, without occupying top-of-page space when empty.
  *
  * Two cards at most. A third and beyond fold behind one line that counts them
  * and opens them in place, because more than two at once is rare and a footer
