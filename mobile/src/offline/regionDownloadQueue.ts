@@ -7,7 +7,7 @@
 // on the map is that you can leave the download screen and keep walking around
 // the map while tiles land.
 //
-// ONE AT A TIME (§3.3). Selecting three basemaps enqueues three jobs and they
+// ONE AT A TIME. Selecting three basemaps enqueues three jobs and they
 // run in sequence, because the politeness envelope is per-provider and running
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
@@ -43,7 +43,7 @@ import {
 } from "./regionTileDownload";
 
 /**
- * Two task kinds, one queue (stage4a §9): the SIX rasters are fetched tile by
+ * Two task kinds, one queue: the SIX rasters are fetched tile by
  * tile straight from the provider, while the self-hosted vector basemap is one
  * clip file served by our own API. The user is choosing between maps, not
  * between transports, so they share the screen, the queue and this progress
@@ -324,7 +324,7 @@ export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
  */
 function pump(): void {
   if (pumping) return;
-  // MOT-007: everything past drain()'s own per-job try/catch — patch →
+  // Everything past drain()'s own per-job try/catch — patch →
   // publish → listener callbacks (toasts included), the dynamic
   // registryDb import, renameArtifactGroup — runs unguarded. One throwing
   // subscriber turned the whole drain into an unhandled rejection and

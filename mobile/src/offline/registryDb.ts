@@ -1,11 +1,12 @@
-// Downloads registry (map-sources.md §4.2 + stage4a §5.1): one SQLite DB is
+// Downloads registry: one SQLite DB is
 // the single source of truth for "what offline map data is on disk". The
 // downloads manager writes it; the map resolver only reads it.
 //
 // PRIVACY: rows carry region bboxes — place-area coordinates. The DB lives
 // in app-private storage (expo-sqlite's default dir, under the app sandbox,
-// covered by allowBackup=false), is surfaced only behind the Stage 4 app
-// lock, and its contents must never reach logs, telemetry, or crash reports.
+// covered by allowBackup=false), is surfaced only behind the app
+// lock, and its contents must never reach logs, telemetry, or crash reports
+// (mobile/src/sentry/scrubEvent.test.ts).
 import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 
@@ -229,7 +230,7 @@ export async function setOverlayEnabled(
  * minus that extension) has no row in the registry and is not in `liveIds`
  * (a download this process is writing right now).
  *
- * MOT-002: unlike a tile-pyramid MBTiles, which checkpoints IN the file and
+ * Unlike a tile-pyramid MBTiles, which checkpoints IN the file and
  * is discovered by `listUnfinishedRegions`, a single-file pmtiles writer
  * (regionDownloads.ts, overlayDownloads.ts) has no resumable state at all —
  * an app kill mid-transfer leaves it with nothing pointing at it and nothing

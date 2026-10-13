@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// MOT-002: an app kill mid-transfer leaves a single-file pmtiles writer's
+// An app kill mid-transfer leaves a single-file pmtiles writer's
 // output on disk with no registry row and no resumable state — nothing
 // discovers or deletes it. `sweepOrphanFiles` is the fix; this pins its
 // three cases with a mocked directory listing and a mocked registry, the

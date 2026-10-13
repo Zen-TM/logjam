@@ -1,14 +1,14 @@
-// MBTiles writer for downloaded raster basemap regions (stage4a-basemaps.md §4).
+// MBTiles writer for downloaded raster basemap regions.
 //
-// Same on-disk shape as a Stage 6 GeoPDF import — one raster MBTiles per region,
+// Same on-disk shape as a GeoPDF import — one raster MBTiles per region,
 // TMS row order, `logjam:*` namespaced metadata — but written from JS rather
 // than the native rasteriser, because there is no pixel work in this path: the
 // bytes arrive off the network already encoded.
 //
 // THE FILE IS THE CHECKPOINT. A tile is only in the file if its batch
 // transaction committed, so a kill mid-download loses at most one batch and the
-// next attempt resumes from exactly what is there (§4.4). The plan also spec'd a
-// `region_download` progress table for this; it isn't needed — the metadata rows
+// next attempt resumes from exactly what is there. No separate progress table is
+// needed: the metadata rows
 // already carry the source, bbox and zoom range, so an unfinished file describes
 // its own job. `logjam:build_state` present ⇒ incomplete ⇒ never registered as a
 // usable artifact.
@@ -375,7 +375,7 @@ export async function listUnfinishedRegions(
 ): Promise<UnfinishedRegion[]> {
   const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
-  // MOT-002: the single-file Protomaps clip (regionDownloads.ts) writes a
+  // The single-file Protomaps clip (regionDownloads.ts) writes a
   // `.pmtiles` here with no checkpoint of its own — an app kill mid-transfer
   // leaves it with nothing to resume into, unlike the MBTiles below. This is
   // the one place that already walks this directory on every Saved-tab open.
