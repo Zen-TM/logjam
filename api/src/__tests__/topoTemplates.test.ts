@@ -6,7 +6,7 @@ import { API_URL, as, BOB_SUB } from "./_actors";
 
 // Requires `make dev`. No auth header = alice. Full CRUD is launch-free (no
 // worker), so this covers the ownership boundary (a sharee/stranger must not
-// reach another user's template — mandatory per CLAUDE.md), the synthetic
+// reach another user's template — mandatory per AGENTS.md), the synthetic
 // read-only Default, validation, and not-found.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
@@ -66,7 +66,7 @@ describe("topo-templates route (fake auth)", () => {
     const createRes = await request(API_URL)
       .post("/topo-templates")
       .set(AUTH)
-      .send({ name: "ch004-topo-template", config: RASTER_TEMPLATE_DEFAULTS });
+      .send({ name: "test-topo-template", config: RASTER_TEMPLATE_DEFAULTS });
     expect(createRes.status).toBe(201);
     const id: string = createRes.body.id;
 
