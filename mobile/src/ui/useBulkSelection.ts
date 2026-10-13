@@ -1,6 +1,6 @@
 // Multi-select over a list of cards — the "press and hold one, tap to toggle,
-// the rail becomes cancel / select-all / delete" interaction first shipped in
-// SavedScreen, now shared by Places and Logs (and any other card list).
+// the rail becomes cancel / select-all / delete" interaction used across
+// card lists (Saved, Places, Logs).
 //
 // The screen owns the DELETE (confirm copy + the actual mutation), because
 // what a delete costs differs per kind — this hook owns only the selection:
