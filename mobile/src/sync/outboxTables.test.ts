@@ -9,8 +9,8 @@ import {
 
 describe("OUTBOX_ENTITIES", () => {
   it("covers every sync-protocol entity plus media", () => {
-    // media rides the outbox but is absent from SYNC_PUSH_OPS_BY_ENTITY, which is
-    // exactly how it fell through the old mapping.
+    // media rides the outbox but is absent from SYNC_PUSH_OPS_BY_ENTITY;
+    // covering it explicitly ensures it does not fall through the mapping.
     for (const entity of Object.keys(SYNC_PUSH_OPS_BY_ENTITY)) {
       expect(OUTBOX_ENTITIES).toContain(entity);
     }
@@ -20,9 +20,9 @@ describe("OUTBOX_ENTITIES", () => {
 
 describe("outboxMirrorTable", () => {
   it("answers for EVERY outbox entity", () => {
-    // The regression this file exists for: a missing case returned undefined,
-    // which built `DELETE FROM undefined`, threw inside the discard transaction,
-    // rolled it back, and left the Discard button with no visible effect.
+    // A missing case returning undefined would build `DELETE FROM undefined`,
+    // throw inside the discard transaction, roll it back, and leave the Discard
+    // button with no visible effect.
     for (const entity of OUTBOX_ENTITIES) {
       const table = outboxMirrorTable(entity);
       expect(

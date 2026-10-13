@@ -1,4 +1,4 @@
-// Parked-ops + conflict-shelf surface (stage8-sync.md §8.4/§8.5). The
+// Parked-ops + conflict-shelf surface. The
 // fail-loudly rule applied to sync: ops the server rejected (blocked) or that
 // lost an edit↔delete race (deadRemote), plus shelved conflict values, are
 // never silently dropped — they surface here with explicit user actions.
@@ -46,7 +46,7 @@ export type ParkedOp = {
   op: SyncPushOp["op"];
   entityId: string;
   /** 'blocked' = server rejected (validation/quota); 'deadRemote' = the row
-   * was deleted server-side under a pending edit (§6 delete-wins). */
+   * was deleted server-side under a pending edit (delete-wins). */
   state: "blocked" | "deadRemote";
   fields: Record<string, unknown> | null;
   error: ParkedError | null;
@@ -254,10 +254,8 @@ function isMergeablePair(shelved: unknown, server: unknown): boolean {
  * since — there is nothing left to restore it into.
  *
  * There is deliberately no `readOnly`: a shelf entry only exists because a push
- * was APPLIED (flush.ts), and `sync.ts` 404s an update to a place you do not
- * own. So a conflict receipt can only ever be about a row of the user's own,
- * and a block for "someone shared this with you" was unreachable code that only
- * hand-seeded rows could produce.
+ * was applied (flush.ts), and the sync endpoint 404s an update to an unowned
+ * place. A conflict receipt can only ever be about a row of the user's own.
  */
 async function shelfTarget(
   entity: string,
@@ -336,18 +334,15 @@ async function writeShelfValue(
 /**
  * Badge count for the More hub's row: parked ops + an unapplicable delta page.
  *
- * The second is why this isn't one COUNT: a page this app version can't apply
- * stops the mirror dead, and the only thing that used to say so was a line
- * claiming the account was unreachable and that it would keep retrying. A
- * permanent failure belongs on the screen for permanent failures.
+ * A page this Logjam GPS version cannot apply stops the mirror; a permanent
+ * failure belongs on the screen for permanent failures rather than retrying
+ * silently in the background.
  *
- * Conflict receipts ARE counted, and that reverses what this comment used to
- * say. The old argument was that a shelved value "needs nothing" because it
- * already lost — but what it is, is a change the user made and the account does
- * not have, which is the same sentence as a parked op and the same thing the
- * badge exists to say. It is also the only warning they will ever get: the
- * value was dropped in favour of another device's, silently, and if nobody
- * looks it stays dropped. That is exactly the fail-loudly case.
+ * Conflict receipts are counted: a shelved value is a change the user made that
+ * the account does not have, which is the same sentence as a parked op and the
+ * same thing the badge exists to say. It is also the only warning they will ever
+ * get: the value was dropped in favour of another device's, silently, and if
+ * nobody looks it stays dropped. That is exactly the fail-loudly case.
  */
 export async function countSyncIssues(): Promise<number> {
   const db = await getSyncDb();
@@ -389,9 +384,9 @@ export async function retryParkedOp(seq: number): Promise<void> {
 }
 
 /**
- * Discard a parked op: its field data is moved to the conflict shelf (never
- * silently lost — §8.4) and the op is deleted. The optimistic mirror row it
- * created (a never-synced create) is also removed.
+ * Discard a parked op: the op is deleted and the optimistic mirror row it
+ * created (a never-synced create) is removed. The user has already confirmed
+ * the discard in the UI.
  */
 export async function discardParkedOp(seq: number): Promise<void> {
   const db = await getSyncDb();
@@ -404,16 +399,13 @@ export async function discardParkedOp(seq: number): Promise<void> {
     );
     if (!row) return;
     const entity = row.entity as OutboxEntity;
-    // Discarding does NOT shelve what the user typed, and that is deliberate
-    // (changed 2026-09-02). It used to, and the row it left behind asked the
-    // user to decide the same thing a second time — they had already read the
-    // change, read what it would cost, and pressed a destructive confirm. The
-    // confirm is where the cost is stated; see `discardExplanation`.
+    // Discarding does not shelve what the user typed: the user already read
+    // the change, read what it would cost, and pressed a destructive confirm.
+    // The confirm is where the cost is stated; see `discardExplanation`.
     // A create that never synced leaves an orphan optimistic mirror row — the
     // pendingUpload tile in a media strip, the ghost place in a list. Guard on
-    // null: an entity with no id-keyed mirror row must SKIP this, not build
-    // `DELETE FROM null` and roll the whole transaction back (which is how
-    // "Discard" came to do nothing at all for a media op).
+    // null: an entity with no id-keyed mirror row must skip this, not build
+    // `DELETE FROM null` and roll the transaction back.
     if (row.op === "create") {
       const table = outboxMirrorTable(entity);
       if (table) {
@@ -465,7 +457,7 @@ export async function discardParkedOp(seq: number): Promise<void> {
       // Discarding a create discards its lineage. The row will never exist
       // server-side, so a queued update or delete still pointing at it is no
       // longer merely deferred (nothing is `blocked` any more) — it flushes,
-      // 404s, and parks as a FRESH sync issue. One discard became a cascade.
+      // 404s, and parks as a fresh sync issue. Otherwise one discard becomes a cascade.
       await db.runAsync(
         "DELETE FROM outbox WHERE entity_id = ? AND seq != ?",
         row.entity_id,
@@ -584,8 +576,7 @@ export async function recreateFromDeadRemote(
           typeof merged.placeTypeId === "string" && merged.placeTypeId
             ? merged.placeTypeId
             : SYSTEM_PLACE_TYPE_IDS.canyon,
-        // Every field value in one go, including what used to be the seven
-        // grade columns.
+        // Every field value in one go.
         fieldValues: asFieldValues(merged.fieldValues),
       });
       await dropOp(seq);
@@ -608,9 +599,9 @@ async function dropOp(seq: number): Promise<void> {
 }
 
 /**
- * Throw a lost value away. The only copy — nothing expires it any more (the
- * 30-day purge went with the tabs: a countdown to silent deletion is what this
- * screen exists to prevent), so the table shrinks only when the user says so.
+ * Throw a lost value away. The only copy — conflict entries never expire (a
+ * countdown to silent deletion would violate fail-loudly), so the table shrinks
+ * only when the user says so.
  */
 export async function dismissShelfEntry(id: number): Promise<void> {
   const db = await getSyncDb();

@@ -201,13 +201,6 @@ export function useMirrorMedia(
 }
 
 /**
- * How many local changes are still waiting to reach the server.
- *
- * The reassurance an offline-first app owes the user: their edit is not lost, it
- * is queued. Counts every outbox row that hasn't flushed, media uploads
- * included, and updates live as the queue drains.
- */
-/**
  * Ids the account does not hold yet, refreshed on the same two signals the
  * pending count is — a flush changes both, and a Saved row's backed-up mark and
  * the hero's "N waiting to sync" disagreeing would be worse than either being
@@ -236,6 +229,13 @@ export function usePendingCreateIds(): Set<string> {
   return ids;
 }
 
+/**
+ * How many local changes are still waiting to reach the server.
+ *
+ * The reassurance Logjam GPS owes the user: their edit is not lost, it
+ * is queued. Counts every outbox row that hasn't flushed, media uploads
+ * included, and updates live as the queue drains.
+ */
 export function usePendingSyncCount(): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
