@@ -129,8 +129,8 @@ export async function storeTrackClimb(
  *
  * Called from the sync cycle, so it runs only for a signed-in account and
  * only when a cycle does. On top of that it does NOTHING, not even a read,
- * when the app is behind another, when the map is in offline-only mode, or on
- * a connection sync may not use.
+ * when Logjam GPS is behind another app, when the map is in offline-only mode,
+ * or on a connection sync may not use.
  *
  * Asks the saved terrain first and then our own API, never the public tile
  * host: nobody is looking at a screen, so the request that would trace the

@@ -1,4 +1,4 @@
-// Map layers for recorded tracks (Stage 7). Rendered inside
+// Map layers for recorded tracks. Rendered inside
 // Map; sources are unpinned so they draw above the basemap/overlay bands —
 // mount this BEFORE the place sources so places stay on top.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -35,10 +35,10 @@ const EMPTY_POINTS: RecordedTrackPoint[] = [];
 /**
  * One track's line. Memoised, and so is the geometry inside it: MapScreen
  * re-renders at the compass cadence (up to ~5/s while the tape or locate-me runs),
- * and rebuilding a growing MultiLineString per render handed the native source
- * a new `shape` object several times a second on the screen the user carries while
- * walking (MLIFE-003). Now the geometry is rebuilt only when the stored points,
- * the live tail or the segment actually change.
+ * and avoiding rebuilding a growing MultiLineString per render prevents handing
+ * the native source a new `shape` object several times a second on the screen
+ * the user carries while walking. The geometry rebuilds only when the stored
+ * points, the live tail or the segment actually change.
  */
 const TrackLine = memo(function TrackLine({
   track,
@@ -70,8 +70,8 @@ const TrackLine = memo(function TrackLine({
   }, [stored, tail, track.currentSegment]);
 
   // MOUNTED EVEN WHILE EMPTY (a MultiLineString with no coordinates draws
-  // nothing). A source that appeared the moment the first points landed was a
-  // layer added ABOVE the location marker mid-recording — the marker's
+  // nothing). Adding a source only when the first points land would insert a
+  // layer ABOVE the location marker mid-recording — the marker's
   // re-insertion key in MapScreen can see this track's id, but not the moment
   // its points arrive.
   return (
@@ -127,9 +127,9 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   /**
    * The map's own latest fix, drawn as the live tail of the track being
    * recorded. Recorded points reach SQLite through Android's JobScheduler,
-   * which batches: the stored line grew several segments at a time and then
-   * sat still, trailing the location marker by a visible gap until the next
-   * batch landed. The tail closes that gap with the same fix the marker is
+   * which batches: without the tail, the stored line grows several segments
+   * at a time and trails the location marker by a visible gap until the next
+   * batch lands. The tail closes that gap with the same fix the marker is
    * drawn from — it is only ever the last leg, so nothing here is stored, and
    * the batch that follows replaces it with the real points.
    */
@@ -162,12 +162,11 @@ export const TrackMapLayers = memo(function TrackMapLayers({
     const held = heldPoints.current;
     Promise.all(
       visibleTracks.map(async (track) => {
-        // INCREMENTAL. This used to re-read every point of every visible track
-        // on each written batch, then rebuild and re-serialise the whole
-        // MultiLineString — O(points) of SQLite and JSON per fix, quadratic
-        // over a recording, on the screen that stays open for the trip. It is
-        // the same fault `trackRecorder`'s point cache was built to fix
-        // (MLIFE-004), on the render side.
+        // INCREMENTAL. Reading incrementally avoids re-reading every point of
+        // every visible track on each written batch and rebuilding the whole
+        // MultiLineString — quadratic SQLite and JSON work over a recording,
+        // on the screen that stays open for the trip. It matches the point
+        // cache in `trackRecorder` on the render side.
         const have = held.get(track.id) ?? EMPTY_POINTS;
         // Fewer stored than held means the series was rewritten underneath us
         // (a discarded track, a wipe) — start again rather than concatenate
