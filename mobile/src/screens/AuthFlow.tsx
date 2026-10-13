@@ -1,8 +1,8 @@
 // The auth forms BEHIND the landing screen: sign up / confirm code / forgot
 // password. Sign-in itself is on the landing screen (`LandingScreen.tsx`) — it
 // is the first thing a fresh install sees, not a tap away — so there is no
-// sign-in form here; a second copy of it is exactly the drift DESIGN.md's
-// "one form per entity" rule exists to stop.
+// sign-in form here; a second copy of it is exactly the drift shared/DESIGN.md's
+// "one form per thing" rule exists to stop.
 //
 // State machine lives in useAuth (port of web useAuth.ts); this renders the
 // screen for the current AuthState. All Cognito errors arrive pre-mapped to

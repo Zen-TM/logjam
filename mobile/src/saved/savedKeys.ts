@@ -4,7 +4,7 @@
 // may import that file: `notifications/notificationDestination.ts` is RN-free
 // so vitest can parse it, and `AppShell.tsx` types the `SavedHome` route params
 // with it. A second hand-kept copy of either list is exactly the drift the root
-// CLAUDE.md's "two lists that must agree" rule is about — a category added here
+// AGENTS.md's "two lists that must agree" rule is about — a category added here
 // breaks `CATEGORY_META`'s `Record<Category, …>` in SavedScreen until it is
 // described there too, which is the executable half of that rule.
 import type { SharableEntityType } from "@logjam/shared";
@@ -31,10 +31,8 @@ export type SavedCategory = (typeof SAVED_CATEGORIES)[number];
  * map material obtained from somewhere else — re-downloadable anywhere,
  * enormous, and pointless to copy between devices.
  *
- * The Waypoints category left this list in the phase 1c fold: a waypoint is a
- * place now, and places live on the Places screen under their type's tab. The
- * split is 3/3 rather than 4/3, and the Settings → Offline and storage copy
- * that states the rule moved with it.
+ * Waypoints are places and live on the Places screen under their type's tab,
+ * not as standalone assets in Saved.
  *
  * It is a `Record<SavedCategory, …>` so a new category cannot be added without
  * answering the question; `savedKeys.test.ts` is the other half, pinning the

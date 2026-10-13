@@ -1,7 +1,6 @@
-// Blocking re-consent screen — Agree or Sign out only (mirrors web
-// ConsentGate; MOBILE_DESIGN_BRIEF auth shell). Shown when needsReconsent()
-// is true for the fetched current user; the server rejects any consentVersion
-// other than CURRENT_CONSENT_VERSION.
+// Blocking re-consent screen — Agree or Sign out only (mirrors Logjam Web
+// ConsentGate). Shown when needsReconsent() is true for the fetched current
+// user; the server rejects any consentVersion other than CURRENT_CONSENT_VERSION.
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
