@@ -15,6 +15,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `terraform plan` is read-only. The one exception is a change to the apply
   role or its boundary (`terraform/envs/prod/iam_apply.tf`), which that role
   may not make: the maintainer applies it from their machine.
+  A plan in `envs/prod` on a fresh checkout fails until the Lambda bundle it
+  zips is built: `cd infra/lambda/cognito-email-sender && npm ci && npm run build`.
 - **Change AWS and the repository's GitHub settings only through Terraform,**
   never the console, the CLI or GitHub's Settings pages: what is made by hand
   is drift the next plan undoes. Secret values, the two settings Apps and

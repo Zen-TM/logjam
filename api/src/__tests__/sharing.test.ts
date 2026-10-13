@@ -104,6 +104,29 @@ describe("sharing routes (fake auth = alice)", () => {
     }
   });
 
+  // Guard for the place_shares (place_id, shared_with_id) unique key. Mutation
+  // that turns it red: drop the key (or the P2002 -> 409 catch in the grant
+  // route) and both racing grants pass the pre-check, giving two 201s or a 500.
+  it("POST share: two concurrent grants of one pair give one 201, one 409 and one row", async () => {
+    const placeId = await createPlace("duplicate share race");
+    try {
+      const grant = () =>
+        request(API_URL)
+          .post(`/places/${placeId}/share`)
+          .set(AUTH)
+          .send({ sharedWithUserId: BOB_ID });
+      const results = await Promise.all([grant(), grant()]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+
+      const list = await request(API_URL)
+        .get(`/places/${placeId}/shares`)
+        .set(AUTH);
+      expect(list.body).toHaveLength(1);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
   it("POST share 404s for a non-existent place", async () => {
     const res = await request(API_URL)
       .post(`/places/${NONEXISTENT_ID}/share`)
@@ -125,19 +148,17 @@ describe("sharing routes (fake auth = alice)", () => {
     }
   });
 
-  it("DELETE share removes every duplicate row, so the sharee gets 404", async () => {
-    const placeId = await createPlace("CH-003 duplicate share revoke");
+  it("DELETE share leaves no row for the pair, so the sharee gets 404", async () => {
+    const placeId = await createPlace("CH-003 share revoke");
     try {
-      // The grant check is not atomic and there is no unique key, so a raced
-      // pair is reachable; insert it directly. Mutation: revert revoke to
-      // deleting one row and the sharee still reads the place.
-      await prisma.placeShare.createMany({
-        data: [1, 2].map(() => ({
-          placeId,
-          sharedById: ALICE_ID,
-          sharedWithId: BOB_ID,
-        })),
-      });
+      // The unique key refuses a second row for the pair, so one row is the
+      // whole grant. Mutation: make revoke a no-op and the sharee still reads
+      // the place.
+      const row = { placeId, sharedById: ALICE_ID, sharedWithId: BOB_ID };
+      await prisma.placeShare.create({ data: row });
+      await expect(
+        prisma.placeShare.create({ data: row }),
+      ).rejects.toMatchObject({ code: "P2002" });
       const before = await request(API_URL)
         .get(`/places/${placeId}`)
         .set(as(BOB_SUB));
