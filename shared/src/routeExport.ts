@@ -4,13 +4,12 @@
  * Separate from gpxWrite.ts, which writes a recorded track, because the two are
  * different things in GPX itself: `<trk>` is where you went, `<rte>` is where
  * you intend to go. A drawn route has no timestamps, so writing it as a track
- * forces a lie — the previous web export stamped every point 1970-01-01, which
- * other apps read as a real (and very old) recording. `<rte>`/`<rtept>` says
- * exactly what a Logjam route is, and our own importer already maps `rte` to a
- * LineString, so the round trip holds.
+ * would force dummy timestamps that other apps read as a real recording.
+ * `<rte>`/`<rtept>` says exactly what a Logjam route is, and our own importer
+ * already maps `rte` to a LineString, so the round trip holds.
  *
  * PRIVACY: the output IS the line through a place — the most sensitive shape
- * of data this app holds. It is written to a file the user chose or handed to
+ * of data Logjam holds. It is written to a file the user chose or handed to
  * the share sheet; it never goes to the server, and callers must never log it.
  */
 import type { RoutePoint } from "./routeValidation.js";

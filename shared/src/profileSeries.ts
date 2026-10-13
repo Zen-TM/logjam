@@ -262,10 +262,8 @@ export function trackStatRows(
     });
   }
   // ONE condition for every height, deliberately. A series with a single
-  // altitude reading sets a min and a max — the same number twice — and
-  // shipped a "High point 27 m / Low point 27 m" pair directly above the line
-  // saying the track had no altitudes. A lone reading is not a height band and
-  // cannot be drawn, so it says nothing at all.
+  // altitude reading sets a min and a max — the same number twice — which is
+  // not a height band and cannot be drawn, so it says nothing at all.
   if (elevation && maxM != null && minM != null) {
     rows.push({ label: L.highPoint, value: formatElevationM(maxM) });
     rows.push({ label: L.lowPoint, value: formatElevationM(minM) });
