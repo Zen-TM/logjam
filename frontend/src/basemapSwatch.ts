@@ -1,7 +1,7 @@
 // The vector basemap's own colours, for the layer picker's swatch.
 //
 // Its own module rather than an export from Map.tsx: sidebar panels are
-// forbidden from importing the map component (panels/CLAUDE.md), and a palette
+// forbidden from importing the map component (frontend/AGENTS.md), and a palette
 // is not map machinery anyway.
 //
 // Read from the style's flavor rather than hand-picked, so the swatch cannot

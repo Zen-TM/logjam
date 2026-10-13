@@ -27,7 +27,7 @@ export default defineConfig({
   // Flake policy: 2 retries in CI, 0 locally. In CI, retries are paired with
   // the github reporter so any test that fails then passes is surfaced as a
   // flake annotation rather than silently passing. Trace is captured on first
-  // retry and screenshot on failure. Revisit after 30 days of CI history.
+  // retry and screenshot on failure.
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
   use: {
