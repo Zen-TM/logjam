@@ -57,11 +57,8 @@ const listCopy = SETTINGS_LIST.copy;
  *
  * Nothing here is gated. Definitions are rows in the local mirror written
  * through the outbox (`fieldDefsStore.ts`), so adding, renaming and deleting a
- * field works with no account and with no signal, for everyone. This file used
- * to carry a `canEdit` flag and a "This needs a connection." hint, because a
- * linked user's definitions then lived on the user record and were shared with
- * the web — a list two surfaces could edit at once with no per-field grain to
- * merge on. The VALUES were always offline-first, and still are.
+ * field works with no account and with no signal, for everyone. Values and
+ * definitions are both offline-first.
  *
  * A rename keeps the field's `key`, so stored values stay attached (that is why
  * renaming goes through the same whole-list save as adding). Deleting has its
@@ -140,8 +137,8 @@ export function CustomFieldList({
           icon="private"
           // The BARE label, not `customFieldDisplayLabel`: that appends
           // the range, and the subtitle one line down already says
-          // "Integer · 1–7". Printing the bounds twice on one row made
-          // the list read as a form rather than an inventory.
+          // "Integer · 1–7". Printing the bounds twice on one row would
+          // make the list read as a form rather than an inventory.
           title={def.label}
           subtitle={fieldSummary(def)}
         />
@@ -179,12 +176,10 @@ export function useCustomFieldForm({
   editing: ScopedCustomFieldDef | null;
   /**
    * The place type whose form this was opened from — PRE-SELECTED in the scope
-   * picker, not substituted for it. It used to remove the picker entirely on
-   * the grounds that the user had already answered the question by being on a
-   * canyon; what that actually did was make the form reached from a place a
-   * lesser one than the identical form in Settings, with no way to say "and on
-   * campsites too" short of going somewhere else and editing it again. The
-   * default answers the question; the picker keeps it changeable.
+   * picker, not substituted for it. Omitting the picker would make the form
+   * reached from a place a lesser one than the identical form in Settings,
+   * leaving no way to say "and on campsites too" without editing it elsewhere.
+   * The default answers the question; the picker keeps it changeable.
    */
   initialTypeId?: string;
   onSaved: (defs: ScopedCustomFieldDef[], message: string) => void;
@@ -273,7 +268,7 @@ export function useCustomFieldForm({
     // A field that is on no type and not on all of them appears on NO form — it
     // exists in Settings and nowhere else, which reads as the save having
     // failed. Refused here rather than saved and puzzled over, and reported
-    // UNDER THE CHIPS: as the name field's error it sat beside the one control
+    // UNDER THE CHIPS: as the name field's error it would sit beside the one control
     // that was not the problem.
     if (!appliesToAll && typeIds.length === 0) {
       setScopeError(
@@ -575,8 +570,8 @@ function dedupeCaseInsensitive(values: readonly string[]): string[] {
  * two spaces meet — `assertKeyNotReserved` refuses a reserved key on create and
  * rename — but adding a system definition makes a key reserved AFTER the fact,
  * so anyone who already had that key holds a legal duplicate until the
- * migration renames theirs. React answered that by rendering one row and
- * dropping the other, which is a worse failure than showing both.
+ * migration renames theirs. Colliding keys cause React to render one row and
+ * drop the other, which is a worse failure than showing both.
  */
 function defRowKey(def: ScopedCustomFieldDef): string {
   return `${def.ownerId ?? "system"}:${def.key}`;
@@ -588,10 +583,8 @@ function capitalize(word: string): string {
 
 function fieldSummary(def: ScopedCustomFieldDef): string {
   const base = typeLabel(def.type);
-  // ONE-SIDED BOUNDS COUNT. Requiring both printed a bare "Integer" for a
-  // min-only field whose own title says "(0+)" — the same both-or-neither
-  // assumption that has been fixed twice already, in the row reader and on the
-  // push path.
+  // ONE-SIDED BOUNDS COUNT. Requiring both would print a bare "Integer" for a
+  // min-only field whose own title says "(0+)".
   if (def.min != null && def.max != null)
     return `${base} · ${def.min}–${def.max}`;
   if (def.min != null) return `${base} · ${def.min}+`;

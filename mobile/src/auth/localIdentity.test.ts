@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // A corrupt identity record must never read as "nobody signed in": that is the
-// guest answer, and a guest keeps the data on the phone. The sign-in used to
-// fold the two together, so a different user signing in over a corrupt record
-// inherited the previous account's places.
+// guest answer, and a guest keeps the data on the phone. Folding the two
+// together would let a different user signing in over a corrupt record
+// inherit the previous account's places.
 
 const store: Record<string, string> = {};
 vi.mock("expo-secure-store", () => ({

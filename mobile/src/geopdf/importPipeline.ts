@@ -1,4 +1,4 @@
-// GeoPDF import pipeline (Stage 6 §6.1):
+// GeoPDF import pipeline:
 //   copying → hashing → parsing → planning → rasterising(zMax) → overviews →
 //   finalising → ready | failed(code)
 //
@@ -7,15 +7,11 @@
 // The tile plan is deterministic from the source bytes, so resume re-derives
 // it and skips completed work via the MBTiles logjam:build_state row.
 //
-// THE PIPELINE TAKES A FILE URI, NEVER BYTES, and that is a hard rule now.
-// Everything before rasterising used to run through the JS heap: a sync
-// whole-file read, a Uint8Array handed to expo-crypto (another full copy across
-// the bridge), then a sync write back out — and on the share-sheet path, a
-// base64 read plus a char-at-a-time `atob` over eight million elements. All of
-// it on the UI thread, all of it before the first tile. The bytes now enter JS
-// exactly once, for the pdf-lib parse, and become unreachable the moment it
-// returns (see `parseSourcePdf`). Hashing is native and streamed; copying is a
-// filesystem copy.
+// THE PIPELINE TAKES A FILE URI, NEVER BYTES. Running whole files through the
+// JS heap (sync reads, crypto array copies, base64 decoding) stalls the UI
+// thread before rendering starts. The bytes enter JS exactly once, for the
+// pdf-lib parse, and become unreachable once it returns (see `parseSourcePdf`).
+// Hashing is native and streamed; copying is a filesystem copy.
 //
 // PRIVACY: the whole flow is device-local — nothing about the file (including
 // its existence) touches the API. Errors surfaced to the UI are static
@@ -65,18 +61,16 @@ import {
 } from "./geoPdfImportsDb";
 
 /**
- * Reject absurd files before loading them into memory (spec §2.1).
+ * Reject oversized files before loading them into memory.
  *
- * 64 MB, not the 300 MB this used to be. `parseSourcePdf` reads the WHOLE file
- * into the Hermes heap — that is the one surviving whole-file read and there is
- * no way around it, pdf-lib needs the bytes — while an Android app heap is
- * typically 256-512 MB. A 300 MB ceiling was a number no phone can hold: it
- * bought an OOM kill where the user should have got a sentence. The measured
- * NSW 1:25 000 sheet is ~8 MB, so 64 MB is still generous, and a cap that fails
- * loudly beats a higher one that crashes.
+ * 64 MB ceiling: `parseSourcePdf` reads the file into the Hermes heap
+ * (pdf-lib requires the bytes in memory), while an Android app heap is
+ * typically 256-512 MB. An oversized ceiling would risk an OOM crash where
+ * the user should receive a clear error. A typical NSW 1:25 000 sheet is ~8 MB,
+ * so 64 MB remains generous, and a cap that fails cleanly beats one that crashes.
  */
 const MAX_GEOPDF_FILE_BYTES = 64 * 1024 * 1024;
-/** Tiles per native call — the progress/cancel granularity (spec §4.1). */
+/** Tiles per native call — the progress/cancel granularity. */
 const BATCH_SIZE = 32;
 
 export { RESIDUAL_WARN_FRACTION };
@@ -102,7 +96,7 @@ export { RESIDUAL_WARN_FRACTION };
  * Neither is supported yet, so this refuses the import rather than producing a
  * confidently misplaced map. Fixing either means teaching the native renderer
  * about rotation and the crop origin; until then, failing loud is the honest
- * behaviour (root CLAUDE.md: no silent fallbacks).
+ * behaviour (no silent fallbacks).
  */
 function assertRendererPageMatchesGeoref(
   rendered: { widthPt: number; heightPt: number } | undefined,
@@ -113,8 +107,8 @@ function assertRendererPageMatchesGeoref(
 ): void {
   if (!rendered) throw new GeoPdfImportError("RENDER_FAILED");
   // /Rotate is checked on its own value, not inferred from the dimensions.
-  // 90 and 270 swap them, but 180 does not — so a dimension comparison alone
-  // waved through an upside-down page and fetched every tile from the
+  // 90 and 270 swap them, but 180 does not — a dimension comparison alone
+  // would wave through an upside-down page and fetch tiles from the
   // diagonally opposite corner of the sheet.
   if (page.rotationDeg !== 0)
     throw new GeoPdfImportError("UNSUPPORTED_PAGE_BOX");
@@ -299,9 +293,9 @@ export async function importGeoPdfFile(
   onProgress: (progress: GeoPdfProgress) => void,
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
-  // Stat-then-copy: the size test used to run AFTER the full copy into
-  // app-private storage, so a 2 GB share-sheet "PDF" filled the phone up before
-  // being refused (see imports/stagedFile.ts).
+  // Stat-then-copy: running the size test after a full copy into app-private
+  // storage would allow oversized files to fill phone storage before being
+  // refused (see imports/stagedFile.ts).
   const staged = await stageIncomingFile({
     uri: fileUri,
     maxBytes: MAX_GEOPDF_FILE_BYTES,
@@ -346,13 +340,11 @@ async function importStagedFile(
   onProgress({ phase: "copying", fraction: 0, label });
   const dir = new Directory(importsRootDir(), sha256);
 
-  // ROW FIRST, THEN THE FILE. The copy used to come first, so a process kill
-  // (or a throw out of `incoming.copy`) in between left a full-size source.pdf
-  // on disk with no row pointing at it: absent from Saved, absent from the
-  // capacity meter, unreachable by any delete, and only ever cleared by a
-  // sign-out. Nothing sweeps `imports/geopdf/`. Inserting first flips the
-  // failure mode to a row whose file is missing, which the resume path already
-  // reports and the user can discard.
+  // ROW FIRST, THEN THE FILE. Copying before inserting would risk leaving an
+  // orphan source.pdf on disk if killed mid-copy: absent from Saved and the
+  // capacity meter, and unreachable by delete. Inserting first ensures any
+  // interrupted copy yields a tracked row that the resume path reports and
+  // the user can discard.
   const record: GeoPdfImport = {
     id: randomId(),
     label,
@@ -365,11 +357,9 @@ async function importStagedFile(
     minzoom: null,
     maxzoom: null,
     residualFraction: null,
-    // FULL. A GeoPDF is a map sheet the user deliberately put on top of the
-    // basemap; drawing it see-through was a hedge against covering something,
-    // and what it actually did was wash out the one map they asked for. The
-    // column survives (a future opacity control would use it) but nothing
-    // writes it any more and the map draws at 1 regardless — see MapScreen.
+    // FULL. A GeoPDF is a map sheet placed on top of the basemap; drawing it
+    // semi-transparent washes out the chosen map. The column survives for
+    // future opacity controls, but the map draws at 1 — see MapScreen.
     opacity: 1,
     visible: true,
     dirPath: dir.uri.replace(/^file:\/\//, ""),
@@ -517,11 +507,11 @@ async function buildArtifact(
         "logjam:build_state",
       );
       // A checkpoint is only honoured when it describes THIS plan: same parser
-      // version, same zMax, same tile count, cursor inside the list. `zMax`
-      // alone used to be the whole test, and zMax is the LAST thing a planner
-      // change moves — a resume then skipped the first nextTileIndex entries of
-      // a DIFFERENT tile list and registered the holed map as ready. The rule
-      // lives with the planner it validates (shared/geoPdfImport/tilePlan.ts).
+      // version, same zMax, same tile count, cursor inside the list. Testing
+      // `zMax` alone is insufficient because planner changes could alter the
+      // tile list, causing resume to skip mismatched tiles and leave holes in
+      // the map. The rule lives with the planner it validates
+      // (shared/geoPdfImport/tilePlan.ts).
       const resume = resumableFrom(
         savedState ? (JSON.parse(savedState) as GeoPdfBuildState) : null,
         plan,

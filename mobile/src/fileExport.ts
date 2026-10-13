@@ -1,4 +1,4 @@
-// Save a way — a route or a recorded track — out of the app as GPX or KML,
+// Save a way — a route or a recorded track — out of Logjam GPS as GPX or KML,
 // or hand back an imported file exactly as it arrived.
 //
 // Serialisation is shared (shared/src/routeExport.ts for an authored route,

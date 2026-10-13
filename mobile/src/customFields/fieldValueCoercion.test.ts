@@ -48,8 +48,8 @@ describe("coerceCustomFields", () => {
   });
 
   // An explicit No must survive (a filter for No reads it), and an unanswered
-  // yes/no must NOT become one: writing false for an untouched toggle left a No
-  // nobody gave on every trip the attribute was shown on.
+  // yes/no must NOT become one: writing false for an untouched toggle would
+  // leave an unintended No on every trip the attribute was shown on.
   it("stores a yes/no as answered, and an unanswered one as cleared", () => {
     expect(coerceCustomFields({ is_cave: "false" }, [isCave])).toEqual({
       is_cave: false,
@@ -87,7 +87,7 @@ describe("withoutClearedFields", () => {
 
 describe("sameFieldValues", () => {
   // Postgres jsonb returns keys shortest-first; a form builds them in the
-  // definitions' order. Text comparison called that a change on every save.
+  // definitions' order. Text comparison would see that as a change on every save.
   it("ignores key order", () => {
     expect(
       sameFieldValues(
