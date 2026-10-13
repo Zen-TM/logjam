@@ -3,8 +3,8 @@
 // The API's in-process globalLimiter runs BEFORE route-level auth, so its
 // userOrIpKey falls back to the client IP — every test request, whichever
 // seeded actor it authenticates as, draws from ONE shared 300-req/60s bucket.
-// The suite's total demand now exceeds a single window, so an unthrottled
-// parallel run always ends in 429s.
+// The suite's total demand exceeds a single window, so an unthrottled
+// run always ends in 429s.
 //
 // Fix at the consumer: vitest runs files sequentially (fileParallelism: false
 // in vitest.config.ts) and, before each file, this gate probes the limiter's

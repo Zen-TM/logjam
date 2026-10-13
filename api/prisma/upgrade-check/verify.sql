@@ -12,7 +12,7 @@ CREATE TEMP TABLE after AS
 SELECT * FROM (VALUES
   ('users',            (SELECT count(*) FROM users)),
   ('place_shares',     (SELECT count(*) FROM place_shares)),
-  -- One row per pair now, so the row count IS the pair count.
+  -- One row per pair, so the row count IS the pair count.
   ('friendship_pairs', (SELECT count(*) FROM friendships))
 ) AS t(metric, value);
 
