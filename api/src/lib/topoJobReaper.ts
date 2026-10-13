@@ -25,7 +25,7 @@ import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { deleteSharesFor } from "./shareAccess";
 
-// Stuck-job reaper for both topo pipelines (Design L4).
+// Stuck-job reaper for both topo pipelines.
 //
 // The job model is "ECS RunTask owns lifecycle; the status column owns retry;
 // no SQS". Nothing transitions a job out of `pending`/`processing` (or an
@@ -46,7 +46,7 @@ import { deleteSharesFor } from "./shareAccess";
 //       render phases, so a job is reaped only when progress stalls for
 //       TOPO_REAPER_PROGRESS_STALL_MS, or it blows the absolute ceiling
 //       (max(timeout, 2× estimate)). A slow-but-advancing render — the
-//       multi-hour large-job case — is never reaped mid-run (ARCH-001).
+//       multi-hour large-job case — is never reaped mid-run.
 //   topo_export_jobs · queued    — flat timeout, anchored on createdAt.
 //   topo_export_jobs · running   — flat timeout, anchored on startedAt
 //       (createdAt fallback for rows that predate the startedAt column).
@@ -54,7 +54,7 @@ import { deleteSharesFor } from "./shareAccess";
 // Every reaped in-flight row with a persisted ecsTaskArn gets a best-effort
 // ECS StopTask — a missed stop is harmless because the workers' terminal
 // status writes are guarded (`WHERE status = ...`), so a reaped-but-alive
-// task can no longer resurrect a failed row or charge storage (Design L1).
+// task can no longer resurrect a failed row or charge storage.
 //
 // Single-instance assumption: like the in-memory rate limiters, this in-API
 // sweep assumes one API instance. With >1 instance multiple sweeps would
@@ -64,7 +64,7 @@ import { deleteSharesFor } from "./shareAccess";
 // scheduled ECS task instead.
 
 // Retry means submitting a new job/export — the reaper never re-launches
-// anything (see the attempt_count comment in schema.prisma, ARCH-008).
+// anything (see the attempt_count comment in schema.prisma).
 const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
 const REAPER_EXPORT_MESSAGE = say`This export was stopped because it took too long. Start it again to try again.`;
 const REAPER_GEO_PDF_MESSAGE = say`This GeoPDF was stopped because it took too long. Make it again to try again.`;
@@ -167,10 +167,9 @@ async function stopTasksBestEffort(
 }
 
 /**
- * A reaped job is a FAILED job the user was never told about (APIC-005): the
- * workers' own except paths write a Notification + push (+ email), the reaper
- * used to write only `status`/`errorMessage`, so a user whose task was never
- * placed or was SIGKILLed found out by polling the list.
+ * A reaped job must notify the user as worker-handled failures do: the workers'
+ * own except paths write a Notification + push (+ email), so the reaper writes
+ * the same notifications when a task fails before or during execution.
  *
  * Best-effort by design: notification/push/email failure must never abort a
  * sweep that has already done its real work (the status flip).
@@ -275,7 +274,7 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
  * Flip overdue rows to failed ONE AT A TIME and notify only the rows this pass
  * actually claimed.
  *
- * The status-guarded claim is the house dedup rule (root CLAUDE.md; same shape
+ * The status-guarded claim is the house dedup rule (root AGENTS.md; same shape
  * as `queueAutoExports`'s `autoExportedAt` marker): two API instances sweeping
  * concurrently both read the same overdue ids, but only one `updateMany` per id
  * reports `count === 1`. Notifying on the READ set instead would send the user
@@ -616,7 +615,7 @@ export async function reapStuckTopoJobs(
 }
 
 /**
- * Export-expiry sweep (ARCH-006): completed exports older than
+ * Export-expiry sweep: completed exports older than
  * TOPO_EXPORT_TTL_MS (default 7 days, 0 disables) are removed — S3 object
  * first (idempotent: the bucket's `expire-exports` lifecycle rule, verified
  * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then one
@@ -644,7 +643,7 @@ export async function expireCompletedExports(
   let expired = 0;
   for (const row of expiredRows) {
     try {
-      // S3 first (Design Q delete ordering): DeleteObject succeeds on a
+      // S3 first: DeleteObject succeeds on a
       // missing key, so a lifecycle-rule head start is harmless; an S3
       // failure leaves the row for retry next sweep.
       if (row.resultKey) {
@@ -877,7 +876,7 @@ export async function queueAutoExports(
 }
 
 /**
- * Sweep sync tombstones (Stage 8) older than SYNC_TOMBSTONE_TTL_MS. Safe to
+ * Sweep sync tombstones older than SYNC_TOMBSTONE_TTL_MS. Safe to
  * run concurrently (deleteMany on a time cutoff is idempotent). A delta client
  * whose cursor predates the horizon gets resetRequired from /sync/delta, so
  * sweeping bounds table growth without correctness risk. 0 = never sweep.
