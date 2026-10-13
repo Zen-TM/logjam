@@ -636,6 +636,10 @@ export function SavedScreen({
   // Single in-flight operation banner: the pipelines here are exclusive (one
   // import / one overlay download at a time), so one row above the list
   // carries label and progress for whichever is running.
+  //
+  // GeoPDF imports are not included here — they take the whole screen (see
+  // geoPdfOp below), because their opening phases block the JS thread and a
+  // progress row on a frozen list is a worse lie than no row.
   const [activeOp, setActiveOp] = useState<{
     label: string;
     category: Category;
