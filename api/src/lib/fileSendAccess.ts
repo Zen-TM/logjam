@@ -10,13 +10,14 @@
 // decides which object a confirm can point at, and the gate decides who may
 // download. All three are security-relevant and none of them need Prisma.
 import {
+  say,
   FILE_SEND_FILENAME_MAX_LENGTH,
   FILE_SEND_MAX_BYTES,
   FILE_SEND_TTL_DAYS,
   type FileSendStatus,
 } from "@logjam/shared";
 
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 
 /**
  * Extensions a send may carry — exactly what the mobile import paths accept.
@@ -41,15 +42,15 @@ export type SendableExtension = (typeof SENDABLE_EXTENSIONS)[number];
  */
 export function sanitizeSendFilename(value: unknown): string {
   if (typeof value !== "string") {
-    throw new AppError(400, "filename is required");
+    throw malformed("filename is required");
   }
   // eslint-disable-next-line no-control-regex
   const cleaned = value.replace(/["\\\x00-\x1f\x7f]/g, "").trim();
-  if (cleaned.length === 0) throw new AppError(400, "filename is required");
+  if (cleaned.length === 0) throw malformed("filename is required");
   if (cleaned.length > FILE_SEND_FILENAME_MAX_LENGTH) {
     throw new AppError(
       400,
-      `filename must be at most ${FILE_SEND_FILENAME_MAX_LENGTH} characters`,
+      say`That file's name is too long. Names can be up to ${FILE_SEND_FILENAME_MAX_LENGTH} characters.`,
     );
   }
   return cleaned;
@@ -67,7 +68,7 @@ export function sendableExtension(filename: string): SendableExtension {
   if (!match) {
     throw new AppError(
       400,
-      `A sent file must be one of: ${SENDABLE_EXTENSIONS.join(", ")}`,
+      say`That kind of file can't be sent. Send a GPX, KML, GeoJSON or PDF file.`,
     );
   }
   return match;
@@ -96,11 +97,14 @@ export function assertSendableSize(sizeBytes: unknown): number {
     !Number.isInteger(sizeBytes) ||
     sizeBytes <= 0
   ) {
-    throw new AppError(400, "sizeBytes must be a positive integer");
+    throw malformed("sizeBytes must be a positive integer");
   }
   if (sizeBytes > FILE_SEND_MAX_BYTES) {
     const limitMb = Math.round(FILE_SEND_MAX_BYTES / 1024 / 1024);
-    throw new AppError(413, `A sent file must be under ${limitMb} MB`);
+    throw new AppError(
+      413,
+      say`That file is too big to send. The limit is ${limitMb} MB.`,
+    );
   }
   return sizeBytes;
 }

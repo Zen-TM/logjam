@@ -4,7 +4,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
-import { NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
+import { say, NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
 
 const router = Router();
 
@@ -372,7 +372,8 @@ router.patch(
     const notification = await prisma.notification.findFirst({
       where: { id, userId: user.id },
     });
-    if (!notification) throw new AppError(404, "Notification not found");
+    if (!notification)
+      throw new AppError(404, say`Couldn't find that notification.`);
 
     const read = req.body?.read === false ? false : true;
     const updated = await prisma.notification.update({
@@ -414,7 +415,8 @@ router.delete(
     const notification = await prisma.notification.findFirst({
       where: { id, userId: user.id },
     });
-    if (!notification) throw new AppError(404, "Notification not found");
+    if (!notification)
+      throw new AppError(404, say`Couldn't find that notification.`);
 
     await prisma.notification.delete({ where: { id } });
 

@@ -139,8 +139,10 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       expect(res.body.imported).toBe(0);
       expect(res.body.errors).toHaveLength(1);
       // Same row error as a nonexistent id, or the response is an existence
-      // oracle. Mutation: restore a separate "not the place owner" message.
-      expect(res.body.errors[0].error).toBe("place not found");
+      // oracle. Mutation: restore a separate sentence for a stranger's place.
+      expect(res.body.errors[0].error).toBe(
+        "Couldn't find the place for this trip.",
+      );
       const missing = await request(API_URL)
         .post("/trips/bulk")
         .set(AUTH)
@@ -155,7 +157,9 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
             },
           ],
         });
-      expect(missing.body.errors[0].error).toBe("place not found");
+      expect(missing.body.errors[0].error).toBe(
+        "Couldn't find the place for this trip.",
+      );
     } finally {
       await deleteTripsBySearch(name);
       await request(API_URL)
@@ -241,7 +245,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       expect(res.body.imported).toBe(1);
       expect(res.body.errors).toHaveLength(1);
       expect(res.body.errors[0].error).toMatch(
-        /types entries must be at most 40 characters/,
+        /A trip type can be up to 40 characters/,
       );
     } finally {
       await deleteTripsBySearch(name);
@@ -354,7 +358,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       });
     expect(res.status).toBe(200);
     expect(res.body.imported).toBe(0);
-    expect(res.body.errors?.[0]?.error).toMatch(/at most 200 characters/);
+    expect(res.body.errors?.[0]?.error).toMatch(/up to 200 characters/);
   });
 
   // APIR-002: the documented contract is 0 → 400, over cap → 413 (SEC-001);

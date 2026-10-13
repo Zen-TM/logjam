@@ -6,6 +6,8 @@
 // so every client must construct and check the SAME class — always import it
 // from @logjam/shared, never redeclare locally.
 
+import { SERVER_FAULT_SENTENCE } from "./userSentence.js";
+
 export class ApiError extends Error {
   readonly status: number;
   readonly path: string;
@@ -72,8 +74,7 @@ export function mapAuthNextStep(step: string): string {
 
 // ── User-facing message derivation ────────────────────────────────────────────
 
-const SERVER_ERROR_MESSAGE =
-  "Something went wrong on our end. Please try again.";
+const SERVER_ERROR_MESSAGE: string = SERVER_FAULT_SENTENCE;
 const NETWORK_ERROR_MESSAGE =
   "Couldn't reach Logjam. Please check your connection and try again.";
 
@@ -81,12 +82,18 @@ const STATUS_MESSAGES: Record<number, string | undefined> = {
   401: "You're not authorised to do that. Please sign in and try again.",
   403: "You don't have permission to do that.",
   404: "The requested item could not be found.",
-  409: undefined, // let serverMessage win for 409 (domain-specific conflicts)
   429: "Too many requests. Please wait a moment and try again.",
   500: SERVER_ERROR_MESSAGE,
   503: "Logjam is temporarily unavailable. Please try again shortly.",
 };
 
+/**
+ * The one path from a failure to the words a client shows. The API writes its
+ * sentence for the user (`say` in userSentence.ts), so it is shown as it is:
+ * a client never rewrites it, parses it, or picks its own words by status.
+ * `STATUS_MESSAGES` and `fallback` are for a response that carried no sentence
+ * (a proxy's 502, a network failure).
+ */
 export function messageFromError(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     if (err.serverMessage) return err.serverMessage;

@@ -1,9 +1,10 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
+  say,
   enforceCanyoningTag,
   linksCanyon,
   MAX_PLACES_PER_TRIP,
@@ -54,19 +55,28 @@ export async function resolveTripPlaceIds(
     !Array.isArray(placeIds) ||
     placeIds.some((id) => typeof id !== "string")
   ) {
-    throw new AppError(400, "placeIds must be an array of strings");
+    throw malformed("placeIds must be an array of strings");
   }
   if (placeIds.length === 0) return [];
   if (placeIds.length > MAX_PLACES_PER_TRIP)
-    throw new AppError(400, `At most ${MAX_PLACES_PER_TRIP} places per trip`);
+    throw new AppError(
+      400,
+      say`A trip can have up to ${MAX_PLACES_PER_TRIP} places.`,
+    );
   if (new Set(placeIds).size !== placeIds.length)
-    throw new AppError(400, "placeIds contains duplicates");
+    throw new AppError(
+      400,
+      say`This trip lists the same place twice. Remove one and save again.`,
+    );
 
   const owned = await prisma.place.count({
     where: { id: { in: placeIds }, ownerId: userId },
   });
   if (owned !== placeIds.length)
-    throw new AppError(400, "One or more places were not found");
+    throw new AppError(
+      400,
+      say`A place on this trip no longer exists. Remove it and save again.`,
+    );
   return placeIds;
 }
 
@@ -89,31 +99,34 @@ export function parseTripTypes(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   if (value === null) return [];
   if (!Array.isArray(value))
-    throw new AppError(400, "types must be an array of strings or null");
+    throw malformed("types must be an array of strings or null");
 
   const result: string[] = [];
   const seen = new Set<string>();
   for (const item of value) {
     if (typeof item !== "string")
-      throw new AppError(400, "types must be an array of strings");
+      throw malformed("types must be an array of strings");
     const trimmed = item.trim();
     if (trimmed.length === 0)
-      throw new AppError(400, "types entries must not be empty");
+      throw malformed("types entries must not be empty");
     if (trimmed.length > TRIP_TYPE_MAX_LENGTH)
       throw new AppError(
         400,
-        `types entries must be at most ${TRIP_TYPE_MAX_LENGTH} characters`,
+        say`A trip type can be up to ${TRIP_TYPE_MAX_LENGTH} characters.`,
       );
     const key = trimmed.toLowerCase();
     if (seen.has(key))
-      throw new AppError(400, "types contains case-insensitive duplicates");
+      throw new AppError(
+        400,
+        say`This trip has the same type twice. Remove one and save again.`,
+      );
     seen.add(key);
     result.push(trimmed);
   }
   if (result.length > MAX_TRIP_TYPES_PER_TRIP)
     throw new AppError(
       400,
-      `At most ${MAX_TRIP_TYPES_PER_TRIP} types per trip`,
+      say`A trip can have up to ${MAX_TRIP_TYPES_PER_TRIP} types.`,
     );
   return result;
 }
@@ -162,13 +175,13 @@ export function parseDisplayName(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== "string")
-    throw new AppError(400, "displayName must be a string or null");
+    throw malformed("displayName must be a string or null");
   const trimmed = value.trim();
   if (trimmed.length === 0) return null;
   if (trimmed.length > TRIP_NAME_MAX_LENGTH)
     throw new AppError(
       400,
-      `displayName must be at most ${TRIP_NAME_MAX_LENGTH} characters`,
+      say`A trip's title can be up to ${TRIP_NAME_MAX_LENGTH} characters.`,
     );
   return trimmed;
 }
@@ -184,7 +197,7 @@ router.get(
 
     const { search, dateFrom, dateTo } = req.query;
     if (search !== undefined && typeof search !== "string") {
-      throw new AppError(400, "search must be a string");
+      throw malformed("search must be a string");
     }
     // Bad input is a 400, not a 500: an Invalid Date (or a repeated query param,
     // which Express hands over as an array) reaches Prisma as a malformed filter
@@ -193,10 +206,10 @@ router.get(
     const parseDateParam = (value: unknown, name: string): Date | undefined => {
       if (value === undefined) return undefined;
       if (typeof value !== "string")
-        throw new AppError(400, `${name} must be a string`);
+        throw malformed(`${name} must be a string`);
       const parsed = new Date(value);
       if (Number.isNaN(parsed.getTime()))
-        throw new AppError(400, `${name} must be a valid date`);
+        throw malformed(`${name} must be a valid date`);
       return parsed;
     };
     const dateFromParsed = parseDateParam(dateFrom, "dateFrom");
@@ -267,7 +280,7 @@ router.get(
     // Owner-private resource — 404 (not 403) for non-owners so the response
     // is no existence oracle for trip IDs (SEC-001).
     if (!trip || trip.userId !== user.id)
-      throw new AppError(404, "Trip log not found");
+      throw new AppError(404, say`Couldn't find that trip.`);
 
     const mediaRows = await prisma.media.findMany({
       where: { linkedType: "tripLog", linkedId: id },
@@ -291,7 +304,7 @@ router.post(
 
     const { date, notes, customFields, placeIds, displayName, types } =
       req.body;
-    if (!date) throw new AppError(400, "date is required");
+    if (!date) throw new AppError(400, say`A trip needs a date.`);
 
     const resolvedPlaceIds = await resolveTripPlaceIds(user.id, placeIds);
     const trimmedDisplayName = parseDisplayName(displayName) ?? null;
@@ -312,7 +325,7 @@ router.post(
         assertClientIdReplayable(
           existing.userId,
           user.id,
-          "Trip log not found",
+          say`Couldn't find that trip.`,
         );
         res.status(200).json(serializeTrip(existing));
         return;
@@ -391,7 +404,7 @@ router.patch(
     });
     // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
     if (!trip || trip.userId !== user.id)
-      throw new AppError(404, "Trip log not found");
+      throw new AppError(404, say`Couldn't find that trip.`);
 
     const { date, notes, customFields, placeIds, displayName, types } =
       req.body;
@@ -462,11 +475,12 @@ router.delete(
     const trip = await prisma.tripLog.findUnique({ where: { id } });
     // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
     if (!trip || trip.userId !== user.id)
-      throw new AppError(404, "Trip log not found");
+      throw new AppError(404, say`Couldn't find that trip.`);
 
     // Empty means another request deleted it since the check above.
     const deleted = await deleteTripsCascade(user.id, [id]);
-    if (deleted.length === 0) throw new AppError(404, "Trip log not found");
+    if (deleted.length === 0)
+      throw new AppError(404, say`Couldn't find that trip.`);
 
     res.status(204).send();
   },

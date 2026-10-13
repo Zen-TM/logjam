@@ -1,28 +1,16 @@
 import { Request, Response, NextFunction } from "express";
-import { logger, safeErrorForLog } from "../lib/logger";
+import { SERVER_FAULT_SENTENCE, withoutQuoted } from "@logjam/shared";
+import { AppError } from "../lib/appError";
+import { logger, redactTilePathPatterns, safeErrorForLog } from "../lib/logger";
 
-// Safe, explicitly-typed shape for fields echoed to the client alongside an
-// error. Constrained to non-sensitive quota figures so a future caller cannot
-// accidentally leak place names/coords (CLAUDE.md privacy rule) — adding a new
-// key here is a deliberate, reviewable change, not an open-ended spread.
-export interface AppErrorDetails {
-  used?: number | string;
-  quota?: number | string;
-  resetAt?: string;
-}
-
-export class AppError extends Error {
-  public details?: AppErrorDetails;
-  constructor(
-    public statusCode: number,
-    message: string,
-    details?: AppErrorDetails,
-  ) {
-    super(message);
-    this.name = "AppError";
-    this.details = details;
-  }
-}
+// The class lives apart so that auth.ts can refuse a request without loading
+// the logger, which reads the environment as it loads.
+export {
+  AppError,
+  fault,
+  malformed,
+  type AppErrorDetails,
+} from "../lib/appError";
 
 export function errorHandler(
   err: Error,
@@ -38,8 +26,20 @@ export function errorHandler(
     // Never log the raw Error — its message/stack can embed user-supplied place
     // names/coords (e.g. a wrapped Prisma error). safeErrorForLog scrubs them;
     // pino's redact paths can't reach free text inside err.message/err.stack.
+    // A sentence may quote the user's own words (a label, a type's name);
+    // withoutQuoted takes them out (errorHandler.unit.test.ts).
+    const safe = safeErrorForLog(err);
+    const detail =
+      err.devDetail === undefined
+        ? undefined
+        : redactTilePathPatterns(err.devDetail);
     reqLog.warn(
-      { err: safeErrorForLog(err), statusCode: err.statusCode, reqId },
+      {
+        err: { ...safe, message: withoutQuoted(safe.message) },
+        statusCode: err.statusCode,
+        reqId,
+        ...(detail !== undefined && { detail }),
+      },
       "request_failed",
     );
     // Echo only whitelisted detail keys — never blind-spread err.details.
@@ -47,6 +47,7 @@ export function errorHandler(
       error: err.message,
       requestId: reqId,
     };
+    if (err.sendDetail && detail !== undefined) body.detail = detail;
     if (err.details) {
       if (err.details.used !== undefined) body.used = err.details.used;
       if (err.details.quota !== undefined) body.quota = err.details.quota;
@@ -57,5 +58,5 @@ export function errorHandler(
   }
 
   reqLog.error({ err: safeErrorForLog(err), reqId }, "unhandled_error");
-  res.status(500).json({ error: "Internal server error", requestId: reqId });
+  res.status(500).json({ error: SERVER_FAULT_SENTENCE, requestId: reqId });
 }

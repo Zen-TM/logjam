@@ -10,7 +10,7 @@
 // unauthenticated caller must not be able to use us as an elevation proxy.
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
-import { AppError } from "../middleware/errorHandler";
+import { malformed } from "../middleware/errorHandler";
 import { elevationLimiter } from "../middleware/rateLimit";
 import {
   buildElevationProfile,
@@ -48,22 +48,22 @@ router.post(
     let segments: RoutePoint[][];
     if (Array.isArray(req.body?.segments)) {
       if (req.body.segments.length === 0) {
-        throw new AppError(400, ROUTE_ERRORS.pointsRequired);
+        throw malformed(ROUTE_ERRORS.pointsRequired);
       }
       segments = [];
       for (const segment of req.body.segments) {
         const parsed = parseRoutePoints(segment);
-        if ("error" in parsed) throw new AppError(400, parsed.error);
+        if ("error" in parsed) throw malformed(parsed.error);
         segments.push(parsed.points);
       }
     } else {
       const parsed = parseRoutePoints(req.body?.points);
-      if ("error" in parsed) throw new AppError(400, parsed.error);
+      if ("error" in parsed) throw malformed(parsed.error);
       segments = [parsed.points];
     }
     const totalPoints = segments.reduce((n, segment) => n + segment.length, 0);
     if (totalPoints > MAX_ROUTE_POINTS) {
-      throw new AppError(400, ROUTE_ERRORS.tooManyPoints);
+      throw malformed(ROUTE_ERRORS.tooManyPoints);
     }
 
     // Clamped, never refused: a caller that sends nothing, or nonsense, gets

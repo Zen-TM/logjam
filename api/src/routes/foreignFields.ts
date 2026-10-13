@@ -30,6 +30,8 @@
 import { Router, Response } from "express";
 
 import {
+  say,
+  quote,
   asFieldValues,
   asForeignFields,
   isReservedFieldKey,
@@ -40,7 +42,7 @@ import {
 import { Prisma } from "@prisma/client";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { createFieldDef } from "../lib/customFieldDefs";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
@@ -58,7 +60,7 @@ function parseAction(value: unknown): ForeignFieldAction {
   ) {
     return value as ForeignFieldAction;
   }
-  throw new AppError(400, `action must be one of: ${ACTIONS.join(", ")}`);
+  throw malformed(`action must be one of: ${ACTIONS.join(", ")}`);
 }
 
 /** "Label: value", the one rendering used by the notes action. Kept here rather
@@ -90,12 +92,12 @@ router.post(
     // `foreignFields` is owner-private, so a sharee must not even learn that
     // this place has any (404-not-403, root CLAUDE.md).
     if (!place || place.ownerId !== user.id) {
-      throw new AppError(404, "Place not found");
+      throw new AppError(404, say`Couldn't find that place.`);
     }
 
     const parked = asForeignFields(place.foreignFields);
     const item = parked.find((entry) => entry.key === key);
-    if (!item) throw new AppError(404, "Field not found");
+    if (!item) throw new AppError(404, say`Couldn't find that attribute.`);
     const remaining = parked.filter((entry) => entry.key !== key);
 
     let fieldValues = asFieldValues(place.fieldValues);
@@ -107,7 +109,10 @@ router.post(
       // key. It can still be discarded or appended, which is why this is here
       // and not in the guard above.
       if (isReservedFieldKey(key)) {
-        throw new AppError(409, `"${item.label}" is a built-in field name.`);
+        throw new AppError(
+          409,
+          say`${quote(item.label)} is the name of a built-in attribute. Choose another name.`,
+        );
       }
       const def: TripLogCustomFieldDef = {
         key: item.key,

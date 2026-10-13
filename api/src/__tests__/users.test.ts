@@ -62,6 +62,17 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
+  // Found by taking bob's name in Logjam Web: the refusal read "Conflict
+  // updating profile". Mutation: answer a P2002 by `meta.target` again.
+  it("PATCH /users/me says a taken username is taken", async () => {
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ username: "bob" });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("That username is taken. Choose another.");
+  });
+
   it("PATCH /users/me rejects an invalid themeSchemeId", async () => {
     const res = await request(API_URL)
       .patch("/users/me")

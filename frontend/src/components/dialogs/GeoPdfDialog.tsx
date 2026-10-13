@@ -20,7 +20,6 @@ import { TOPO_LAYERS } from "../../topoLayerTypes";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ApiError } from "../../errors/ApiError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
@@ -760,15 +759,7 @@ function GeoPdfDialog({
       onClose();
     } catch (e) {
       console.error(e);
-      if (e instanceof ApiError && (e.status === 429 || e.status === 503)) {
-        setError(
-          "You already have GeoPDFs generating. Please wait for one to finish before starting another.",
-        );
-      } else {
-        setError(
-          messageFromError(e, "Couldn't queue GeoPDF. Please try again."),
-        );
-      }
+      setError(messageFromError(e, "Couldn't queue GeoPDF. Please try again."));
     } finally {
       setGenerating(false);
     }

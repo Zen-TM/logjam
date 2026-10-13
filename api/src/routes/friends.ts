@@ -3,10 +3,11 @@ import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
 import {
+  say,
   normalizeUserUiPreferences,
   isSharableEntityType,
   type BulkShareItem,
@@ -121,11 +122,14 @@ async function requestOrAccept(userId: string, addresseeId: string) {
   });
   if (existing) {
     if (existing.status === "blocked")
-      throw new AppError(403, "Unable to send friend request");
+      throw new AppError(403, say`Couldn't send that friend request.`);
     if (existing.status === "accepted")
-      throw new AppError(409, "Already friends");
+      throw new AppError(409, say`You're already friends.`);
     if (existing.requesterId === userId)
-      throw new AppError(409, "Friend request already pending");
+      throw new AppError(
+        409,
+        say`A friend request between you is already waiting.`,
+      );
     // Their request to this user is the one waiting. Both have asked, so
     // this is the yes: the same friendship whether the two requests were a
     // year apart or raced. 200, not 201: nothing was created.
@@ -246,16 +250,20 @@ router.post(
     const user = await resolveUser(req.user!.sub);
 
     const { addresseeId } = req.body;
-    if (!addresseeId) throw new AppError(400, "addresseeId is required");
+    if (!addresseeId) throw malformed("addresseeId is required");
     if (addresseeId === user.id)
-      throw new AppError(400, "You cannot send a friend request to yourself");
+      throw new AppError(
+        400,
+        say`You can't send a friend request to yourself.`,
+      );
 
     const addressee = await prisma.user.findUnique({
       where: { id: addresseeId },
     });
     // Same refusal a blocked pair gets: a distinct 404 would tell the caller
     // which user ids exist.
-    if (!addressee) throw new AppError(403, "Unable to send friend request");
+    if (!addressee)
+      throw new AppError(403, say`Couldn't send that friend request.`);
 
     // Lost to a racing request or redeem for the same pair: go again, and
     // this attempt reads the row that won, so a race ends where the same two
@@ -268,7 +276,10 @@ router.post(
       .catch((err: unknown) => {
         if (!isUniqueViolation(err)) throw err;
         // The pair's row came, went and came again: nothing was made here.
-        throw new AppError(409, "Friend request already pending");
+        throw new AppError(
+          409,
+          say`A friend request between you is already waiting.`,
+        );
       });
 
     res.status(status).json(friendship);
@@ -285,11 +296,18 @@ router.patch(
 
     const id = getParam(req.params.id);
     const friendship = await prisma.friendship.findUnique({ where: { id } });
-    if (!friendship) throw new AppError(404, "Friend request not found");
+    if (!friendship)
+      throw new AppError(404, say`Couldn't find that friend request.`);
     if (friendship.addresseeId !== user.id)
-      throw new AppError(403, "Only the recipient can accept a friend request");
+      throw new AppError(
+        403,
+        say`Only the person a friend request was sent to can accept it.`,
+      );
     if (friendship.status !== "pending")
-      throw new AppError(400, "Friend request is not pending");
+      throw new AppError(
+        400,
+        say`That friend request has already been answered.`,
+      );
 
     res.json(await acceptFriendRequest(friendship, user.id));
   },
@@ -305,14 +323,18 @@ router.patch(
 
     const id = getParam(req.params.id);
     const friendship = await prisma.friendship.findUnique({ where: { id } });
-    if (!friendship) throw new AppError(404, "Friend request not found");
+    if (!friendship)
+      throw new AppError(404, say`Couldn't find that friend request.`);
     if (friendship.addresseeId !== user.id)
       throw new AppError(
         403,
-        "Only the recipient can decline a friend request",
+        say`Only the person a friend request was sent to can decline it.`,
       );
     if (friendship.status !== "pending")
-      throw new AppError(400, "Friend request is not pending");
+      throw new AppError(
+        400,
+        say`That friend request has already been answered.`,
+      );
 
     // Delete the friendship and purge this user's own friend_request
     // notification that referenced it (PRIV-003 — clean the row, don't rely on
@@ -349,14 +371,15 @@ router.delete(
 
     const id = getParam(req.params.id);
     const friendship = await prisma.friendship.findUnique({ where: { id } });
-    if (!friendship) throw new AppError(404, "Friendship not found");
+    if (!friendship) throw new AppError(404, say`Couldn't find that friend.`);
     if (friendship.status !== "accepted")
-      throw new AppError(400, "No accepted friendship found");
+      throw new AppError(400, say`You aren't friends with that person.`);
 
     // Either party can remove a friend
     const isMember =
       friendship.requesterId === user.id || friendship.addresseeId === user.id;
-    if (!isMember) throw new AppError(403, "Access denied");
+    if (!isMember)
+      throw new AppError(403, say`You don't have permission to do that.`);
 
     // Remove the friendship and any place shares between the two users
     const otherId =
@@ -714,12 +737,13 @@ export async function resolveFriendCounterpart(
   const friendship = await prisma.friendship.findUnique({
     where: { id: friendshipId },
   });
-  if (!friendship) throw new AppError(404, "Friendship not found");
+  if (!friendship) throw new AppError(404, say`Couldn't find that friend.`);
   if (friendship.status !== "accepted")
-    throw new AppError(400, "No accepted friendship found");
+    throw new AppError(400, say`You aren't friends with that person.`);
   const isMember =
     friendship.requesterId === userId || friendship.addresseeId === userId;
-  if (!isMember) throw new AppError(403, "Access denied");
+  if (!isMember)
+    throw new AppError(403, say`You don't have permission to do that.`);
   return friendship.requesterId === userId
     ? friendship.addresseeId
     : friendship.requesterId;
@@ -946,7 +970,7 @@ router.get(
 
     const { q } = req.query;
     if (!q || typeof q !== "string" || q.length < 3) {
-      throw new AppError(400, "Search query must be at least 3 characters");
+      throw new AppError(400, say`Type at least 3 characters to search.`);
     }
 
     // Same where for the page and the count, so the total reveals nothing

@@ -58,29 +58,31 @@ logging.basicConfig(
 log = logging.getLogger("worker")
 
 
+GENERIC_FAILURE = (
+    "This LiDAR map couldn't be made. Make it again, and contact support if it "
+    "keeps failing."
+)
+
+
 def safe_error_message(e: Exception) -> str:
-    """Map raw exceptions to user-safe text; full traceback stays in CloudWatch."""
+    """The sentence the job's owner reads in both clients (shared/DESIGN.md §11).
+
+    Written for them: what went wrong and what to do, with no tool's name and
+    no id. Which step failed stays in CloudWatch, with the full traceback.
+    """
     msg = str(e)
     if isinstance(e, subprocess.CalledProcessError):
-        return f"A pipeline subprocess failed. Contact support with job ID {JOB_ID}."
+        return GENERIC_FAILURE
     if isinstance(e, MemoryError) or "OOM" in msg or "exit code -9" in msg:
-        return "Processing ran out of memory. Try a smaller LiDAR area."
+        return "This area was too big to process. Try a smaller one."
     if isinstance(e, RuntimeError):
-        if "tippecanoe" in msg:
-            return (
-                "Failed to build vector tiles. Contact support with job ID {}.".format(
-                    JOB_ID
-                )
-            )
-        if "pipeline.py" in msg:
-            return "The topo pipeline exited with an error. Contact support with job ID {}.".format(
-                JOB_ID
-            )
+        return GENERIC_FAILURE
     if isinstance(e, (OSError, IOError)):
         return (
-            "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
+            "Logjam couldn't read the LiDAR data. Check the ZIP is the one ELVIS "
+            "sent you."
         )
-    return f"Processing failed. Contact support with job ID {JOB_ID}."
+    return GENERIC_FAILURE
 
 
 AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")

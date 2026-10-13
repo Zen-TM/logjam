@@ -12,8 +12,8 @@
 //   403/409, which would be an existence oracle for foreign ids (SEC-001).
 //   A genuine cross-user v4 collision is cryptographically negligible;
 //   treat it as an attack.
-import { isUuidV4 } from "@logjam/shared";
-import { AppError } from "../middleware/errorHandler";
+import { isUuidV4, type UserSentence } from "@logjam/shared";
+import { AppError, malformed } from "../middleware/errorHandler";
 
 /**
  * Parse an optional client-supplied id from a request body. Returns the id,
@@ -25,7 +25,7 @@ export function parseClientSuppliedId(
 ): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (!isUuidV4(value)) {
-    throw new AppError(400, `${fieldName} must be a UUIDv4`);
+    throw malformed(`${fieldName} must be a UUIDv4`);
   }
   return value;
 }
@@ -39,7 +39,7 @@ export function parseClientSuppliedId(
 export function assertClientIdReplayable(
   rowOwnerId: string,
   callerId: string,
-  notFoundMessage: string,
+  notFoundMessage: UserSentence,
 ): void {
   if (rowOwnerId !== callerId) throw new AppError(404, notFoundMessage);
 }

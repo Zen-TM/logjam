@@ -21,11 +21,11 @@
 //
 // PRIVACY: labels are user-authored text. Nothing here logs one.
 import { Router, Response } from "express";
-import { type CustomFieldEntity } from "@logjam/shared";
+import { say, type CustomFieldEntity } from "@logjam/shared";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { userPatchLimiter } from "../middleware/rateLimit";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { getParam } from "../lib/getParam";
 import { parseTripTypes } from "./tripLogsGlobal";
@@ -76,13 +76,13 @@ function parseScoping(body: {
       !Array.isArray(body.placeTypeIds) ||
       body.placeTypeIds.some((id) => typeof id !== "string")
     ) {
-      throw new AppError(400, "placeTypeIds must be an array of ids");
+      throw malformed("placeTypeIds must be an array of ids");
     }
     out.placeTypeIds = body.placeTypeIds as string[];
   }
   if (body.appliesToAllTypes !== undefined) {
     if (typeof body.appliesToAllTypes !== "boolean") {
-      throw new AppError(400, "appliesToAllTypes must be a boolean");
+      throw malformed("appliesToAllTypes must be a boolean");
     }
     out.appliesToAllTypes = body.appliesToAllTypes;
   }
@@ -92,7 +92,7 @@ function parseScoping(body: {
 /** `:entity` is the URL segment ("trip-log" | "place"), not the union value. */
 function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
   const entity = ENTITY_BY_SEGMENT[getParam(req.params.entity)];
-  if (!entity) throw new AppError(404, "Unknown custom field entity");
+  if (!entity) throw malformed("Unknown custom field entity", 404);
   return entity;
 }
 
@@ -150,7 +150,7 @@ router.patch(
     const key = getParam(req.params.key);
 
     const id = await findDefIdByKey(user.id, entity, key);
-    if (!id) throw new AppError(404, "Custom field not found");
+    if (!id) throw new AppError(404, say`Couldn't find that attribute.`);
 
     const body = req.body as {
       placeTypeIds?: unknown;
@@ -167,7 +167,7 @@ router.patch(
       ["type", body.type],
     ] as const) {
       if (value !== undefined && typeof value !== "string") {
-        throw new AppError(400, `Invalid ${field}`);
+        throw malformed(`Invalid ${field}`);
       }
     }
     for (const [field, value] of [
@@ -176,7 +176,7 @@ router.patch(
       ["position", body.position],
     ] as const) {
       if (value !== undefined && value !== null && typeof value !== "number") {
-        throw new AppError(400, `Invalid ${field}`);
+        throw malformed(`Invalid ${field}`);
       }
     }
 
@@ -207,7 +207,7 @@ router.get(
 
     const defs = await loadDefs(user.id, entity);
     if (!defs.some((def) => def.key === key)) {
-      throw new AppError(404, "Custom field not found");
+      throw new AppError(404, say`Couldn't find that attribute.`);
     }
 
     res.json({
@@ -238,7 +238,7 @@ router.delete(
     // A user-driven delete of a field that is not there is a 404. (The sync
     // push path calls the store directly, where the same miss is idempotent —
     // a replayed op must not fail.)
-    if (!result) throw new AppError(404, "Custom field not found");
+    if (!result) throw new AppError(404, say`Couldn't find that attribute.`);
 
     const config = entityConfig(entity);
     res.json({

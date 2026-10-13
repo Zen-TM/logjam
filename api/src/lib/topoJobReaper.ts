@@ -19,6 +19,7 @@ import {
   validateAutoExportSettings,
   validateExportRequest,
   type TopoLayerKey,
+  say,
 } from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
@@ -64,12 +65,9 @@ import { deleteSharesFor } from "./shareAccess";
 
 // Retry means submitting a new job/export — the reaper never re-launches
 // anything (see the attempt_count comment in schema.prisma, ARCH-008).
-const REAPER_JOB_MESSAGE =
-  "This job was stopped because it took too long. Submit a new job to try again.";
-const REAPER_EXPORT_MESSAGE =
-  "This export was stopped because it took too long. Submit a new export to try again.";
-const REAPER_GEO_PDF_MESSAGE =
-  "This job was stopped because it took too long. Submit a new job to try again.";
+const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
+const REAPER_EXPORT_MESSAGE = say`This export was stopped because it took too long. Start it again to try again.`;
+const REAPER_GEO_PDF_MESSAGE = say`This GeoPDF was stopped because it took too long. Make it again to try again.`;
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate

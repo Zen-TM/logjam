@@ -286,10 +286,10 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     exportUpdateMany.mockResolvedValue({ count: 1 });
     await reapStuckTopoJobs(NOW);
     expect(jobUpdateMany.mock.calls[0][0].data.errorMessage).toBe(
-      "This job was stopped because it took too long. Submit a new job to try again.",
+      "This LiDAR map was stopped because it took too long. Make it again to try again.",
     );
     expect(exportUpdateMany.mock.calls[0][0].data.errorMessage).toBe(
-      "This export was stopped because it took too long. Submit a new export to try again.",
+      "This export was stopped because it took too long. Start it again to try again.",
     );
   });
 

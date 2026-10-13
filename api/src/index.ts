@@ -1,3 +1,4 @@
+import { say } from "@logjam/shared";
 import dotenv from "dotenv";
 import path from "path";
 // Local dev (run from api/ via `npm run dev`) loads the Terraform-generated root
@@ -182,7 +183,7 @@ if (env.ORIGIN_VERIFY_SECRET) {
       timingSafeEqual(provided, originVerifySecret);
     if (matches) return next();
     if (env.ORIGIN_VERIFY_ENFORCE) {
-      throw new AppError(403, "Forbidden");
+      throw new AppError(403, say`You don't have permission to do that.`);
     }
     logger.warn(
       { path: req.path, hasHeader: Boolean(header) },

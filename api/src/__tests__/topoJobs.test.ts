@@ -142,7 +142,9 @@ describe("topo-jobs route (fake auth)", () => {
         .post(`/topo-jobs/${jobId}/start`)
         .set(as(BOB_SUB));
       expect(startRes.status).toBe(403);
-      expect(startRes.body.error).toBe("Only the owner can start this job");
+      expect(startRes.body.error).toBe(
+        "Only the owner can start this LiDAR map.",
+      );
     } finally {
       await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
     }

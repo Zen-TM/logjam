@@ -1,3 +1,4 @@
+import { say, type UserSentence } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 
@@ -39,7 +40,7 @@ export async function requirePlaceAccess(
   place: { id: string; ownerId: string },
 ): Promise<Exclude<PlaceRole, "none">> {
   const role = await getPlaceRole(userId, place);
-  if (role === "none") throw new AppError(404, "Place not found");
+  if (role === "none") throw new AppError(404, say`Couldn't find that place.`);
   return role;
 }
 
@@ -55,10 +56,10 @@ export async function requirePlaceAccess(
 export async function requirePlaceOwnerAccess(
   userId: string,
   place: { id: string; ownerId: string },
-  forbiddenMessage: string,
+  forbiddenMessage: UserSentence,
 ): Promise<void> {
   const role = await getPlaceRole(userId, place);
-  if (role === "none") throw new AppError(404, "Place not found");
+  if (role === "none") throw new AppError(404, say`Couldn't find that place.`);
   if (role !== "owner") throw new AppError(403, forbiddenMessage);
 }
 
@@ -76,7 +77,7 @@ export async function requirePlaceOwnerAccess(
 export function requirePlaceOwner(
   userId: string,
   place: { ownerId: string },
-  denial: AppError = new AppError(404, "Place not found"),
+  denial: AppError = new AppError(404, say`Couldn't find that place.`),
 ): void {
   if (place.ownerId !== userId) throw denial;
 }

@@ -14,6 +14,7 @@
 // rule that makes /shares answer 404 rather than 403 (SEC-001). The caller
 // supplied the list, so it can label its own rows from the totals.
 import {
+  say,
   isBulkShareItemType,
   MAX_BULK_SHARE_ITEMS,
   type BulkShareItem,
@@ -21,7 +22,7 @@ import {
   type BulkShareResult,
 } from "@logjam/shared";
 
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 
 /** The key an existing (item, recipient) share pair is looked up by. */
 export function sharePairKey(
@@ -66,26 +67,26 @@ export type BulkSharePlan = {
  */
 export function parseBulkShareItems(value: unknown): BulkShareItem[] {
   if (!Array.isArray(value)) {
-    throw new AppError(400, "items must be an array");
+    throw malformed("items must be an array");
   }
   if (value.length > MAX_BULK_SHARE_ITEMS) {
     throw new AppError(
       413,
-      `At most ${MAX_BULK_SHARE_ITEMS} items can be shared at once`,
+      say`You can share up to ${MAX_BULK_SHARE_ITEMS} things at once.`,
     );
   }
   const seen = new Set<string>();
   const items: BulkShareItem[] = [];
   for (const raw of value) {
     if (!raw || typeof raw !== "object") {
-      throw new AppError(400, "items must be objects");
+      throw malformed("items must be objects");
     }
     const { entityType, entityId } = raw as Record<string, unknown>;
     if (!isBulkShareItemType(entityType)) {
-      throw new AppError(400, "Unknown item entityType");
+      throw malformed("Unknown item entityType");
     }
     if (typeof entityId !== "string" || entityId.length === 0) {
-      throw new AppError(400, "items must carry an entityId");
+      throw malformed("items must carry an entityId");
     }
     // A list the user built by tapping rows cannot contain the same row twice,
     // so a duplicate is a client bug — dropped rather than rejected, because

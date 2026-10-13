@@ -91,7 +91,7 @@ describe("assertGlobalCapacity", () => {
     } catch (err) {
       const appError = err as AppError;
       expect(appError.statusCode).toBe(429);
-      expect(appError.message).toMatch(/capacity/i);
+      expect(appError.message).toMatch(/try again/i);
     }
   });
 

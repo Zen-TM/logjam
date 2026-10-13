@@ -35,9 +35,13 @@
 // the next delta on its own `updatedAt`.
 
 import { Prisma } from "@prisma/client";
-import { canonicalLinkPair, normalizeLinkedPlaceIds } from "@logjam/shared";
+import {
+  say,
+  canonicalLinkPair,
+  normalizeLinkedPlaceIds,
+} from "@logjam/shared";
 
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
 import { placeLinkDeleteTombstones, writeTombstones } from "./syncTombstones";
 
@@ -54,14 +58,15 @@ export async function resolveLinkedPlaceIds(
   value: unknown,
 ): Promise<string[] | undefined> {
   const parsed = normalizeLinkedPlaceIds(value);
-  if ("error" in parsed) throw new AppError(400, parsed.error);
+  if ("error" in parsed) throw malformed(parsed.error);
   if (parsed.placeIds === undefined) return undefined;
   const placeIds = parsed.placeIds.filter((id) => id !== selfPlaceId);
   if (placeIds.length === 0) return [];
   const owned = await prisma.place.count({
     where: { id: { in: placeIds }, ownerId },
   });
-  if (owned !== placeIds.length) throw new AppError(404, "Place not found");
+  if (owned !== placeIds.length)
+    throw new AppError(404, say`Couldn't find that place.`);
   return placeIds;
 }
 

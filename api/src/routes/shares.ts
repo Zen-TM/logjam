@@ -14,10 +14,10 @@ import { Router, Response } from "express";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
-import { normalizeUserUiPreferences } from "@logjam/shared";
+import { say, normalizeUserUiPreferences } from "@logjam/shared";
 import { sendPushToUser } from "../services/push";
 import {
   loadEntityRole,
@@ -42,10 +42,10 @@ router.post(
 
     const entityType = parseSharableEntityType(body.entityType);
     const entityId = typeof body.entityId === "string" ? body.entityId : "";
-    if (!entityId) throw new AppError(400, "entityId is required");
+    if (!entityId) throw malformed("entityId is required");
     const { sharedWithUserId } = body;
     if (!sharedWithUserId || typeof sharedWithUserId !== "string") {
-      throw new AppError(400, "sharedWithUserId is required");
+      throw malformed("sharedWithUserId is required");
     }
 
     // Owner-only, decided by shareAccess. A stranger gets the same 404 a
@@ -54,11 +54,11 @@ router.post(
       user.id,
       entityType,
       entityId,
-      "Only the owner can share this item",
+      say`Only the owner can share this.`,
     );
 
     if (sharedWithUserId === user.id) {
-      throw new AppError(400, "You already own this item");
+      throw new AppError(400, say`This is already yours.`);
     }
 
     // Friends only — same rule place sharing enforces, and checked BEFORE the
@@ -74,7 +74,7 @@ router.post(
       },
     });
     if (!friendship) {
-      throw new AppError(403, "You can only share items with friends");
+      throw new AppError(403, say`You can only share with friends.`);
     }
 
     // Unreachable given the friendship above; kept so a missing row fails loud
@@ -82,7 +82,7 @@ router.post(
     const targetUser = await prisma.user.findUnique({
       where: { id: sharedWithUserId },
     });
-    if (!targetUser) throw new AppError(404, "Target user not found");
+    if (!targetUser) throw new AppError(404, say`Couldn't find that person.`);
 
     const existing = await prisma.share.findUnique({
       where: {
@@ -93,7 +93,8 @@ router.post(
         },
       },
     });
-    if (existing) throw new AppError(409, "Already shared with this user");
+    if (existing)
+      throw new AppError(409, say`You've already shared this with them.`);
 
     const notifyRecipient = normalizeUserUiPreferences(targetUser.uiPreferences)
       .notifications.shareInApp;
@@ -158,7 +159,7 @@ router.delete(
     const isOwner = loaded?.role === "owner";
     const isRecipient = targetUserId === user.id;
     if (!loaded || (!isOwner && !isRecipient)) {
-      throw new AppError(404, "Item not found");
+      throw new AppError(404, say`Couldn't find that.`);
     }
 
     const share = await prisma.share.findUnique({
@@ -170,7 +171,8 @@ router.delete(
         },
       },
     });
-    if (!share) throw new AppError(404, "Share not found");
+    if (!share)
+      throw new AppError(404, say`This isn't shared with them any more.`);
 
     // Everything the revoke has to do — the row, the recipient's residual
     // notification, the delta bump and the conditional tombstone — is
@@ -199,7 +201,7 @@ router.get(
       user.id,
       entityType,
       entityId,
-      "Only the owner can view shares",
+      say`Only the owner can see who this is shared with.`,
     );
 
     const shares = await prisma.share.findMany({

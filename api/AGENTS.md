@@ -12,9 +12,16 @@
   not 403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
 - **A response about another user carries their username, never their email**
   (`src/__tests__/friends.test.ts`).
-- **Errors are `AppError(status, message)`** from `middleware/errorHandler`,
+- **Errors are ``AppError(status, say`…`)``** from `middleware/errorHandler`,
   never `res.status(500)` or a bare `Error`: an upstream that refused is 502, a
   dependency we own that is missing is 503.
+- **Any text a client may show is user copy, written here once with
+  `` say`…` ``:** what is wrong and what to do, with no field key, id or
+  client's name, and worded the same for a thing that is hidden as for one
+  that is missing. A request only a broken client can send is
+  `malformed(detail)`; the detail is logged, so it holds no name, coordinate,
+  tag, field value or label. Guard: `src/userCopy.unit.test.ts`.
+  [0033](../docs/decisions/0033-the-api-writes-the-sentence-a-user-reads.md)
 - **An array in a request body is capped at both ends:** empty is 400, over
   its limit 413; the body-size cap is no substitute (`src/__tests__/placesBulk.test.ts`).
 

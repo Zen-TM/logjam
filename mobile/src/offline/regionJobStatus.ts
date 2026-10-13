@@ -46,6 +46,18 @@ export function isRetryableFailure(code: RegionFailureCode): boolean {
   return code !== "region-rejected" && code !== "source-unavailable";
 }
 
+/**
+ * Why the server refused this area: its own sentence, as it is (shared/DESIGN.md
+ * §11). A job that failed before the phone kept that sentence holds one of two
+ * codes instead, and a response with no sentence holds nothing.
+ */
+export function regionRejectedLine(detail: string | undefined): string {
+  if (detail === "too-large")
+    return "Pick a smaller area — up to 40 km across.";
+  if (detail === "outside-nsw" || !detail) return "Pick an area inside NSW.";
+  return detail;
+}
+
 /** Nothing more will happen unless the user asks — the "may I leave?" gate. */
 export function isJobSettled(job: RegionJob): boolean {
   return isJobFinished(job) || isJobStalled(job);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { parkedError } from "../sync/parkedError";
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
 import {
   bulkDiscardBody,
@@ -203,136 +204,52 @@ describe("opAdvice", () => {
   });
 });
 
-describe("opAdvice words a rejection in our own sentence", () => {
-  // Mutation: render the server's text again (put `message` back on
-  // `ParkedOp.error` and return it from `rejectionLine`).
+describe("opAdvice shows a rejection in the server's sentence", () => {
+  // The API writes every refusal for the user (shared/DESIGN.md §11), so the
+  // phone shows it and guesses nothing. Mutation: return CANT_SAVE whatever
+  // `error.sentence` holds, or pick a line from the op's fields again.
   const line = (overrides: Partial<ParkedOp>) =>
     opAdvice(parked(overrides)).line;
 
-  it.each<[string, Partial<ParkedOp>, string]>([
-    [
-      "a place created without a name",
-      {
-        entity: "place",
-        op: "create",
-        fields: { latitude: -33.7, longitude: 150.3 },
-        error: { code: 400 },
-      },
-      "This place needs a name before it can sync.",
-    ],
-    [
-      "a place edit holding a value out of range",
-      {
-        entity: "place",
-        op: "update",
-        fields: { fieldValues: { v_grade: 9 } },
-        error: { code: 400 },
-      },
-      "A value on this place is outside the range it accepts.",
-    ],
-    [
-      "a trip created without a date",
-      {
+  it("says what the server said, whatever the op looks like", () => {
+    // A trip refused for listing one place twice used to read "names a place
+    // that no longer exists": a guess from the fields, and wrong.
+    expect(
+      line({
         entity: "tripLog",
         op: "create",
-        fields: { displayName: "x" },
-        error: { code: 400 },
-      },
-      "This trip needs a date before it can sync.",
-    ],
-    [
-      "a trip with a date that is not one",
-      {
-        entity: "tripLog",
-        op: "update",
-        fields: { date: "not a date" },
-        error: { code: 400 },
-      },
-      "The date on this trip isn't a real date.",
-    ],
-    [
-      "a trip naming places",
-      {
-        entity: "tripLog",
-        op: "create",
-        fields: { date: "2026-07-01", placeIds: ["a"] },
-        error: { code: 400 },
-      },
-      "This trip names a place that no longer exists.",
-    ],
-    [
-      "a link to a place that is gone",
-      { entity: "placeLink", op: "create", error: { code: 404 } },
-      "One of the places in this link no longer exists.",
-    ],
-    [
-      "a place type with no name",
-      {
-        entity: "placeType",
-        op: "create",
-        fields: { name: "  " },
-        error: { code: 400 },
-      },
-      "This place type needs a name before it can sync.",
-    ],
-    [
-      "a place type name already taken",
-      {
-        entity: "placeType",
-        op: "update",
-        fields: { name: "Cave" },
-        error: { code: 409 },
-      },
-      "You already have a place type with that name.",
-    ],
-    [
-      "deleting a place type that still has places",
-      { entity: "placeType", op: "delete", error: { code: 409 } },
-      "This place type still has places in it. Move them to another type first.",
-    ],
-    [
-      "deleting a built-in place type",
-      { entity: "placeType", op: "delete", error: { code: 403 } },
-      "Built-in place types can't be deleted.",
-    ],
-    [
-      "an attribute with no name",
-      {
-        entity: "customFieldDef",
-        op: "create",
-        fields: { key: "k", type: "number" },
-        error: { code: 400 },
-      },
-      "This attribute needs a name before it can sync.",
-    ],
-    [
-      "an attribute whose smallest is above its largest",
-      {
-        entity: "customFieldDef",
-        op: "update",
-        fields: { min: 10, max: 2 },
-        error: { code: 400 },
-      },
-      "The smallest value can't be above the largest.",
-    ],
-    [
-      "an attribute that already exists",
-      { entity: "customFieldDef", op: "create", error: { code: 409 } },
-      "You already have an attribute with that name.",
-    ],
-  ])("%s", (_name, overrides, expected) => {
-    expect(line(overrides)).toBe(expected);
+        fields: { date: "2026-07-01", placeIds: ["a", "a"] },
+        error: {
+          code: 400,
+          sentence:
+            "This trip lists the same place twice. Remove one and save again.",
+        },
+      }),
+    ).toBe("This trip lists the same place twice. Remove one and save again.");
   });
 
-  it("falls back for a refusal it has no sentence for", () => {
+  it("offers no retry for it: the same request is refused the same way", () => {
+    expect(
+      opAdvice(
+        parked({ error: { code: 409, sentence: "That name is taken." } }),
+      ).canRetry,
+    ).toBe(false);
+  });
+
+  it("falls back to its own line when the server sent no sentence", () => {
     expect(line({ entity: "route", op: "update", error: { code: 400 } })).toBe(
       "This change can't be saved as it is.",
     );
   });
 
-  it("never prints the server's text, nor the thing's name", () => {
-    // The loader drops the message; a payload that still carries one (an old
-    // row, a hand-built op) must not reach the line either.
+  it("never shows a message parked before the server wrote for the user", () => {
+    // Such a row holds `{ code, message }`, the message in a developer's words
+    // and sometimes with a name in it. Neither the loader nor the line reads it.
+    const stored = JSON.stringify({
+      code: 400,
+      message: "Unknown field: Secret Gully",
+    });
+    expect(parkedError(stored)).toEqual({ code: 400 });
     const op = parked({
       entity: "place",
       op: "create",
@@ -340,8 +257,15 @@ describe("opAdvice words a rejection in our own sentence", () => {
       fields: { name: "Secret Gully", latitude: -33.7, longitude: 150.3 },
       error: { code: 400, message: "Unknown field: Secret Gully" } as never,
     });
-    const advice = opAdvice(op).line;
-    expect(advice).not.toMatch(/Unknown field|Secret Gully/);
+    expect(opAdvice(op).line).toBe("This change can't be saved as it is.");
+  });
+
+  it("loads the sentence a refusal was parked with", () => {
+    expect(
+      parkedError(
+        JSON.stringify({ code: 400, sentence: "A trip needs a date." }),
+      ),
+    ).toEqual({ code: 400, sentence: "A trip needs a date." });
   });
 });
 

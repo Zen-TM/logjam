@@ -62,7 +62,67 @@ export function copyViolations(text: string): string[] {
 export function copySay(id: string): string {
   return id === "title-case"
     ? TITLE_CASE_SAY
-    : (COPY_RULES.find((rule) => rule.id === id)?.say ?? "");
+    : id === "not-a-sentence"
+      ? "A sentence starts with a capital and ends with a full stop."
+      : ([...COPY_RULES, ...API_SENTENCE_RULES].find((rule) => rule.id === id)
+          ?.say ?? "");
+}
+
+/**
+ * What a sentence the API sends must also keep (§11): it is read by a person,
+ * on either client, so it carries no word of ours. Checked on the literal parts
+ * of every say`…` by `api/src/userCopy.unit.test.ts`.
+ */
+export const API_SENTENCE_RULES: readonly CopyRule[] = [
+  {
+    id: "names-a-client",
+    pattern: /\bLogjam (?:Web|GPS)\b/,
+    say: "The API cannot know which client is asking: name neither.",
+  },
+  {
+    id: "field-key",
+    pattern: /\b[a-z]+(?:[A-Z]|_[a-z])\w*|[[\]{}<>]/,
+    say: "No field key, op path or code: say it in the user's words.",
+  },
+  {
+    id: "developer-wording",
+    pattern:
+      /\b(?:must be|is required|are required|invalid|uuid\w*|ids?|payload|header|array|string|boolean|integer|null|undefined|param(?:eter)?s?|endpoint|request body)\b/i,
+    say: 'Say what is wrong and what to do ("A trip needs a date."), not what the request failed.',
+  },
+];
+
+/**
+ * The rule ids a sentence the API sends breaks. `text` is the whole sentence,
+ * with each hole of its template written as "…".
+ */
+export function apiSentenceViolations(text: string): string[] {
+  const hits = [
+    ...copyViolations(text),
+    ...API_SENTENCE_RULES.filter((rule) => rule.pattern.test(text)).map(
+      (rule) => rule.id,
+    ),
+  ];
+  if (!/^[A-Z“…]/.test(text) || !/[.?!]$/.test(text))
+    hits.push("not-a-sentence");
+  return hits;
+}
+
+/**
+ * A client reading INTO the API's sentence (§11): searching it, comparing it,
+ * cutting it up. It is shown as it is; a client that needs to tell two
+ * refusals apart asks for a status or a field, never for words.
+ */
+const READS_SERVER_SENTENCE =
+  /\bserverMessage\s*(?:\?\.|\.)\s*(?:includes|match|startsWith|endsWith|indexOf|search|split|replace|slice|toLowerCase)\b|\bserverMessage\s*[!=]==?\s*["'`]/;
+
+/** The lines of a client source file that parse the API's sentence. */
+export function serverSentenceParses(source: string): number[] {
+  return source
+    .split("\n")
+    .flatMap((line, index) =>
+      READS_SERVER_SENTENCE.test(line) ? [index + 1] : [],
+    );
 }
 
 /** JSX attributes and object properties whose string is words a user reads. */

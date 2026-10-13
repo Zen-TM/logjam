@@ -252,8 +252,11 @@ renumber.
   filtered-empty list offers Clear filters.
 - **An error has one place**: under its field; above the submit of a form
   still open; a toast once the form has closed or the failure was in the
-  background. The words are ours ("Couldn't save this trip."), never an
-  error's message, which can carry a place name.
+  background.
+- **A failed request's words come through `messageFromError`**: the API's
+  sentence as it is, never reworded, searched or chosen by status. Ours
+  ("Couldn't save this trip.") are for when it sent none. A thrown `Error`'s
+  message is never shown: it can carry a place name.
 - **A requirement shows on submit; a limit shows live.** An error clears when
   its field is edited.
 - **A toast reports an outcome and goes on its own**; errors stay longer.

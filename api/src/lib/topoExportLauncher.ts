@@ -1,3 +1,4 @@
+import { say } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "./env";
@@ -80,7 +81,7 @@ export async function createAndLaunchTopoExport(
     if (queued >= MAX_QUEUED_PER_USER) {
       throw new AppError(
         429,
-        `Too many concurrent exports (limit ${MAX_QUEUED_PER_USER})`,
+        say`You can run ${MAX_QUEUED_PER_USER} exports at a time. Wait for one to finish.`,
       );
     }
     return tx.topoExportJob.create({
@@ -119,10 +120,10 @@ export async function createAndLaunchTopoExport(
         where: { id: exportJob.id },
         data: {
           status: "failed",
-          errorMessage: "Failed to launch export task.",
+          errorMessage: say`Couldn't start this export. Try again.`,
         },
       });
-      throw new AppError(500, "Failed to launch export job");
+      throw new AppError(500, say`Couldn't start that export. Try again.`);
     }
   }
 

@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { deletePlacesCascade, deleteTripsCascade } from "../lib/bulkDelete";
 
@@ -19,7 +19,7 @@ router.delete(
     const { batchId } = req.params;
 
     if (!batchId || typeof batchId !== "string") {
-      throw new AppError(400, "batchId is required");
+      throw malformed("batchId is required");
     }
 
     // Find all trips created by this batch for this user.

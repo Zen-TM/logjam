@@ -20,9 +20,11 @@ import {
   placeTypeNameTakenError,
   type CustomFieldEntity,
   type TripLogCustomFieldDef,
+  say,
+  type UserSentence,
 } from "@logjam/shared";
 
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
 
 /** Types this user may put a place into: their own plus the system ones. */
@@ -47,13 +49,17 @@ export async function resolvePlaceTypeId(
   requested: unknown,
 ): Promise<string> {
   if (typeof requested !== "string" || requested.length === 0) {
-    throw new AppError(400, "placeTypeId is required");
+    throw malformed("placeTypeId is required");
   }
   const type = await prisma.placeType.findFirst({
     where: { id: requested, ...visiblePlaceTypeWhere(userId) },
     select: { id: true },
   });
-  if (!type) throw new AppError(400, "Unknown place type");
+  if (!type)
+    throw new AppError(
+      400,
+      say`That place type no longer exists. Choose another.`,
+    );
   return type.id;
 }
 
@@ -118,6 +124,13 @@ export type PlaceTypeInput = {
 };
 
 /** Validate a client-supplied type, or throw a 400 naming what is wrong. */
+/** Why a type that still holds places is not deleted. */
+export function placeTypeInUse(placeCount: number): UserSentence {
+  return placeCount === 1
+    ? say`That type still has 1 place in it. Move it to another type first.`
+    : say`That type still has ${placeCount} places in it. Move them to another type first.`;
+}
+
 export function assertValidPlaceType(input: {
   name?: unknown;
   iconKey?: unknown;
@@ -125,11 +138,11 @@ export function assertValidPlaceType(input: {
   position?: unknown;
 }): PlaceTypeInput {
   const name = typeof input.name === "string" ? input.name.trim() : "";
-  if (!name) throw new AppError(400, "A place type needs a name.");
+  if (!name) throw new AppError(400, say`A place type needs a name.`);
   if (name.length > PLACE_TYPE_NAME_MAX_LENGTH) {
     throw new AppError(
       400,
-      `A place type name must be ${PLACE_TYPE_NAME_MAX_LENGTH} characters or fewer.`,
+      say`A place type's name can be up to ${PLACE_TYPE_NAME_MAX_LENGTH} characters.`,
     );
   }
   // Icon and colour come from CURATED lists, not free text. The icon because a
@@ -137,13 +150,13 @@ export function assertValidPlaceType(input: {
   // because a type's colour is a map marker colour, and the WCAG 3:1 guarantee
   // in scripts/wcag-contrast.mjs can only be asserted over a closed set.
   if (!isPlaceTypeIconKey(input.iconKey)) {
-    throw new AppError(400, "Unknown icon");
+    throw malformed("Unknown icon");
   }
   if (!isPlaceTypeColor(input.color)) {
-    throw new AppError(400, "Unknown colour");
+    throw malformed("Unknown colour");
   }
   if (input.position !== undefined && typeof input.position !== "number") {
-    throw new AppError(400, "Invalid position");
+    throw malformed("Invalid position");
   }
   return {
     name,
@@ -168,7 +181,7 @@ export async function requireOwnPlaceType(userId: string, id: string) {
   const type = await prisma.placeType.findFirst({
     where: { id, ownerId: userId },
   });
-  if (!type) throw new AppError(404, "Place type not found");
+  if (!type) throw new AppError(404, say`Couldn't find that place type.`);
   return type;
 }
 

@@ -21,6 +21,7 @@
 // fails if the two ever disagree.
 
 import { isUuidV4 } from "./sync.js";
+import { quote, say, type UserSentence } from "./userSentence.js";
 import type { TripLogCustomFieldType } from "./tripLogFields.js";
 
 // PREFIX "b" for system TYPES, "a" for system DEFINITIONS — and neither is a
@@ -84,8 +85,8 @@ export function placeTypeNameTaken(
 }
 
 /** The one sentence for a refused name, on both clients and from the API. */
-export function placeTypeNameTakenError(name: string): string {
-  return `You already have a place type called "${name.trim()}".`;
+export function placeTypeNameTakenError(name: string): UserSentence {
+  return say`You already have a place type called ${quote(name)}.`;
 }
 
 /**
@@ -504,8 +505,11 @@ export function isReservedFieldKey(key: string): boolean {
  * leaves the user renaming by trial and error, so the suggestion is part of the
  * error rather than something each caller invents.
  */
-export function reservedFieldKeyError(key: string, label: string): string {
-  return `"${label}" is reserved — it is a built-in field. Try a more specific label, like "${label} (mine)".`;
+export function reservedFieldKeyError(
+  key: string,
+  label: string,
+): UserSentence {
+  return say`${quote(label)} is the name of a built-in attribute. Try a more specific name, like ${quote(`${label} (mine)`)}.`;
 }
 
 /**

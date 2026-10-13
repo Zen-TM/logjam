@@ -1,10 +1,10 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser as getUser } from "../lib/resolveUser";
-import { validateGeoPdfTemplateConfig } from "@logjam/shared";
+import { say, validateGeoPdfTemplateConfig } from "@logjam/shared";
 
 const router = Router();
 
@@ -31,7 +31,7 @@ router.get(
     const id = getParam(req.params.id);
     const template = await prisma.geoPdfTemplate.findUnique({ where: { id } });
     if (!template || template.userId !== user.id) {
-      throw new AppError(404, "Template not found");
+      throw new AppError(404, say`Couldn't find that template.`);
     }
     res.json(template);
   },
@@ -46,14 +46,14 @@ router.post(
     const { name, config } = req.body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
-      throw new AppError(400, "name is required");
+      throw new AppError(400, say`A template needs a name.`);
     }
     if (!config || typeof config !== "object") {
-      throw new AppError(400, "config is required and must be an object");
+      throw malformed("config is required and must be an object");
     }
     const configError = validateGeoPdfTemplateConfig(config);
     if (configError) {
-      throw new AppError(400, configError);
+      throw malformed(configError);
     }
 
     const template = await prisma.geoPdfTemplate.create({
@@ -76,24 +76,24 @@ router.patch(
     const id = getParam(req.params.id);
     const existing = await prisma.geoPdfTemplate.findUnique({ where: { id } });
     if (!existing || existing.userId !== user.id) {
-      throw new AppError(404, "Template not found");
+      throw new AppError(404, say`Couldn't find that template.`);
     }
 
     const { name, config } = req.body;
     const data: { name?: string; config?: object } = {};
     if (name !== undefined) {
       if (typeof name !== "string" || name.trim().length === 0) {
-        throw new AppError(400, "name must be a non-empty string");
+        throw new AppError(400, say`A template needs a name.`);
       }
       data.name = name.trim();
     }
     if (config !== undefined) {
       if (typeof config !== "object") {
-        throw new AppError(400, "config must be an object");
+        throw malformed("config must be an object");
       }
       const configError = validateGeoPdfTemplateConfig(config);
       if (configError) {
-        throw new AppError(400, configError);
+        throw malformed(configError);
       }
       data.config = config;
     }
@@ -115,7 +115,7 @@ router.delete(
     const id = getParam(req.params.id);
     const existing = await prisma.geoPdfTemplate.findUnique({ where: { id } });
     if (!existing || existing.userId !== user.id) {
-      throw new AppError(404, "Template not found");
+      throw new AppError(404, say`Couldn't find that template.`);
     }
 
     await prisma.geoPdfTemplate.delete({ where: { id } });

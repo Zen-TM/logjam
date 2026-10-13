@@ -78,7 +78,7 @@ describe("fetchAndParseRopeWiki", () => {
     mockFetchCsv("", false, 503);
     await expect(fetchAndParseRopeWiki()).rejects.toMatchObject({
       statusCode: 502,
-      message: expect.stringMatching(/HTTP 503/),
+      devDetail: expect.stringMatching(/HTTP 503/),
     });
   });
 
