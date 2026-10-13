@@ -31,7 +31,8 @@ export function readMutedTopoAreas(): ReadonlySet<string> {
     const parsed: unknown = JSON.parse(stored);
     // A corrupted value means "nothing muted", not a crash on the map's first
     // render — the failure mode here is showing an overlay the user hid, which
-    // they can see and fix, rather than a screen that won't mount.
+    // they can see and fix, rather than a screen that won't mount. Guard:
+    // mobile/src/map/topoAreaMuting.test.ts.
     if (!Array.isArray(parsed)) return new Set();
     return new Set(parsed.filter((id): id is string => typeof id === "string"));
   } catch {

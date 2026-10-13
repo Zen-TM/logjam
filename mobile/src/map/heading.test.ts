@@ -76,11 +76,11 @@ function playHeading(
  * actually has. Tests that feed a tidy noiseless stream measure a signal the
  * phone never sends.
  *
- * BOTH NUMBERS ARE MEASURED, not guessed (Pixel 9, `HDGPROBE` log, 35 s at
- * rest, 2026-08-17): distinct readings arrive every 133 ms median, and a phone
- * lying still wanders 0.053° peak-to-peak. Note that the cadence is NOT
- * `HEADING_SENSOR_MS` — that is only how often we ask to be handed the latest
- * value, and modelling the stream at that rate flatters every filter in here.
+ * BOTH NUMBERS ARE MEASURED, not guessed (Pixel 9, 35 s at rest):
+ * distinct readings arrive every 133 ms median, and a phone lying still wanders
+ * 0.053° peak-to-peak. Note that the cadence is NOT `HEADING_SENSOR_MS` — that
+ * is only how often we ask to be handed the latest value, and modelling the
+ * stream at that rate flatters every filter in here.
  *
  * The noise is deliberately deterministic rather than random — a flaky
  * smoothness test is worse than none — but it is the right size and it moves
@@ -129,7 +129,7 @@ describe("noteHeadingSample", () => {
   });
 
   it("ignores the sensor's own wander on a still phone", () => {
-    // THE NOISE FIX. A phone lying on a rock still reports a bearing that
+    // A phone lying on a rock still reports a bearing that
     // creeps about by a fraction of a degree, thirty times a second. That must
     // not move the target at all — if it does, the ticker never stops and the
     // map rotates while nothing moves.
@@ -145,7 +145,7 @@ describe("noteHeadingSample", () => {
   });
 
   it("drags rather than gates, so a real turn has no staircase", () => {
-    // The old ≥3° gate removed the wobble and kept the jump. A drag follower
+    // A fixed ≥3° gate removes the wobble but keeps the jump. A drag follower
     // keeps the target exactly HEADING_HYSTERESIS_DEG behind the sample, so
     // continuous input produces continuous output.
     const filter = createHeadingFilter();
@@ -250,8 +250,8 @@ describe("the heading chase, end to end", () => {
   });
 
   it("does not sail past a turn that stops between samples", () => {
-    // The price of dead reckoning, and what HEADING_LEAD_DEG/MS bound. Without
-    // the lead cap this overshot by tens of degrees and swung back.
+    // The price of dead reckoning, and what HEADING_LEAD_DEG/MS bound: without
+    // the lead cap this overshoots by tens of degrees and swings back.
     const played = playHeading(
       spun((t) => Math.min(t, 800) * 0.11, 8_000),
       8_000,
@@ -268,8 +268,8 @@ describe("the heading chase, end to end", () => {
   });
 
   it("never turns the display faster than the slew ceiling", () => {
-    // A magnetometer spike is a 180° delta arriving in one sample, and it used
-    // to be passed straight through as a snap.
+    // A magnetometer spike is a 180° delta arriving in one sample; it must
+    // not be passed straight through as a snap.
     const played = playHeading(
       [
         { atMs: 0, deg: 0 },
@@ -287,12 +287,10 @@ describe("the heading chase, end to end", () => {
   });
 
   it("does not follow one bad sample", () => {
-    // The old accelerometer+magnetometer source reported a genuinely backwards
-    // azimuth at the start of a turn, because hand acceleration corrupted its
-    // idea of down; the rotation vector does not, but a magnetic anomaly can
-    // still produce an outlier. One sample of it must not reach the map: the
-    // hysteresis absorbs most of it and the slow position term bleeds in the
-    // rest over most of a second, by which time it has been contradicted.
+    // The rotation vector avoids accelerometer tilt errors, but a magnetic
+    // anomaly can still produce an outlier. One sample of it must not reach the
+    // map: the hysteresis absorbs most of it and the slow position term bleeds
+    // in the rest over most of a second, by which time it has been contradicted.
     const samples = spun(() => 0, 4_000);
     samples[10] = { atMs: samples[10]!.atMs, deg: -25 };
     const played = playHeading(samples, 4_000);
@@ -325,12 +323,10 @@ describe("overshoot off a fast flick", () => {
   }
 
   it("stays within a few degrees however hard the phone is turned", () => {
-    // THE BUG HEADING_LEAD_MAX_DEG EXISTS FOR. The lead cap is `base + rate ×
-    // HEADING_LEAD_MS`, which had no ceiling — so the bound on overshoot scaled
-    // with the rate it was bounding, and a hard wrist flick (~700-1000°/s) ran
-    // the map tens of degrees past the bearing the phone had stopped on and
-    // then crawled back over a second. It was signed off on a 110°/s turn,
-    // where the same formula gives 5°.
+    // The lead cap is `base + rate × HEADING_LEAD_MS`. Without a ceiling, the
+    // bound on overshoot scales with the rate it bounds, running the map tens
+    // of degrees past the bearing on a hard wrist flick (~700-1000°/s) before
+    // slowly recovering.
     for (const [rate, duration] of [
       [200, 600],
       [400, 450],
@@ -477,9 +473,9 @@ describe("declination west of the agonic line", () => {
 
 describe("the tape's magnetic mode", () => {
   it("subtracts exactly what the forward path added", () => {
-    // Two sources for one constant: the tape subtracted the NSW literal while
-    // resolveTrueHeading added the LEARNED value, so the labels drifted from
-    // the map by `learned - 12.5` once a fix supplied one.
+    // The tape must subtract the learned declination that resolveTrueHeading
+    // added, rather than the NSW fallback, to prevent labels drifting from the
+    // map.
     resetDeclination();
     learnDeclination({ magHeading: 100, trueHeading: 118 });
     const trueBearing = resolveTrueHeading({ trueHeading: -1, magHeading: 40 });
@@ -521,12 +517,11 @@ describe("the compass calibration verdict", () => {
   }
 
   it("warns where the system compass app does — at LOW", () => {
-    // Agreeing with the phone's own compass app is the requirement: after a
-    // reboot it said LOW and asked for a calibration while this said nothing.
-    // The reading IS contaminated (expo-location's `onAccuracyChanged` does not
-    // filter by sensor, and the same listener covers the accelerometer), which
-    // is why confirmation over consecutive probes carries the noise rejection
-    // rather than the threshold doing it.
+    // Agreeing with the phone's own compass app is the requirement when
+    // calibration is low. The reading IS contaminated (expo-location's
+    // `onAccuracyChanged` does not filter by sensor, and the same listener
+    // covers the accelerometer), which is why confirmation over consecutive
+    // probes carries the noise rejection rather than the threshold doing it.
     expect(fold([3, 3, 3]).warning).toBe(false);
     expect(fold([2, 2, 2]).warning).toBe(false);
     expect(fold([1, 1, 1]).warning).toBe(true);
@@ -714,9 +709,8 @@ describe("normalizeBearing", () => {
 
 describe("povStopDurationMs", () => {
   it("gives every continuous writer headroom over its own interval", () => {
-    // The bug this exists for: the zoom ramp shipped with
-    // `duration: <its own tick>`, so a tick landing late cancelled a
-    // transition that had not finished.
+    // If duration matches the tick interval exactly, a tick landing late
+    // cancels a transition that has not finished.
     expect(povStopDurationMs(100)).toBeGreaterThan(100);
     expect(povStopDurationMs(100)).toBe(100 * POV_ANIMATION_HEADROOM);
   });

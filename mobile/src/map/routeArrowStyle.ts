@@ -1,10 +1,10 @@
 // The direction arrows drawn along a route line, as a pure style builder.
 //
 // The arrowhead itself, the segment split and the sizes both clients must agree
-// on live in `@logjam/shared` (`routeArrow.ts`) — Logjam Web draws the same
-// arrows and used to draw them with a text glyph, which is the fault documented
-// there. What stays here is the MLRN-shaped style object, because MapLibre
-// Native and MapLibre GL JS spell their layer properties differently.
+// on live in `@logjam/shared` (`shared/src/routeArrow.ts`) — Logjam Web draws the
+// same arrows; text glyph arrows suffer alignment defects documented there.
+// What stays here is the MLRN-shaped style object, because MapLibre Native and
+// MapLibre GL JS spell their layer properties differently.
 //
 // Split out of `RouteDraftLayer` (which pulls in React Native and MLRN) so the
 // style can be asserted in a plain node test — the same split
@@ -31,9 +31,9 @@ export {
 
 /**
  * Which way the line runs, as arrows along it — MapLibre spaces and rotates
- * them itself, so they re-space as you zoom and cost no React views (the
- * markers this replaced were re-created on every drag frame, which is what made
- * dragging an anchor stutter).
+ * them itself, so they re-space as you zoom and cost no React views
+ * (recreating React view markers on every drag frame causes dragging an anchor
+ * to stutter).
  *
  * A STYLE, not a component of ours, and three things here are load-bearing:
  *
@@ -48,7 +48,8 @@ export {
  * - `iconAllowOverlap`/`iconIgnorePlacement` so an arrow never loses a
  *   placement contest with a street label, and `iconKeepUpright` off (the
  *   default, stated because it matters) because an arrow that flips itself to
- *   stay readable is then pointing the wrong way.
+ *   stay readable is then pointing the wrong way. Guard:
+ *   mobile/src/map/routeArrowStyle.test.ts.
  */
 export function routeArrowStyle(
   color: SymbolLayerStyle["iconColor"],

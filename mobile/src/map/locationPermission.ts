@@ -1,6 +1,6 @@
 // Foreground location permission flow, shared by locate-me and track
-// recording. Non-prompting check first: requestForegroundPermissionsAsync has
-// been observed to hang on-device even when the permission is already granted.
+// recording. Non-prompting check first: requestForegroundPermissionsAsync can
+// hang on-device even when the permission is already granted.
 import * as Location from "expo-location";
 
 import { alertPermissionDenied } from "../permissionAlert";

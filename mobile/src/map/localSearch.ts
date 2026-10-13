@@ -7,7 +7,8 @@
 // The rule is deliberately dumb — case-insensitive substring, prefix matches
 // first — because the corpus is one person's places and waypoints, not a
 // document index. Fuzzy matching over forty rows buys nothing and starts
-// answering "Claustral" with "Coal Mine".
+// answering "Claustral" with "Coal Mine". Guard:
+// mobile/src/map/localSearch.test.ts.
 //
 // PRIVACY: this runs entirely on the device against the local mirror. It is
 // what lets the search box answer a place name at all — sending one to
