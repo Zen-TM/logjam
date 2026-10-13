@@ -235,9 +235,8 @@ describe("parseVectorImport dispatcher", () => {
   });
 });
 
-// Every case here imported "successfully" before, with data missing or made
-// up — the failure mode the root CLAUDE.md no-silent-fallbacks rule exists to
-// prevent. A canyoner cannot tell a short track from a truncated one.
+// Fail loudly on malformed input rather than silently dropping or inventing
+// data: a canyoner cannot tell a short track from a truncated one.
 describe("malformed input fails loudly", () => {
   it("rejects a GPX truncated mid-download instead of importing a short track", () => {
     const truncated =
@@ -275,7 +274,7 @@ describe("malformed input fails loudly", () => {
   });
 
   it("reports structurally bad GeoJSON coordinates as an import error", () => {
-    // These escaped as a raw "position is not iterable" TypeError.
+    // Prevents a raw "position is not iterable" TypeError from escaping to the user.
     for (const geometry of [
       '{"type":"LineString","coordinates":[150.1,-33.1]}',
       '{"type":"Polygon","coordinates":[150.1,-33.1]}',

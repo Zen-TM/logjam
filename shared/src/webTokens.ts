@@ -1,7 +1,8 @@
 // Logjam Web's token stylesheet, generated from the shared declarations so the
 // browser has no second list of the same values. Pure: it returns the CSS, and
 // `frontend/scripts/generate-tokens.mjs` writes it to
-// `frontend/src/tokens.generated.css`, which a frontend test holds to this.
+// `frontend/src/tokens.generated.css`, which `frontend/src/tokens.generated.test.ts`
+// holds to this.
 import {
   ASSET_HUES,
   CONTROL,
