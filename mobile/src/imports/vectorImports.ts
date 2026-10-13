@@ -61,20 +61,19 @@ export function randomId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// A KMZ may not expand past what a bare .kml import is allowed to be. The
-// ceiling above is checked against the COMPRESSED file, so without this a 30 MB
-// zip of zeroes inflates to gigabytes — on the one input path an outside party
-// controls, and before any downstream guard (MAX_IMPORT_POSITIONS) gets to run.
+// A KMZ may not expand past what a bare .kml import is allowed to be (Guard:
+// vectorImports.test.ts). The ceiling above is checked against the COMPRESSED
+// file, so without this a 30 MB zip of zeroes inflates to gigabytes — on the
+// one input path an outside party controls, and before any downstream guard
+// (MAX_IMPORT_POSITIONS) gets to run.
 const MAX_KMZ_UNCOMPRESSED_BYTES = MAX_IMPORT_FILE_BYTES;
 
 /**
  * KMZ = zip with a KML inside (canonically doc.kml). Returns the KML text.
  *
- * Takes BYTES, not base64. It used to read the file as a base64 string and
- * decode it with `for (i…) bytes[i] = binary.charCodeAt(i)` — the per-byte JS
- * loop the GeoPDF work was written to eliminate. Hermes has no JIT, so that
- * costs ~70× what it profiles at on a laptop: a 20 MB KMZ froze the UI thread
- * for seconds with nothing on screen. `new File(uri).bytes()` is native.
+ * Takes BYTES, not base64. Reading as bytes avoids per-byte JS decoding loops
+ * on Hermes (without a JIT, decoding large strings in JS freezes the UI
+ * thread). `new File(uri).bytes()` is native.
  *
  * TWO PASSES, and the first one inflates nothing. A bare `unzipSync(bytes)`
  * eagerly inflates EVERY entry — icons, overlays, and a hostile 10000:1 entry
@@ -131,13 +130,11 @@ export async function importVectorSource(
   /** Friend this file arrived from, when it came in through "Send a copy". */
   sentBy: string | null = null,
 ): Promise<VectorImport> {
-  // THE SIZE CHECK LIVES HERE, not in the picker. `importVectorFileFromPicker`
-  // was the only caller that checked, and the share sheet ("Open in Logjam")
-  // calls this one directly — so a large or hostile `.geojson` went straight
-  // into `readAsStringAsync`, i.e. the whole file into one JS string, and OOM
-  // -killed the app before any guard fired. It is also the one input path an
-  // outside party controls. Staging additionally gives the KMZ reader a real
-  // file to take bytes from (share-sheet URIs are `content://`).
+  // THE SIZE CHECK LIVES HERE, not in the picker: both the picker and the share
+  // sheet ("Open in Logjam") route here. Checking size before reading into
+  // memory avoids unbounded string allocations on input paths an outside party
+  // controls (Guard: stagedFile.test.ts). Staging additionally gives the KMZ
+  // reader a real file to take bytes from (share-sheet URIs are `content://`).
   const staged = await stageIncomingFile({
     uri: sourceUri,
     maxBytes: MAX_IMPORT_FILE_BYTES,
@@ -189,12 +186,12 @@ async function parseAndStore(
     await FileSystem.writeAsStringAsync(fileUri, collection);
     // The picked file, kept verbatim beside its derivation. `text` rather than
     // a copy of `sourceUri` so a KMZ lands as the KML it contains: the staged
-    // original is a zip, `writeAsStringAsync` is UTF-8, and the app has never
+    // original is a zip, `writeAsStringAsync` is UTF-8, and Logjam GPS does not
     // read a KMZ's bundled assets anyway — so the text it parsed IS the most
     // faithful original it can honestly offer.
-    // ponytail: text-only. A KMZ's icons/overlays are dropped, as they always
-    // were; keeping the zip needs a binary-safe SAF write, do it when someone
-    // asks for those assets back.
+    // ponytail: text-only. A KMZ's icons/overlays are dropped; keeping the zip
+    // needs a binary-safe SAF write, do it when someone asks for those assets
+    // back.
     await FileSystem.writeAsStringAsync(sourceUriStored, text);
 
     // The ORIGINAL is what uploads, never the GeoJSON beside it: the
@@ -248,7 +245,7 @@ async function parseAndStore(
 
 /**
  * Extension → MIME, inverted from the shared table rather than restated: two
- * lists that must agree are one declaration (root CLAUDE.md). A format the
+ * lists that must agree are one declaration (root AGENTS.md). A format the
  * server does not accept cannot appear here, because it would have no entry.
  */
 const MIME_BY_FORMAT: Record<"gpx" | "kml" | "geojson", string> =
@@ -294,7 +291,7 @@ export async function importVectorFileFromPicker(): Promise<ImportOutcome> {
  * draws from.
  *
  * A file imported on another device arrives as a row long before its bytes do
- * (§7.3: rows sync eagerly, blobs are fetched on demand), so this is the step
+ * (rows sync eagerly, blobs are fetched on demand), so this is the step
  * between "it is in your list" and "it is on your map". Returns the GeoJSON
  * path, or null when the file could not be fetched — offline, most often,
  * which is not an error worth a dialog on a screen full of other files.

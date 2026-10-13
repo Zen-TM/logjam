@@ -5,7 +5,7 @@ import { type Glyph } from "../ui";
 export { primaryTripType, tripTypeLabel } from "@logjam/shared";
 
 /**
- * TRIP TYPE IDENTITY — glyph + hue per activity, resolved against this app's
+ * TRIP TYPE IDENTITY — glyph + hue per activity, resolved against Logjam GPS's
  * theme and icon set. The decision (seeded identities, the label hash, the
  * untyped glyph) is `tripTypeIdentity` in `@logjam/shared`, so Logjam Web draws
  * the same trip the same colour.

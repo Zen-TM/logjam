@@ -103,7 +103,7 @@ export function CompassStrip({
       </View>
       {/* The bearing itself: everything else on the strip moves, this doesn't. */}
       <View style={styles.centreLine} />
-      {/* Marked only when it is NOT the app's convention. Every other bearing
+      {/* Marked only when it is NOT Logjam GPS's convention. Every other bearing
           on this screen is true north, so a tape quietly reading 12° lower is
           the one state worth spending eight pixels of map to declare. */}
       {reference === "magnetic" ? (

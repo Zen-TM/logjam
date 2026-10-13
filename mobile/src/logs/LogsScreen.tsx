@@ -3,10 +3,10 @@
 // year. Built on the DESIGN.md skeleton (pinned hero + pinned filter rail +
 // scrolling list + one sheet), same as Saved.
 //
-// The four filter axes match the web Trip Logs panel and share its predicate
-// (`filterTrips` in shared/). Type is the rail — the axis you flick between —
-// while text and date range live in a "find" row that stays collapsed until
-// asked for, so the resting screen is a logbook and not a search console.
+// The four filter axes match Logjam Web's Trip Logs panel and share its
+// predicate (`filterTrips` in shared/). Type is the rail — the axis you flick
+// between — while text and date range live in a "find" row that stays collapsed
+// until asked for, so the resting screen is a logbook and not a search console.
 //
 // PRIVACY: rows carry place names, dates and user notes — data the mirror
 // already holds on this device. None of it is logged, and the failure paths
@@ -715,9 +715,9 @@ const TripRow = memo(function TripRow({
       right={
         <View style={styles.rowTrailing}>
           {/* What is IN this entry, each glyph labelled by its own count where
-              a count means something. A bare "+2" (it used to mean extra trip
-              types) reads as an unexplained number — the extra types are
-              already implied by the rail and shown in full on the trip. */}
+              a count means something. A bare "+2" reads as an unexplained
+              number — the extra types are already implied by the rail and shown
+              in full on the trip. */}
           {attachments > 0 ? (
             <View style={styles.badge}>
               <Icon idea="attachment" size={12} color={theme.textMuted} />

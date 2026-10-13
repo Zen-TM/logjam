@@ -6,8 +6,8 @@ import { huesFor } from "./theme";
 
 // The scheme is state: picking one in Settings → Display repaints the running
 // app. That only holds while nothing keeps a colour from before the change, so
-// theme.ts exports no colour as a module constant and the names it once used
-// for them may not be imported (`logjam/no-launch-theme` in eslint.config.js).
+// theme.ts exports no colour as a module constant and static colour names
+// may not be imported (`logjam/no-launch-theme` in eslint.config.js).
 //
 // Mutations that turn it red: drop a name from the rule's `importNames`; delete
 // the rule's block from eslint.config.js; make it "warn".

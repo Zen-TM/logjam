@@ -4,7 +4,7 @@
 // Reads live from the offline mirror so an optimistic edit shows immediately,
 // falling back to the navigation snapshot before the first mirror read
 // resolves. Editing reuses the Logs screen's TripEditSheet — one trip form in
-// the app, so the fields can't drift between "log" and "edit".
+// Logjam GPS, so the fields can't drift between "log" and "edit".
 //
 // PRIVACY: everything here (place names, notes, photos) is already on the
 // device in the mirror. Nothing is logged, and photos leave only through the

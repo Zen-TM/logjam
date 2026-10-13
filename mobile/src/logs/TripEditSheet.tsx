@@ -70,7 +70,7 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  *
  * PRIVACY: place names are the sensitive payload here. They stay in component
  * state and go out only through the outbox's authed push — nothing is logged,
- * and there is no autosaved draft (the web's localStorage draft has no mobile
+ * and there is no autosaved draft (Logjam Web's localStorage draft has no Logjam GPS
  * equivalent: the OS doesn't evict this form mid-edit the way a browser tab
  * gets reclaimed).
  */
@@ -179,8 +179,8 @@ export function TripEditSheet({
    * would unmount the field under the cursor.
    *
    * Kept-only fields sit in their own section with a remove button, because
-   * clearing is not a way out for every kind — a date had no empty state until
-   * "Clear date", and nothing said which fields were leftovers. Removing drops
+   * clearing is not a way out for every kind — a date has no empty state
+   * without "Clear date", and leftover fields need clear labeling. Removing drops
    * the key from `keptKeys`, so the field leaves the form and the save leaves it
    * out; closing without saving brings it back, which is why there is no
    * confirm.
@@ -211,7 +211,7 @@ export function TripEditSheet({
   //
   // Deliberately keyed on the sheet OPENING — the trip's ID, not the object.
   // A detail screen hands this a fresh object on every mirror change (a sync
-  // pull, an upload tick, an inbox refresh), and re-seeding on that wiped
+  // pull, an upload tick, an inbox refresh), and re-seeding on that would wipe
   // whatever the user was halfway through typing. `initialPlaces` is left out
   // for the same reason: callers build that array inline.
   const openKey = visible ? (trip?.id ?? "new") : null;
@@ -255,7 +255,8 @@ export function TripEditSheet({
   // SELECTED the moment a canyon is linked — and it is LOCKED (see
   // CANYONING_LOCKED) rather than toggleable, because the server re-adds it on
   // save anyway, so a chip the user could "deselect" would be a lie.
-  // enforceCanyoningTag only ever force-ADDS, so unlinking the canyon leaves an
+  // enforceCanyoningTag only ever force-ADDS (guard:
+  // shared/src/tripName.test.ts), so unlinking the canyon leaves an
   // existing `canyoning` alone (a canyon-less trip can still be canyoning) —
   // and with no canyon linked the chip is a normal toggle. A campsite or a
   // marker is not a canyon: linking one tags nothing.
@@ -367,7 +368,7 @@ export function TripEditSheet({
       if (trip && base) {
         // Field-scoped: push only what the user changed since the sheet opened,
         // so a concurrent edit to another field on another device isn't
-        // clobbered (§6 LWW).
+        // clobbered (field-scoped LWW).
         const changes: Parameters<typeof updateTripLocal>[1] = {};
         if (isoDate !== new Date(base.date).toISOString())
           changes.date = isoDate;
@@ -642,9 +643,10 @@ export function TripEditSheet({
             onAdd={addType}
             addPlaceholder="Other"
             disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
-            // The chips no longer move to show which type leads, so the one
-            // that picks the trip's glyph and hue is starred — only once there
-            // is a choice between two, when it stops being obvious.
+            // Chips stay in stable order rather than moving to show which type
+            // leads, so the one that picks the trip's glyph and hue is starred —
+            // only once there is a choice between two, when it stops being
+            // obvious.
             primaryValue={
               types.length > 1
                 ? (primaryTripType(types) ?? undefined)

@@ -1,9 +1,8 @@
 // "What's there?" — the panel a tap on the map opens.
 //
-// The map answers where things are; until now it could not answer anything
-// about a spot you were only pointing at. Long-press already meant "something
+// The map answers where things are. Long-press already means "something
 // goes HERE" (a marker, a canyon), which is a commitment; a tap is the
-// question that comes before it, and it deserves the four facts a canyoner
+// question that comes before it, and it answers the four facts a canyoner
 // actually wants off a map — where it is, how high it is, and how far and which
 // way it is from them — plus the two things they might do about it.
 //
@@ -143,8 +142,7 @@ function PointDetail({
         ? { state: "known", metres: elevationM }
         : loading
           ? { state: "checking" }
-          : // No longer ever "Needs an account": the tiles are public, so a
-            // guest with signal gets a height like anyone.
+          : // Public tiles, so a guest with signal gets a height like anyone.
             { state: "unavailable" },
     from: userCoord
       ? { latitude: userCoord[1], longitude: userCoord[0] }
