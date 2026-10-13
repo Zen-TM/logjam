@@ -21,8 +21,8 @@
 //
 // PRIVACY: recipients are accepted friends (lib/friendRecipients.ts, the same
 // guard sending a file runs). The response is COUNTS — never a per-id verdict,
-// which would confirm to a caller that an id they guessed exists (SEC-001).
-// Notification payloads carry ids only, as the single-item paths do (PRIV-005).
+// which would confirm to a caller that an id they guessed exists.
+// Notification payloads carry ids only, as the single-item paths do.
 import { Router, Response } from "express";
 
 import { Prisma } from "@prisma/client";
@@ -107,8 +107,8 @@ router.post(
 
     // ── What is actually the sender's to give ──────────────────────────────
     // Batched by type: five queries at most, whatever the list length. The owner
-    // rule itself stays in placeAccess/shareAccess — nothing here re-derives it
-    // (SEC-001), which is why those two grew a batch form rather than this file
+    // rule itself stays in placeAccess/shareAccess — nothing here re-derives it,
+    // which is why those two grew a batch form rather than this file
     // growing a `WHERE ownerId` of its own.
     const idsByType = new Map<BulkShareItemType, string[]>();
     for (const item of items) {
@@ -252,12 +252,12 @@ router.post(
         //
         // NOT one aggregate row per batch, which is the shape this obviously
         // wants: the inbox row for a shared item is what the read-time resolver
-        // drops when the share is revoked (PRIV-001/003), and a single row
+        // drops when the share is revoked, and a single row
         // holding 23 ids would have to partially resolve, recount its own label
         // and delete itself at zero. Per-item rows keep that logic exactly as it
         // is, and the client collapses them on `batchId` for display.
         //
-        // Ids only, as ever (PRIV-005) — the display strings are resolved from
+        // Ids only, as ever — the display strings are resolved from
         // the live rows in routes/notifications.ts.
         const notifications = plan.grants
           .filter((grant) => notifiable.has(grant.sharedWithId))
