@@ -4048,9 +4048,9 @@ def main():
             "Comma-separated list of layers to generate "
             "(hillshade, vegetation, features, slope, contours). "
             "Defaults to 'all'. Per-layer `enabled` flags in "
-            "--settings-json also disable layers. Composite is not "
-            "produced at job time — the export worker builds it "
-            "on demand."
+            "--settings-json also disable layers. As of Stage 2 "
+            "composite is no longer produced at job time — the "
+            "export worker builds it on demand."
         ),
     )
     parser.add_argument(
@@ -4332,7 +4332,7 @@ def main():
             requested = {l.strip().lower() for l in args.layers.split(",") if l.strip()}
             if "composite" in requested:
                 log.warning(
-                    "--layers 'composite' is a no-op; "
+                    "--layers 'composite' is a no-op since Stage 2; "
                     "composites are built on demand by the export worker. Ignoring."
                 )
                 requested.discard("composite")
