@@ -1,10 +1,9 @@
 // What a route IS, as numbers — distance, climb and descent, the height band,
 // and the elevation profile.
 //
-// Split out of the old standalone RouteStatsSheet for the same reason
-// `tracks/TrackStatsBody.tsx` was: the stats are a SUB-MODE of the route's
-// options sheet now (DESIGN.md), not a sheet of their own, so the body has
-// to be mountable inside someone else's `BottomSheet`.
+// The stats are a sub-mode of the route's options sheet, so the body is
+// mountable inside a parent `BottomSheet` (mirroring
+// `tracks/TrackStatsBody.tsx`).
 //
 // It owns its own elevation hook rather than taking a profile prop — unlike a
 // track's body, which is also rendered for a LIVE recording whose caller

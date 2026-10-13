@@ -178,7 +178,7 @@ export function PlaceEditSheet({
       place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude),
     );
     // The grades are ordinary field values, seeded by the one path every other
-    // field uses — there is no second reader for them any more.
+    // field uses.
     setNotes(place?.notes ?? "");
     // A new place starts as a CANYON: this is a canyoning app, and a default
     // that is right most of the time beats a picker with nothing chosen. The
@@ -221,16 +221,13 @@ export function PlaceEditSheet({
   /**
    * The fields THIS type's form asks for — ALL of them, with nothing cut.
    *
-   * The seven canyon axes used to be seven hand-written controls above this
-   * list, with their keys spelled out, and were then subtracted from it so they
-   * were not asked twice. They are ordinary bounded field values with ordinary
-   * definitions, so the generic renderer draws them now: a bounded integer is a
-   * rail (`CustomFieldValues.tsx`), which is the same control by a rule instead
-   * of by name. Three consequences, all wanted — a canyon's own fields finally
-   * appear in "Your place attributes"; `quality` is a FLOAT and gets a decimal
-   * box rather than a rail that silently could not express the 4.5 the web
-   * stores; and a user's own "Difficulty, 1-5" is drawn exactly like a V grade
-   * without anything knowing about canyons.
+   * Canyon axes are ordinary bounded field values with definitions rendered
+   * by the generic renderer: a bounded integer is a rail
+   * (`CustomFieldValues.tsx`), by rule instead of by name. A canyon's own
+   * fields appear in "Your place attributes"; `quality` is a FLOAT and gets a
+   * decimal box rather than a rail that cannot express the 4.5 Logjam Web
+   * stores; and a user's own "Difficulty, 1-5" is drawn like a V grade without
+   * anything knowing about canyons.
    */
   const typeFieldDefs = useMemo(
     () => defsForType(customFieldDefs, placeTypeId),
@@ -377,9 +374,8 @@ export function PlaceEditSheet({
     defs: customFieldDefs,
     editing: editingField,
     // Opened from a place's own form, so the type it is on is the default —
-    // and still changeable, which is the whole of finding #17: this used to
-    // REMOVE the scope picker, making the form reached from a place strictly
-    // less capable than the identical form in Settings.
+    // and still changeable, keeping the form reached from a place as capable
+    // as the identical form in Settings.
     initialTypeId: placeTypeId,
     onSaved: (next, message) => {
       setCustomFieldDefs(next);
@@ -437,9 +433,8 @@ export function PlaceEditSheet({
         ) : mode === "fieldForm" ? (
           fieldForm.footer
         ) : mode === "fields" ? (
-          // PINNED. It used to be the last row of the list, which put the one
-          // action this mode exists for below however many rows were already
-          // there.
+          // PINNED, keeping the action this mode exists for visible above the
+          // list rows.
           <Button
             label={ATTRIBUTE_NOUN.add}
             icon="add"
@@ -562,8 +557,7 @@ export function PlaceEditSheet({
             </View>
           </View>
           {/* Under the coordinates it fills in, because that is what it does —
-            not at the top as a second way to start, which is what the old
-            two-option "Add a place" sheet made it. Nothing is lost by going:
+            not at the top as a second way to start. Nothing is lost by going:
             the form comes back exactly as it was left. */}
           {onPickOnMap ? (
             <Button

@@ -8,21 +8,17 @@
 //   - a standalone FILE linked as the place's way (`Media.linkedId`) — an
 //     import the user brought in, or a recording.
 //
-// BOTH are displaced by UNLINKING now, and both survive it. That is the change
-// that made this file smaller: a file used to be COPIED into the place, so
-// displacing one deleted the copy and the confirm had to say so. A file is
-// linked, so replacing a way costs nothing and destroys nothing — the same
-// promise `Route.placeId`'s SetNull always made.
+// Both are displaced by unlinking, and both survive it. A file is linked (not
+// copied), so replacing a way costs nothing and destroys nothing — the same
+// promise `Route.placeId`'s SetNull makes.
 //
 // Five sources fill that slot (a route you drew, an import, a recorded track, a
-// file off the phone, a line drawn on the map). Each of them deciding for
-// itself what to warn about is how one ended up silently deleting a file, so
-// they all read the occupant, the sentence and the write order from here.
-// `fillRouteSlot.ts` is the runner that acts on them.
+// file off the phone, a line drawn on the map). All read the occupant, the
+// confirmation copy and the write order from here to keep slot-replacement
+// semantics consistent. `fillRouteSlot.ts` is the runner that acts on them.
 //
 // PRIVACY: the place name and the attachment's filename appear only in a
-// confirm the user opened for that place (shared/DESIGN.md §13) — never in a log or
-// an error string.
+// confirm the user opened for that place — never in a log or an error string.
 import { mediaCategory, mediaDisplayName } from "@logjam/shared";
 
 import type { DeleteConfirmCopy } from "@logjam/shared";
@@ -37,7 +33,7 @@ export type WaySource = "route" | "track" | "import" | "file" | "draw";
  * linked), so it writes a route link; an import and a picked file link the
  * media row itself.
  *
- * Both are links now. The distinction survives only because the two live in
+ * Both are links. The distinction exists only because the two live in
  * different tables and the swap has to know which one to unlink.
  */
 export function waySourceWrites(source: WaySource): "route" | "media" {
@@ -70,7 +66,7 @@ export type RouteSlotOccupant =
  *   its own incumbent otherwise, and would ask to displace itself.
  *
  * A drawn route wins a tie. Both occupants at once is a state neither the API
- * nor this app can produce deliberately, and the drawn route is the one the
+ * nor Logjam GPS can produce deliberately, and the drawn route is the one the
  * place screen shows, so it is the one the user is being asked about.
  */
 export function routeSlotOccupant(
@@ -126,7 +122,7 @@ export function routeSlotDisplaceConfirm(
  * The ONE exception is file-over-file. `assertPlaceTrackSlotFree`
  * (api/src/routes/media.ts) answers a second track on a place with 409, so
  * writing first doesn't leave two — it parks the link op and lands nothing at
- * all. Unlinking first is cheap and reversible now that it destroys nothing,
+ * all. Unlinking first is cheap and reversible since it destroys nothing,
  * which is what makes this ordering safe rather than merely necessary.
  */
 export function removeOccupantFirst(

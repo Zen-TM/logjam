@@ -378,8 +378,8 @@ export function PlaceFilterSheet(props: Props) {
     >
       {/* The list stays mounted underneath (see `overlay` on BottomSheet):
           swapping the sheet's CHILDREN for the short picker collapses the
-          scroll content, and RN clamps the offset to 0 — so coming back from a
-          date threw the user to the top of a long sheet. */}
+          scroll content, and RN clamps the offset to 0 — which would throw the
+          user to the top of a long sheet when returning from a date. */}
       <FormStack>
         {contractSectionKeys(PLACES_FILTER_SHEET, "gps").map((key) => (
           <Fragment key={key}>{FILTER_SHEET_SECTIONS[key](context)}</Fragment>

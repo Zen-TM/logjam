@@ -1,11 +1,7 @@
 // Managing your own PLACE TYPES on the phone.
 //
 // The type is the thing that decides which questions a place is asked, what
-// colour its pin is and which tab it lands under — and until now it could only
-// be created on the web. The sync push has accepted `placeType`
-// create/update/delete since the rework (`PLACE_TYPE_FIELDS` in
-// api/src/routes/sync.ts); the phone simply had no screen for it, so a user
-// with only a phone could not add one at all.
+// colour its pin is and which tab it lands under.
 //
 // The LIST lives in Settings, beside the two attribute lists, for the same
 // reason they do: it is a list you keep rather than a preference you set, and
@@ -382,7 +378,7 @@ const GRID_COLUMNS = 6;
  *
  * A grid of fixed 44pt cells leaves whatever the row width happens not to
  * divide into as a ragged margin down the right-hand side, so a full row of
- * icons sat inset from the edge the name field reached — which reads as a
+ * icons would sit inset from the edge the name field reached, reading as a
  * misalignment rather than as a grid. Measuring once and dividing makes a full
  * row exactly as wide as every other control on the form.
  *
