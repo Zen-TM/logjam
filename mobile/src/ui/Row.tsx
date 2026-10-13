@@ -24,7 +24,7 @@ import { Icon, type Glyph } from "./Icon";
 //
 // Pass `icon` + `hue` for the standard identity tile: a 40pt rounded square
 // filled SOLID with the hue under an `onFill` glyph, as on Logjam Web (a hue
-// glyph on a wash of itself failed 3:1 on dark cards). That tile is how a
+// glyph on a wash of itself fails 3:1 on dark cards). That tile is how a
 // list of mixed kinds stays scannable — colour and glyph say *what* a row is
 // before the text is read — so prefer it over a bare `leading` node whenever
 // the row has a kind. `progress` (0-1) draws a hue-coloured determinate bar
@@ -46,7 +46,7 @@ export function Row({
   accessibilityLabel,
   // TWO lines for the title, and that is a text-size rule rather than a taste
   // one: at a large OS font setting (or a large in-app multiplier) a one-line
-  // cap turned "Auto-download finished GeoPDFs" into "Auto-download finis…"
+  // cap turns "Auto-download finished GeoPDFs" into "Auto-download finis…"
   // with no way to read the rest. A row that grows is legible; a row that
   // truncates is a dead end. Two rather than unlimited, because a title is
   // often a user-supplied NAME and a pasted paragraph should not become a
@@ -55,7 +55,7 @@ export function Row({
   // The subtitle is UNCAPPED by default: it is our own copy, not user data, and
   // it is where the explanations live ("Every layer of every finished job, once
   // each"). Any fixed cap is a sentence that survives at one text size and is
-  // cut off at the next — two lines was simply a bigger size at which to fail.
+  // cut off at the next — two lines is simply a bigger size at which to fail.
   subtitleNumberOfLines,
   style,
 }: {
@@ -191,9 +191,8 @@ export function Row({
 
 const useStyles = makeStyles((theme, textRole) => ({
   row: {
-    // Column + centred: with no footer this lays out exactly as the old
-    // flex-row card did (one full-width child, vertically centred when the
-    // 56pt floor bites).
+    // Column + centred: with no footer, one full-width child is vertically
+    // centred when the 56pt floor bites.
     justifyContent: "center",
     backgroundColor: theme.card,
     borderWidth: 1,
@@ -206,7 +205,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   footer: { paddingTop: spacing(1) },
   pressed: { backgroundColor: theme.cardPressed },
-  // An accent edge and no tint: a tint dropped the subtitle's contrast
+  // An accent edge and no tint: a tint drops the subtitle's contrast
   // (UX §9), and Logjam Web's selected row is the same edge.
   selected: { borderColor: theme.accent },
   disabled: { opacity: opacity.disabled },

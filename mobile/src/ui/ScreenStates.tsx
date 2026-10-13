@@ -5,8 +5,8 @@ import { spacing, makeStyles, useTheme, withAlpha, muted } from "../theme";
 import { Button } from "./Button";
 import { Icon, type Glyph } from "./Icon";
 
-// Full-screen data states (MOBILE_DESIGN_BRIEF §8: loading / empty / error are
-// mandatory on every data surface).
+// Full-screen data states: loading, empty and error are mandatory on every
+// data surface.
 
 // `label` says what is loading ("Loading your places…"), as on Logjam Web: a
 // load that names itself is a load a screen reader can announce.

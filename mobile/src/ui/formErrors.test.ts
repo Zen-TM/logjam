@@ -6,16 +6,11 @@ import { describe, expect, it } from "vitest";
 //
 // shared/DESIGN.md §11, "Form errors": a problem with one control is drawn under it by
 // `FieldError` (directly, or through `TextField`'s / `ChipPicker`'s `error`).
-// Before that rule, the same warning-coloured line was restyled by hand in the
-// forms that needed it — `CustomFieldsEditor` drew its place-type error with a
-// local `scopeError` style beside a `TextField` that drew its own — and two
-// stylesheets for one visual is how the rest of the drift started.
 //
-// So a style NAMED for an error that sets a text colour (`text`, or the warning
-// it used to be) may exist only in `src/ui/`, and no style outside it sets
-// `color: theme.warning` at all: the warning is a glyph, edge or fill, never
-// the colour of words (docs/ux-principles.md §7). A notice beside a control
-// uses `FieldError`; one over the map uses `Notice`.
+// A style NAMED for an error that sets a text colour (`text`) may exist only in
+// `src/ui/`, and no style outside it sets `color: theme.warning` at all: the
+// warning is a glyph, edge or fill, never the colour of words (UX §7). A notice
+// beside a control uses `FieldError`; one over the map uses `Notice`.
 const SRC = join(__dirname, "..");
 const UI = join(SRC, "ui");
 

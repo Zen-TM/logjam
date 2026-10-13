@@ -141,15 +141,15 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(0.5),
     minHeight: CHIP_HEIGHT,
     // A pill is never narrower than it is tall: a one-glyph chip is a circle.
+    // Guard: pill.test.ts.
     minWidth: CHIP_HEIGHT,
     justifyContent: "center",
   },
   pressed: { opacity: 0.75 },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.control, color: theme.text },
-  // `onFill`, not the page colour: on the shared heath fill the old dark page
-  // was 3.7:1 (root CLAUDE.md, "Text or a glyph ON a colour fill uses a dark
-  // ink").
+  // `onFill`, not the page colour: text or a glyph on a colour fill needs
+  // dark ink for contrast.
   labelActive: { color: theme.onFill },
   labelMuted: { color: theme.textMuted },
   // The add chip is not a value of the rail, so it does not wear a value's
@@ -161,7 +161,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // A fixed box with a radius of exactly half of it, and a background that is
   // always set (`badgeActive` makes it transparent, never absent): see
-  // `halfRadius` for why a 999 radius came back square once another chip was
+  // `halfRadius` for why a 999 radius renders square once another chip is
   // selected.
   badge: {
     height: BADGE_SIZE,
@@ -172,8 +172,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  // No wash on a fill: an ink wash darkened Daylight's accent until the count
-  // on it fell under 4.5:1. The count reads as `onFill` on the fill itself.
+  // No wash on a fill: an ink wash darkens Daylight's accent until the count
+  // on it falls under 4.5:1. The count reads as `onFill` on the fill itself.
   badgeActive: { backgroundColor: "transparent" },
   badgeText: { ...textRole.caption, color: theme.textMuted },
   badgeTextActive: { color: theme.onFill },

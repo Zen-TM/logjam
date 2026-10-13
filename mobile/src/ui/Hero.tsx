@@ -88,8 +88,8 @@ export function Hero({
 const useStyles = makeStyles((theme, textRole) => ({
   hero: {
     // No fill: it sits on the page and a hairline separates it from the list,
-    // as Logjam Web's hero does. Its old fill, a step lighter than the card,
-    // failed AA under its own text in Sandstone and Ironbark.
+    // as Logjam Web's hero does. A fill, a step lighter than the card,
+    // fails AA under its own text in Sandstone and Ironbark.
     borderBottomWidth: 1,
     borderBottomColor: theme.line,
     paddingHorizontal: spacing(2),
