@@ -1,6 +1,6 @@
 import { NativeModule, requireOptionalNativeModule } from "expo";
 
-// Research logger for the track-accuracy work (private/todo/track-accuracy.md).
+// Research logger for the track-accuracy work.
 // DIAGNOSTIC ONLY: nothing in the app reads what this writes, and nothing may
 // start it except the developer toggle in Settings. It exists because
 // `expo-sensors` stops every sensor when the activity backgrounds, so a

@@ -82,7 +82,7 @@ export async function sendFileCopy({
    * Which bulk action this file was one of, when it was one of several. Groups
    * the recipient's notifications so a bulk send is ONE inbox row they can
    * expand, and suppresses this send's own push in favour of the batch's.
-   * Absent on an ordinary one-file send, which pushes as it always did.
+   * Absent on an ordinary one-file send, which pushes directly.
    */
   batchId?: string;
 }): Promise<void> {

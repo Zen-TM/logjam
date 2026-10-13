@@ -14,7 +14,7 @@ import { ThemeProvider } from "./src/theme";
 import { initSentry } from "./src/sentry/initSentry";
 import { configureAmplify } from "./src/auth/amplifyConfig";
 // Side-effect import: registers the background track-recording task at module
-// scope so it exists when Android relaunches the app headless (Stage 7).
+// scope so it exists when Android relaunches the app headless.
 import "./src/tracks/trackRecorder";
 import App from "./App";
 

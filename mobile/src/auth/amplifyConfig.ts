@@ -1,5 +1,5 @@
-// Amplify/Cognito wiring — same pool as web (frontend/src/main.tsx is the
-// reference). Called once at app startup from index.ts. In fake-auth dev mode
+// Amplify/Cognito wiring — same pool as Logjam Web (frontend/src/main.tsx is the
+// reference). Called once at Logjam GPS startup from index.ts. In fake-auth dev mode
 // Amplify is never configured — apiFetch short-circuits to a fake token.
 import { Amplify } from "aws-amplify";
 import { cognitoUserPoolsTokenProvider } from "aws-amplify/auth/cognito";

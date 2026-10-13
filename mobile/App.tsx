@@ -32,7 +32,7 @@ import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { Button, LoadingState } from "./src/ui";
 import { makeStyles, muted, spacing, useThemeMode } from "./src/theme";
 
-// The blocked build's only way out (MAPP-001). The rule itself — Android only,
+// The blocked build's only way out. The rule itself — Android only,
 // from app.json's package id, https so it resolves without the Play app — is
 // `storeListingUrl` in ./src/version, pure and tested, because mobile/ has no
 // React Native test environment and a rule inside a component is a rule nothing
@@ -91,7 +91,6 @@ async function confirmSignOut(): Promise<boolean> {
 
 export default function App() {
   const styles = useStyles();
-  // Light icons on a dark page, dark icons on a light one.
   const systemBarStyle = useThemeMode() === "dark" ? "light" : "dark";
 
   const minVersionGate = useMinVersionGate();
@@ -106,7 +105,7 @@ export default function App() {
     void excludeLocalDataFromBackup().catch(console.error);
   }, []);
 
-  // MAPP-002: the hard block is for a build that is too old AND on a
+  // The hard block is for a build that is too old AND on a
   // connection where the update is free and to hand. Everything else shows the
   // same screen with a way past it and keeps working — a dead app in a place
   // holds the user's offline maps and their in-progress track hostage to a Play
@@ -177,7 +176,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SystemBars style={systemBarStyle} />
-      {/* App lock (Stage 4): active once offline map data exists on-device. */}
+      {/* App lock: active once offline map data exists on-device. */}
       <AppLockGate>
         {auth.state === "loading" ? (
           <LoadingState />

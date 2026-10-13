@@ -1,6 +1,7 @@
-// Server-generated GeoPDF jobs (the same ones the web "Generate GeoPDF" flow
-// produces). Mobile does not generate them; it lists the user's completed jobs
-// and imports their bytes into the on-device GeoPDF pipeline for offline use.
+// Server-generated GeoPDF jobs (the same ones the Logjam Web "Generate GeoPDF"
+// flow produces). Logjam GPS does not generate them; it lists the user's
+// completed jobs and imports their bytes into the on-device GeoPDF pipeline for
+// offline use.
 // Online-only: fetching the list + presigned download needs the network. The
 // import artifact it produces is then device-local (see importGeoPdfFromUrl).
 import type { GeoPdfJobView } from "@logjam/shared";

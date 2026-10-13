@@ -269,7 +269,7 @@ const TAB_BAR_TOP_PAD = spacing(0.5);
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which
  * is what `MapView`'s `focus` param takes. Built at navigation time and never
- * stored: a region of interest stays off the server (mobile/CLAUDE.md).
+ * stored: a region of interest stays off the server (mobile/AGENTS.md, Privacy and battery).
  */
 const PLACE_FOCUS_DEGREES = 0.005;
 function placeFocus(place: { latitude: number; longitude: number }) {
@@ -479,8 +479,7 @@ function SavedStackNav() {
                   : undefined,
               })
             }
-            // "Download a map region" used to drop the user on the map to find
-            // the affordance themselves; it now opens the screen that does it.
+            // Open the region download framing screen directly.
             onDownloadRegion={() =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapRegionDownload",
@@ -500,8 +499,8 @@ function SavedStackNav() {
                   : undefined,
               )
             }
-            // The recorder lives on the map, and so does the mode it puts the
-            // app into — this hands the id over rather than arming it here.
+            // The recorder lives on the map, and so does the mode it puts
+            // Logjam GPS into — this hands the id over rather than arming it here.
             onContinueRecording={(trackId) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
@@ -815,8 +814,8 @@ export function AppShell({
   // route notification taps: a place reference deep-links to its detail,
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
-  // Stage 8 sync triggers: initial cycle, app foreground, connectivity
-  // regained. Torn down on sign-out (shell unmount).
+  // Sync triggers: initial cycle, app foreground, connectivity regained.
+  // Torn down on sign-out (shell unmount).
   //
   // A guest registers none of them. This is the load-bearing half of guest
   // mode: without a cycle ever running, local mutations pile up in the outbox
@@ -848,7 +847,7 @@ export function AppShell({
   }, [isGuest]);
 
   // Take the account's theme choice, so a scheme picked in the browser (or on
-  // another phone) is the one this app is painted in. Keyed on the ACCOUNT's
+  // another phone) is the one Logjam GPS is painted in. Keyed on the ACCOUNT's
   // value only: a scheme just picked on this phone must not be undone by the
   // copy this query fetched before the pick.
   useEffect(() => {
@@ -862,7 +861,7 @@ export function AppShell({
     // identical either way.
     //
     // This registers the token only when notification permission is ALREADY
-    // granted; it never prompts (MRUN-004 — Settings → Notifications asks).
+    // granted; it never prompts (Settings → Notifications asks).
     if (!isGuest) void registerForPushNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
@@ -873,7 +872,7 @@ export function AppShell({
         } | null;
         if (!nav) return;
         // Where the tap goes — including the guard the tab bar applies, for the
-        // same reason (MAPP-009). The precedence lives in
+        // same reason. The precedence lives in
         // notifications/tapTarget, pure and tested, because this listener is
         // inside a component and nothing in mobile/ can run one.
         const target = notificationTapTarget({
@@ -885,20 +884,19 @@ export function AppShell({
           alertFinishRouteFirst();
           return;
         }
-        // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ. It was built
-        // that way once (the push carried the row's id for exactly that) and
-        // reverted: a banner is a glance, often from a lock screen, and read
-        // means "seen, nothing left to do here". The unread list is the queue of
-        // things the user still has to deal with, and emptying it on the
-        // strength of a tap-through takes rows out of the one list they are
-        // looked for in. Opening the row is what reads it.
+        // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
+        // glance, often from a lock screen, whereas read means "seen, nothing
+        // left to do here". The unread list is the queue of things the user
+        // still has to deal with, and emptying it on the strength of a
+        // tap-through takes rows out of the one list they are looked for in.
+        // Opening the row is what reads it.
         if (target.kind === "place") {
           nav.navigate("Places", {
             screen: "PlaceDetail",
             params: { placeId: target.placeId, name: "Place" },
           });
         } else {
-          // Inbox now lives inside the More stack.
+          // Inbox lives inside the More stack.
           nav.navigate("More", { screen: "Inbox" });
         }
       },
@@ -938,7 +936,7 @@ export function AppShell({
   if (userQuery.loading && !userQuery.data) return <LoadingState />;
 
   // Consent gate: block when we KNOW consent is stale. If the user fetch
-  // failed (offline), proceed — never lock someone out of the app in the
+  // failed (offline), proceed — never lock someone out of Logjam GPS in the
   // field over an unreachable consent check.
   //
   // A guest passes through the same way an offline user does, and for a
