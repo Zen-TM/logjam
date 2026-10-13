@@ -140,7 +140,7 @@ export default function LayersPopover({
   setLidarLayerToggles: Setter<Record<string, boolean>>;
   lidarLayerOrder: string[];
   setLidarLayerOrder: Setter<string[]>;
-  /** Layer names whose PMTiles failed to load for at least one job (LAYERS-1). */
+  /** Layer names whose PMTiles failed to load for at least one job. */
   unavailableTopoLayerNames: Set<string>;
   completedTopoJobs: CompletedTopoJob[];
   lidarJobToggles: Record<string, boolean>;
@@ -267,7 +267,7 @@ export default function LayersPopover({
                             "Shared with you" row makes a shared place answer to two
                             toggles at once. Whose a thing is is already on the thing
                             itself: on the map FILL is the type and the RING is sharing
-                            (root CLAUDE.md), and every list marks a shared row. A legend
+                            (shared/DESIGN.md), and every list marks a shared row. A legend
                             says what kind; the pin says whose (operator, 2026-09-17). */}
                   <OverlayRow
                     icon="place"
