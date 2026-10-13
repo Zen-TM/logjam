@@ -2,7 +2,7 @@
 // makes it safe.
 //
 // The lock is what stands between someone holding this unlocked phone and the
-// place coordinates on it (mobile/CLAUDE.md privacy mandate). So:
+// place coordinates on it (mobile/AGENTS.md, Privacy and battery). So:
 //
 // - Turning it OFF requires the device authenticator — otherwise the switch is a
 //   one-tap bypass of the thing it controls, reachable by anyone holding the
@@ -20,9 +20,8 @@
 // asymmetry above still stands for anyone who turns it on — this changes which
 // side the app starts on, not how hard it is to lower once raised.
 //
-// What it gates is no longer conditional on downloads: the mirror holds synced
-// place names and coordinates from the moment the user signs in, so "there is
-// nothing to protect yet" was never true (see AppLockGate).
+// What it gates does not depend on downloads: the mirror holds synced place
+// names and coordinates from the moment the user signs in (see AppLockGate).
 import * as LocalAuthentication from "expo-local-authentication";
 import { Platform } from "react-native";
 
@@ -46,6 +45,7 @@ export function onAppLockPreferenceChanged(listener: Listener): () => void {
  * Synchronous, so the gate's first render is already correct. Only an explicit
  * "on" means on — a missing store, a corrupted value and a fresh install all
  * read as OFF (see the header note on why this default is not fail-safe).
+ * Guard: `src/offline/appLockPreference.test.ts`.
  */
 export function isAppLockEnabled(): boolean {
   return readPref(APP_LOCK_PREF_KEY) === "on";
@@ -76,7 +76,7 @@ export async function setAppLockEnabled(
       message: "This phone wouldn't store that setting.",
     };
   }
-  // Logged, not fatal: the lock itself is the guard and it is now set either
+  // Logged, not fatal: the lock itself is the guard and is set either
   // way; FLAG_SECURE is the thumbnail hardening on top of it, and failing the
   // whole toggle over it would leave the switch disagreeing with the pref.
   await applyScreenCapturePolicy().catch(console.error);
@@ -85,10 +85,10 @@ export async function setAppLockEnabled(
 }
 
 /**
- * FLAG_SECURE follows the lock, and only the lock.
+ * FLAG_SECURE follows the lock, and only the lock. Guard: `src/offline/appLockPreference.test.ts`.
  *
  * Android captures the task-switcher thumbnail BEFORE the `AppState` change
- * that re-locks the app fires, so backgrounding from the map left a recents
+ * that re-locks the app fires, so backgrounding from the map leaves a recents
  * thumbnail of place markers — or of a detail screen printing the
  * coordinates — readable in front of the lock by exactly the person the lock
  * exists to stop (someone holding the unlocked phone).

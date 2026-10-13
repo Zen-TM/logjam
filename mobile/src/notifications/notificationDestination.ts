@@ -1,11 +1,9 @@
 // "View in Saved" / "View in Friends" — where a notification's SUBJECT lives,
 // as data.
 //
-// A notification is a report about something that now exists somewhere else in
-// the app, and until now only one kind said where: a place share opened the
-// place. Everything else — a finished topo, a GeoPDF, a file a friend sent and
-// you kept, a route someone shared — left the user to go and find the thing
-// themselves, in a tab with seven filters.
+// A notification reports on an entity that exists in Logjam GPS: a place share
+// opens the place directly, while other entities (a finished topo, a GeoPDF,
+// a received file, a shared route) live under specific tabs and filters.
 //
 // So each row's ⋯ sheet offers one more verb: go to the tab, on the right
 // filter, with the row it is about pulsed so the eye lands on it. Which is a

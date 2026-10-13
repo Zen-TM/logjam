@@ -7,7 +7,7 @@
 // one: answering from it fabricates coverage the field trip will not have, and
 // a simulation that lies is worse than no simulation.
 //
-// Its own module, free of expo-sqlite, so the rule has a test.
+// Its own module, free of expo-sqlite, so the rule has a test. Guard: `src/offline/demTileCache.test.ts`.
 //
 // One tile is 256 KB of float metres, and a profile re-samples the same handful
 // on every vertex drag, so this is what keeps dragging a route cheap.

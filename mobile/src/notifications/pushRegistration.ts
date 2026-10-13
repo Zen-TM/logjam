@@ -1,10 +1,10 @@
-// Push-token lifecycle (Stage 3): register on login / app start, unregister
+// Push-token lifecycle: register on login / app start, unregister
 // on sign-out. Best-effort throughout — a push registration failure must
 // never block sign-in (mirror of the server's best-effort fan-out).
 //
 // Privacy: the Expo push token is an opaque routing handle, not a secret and
 // not user data; server-side it is bound to the signed-in user. Pushes carry
-// generic titles + opaque IDs only (enforced server-side in services/push.ts).
+// generic titles + opaque IDs only (enforced server-side in api/src/services/push.ts).
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
@@ -17,8 +17,8 @@ const PUSH_TOKEN_KEY = "logjam_push_token";
 /**
  * App-start registration. NEVER prompts: on Android a POST_NOTIFICATIONS dialog
  * fired from a mount effect lands over a blank screen before the user has seen
- * the app, and a denial there can't be re-prompted — that install loses push
- * permanently (MRUN-004). Asking is `requestPushPermission()`'s job, from a
+ * Logjam GPS, and a denial there can't be re-prompted — that install loses push
+ * permanently. Asking is `requestPushPermission()`'s job, from a
  * screen where the user knows what they are answering.
  */
 export async function registerForPushNotifications(): Promise<void> {
@@ -90,9 +90,9 @@ export async function unregisterPushNotifications(): Promise<void> {
   } finally {
     // Unconditionally, even when the DELETE never reached the server: a token
     // we can no longer revoke is one this install must stop claiming to own.
-    // Keeping it meant an offline sign-out left the departing user's binding
-    // in SecureStore, and the next user's re-registration is what would have
-    // moved it — a step that never runs if they decline notifications.
+    // Keeping it would leave a departing user's binding in SecureStore across
+    // an offline sign-out, which depends on a subsequent user re-registering
+    // (a step that never runs if notifications are declined).
     if (token)
       await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(console.error);
   }

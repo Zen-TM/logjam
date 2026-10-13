@@ -7,8 +7,8 @@
  * A short, SAFE description of an unforeseen failure, for the row that reports
  * it. Message text only — no stack, no URL, no path, and nothing derived from
  * the bbox (privacy rule: a region of interest must not leak into a log, a
- * report or a screenshot). Capped, because an arbitrary `Error.message` is
- * arbitrary in length.
+ * report or a screenshot). Guard: `src/offline/failureDetail.test.ts`. Capped,
+ * because an arbitrary `Error.message` is arbitrary in length.
  */
 export function failureDetail(err: unknown): string | undefined {
   const raw =
