@@ -19,7 +19,7 @@ import classes from "./ColourField.module.css";
  * NOT free for anything with an identity hue. A route's colour and a
  * place type's colour come from a closed `palette`, because a
  * closed set is what the contrast guard can measure; a free picker would delete
- * that check rather than fail it (root CLAUDE.md). A topo's styles are map
+ * that check rather than fail it (frontend/DESIGN.md §4). A topo's styles are map
  * cartography, drawn over terrain rather than read as UI, and their users tune
  * them to the shade — so here the colour is free.
  *
@@ -159,8 +159,7 @@ function FreeColourField({
  * THE FIELD IS NOT THE BUTTON. It reads as a line — its label at the left and
  * the colour itself as a square filling the line's full height at the right. Only that square is the control: a card where the
  * whole surface was clickable gave a 380px panel a large target whose job was
- * to show one small colour, and the colour is the part anyone aims at
- * (operator, 2026-09-17).
+ * to show one small colour, and the colour is the part anyone aims at.
  *
  * The colour's NAME is the trigger's accessible name ("Colour: Teal") and not
  * text beside the swatch: the swatch already shows the colour, and a reader who
@@ -200,9 +199,9 @@ function PaletteField({
       <span className={choice.swatchLabel}>{label}</span>
       {/* The swatch IS the control, and it is the whole of it. No caret, no
           card behind the row, and no colour NAME: the swatch shows the colour,
-          so spelling it out beside it says the same thing twice (operator,
-          2026-09-17). The name is still the control's accessible name, where it
-          is the only thing a reader who cannot see the swatch has. */}
+          so spelling it out beside it says the same thing twice. The name is
+          still the control's accessible name, where it is the only thing a
+          reader who cannot see the swatch has. */}
       <button
         ref={triggerRef}
         type="button"
@@ -260,7 +259,7 @@ function PaletteField({
 
 /**
  * THE ONE COLOUR PICKER. Its square sits at the end of a line and opens a
- * floating palette, never a row of swatches inline (UX §10). With a `palette`
+ * floating palette, never a row of swatches inline (shared/DESIGN.md §10). With a `palette`
  * the choice is one of a closed list; without one it is any colour.
  */
 export function ColourField(

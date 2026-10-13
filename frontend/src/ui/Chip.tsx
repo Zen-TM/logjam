@@ -222,7 +222,7 @@ export function ChipPicker({
 
 /** A wheel notch moves a rail this fraction of what it would scroll a page: a
  *  rail is a few hundred pixels wide, and a full notch skipped most of it. */
-// ponytail: one fixed factor; tune here if a mouse or trackpad feels wrong.
+// One fixed factor; tune here if a mouse or trackpad feels wrong.
 const WHEEL_SPEED = 0.5;
 
 export type ChipOption<T extends string> = {

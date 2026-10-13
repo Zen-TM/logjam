@@ -1,9 +1,4 @@
-// A request BODY is a contract with a route, and nothing here was checking it.
-// `reassignPlaceType` sent `{ toPlaceTypeId }` while the route reads
-// `placeTypeId` (api/src/routes/placeTypes.ts, pinned by its own integration
-// test), so every attempt to move a type's places answered 400 and the type
-// could never be emptied — invisibly, because the server test passed and the
-// only client was never asserted against it.
+// The reassign route reads `placeTypeId` (api/src/routes/placeTypes.ts).
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { reassignPlaceType } from "./placeUtils";
 

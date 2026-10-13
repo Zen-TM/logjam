@@ -2,16 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useCurrentUser } from "./placeUtils";
 
-// The signed-in user's own record is the app's only source for "who am I", and
-// `null` is load-bearing: Account renders "Loading…" for as long as it stays
+// The signed-in user's own record is Logjam Web's only source for "who am I",
+// and `null` is load-bearing: Account renders "Loading…" for as long as it stays
 // null, and way ownership reads a missing user as "not mine" — which hands a
 // friend's shared route the OWNER's verbs (waysModel.ts `shared`, wayActions
-// `owned`). Swallowing the one failure therefore did not degrade one page: a
-// single 429 or 500 made Account load forever and mislabelled ownership, with
-// nothing to retry. It was the one hook in placeUtils that did not return
-// `error` (frontend/CLAUDE.md, "Hook contract").
-//
-// The 429 is the case that found it: a rate-limited boot, not a dead server.
+// `owned`). Without surfacing `error`, a 429 or 500 leaves Account loading
+// indefinitely with nothing to retry.
 
 const user = {
   id: "u1",
