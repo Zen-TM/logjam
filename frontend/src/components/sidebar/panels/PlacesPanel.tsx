@@ -191,7 +191,7 @@ function PlacesPanel({
   const toast = useToast();
   const isNarrow = useIsMobile();
   // Session-scoped like the filters: a search remembered for a month reads as
-  // "my places are missing" (UX finding 5). Sort is a preference and stays.
+  // "my places are missing". Sort is a preference and stays.
   const [query, setQuery] = useStoredState(
     "logjam.placeSearch",
     "",
@@ -482,7 +482,7 @@ function PlacesPanel({
       onRefetch();
       if (result.review.length > 0) setReviewOpen(true);
       // Summarise what happened automatically, and flag what still needs review,
-      // so the import isn't silent (IMPORT-3). The corpus is a hand-refreshed
+      // so the import isn't silent. The corpus is a hand-refreshed
       // snapshot, so date it (RopeWiki blocks server-side fetches).
       const done = [
         result.added > 0 ? `${result.added} added` : null,
