@@ -11,7 +11,7 @@ already been processed. The unit tests stub GDAL, so nothing else catches it.
 Two guards, both pure text so they run on a host without GDAL:
 
 * `requirements.txt` caps NumPy below 2. Mutation that turns this red:
-  raising the cap to `<3.0` (what Dependabot did in #137).
+  raising the cap to `<3.0`.
 * the Dockerfile imports `gdal_array` at build time, so a pairing that still
   slips through fails the image build, not a user's job. Mutation: deleting
   that RUN line.

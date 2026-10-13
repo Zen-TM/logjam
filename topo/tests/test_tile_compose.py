@@ -1,9 +1,8 @@
 """Tests for the GeoTIFF composite blender in renderers/tile_compose.py.
 
 Guards the alpha-aware Warp chain: two non-overlapping RGBA layers must both
-survive composition, and opaque colour-0 pixels must not be dropped. The old
-BuildVRT(srcNodata=0) path failed both — it masked the alpha band and treated
-black as nodata.
+survive composition, and opaque colour-0 pixels must not be dropped (alpha
+band preserved, black is not treated as nodata).
 
 Plain unittest (no pytest dep) so it runs in the worker Docker image as-is.
 """
@@ -92,8 +91,7 @@ class TestCompositeGeoTiff(unittest.TestCase):
             self.assertTrue((r[:, :50] == 255).all())
             self.assertTrue((b[:, :50] == 0).all())
             self.assertTrue((a[:, :50] == 255).all())
-            # Right half = opaque blue from layer B. The old nodata-masked path
-            # dropped these pixels.
+            # Right half = opaque blue from layer B.
             self.assertTrue((b[:, 50:] == 255).all())
             self.assertTrue((r[:, 50:] == 0).all())
             self.assertTrue((a[:, 50:] == 255).all())
@@ -167,9 +165,9 @@ def _square_footprint(lon0: float, lat0: float, side: float = 0.02) -> dict:
 
 @unittest.skipUnless(_REAL_SHAPELY, "real shapely required (host stubs it)")
 class TestCompositeTileCoords(unittest.TestCase):
-    """Guards the non-adjacent-footprint fix: tile enumeration must follow the
-    actual footprint geometry per connected component, never the union bbox that
-    spans the empty gap between captures (the wallewerang 5h33m blowup)."""
+    """Tile enumeration must follow the actual footprint geometry per
+    connected component, never the union bbox that spans the empty gap between
+    captures."""
 
     # Two ~2 km squares ~1° (~93 km) apart — a non-adjacent capture.
     JOB_A = {"id": "a", "footprint": _square_footprint(150.00, -33.02)}
@@ -216,8 +214,8 @@ class TestCompositeTileCoords(unittest.TestCase):
             for z in range(tc.ZOOM_MIN, tc.ZOOM_MAX + 1)
             for x, y in tc.tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
         }
-        # Contiguous coverage: kept set is the full bbox set (intersect-test keeps
-        # every tile), so the fix is a no-op for normal jobs.
+        # Contiguous coverage: kept set is the full bbox set (intersect-test
+        # keeps every tile).
         self.assertEqual(coords, naive)
 
     def test_cap_fails_fast(self):
