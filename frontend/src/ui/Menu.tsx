@@ -225,8 +225,8 @@ export function Menu({
  * says. Layers must NOT: the whole point of it is to stay open while the user
  * pans the map behind it and watches overlays come and go. A popover that is a
  * FIELD's value — the colour palette — must, because every other way of
- * choosing a value in this app closes when you look away, and one that hangs
- * around reads as stuck (operator, 2026-09-17).
+ * choosing a value in Logjam Web closes when you look away, and one that hangs
+ * around reads as stuck.
  */
 export function Popover({
   open,

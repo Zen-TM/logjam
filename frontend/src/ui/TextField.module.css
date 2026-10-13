@@ -169,8 +169,8 @@
   color: var(--color-text-muted);
 }
 
-/* The track and thumb are drawn here rather than left to `accent-color`, which
-   painted a grey knob whatever the scheme said (operator, 2026-09-18). */
+/* The track and thumb are drawn here rather than left to `accent-color`, so
+   the thumb matches the active scheme. */
 .rangeInput {
   flex: 1;
   min-width: 0;
