@@ -30,11 +30,8 @@ resource "aws_ecr_repository" "topo_worker" {
 
 # ── Image retention ───────────────────────────────────────────────────────────
 #
-# Neither repo had ANY lifecycle policy until now, so every image built since
-# March 2026 was still resident: 209 images / 71 GB, growing ~12 GB a month
-# (~0.9 deploys/day across the two repos). At $0.10/GB-month that was $5/mo and
-# rising by roughly $1.20/mo every month — the largest no-compromise line on the
-# bill and the only one that compounds.
+# Bounds storage growth and cost from accumulating unneeded container image
+# layers across deploy runs.
 #
 # Why a count and not an age: deploys are pinned by git SHA (deploy-api.yml
 # tags <sha> and latest), and what must never be expired is the image the

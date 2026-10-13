@@ -1,17 +1,12 @@
 # Account-level cost guardrail — the outermost backstop, below which every
 # per-user limit (compute credits, storage, egress) is a refinement.
 #
-# The budget itself pre-dates Terraform: it was created in the console in
-# 2026-06 and lived as drift until now. The `import` block below adopts the
-# LIVE resource rather than creating a second one, so this file must keep
-# matching what is deployed (name, limit, start date) or the import fails.
+# The `import` block below adopts the LIVE resource rather than creating a
+# second one, so this file matches what is deployed (name, limit, start date)
+# to avoid import failure.
 #
-# Why this matters (2026-09-03): the live budget had ACTUAL notifications at
-# 80% and 100% and NO forecast notification. Actual spend was $3.67 while the
-# month was forecast at $48.46 against the $50 limit — i.e. the account was
-# projected to blow the budget and not one alert would have fired until the
-# money was already gone. FORECASTED is the only notification here that warns
-# before the spend happens.
+# FORECASTED is the only notification here that warns before the spend happens;
+# ACTUAL notifications only fire after the threshold is crossed.
 
 locals {
   # The one human who reads these. Also the confirmed subscriber on the
@@ -30,7 +25,7 @@ resource "aws_sns_topic" "budget_alerts" {
 }
 
 # Email is what a human actually reads. The topic exists so an automated
-# response (a throttle Lambda that flips the app into read-only, say) can be
+# response (a throttle Lambda that flips the API into read-only, say) can be
 # attached later without editing the budget itself.
 resource "aws_sns_topic_subscription" "budget_alerts_email" {
   provider  = aws.us_east_1
@@ -103,8 +98,7 @@ resource "aws_budgets_budget" "monthly" {
     subscriber_sns_topic_arns  = [aws_sns_topic.budget_alerts.arn]
   }
 
-  # The one that fires BEFORE the money is spent. This is the notification the
-  # live budget was missing.
+  # Fires BEFORE the money is spent, warning before spend happens.
   notification {
     comparison_operator        = "GREATER_THAN"
     notification_type          = "FORECASTED"
