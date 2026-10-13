@@ -70,13 +70,14 @@ down to its index: it holds the rules for all three.
 
 ## Comments
 
-A comment says what the code cannot: why this, why not the obvious
-alternative, what broke last time. If a rename would make it redundant,
-rename instead.
+A comment says what the code cannot: a choice too small for an ADR, why the
+obvious alternative lost, behaviour a reader wouldn't expect. Never what the
+code already says or how it got there. If a rename would do, rename.
 
-- Cite only what a reader of the repo can open: no audit codes (`SEC-001`),
-  private plans, chat or session links. Say what the code guards instead.
-- A critical invariant gets a test, and the comment cites the test.
+- Cite what a reader can open (an ADR, a test): no audit codes (`SEC-001`),
+  private plans or chat links. An issue, only while open, for a hold or
+  workaround.
+- A comment stating a rule names its test; a rule with no test is a defect.
 
 ## Testing
 
