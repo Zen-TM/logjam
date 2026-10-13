@@ -140,10 +140,10 @@ describe("collapseBatches", () => {
 
   it("lists EVERY member when expanded — the header is not one of them", () => {
     const rows = collapseBatches(list, batches, new Set([`${BATCH}:shares`]));
-    // The bug this pins: with the first member doubling as the header, "alice
-    // shared 2 items" expanded to ONE named row and the other item was never
-    // shown. b and c were also separated from a by an unrelated row, so this
-    // asserts the gathering too.
+    // If the first member doubles as the header, "alice shared 2 items"
+    // expands to ONE named row and the other item is never shown. b and c are
+    // also separated from a by an unrelated row, so this asserts the gathering
+    // too.
     expect(rows.map((n) => n.id)).toEqual([headerId, "a", "b", "c", "x"]);
   });
 

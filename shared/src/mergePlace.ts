@@ -1,26 +1,19 @@
-// Per-field place merge with explicit precedence. Moved from
-// frontend/src/csvImport/mergePlace.ts and generalized from a single
-// "keepExisting | useCsv" policy to a per-field policy map so the server can
-// enforce the same rules the client previews.
+// Per-field place merge with explicit precedence: uses a per-field policy map
+// so the server can enforce the same rules the client previews.
 //
-// Invariants (preserved verbatim through the places rework):
+// Invariants (mergePlace.test.ts):
 // - name / latitude / longitude are immutable: always keep existing.
 // - altNames and the source list are always unioned (never a conflict, never
 //   discard data).
 // - For any other field: if one side is absent take the other (union, never
 //   discard data); if both sides are present, defer to policy[field].
 //
-// WHAT CHANGED: the field list is no longer a hardcoded seven-entry union of
-// grade columns. A place's mergeable fields are `notes` plus the KEYS of the
-// definitions its type carries, so a user's own field merges under the same
-// rules the grades always did — and a Campsite, which has no grades at all,
-// merges its own fields rather than seven columns it does not have.
+// A place's mergeable fields are `notes` plus the keys of the definitions its
+// type carries, so a user's custom fields merge under the same rules as
+// standard fields — and a place type with no grades merges only its own fields.
 //
-// A stored policy from before the rework is keyed by column name (`vGrade`);
-// the forward migration rewrites those to field keys (`v_grade`). An
-// unmigrated policy does not error, it silently falls back to the default for
-// every field the user configured — which is why the migration does it rather
-// than a lenient reader here.
+// Stored policies are keyed by field keys (`v_grade`). An unrecognised key
+// does not error, it falls back to the default (`keepExisting`).
 
 import { asFieldValues, setFieldValues } from "./fieldValues.js";
 import { SOURCES_FIELD_KEY } from "./placeTypes.js";
