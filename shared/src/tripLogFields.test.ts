@@ -409,8 +409,8 @@ describe("renameCustomFieldLabel", () => {
 
 // One-sided bounds, end to end through the row reader. Three of the system
 // definitions are min-only (`hours`, `num_abseils`, `longest_abseil`) — there
-// is no honest ceiling for "how many pitches" — and the both-or-neither rule
-// this replaces dropped their bound silently on the way out of the database.
+// is no honest ceiling for "how many pitches" — so a bound must be preserved
+// even without its counterpart.
 describe("customFieldDefFromRow with one-sided bounds", () => {
   const row = (over: Partial<CustomFieldDefRow>): CustomFieldDefRow => ({
     entity: "place",
@@ -506,7 +506,7 @@ describe("tripFieldDefs", () => {
     ]);
   });
 
-  // A trip is not scoped by the places it links any more: a field that names a
+  // A trip is not scoped by the places it links: a field that names a
   // place type (a stale row from before tags) asks nothing on its own.
   it("ignores place-type scoping on a trip field", () => {
     const stale: ScopedCustomFieldDef = {
@@ -558,10 +558,8 @@ describe("isSystemFieldDef", () => {
     );
   });
 
-  // THE REGRESSION. A definition created on the phone has no owner id until the
-  // server sends one back, and `ownerId === null` alone called that a built-in:
-  // the field the user had just added drew a padlock and no verbs until the
-  // next delta landed.
+  // A definition created locally has no owner id until the server assigns
+  // one: it must not be treated as a built-in while awaiting the delta.
   it("is false for a locally-created field that has no owner id yet", () => {
     expect(isSystemFieldDef(scoped({ ownerId: null }))).toBe(false);
   });

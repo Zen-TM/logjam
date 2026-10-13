@@ -328,12 +328,12 @@ describe("formatters", () => {
 
 // --- Noise regressions -----------------------------------------------------
 //
-// The sawtooth cases above are the signal the OLD constants were tuned for,
-// and they passed while a phone sitting still on a rock recorded 10.5 km and
-// 3.2 km of ascent. Real GPS error is a RANDOM WALK, not a sawtooth: it
-// wanders past any fixed per-sample threshold given enough samples. These
-// feed simulated noise through the whole pipeline — acceptance gate first,
-// then stats — which is the only way the two interact.
+// Fixed per-sample thresholds tuned for sawtooth noise pass while a phone
+// sitting still on a rock records kilometres of drift and ascent. Real GPS
+// error is a RANDOM WALK, not a sawtooth: it wanders past any fixed per-sample
+// threshold given enough samples. These feed simulated noise through the whole
+// pipeline — acceptance gate first, then stats — which is the only way the
+// two interact.
 
 /** Deterministic LCG: these assertions must not flake. */
 function makeNoise(seed: number): (sigma: number) => number {
@@ -384,8 +384,8 @@ function simulate(options: {
 
 describe("noise rejection (random walk, not sawtooth)", () => {
   it("a phone sitting still for 20 minutes records almost nothing", () => {
-    // 30 m-accurate fixes, 15 m of drift each way. Before the accuracy-scaled
-    // gate this read 10.53 km walked and 3216 m climbed.
+    // 30 m-accurate fixes, 15 m of drift each way: an accuracy-scaled gate
+    // prevents random walk noise from accumulating kilometres of false movement.
     const stats = computeTrackStats(
       simulate({
         minutes: 20,
@@ -401,7 +401,6 @@ describe("noise rejection (random walk, not sawtooth)", () => {
 
   it("a real walk under place-grade noise reads close to the truth", () => {
     // 60 min at 1.2 m/s = 4.32 km, climbing 400 m, on 30 m fixes.
-    // Before: 32.45 km and 9472 m.
     const stats = computeTrackStats(
       simulate({
         minutes: 60,
@@ -491,10 +490,9 @@ describe("rejectTrackFix drift and plausibility gates", () => {
   });
 
   it("allows vehicle speed FROM PRECISE FIXES — the drive in is a recording too", () => {
-    // 60 km/h (16.7 m/s) for 3 s, from two 5 m fixes. Under the flat 5 m/s
-    // ceiling this was rejected, and because a rejection leaves `prev` behind,
-    // the next fix was measured over a longer baseline and rejected as well — a
-    // bus recorded a chorded route whose speed could not exceed 18 km/h.
+    // 60 km/h (16.7 m/s) for 3 s, from two 5 m fixes. Without vehicle speed
+    // headroom on precise fixes, a rejection leaves `prev` behind, causing
+    // subsequent fixes across longer baselines to also be rejected.
     expect(
       rejectTrackFix(
         point({ timestampMs: 0, accuracyM: 5 }),
@@ -715,7 +713,7 @@ describe("computeTrackDetail", () => {
   });
 
   it("falls back to average speed on a series that never measured suppression", () => {
-    // Imported files and rows written before the recorder counted: null is
+    // Imported files and rows without stationary tracking: null is
     // "not measured", and must not read as "nothing was suppressed".
     const detail = computeTrackDetail(pausedInterval({ stationaryMs: null }));
     expect(detail.stoppedMs).toBe(0);
@@ -723,9 +721,8 @@ describe("computeTrackDetail", () => {
   });
 
   it("books the time after the last fix as stopped, not as nothing", () => {
-    // The 2026-08-20 field walk: the last accepted fix landed 19 minutes
-    // before the Finish tap, and moving + stopped summed to the fixes' own
-    // span rather than to the recording's.
+    // When the last accepted fix lands well before the Finish tap, moving +
+    // stopped must sum to the recording's span rather than only to the fixes' span.
     const walked = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000 });
     const fixSpanMs = 400_000;
     const detail = computeTrackDetail(walked, {
@@ -770,7 +767,7 @@ describe("computeTrackDetail", () => {
   it("draws exactly the stopped time it reports, and runs the full recording", () => {
     // The chart and the headline numbers are two renderings of ONE
     // classification. A chart reading 0.1 km/h beside a stat saying "stopped"
-    // is the app disagreeing with itself, and a chart ending at the last fix
+    // is Logjam GPS disagreeing with itself, and a chart ending at the last fix
     // leaves the longest rest of the day off the picture entirely.
     const walked = walk({ count: 6, stepMilliDeg: 1, stepMs: 30_000 });
     // A proven rest inside the track, and a long wait before Finish.
