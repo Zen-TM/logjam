@@ -23,10 +23,10 @@ beforeEach(() => {
   update.mockReset();
 });
 
-// Two phones on one account each made "Cave" with no signal and push in the
-// same instant: both read the name as free, and the second insert loses to the
-// unique index. A push renames a taken name because a refusal parks an op the
-// user can only discard, with the places made of the type.
+// Two Logjam GPS devices on one account each made "Cave" with no signal and push
+// in the same instant: both read the name as free, and the second insert loses
+// to the unique index. A push renames a taken name because a refusal parks an
+// op the user can only discard, with the places made of the type.
 //
 // Mutation that turns the first two red: answer the lost race with a 409
 // whatever the caller asked for.

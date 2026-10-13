@@ -247,7 +247,6 @@ async function sweepPrefix(bucket: string, prefix: string, maxObjects: number) {
     update: { lastKey: keys[keys.length - 1] },
   });
 
-  // Notify against the freshly written totals.
   if (totals.size > 0) {
     const users = await prisma.user.findMany({
       where: { id: { in: [...totals.keys()] } },

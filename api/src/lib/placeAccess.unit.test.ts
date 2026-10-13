@@ -25,7 +25,7 @@ beforeEach(() => {
   shareFindFirst.mockReset();
 });
 
-// These tests encode the hybrid-share privacy boundary (root CLAUDE.md):
+// These tests encode the hybrid-share privacy boundary (root AGENTS.md):
 // share recipients are "shared", never "owner"; strangers are "none".
 
 describe("getPlaceRole", () => {
@@ -103,7 +103,7 @@ describe("requirePlaceOwner", () => {
     expect(() => requirePlaceOwner("owner-1", PLACE)).not.toThrow();
   });
 
-  // PRIV-102: the DEFAULT denial must be the safe one. A 403 default would
+  // The DEFAULT denial must be the safe one. A 403 default would
   // ship an existence oracle at the first call site that forgot the argument.
   it("throws the default 404 for a non-owner (even a share recipient)", () => {
     const err = (() => {
@@ -123,7 +123,7 @@ describe("requirePlaceOwner", () => {
   });
 });
 
-// PRIV-001 promise anchor. privacy.html ("How sharing works") commits:
+// Privacy promise anchor. privacy.html ("How sharing works") commits:
 // "Per-trip notes, per-trip media, and your trip-log history remain private
 // to you." These tests pin the exact wire-shape a share recipient receives
 // from the single-trip GET deny path — if that policy wording ever changes,
