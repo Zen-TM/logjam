@@ -83,7 +83,10 @@ router.post(
             err instanceof Prisma.PrismaClientKnownRequestError &&
             err.code === "P2002"
           )
-            throw new AppError(409, "Place already shared with this user");
+            throw new AppError(
+              409,
+              say`You've already shared this place with them.`,
+            );
           throw err;
         });
       // The delta's shared-place visibility is a WHERE-restriction layered on
