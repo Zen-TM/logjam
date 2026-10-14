@@ -266,6 +266,64 @@ the same week.
 
 ---
 
+## Building the flow network layer
+
+`build_flow_network.py` turns the same 5 m DEM sheets into a GeoPackage of
+creeks for one or more drainage basins. Each creek is cut into segments at
+every junction, and each segment carries:
+
+| Field | Meaning |
+|---|---|
+| `id` | the segment |
+| `flows_into` | the `id` of the segment its water goes to next (empty at a basin's outlet) |
+| `catchment_start_km2` | catchment area at its top, just below the junction it starts at |
+| `catchment_end_km2` | catchment area at its bottom, just above the next junction |
+| `stream_order` | Strahler order |
+| `basin` | the basin it was built in |
+
+Between two junctions a creek gains area only from the hillside beside it, so
+the catchment at any point on a segment is a straight-line blend of its two
+values.
+
+It needs GDAL with its Python bindings, NumPy, Shapely (the worker image has
+all three) and the `whitebox_tools` binary from
+[WhiteboxTools](https://www.whiteboxgeo.com/download-whiteboxtools/) on PATH.
+
+The basins are a polygon file (GeoPackage, GeoJSON or shapefile, any CRS) with
+one feature per basin; `--name-field` names the attribute that holds each
+basin's name. Basins share no water, so each is built on its own, and a file
+with one basin or a hundred is the same command.
+
+```bash
+# The sheets the basins need, then the build.
+python3 build_flow_network.py sheets basins.gpkg --name-field name > sheets.txt
+python3 build_nsw_dem.py fetch dem/src $(cat sheets.txt)
+python3 build_flow_network.py build dem/src basins.gpkg dem/flow-work dem/flow-network.gpkg \
+  --extracted "October 2026" --name-field name
+```
+
+Each basin's working files go in their own directory under `dem/flow-work`,
+and a stage that finished is skipped, so a stopped run carries on where it
+left off. `3-d8.tif` there is the basin's flow-direction raster; keep it to
+trace a catchment's outline later (GRASS `r.water.outlet` in QGIS).
+
+| Option | Default | |
+|---|---|---|
+| `--cell-m` | 5 | grid cell size; 20 for a coarser, cheaper build |
+| `--min-catchment-km2` | 0.02 | the catchment at which a creek starts; about where two-thirds of the creeks on the SIX topo map start |
+| `--buffer-m` | 2000 | extra DEM around each basin, for water its published boundary puts on the wrong side of a divide |
+| `--breach-max-m` | 500 | the longest channel a breach may cut through a road embankment or similar |
+
+Only segments whose bottom is inside the basin are kept: everything upstream
+of them is inside too, so their catchment is whole.
+
+Measured on one sheet (Katoomba) with two test areas of about 80 km² each and
+the 2 km buffer: 36 seconds, 1,333 segments. A whole basin the size of the
+Hawkesbury–Nepean (about 0.9 billion cells at 5 m) has not been run yet;
+build a single sub-basin first to measure time and memory.
+
+---
+
 ## Troubleshooting
 
 **`pdal: command not found`**
