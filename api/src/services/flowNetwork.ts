@@ -42,6 +42,7 @@ import {
   blend,
   boxAround,
   chooseCreek,
+  downstreamBearing,
   inPolygons,
   lineDownTo,
   nearestOnLine,
@@ -366,12 +367,14 @@ export function lookupIn(
   }
   const { chosen, biggerNearby } = choice;
   const [longitude, latitude] = chosen.nearest.position;
+  const bearing = downstreamBearing(chosen.line, chosen.nearest);
   return {
     status: "found",
     snapped: { longitude: round(longitude), latitude: round(latitude) },
     distanceM: Math.round(chosen.distanceM * 10) / 10,
     catchmentKm2: chosen.catchmentKm2,
     streamOrder: chosen.streamOrder,
+    ...(bearing !== null && { downstreamBearing: bearing }),
     ...(biggerNearby && {
       biggerNearby: { catchmentKm2: biggerNearby.catchmentKm2 },
     }),

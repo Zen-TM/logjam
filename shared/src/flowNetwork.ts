@@ -41,6 +41,12 @@ export type FlowNetworkLookup =
       catchmentKm2: number;
       streamOrder: number;
       /**
+       * Which way the water runs at the snapped point, in whole degrees
+       * clockwise from north. Absent from an API that predates it, and on a
+       * segment too short to have a direction.
+       */
+      downstreamBearing?: number;
+      /**
        * Another creek in snapping range draining at least
        * FLOW_NETWORK_BIGGER_FACTOR times more: near a confluence the nearest
        * creek may not be the one meant.

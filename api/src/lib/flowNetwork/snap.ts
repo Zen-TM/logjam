@@ -88,6 +88,47 @@ export function nearestOnLine(
 }
 
 /**
+ * Which way the water runs at a point on a segment, in degrees clockwise from
+ * north. Lines run downstream (the build writes them from source to mouth),
+ * so it is the line's own direction, taken between the points `spanM` either
+ * side: one leg alone is a 5 m D8 step and points anywhere within 45° of the
+ * creek, which on the map reads as a wrong arrow.
+ */
+export function downstreamBearing(
+  line: readonly Position[],
+  nearest: NearestOnLine,
+  spanM = 25,
+): number | null {
+  if (line.length < 2) return null;
+  const frame = localFrame(nearest.position);
+  const xy = line.map(frame.toMetres);
+  const cumulative = [0];
+  for (let i = 1; i < xy.length; i++) {
+    const [ax, ay] = xy[i - 1]!;
+    const [bx, by] = xy[i]!;
+    cumulative.push(cumulative[i - 1]! + Math.hypot(bx - ax, by - ay));
+  }
+  const total = cumulative[cumulative.length - 1]!;
+  if (total === 0) return null;
+  const at = (s: number): Position => {
+    const d = Math.max(0, Math.min(total, s));
+    let i = 1;
+    while (i < cumulative.length - 1 && cumulative[i]! < d) i++;
+    const [ax, ay] = xy[i - 1]!;
+    const [bx, by] = xy[i]!;
+    const length = cumulative[i]! - cumulative[i - 1]!;
+    const t = length === 0 ? 0 : (d - cumulative[i - 1]!) / length;
+    return [ax + t * (bx - ax), ay + t * (by - ay)];
+  };
+  const here = nearest.fraction * total;
+  const [ux, uy] = at(here - spanM);
+  const [dx, dy] = at(here + spanM);
+  if (ux === dx && uy === dy) return null;
+  const degrees = (Math.atan2(dx - ux, dy - uy) * 180) / Math.PI;
+  return Math.round((degrees + 360) % 360);
+}
+
+/**
  * The part of a line from its start down to a point on it: the snapped
  * segment drawn as upstream ends where the click was measured, not at the next
  * junction below.

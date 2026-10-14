@@ -9,6 +9,7 @@ import {
   blend,
   boxAround,
   chooseCreek,
+  downstreamBearing,
   inPolygons,
   lineDownTo,
   localFrame,
@@ -94,6 +95,36 @@ describe("nearestOnLine", () => {
     expect(head).toHaveLength(3);
     expect(head.slice(0, 2)).toEqual(line.slice(0, 2));
     expect(head[2]).toEqual(near.position);
+  });
+});
+
+describe("downstreamBearing", () => {
+  // Mutation: swap the arguments of atan2 and an eastward creek points north.
+  it("points the way the line runs", () => {
+    const east = [at(0, 0), at(200, 0)];
+    expect(downstreamBearing(east, nearestOnLine(east, at(100, 5))!)).toBe(90);
+    const south = [at(0, 0), at(0, -200)];
+    expect(downstreamBearing(south, nearestOnLine(south, at(3, -100))!)).toBe(
+      180,
+    );
+  });
+
+  // Mutation: take the direction of the one leg the snap is on, and a D8
+  // step across a creek running east reads as north.
+  it("follows the creek, not the 5 m step it was snapped onto", () => {
+    // East in 5 m stairs: 5 east, 5 north, 5 east, 5 south, ...
+    const stairs: Position[] = [];
+    for (let i = 0; i <= 20; i++) {
+      stairs.push(at(i * 5, 0), at(i * 5, i % 2 === 0 ? 5 : 0));
+    }
+    const near = nearestOnLine(stairs, at(50, 2.5))!;
+    expect(downstreamBearing(stairs, near)).toBeGreaterThan(75);
+    expect(downstreamBearing(stairs, near)).toBeLessThan(105);
+  });
+
+  it("has no direction on a line without length", () => {
+    const dot = [at(1, 1), at(1, 1)];
+    expect(downstreamBearing(dot, nearestOnLine(dot, ORIGIN)!)).toBeNull();
   });
 });
 
