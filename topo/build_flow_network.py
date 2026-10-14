@@ -59,6 +59,7 @@ ogr.UseExceptions()
 # 55/56 zone line at 150°E, which runs through the Wolgan and Capertee.
 ALBERS = "EPSG:3577"
 LAYER = "flow_network"
+BASINS_LAYER = "basins"
 
 # ESRI D8 codes, as WhiteboxTools writes them with --esri_pntr: the
 # neighbour a cell drains into, as (row step, column step). Rows grow
@@ -655,9 +656,15 @@ def write_segments(path, lines, flows_into, start_km2, end_km2, order) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def merge(parts: List[Tuple[str, Path]], out: Path, extracted: str) -> None:
+def merge(
+    parts: List[Tuple[str, Path]],
+    basins: List[Tuple[str, ogr.Geometry]],
+    out: Path,
+    extracted: str,
+) -> None:
     """Every basin's segments in one layer, ids unique across basins, in
-    WGS84. Redone each run: it is fast, and a basin may have been added."""
+    WGS84, plus the basins' outlines. Redone each run: it is fast, and a basin
+    may have been added."""
     print("merge", flush=True)
     part = out.with_name(f"{out.stem}.part{out.suffix}")
     part.unlink(missing_ok=True)
@@ -717,6 +724,22 @@ def merge(parts: List[Tuple[str, Path]], out: Path, extracted: str) -> None:
         print(f"  {name}: {len(features):,} segments", flush=True)
         next_id += len(features)
     layer.CommitTransaction()
+
+    # What the layer covers. Without it, a click outside every basin built so
+    # far would read "no creek here" when the truth is "not built here".
+    outlines = ds.CreateLayer(BASINS_LAYER, wgs84, ogr.wkbMultiPolygon)
+    outlines.CreateField(ogr.FieldDefn("name", ogr.OFTString))
+    for name, basin in basins:
+        g = ogr.Feature(outlines.GetLayerDefn())
+        g.SetField("name", name)
+        geom = basin.Clone()
+        geom.Transform(to_wgs84)
+        g.SetGeometry(ogr.ForceToMultiPolygon(geom))
+        outlines.CreateFeature(g)
+
+    # Walking upstream asks "which segments flow into this one?" once per
+    # segment; without an index each asking scans the whole layer.
+    ds.ExecuteSQL(f"CREATE INDEX {LAYER}_flows_into ON {LAYER} (flows_into)")
     ds = None
     part.rename(out)
 
@@ -730,7 +753,8 @@ def build(args: argparse.Namespace) -> None:
     if not shutil.which("whitebox_tools"):
         sys.exit("build needs the `whitebox_tools` binary (WhiteboxTools) on PATH")
     parts = []
-    for name, basin in read_basins(args.basins, args.name_field):
+    basins = read_basins(args.basins, args.name_field)
+    for name, basin in basins:
         print(name, flush=True)
         work = args.work / basin_slug(name)
         work.mkdir(parents=True, exist_ok=True)
@@ -741,7 +765,7 @@ def build(args: argparse.Namespace) -> None:
         parts.append(
             (name, segments(d8, acc, basin, work, args.cell_m, args.min_catchment_km2))
         )
-    merge(parts, args.out, args.extracted)
+    merge(parts, basins, args.out, args.extracted)
 
 
 def main() -> None:

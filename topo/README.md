@@ -283,7 +283,8 @@ every junction, and each segment carries:
 
 Between two junctions a creek gains area only from the hillside beside it, so
 the catchment at any point on a segment is a straight-line blend of its two
-values.
+values. A second layer, `basins`, holds each basin's outline and `name`: the
+area the layer covers.
 
 It needs GDAL with its Python bindings, NumPy, Shapely (the worker image has
 all three) and the `whitebox_tools` binary from
@@ -317,10 +318,14 @@ trace a catchment's outline later (GRASS `r.water.outlet` in QGIS).
 Only segments whose bottom is inside the basin are kept: everything upstream
 of them is inside too, so their catchment is whole.
 
-Measured on one sheet (Katoomba) with two test areas of about 80 km² each and
-the 2 km buffer: 36 seconds, 1,333 segments. A whole basin the size of the
-Hawkesbury–Nepean (about 0.9 billion cells at 5 m) has not been run yet;
-build a single sub-basin first to measure time and memory.
+Measured on the Grose River (669 km², Geofabric's outline; 4 sheets, a grid
+of 54 million cells): 92 seconds on 20 cores, about 1.5 GB of memory at
+most, 13,490 segments, and an outlet catchment within 1% of Geofabric's.
+WhiteboxTools holds the basin's whole bounding box in memory, so memory
+grows with that box: the whole Hawkesbury–Nepean is a box of 2.2 billion
+cells, which by the same measure needs roughly 50 to 70 GB. Accumulation is
+float32, so above 2²⁴ cells (420 km² at 5 m) it is exact only to a few
+cells; the build's checks allow for that.
 
 ---
 
