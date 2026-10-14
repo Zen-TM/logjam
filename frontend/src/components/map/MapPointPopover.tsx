@@ -4,12 +4,15 @@ import * as maplibregl from "maplibre-gl";
 import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
+  mapPointCatchment,
+  mapPointCatchmentNote,
   mapPointFacts,
   mapPointVerbs,
+  type MapPointCatchment,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
-import { useElevationProfile } from "../../placeUtils";
+import { useElevationProfile, useFlowNetworkLookup } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
 import {
@@ -20,14 +23,17 @@ import {
   StatGrid,
   type Stat,
 } from "../../ui";
+import { readCssVar } from "./cssVar";
+import { clearSnap, showSnap } from "./flowNetworkLayers";
 import classes from "./MapPointPopover.module.css";
 
 /**
  * "What is here?": the panel a press on empty map opens, anchored at the point
  * it asked about, with a dot left there (`MAP_POINT`, shared/contracts).
  *
- * Mounted only while a point is being asked about, so the elevation request is
- * tied to the panel being open and never fires for a stale point.
+ * Mounted only while a point is being asked about, so the elevation and
+ * catchment requests are tied to the panel being open and never fire for a
+ * stale point.
  *
  * PRIVACY (shared/DESIGN.md §13): the coordinate is on this panel and the
  * clipboard when the user presses Copy, and nowhere else: not in a toast, a
@@ -40,6 +46,7 @@ export default function MapPointPopover({
   onClose,
   onAddPlace,
   onMeasure,
+  onShowUpstream,
 }: {
   map: maplibregl.Map;
   point: MapPointCoord;
@@ -48,6 +55,8 @@ export default function MapPointPopover({
   onClose: () => void;
   onAddPlace: (point: MapPointCoord) => void;
   onMeasure: (point: MapPointCoord) => void;
+  /** Draws the creeks upstream of the point; they outlive this panel. */
+  onShowUpstream: (point: MapPointCoord) => void;
 }) {
   const toast = useToast();
   // On narrow web the tab bar owns the bottom of the screen, and a panel below
@@ -81,6 +90,21 @@ export default function MapPointPopover({
   ]);
   const metres = profile.profile?.samples[0]?.elevationM ?? null;
 
+  const flow = useFlowNetworkLookup(point, MAP_POINT.copy.catchmentFailed);
+  const catchment: MapPointCatchment = flow.lookup
+    ? mapPointCatchment(flow.lookup)
+    : flow.error
+      ? { state: "failed", message: flow.error }
+      : { state: "checking" };
+  const snapped = flow.lookup?.status === "found" ? flow.lookup.snapped : null;
+
+  // The creek point the figure was measured at, while the figure is on show.
+  useEffect(() => {
+    if (!snapped) return;
+    showSnap(map, point, snapped, readCssVar("--color-accent", "#deb188"));
+    return () => clearSnap(map);
+  }, [map, point, snapped]);
+
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
@@ -90,6 +114,7 @@ export default function MapPointPopover({
           ? { state: "checking" }
           : { state: "unavailable" },
     from,
+    catchment,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
@@ -102,12 +127,15 @@ export default function MapPointPopover({
     map.getCanvas().focus();
   };
 
+  const catchmentNote = mapPointCatchmentNote(catchment);
+
   const run: Record<
-    Extract<MapPointVerbId, "addPlace" | "measure" | "copy">,
+    Extract<MapPointVerbId, "addPlace" | "measure" | "copy" | "upstream">,
     () => void
   > = {
     addPlace: () => onAddPlace(point),
     measure: () => onMeasure(point),
+    upstream: () => onShowUpstream(point),
     copy: () => {
       void navigator.clipboard
         .writeText(
@@ -132,11 +160,14 @@ export default function MapPointPopover({
       >
         <div className={classes.body}>
           <StatGrid stats={stats} />
+          {catchmentNote && <p className={classes.note}>{catchmentNote}</p>}
           {from === null && (
             <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
           )}
           <div className={classes.verbs}>
-            {mapPointVerbs("web").map((verb) => (
+            {mapPointVerbs("web", {
+              creekFound: catchment.state === "found",
+            }).map((verb) => (
               <Row
                 key={verb.id}
                 title={verb.label}

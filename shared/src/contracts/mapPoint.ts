@@ -21,8 +21,12 @@ import {
   initialBearingDegrees,
 } from "../trackStats.js";
 import type { IconIdea } from "../icons.js";
+import { FLOW_NETWORK_SNAP_M, type FlowNetworkLookup } from "../flowNetwork.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
+
+const FLOW_NETWORK_GAP =
+  "Logjam GPS's sheet does not ask the API's flow network yet: a gap, not a choice.";
 
 export const MAP_POINT = {
   id: "map.point",
@@ -41,6 +45,9 @@ export const MAP_POINT = {
       reason:
         "A slope needs nine heights from the fine DEM. Logjam GPS reads DEM tiles itself; Logjam Web gets heights from the API's profile route, which answers along a line.",
     },
+    // How much land drains through the nearest creek: a measurement of the
+    // ground, never a rating of how dangerous the creek is.
+    { key: "catchment", on: "web", reason: FLOW_NETWORK_GAP },
   ],
   copy: {
     position: "Position",
@@ -53,6 +60,15 @@ export const MAP_POINT = {
     // rather than as the terrain being a connection away.
     elevationNeedsConnection: "Needs a connection",
     coordinatesCopied: "Coordinates copied.",
+    catchment: "Catchment",
+    catchmentChecking: "Checking…",
+    catchmentNoCreek: `No creek within ${FLOW_NETWORK_SNAP_M} m`,
+    // The layer is built basin by basin, so "none here" would be false.
+    catchmentNotCovered: "Not covered yet",
+    catchmentFailed: "Couldn't check the catchment.",
+    upstreamFinding: "Finding the creeks upstream…",
+    upstreamFailed: "Couldn't show the creeks upstream.",
+    upstreamClear: "Clear the creeks upstream",
   },
 } as const satisfies ScreenContract;
 
@@ -69,6 +85,8 @@ type PointVerbDeclaration = {
   subtitle?: string;
   on: ContractPlatform;
   reason: string;
+  /** Offered only once a creek has been found near the point. */
+  needsCreek?: true;
 };
 
 /** In the order each client draws them. */
@@ -115,6 +133,14 @@ export const MAP_POINT_VERBS = [
     reason:
       "Logjam GPS copies by pressing the Position figure, which wears the copy glyph.",
   },
+  {
+    id: "upstream",
+    icon: "catchment",
+    label: "Show the creeks upstream",
+    on: "web",
+    reason: FLOW_NETWORK_GAP,
+    needsCreek: true,
+  },
 ] as const satisfies readonly PointVerbDeclaration[];
 
 export type MapPointVerbId = (typeof MAP_POINT_VERBS)[number]["id"];
@@ -126,10 +152,17 @@ export type MapPointVerb = {
   subtitle: string | null;
 };
 
-/** The verbs one client has, in the order it draws them. */
-export function mapPointVerbs(platform: ContractPlatform): MapPointVerb[] {
+/**
+ * The verbs one client has, in the order it draws them. `creekFound`: the
+ * catchment lookup found a creek near the point; until then (and when it
+ * found none) there is nothing upstream to show.
+ */
+export function mapPointVerbs(
+  platform: ContractPlatform,
+  { creekFound = false }: { creekFound?: boolean } = {},
+): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
-    .filter((verb) => verb.on === platform)
+    .filter((verb) => verb.on === platform && (creekFound || !verb.needsCreek))
     .map((verb) => ({
       id: verb.id as MapPointVerbId,
       icon: verb.icon,
@@ -146,8 +179,84 @@ export type MapPointElevation =
   | { state: "checking" }
   | { state: "unavailable" };
 
+/**
+ * What the flow network says about the creek nearest the point. `failed`
+ * carries the sentence `messageFromError` chose: the API's own, as it is.
+ */
+export type MapPointCatchment =
+  | { state: "checking" }
+  | { state: "found"; catchmentKm2: number; biggerNearbyKm2: number | null }
+  | { state: "noCreek" }
+  | { state: "notCovered" }
+  | { state: "failed"; message: string };
+
+/** A lookup's answer, as the panel shows it. */
+export function mapPointCatchment(
+  lookup: FlowNetworkLookup,
+): MapPointCatchment {
+  switch (lookup.status) {
+    case "found":
+      return {
+        state: "found",
+        catchmentKm2: lookup.catchmentKm2,
+        biggerNearbyKm2: lookup.biggerNearby?.catchmentKm2 ?? null,
+      };
+    case "no-creek":
+      return { state: "noCreek" };
+    case "not-covered":
+      return { state: "notCovered" };
+  }
+}
+
+/**
+ * An area in km², at a precision that suits it: a gully's 0.03 km² and a
+ * river's 663 km² both show. Always km², so two catchments on one surface
+ * compare at a glance (shared/DESIGN.md §11).
+ */
+export function formatCatchmentKm2(km2: number): string {
+  if (!Number.isFinite(km2) || km2 < 0) return "—";
+  if (km2 < 0.005) return "<0.01 km²";
+  // Thresholds at the rounding edge, so 0.996 reads "1.0", not "1.00".
+  const digits = km2 < 0.995 ? 2 : km2 < 9.95 ? 1 : 0;
+  const figure = km2.toLocaleString("en-AU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return `${figure} km²`;
+}
+
+/**
+ * The line under the figures when a much bigger creek is also in range: near
+ * a confluence the nearest creek may not be the one the user meant.
+ */
+export function mapPointCatchmentNote(
+  catchment: MapPointCatchment | undefined,
+): string | null {
+  if (catchment?.state !== "found" || catchment.biggerNearbyKm2 == null)
+    return null;
+  return `A creek draining ${formatCatchmentKm2(catchment.biggerNearbyKm2)} is also nearby.`;
+}
+
+/**
+ * The notice over the map while the creeks upstream of a point are drawn.
+ * `trimmed`: the API left the smallest creeks out to fit the response.
+ */
+export function mapPointUpstreamNotice(
+  catchmentKm2: number,
+  trimmed: boolean,
+): string {
+  const line = `Creeks upstream · ${formatCatchmentKm2(catchmentKm2)}`;
+  return trimmed ? `${line} · smaller ones left out` : line;
+}
+
 export type MapPointFact = {
-  key: "position" | "elevation" | "distance" | "bearing" | "slope";
+  key:
+    | "position"
+    | "elevation"
+    | "distance"
+    | "bearing"
+    | "slope"
+    | "catchment";
   label: string;
   value: string;
   /** Takes the whole line. */
@@ -166,14 +275,16 @@ export function mapPointPosition(point: MapPointCoord): string {
  * when the device has none: distance and bearing are then left out rather than
  * asked for. `slopeDegrees` is `demSlopeAt`'s answer: null or absent wherever
  * the fine DEM cannot tell, and then there is no slope figure at all.
+ * `catchment` is absent on a client that does not look it up.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
   elevation: MapPointElevation;
   from: MapPointCoord | null;
   slopeDegrees?: number | null;
+  catchment?: MapPointCatchment;
 }): MapPointFact[] {
-  const { point, elevation, from, slopeDegrees } = input;
+  const { point, elevation, from, slopeDegrees, catchment } = input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -226,6 +337,24 @@ export function mapPointFacts(input: {
       key: "slope",
       label: copy.slope,
       value: `${Math.round(slopeDegrees)}°`,
+    });
+  if (catchment)
+    facts.push({
+      key: "catchment",
+      label: copy.catchment,
+      ...(catchment.state === "failed"
+        ? // A sentence, not a figure: it takes the line.
+          { value: catchment.message, span: true as const }
+        : {
+            value:
+              catchment.state === "found"
+                ? formatCatchmentKm2(catchment.catchmentKm2)
+                : catchment.state === "checking"
+                  ? copy.catchmentChecking
+                  : catchment.state === "noCreek"
+                    ? copy.catchmentNoCreek
+                    : copy.catchmentNotCovered,
+          }),
     });
   return facts;
 }

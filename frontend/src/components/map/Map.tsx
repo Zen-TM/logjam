@@ -1,4 +1,4 @@
-import { Button, Notice } from "../../ui";
+import { Button, IconButton, Notice } from "../../ui";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
@@ -15,6 +15,8 @@ import {
   MAP_INK,
   PLACE_TYPE_COLORS,
   SHARED_PLACE_COLOR,
+  MAP_POINT,
+  mapPointUpstreamNotice,
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
@@ -23,6 +25,12 @@ import {
 import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
+import { readCssVar } from "./cssVar";
+import {
+  clearUpstream,
+  paintFlowNetwork,
+  showUpstream,
+} from "./flowNetworkLayers";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
@@ -94,6 +102,7 @@ import type {
 } from "../../placeUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import {
+  getFlowNetworkLookup,
   passesFilters,
   isPlaceDoneByViewer,
   type TPlaceType,
@@ -142,11 +151,27 @@ const ROUTE_MIN_ZOOM = 10;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 
-function readCssVar(name: string, fallback: string): string {
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-  return value || fallback;
+/**
+ * Fits the map to a [west, south, east, north] box: a way's extent or the
+ * creeks upstream of a point. Fitted rather than centred: a line has a length,
+ * and dropping the camera on its midpoint at a fixed zoom shows either a
+ * fraction of it or a great deal of nothing. Same padding as the topo
+ * footprint fly.
+ */
+function fitToBox(
+  map: maplibregl.Map,
+  [west, south, east, north]: readonly [number, number, number, number],
+) {
+  if ([west, south, east, north].every((value) => Number.isFinite(value))) {
+    map.fitBounds([west, south, east, north], {
+      padding: 80,
+      duration: 1200,
+      maxZoom: 16,
+    });
+  } else {
+    // Never the coordinates themselves (privacy rule) — just that it was skipped.
+    console.warn("Skipping fit: bounds out of range");
+  }
 }
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
@@ -881,6 +906,63 @@ function Map({
     askedClosedAt.current = Date.now();
     setAsked(null);
   }, []);
+  // The creeks upstream of a point, asked for from that point's panel. They
+  // outlive the panel, which closes as soon as the map moves to fit them, and
+  // stay until cleared from their notice or a new point is asked about.
+  const [upstream, setUpstream] = useState<
+    | { state: "finding" }
+    | { state: "shown"; catchmentKm2: number; trimmed: boolean }
+    | null
+  >(null);
+  // Bumped by every show and clear, so a late answer to an earlier request
+  // never draws over what the user did since.
+  const upstreamRequest = useRef(0);
+  const clearUpstreamOverlay = useCallback(() => {
+    upstreamRequest.current += 1;
+    setUpstream(null);
+    if (mapRef.current) clearUpstream(mapRef.current);
+  }, []);
+  const showUpstreamFrom = useCallback(
+    (point: MapPointCoord) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const request = ++upstreamRequest.current;
+      clearUpstream(map);
+      setUpstream({ state: "finding" });
+      const failed = (message: string) => {
+        setUpstream(null);
+        toast.error(message);
+      };
+      // The press, not the creek point it snapped to: the API snaps it the
+      // same way, so the lines start at the creek the panel measured.
+      getFlowNetworkLookup({ ...point, upstream: true })
+        .then((lookup) => {
+          if (request !== upstreamRequest.current || mapRef.current !== map)
+            return;
+          if (lookup.status !== "found" || !lookup.upstream) {
+            failed(MAP_POINT.copy.upstreamFailed);
+            return;
+          }
+          showUpstream(
+            map,
+            lookup.upstream,
+            readCssVar("--color-accent", "#deb188"),
+          );
+          setUpstream({
+            state: "shown",
+            catchmentKm2: lookup.catchmentKm2,
+            trimmed: lookup.upstream.trimmedBelowOrder != null,
+          });
+          fitToBox(map, lookup.upstream.bbox);
+        })
+        .catch((err) => {
+          if (request !== upstreamRequest.current) return;
+          console.error(err);
+          failed(messageFromError(err, MAP_POINT.copy.upstreamFailed));
+        });
+    },
+    [toast],
+  );
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
     selectRouteRef.current = selectRoute;
@@ -1591,6 +1673,7 @@ function Map({
     const map = mapRef.current;
     const onThemeChange = () => {
       applyPlaceThemePaint(map);
+      paintFlowNetwork(map, readCssVar("--color-accent", "#deb188"));
     };
 
     window.addEventListener("logjam-theme-change", onThemeChange);
@@ -1852,11 +1935,14 @@ function Map({
       pending = null;
     };
     const armed = () => pickModeRef.current || drawingRouteRef.current;
-    const ask = (latitude: number, longitude: number) =>
+    const ask = (latitude: number, longitude: number) => {
+      // A new question puts away the creeks drawn for the last one.
+      clearUpstreamOverlay();
       setAsked({
         point: { latitude, longitude },
         from: userFixRef.current,
       });
+    };
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       if (armed() || Date.now() - askedClosedAt.current < JUST_CLOSED_MS)
@@ -1914,7 +2000,7 @@ function Map({
       map.off("contextmenu", onContextMenu);
       canvas.removeEventListener("keydown", onKeyDown);
     };
-  }, [mapLoaded]);
+  }, [mapLoaded, clearUpstreamOverlay]);
 
   // Coordinate picking mode
   const onCoordsPickedRef = useRef(onCoordsPicked);
@@ -3009,22 +3095,10 @@ function Map({
     onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
   }, [onFlyToBoundsConsumed]);
 
-  // A way's extent, fitted rather than centred: a line has a length, and
-  // dropping the camera on its midpoint at a fixed zoom shows either a fraction
-  // of it or a great deal of nothing. Same padding as the topo footprint fly.
+  // A way's extent (`fitToBox`).
   useEffect(() => {
     if (!flyToBounds || !mapLoaded || !mapRef.current) return;
-    const [west, south, east, north] = flyToBounds;
-    if ([west, south, east, north].every((value) => Number.isFinite(value))) {
-      mapRef.current.fitBounds([west, south, east, north], {
-        padding: 80,
-        duration: 1200,
-        maxZoom: 16,
-      });
-    } else {
-      // Never the coordinates themselves (privacy rule) — just that it was skipped.
-      console.warn("Skipping fit-to-way: bounds out of range");
-    }
+    fitToBox(mapRef.current, flyToBounds);
     onFlyToBoundsConsumedRef.current?.();
   }, [flyToBounds, mapLoaded]);
 
@@ -3314,6 +3388,26 @@ function Map({
     setIs3D(!is3D);
   };
 
+  const upstreamNotice = upstream && (
+    <Notice
+      icon="catchment"
+      announce
+      action={
+        <IconButton
+          icon="close"
+          label={MAP_POINT.copy.upstreamClear}
+          size={14}
+          round
+          onClick={clearUpstreamOverlay}
+        />
+      }
+    >
+      {upstream.state === "finding"
+        ? MAP_POINT.copy.upstreamFinding
+        : mapPointUpstreamNotice(upstream.catchmentKm2, upstream.trimmed)}
+    </Notice>
+  );
+
   return (
     <div
       id="map"
@@ -3329,7 +3423,14 @@ function Map({
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
         tools={mapTools}
-        notices={notices}
+        notices={
+          notices || upstreamNotice ? (
+            <>
+              {notices}
+              {upstreamNotice}
+            </>
+          ) : undefined
+        }
         search={
           // Always available, including during pick modes for a quick fly-to.
           <MapSearchBox
@@ -3356,6 +3457,7 @@ function Map({
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
+          onShowUpstream={showUpstreamFrom}
         />
       )}
       {pickingCoords && (

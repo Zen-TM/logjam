@@ -110,6 +110,7 @@ export const ICONS = {
   importedFile: { web: "file-plus", gps: "file-plus" },
   geoPdf: { web: "file-text", gps: "file-text" },
   lidar: { web: "mountain", gps: "mci:image-filter-hdr-outline" },
+  catchment: { web: "waves", gps: "mci:waves" }, // the creeks that drain to a point
   layers: { web: "layers", gps: "layers" }, // the layer picker
   template: { web: "layout-template", gps: "layout" },
   notes: { web: "align-left", gps: "align-left" },

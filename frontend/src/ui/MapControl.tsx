@@ -69,17 +69,23 @@ export function Notice({
   children,
   action,
   tone = "info",
+  announce = false,
 }: {
   icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
   tone?: "info" | "warning";
+  /**
+   * Read out as it changes: for a notice that is the only answer to
+   * something the user just did, after focus has gone back to the map.
+   */
+  announce?: boolean;
 }) {
   return (
     <div
       className={[classes.notice, action ? classes.withAction : ""].join(" ")}
       data-tone={tone}
-      role={tone === "warning" ? "alert" : undefined}
+      role={tone === "warning" ? "alert" : announce ? "status" : undefined}
     >
       {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
       <span className={classes.noticeText}>{children}</span>
