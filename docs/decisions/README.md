@@ -129,3 +129,4 @@ supersede instead.
 | [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md) | Heights in NSW come from the Spatial Services 5 m DEM, built once into our own archive | 2026-10-10 | Accepted |
 | [0032](0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md) | A contributor's AWS access is read-only, behind the CI privacy Deny and MFA | 2026-10-08 | Accepted |
 | [0033](0033-the-api-writes-the-sentence-a-user-reads.md) | The API writes the sentence a user reads when it refuses a request | 2026-10-13 | Accepted |
+| [0034](0034-catchment-lookups-run-on-the-api-from-a-private-geopackage.md) | Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix | 2026-10-15 | Accepted |

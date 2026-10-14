@@ -327,6 +327,35 @@ cells, which by the same measure needs roughly 50 to 70 GB. Accumulation is
 float32, so above 2²⁴ cells (420 km² at 5 m) it is exact only to a few
 cells; the build's checks allow for that.
 
+### Trying a layer locally
+
+`make dev` puts the Govetts Creek test layer
+(`api/src/__tests__/__fixtures__/flow-network.gpkg`) in the local topo
+bucket. To try a build of your own instead, name it in
+`infra/terraform/envs/local/flow-network.auto.tfvars` (gitignored) and run
+`make dev` again:
+
+```hcl
+flow_network_gpkg = "/path/to/flow-network.gpkg"
+```
+
+Then press a creek inside the basin on Logjam Web's map.
+
+### Publishing the layer
+
+Publishing is a prod change and the maintainer's to make. The layer goes to
+the topo bucket outside `master/`, so the CDN never serves it; only the API
+reads it ([ADR 0034](../docs/decisions/0034-catchment-lookups-run-on-the-api-from-a-private-geopackage.md)):
+
+```bash
+aws s3 cp dem/flow-network.gpkg \
+  s3://logjam-topo-jobs/private/flow-network/flow-network.gpkg
+```
+
+No deploy is needed: the API checks the file's ETag every five minutes and
+swaps in a new build. Until the first upload, catchment lookups answer that
+they aren't available.
+
 ---
 
 ## Troubleshooting
