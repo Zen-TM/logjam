@@ -41,5 +41,13 @@ export {
   Toast,
   type ToastSeverity,
 } from "./Feedback";
-export { MapButton, MapButtonGroup, MapPointDot, Notice } from "./MapControl";
+export {
+  MapButton,
+  MapButtonGroup,
+  MapCreekPoint,
+  MapFlowArrow,
+  MapPointDot,
+  MapTip,
+  Notice,
+} from "./MapControl";
 export { useEscape } from "./useEscape";

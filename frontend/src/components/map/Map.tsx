@@ -26,11 +26,14 @@ import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import { readCssVar } from "./cssVar";
+import { CreekPointMarker } from "./CreekPointMarker";
 import {
   clearUpstream,
   paintFlowNetwork,
+  revealUpstream,
   showUpstream,
 } from "./flowNetworkLayers";
+import { UpstreamHover } from "./UpstreamHover";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
@@ -149,6 +152,16 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 const ROUTE_MIN_ZOOM = 10;
 
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
+
+/** Everything on the map that has a press of its own. */
+const PRESSABLE = [
+  "place-circles",
+  "shared-place-halos",
+  "shared-place-circles",
+  "routes-hit",
+  "place-tracks-hit",
+  "standalone-tracks-hit",
+];
 const INITIAL_ZOOM = 7;
 
 /**
@@ -880,6 +893,11 @@ function Map({
   useEffect(() => {
     drawingRouteRef.current = drawingRoute;
   }, [drawingRoute]);
+  // A pick or a drawing tool owns the pointer: no creek figure under it.
+  const armedForHover = useCallback(
+    () => pickModeRef.current || drawingRouteRef.current,
+    [],
+  );
   const selectTrackRef = useRef(selectTrack);
   useEffect(() => {
     selectTrackRef.current = selectTrack;
@@ -911,14 +929,28 @@ function Map({
   // stay until cleared from their notice or a new point is asked about.
   const [upstream, setUpstream] = useState<
     | { state: "finding" }
-    | { state: "shown"; catchmentKm2: number; trimmed: boolean }
+    | {
+        state: "shown";
+        catchmentKm2: number;
+        creeks: number;
+        trimmed: boolean;
+        bbox: [number, number, number, number];
+        snapped: MapPointCoord;
+        bearing?: number;
+      }
     | null
   >(null);
   // Bumped by every show and clear, so a late answer to an earlier request
   // never draws over what the user did since.
   const upstreamRequest = useRef(0);
+  // Stops the draw-in, if it is still running.
+  const stopReveal = useRef<() => void>(() => {});
+  // A draw-in still running when Logjam Web leaves the map stops with it.
+  useEffect(() => () => stopReveal.current(), []);
   const clearUpstreamOverlay = useCallback(() => {
     upstreamRequest.current += 1;
+    stopReveal.current();
+    stopReveal.current = () => {};
     setUpstream(null);
     if (mapRef.current) clearUpstream(mapRef.current);
   }, []);
@@ -927,6 +959,7 @@ function Map({
       const map = mapRef.current;
       if (!map) return;
       const request = ++upstreamRequest.current;
+      stopReveal.current();
       clearUpstream(map);
       setUpstream({ state: "finding" });
       const failed = (message: string) => {
@@ -943,15 +976,19 @@ function Map({
             failed(MAP_POINT.copy.upstreamFailed);
             return;
           }
-          showUpstream(
-            map,
-            lookup.upstream,
-            readCssVar("--color-accent", "#deb188"),
-          );
+          showUpstream(map, lookup.upstream, lookup.catchmentKm2);
+          stopReveal.current = revealUpstream(map, {
+            reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
+              .matches,
+          });
           setUpstream({
             state: "shown",
             catchmentKm2: lookup.catchmentKm2,
+            creeks: lookup.upstream.lines.features.length,
             trimmed: lookup.upstream.trimmedBelowOrder != null,
+            bbox: lookup.upstream.bbox,
+            snapped: lookup.snapped,
+            bearing: lookup.downstreamBearing,
           });
           fitToBox(map, lookup.upstream.bbox);
         })
@@ -1916,15 +1953,6 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    // Everything on the map that has a press of its own.
-    const PRESSABLE = [
-      "place-circles",
-      "shared-place-halos",
-      "shared-place-circles",
-      "routes-hit",
-      "place-tracks-hit",
-      "standalone-tracks-hit",
-    ];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
     // Pressing the panel's own dismissal and the map in one gesture.
@@ -3393,18 +3421,31 @@ function Map({
       icon="catchment"
       announce
       action={
-        <IconButton
-          icon="close"
-          label={MAP_POINT.copy.upstreamClear}
-          size={14}
-          round
-          onClick={clearUpstreamOverlay}
-        />
+        <>
+          {upstream.state === "shown" && (
+            <IconButton
+              icon="fitTo"
+              label={MAP_POINT.copy.upstreamFit}
+              size={14}
+              round
+              onClick={() => {
+                if (mapRef.current) fitToBox(mapRef.current, upstream.bbox);
+              }}
+            />
+          )}
+          <IconButton
+            icon="close"
+            label={MAP_POINT.copy.upstreamClear}
+            size={14}
+            round
+            onClick={clearUpstreamOverlay}
+          />
+        </>
       }
     >
       {upstream.state === "finding"
         ? MAP_POINT.copy.upstreamFinding
-        : mapPointUpstreamNotice(upstream.catchmentKm2, upstream.trimmed)}
+        : mapPointUpstreamNotice(upstream)}
     </Notice>
   );
 
@@ -3449,6 +3490,20 @@ function Map({
           />
         }
       />
+      {upstream?.state === "shown" && drawableMap && (
+        <>
+          <CreekPointMarker
+            map={drawableMap}
+            point={upstream.snapped}
+            bearing={upstream.bearing}
+          />
+          <UpstreamHover
+            map={drawableMap}
+            pressable={PRESSABLE}
+            armed={armedForHover}
+          />
+        </>
+      )}
       {asked && drawableMap && (
         <MapPointPopover
           map={drawableMap}

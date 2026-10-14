@@ -30,6 +30,7 @@ import {
   mapPointCatchment,
   mapPointCatchmentNote,
   mapPointFacts,
+  mapPointStreamOrder,
   mapPointUpstreamNotice,
   mapPointVerbs,
   type MapPointCatchment,
@@ -861,8 +862,18 @@ describe("the map point panel", () => {
         catchment,
       }).at(-1);
     expect(
-      facts({ state: "found", catchmentKm2: 4.23, biggerNearbyKm2: null }),
-    ).toEqual({ key: "catchment", label: "Catchment", value: "4.2 km²" });
+      facts({
+        state: "found",
+        catchmentKm2: 4.23,
+        streamOrder: 3,
+        biggerNearbyKm2: null,
+      }),
+    ).toEqual({
+      key: "catchment",
+      label: "Catchment",
+      value: "4.2 km²",
+      tag: { text: "Order 3", spoken: "Stream order 3" },
+    });
     expect(facts({ state: "checking" })!.value).toBe("Checking…");
     expect(facts({ state: "noCreek" })!.value).toBe("No creek within 50 m");
     expect(facts({ state: "notCovered" })!.value).toBe("Not covered yet");
@@ -895,7 +906,12 @@ describe("the map point panel", () => {
         biggerNearby: { catchmentKm2: 14 },
         attribution,
       }),
-    ).toEqual({ state: "found", catchmentKm2: 4.2, biggerNearbyKm2: 14 });
+    ).toEqual({
+      state: "found",
+      catchmentKm2: 4.2,
+      streamOrder: 3,
+      biggerNearbyKm2: 14,
+    });
     expect(mapPointCatchment({ status: "no-creek", attribution })).toEqual({
       state: "noCreek",
     });
@@ -922,6 +938,7 @@ describe("the map point panel", () => {
       mapPointCatchmentNote({
         state: "found",
         catchmentKm2: 0.4,
+        streamOrder: 1,
         biggerNearbyKm2: 14.2,
       }),
     ).toBe("A creek draining 14 km² is also nearby.");
@@ -929,6 +946,7 @@ describe("the map point panel", () => {
       mapPointCatchmentNote({
         state: "found",
         catchmentKm2: 0.4,
+        streamOrder: 1,
         biggerNearbyKm2: null,
       }),
     ).toBeNull();
@@ -937,12 +955,27 @@ describe("the map point panel", () => {
   });
 
   it("says on the map when smaller creeks were left out", () => {
-    expect(mapPointUpstreamNotice(4.23, false)).toBe(
-      "Creeks upstream · 4.2 km²",
-    );
-    expect(mapPointUpstreamNotice(663, true)).toBe(
-      "Creeks upstream · 663 km² · smaller ones left out",
-    );
+    expect(
+      mapPointUpstreamNotice({ catchmentKm2: 4.23, creeks: 1, trimmed: false }),
+    ).toBe("Creeks upstream · 4.2 km² · 1 creek");
+    expect(
+      mapPointUpstreamNotice({
+        catchmentKm2: 663,
+        creeks: 3689,
+        trimmed: true,
+      }),
+    ).toBe("Creeks upstream · 663 km² · 3,689 creeks · smaller ones left out");
+    // A count is a number, and a zero is left out (shared/DESIGN.md §11).
+    expect(
+      mapPointUpstreamNotice({ catchmentKm2: 4.23, creeks: 0, trimmed: false }),
+    ).toBe("Creeks upstream · 4.2 km²");
+  });
+
+  it("names a creek's stream order in full out loud", () => {
+    expect(mapPointStreamOrder(3)).toEqual({
+      text: "Order 3",
+      spoken: "Stream order 3",
+    });
   });
 
   // Mutation: give the point panel's verb words of its own.

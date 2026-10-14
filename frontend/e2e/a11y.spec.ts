@@ -836,6 +836,7 @@ test.describe("desktop", () => {
           distanceM: 18,
           catchmentKm2: 4.23,
           streamOrder: 3,
+          downstreamBearing: 90,
           biggerNearby: { catchmentKm2: 14.2 },
           attribution: "NSW 5 m DEM",
           ...(upstream && {
@@ -868,6 +869,7 @@ test.describe("desktop", () => {
     });
     const panel = page.getByRole("dialog", { name: "This point" });
     await expect(panel.getByText("4.2 km²")).toBeVisible();
+    await expect(panel.getByText("Order 3", { exact: true })).toBeVisible();
     await expect(
       panel.getByText("A creek draining 14 km² is also nearby."),
     ).toBeVisible();
@@ -881,20 +883,30 @@ test.describe("desktop", () => {
     await verb.click();
     await expect(panel).toHaveCount(0);
     const notice = page.getByText(
-      "Creeks upstream · 4.2 km² · smaller ones left out",
+      "Creeks upstream · 4.2 km² · 2 creeks · smaller ones left out",
     );
     await expect(notice).toBeVisible();
+    // The creek point stays marked with the creeks, as a drop and an arrow.
+    await expect(page.locator(".maplibregl-marker")).toHaveCount(2);
     // Focus is back on the map, so the notice must be read out on its own.
     await expect(
       page.getByRole("status").filter({ hasText: "Creeks upstream" }),
     ).toBeVisible();
     await expectNoViolations(page, "#map");
 
-    // Cleared from its notice.
+    // Fitted again from its notice, after the user has looked elsewhere.
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page
+      .getByRole("button", { name: "Fit the map to the creeks upstream" })
+      .click();
+    await expect(notice).toBeVisible();
+
+    // Cleared from its notice, and the creek point with it.
     await page
       .getByRole("button", { name: "Clear the creeks upstream" })
       .click();
     await expect(notice).toHaveCount(0);
+    await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
   });
 
   test("Measure: armed from the Tools tray or a point, a page in the panel", async ({

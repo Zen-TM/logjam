@@ -66,9 +66,14 @@ export const MAP_POINT = {
     // The layer is built basin by basin, so "none here" would be false.
     catchmentNotCovered: "Not covered yet",
     catchmentFailed: "Couldn't check the catchment.",
+    // Strahler order: 1 for a creek with no tributaries, one more where two of
+    // the same order meet. A count of how branched the network above is.
+    streamOrder: "Order",
+    streamOrderSpoken: "Stream order",
     upstreamFinding: "Finding the creeks upstream…",
     upstreamFailed: "Couldn't show the creeks upstream.",
     upstreamClear: "Clear the creeks upstream",
+    upstreamFit: "Fit the map to the creeks upstream",
   },
 } as const satisfies ScreenContract;
 
@@ -185,7 +190,12 @@ export type MapPointElevation =
  */
 export type MapPointCatchment =
   | { state: "checking" }
-  | { state: "found"; catchmentKm2: number; biggerNearbyKm2: number | null }
+  | {
+      state: "found";
+      catchmentKm2: number;
+      streamOrder: number;
+      biggerNearbyKm2: number | null;
+    }
   | { state: "noCreek" }
   | { state: "notCovered" }
   | { state: "failed"; message: string };
@@ -199,6 +209,7 @@ export function mapPointCatchment(
       return {
         state: "found",
         catchmentKm2: lookup.catchmentKm2,
+        streamOrder: lookup.streamOrder,
         biggerNearbyKm2: lookup.biggerNearby?.catchmentKm2 ?? null,
       };
     case "no-creek":
@@ -226,6 +237,21 @@ export function formatCatchmentKm2(km2: number): string {
 }
 
 /**
+ * A creek's Strahler order as a short tag, and the words a screen reader
+ * says for it: "Order" alone means nothing out loud.
+ */
+export function mapPointStreamOrder(order: number): {
+  text: string;
+  spoken: string;
+} {
+  const copy = MAP_POINT.copy;
+  return {
+    text: `${copy.streamOrder} ${order}`,
+    spoken: `${copy.streamOrderSpoken} ${order}`,
+  };
+}
+
+/**
  * The line under the figures when a much bigger creek is also in range: near
  * a confluence the nearest creek may not be the one the user meant.
  */
@@ -239,14 +265,25 @@ export function mapPointCatchmentNote(
 
 /**
  * The notice over the map while the creeks upstream of a point are drawn.
+ * `creeks`: how many creek segments are drawn (a zero is left out).
  * `trimmed`: the API left the smallest creeks out to fit the response.
  */
-export function mapPointUpstreamNotice(
-  catchmentKm2: number,
-  trimmed: boolean,
-): string {
-  const line = `Creeks upstream · ${formatCatchmentKm2(catchmentKm2)}`;
-  return trimmed ? `${line} · smaller ones left out` : line;
+export function mapPointUpstreamNotice({
+  catchmentKm2,
+  creeks,
+  trimmed,
+}: {
+  catchmentKm2: number;
+  creeks: number;
+  trimmed: boolean;
+}): string {
+  const parts = ["Creeks upstream", formatCatchmentKm2(catchmentKm2)];
+  if (creeks > 0)
+    parts.push(
+      `${creeks.toLocaleString("en-AU")} ${creeks === 1 ? "creek" : "creeks"}`,
+    );
+  if (trimmed) parts.push("smaller ones left out");
+  return parts.join(" · ");
 }
 
 export type MapPointFact = {
@@ -263,6 +300,8 @@ export type MapPointFact = {
   span?: true;
   /** Pressing the figure copies it (Logjam GPS); Logjam Web has a verb. */
   copyable?: true;
+  /** A short tag beside the figure, and its words out loud. */
+  tag?: { text: string; spoken: string };
 };
 
 /** The position as shown and as copied: five places is under two metres. */
@@ -338,7 +377,14 @@ export function mapPointFacts(input: {
       label: copy.slope,
       value: `${Math.round(slopeDegrees)}°`,
     });
-  if (catchment)
+  if (catchment?.state === "found") {
+    facts.push({
+      key: "catchment",
+      label: copy.catchment,
+      value: formatCatchmentKm2(catchment.catchmentKm2),
+      tag: mapPointStreamOrder(catchment.streamOrder),
+    });
+  } else if (catchment)
     facts.push({
       key: "catchment",
       label: copy.catchment,
@@ -347,13 +393,11 @@ export function mapPointFacts(input: {
           { value: catchment.message, span: true as const }
         : {
             value:
-              catchment.state === "found"
-                ? formatCatchmentKm2(catchment.catchmentKm2)
-                : catchment.state === "checking"
-                  ? copy.catchmentChecking
-                  : catchment.state === "noCreek"
-                    ? copy.catchmentNoCreek
-                    : copy.catchmentNotCovered,
+              catchment.state === "checking"
+                ? copy.catchmentChecking
+                : catchment.state === "noCreek"
+                  ? copy.catchmentNoCreek
+                  : copy.catchmentNotCovered,
           }),
     });
   return facts;

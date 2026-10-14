@@ -62,6 +62,7 @@ export const ICONS = {
   measure: { web: "ruler", gps: "mci:ruler" },
   pickArea: { web: "square-dashed", gps: "mci:selection" },
   scan: { web: "scan", gps: "maximize" },
+  fitTo: { web: "maximize-2", gps: "maximize-2" }, // fit the map to a drawn thing
   zoomIn: { web: "zoom-in", gps: "zoom-in" },
   zoomOut: { web: "zoom-out", gps: "zoom-out" },
   navigateTo: { web: "navigation", gps: "navigation" },

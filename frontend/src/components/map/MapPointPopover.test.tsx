@@ -17,9 +17,18 @@ vi.mock("../../useIsMobile", () => ({ useIsMobile: () => false }));
 vi.mock("../feedback/ToastProvider", () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
+const markers = vi.hoisted(
+  () => [] as { options: Record<string, unknown>; at?: [number, number] }[],
+);
 vi.mock("maplibre-gl", () => ({
   Marker: class {
-    setLngLat() {
+    entry: { options: Record<string, unknown>; at?: [number, number] };
+    constructor(options: Record<string, unknown>) {
+      this.entry = { options };
+      markers.push(this.entry);
+    }
+    setLngLat(at: [number, number]) {
+      this.entry.at = at;
       return this;
     }
     addTo() {
@@ -50,6 +59,7 @@ afterEach(() => {
   flow.loading = true;
   layers.showSnap.mockClear();
   layers.clearSnap.mockClear();
+  markers.length = 0;
 });
 
 const point = { latitude: -33.6, longitude: 150.3 };
@@ -104,7 +114,9 @@ describe("What is here?: the catchment", () => {
   it("shows the catchment, marks the creek point, and offers the creeks upstream", () => {
     found();
     const { map, onShowUpstream, onClose } = draw();
-    expect(catchmentValue()).toBe("4.2 km²");
+    expect(catchmentValue()).toContain("4.2 km²");
+    // The order is a tag on the figure, said in full out loud.
+    expect(screen.getByText("Stream order 3")).toBeTruthy();
     expect(layers.showSnap).toHaveBeenCalledWith(
       map,
       point,
@@ -115,6 +127,30 @@ describe("What is here?: the catchment", () => {
     expect(onShowUpstream).toHaveBeenCalledWith(point);
     // The map moves to fit the creeks, so the panel goes first.
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // Mutation: draw the arrow at a fixed angle, or turn it with the screen
+  // rather than the map, and it points somewhere the water does not run.
+  it("marks the creek point with a drop, and an arrow the way the water runs", () => {
+    found({ downstreamBearing: 120 });
+    draw();
+    const atCreek = markers.filter(
+      (marker) => marker.at?.[0] === snapped.longitude,
+    );
+    expect(atCreek).toHaveLength(2);
+    expect(atCreek.map((marker) => marker.options)).toContainEqual(
+      expect.objectContaining({ rotation: 120, rotationAlignment: "map" }),
+    );
+  });
+
+  it("leaves the arrow off when the API cannot tell which way", () => {
+    found();
+    draw();
+    const atCreek = markers.filter(
+      (marker) => marker.at?.[0] === snapped.longitude,
+    );
+    expect(atCreek).toHaveLength(1);
+    expect(atCreek[0].options).not.toHaveProperty("rotation");
   });
 
   it("takes the creek point away with the panel", () => {

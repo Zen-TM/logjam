@@ -24,6 +24,7 @@ import {
   type Stat,
 } from "../../ui";
 import { readCssVar } from "./cssVar";
+import { CreekPointMarker } from "./CreekPointMarker";
 import { clearSnap, showSnap } from "./flowNetworkLayers";
 import classes from "./MapPointPopover.module.css";
 
@@ -96,9 +97,11 @@ export default function MapPointPopover({
     : flow.error
       ? { state: "failed", message: flow.error }
       : { state: "checking" };
-  const snapped = flow.lookup?.status === "found" ? flow.lookup.snapped : null;
+  const found = flow.lookup?.status === "found" ? flow.lookup : null;
+  const snapped = found?.snapped ?? null;
 
-  // The creek point the figure was measured at, while the figure is on show.
+  // The line to the creek point the figure was measured at, while the figure
+  // is on show.
   useEffect(() => {
     if (!snapped) return;
     showSnap(map, point, snapped, readCssVar("--color-accent", "#deb188"));
@@ -119,6 +122,7 @@ export default function MapPointPopover({
     label: fact.label,
     value: fact.value,
     ...(fact.span ? { span: true } : {}),
+    ...(fact.tag ? { tag: fact.tag } : {}),
   }));
 
   const close = () => {
@@ -149,6 +153,13 @@ export default function MapPointPopover({
   return (
     <>
       {createPortal(<MapPointDot />, anchorEl)}
+      {snapped && (
+        <CreekPointMarker
+          map={map}
+          point={snapped}
+          bearing={found?.downstreamBearing}
+        />
+      )}
       <Popover
         open
         onClose={close}

@@ -83,6 +83,9 @@ export type Stat = {
    *  value so the press can be found. The cell is on the card colour only then:
    *  the fill means "press me" (UX §4), a read-out sits on the page. */
   onCopy?: () => void;
+  /** A short tag after the value ("Order 3"), and its words out loud. Read,
+   *  never pressed, so it has an edge and no fill (UX §4). */
+  tag?: { text: string; spoken: string };
 };
 
 /** Headline numbers in a two-column grid, each a label over its value. A
@@ -108,6 +111,14 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
                 <span>{stat.value}</span>
                 <Icon idea="copy" size={14} />
               </button>
+            ) : stat.tag ? (
+              <span className={classes.valueLine}>
+                {stat.value}
+                <span className={classes.tag} title={stat.tag.spoken}>
+                  <span aria-hidden>{stat.tag.text}</span>
+                  <span className="visually-hidden">{stat.tag.spoken}</span>
+                </span>
+              </span>
             ) : (
               stat.value
             )}
