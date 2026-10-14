@@ -158,6 +158,18 @@ export const elevationLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// A flow network lookup is a few R-tree pages of a file on local disk, or with
+// `upstream` a walk of up to the whole catchment (~20 ms for the Grose). Cheap,
+// but it is clicked, not typed, so 60 a minute is past any person and slows a
+// script mapping catchments through us one request at a time.
+export const flowNetworkLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const userPatchLimiter = rateLimit({
   windowMs: 60_000,
   max: userPatchLimitMax(),

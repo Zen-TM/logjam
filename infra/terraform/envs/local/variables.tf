@@ -54,3 +54,19 @@ variable "protomaps_archive_uri" {
   type    = string
   default = ""
 }
+
+# The flow network layer the catchment lookup reads (POST /flow-network/lookup).
+#
+# EMPTY BY DEFAULT, which uploads the committed test fixture: Govetts Creek
+# only, so a click anywhere else in NSW answers "not covered". For the whole
+# state, build it (topo/build_flow_network.py) and point this at it in a
+# gitignored `*.auto.tfvars` beside this file, e.g.
+#
+#   flow_network_gpkg = "/home/you/logjam-data/flow-network.gpkg"
+#
+# A changed file is uploaded again on the next `make dev`; the API checks for
+# a new one every five minutes and swaps it in without a restart.
+variable "flow_network_gpkg" {
+  type    = string
+  default = ""
+}

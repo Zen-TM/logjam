@@ -90,6 +90,39 @@ describe("logger redaction", () => {
     });
   });
 
+  // A catchment lookup (POST /flow-network/lookup) sends wherever someone
+  // clicked on Logjam Web's map, and they click where they mean to go. The
+  // body is exactly what Logjam Web sends. Mutation: delete
+  // "req.body.longitude" or "req.body.latitude" from `redactPaths` and the
+  // first test goes red; put `body` back into `serializeRequestForLog` and
+  // the second does.
+  describe("a catchment lookup's point", () => {
+    const lookupBody = {
+      longitude: 150.357825,
+      latitude: -33.613437,
+      upstream: true,
+    };
+    const values = ["150.357825", "33.613437"];
+
+    it("is censored if a log line ever carries the request body", () => {
+      const line = JSON.stringify(captureLog({ req: { body: lookupBody } }));
+      for (const value of values) expect(line).not.toContain(value);
+    });
+
+    it("is not in what the request logger keeps of the request", () => {
+      const kept = JSON.stringify(
+        serializeRequestForLog({
+          id: "r1",
+          method: "POST",
+          url: "/flow-network/lookup",
+          body: lookupBody,
+        } as Parameters<typeof serializeRequestForLog>[0]),
+      );
+      for (const value of values) expect(kept).not.toContain(value);
+      expect(kept).toContain("/flow-network/lookup");
+    });
+  });
+
   it("masks authorization and cookie headers", () => {
     const out = captureLog({
       req: {

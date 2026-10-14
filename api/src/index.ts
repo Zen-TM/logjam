@@ -53,6 +53,7 @@ import devicesRouter from "./routes/devices";
 import basemapRouter from "./routes/basemap";
 import routesRouter from "./routes/routes";
 import elevationRouter from "./routes/elevation";
+import flowNetworkRouter from "./routes/flowNetwork";
 import syncRouter from "./routes/sync";
 
 const env = getEnv();
@@ -236,6 +237,7 @@ app.use("/geo-pdf", geoPdfRouter);
 app.use("/custom-fields", customFieldsRouter);
 app.use("/routes", routesRouter);
 app.use("/elevation", elevationRouter);
+app.use("/flow-network", flowNetworkRouter);
 app.use("/sync", syncRouter);
 
 app.use(errorHandler);
