@@ -223,18 +223,26 @@ def strahler(flows_into: np.ndarray) -> np.ndarray:
 
 def check(net: Network, down: np.ndarray, acc: np.ndarray) -> None:
     """Fail the build rather than write a layer that is quietly wrong."""
+    # Whitebox writes accumulation as float32, which above 2**24 cells (about
+    # 420 km² at 5 m) holds only every 2nd, 4th, ... whole number: two cells
+    # in a row on a big river can read the same. That is the slack allowed,
+    # and nowhere else (the Grose, 27 M cells, failed a strict check here).
+    slack = np.spacing(acc.astype(np.float32)).astype(np.float64)
     # Accumulation counts every cell above, so it must rise at every step
     # downstream. If it falls, the D8 codes are being read in the wrong
     # directions (an ESRI_D8 entry swapped, or Whitebox's own codes).
     has_down = down >= 0
-    if np.any(acc[down[has_down]] <= acc[has_down]):
+    here, below = acc[has_down], acc[down[has_down]]
+    if np.any((below < here) | ((below == here) & (slack[has_down] <= 1))):
         raise ValueError("catchment falls going downstream: D8 codes misread")
     # Where creeks meet, the segment below starts with at least what every
     # creek brought (plus the hillside draining straight into the junction).
     into = net.flows_into >= 0
     brought = np.zeros(len(net))
     np.add.at(brought, net.flows_into[into], acc[net.last[into]])
-    if np.any(acc[net.first] < brought):
+    rounding = slack[net.first].copy()
+    np.add.at(rounding, net.flows_into[into], slack[net.last[into]])
+    if np.any(acc[net.first] < brought - rounding):
         raise ValueError("a segment starts with less than its tributaries bring")
 
 

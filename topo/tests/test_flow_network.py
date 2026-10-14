@@ -175,6 +175,33 @@ class TestCheck(unittest.TestCase):
         with self.assertRaises(ValueError):
             check(net, down, acc)
 
+    def big_river(self, *values):
+        """A single creek of len(values) cells running south down column 0."""
+        idx = cells(*[(r, 0) for r in range(len(values))])
+        ptr = np.full(len(values), 4, np.int64)
+        down = downstream(idx, ptr, NROWS, NCOLS)
+        return link(down), down, np.array(values, np.float64)
+
+    # Mutation: a strict rise everywhere, and every big river fails the build:
+    # Whitebox's float32 holds only every 2nd whole number above 2**24, so two
+    # cells in a row read the same (the Grose did, at 27 M cells).
+    def test_a_float32_tie_on_a_big_river_passes(self):
+        big = float(2**24 + 2)
+        check(*self.big_river(big, big, big + 2))  # does not raise
+
+    # Mutation: allow ties everywhere, and a misread code that points a small
+    # creek sideways at a cell with the same count goes through.
+    def test_a_tie_where_float32_is_exact_fails_the_build(self):
+        with self.assertRaises(ValueError):
+            check(*self.big_river(5000.0, 5000.0, 5001.0))
+
+    # Mutation: let the slack swallow falls too, and a big river running
+    # uphill goes through.
+    def test_a_fall_on_a_big_river_still_fails_the_build(self):
+        big = float(2**24 + 2)
+        with self.assertRaises(ValueError):
+            check(*self.big_river(big, big - 2, big + 2))
+
 
 class TestStrahler(unittest.TestCase):
     # Mutation: add one at every junction, and a small side creek joining a
