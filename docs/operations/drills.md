@@ -49,8 +49,9 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       Time from dispatch to green: ____
 - [ ] **API forward:** the same with the newest sha. Time: ____
 - [ ] **Frontend back and forward.** Times: ____ / ____
-- [ ] **Worker back and forward.** `logjam-topo-worker` and
-      `logjam-topo-export-worker` carry the chosen tag. Times: ____ / ____
+- [ ] **Worker back and forward.** `logjam-topo-worker`,
+      `logjam-topo-export-worker` and `logjam-place-registry` carry the
+      chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
       with no ECR image (or no `releases/<sha>/`) fails before any swap.
 - [ ] **Refused while a deploy is busy:** a rollback dispatched while a

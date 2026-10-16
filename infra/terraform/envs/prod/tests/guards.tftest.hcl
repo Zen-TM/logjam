@@ -242,3 +242,23 @@ run "contributor_is_read_only_and_mfa_gated" {
     error_message = "The contributor group policy no longer fits the 5,120-character inline limit."
   }
 }
+
+run "place_registry_role_writes_only_master_places" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.place_registry]
+  }
+
+  # Mutation: widening the Resource to the bucket (`/*`, `/master/*`), or
+  # adding an action or a statement, lets the monthly build write or delete
+  # more than the public place registry.
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.place_registry.policy).Statement) == 1 &&
+      jsondecode(aws_iam_role_policy.place_registry.policy).Statement[0].Effect == "Allow" &&
+      toset(jsondecode(aws_iam_role_policy.place_registry.policy).Statement[0].Action) == toset(["s3:GetObject", "s3:PutObject"]) &&
+      jsondecode(aws_iam_role_policy.place_registry.policy).Statement[0].Resource == "arn:aws:s3:::logjam-topo-jobs/master/places/*"
+    )
+    error_message = "The place registry role may only read and write objects under master/places/ in the topo bucket."
+  }
+}
