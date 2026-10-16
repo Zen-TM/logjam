@@ -79,4 +79,5 @@
 - **Rate limits:** actors share the per-IP budget and `_rateLimitGate.ts` waits
   it out, but not the per-user `userPatchLimiter`: a write-heavy file uses the
   `write()` retry from `src/__tests__/placeTypes.test.ts` and a timeout over 61 s.
-- **Fixtures** are the source's real output, in `__fixtures__/` beside the test.
+- **Fixtures** are a published source's real output, never a user's, in
+  `__fixtures__/` beside the test.
