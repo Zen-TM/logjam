@@ -11,12 +11,12 @@ const CAROL = as(CAROL_SUB);
 // (ownership/dupes/cap), and search-by-linked-place-name. Requires
 // `make dev` (AUTH_MODE=fake; no header = alice).
 //
-// Place deletion no longer cascades a linked trip away (trips survive with
+// Place deletion does not cascade a linked trip away (trips survive with
 // their join rows detached) — every test that links a trip to a place must
 // explicitly DELETE /trips/:id in addition to DELETE /places/:id.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
-const TAG = `CH003-global-${Date.now()}`;
+const TAG = `global-trips-${Date.now()}`;
 const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
 
 async function createPlace(name: string, auth = AUTH): Promise<string> {
@@ -87,7 +87,7 @@ describe("GET /trips (global trip list, fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.length).toBe(1);
       expect(res.body[0].places).toEqual([{ id: placeId, name: uniqueName }]);
-      // Header reflects the FILTERED count, not the whole account (UX-001).
+      // Header reflects the FILTERED count, not the whole account.
       expect(Number(res.headers["x-total-count"])).toBe(1);
     } finally {
       await deleteTrip(trip.id);
@@ -161,7 +161,7 @@ describe("GET /trips (global trip list, fake auth = alice)", () => {
 });
 
 describe("POST /trips (acting as carol — spreads the per-user rate-limit budget)", () => {
-  it("a bare {date} trip is valid — place-XOR-displayName exclusion was removed", async () => {
+  it("a bare {date} trip is valid without place or displayName", async () => {
     const trip = await createTrip({ date: "2026-06-05" }, CAROL);
     try {
       expect(trip.places).toEqual([]);
@@ -458,7 +458,7 @@ describe("GET /trips/:id (acting as carol — spreads the per-user rate-limit bu
     }
   });
 
-  it("a non-owner (bob) gets 404, not the trip owner's data (SEC-001: no ID oracle)", async () => {
+  it("a non-owner (bob) gets 404, not the trip owner's data (no ID oracle)", async () => {
     const trip = await createTrip(
       { date: "2026-06-20", notes: "owner-private" },
       CAROL,
@@ -482,9 +482,8 @@ describe("GET /trips/:id (acting as carol — spreads the per-user rate-limit bu
   });
 });
 
-// APIR-011: malformed query params reached Prisma as an Invalid Date and came
-// back as a 500 for what is plain bad input (the bulk import path has always
-// rejected unparseable dates with a 400).
+// Malformed query params are rejected with a 400 instead of reaching Prisma
+// as an Invalid Date.
 describe("GET /trips — query param validation", () => {
   it("400s on an unparseable dateFrom/dateTo instead of 500ing", async () => {
     for (const query of [{ dateFrom: "garbage" }, { dateTo: "2024-13-45x" }]) {

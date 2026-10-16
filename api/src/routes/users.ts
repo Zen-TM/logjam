@@ -301,22 +301,11 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    // `tripLogCustomFields` / `placeCustomFields` USED TO BE ACCEPTED HERE, as
-    // a whole list reconciled by `replaceFieldDefs`. Both are gone, and the
-    // deletion is deliberate rather than a tidy-up — the whole-list shape
-    // cannot express what a definition now is:
-    //
-    //  * It carried `{key,label,type,min,max}` and nothing else, so every save
-    //    from a dialog that round-tripped the list would have wiped
-    //    `placeTypeIds` and `appliesToAllTypes` on every definition — silently,
-    //    because the payload simply did not mention them.
-    //  * It matched `existing` scoped to `ownerId: userId`, so the SYSTEM
-    //    definitions (ownerId null) fell through to the create branch and the
-    //    user acquired a private duplicate of every built-in field, colliding
-    //    with the real one under the same key.
-    //
-    // Definitions have been rows since the custom_field_defs table landed; the
-    // row-grain endpoints in routes/customFields.ts and the sync push op are
+    // `tripLogCustomFields` / `placeCustomFields` are rejected here rather than
+    // silently ignored: definitions cannot be updated as a whole list because
+    // the whole-list shape cannot express `placeTypeIds`, `appliesToAllTypes`,
+    // or system field ownership. Definitions are rows in `custom_field_defs`;
+    // the row-grain endpoints in routes/customFields.ts and sync push ops are
     // the write paths. A client sending the old key gets a 400 naming the
     // replacement rather than a silent no-op.
     const {
@@ -455,10 +444,9 @@ router.patch(
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2002"
       ) {
-        // The username is the only unique column this route writes. The
-        // error's `meta.target` used to be asked which column it was, but it
-        // does not name one under the driver adapter, so a taken name read
-        // "Conflict updating profile" (users.test.ts).
+        // The username is the only unique column this route writes.
+        // `meta.target` does not name the column under the driver adapter, so
+        // any P2002 here indicates a taken username (users.test.ts).
         throw new AppError(409, say`That username is taken. Choose another.`);
       }
       throw e;
@@ -509,7 +497,7 @@ router.delete(
     // Pre-fetch every S3 pointer the user owns BEFORE touching the DB. Once the
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
-    // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
+    // can re-derive the keys — no orphaned objects, no lost keys.
     const [
       topoJobs,
       topoExportJobs,
@@ -547,7 +535,7 @@ router.delete(
         },
       }),
       // Place IDs and friendship IDs are needed to purge cross-user
-      // notifications that reference this user's data (PRIV-003); the party
+      // notifications that reference this user's data; the party
       // ids feed the sync-tombstone fan-out (counterparts must forget the
       // friendship edge).
       prisma.place.findMany({
@@ -625,7 +613,7 @@ router.delete(
       // GeoPDF outputs live under exports/geo-pdf/{jobId}/ (geoPdfWorker
       // resultKeyFor). Delete the whole per-job prefix, not just the recorded
       // resultKey, so an object uploaded by a running/failed job before its row
-      // was recorded is still purged (ARCH-001).
+      // was recorded is still purged.
       ...geoPdfJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
@@ -643,7 +631,7 @@ router.delete(
     // defense-in-depth and to keep the delete deterministic if a future child
     // table is added without a cascade. `Media` has a polymorphic linkedId with
     // no DB FK, so its row delete MUST stay explicit.
-    // Sync tombstones for OTHER users' mirrors (Stage 8): the deleted user's
+    // Sync tombstones for OTHER users' mirrors: the deleted user's
     // own tombstones are pointless (the cascade wipes their account, and
     // SyncTombstone.userId cascades too), so every row here targets a
     // counterpart. Ids only — never names/coords.
@@ -684,11 +672,11 @@ router.delete(
         ? [prisma.syncTombstone.createMany({ data: accountTombstones })]
         : []),
       // The deleted user's own tombstone log (rows other users' deletes wrote
-      // FOR this user) — cascade covers it; explicit per ARCH-001 convention.
+      // FOR this user) — cascade covers it; explicit per account-delete convention.
       prisma.syncTombstone.deleteMany({ where: { userId: user.id } }),
       prisma.notification.deleteMany({ where: { userId: user.id } }),
-      // Purge notifications held by OTHER users that reference this user's data
-      // (PRIV-003): place_shared rows pointing at any of the deleted user's
+      // Purge notifications held by OTHER users that reference this user's data:
+      // place_shared rows pointing at any of the deleted user's
       // places, and friend_request(_accepted) rows pointing at any friendship
       // this user was party to. The cascade removes the places/shares/
       // friendships but not the recipient's denormalised notification rows.
@@ -718,7 +706,7 @@ router.delete(
         : []),
       // Direct shares and file sends this user made: the Share and
       // FileSendRecipient rows cascade, the recipients' notification rows do
-      // not. Both payloads carry the sender's id from the first release.
+      // not. Both payloads carry the sender's id.
       prisma.notification.deleteMany({
         where: {
           OR: [
@@ -747,7 +735,7 @@ router.delete(
       prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       // Explicit even though TripLogPlace.tripLogId cascades on TripLog
-      // delete — ARCH-001 convention: never rely solely on an implicit
+      // delete — account-delete convention: never rely solely on an implicit
       // cascade for the account-delete purge list.
       prisma.tripLogPlace.deleteMany({
         where: { tripLog: { userId: user.id } },
@@ -757,17 +745,17 @@ router.delete(
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
-      // Routes store their geometry on the row, so there is no S3 leg here —
-      // that is the point of the design (ARCH-001). No S3 objects involved;
-      // explicit per convention even though the cascade covers the rows.
+      // Routes store their geometry on the row, so there is no S3 leg here.
+      // No S3 objects involved; explicit per convention even though the
+      // cascade covers the rows.
       prisma.route.deleteMany({ where: { ownerId: user.id } }),
       // Links between this account's places. Owner-private, no S3 leg, no
       // tombstone fan-out — the only viewer is the account being deleted.
       prisma.placeLink.deleteMany({ where: { ownerId: user.id } }),
       // Custom field definitions: user-authored labels, no S3 leg, and never
       // shared — so no tombstone fan-out either, the only viewer is the
-      // account being deleted. Explicit per the ARCH-001 convention even
-      // though the FK cascade covers the rows.
+      // account being deleted. Explicit per convention even though the FK
+      // cascade covers the rows.
       prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);

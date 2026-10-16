@@ -10,7 +10,7 @@ const router = Router();
 // DELETE /imports/:batchId — undo an entire import batch.
 // Deletes ONLY rows created by that batch (stamped with importBatchId).
 // Pre-existing places that were merged-into during the import are never
-// stamped with importBatchId and therefore survive undo.
+// stamped with importBatchId and therefore survive undo (src/__tests__/import.test.ts).
 router.delete(
   "/:batchId",
   requireAuth,

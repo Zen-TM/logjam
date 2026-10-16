@@ -10,19 +10,17 @@ import { placeListInclude } from "./places";
 
 // The privacy boundary of the place LIST payload (hybrid share model).
 //
-// `GET /places` and `GET /places/shared` share one fetch helper. It used to
-// attach `_count: { tripLogLinks, shares }` unconditionally, so every recipient
-// learned, per shared place, how many trips the owner had logged on it (the
-// cardinality of the owner-private trip list) and how many OTHER people the
-// owner had shared it with (their share fan-out).
+// `GET /places` and `GET /places/shared` share one fetch helper. Attaching
+// `_count: { tripLogLinks, shares }` to the shared list would expose how many
+// trips the owner has logged (cardinality of the owner-private trip list) and
+// how many other people the owner shared it with (their share fan-out).
 //
-// shareBoundary.test.ts asserts the trip *list* never attaches to a shared
-// place, and passes — the count slipped past that assertion. The frontend
-// declined to render it, which is not a boundary: anyone with devtools, or any
-// future client, saw it.
+// Relying on clients to decline rendering the count is not a security boundary;
+// any client or devtools inspection would expose it.
 //
-// These are unit tests because the leak lives in a pure include-shape decision:
-// no server, no DB, so they run in the gate that the integration suite doesn't.
+// These are unit tests because the boundary lives in a pure include-shape
+// decision: no server, no DB, so they run in the gate that the integration
+// suite doesn't.
 
 describe("placeListInclude — owned list", () => {
   it("counts trips and shares (the owner's own data)", () => {

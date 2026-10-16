@@ -21,7 +21,7 @@ function twoDigitYear(yy: number): number {
 // JS Date silently normalizes out-of-range components (new Date(2023, 1, 30) →
 // Mar 2, not "invalid") — isNaN(d.getTime()) can never catch that, so an
 // impossible calendar date (30/02/2023, 31/04/2023) would otherwise roll
-// forward into a *different, wrong* date with no signal (FECO-007). Verify the
+// forward into a *different, wrong* date with no signal. Verify the
 // constructed Date reports back the exact year/month/day it was built from;
 // any mismatch means the input wasn't a real date.
 function isExactYMD(

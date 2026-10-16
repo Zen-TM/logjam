@@ -3,8 +3,7 @@ import { useCallback, useState } from "react";
 /**
  * Wraps a dialog's real close handler so every close trigger — the title-bar
  * X, the Cancel button, Esc, a backdrop click — can share one "discard
- * unsaved changes?" confirm instead of each dialog re-inventing it
- * (PLACE-3 / TRIP-3 / IMPORT-8).
+ * unsaved changes?" confirm instead of each dialog re-inventing it.
  *
  * Callers wire every close trigger to `requestClose` instead of calling
  * `onClose` directly, and render a confirm (e.g. the shared `ConfirmDialog`)

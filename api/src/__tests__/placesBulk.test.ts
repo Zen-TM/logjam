@@ -59,8 +59,8 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     expect(res.status).toBe(200);
     expect(res.body.created).toBe(1);
     // Messages carry NO "Row N:" prefix — the caller labels the row from the
-    // returned rowIndex so it can use the original CSV line (IMPORT-7).
-    // Numeric/coordinate messages now derive from the shared
+    // returned rowIndex so it can use the original CSV line.
+    // Numeric/coordinate messages derive from the shared
     // PLACE_NUMERIC_CONSTRAINTS / range constants (single source of truth with
     // POST/PATCH /places) — labels are the shared field labels.
     expect(res.body.errors).toEqual([
@@ -174,10 +174,10 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
   });
 
   it("rejects merging into a foreign-owned placeId as a per-row not-found error indistinguishable from a nonexistent id (no 403 oracle, no rows changed)", async () => {
-    // Since 024f410 the merge-target lookup is owner-scoped: a target owned by
-    // someone else is absent from the lookup and reported with the SAME per-row
-    // "target place not found" error as a nonexistent id — a 403 here would
-    // confirm to a non-owner that the place ID exists (existence oracle).
+    // The merge-target lookup is owner-scoped: a target owned by someone else
+    // is absent from the lookup and reported with the SAME per-row "target
+    // place not found" error as a nonexistent id — a 403 here would confirm
+    // to a non-owner that the place ID exists (existence oracle).
     const foreign = await prisma.place.create({
       data: {
         placeTypeId: CANYON_TYPE_ID,
@@ -229,7 +229,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     // A create row and a merge-into-existing row with identical name+coords
     // produce the same importKey. Creates commit first (un-transacted), so the
     // merge stamping the same (ownerId, importKey) would 409 AFTER the create
-    // landed. The fix drops the merge's best-effort importKey stamp instead.
+    // landed. Merges omit the importKey stamp to prevent this conflict.
     const run = Date.now();
     const shared = `IMPORT-1 collide ${run}`;
     const mergeTargetId = await createPlace(`IMPORT-1 merge target ${run}`);

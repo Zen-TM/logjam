@@ -43,9 +43,8 @@ beforeEach(() => {
 // reasons a ROUTE can be visible (a Share row, or the place its `placeId`
 // points at being shared). Every test below pins one arm while the other is
 // absent, so a change that quietly drops an arm fails here rather than in the
-// field. The waypoint half of this file went with the phase 1c fold: a
-// waypoint is a place now, and a PlaceLink grants no visibility at all — so
-// there is one inheritance arm left in the codebase and it is the foreign key.
+// field. A waypoint is a place, and a PlaceLink grants no visibility at
+// all — so there is one inheritance arm and it is the foreign key.
 describe("getRouteRole", () => {
   it("grants 'shared' on a direct share of an UNLINKED route", async () => {
     mocked.share.findUnique.mockResolvedValue({ id: "share-1" });
@@ -78,7 +77,7 @@ describe("getRouteRole", () => {
 });
 
 // The revoke path asks this directly: a direct revoke must not tombstone a
-// recipient who keeps the place arm (finding 2).
+// recipient who keeps the place arm.
 describe("hasPlaceInheritedAccess", () => {
   it("is true for a route whose place is shared with the user", async () => {
     mocked.route.findFirst.mockResolvedValue({ id: "rt-1" });
@@ -100,7 +99,7 @@ describe("getJobRole", () => {
   });
 });
 
-// The anti-oracle rule from root CLAUDE.md, in executable form: a caller with
+// The anti-oracle rule from root AGENTS.md, in executable form: a caller with
 // no access must not be able to tell "exists but not mine" from "absent".
 describe("404-not-403 anti-oracle", () => {
   it("requireShareAccess throws 404 on no access", () => {
@@ -220,10 +219,10 @@ describe("parseSharableEntityType", () => {
   });
 });
 
-// APIR-007 / decision D2: unfriending revokes EVERY share type, in both
-// directions — not just the place shares the unfriend handler already
-// deleted. The distinction that is easy to get wrong is FileSend: a pending
-// send is still live access, an accepted one is a copy the recipient holds.
+// Unfriending revokes EVERY share type, in both directions — not just the
+// place shares the unfriend handler already deleted. The distinction that is
+// easy to get wrong is FileSend: a pending send is still live access, an
+// accepted one is a copy the recipient holds.
 describe("revokeAllSharesBetween", () => {
   const ME = "me";
   const EX = "ex-friend";
@@ -303,7 +302,7 @@ describe("revokeAllSharesBetween", () => {
     await revokeAllSharesBetween(tx as never, ME, EX);
 
     const where = tx.fileSendRecipient.findMany.mock.calls[0][0].where;
-    // The status filter IS the accepted-is-a-copy rule (D2). If this ever
+    // The status filter IS the accepted-is-a-copy rule. If this ever
     // widens, accepted recipients start losing files they already own.
     expect(where.status).toBe("pending");
     expect(where.OR).toEqual([

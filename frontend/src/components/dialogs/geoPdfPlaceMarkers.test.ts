@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
 import type { MarkerExtent } from "./geoPdfPlaceMarkers";
 
-// PRIV-006 export-default privacy boundary: friends' shared places must
+// Export-default privacy boundary: friends' shared places must
 // never reach a printable GeoPDF unless the user explicitly opted in.
 const EXTENT: MarkerExtent = {
   north: -33.0,

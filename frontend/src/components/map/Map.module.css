@@ -139,7 +139,7 @@
   filter: invert(1);
 }
 
-/* MapLibre's blue focus glow → the app's one focus ring. */
+/* MapLibre's blue focus glow → Logjam Web's one focus ring. */
 :global(#map .maplibregl-ctrl button:focus-visible) {
   box-shadow: none;
   outline: 2px solid var(--color-text);

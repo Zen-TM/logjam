@@ -72,7 +72,7 @@ describe("extentFieldErrors", () => {
     expect(hasExtentFieldError(errors)).toBe(false);
   });
 
-  it("requires numbers (the UAT non-numeric case)", () => {
+  it("requires numbers", () => {
     const errors = extentFieldErrors(values({ n: "abc", w: "" }), baseState);
     expect(errors.n).toBe("Enter a number");
     expect(errors.w).toBe("Enter a number");
@@ -84,7 +84,7 @@ describe("extentFieldErrors", () => {
     expect(errors.e).toMatch(/-180 and 180/);
   });
 
-  it("flags an inverted North/South (the UAT GEOPDF-1 case)", () => {
+  it("flags an inverted North/South", () => {
     // North value south of South: -34 < -33.7.
     const errors = extentFieldErrors(values({ n: "-34" }), baseState);
     expect(errors.n).toBe("Must be north of the South value");

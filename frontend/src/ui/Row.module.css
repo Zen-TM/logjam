@@ -3,14 +3,10 @@
   --outline: 0 0 transparent;
   position: relative;
   display: flex;
-  /* NEVER SHRINK. A row is a flex item in the column its list scrolls, and a
-     flex item shrinks by default: once the list overflowed, every card was
-     squeezed from its natural height toward `min-height`, which crushed the
-     bottom padding until the subtitle hung 2.5px out of the card. It only ever
-     showed on a list long enough to scroll, which is why it survived six
-     panels — each of which had written `flex-shrink: 0` beside its own rows,
-     so the seventh (Friends) inherited the bug by not knowing to (2026-09-18).
-     The card owns its own height; the list gets to scroll. */
+  /* A row is a flex item in the column its list scrolls, and a flex item
+     shrinks by default. Disabling shrink keeps the card at its natural height
+     and protects its padding when the list overflows. The card owns its own
+     height; the list gets to scroll. */
   flex: none;
   flex-wrap: wrap;
   align-items: center;
@@ -29,14 +25,13 @@
   box-shadow: var(--edge), var(--outline);
 }
 
-/* THE CARD FILL MEANS "YOU CAN ACT ON THIS" (UX §4). A row wears it when it
-   opens (`onOpen` or `href` lays the stretched button over the card), can be
-   picked, or holds controls of its own (a ⋯, Accept / Decline, a switch): a
-   request row with two buttons and no card looked broken (operator,
-   2026-10-06). Only a READ-OUT has none, and it does not answer the pointer:
-   lighting its edge on hover promised a press that does nothing (operator,
-   2026-09-16). A row of controls alone gets the fill but not the hover edge,
-   because the card itself is not what presses. */
+/* The card fill means "you can act on this" (UX §4; pressableFill.test.ts).
+   A row wears it when it opens (`onOpen` or `href` lays the stretched button
+   over the card), can be picked, or holds controls of its own (a ⋯, Accept /
+   Decline, a switch). Only a read-out has none, and it does not answer the
+   pointer: lighting its edge on hover would suggest a press that does nothing.
+   A row of controls alone gets the fill but not the hover edge, because the
+   card itself is not what presses. */
 .row:has(.open),
 .row:has(.pick),
 .row:has(
@@ -114,21 +109,19 @@
 /* The row's 4px end padding is sized for a trailing ⋯, whose icon-button box
    carries its own whitespace. A switch has none, so it stands off the edge
    itself — and neither does a plain MARK (the + at the end of a row whose
-   whole card is the button), which sat hard against the card's edge on both
-   share surfaces until this covered it too (operator, 2026-09-19). */
+   whole card is the button), which otherwise sits hard against the card's
+   edge. */
 .trailing > [role="switch"]:last-child,
 .trailing > [data-mark]:last-child {
   margin-right: var(--space-1);
 }
 
-/* A MARK IS DECORATION, SO IT IS NOT A TARGET — and neither is the group
+/* A mark is decoration, so it is not a target — and neither is the group
    holding it. `.trailing` sits above the stretched button on purpose, so a
-   real trailing control (a ⋯, a bin, a switch) keeps its own hit area; the
-   cost is that a group containing ONLY a mark swallowed the press meant for
-   the card under it, so pressing the one thing that looks like "add" did
-   nothing (operator, 2026-09-19). Marking the span alone was not enough —
-   the press then landed on the group instead — so a trailing group with no
-   real control in it stands aside entirely. */
+   real trailing control (a ⋯, a bin, a switch) keeps its own hit area; to
+   prevent a mark-only group from swallowing the press meant for the card
+   under it, a trailing group with no real control in it stands aside
+   entirely. */
 .trailing:not(:has(button, a, input, select, textarea, [role="switch"])) {
   pointer-events: none;
 }

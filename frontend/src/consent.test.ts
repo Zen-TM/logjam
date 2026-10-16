@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { CURRENT_CONSENT_VERSION, consentGate } from "./consent";
 
-// FECO-005: ConsentGate rendered instead of the app while every
-// `enabled=authenticated` data hook fetched the user's places, trips, friends
-// and notifications behind it. `settled` is what those hooks now wait on, and
-// `blocked` is what renders the gate — one function so the two can't drift.
+// User-data hooks must not fetch data behind the gate (frontend/AGENTS.md).
+// `settled` is what those hooks wait on, and `blocked` is what renders the gate —
+// one function so the two can't drift.
 describe("consentGate", () => {
   it("neither blocks nor releases while the current user is still loading", () => {
     expect(consentGate(null, null)).toEqual({ blocked: false, settled: false });

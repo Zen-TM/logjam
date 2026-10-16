@@ -18,7 +18,7 @@ const DEFAULT_TEMPLATE_ID = "default";
 
 // The "Default" preset is synthetic: it is not persisted as a per-user row.
 // The route surfaces it as a virtual, read-only template at the top of the
-// list, sharing the same shape as user-saved rows so the frontend can treat
+// list, sharing the same shape as user-saved rows so clients can treat
 // it uniformly.
 function defaultTemplate() {
   return {

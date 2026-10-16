@@ -61,13 +61,13 @@ describe("numericFieldError", () => {
     expect(numericFieldError("   ", { min: 0 })).toBeNull();
     expect(numericFieldError("-", { min: 0 })).toBeNull();
   });
-  it("flags a decimal in an integer field instead of truncating (TRIP-1)", () => {
+  it("flags a decimal in an integer field instead of truncating", () => {
     expect(numericFieldError("5.5", { integer: true })).toBe(
       "Whole numbers only",
     );
     expect(numericFieldError("5", { integer: true })).toBeNull();
   });
-  it("flags negatives on a non-negative field (PLACE-2/TRIP-2)", () => {
+  it("flags negatives on a non-negative field", () => {
     expect(numericFieldError("-5", { min: 0 })).toBe("Cannot be negative");
     expect(numericFieldError("-5.5", { integer: true, min: 0 })).toBe(
       "Whole numbers only",
@@ -83,7 +83,7 @@ describe("numericFieldError", () => {
     );
     expect(numericFieldError("3.5", { min: 1, max: 5 })).toBeNull();
   });
-  it("enforces coordinate ranges (PLACE-1)", () => {
+  it("enforces coordinate ranges", () => {
     expect(numericFieldError("95", { min: -90, max: 90 })).toBe(
       "Must be between -90 and 90",
     );

@@ -51,9 +51,7 @@ export const TOPO_JOB_NAME_MAX_LENGTH = 200;
 // GET /topo-jobs, GET /topo-jobs/:id and (for the role stamp)
 // /completed-overlays all answer the same two questions about a TopoJob row:
 // which columns a client is allowed to see, and what a NON-owner is allowed to
-// see of them. Answering them three times is how they drifted — the detail
-// endpoint used to stamp no syncRole at all, so a client polling a shared job
-// could not tell from that response that it was read-only.
+// see of them.
 //
 // Two rules, declared once:
 //   - userId NEVER leaves this file. A recipient has no business learning the
@@ -122,10 +120,8 @@ router.post(
     const user = await getUser(req.user!.sub);
     const { tileCount, jobName, settings, autoExport } = req.body;
 
-    // Same class as APIR-010, on a route no finding named: a non-string
-    // jobName reached Prisma and came back as a raw 500. The name is a user
-    // label, so cap it alongside the type check rather than storing whatever
-    // fits in the body budget.
+    // Validate jobName is a string and cap it alongside the type check rather
+    // than storing whatever fits in the body budget.
     if (jobName !== undefined && jobName !== null) {
       if (typeof jobName !== "string")
         throw malformed("jobName must be a string");
@@ -291,7 +287,7 @@ router.post(
     }
 
     // Authoritative quota check against server-counted tiles from the actual
-    // ZIP, serialised per user (ARCH-009): the user-row lock prevents two
+    // ZIP, serialised per user: the user-row lock prevents two
     // concurrent /start calls from both reading the same monthly aggregate and
     // both passing. The job is still "uploading" so it won't appear in the
     // aggregate. RunTask stays outside the transaction (no AWS calls inside
@@ -332,9 +328,9 @@ router.post(
     });
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
-    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
+    // launchFargateTask throws on placement failure (`failures[]`
     // populated / no task) as well as on SDK errors, so a launch problem can
-    // never strand the job in `pending` (ARCH-002a).
+    // never strand the job in `pending`.
     if (ECS_SUBNETS.length) {
       try {
         const taskArn = await launchFargateTask({
@@ -342,7 +338,7 @@ router.post(
           containerName: "topo-worker",
           environment: [{ name: "JOB_ID", value: jobId }],
         });
-        // Persist the ARN (Design L2) so the reaper / DELETE can StopTask it.
+        // Persist the ARN so the reaper / DELETE can StopTask it.
         await prisma.topoJob.update({
           where: { id: jobId },
           data: { ecsTaskArn: taskArn },
@@ -492,18 +488,18 @@ router.get(
       select: { ...TOPO_JOB_SELECT, s3OutputKeys: true },
     });
     if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
-    // Was a 403, which confirmed the id existed to anyone who guessed it.
-    // shareAccess gives a stranger the same 404 a missing id gets.
+    // ShareAccess gives a stranger the same 404 a missing id gets, so
+    // existence is not confirmed to a guesser.
     requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
     res.json(serializeTopoJobFor(job, user.id));
   },
 );
 
-// (Stage 2) Per-job download URLs are gone. All downloads now go through
-// POST /topo-exports → the export worker. See routes/topoExports.ts.
+// All downloads go through POST /topo-exports → the export worker.
+// See routes/topoExports.ts.
 
 // DELETE /topo-jobs/:id — delete job and all S3 objects. In-flight jobs are
-// cancel-then-purged (Design L5): the row is force-failed (status-guarded)
+// cancelled then purged: the row is force-failed (status-guarded)
 // so the worker can't complete it mid-delete, the Fargate task is stopped
 // best-effort, and only then are the prefixes purged and the row removed.
 router.delete(
@@ -537,7 +533,7 @@ router.delete(
       // Cancel: status-guarded flip so a worker that completes between the
       // ownership read and this write wins (its storage charge then matches
       // the fresh outputBytes re-read below). After the flip, the worker's
-      // guarded terminal write (Design L1) matches 0 rows and self-cleans, so
+      // guarded terminal write matches 0 rows and self-cleans, so
       // a missed StopTask only costs Fargate time.
       await prisma.topoJob.updateMany({
         where: { id: jobId, status: { in: ["pending", "processing"] } },
@@ -570,7 +566,7 @@ router.delete(
     });
     if (!fresh) throw new AppError(404, say`Couldn't find that LiDAR map.`);
 
-    // S3-first (ARCH-004): delete the objects before the DB row and the quota
+    // S3-first: delete the objects before the DB row and the quota
     // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
     // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
     // — no orphaned objects, and the quota is only decremented once the bytes
@@ -581,7 +577,7 @@ router.delete(
       ),
     );
 
-    // One transaction (Design Q): queued exports referencing this job are
+    // One transaction: queued exports referencing this job are
     // force-failed with a clear message (their COG source is about to
     // disappear), and the row delete commits with the quota decrement.
     await prisma.$transaction(async (tx) => {

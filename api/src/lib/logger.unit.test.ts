@@ -9,9 +9,9 @@ import {
   serializeRequestForLog,
 } from "./logger";
 
-// Build a pino logger using the SAME redact paths the app logger uses, but
+// Build a pino logger using the SAME redact paths the API logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
-// This guards the CLAUDE.md privacy rule: place coords/names must never reach
+// This guards the AGENTS.md privacy rule: place coords/names must never reach
 // logs in plain text.
 function captureLog(obj: unknown): Record<string, unknown> {
   const lines: string[] = [];
@@ -134,7 +134,7 @@ describe("logger redaction", () => {
     expect(body.id).toBe("place-1");
   });
 
-  // PRIV-001 defence-in-depth: array-shaped bulk-import/create payloads carry
+  // Defence-in-depth: array-shaped bulk-import/create payloads carry
   // user-typed names the coordinate wildcards can't reach. No log site emits
   // these today (unproven hardening), but the redact paths must censor them if
   // one ever does.
@@ -192,9 +192,8 @@ describe("logger redaction", () => {
     expect(body.foreignFields).toBe("[redacted]");
   });
 
-  // THE SYNC PUSH is the phone's only write path: every place the app has ever
-  // created reached the server inside `ops[*].fields`, which no path in the list
-  // reached until 2026-09-10.
+  // THE SYNC PUSH is the phone's only write path: every place Logjam GPS creates
+  // reaches the server inside `ops[*].fields`.
   it("censors a place inside a sync push op", () => {
     const out = captureLog({
       req: {
@@ -279,8 +278,8 @@ describe("logger redaction", () => {
   });
 });
 
-// Guards the SEC-002 boundary: tile z/x/y indices are approximate coordinates
-// and must never reach logs, even embedded in fetch-error URLs.
+// Tile z/x/y indices are approximate coordinates and must never reach logs,
+// even embedded in fetch-error URLs.
 describe("redactTilePathPatterns", () => {
   it("strips a full tile URL including host and z/x/y path", () => {
     const out = redactTilePathPatterns(
@@ -314,10 +313,10 @@ describe("redactTilePathPatterns", () => {
   });
 });
 
-// Guards the SEC-001 (DoD) boundary: pino redact paths cannot scrub free text
-// inside err.message/err.stack, and Prisma renders user-supplied place
-// name/coords into a validation error's message. safeErrorForLog must drop the
-// rendered argument block before it can reach logs.
+// Pino redact paths cannot scrub free text inside err.message/err.stack, and
+// Prisma renders user-supplied place name/coords into a validation error's
+// message. safeErrorForLog must drop the rendered argument block before it can
+// reach logs.
 describe("safeErrorForLog", () => {
   it("strips a Prisma rendered-args block carrying place name/coords", () => {
     const err = new Error(
@@ -392,9 +391,8 @@ describe("safeErrorForLog", () => {
   });
 });
 
-// PRIV-109: the query string carries user search terms (?search= is matched
-// against place NAMES in GET /trips), and no redact path can reach inside a
-// URL string.
+// The query string carries user search terms (?search= is matched against
+// place NAMES in GET /trips), and no redact path can reach inside a URL string.
 describe("serializeRequestForLog", () => {
   it("logs the path without the query string", () => {
     const out = serializeRequestForLog({
@@ -417,11 +415,10 @@ describe("serializeRequestForLog", () => {
   });
 });
 
-// The api/CLAUDE.md rule "never log a raw thrown error; scrub it with
-// safeErrorForLog" was a comment until this test: 21 sites had drifted past it
-// by the 2026-08-28 review (APIC-001). Pino's redact.paths only censor
-// structured keys — they cannot reach free text inside err.message/err.stack,
-// where Prisma renders user-supplied place names and coordinates.
+// The api/AGENTS.md rule: never log a raw thrown error; scrub it with
+// safeErrorForLog. Pino's redact.paths only censor structured keys — they
+// cannot reach free text inside err.message/err.stack, where Prisma renders
+// user-supplied place names and coordinates.
 describe("no raw err reaches a log site", () => {
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

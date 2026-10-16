@@ -23,7 +23,7 @@ export type Disablable =
  * swaps the leading glyph for a spinner and disables the button while its
  * request runs.
  *
- * `disabledReason` (UX §5) says why a disabled button is, and what to do: it
+ * `disabledReason` (shared/DESIGN.md §5) says why a disabled button is, and what to do: it
  * shows as a tooltip on hover and on focus and a screen reader hears it as the
  * description. A button that carries one stays FOCUSABLE (`aria-disabled`, and
  * the press does nothing), because a disabled button can neither be tabbed to

@@ -11,7 +11,7 @@ import {
   MARKER_TYPE_ID,
 } from "./_actors";
 
-// POST /sync/push contract (Stage 8 §8): FIFO order, per-op transactions,
+// POST /sync/push contract: FIFO order, per-op transactions,
 // per-op statuses, dependencyFailed propagation, conflict receipts, and the
 // foreign-id anti-oracle. Requires `make dev`. Synthetic coords only.
 
@@ -220,7 +220,7 @@ describe("sync push — FIFO batch lifecycle", () => {
   });
 });
 
-describe("sync push — conflicts (§6)", () => {
+describe("sync push — conflicts", () => {
   // The reply to a push can be lost after the write landed, and the phone
   // sends the op again with its original base. A canyon-linked trip is
   // force-tagged, so the stored types are not the ones the op carried.
@@ -426,9 +426,8 @@ describe("sync push — ownership boundary", () => {
 });
 
 describe("sync push — route colour", () => {
-  // Colour used to be assigned server-side and ignored on the wire, so a route
-  // drawn on a phone rendered in a fallback colour and then changed under the
-  // user when the create op came back.
+  // A route honours the colour chosen by the client rather than falling back
+  // and changing colour when the create op comes back.
   it("honours a palette colour on create and update, and refuses one outside it", async () => {
     const routeId = randomUUID();
     const points = [
@@ -505,9 +504,9 @@ describe("sync push — notification markRead", () => {
     expect(res.body.results[0].status).toBe("alreadyApplied");
   });
 
-  // The same anti-oracle rule for the two ops mark-as-unread and delete added
-  // with the inbox's per-row menu: a notification that is not this user's is
-  // reported exactly as one that never existed.
+  // The same anti-oracle rule applies to mark-as-unread and delete: a
+  // notification that is not this user's is reported exactly as one that never
+  // existed.
   it("markUnread and delete on a purged/foreign notification are alreadyApplied", async () => {
     const res = await push(ALICE_SUB, [
       {
@@ -562,11 +561,9 @@ describe("sync push — notification markRead", () => {
 });
 
 describe("sync push — route anchors", () => {
-  // Regression: the push handler accepted `anchors`, validated it, and then
-  // dropped it — so every route drawn on a phone lost the user's own vertices
-  // on the first pull after it flushed, and reopening a snapped route gave
-  // back a handle on every snapped point. REST PATCH always applied the rule;
-  // only this path didn't.
+  // Route anchors must be persisted on create and update (matching REST
+  // PATCH) so user vertices survive sync rather than being replaced by all
+  // snapped points.
   it("persists anchors on create and update, and clears them when points move without anchors", async () => {
     const routeId = randomUUID();
     const points = [
@@ -636,9 +633,9 @@ describe("sync push — route anchors", () => {
 
 describe("sync push — direct-share delete cleanup", () => {
   // REST DELETE /routes/:id fans tombstones out to direct sharees and purges
-  // their Share rows; the sync push delete used to do neither (finding 1), so a
-  // place/route deleted from a phone while offline stranded the recipient's
-  // mirror AND left the Share row granting access to a dead id.
+  // their Share rows. Sync push delete must do the same, otherwise a
+  // place/route deleted while offline strands the recipient's mirror and leaves
+  // the Share row granting access to a dead id.
   it("a pushed route delete tombstones a direct sharee", async () => {
     const routeId = randomUUID();
     const created = await push(ALICE_SUB, [
@@ -698,11 +695,9 @@ describe("sync push — direct-share delete cleanup", () => {
 });
 
 // A "how many" field has a floor and no honest ceiling — three of the SYSTEM
-// definitions are exactly that shape. The push path gated `min` and `max` on
-// BOTH being numbers, so a one-sided definition created offline arrived
-// unbounded: the form stopped showing the range and nothing refused a
-// negative, leaving no check anywhere. The REST twin already passed them
-// independently, so this was also a REST/sync divergence.
+// definitions are exactly that shape. Both push and REST accept one-sided
+// bounds (min without max, or vice versa) so offline definitions do not arrive
+// unbounded.
 describe("sync push — a definition keeps a one-sided bound", () => {
   it("stores a min with no max", async () => {
     const defId = randomUUID();
@@ -737,7 +732,7 @@ describe("sync push — a definition keeps a one-sided bound", () => {
     expect(def!.max ?? null).toBeNull();
 
     // Checked, because an unchecked cleanup that 429s leaves this definition in
-    // alice's list and customFields.test's exact-list assertion fails instead.
+    // alice's list and customFields.test.ts's exact-list assertion fails instead.
     const removed = await request(API_URL)
       .delete(`/custom-fields/trip-log/${key}`)
       .set(as(ALICE_SUB));

@@ -52,11 +52,8 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
-  // "Live" means a live SHARE, not merely a live place (APIR-012/PRIV-103).
-  // This fixture used to own the place as ALICE and create no PlaceShare at
-  // all — an impossible state that only resolved because the old read-time
-  // fallback checked place existence. Bob owns it and shares it, as the
-  // notification claims.
+  // "Live" means a live SHARE, not merely a live place: bob owns it and
+  // shares it, as the notification claims.
   it("resolves placeName and sharedByUsername for a live place_shared notification", async () => {
     const place = await prisma.place.create({
       data: {
@@ -162,9 +159,9 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
     expect(deleteRes.status).toBe(404);
   });
 
-  // 404, not 403 (APIR-013/PRIV-105): a foreign notification id must be
-  // indistinguishable from one that does not exist, or the status confirms the
-  // id is real to someone who cannot see it.
+  // 404, not 403: a foreign notification id must be indistinguishable from
+  // one that does not exist, or the status confirms the id is real to someone
+  // who cannot see it.
   it("404s when the notification belongs to another user", async () => {
     const bobNotification = await prisma.notification.create({
       data: {
@@ -221,7 +218,7 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
       expect(unreadRes.status).toBe(200);
       expect(unreadRes.body.read).toBe(false);
 
-      // Anything but a boolean false still marks it read, as the bodyless call always did.
+      // Anything but a boolean false still marks it read.
       const junkRes = await request(API_URL)
         .patch(`/notifications/${notification.id}/read`)
         .set(AUTH)

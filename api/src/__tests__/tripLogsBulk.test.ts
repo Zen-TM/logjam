@@ -8,13 +8,13 @@ import {
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// Integration coverage for POST /trips/bulk (routes/tripLogsBulk.ts), previously
-// untested (CH-003, 2026-06-22). Focus: the SEC-001 row-cap guards (empty 400 /
-// oversized 413), the idempotent upsert-by-importKey contract, and per-row
-// ownership validation. Requires `make dev` (AUTH_MODE=fake; no header = alice).
+// Integration coverage for POST /trips/bulk (routes/tripLogsBulk.ts).
+// Focus: the row-cap guards (empty 400 / oversized 413), the idempotent
+// upsert-by-importKey contract, and per-row ownership validation. Requires
+// `make dev` (AUTH_MODE=fake; no header = alice).
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
-const TAG = `CH003-bulk-${Date.now()}`;
+const TAG = `bulk-trips-${Date.now()}`;
 
 // Bulk-imported trips are place-less with a displayName, so they surface via
 // the global list search filter — use that to collect ids and clean up.
@@ -46,7 +46,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects more than the import cap with 413 (SEC-001)", async () => {
+  it("rejects more than the import cap with 413", async () => {
     const trips = Array.from({ length: 2001 }, (_, i) => ({
       sourcePlaceName: "x",
       date: "2024-01-01",
@@ -294,10 +294,9 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     }
   });
 
-  // APIR-003: POST /trips and PATCH /trips/:id force the `canyoning` tag onto
-  // any place-linked trip ("maintained on every write"); the bulk importer
-  // linked places without it, so a CSV row with no types imported untagged and
-  // stayed that way until someone re-saved it through PATCH.
+  // POST /trips and PATCH /trips/:id force the `canyoning` tag onto any
+  // place-linked trip; bulk import must do the same so a place-linked trip
+  // imported without types is tagged canyoning.
   it("force-tags a place-linked imported row as canyoning", async () => {
     const placeName = `${TAG}-tag-place`;
     const placeRes = await request(API_URL).post("/places").set(AUTH).send({
@@ -338,9 +337,9 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     }
   });
 
-  // APIR-004: displayName went in verbatim, so an over-long CSV field produced
-  // a row PATCH /trips/:id (which caps at TRIP_NAME_MAX_LENGTH) could never
-  // save again.
+  // Bulk import validates displayName against TRIP_NAME_MAX_LENGTH (matching
+  // PATCH /trips/:id) so an over-long name is rejected per row instead of
+  // producing an uneditable trip.
   it("rejects an over-long displayName per row instead of storing it", async () => {
     const name = `${TAG}-longname`;
     const res = await request(API_URL)
@@ -361,8 +360,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     expect(res.body.errors?.[0]?.error).toMatch(/up to 200 characters/);
   });
 
-  // APIR-002: the documented contract is 0 → 400, over cap → 413 (SEC-001);
-  // the delete path answered 400 for both.
+  // The capped-array contract requires 0 → 400 and over cap → 413.
   it("rejects an oversized delete with 413, and an empty one with 400", async () => {
     const ids = Array.from({ length: 501 }, () => NONEXISTENT_ID);
     const tooMany = await request(API_URL)

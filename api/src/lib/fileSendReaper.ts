@@ -52,7 +52,7 @@ export async function sweepExpiredFileSends(
   let swept = 0;
   for (const row of expired) {
     try {
-      // S3 first (Design Q delete ordering). DeleteObject succeeds on a missing
+      // S3 first. DeleteObject succeeds on a missing
       // key, so the lifecycle rule having already removed it is harmless; an S3
       // failure leaves the row for the next sweep rather than losing the refund.
       await s3.send(
@@ -60,7 +60,7 @@ export async function sweepExpiredFileSends(
       );
       await prisma.$transaction(async (tx) => {
         // Claim by deleting. Only the instance that actually removed the row
-        // refunds — see the header.
+        // refunds — see the header. Guard: fileSendReaper.unit.test.ts ("refunds NOTHING when another instance already claimed the row").
         const { count } = await tx.fileSend.deleteMany({
           where: { id: row.id },
         });
@@ -71,7 +71,7 @@ export async function sweepExpiredFileSends(
           // surviving `file_sent` notification means exactly one thing —
           // "expired before it was saved" — which is what lets the inbox keep
           // explaining it forever without storing the filename anywhere
-          // (notifications.ts, PRIV-005). Settling it here is what makes that
+          // (notifications.ts). Settling it here is what makes that
           // inference true: a recipient who ALREADY HAS the file is told
           // nothing, because their notification goes now.
           //
@@ -92,9 +92,9 @@ export async function sweepExpiredFileSends(
 
           // THE ONE PLACE A FILENAME IS WRITTEN INTO A PAYLOAD, and the only
           // one that may be. Everywhere else these notifications resolve their
-          // filename from the live send at read time (PRIV-005), because a
+          // filename from the live send at read time, because a
           // filename is user text that routinely names a place and must not
-          // sit at rest for something the reader can no longer reach. That
+          // sit at rest for something the reader can no longer reach. Guard: fileSendReaper.unit.test.ts ("stamps nothing when every recipient already saved it"). That
           // reasoning runs out here: the row about to be deleted is the last
           // copy, and a recipient who never got the file is owed the name of
           // the thing they missed — "bob sent you a file" is not enough to ask

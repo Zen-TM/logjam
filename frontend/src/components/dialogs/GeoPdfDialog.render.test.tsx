@@ -117,10 +117,11 @@ describe("GeoPdfDialog, across a Select on map round trip", () => {
     expect(titleBox().value).toBe("My edit");
   });
 
-  // The step that fills the form from the template being edited used to key on
-  // the template OBJECT, so a fresh copy of the same template (a refetch) wiped
-  // the form. Mutation: key `templatePopulatedFor` on `editingTemplate` again
-  // instead of `editingTemplate?.id`.
+  // The step that fills the form from the template being edited keys on
+  // template ID rather than the template object, so a fresh copy of the same
+  // template (a refetch) does not wipe the form. Mutation: key
+  // `templatePopulatedFor` on `editingTemplate` instead of
+  // `editingTemplate?.id`.
   it("keeps edits to a template when it is handed over again", async () => {
     const props = { templateMode: true };
     const { rerender } = render(

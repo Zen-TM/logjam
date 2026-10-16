@@ -16,7 +16,7 @@ export default function Lightbox({
   const containerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerBeforeRef = useRef<HTMLElement | null>(null);
-  // Failed to load (e.g. a 404'd S3 object) — MOBILE-5. Without this the
+  // Failed to load (e.g. a 404'd S3 object). Without this the
   // browser's broken-image glyph sits alone on the black backdrop.
   const [failed, setFailed] = useState(false);
 

@@ -17,8 +17,8 @@ import classes from "./CustomFieldInput.module.css";
 const UNSET = "";
 
 /** A yes/no is THREE states, "—" first, as on Logjam GPS. A checkbox has no
- *  empty state, so it wrote `false` for every yes/no the form showed — a "No"
- *  nobody gave, kept after the trip was retagged and counted as answered. */
+ *  empty state and would record `false` for an unanswered field — a "No"
+ *  nobody gave. (CustomFieldInput.render.test.tsx) */
 const BOOLEAN_OPTIONS = [
   { value: UNSET, label: "—" },
   { value: "true", label: "Yes" },
@@ -52,16 +52,14 @@ export function customFieldValueError(
 
 /**
  * A single attribute's input, shared between PlaceDialog and TripLogDialog so
- * the two cannot drift (UX-002/UX-003). The control is chosen by the
- * definition's SHAPE, never by its key — the same rule the filter sheet
- * follows (`filterPillStops`, DESIGN.md) and the same one Logjam GPS's
- * `CustomFieldValueInput` follows.
+ * the two cannot drift. The control is chosen by the definition's SHAPE,
+ * never by its key — the same rule the filter sheet follows (`filterPillStops`,
+ * DESIGN.md) and the same one Logjam GPS's `CustomFieldValueInput` follows.
  *
  * A BOUNDED INTEGER IS A RAIL (`railStops`, shared). That is how the seven
  * canyon grades are drawn now: they are ordinary bounded integers, so a user's
  * own "Difficulty, 1-5" is drawn exactly like the V grade without anything
- * here knowing that canyons exist. They used to be seven hand-written selects
- * in `PlaceDialog` with their reserved keys spelled out.
+ * here knowing that canyons exist.
  *
  * `value` is the raw form string; "" is unset for every type, a yes/no
  * included (`BOOLEAN_OPTIONS`).
@@ -122,8 +120,9 @@ function CustomFieldInput({
 
   if (def.type === "integer" || def.type === "float") {
     // A decimal typed into an integer field shows "Whole numbers only" instead
-    // of being silently truncated (TRIP-1), and an out-of-range value on a
-    // bounded field is flagged instead of silently clamped (TRIP-2).
+    // of being silently truncated, and an out-of-range value on a
+    // bounded field is flagged instead of silently clamped
+    // (CustomFieldInput.test.ts).
     return (
       <NumberField
         label={label}

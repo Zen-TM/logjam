@@ -1,16 +1,15 @@
-// Stage 8 delta-sync tombstones: per-user deletion/visibility-revocation log.
+// Delta-sync tombstones: per-user deletion/visibility-revocation log.
 // A row means "user X must remove entity (type,id) from any local mirror".
 //
-// Convention (sync-era sibling of the ARCH-001 S3-purge rule): any hard-delete
-// of a synced entity must call writeTombstones IN THE SAME TRANSACTION as the
-// delete it records, fanning out to every user whose visibility included the
-// row. Never after the transaction — a crash between delete and tombstone
-// would orphan mirrors forever.
+// Convention: any hard-delete of a synced entity must call writeTombstones IN
+// THE SAME TRANSACTION as the delete it records, fanning out to every user
+// whose visibility included the row. Never after the transaction — a crash
+// between delete and tombstone would orphan mirrors forever.
 //
 // The builders below are pure (unit-testable, Prisma-free): they turn the
 // facts a delete site already has (owner, sharees, media ids) into the exact
-// tombstone rows the spec's §3.3 site table requires. Rows carry ids only —
-// never names/coords — so the table is log-safe (privacy rules).
+// tombstone rows required. Rows carry ids only — never names/coords — so the
+// table is log-safe (privacy rules).
 
 import { Prisma } from "@prisma/client";
 import type { SyncEntityType } from "@logjam/shared";
@@ -93,7 +92,7 @@ export function tripDeleteTombstones(args: {
  * the place, its media and every revoked share row; each sharee forgets the
  * place and its place-level media. A sharee's signal here is deliberately
  * identical to an unshare (place tombstone) — continued-existence oracle
- * closed (§4.6.3). */
+ * closed. */
 export function placeDeleteTombstones(args: {
   ownerId: string;
   placeId: string;
@@ -205,7 +204,7 @@ export function mediaDeleteTombstones(args: {
 
 /** Share revocation (DELETE /places/:id/share/:userId, unshare-all, and the
  * per-share leg of unfriend): the sharee loses the whole place record — the
- * same `place` tombstone a place-delete would emit (§4.6.3) — plus its
+ * same `place` tombstone a place-delete would emit — plus its
  * place-level media; the place owner forgets the share row. */
 export function shareRevokeTombstones(args: {
   placeOwnerId: string;

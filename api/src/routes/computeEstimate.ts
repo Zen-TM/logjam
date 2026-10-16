@@ -73,7 +73,7 @@ router.post(
       case "topoExport": {
         // Same read-access rule the real submit uses — owned OR directly shared.
         // A job the caller cannot read is 404, never 403, so this endpoint is not
-        // an existence oracle for job ids (APIR-013/PRIV-106).
+        // an existence oracle for job ids.
         const job = await prisma.topoJob.findFirst({
           where: {
             id: request.sourceJobId,

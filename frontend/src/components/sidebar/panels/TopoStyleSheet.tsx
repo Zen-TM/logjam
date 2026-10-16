@@ -4,14 +4,13 @@
 // A SIDE SHEET beside the LiDAR topos view, not an accordion inside it. These
 // are styles someone tunes by watching the map change, and a sheet beside the
 // panel leaves the map in view and live — the reason filters open that way too
-// (DESIGN.md). It was an accordion at the bottom of the page with its own
-// Contours | Features tab strip, so a colour change happened with the map's
-// answer scrolled out of sight.
+// (DESIGN.md). An accordion at the bottom of the page would scroll the map's
+// answer out of sight during colour changes.
 //
 // Every change applies at once: App's `useLiveVectorStyle` draws it and
 // debounces the save (PUT /vector-style). Nothing here saves, and the sheet says
 // neither — a sheet of controls that change the map while you watch does not
-// need a paragraph explaining that it does (operator, 2026-09-18).
+// need a paragraph explaining that it does.
 import { useId } from "react";
 import {
   CONTOUR_WIDTH_UNITS_PER_PX,
@@ -54,7 +53,7 @@ const POINT_ICON: Record<OsmPointFeatureKey, string> = {
 // closest zoom. A contour is stored in eighths of that (`majorWidthM`, named for
 // ground metres it has never been measured in), so it is divided on the way in
 // and multiplied on the way out — otherwise two boxes side by side take the same
-// number and draw lines eight times apart (operator, 2026-09-18).
+// number and draw lines eight times apart.
 const toPixels = (stored: number) => stored / CONTOUR_WIDTH_UNITS_PER_PX;
 const toStored = (pixels: number) => pixels * CONTOUR_WIDTH_UNITS_PER_PX;
 
@@ -129,9 +128,8 @@ function StyleForm({
         />
       </SheetSection>
 
-      {/* A TABLE: a colour column and a width column, headed once. The boxes
-          were bare numbers with nothing saying what they set, and a label
-          beside each said "Major"/"Minor" twice over (operator, 2026-09-18). */}
+      {/* A TABLE: a colour column and a width column, headed once, rather than
+          bare numbers with no heading and duplicated labels. */}
       <SheetSection title="Contours">
         <div className={classes.styleTable}>
           <ColumnHeads columns={DRAWN_COLUMNS} />
@@ -224,7 +222,7 @@ function StyleForm({
 }
 
 /** The one line that says what the columns under it are. A width box with
- *  nothing over it is a number with no noun (operator, 2026-09-18). */
+ *  nothing over it is a number with no noun. */
 function ColumnHeads({
   columns,
   switched = false,
@@ -248,9 +246,8 @@ function ColumnHeads({
 /**
  * One line of the table: what it is at the left, then the cells that say how it
  * is drawn, then — for an OSM feature — its switch. The cells are the grid's
- * own, not a box of their own: a feature's colour and width sat on a row below
- * its switch, right-aligned, two small controls adrift in an empty line
- * (operator, 2026-09-18).
+ * own, not a box of their own: keeping colour, width, and switch on one row
+ * avoids placing controls on a separate line adrift from their switch.
  *
  * The name is text, not a label: each control carries its own accessible name,
  * which CONTAINS the visible word (WCAG 2.5.3). The switch takes the name and

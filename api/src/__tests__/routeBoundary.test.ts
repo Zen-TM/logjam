@@ -61,7 +61,7 @@ describe("route visibility — unlinked routes are owner-private", () => {
     expect(owner.status).toBe(200);
     expect(owner.body.points).toHaveLength(3);
 
-    // 404 not 403: the status must not confirm the route exists (SEC-001).
+    // 404 not 403: the status must not confirm the route exists.
     for (const sub of [BOB_SUB, CAROL_SUB]) {
       const res = await request(API_URL).get(`/routes/${routeId}`).set(as(sub));
       expect(res.status).toBe(404);

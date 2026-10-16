@@ -4,11 +4,9 @@
 // The page answers "what maps have I made, and what is still being made?"
 // (shared/DESIGN.md §2). The second half of that question is `beingMade`: every job the
 // user is still waiting on — a GeoPDF, a topo, an export of a topo — as one kind
-// of row, newest first, with the words for where it has got to. It used to be a
-// stack of coloured ribbons over the page with a "TOPO"/"EXPORT · GPKG" chip on
-// each, capped at three behind a "Show all"; the tile's glyph and hue already
-// say which kind a row is, and a list that scrolls has no reason to hide its
-// fourth item.
+// of row, newest first, with the words for where it has got to. The tile's glyph
+// and hue already say which kind a row is, and a list that scrolls has no
+// reason to hide its fourth item.
 import {
   EXPORT_FORMAT_RULES,
   formatBytes,
@@ -90,7 +88,7 @@ export function formatDay(iso: string): string {
 }
 
 /** "8 Sept 2026, 3:41 pm" — for a name made from a date, where two made the
- *  same day would otherwise read identically (GEOPDF-2). */
+ *  same day would otherwise read identically. */
 function formatDayAndTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     day: "numeric",

@@ -149,8 +149,7 @@ export function Row({
   trailing?: ReactNode;
   /** Controls that answer the row (Accept, Decline), on a line of their own
    *  INSIDE the card, under the text. Below the card they read as a caption
-   *  for the next row down (Logjam GPS learned that from a mis-pressed
-   *  "Download again"). */
+   *  for the next row down. */
   footer?: ReactNode;
   onOpen?: () => void;
   /**

@@ -8,9 +8,9 @@ import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 // wipes the authenticated user (alice) and every owned record, which would
 // destroy the shared seed for all other integration tests running against the
 // same local DB. The cascade-delete + S3 cleanup path it drives is covered by
-// reading the route and by CH-002 (s3Cleanup now throws on failure); a
-// dedicated destructive test would need an isolated throwaway user, which fake
-// auth (always alice) cannot impersonate. See code-health-unaddressed.md.
+// unit tests (s3Cleanup throws on failure); a dedicated destructive test would
+// need an isolated throwaway user, which fake auth (always alice) cannot
+// impersonate.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
@@ -32,11 +32,9 @@ describe("users routes (fake auth = alice)", () => {
     expect(typeof res.body.monthlyComputeResetAt).toBe("string");
   });
 
-  // Regression: PATCH /me previously returned the raw Prisma row, dropping the
-  // derived monthlyComputeUsage/monthlyComputeResetAt (not columns). The frontend
-  // replaces its cached user with this response, so the dropped fields made the
-  // Account panel render " / 40" and a full progress bar after any profile
-  // update (fresh-signup consent flow being the reliable trigger).
+  // PATCH /users/me must include the derived monthlyComputeUsage and
+  // monthlyComputeResetAt (not DB columns), because the frontend replaces its
+  // cached user with this response.
   it("PATCH /users/me returns the derived monthly-tile-usage fields", async () => {
     const before = await request(API_URL).get("/users/me").set(AUTH);
     const res = await request(API_URL)
@@ -62,8 +60,9 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
-  // Found by taking bob's name in Logjam Web: the refusal read "Conflict
-  // updating profile". Mutation: answer a P2002 by `meta.target` again.
+  // When a chosen username is already taken, the refusal must inform the user
+  // rather than returning a generic conflict error.
+  // Mutation: answer a P2002 by `meta.target` again.
   it("PATCH /users/me says a taken username is taken", async () => {
     const res = await request(API_URL)
       .patch("/users/me")
@@ -127,7 +126,7 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
-  // Consent boundary (PRIV-002): the server is the integrity half of the
+  // Consent boundary: the server is the integrity half of the
   // re-consent mechanism — it must reject any consentVersion other than the
   // current constant, and must expose consentVersion so the client gate
   // (frontend needsReconsent/ConsentGate) can fire after a version bump.
@@ -168,12 +167,11 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
-  // PRIV-004: privacy.html promises a "complete machine-readable JSON copy"
-  // (APP 12 access). schemaVersion 2 adds the previously omitted user-owned
-  // collections — topo jobs carry location-bearing footprints, so their
-  // absence made "complete" inaccurate. BigInt byte fields (topoJob
-  // outputBytes, topoExportJob resultBytes) must serialise via the global
-  // replacer without crashing.
+  // privacy.html promises a "complete machine-readable JSON copy" (APP 12
+  // access). Topo jobs carry location-bearing footprints, so they must be
+  // included in the export. BigInt byte fields (topoJob outputBytes,
+  // topoExportJob resultBytes) must serialise via the global replacer without
+  // crashing.
   it("GET /users/me/export includes topo jobs, topo exports, topo templates, and notifications (schemaVersion 2)", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);

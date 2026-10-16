@@ -9,7 +9,7 @@
   padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-line);
-  /* A button wears the pressable fill (UX §4), whichever it is; the one
+  /* A button wears the pressable fill, whichever it is; the one
      primary of a surface overrides it with the accent. */
   background: var(--color-card);
   color: var(--color-text);
@@ -38,8 +38,8 @@
   padding: 0 var(--space-1-5);
 }
 
-/* The label on a fill is `onFill`, never the page colour (root CLAUDE.md:
-   text ON a colour fill). */
+/* The label on a fill is `onFill`, never the page colour
+   (shared/DESIGN.md §7). */
 .filled {
   border-color: var(--color-accent);
   background: var(--color-accent);

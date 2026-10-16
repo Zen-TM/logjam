@@ -17,12 +17,9 @@ const PEEK_REVEAL_PX = 96;
 // Bottom nav strip height; the sheet sits above it. Keep in sync with
 // --bottom-nav-height in index.css.
 const NAV_HEIGHT_PX = 68;
-// Fraction of viewport height revealed at the "half" snap. Panels with pinned
-// top-of-list chrome (search box, action buttons, a collapsed filter
-// accordion) were eating most of a plain 50% reveal, leaving as little as
-// ~85px (~1.5 rows) for the scrollable list underneath — MOBILE-8. Raised so
-// the list gets meaningfully more room while "half" still reads as
-// mid-height (leaves the map reachable, unlike "full").
+// Fraction of viewport height revealed at the "half" snap. Set to 0.68 so panels
+// with pinned top-of-list chrome leave enough vertical space for the scrollable
+// list underneath while leaving the map reachable (unlike "full").
 const HALF_REVEAL_FRACTION = 0.68;
 
 /** The sheet's own height — it fills the viewport above the bottom nav strip. */
@@ -83,8 +80,7 @@ function useViewportHeight(): number {
  *  It is the same COMPLEMENTARY LANDMARK the desktop panel is, named by the page
  *  it holds — a reader jumping by landmark should not lose the panel by being on
  *  a phone. Its grab bar is a `slider`, because a bar that only answers a drag
- *  is a control a keyboard cannot reach (WCAG 2.1.1) and "full" was unreachable
- *  without one. */
+ *  is a control a keyboard cannot reach (WCAG 2.1.1). */
 function BottomSheet({
   snap,
   onSnapChange,
