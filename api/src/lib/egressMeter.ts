@@ -296,8 +296,8 @@ export async function sweepEgress(): Promise<void> {
         );
       }
     } catch (err) {
-      // One prefix failing must not stop the other. No key or user id in the
-      // log line — this is an infrastructure error, not user data.
+      // No key or user id in the log line — this is an infrastructure error,
+      // not user data.
       logger.error(
         { prefix, err: safeErrorForLog(err) },
         "egress_sweep_failed",

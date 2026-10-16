@@ -7,6 +7,11 @@ import darkLayers from "./protomapsLayers.dark.json";
 
 export type ProtomapsFlavor = "light" | "dark";
 
+/** The flavor every map in Logjam GPS mounts, so they all render the same
+ *  vector basemap. Light matches the paper-topo look of the SIX rasters; the
+ *  dark JSON ships alongside for a later theme pass. */
+export const PROTOMAPS_FLAVOR: ProtomapsFlavor = "light";
+
 export interface ProtomapsLayerDef {
   id: string;
   type: "background" | "fill" | "line" | "symbol";

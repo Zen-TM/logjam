@@ -1,4 +1,4 @@
-// Notifications offline cache (stage8-sync.md §4.7): notifications are
+// Notifications offline cache: notifications are
 // deliberately NOT in the delta protocol — they're refetch-and-cache. The
 // last GET /notifications response is stored verbatim so the inbox renders
 // offline; a live fetch refreshes it and the cache follows.
@@ -99,7 +99,7 @@ async function pendingInboxOps(): Promise<{
 /**
  * Fetch notifications and refresh the offline cache. Throws on network
  * failure (the caller falls back to readNotificationsCache) — a failed
- * fetch must NOT wipe a good cache.
+ * fetch must NOT wipe a good cache (notificationsCache.test.ts).
  */
 export async function fetchAndCacheNotifications(): Promise<NotificationsCache> {
   const { data, total } = await getNotifications();

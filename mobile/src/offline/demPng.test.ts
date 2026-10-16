@@ -1,11 +1,13 @@
-// Decoder check against a REAL tile, not a synthetic one: the fixture is the
-// z13 terrarium tile over Blue Gum Forest / Grose Valley, committed in
-// `shared/src/__fixtures__/` because the API's reader is tested on it too.
+// Decoder check against a REAL tile, not a synthetic one: the fixture is a z13
+// terrarium tile of NSW terrain, committed in `shared/src/__fixtures__/`
+// because the API's reader is tested on it too. A real tile, deliberately: one
+// this decoder built would not exercise the filters a real export uses.
 //
 // Expected heights come from an independent decode of the same file (Python
 // zlib + the PNG spec's filters), not from this decoder — a self-referential
 // expectation would pass on a decoder that unfilters wrongly and consistently.
-// Sanity anchors them too: the Grose sits between ~700 m and ~1100 m.
+// Sanity anchors them too: the terrain in the tile sits between ~700 m and
+// ~1100 m.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

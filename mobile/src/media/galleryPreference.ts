@@ -4,7 +4,7 @@
 // DEVICE-scoped and OFF by default, and the default is a privacy decision
 // rather than a taste one. A photo taken inside Logjam is place evidence: it
 // lives in app-private storage, excluded from cloud backup, behind the app lock
-// (mobile/CLAUDE.md, Privacy). Copying it to the shared gallery hands it to
+// (mobile/AGENTS.md, Privacy and battery). Copying it to the shared gallery hands it to
 // every other app on the handset with media access, to the phone's own photo
 // backup, and to whoever is handed the phone to look at something else — none
 // of which this app can undo. So it is opt-in, per handset, and the switch says
@@ -21,7 +21,7 @@ import { readPref, writePref } from "../prefsDb";
 const GALLERY_SAVE_KEY = "mediaSaveToGallery";
 
 /** Only an explicit "on" is on — an unreadable or absent preference reads as
- *  off, the same fail-closed posture as the app lock. */
+ *  off, the same fail-closed posture as the app lock (galleryPreference.test.ts). */
 export function savesCapturesToGallery(): boolean {
   return readPref(GALLERY_SAVE_KEY) === "on";
 }

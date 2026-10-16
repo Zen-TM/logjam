@@ -163,12 +163,6 @@ function cacheTile(
   tileCache.set(key, lines);
 }
 
-/** Test seam — the caches are module-scoped and would leak between tests. */
-export function clearSnapTileCache() {
-  tileCache.clear();
-  archives.clear();
-}
-
 async function linesInTile(
   archive: SnapArchive,
   x: number,

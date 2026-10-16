@@ -1035,8 +1035,6 @@ function Map({
     // Privacy: this is entirely browser-native. MapLibre reads the position via
     // navigator.geolocation and renders it as a map marker in this page — the
     // position is never sent to the API, and no analytics/telemetry observes it.
-    // Keep it that way: do not wire the `geolocate` event to anything that
-    // persists or transmits the coordinates.
     const geolocate = new maplibregl.GeolocateControl({
       // High accuracy: the difference between the right side of a creek and
       // the wrong one. Costs battery, which is the correct trade for a
@@ -1750,10 +1748,9 @@ function Map({
               entry.color,
               entry.stamp,
             ).catch((err: unknown) => {
-              // One bad track must not blank the whole layer. The thrown error
-              // carries only the HTTP status — never log the presigned URL,
-              // whose place-name-derived filename must stay out of logs
-              // (privacy rule).
+              // One bad track blanks only itself. Safe to log: the thrown
+              // error carries the HTTP status, not the presigned URL whose
+              // filename is the place's name (trackGeo.test.ts).
               console.error(err);
               if (!failedTrackToastedRef.current.has(entry.mediaId)) {
                 failedTrackToastedRef.current.add(entry.mediaId);
@@ -3035,7 +3032,7 @@ function Map({
 
   useEffect(() => {
     if (!flyToPlace || !mapLoaded || !mapRef.current) return;
-    // Defensive guard (PLACE-1): an out-of-range record must not crash the app.
+    // Defensive guard: an out-of-range record must not crash the app.
     // MapLibre's flyTo throws "Invalid LngLat" for lat outside [-90,90] (or
     // lng outside [-180,180]), which previously escaped to the RootErrorBoundary
     // and made the record unmanageable — you couldn't even open it to fix or
@@ -3049,8 +3046,7 @@ function Map({
         duration: 1500,
       });
     } else {
-      // Don't log the coordinates themselves (privacy rule: no place coords in
-      // logs/errors) — just note the fly-to was skipped.
+      // The warning names no coordinate: they are the place's.
       console.warn("Skipping fly-to: place coordinates out of range");
     }
     onFlyToPlaceConsumedRef.current?.();

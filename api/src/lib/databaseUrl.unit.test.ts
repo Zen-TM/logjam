@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { composeDatabaseUrl, databaseUrlFromEnv } from "./databaseUrl";
+import { composeDatabaseUrl as prismaConfigCompose } from "../../prisma.config";
+
+// prisma.config.ts loads .env on import; this test wants neither its values
+// nor its side effect.
+vi.mock("dotenv/config", () => ({}));
 
 describe("composeDatabaseUrl", () => {
   it("URL-encodes special characters in user and password", () => {
@@ -23,6 +28,16 @@ describe("composeDatabaseUrl", () => {
       password: "logjam",
     });
     expect(url).toBe("postgresql://logjam:logjam@localhost:5432/logjam");
+  });
+
+  // Mutation: drop either encodeURIComponent in prisma.config.ts.
+  it("matches the copy in prisma.config.ts, which cannot import this one", () => {
+    for (const parts of [
+      { host: "db", port: "6543", name: "n", user: "u@x", password: "p!:/#" },
+      { host: "db", name: "n", user: "u", password: "p" },
+    ]) {
+      expect(prismaConfigCompose(parts)).toBe(composeDatabaseUrl(parts));
+    }
   });
 });
 

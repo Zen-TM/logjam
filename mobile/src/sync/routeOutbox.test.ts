@@ -255,3 +255,10 @@ describe("UPDATE_TARGETS column maps vs the schema declaration", () => {
     }
   });
 });
+
+describe("a place update's columns", () => {
+  // Mutation: add `foreignFields` to PLACE_UPDATE_COLUMNS.
+  it("never include foreignFields, which no user edit writes and the server refuses", () => {
+    expect(UPDATE_TARGETS.place!.columns).not.toHaveProperty("foreignFields");
+  });
+});

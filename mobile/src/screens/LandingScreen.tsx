@@ -223,7 +223,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // registers it in the embedded asset map. The drawable ships, the runtime
   // cannot resolve it, and the Image renders 88pt of nothing — which is
   // exactly what a release build did, silently, while debug was fine. Do not
-  // "de-duplicate" these two files.
+  // "de-duplicate" these two files (LandingScreen.test.ts).
   logo: {
     width: 88,
     height: 88,

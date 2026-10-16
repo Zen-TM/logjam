@@ -1,8 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("./prisma", () => ({ default: {} }));
+const { findMany } = vi.hoisted(() => ({ findMany: vi.fn() }));
+vi.mock("./prisma", () => ({ default: { deviceToken: { findMany } } }));
 
-import { buildPushMessages, pushTitleFor, tokensToPrune } from "./push";
+import {
+  buildPushMessages,
+  pushTitleFor,
+  sendPushToUser,
+  tokensToPrune,
+} from "./push";
 
 describe("buildPushMessages — privacy invariant", () => {
   it("builds one message per token with a static generic title", () => {
@@ -96,5 +102,20 @@ describe("tokensToPrune", () => {
 
   it("handles missing tickets gracefully", () => {
     expect(tokensToPrune(["a", "b"], [{ status: "ok" }])).toEqual([]);
+  });
+});
+
+// Mutation: rethrow from sendPushToUser's catch.
+describe("sendPushToUser", () => {
+  it("swallows a failed send, so the request that triggered it still succeeds", async () => {
+    findMany.mockResolvedValueOnce([{ token: "ExponentPushToken[a]" }]);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("fetch failed"));
+    await expect(
+      sendPushToUser("u1", { type: "friend_request", notificationId: "n1" }),
+    ).resolves.toBeUndefined();
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
   });
 });

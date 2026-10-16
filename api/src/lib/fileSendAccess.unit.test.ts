@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { AppError } from "../middleware/errorHandler";
 import {
@@ -27,7 +29,7 @@ function statusOf(fn: () => unknown): number | undefined {
 // function rather than an inline `.trim()`.
 describe("sanitizeSendFilename", () => {
   it("keeps an ordinary filename intact", () => {
-    expect(sanitizeSendFilename("Kanangra Main.gpx")).toBe("Kanangra Main.gpx");
+    expect(sanitizeSendFilename("Alpha Creek.gpx")).toBe("Alpha Creek.gpx");
   });
 
   it("strips the quote that would close the Content-Disposition token", () => {
@@ -52,6 +54,35 @@ describe("sanitizeSendFilename", () => {
       400,
     );
     expect(sanitizeSendFilename("a".repeat(251) + ".gpx")).toHaveLength(255);
+  });
+});
+
+// A place's name is exactly what a user ends up typing into the filename box,
+// and this is the one user-supplied string on a send (PRIV-005, root AGENTS.md:
+// logs never carry a place's name). Mutations: put `value` into the refusal's
+// detail (the detail IS logged, errorHandler.ts), or pass `filename` into a log
+// call on the send surface.
+describe("a sent file's name never reaches a log", () => {
+  it("names only ids in every log call on the send surface", () => {
+    const source = readFileSync(
+      join(__dirname, "../routes/fileSends.ts"),
+      "utf8",
+    );
+    const calls = source.match(/logger\.\w+\([\s\S]*?\);/g) ?? [];
+    // Guards the guard: a regex that matched nothing would pass vacuously.
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call).not.toMatch(/filename/i);
+  });
+
+  it("refuses a filename without repeating it back", () => {
+    let refusal: unknown;
+    try {
+      sanitizeSendFilename({ place: "Alpha Creek" });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toBeInstanceOf(AppError);
+    expect(JSON.stringify(refusal)).not.toContain("Alpha Creek");
   });
 });
 

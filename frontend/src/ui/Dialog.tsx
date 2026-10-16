@@ -43,9 +43,9 @@ type DialogProps = {
  * - Escape, the close button and a press that starts AND ends on the backdrop
  *   call `onClose`. A press that starts in a field and ends outside it (a text
  *   selection dragged too far) is not a dismissal.
- * - Rendered into `document.body`, and it stops its own Escape: closing it must
- *   not also close the MUI dialog it was raised from, or clear the selection of
- *   the list behind it.
+ * - Rendered into `document.body`, and it stops its own Escape, so closing it
+ *   does not also close the sheet it was raised from or clear the selection of
+ *   the list behind it (Dialog.test.tsx).
  */
 export function Dialog(props: DialogProps) {
   if (!props.open) return null;

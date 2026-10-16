@@ -1,6 +1,6 @@
 // expo-secure-store binding for the chunked key-value storage (Keychain on
-// iOS, Keystore-encrypted prefs on Android — mobile/CLAUDE.md: tokens never
-// touch AsyncStorage or plain files).
+// iOS, Keystore-encrypted prefs on Android), the token store Amplify is given
+// in place of AsyncStorage (amplifyConfig.test.ts).
 import * as SecureStore from "expo-secure-store";
 
 import {

@@ -102,6 +102,7 @@ export default function LidarPanel({
   templateRefetchTrigger,
   onSheetOpenChange,
   onExpandSheet,
+  loadsUserData,
 }: {
   /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
@@ -132,6 +133,10 @@ export default function LidarPanel({
   /** Told when the style sheet opens or closes, so the map insets for it. */
   onSheetOpenChange: (open: boolean) => void;
   onExpandSheet?: () => void;
+  /** App's own `authenticated && consentSettled` (FECO-005), the value every
+   *  user-data hook in this app takes as `enabled`: the template fetch below
+   *  waits for it like the rest. */
+  loadsUserData: boolean;
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
@@ -160,6 +165,9 @@ export default function LidarPanel({
   // A template saved from TopoDialog's "Save as template" bumps
   // `templateRefetchTrigger`, so the list is never a reload behind (TOPO-1).
   useEffect(() => {
+    // Behind the consent gate this is one more user-data request the gate
+    // exists to hold (FECO-005), so it waits with every other fetch.
+    if (!loadsUserData) return;
     // Concurrent-duplicate-safe fetch shared with TopoDialog (TOPO-6).
     fetchTopoTemplates()
       .then(setTemplates)
@@ -167,7 +175,7 @@ export default function LidarPanel({
         console.error(err);
         toast.error(messageFromError(err, "Couldn't load topo templates."));
       });
-  }, [toast, templateFetchCount, templateRefetchTrigger]);
+  }, [toast, templateFetchCount, templateRefetchTrigger, loadsUserData]);
 
   const topoNames = useMemo(
     () => topoNamesById(completedTopoJobs),

@@ -7,8 +7,9 @@
 // swapped a 72pt round button for a full-width rounded rectangle, so the icon
 // jumped left and up and the two shapes had nothing in common.)
 //
-// Behaviour mirrors the web MapSearchBox: 3-char minimum, 350 ms debounce,
-// Nominatim via `geocode`, tap a result to recentre.
+// Locations come from Nominatim via `geocode`: 3-char minimum, 350 ms
+// debounce, tap a result to recentre. Logjam Web's MapSearchBox differs here:
+// it asks the geocoder only when the user picks "Search locations for …".
 //
 // IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
 // A box that could find Katoomba but not the place you saved last week was
@@ -17,9 +18,9 @@
 // with no debounce and no request, and are listed ABOVE the places with their
 // kind's glyph and hue so the two are never confused for each other.
 //
-// PRIVACY: only the typed string leaves the app (see src/geocode.ts). Place
-// names and coordinates are never sent here — the saved matches are the reason
-// they do not have to be — and results are not persisted.
+// PRIVACY: only the typed string leaves the app (shared/src/geocode.test.ts).
+// No saved place's name or coordinates is sent — the saved matches are the
+// reason they do not have to be — and results are not persisted.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,

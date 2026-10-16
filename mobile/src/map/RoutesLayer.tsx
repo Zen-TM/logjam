@@ -7,7 +7,7 @@
 //
 // ONE GeoJSONSource for the same reason as PlaceRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
-import { MAP_INK } from "@logjam/shared";
+import { MAP_INK, SAVED_ROUTE_MIN_ZOOM } from "@logjam/shared";
 import { memo, useMemo } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
@@ -22,15 +22,13 @@ import {
 } from "./routeArrowStyle";
 import { stopSourcePress } from "./sourcePress";
 
-/**
- * Zoom floor for SAVED routes. Zoomed out past this a route is a few pixels of
- * line that says nothing about where it goes, and a state-wide view of every
- * route you have ever drawn is just ink over the map.
- *
- * Matches the web's ROUTE_MIN_ZOOM — roughly a 50 km view. The route being DRAWN is exempt (the draft
- * layer has no floor) — hiding what the user is working on would be absurd.
- */
-export const SAVED_ROUTE_MIN_ZOOM = 10;
+// Re-exported so a caller keeps importing the floor from the layer it draws.
+export { SAVED_ROUTE_MIN_ZOOM };
+
+// The zoom floor for saved routes is SAVED_ROUTE_MIN_ZOOM in `@logjam/shared`
+// (`routeArrow.ts`, re-exported below): Logjam Web draws the same routes at the
+// same floor, so the two clients cannot show one at different scales. Why that
+// zoom, and why the route being drawn is exempt, is documented there.
 
 export const RoutesLayer = memo(function RoutesLayer({
   routes,

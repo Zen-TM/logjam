@@ -71,6 +71,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
@@ -88,9 +89,6 @@ import { TrackMapLayers } from "../tracks/TrackMapLayers";
 /** The selection ring's width, and the amount its radius has to exceed the
  *  thumb's for the two curves to sit concentric. */
 const THUMB_RING = 2;
-
-/** Matches `MapScreen`'s — the two maps must render the same vector basemap. */
-const PROTOMAPS_FLAVOR = "light" as const;
 
 /** Zoom for a picker opened on a coordinate someone already typed: close enough
  *  to see which side of the creek the point is on. */

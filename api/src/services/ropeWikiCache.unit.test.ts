@@ -135,6 +135,31 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
     mockS3Object(SAMPLE_CSV);
     expect((await getRopeWikiCanyons()).places).toHaveLength(3);
   });
+
+  // A snapshot that is there but is not a corpus must fail like one that is
+  // missing — same sentence, same 503. Before, the parser threw a bare Error
+  // and the user got errorHandler's generic "something went wrong".
+  it("raises a 503 when the snapshot is not a corpus", async () => {
+    mockS3Object("Name,Region\n");
+
+    const error = await getRopeWikiCanyons().catch((e) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error.statusCode).toBe(503);
+    expect(error.message).toBe(
+      "RopeWiki's canyon list isn't available right now.",
+    );
+    expect(error.devDetail).toContain("no data rows");
+  });
+
+  it("raises a 503 when the snapshot has lost a required column", async () => {
+    // `location` is the third column the parser insists on (services/ropewiki.ts).
+    mockS3Object("pageid,coords\n1,150.4 -33.5\n");
+
+    const error = await getRopeWikiCanyons().catch((e) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error.statusCode).toBe(503);
+    expect(error.devDetail).toContain("location");
+  });
 });
 
 describe("getRopeWikiCanyons — fresh=true live path", () => {

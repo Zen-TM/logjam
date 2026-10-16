@@ -164,9 +164,10 @@ export function Row({
   download?: string;
   external?: boolean;
   selected?: boolean;
-  /** An accent edge down the left side: a property of the row, such as unread,
-   *  that must still show while the row is also selected. Drawn as an inset
-   *  shadow, so the row's box does not change size when it comes and goes. */
+  /** An accent edge down the left side: a property of the row, such as
+   *  unread. Its inset shadow is composed with the selected outline rather
+   *  than replaced by it, so a selected row keeps it, and the row's box does
+   *  not change size when it comes and goes. */
   accentEdge?: boolean;
   disabled?: boolean;
 }) {

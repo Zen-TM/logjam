@@ -35,6 +35,17 @@ export const ROUTE_ARROW_IMAGE = "route-arrow";
 export const ROUTE_ARROW_MIN_ZOOM = 12;
 
 /**
+ * Zoom floor for SAVED routes, on both clients. Below it a route is a few
+ * pixels of line that says nothing about where it goes, and a state-wide view
+ * of every route you have ever drawn is just ink over the map. z10 is roughly a
+ * 50 km view; z7, where the width ramp starts, hazed the whole state.
+ *
+ * The route being DRAWN is exempt — the draft layer has no floor. Hiding what
+ * the user is working on would be absurd.
+ */
+export const SAVED_ROUTE_MIN_ZOOM = 10;
+
+/**
  * Scales the 64x48 source image, so the 26px arrowhead inside it draws about
  * 12px long on a 3px line. Tune here, not by regenerating the image: an SDF is
  * resolution-independent, which is half of why it is one.

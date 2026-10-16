@@ -376,7 +376,23 @@ export async function fetchAndParseRopeWiki(): Promise<{
   return parseRopeWikiCsv(await response.text());
 }
 
-/** Parse a RopeWiki Special:Ask CSV export into places plus per-row errors. */
+/**
+ * The sentence a user gets whenever the corpus itself is unusable — the
+ * snapshot is missing (ropeWikiCache.ts), refused (below), or unparseable.
+ * Carried rather than composed: the same failure must not read two ways
+ * depending on which door it came through.
+ */
+export const ROPEWIKI_UNAVAILABLE = say`RopeWiki's canyon list isn't available right now.`;
+
+/**
+ * Parse a RopeWiki Special:Ask CSV export into places plus per-row errors.
+ *
+ * A bad CSV is an unavailable corpus, not an internal fault: both callers serve
+ * it to a route, and a bare Error would reach the client as errorHandler's
+ * generic 500 with nothing to act on. The `devDetail` names the fault for
+ * whoever re-exports the file; neither it nor the row contents are logged.
+ * (src/services/ropeWikiCache.unit.test.ts)
+ */
 export function parseRopeWikiCsv(csvText: string): {
   places: RopeWikiCanyon[];
   errors: string[];
@@ -387,7 +403,12 @@ export function parseRopeWikiCsv(csvText: string): {
   });
 
   if (records.length < 2) {
-    throw new Error("RopeWiki CSV is empty or has no data rows");
+    throw new AppError(
+      503,
+      ROPEWIKI_UNAVAILABLE,
+      undefined,
+      "RopeWiki CSV is empty or has no data rows",
+    );
   }
 
   // First row is headers — identify column indices by name
@@ -395,7 +416,12 @@ export function parseRopeWikiCsv(csvText: string): {
   const requiredCol = (name: string): number => {
     const i = headers.indexOf(name);
     if (i === -1) {
-      throw new Error(`RopeWiki CSV missing required column: ${name}`);
+      throw new AppError(
+        503,
+        ROPEWIKI_UNAVAILABLE,
+        undefined,
+        `RopeWiki CSV missing required column: ${name}`,
+      );
     }
     return i;
   };

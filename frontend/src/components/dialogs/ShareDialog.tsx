@@ -19,9 +19,8 @@
 // something one press can undo, and no footer button in sight for the friends
 // already listed underneath.
 //
-// PRIVACY: usernames only, never email. The friends endpoints are
-// username-only server-side (root CLAUDE.md) and this must not become the
-// surface that wants more.
+// PRIVACY: usernames only. `TFriend` has no email field because the friends
+// endpoints never send one (api src/__tests__/friends.test.ts).
 import { Fragment, type ReactNode } from "react";
 import {
   contractSectionKeys,

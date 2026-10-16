@@ -1,4 +1,4 @@
-// MBTiles writer for downloaded raster basemap regions (stage4a-basemaps.md §4).
+// MBTiles writer for downloaded raster basemap regions.
 //
 // Same on-disk shape as a Stage 6 GeoPDF import — one raster MBTiles per region,
 // TMS row order, `logjam:*` namespaced metadata — but written from JS rather
@@ -7,15 +7,16 @@
 //
 // THE FILE IS THE CHECKPOINT. A tile is only in the file if its batch
 // transaction committed, so a kill mid-download loses at most one batch and the
-// next attempt resumes from exactly what is there (§4.4). The plan also spec'd a
-// `region_download` progress table for this; it isn't needed — the metadata rows
-// already carry the source, bbox and zoom range, so an unfinished file describes
-// its own job. `logjam:build_state` present ⇒ incomplete ⇒ never registered as a
-// usable artifact.
+// next attempt resumes from exactly what is there. No `region_download`
+// progress table is needed for this: the metadata rows already carry the
+// source, bbox and zoom range, so an unfinished file describes its own job.
+// `logjam:build_state` present ⇒ incomplete ⇒ never registered as a usable
+// artifact.
 //
 // PRIVACY: these files hold place-area coordinates in their `bounds` metadata
-// and live in app-private, backup-excluded storage behind the app lock. Never
-// log a path or a bbox from here — progress logging is counts and state words.
+// and live in app-private, backup-excluded storage behind the app lock. A file
+// is named by its job's uuid, so a path names no area, and nothing here logs a
+// bbox.
 import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 import {

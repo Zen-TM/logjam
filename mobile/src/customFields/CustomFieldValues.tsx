@@ -91,8 +91,8 @@ export function CustomFieldValueInputs({
 
 /**
  * Recorded values as a hairline table (rows from `attributeRows`). A table and
- * not cards because a row here is a fact, not something to tap — see "A parked
- * attribute is a CARD; a recorded one is a table row" in mobile/CLAUDE.md.
+ * not cards because a row here is a fact, not something to tap: a parked
+ * attribute waits on the form for a finger, a recorded one is only read.
  */
 export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
   const styles = useStyles();

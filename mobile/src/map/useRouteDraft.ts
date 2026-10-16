@@ -78,7 +78,7 @@ export function useRouteDraft(): RouteDraftHandle {
     setDraft((current) => {
       if (!current) return current;
       const updated = next(current);
-      // A no-op must not consume an undo step, or Undo appears to do nothing.
+      // A no-op leaves the history alone, or Undo would appear to do nothing.
       if (updated === current) return current;
       history.current = [...history.current, current].slice(-MAX_HISTORY);
       setCanUndo(true);

@@ -1,29 +1,33 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../services/prisma", () => ({
-  default: {
+const { db, send, generateGeoPdf, incrementStorageUsed } = vi.hoisted(() => ({
+  db: {
     geoPdfJob: { findUnique: vi.fn(), updateMany: vi.fn() },
-    user: { update: vi.fn() },
+    user: { update: vi.fn(), findUnique: vi.fn() },
     notification: { create: vi.fn() },
     $transaction: vi.fn(),
     $disconnect: vi.fn(),
   },
+  send: vi.fn(),
+  generateGeoPdf: vi.fn(),
+  incrementStorageUsed: vi.fn(),
 }));
 
-vi.mock("../services/awsClients", () => ({
-  s3: { send: vi.fn() },
-}));
+vi.mock("../services/prisma", () => ({ default: db }));
+vi.mock("../services/awsClients", () => ({ s3: { send } }));
+vi.mock("../lib/storageQuota", () => ({ incrementStorageUsed }));
+vi.mock("../services/push", () => ({ sendPushToUser: vi.fn() }));
+vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
 
 // generateGeoPdf pulls in canvas/pdfkit/font registration — far too heavy
 // (and irrelevant) for these claim/guard unit tests.
-vi.mock("../services/generateGeoPdf", () => ({
-  generateGeoPdf: vi.fn(),
-}));
+vi.mock("../services/generateGeoPdf", () => ({ generateGeoPdf }));
 
 import {
   resultKeyFor,
   parseStoredConfig,
   parseStoredVectorStyle,
+  processGeoPdfJob,
 } from "./geoPdfWorker";
 import { VECTOR_STYLE_DEFAULTS, type GeoPdfConfig } from "@logjam/shared";
 
@@ -80,5 +84,62 @@ describe("parseStoredVectorStyle", () => {
       contours: { ...VECTOR_STYLE_DEFAULTS.contours, majorColour: "#fff" },
     };
     expect(parseStoredVectorStyle(bad)).toEqual(VECTOR_STYLE_DEFAULTS);
+  });
+});
+
+describe("processGeoPdfJob", () => {
+  const pdf = Buffer.from("%PDF");
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.geoPdfJob.findUnique.mockResolvedValue({
+      id: "j1",
+      userId: "u1",
+      config: validConfig(),
+      vectorStyleSnapshot: null,
+    });
+    db.user.findUnique.mockResolvedValue(null);
+    generateGeoPdf.mockResolvedValue(pdf);
+  });
+
+  it("claims nothing and renders nothing when the job is no longer queued", async () => {
+    db.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await processGeoPdfJob("j1")).toBe(0);
+    expect(generateGeoPdf).not.toHaveBeenCalled();
+  });
+
+  // Mutation: charge storage through the outer prisma, or after the
+  // transaction, instead of through its tx.
+  it("charges storage inside the transaction that marks the job completed", async () => {
+    const tx = { geoPdfJob: { updateMany: vi.fn() } };
+    db.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });
+    tx.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });
+    db.$transaction.mockImplementationOnce((fn) => fn(tx));
+
+    expect(await processGeoPdfJob("j1")).toBe(0);
+    expect(tx.geoPdfJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "j1", status: "running" },
+        data: expect.objectContaining({ status: "completed" }),
+      }),
+    );
+    expect(incrementStorageUsed).toHaveBeenCalledWith(
+      "u1",
+      BigInt(pdf.length),
+      tx,
+    );
+  });
+
+  it("charges nothing and deletes the upload when the job was reaped mid-render", async () => {
+    const tx = { geoPdfJob: { updateMany: vi.fn() } };
+    db.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });
+    tx.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 0 });
+    db.$transaction.mockImplementationOnce((fn) => fn(tx));
+
+    expect(await processGeoPdfJob("j1")).toBe(0);
+    expect(incrementStorageUsed).not.toHaveBeenCalled();
+    expect(db.notification.create).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][0].constructor.name).toBe("DeleteObjectCommand");
   });
 });

@@ -30,7 +30,7 @@
 // bin would promise to end the record.
 //
 // PRIVACY: usernames and item names only — the payload carries no coordinates
-// and no notes. Nothing here is logged.
+// and no notes (api src/__tests__/friendShares.test.ts).
 import {
   Fragment,
   useCallback,

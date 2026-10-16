@@ -82,11 +82,15 @@ describe("fetchAndParseRopeWiki", () => {
     });
   });
 
-  it("throws when a required column is missing", async () => {
+  // The same 503 the missing-snapshot path raises (ropeWikiCache.unit.test.ts):
+  // unusable CSV is an unavailable corpus, and the column that went missing is
+  // a devDetail, because `message` is the sentence the user reads.
+  it("throws a 503 AppError when a required column is missing", async () => {
     mockFetchCsv("location,coords\nFoo,bar"); // no pageid column
-    await expect(fetchAndParseRopeWiki()).rejects.toThrow(
-      /missing required column/i,
-    );
+    await expect(fetchAndParseRopeWiki()).rejects.toMatchObject({
+      statusCode: 503,
+      devDetail: expect.stringMatching(/missing required column: pageid/i),
+    });
   });
 });
 

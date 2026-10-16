@@ -133,9 +133,9 @@ describe("validateEnv — origin-verify", () => {
   });
 });
 
-// APIC-004: DATABASE_SSL / DATABASE_SSL_CA / GEO_PDF_JOB_ID were consumed but
-// absent from the schema, so nothing validated them. DATABASE_SSL is an exact
-// "disable" compare in services/prisma.ts — a near-miss value used to leave
+// DATABASE_SSL / DATABASE_SSL_CA / GEO_PDF_JOB_ID are read outside getEnv() but
+// declared in the schema so boot validates them. DATABASE_SSL is an exact
+// "disable" compare in services/prisma.ts — a near-miss value would leave
 // verified TLS on and surface as an opaque pg_hba error.
 describe("TLS + worker env vars are in the schema", () => {
   it("accepts DATABASE_SSL=disable and the CA path", () => {
@@ -152,6 +152,37 @@ describe("TLS + worker env vars are in the schema", () => {
     for (const bad of ["DISABLED", "false", "true", "require"]) {
       process.env.DATABASE_SSL = bad;
       expect(() => validateEnv()).toThrow(/process.exit\(1\)/);
+    }
+  });
+
+  // Mutation: delete the DATABASE_SSL production check in validateEnv.
+  it("refuses DATABASE_SSL=disable in production, where it would drop RDS TLS", () => {
+    setEnv({
+      NODE_ENV: "production",
+      AUTH_MODE: "cognito",
+      COGNITO_REGION: "r",
+      COGNITO_USER_POOL_ID: "p",
+      COGNITO_CLIENT_ID: "c",
+      DB_HOST: "db",
+      DB_NAME: "db",
+      DB_USER: "u",
+      DB_PASSWORD: "p",
+      CORS_ORIGIN: "http://x",
+      S3_BUCKET_TOPO: "t",
+      S3_BUCKET_MEDIA: "m",
+      ECS_SUBNETS: "s",
+      ECS_SECURITY_GROUPS: "g",
+      TOPO_CDN_BASE_URL: "https://cdn.example.com",
+    });
+    expect(() => validateEnv()).not.toThrow();
+    process.env.DATABASE_SSL = "disable";
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("boots with any GIT_SHA, including the empty one a build without the arg bakes in", () => {
+    for (const sha of ["", "not-a-sha", "0123abc"]) {
+      process.env.GIT_SHA = sha;
+      expect(validateEnv().GIT_SHA).toBe(sha);
     }
   });
 

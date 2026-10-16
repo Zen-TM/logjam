@@ -13,7 +13,7 @@ import { randomUUID } from "crypto";
 import { promises as fs, createReadStream } from "fs";
 import os from "os";
 import path from "path";
-import { Router, Response } from "express";
+import { NextFunction, Router, Response } from "express";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { AppError } from "../middleware/errorHandler";
@@ -165,7 +165,7 @@ router.post(
 router.get(
   "/region-clip/:token",
   requireAuth,
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const user = await resolveUser(req.user!.sub);
     const token = req.params.token;
     const entry =
@@ -183,10 +183,14 @@ router.get(
       fs.unlink(entry.path).catch(() => {});
     };
     stream.on("close", cleanup);
-    stream.on("error", () => {
+    stream.on("error", (err) => {
       cleanup();
-      if (!res.headersSent) res.status(500);
-      res.end();
+      // A download that dies half-way must not end as if it were complete.
+      // Once pipe() has flushed the headers the only way to signal failure is
+      // to destroy the response; before that the errorHandler still gets to
+      // answer with an AppError.
+      if (res.headersSent) res.destroy(err);
+      else next(new AppError(503, say`That download failed. Start it again.`));
     });
   },
 );

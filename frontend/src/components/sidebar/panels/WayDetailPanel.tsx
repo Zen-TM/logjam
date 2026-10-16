@@ -108,7 +108,7 @@ const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   delete: "delete",
 };
 
-/** Export never touches the server — a route's geometry is already here. */
+/** Export is made in the browser, from the route's geometry already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
   const anchor = document.createElement("a");
@@ -357,7 +357,7 @@ export default function WayDetailPanel({
    * THE ORDER IS THE GUARANTEE: copy first, unshare second. Reversed, a failure
    * between the two steps leaves the user with neither the share nor a copy —
    * this way the worst case is that they still have both, which they can see
-   * and act on.
+   * and act on (WayDetailPanel.test.tsx).
    */
   const handleCopy = (alsoRemove: boolean) => {
     if (!route) return;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
-import { PLACE_TYPE_COLORS } from "@logjam/shared";
+import { MAX_SCOPED_PLACE_TYPES, PLACE_TYPE_COLORS } from "@logjam/shared";
 
 import { API_URL } from "./_actors";
 import { throttleWrites } from "./_rateLimitGate";
@@ -433,5 +433,27 @@ describe("custom-fields route (fake auth)", () => {
     await write(() =>
       request(API_URL).delete(`/place-types/${typeId}`).set(AUTH),
     );
+  });
+
+  it("refuses a scoping past the ceiling with 413, keeping no rows", async () => {
+    // The 413 lands before any place-type lookup, so the ids need not exist:
+    // this is the input bound, not the foreign key, doing the refusing.
+    const response = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(AUTH)
+        .send({
+          field: {
+            key: `capped_${Date.now()}`.slice(0, 20),
+            label: "Over-scoped",
+            type: "string",
+          },
+          placeTypeIds: Array.from(
+            { length: MAX_SCOPED_PLACE_TYPES + 1 },
+            () => "00000000-0000-4000-8000-000000000000",
+          ),
+        }),
+    );
+    expect(response.status, JSON.stringify(response.body)).toBe(413);
   });
 });

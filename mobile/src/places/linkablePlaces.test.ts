@@ -23,10 +23,10 @@ describe("linkablePlaces", () => {
 
   it("filters case-insensitively on the query", () => {
     const { visible } = linkablePlaces(
-      [place("Claustral"), place("Ranon")],
-      "clau",
+      [place("Alpha Creek"), place("Beta Creek")],
+      "alp",
     );
-    expect(visible.map((c) => c.name)).toEqual(["Claustral"]);
+    expect(visible.map((c) => c.name)).toEqual(["Alpha Creek"]);
   });
 
   it("reports nothing hidden while under the cap", () => {

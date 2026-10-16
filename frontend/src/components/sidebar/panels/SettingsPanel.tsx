@@ -275,7 +275,7 @@ function SettingsPanel({
 
 const copy = SETTINGS.copy;
 
-/** Only the user's OWN attributes are counted. */
+/** The user's own attributes: a system one has no owner. */
 const ownCount = (defs: ScopedCustomFieldDef[]) =>
   defs.filter((def) => def.ownerId !== null).length;
 

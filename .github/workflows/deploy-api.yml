@@ -112,13 +112,13 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # INF-009: point the two logjam-api task definitions at the image just
-      # pushed, by sha. Both used to carry `:latest`, so what a RunTask launched
-      # was whatever that moving tag happened to resolve to — including a stale
+      # Point the two logjam-api task definitions at the image just pushed, by
+      # sha. Both used to carry `:latest`, so what a RunTask launched was
+      # whatever that moving tag happened to resolve to — including a stale
       # image if the `:latest` push failed after the sha push succeeded, which
       # would run the migration on one build and the API on another. This step
       # runs BEFORE the migration below for exactly that reason.
-      - name: Pin ECS task definitions to this image (INF-009)
+      - name: Pin ECS task definitions to this image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}

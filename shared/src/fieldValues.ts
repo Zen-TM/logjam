@@ -7,7 +7,7 @@
 // and a value of the wrong type. This module is the one answer, so that
 // disagreement cannot happen.
 //
-// The rules, all three deliberate:
+// The rules, all three deliberate (fieldValues.test.ts):
 //  * MISSING AND NULL ARE THE SAME THING — "no value". `setFieldValue(k, null)`
 //    deletes the key rather than storing a null, because a stored null renders
 //    as an empty field and satisfies a "has a value" filter. The old columns

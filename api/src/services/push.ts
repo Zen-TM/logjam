@@ -131,7 +131,7 @@ export function tokensToPrune(
 /**
  * Send a push to every registered device of a user. Best-effort like email:
  * failures are logged (scrubbed) and swallowed — a push must never fail the
- * request that triggered it.
+ * request that triggered it (push.unit.test.ts).
  */
 export async function sendPushToUser(
   userId: string,

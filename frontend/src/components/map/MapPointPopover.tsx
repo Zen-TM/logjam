@@ -29,9 +29,9 @@ import classes from "./MapPointPopover.module.css";
  * Mounted only while a point is being asked about, so the elevation request is
  * tied to the panel being open and never fires for a stale point.
  *
- * PRIVACY (shared/DESIGN.md §13): the coordinate is on this panel and the
- * clipboard when the user presses Copy, and nowhere else: not in a toast, a
- * log or an error. `from` is the browser's own fix, which this never asks for.
+ * PRIVACY (shared/DESIGN.md §13): the coordinate goes to this panel, and to
+ * the clipboard when the user presses Copy; the toasts are fixed sentences.
+ * `from` is the browser's own fix, which this never asks for.
  */
 export default function MapPointPopover({
   map,

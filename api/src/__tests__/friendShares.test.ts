@@ -319,6 +319,18 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(raw).not.toContain("email");
   });
 
+  // Logjam Web's FriendSharingSection relies on this: names, never places.
+  it("carries no coordinates, geometry or notes", async () => {
+    const res = await request(API_URL)
+      .get(`/friends/${aliceBobFriendshipId}/shares`)
+      .set(as(ALICE_SUB));
+    expect(res.status).toBe(200);
+    const raw = JSON.stringify(res.body);
+    for (const key of ["latitude", "longitude", "geometry", "notes"]) {
+      expect(raw).not.toContain(`"${key}"`);
+    }
+  });
+
   it("403s for a user who is not a member of the friendship", async () => {
     const res = await request(API_URL)
       .get(`/friends/${aliceBobFriendshipId}/shares`)

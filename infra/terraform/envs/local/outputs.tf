@@ -1,11 +1,11 @@
 output "media_bucket" {
   value       = module.media.bucket_id
-  description = "LocalStack media bucket name."
+  description = "MiniStack media bucket name."
 }
 
 output "topo_bucket" {
   value       = module.topo.bucket_id
-  description = "LocalStack topo bucket name."
+  description = "MiniStack topo bucket name."
 }
 
 output "env_file" {

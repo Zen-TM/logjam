@@ -114,6 +114,7 @@ function SidebarPanel({
   currentUserError,
   onRetryCurrentUser,
   onOpenTopoWithTemplate,
+  loadsUserData,
   // Friends
   friends,
   friendRequests,
@@ -225,6 +226,9 @@ function SidebarPanel({
   currentUserError: string | null;
   onRetryCurrentUser: () => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
+  /** App's consent-gate decision, handed to the two Maps views so their own
+   *  fetches wait for it (`loadsUserData` there). */
+  loadsUserData: boolean;
   // Friends
   friends: TFriend[];
   friendRequests: TFriendRequest[];
@@ -426,6 +430,7 @@ function SidebarPanel({
             onCreateGeoPdfTemplate={onCreateGeoPdfTemplate}
             refetchTrigger={geoPdfTemplateRefetch}
             geoPdfJobsRefetch={geoPdfJobsRefetch}
+            loadsUserData={loadsUserData}
           />
         )}
         {activePanel === "maps" && mapsView === "lidar" && (
@@ -450,6 +455,7 @@ function SidebarPanel({
             vectorStyle={vectorStyle}
             onVectorStyleChange={onVectorStyleChange}
             templateRefetchTrigger={topoTemplateRefetch}
+            loadsUserData={loadsUserData}
           />
         )}
         {activePanel === "friends" && (

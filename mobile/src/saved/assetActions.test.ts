@@ -425,3 +425,19 @@ describe("the share / send-a-copy verb matrix", () => {
     );
   });
 });
+
+describe("deleting a recording", () => {
+  // Mutation: delete the local track before the media row.
+  it("keeps the local track when deleting its backup fails, so it can be retried", async () => {
+    const { getMediaById } = await import("../sync/mirrorStore");
+    const { deleteMediaLocal } = await import("../sync/mediaUpload");
+    const { deleteTrack } = await import("../tracks/tracksDb");
+    vi.mocked(deleteTrack).mockClear();
+    vi.mocked(getMediaById).mockResolvedValueOnce({ id: "m1" } as never);
+    vi.mocked(deleteMediaLocal).mockRejectedValueOnce(new Error("offline"));
+
+    const recording = { ...track(3), mediaId: "m1" } as unknown as Track;
+    await expect(trackActions(recording).delete?.run()).rejects.toThrow();
+    expect(deleteTrack).not.toHaveBeenCalled();
+  });
+});

@@ -305,6 +305,7 @@ import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
@@ -353,10 +354,6 @@ import {
 // install-failure fallback. Fonts: the Noto Sans stacks the generated basemap
 // layers reference — place labels use the same stack so one glyph source
 // serves everything.
-//
-// Light flavor everywhere for now — matches the paper-topo look of the SIX
-// rasters; the dark JSON ships alongside for a later theme pass.
-const PROTOMAPS_FLAVOR = "light" as const;
 
 // Module-level: <Camera> is memo'd and takes no dynamic props, so a stable
 // object lets the memo hold and keeps every re-render of this screen from

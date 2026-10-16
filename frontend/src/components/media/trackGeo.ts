@@ -1,6 +1,6 @@
 // Parse track files (GPX/KML/GeoJSON) into GeoJSON for the map track layers.
-// Parsing happens client-side (the API never echoes track contents — privacy
-// rule), so we fetch the presigned S3 URL directly with raw fetch (not
+// Parsing happens client-side: the API hands out a presigned S3 URL for a
+// track, never its contents, so we fetch that URL with raw fetch (not
 // apiFetch, whose base URL + auth are for our own API, not S3).
 //
 // One parser for both track sources: a place's attached track and a standalone
@@ -114,7 +114,7 @@ export function trackGeoCacheKey(entry: {
 const MAX_TRACK_TEXTS = 60;
 
 /** Insertion order is the eviction order. In memory only, gone with the tab:
- *  this is the user's location history and is never written down or logged. */
+ *  this is the user's location history, so nothing caches it to disk. */
 const trackTexts = new Map<string, Promise<string>>();
 
 /**
@@ -136,6 +136,8 @@ export function fetchTrackText(
   if (cached) return cached;
   const text = (async () => {
     const res = await fetch(await displayUrl());
+    // Status only: callers log this, and the URL names the file
+    // (trackGeo.test.ts).
     if (!res.ok) throw new Error(`Couldn't fetch track (${res.status})`);
     return res.text();
   })();

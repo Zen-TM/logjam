@@ -116,12 +116,12 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      # INF-009: point both topo-worker task definitions at the image just
-      # pushed, by sha, so a RunTask launches this commit rather than whatever
-      # the moving `:latest` tag resolves to. Nothing here waits on it — these
-      # are on-demand workers with no service to roll — so the pin is the whole
+      # Point both topo-worker task definitions at the image just pushed, by
+      # sha, so a RunTask launches this commit rather than whatever the moving
+      # `:latest` tag resolves to. Nothing here waits on it — these are
+      # on-demand workers with no service to roll — so the pin is the whole
       # deploy for topo/.
-      - name: Pin ECS task definitions to this image (INF-009)
+      - name: Pin ECS task definitions to this image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}

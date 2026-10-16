@@ -118,13 +118,13 @@ definitions are in `envs/prod/ecs.tf`:
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
 
 The job workers write their results straight to Postgres and S3, then
-notify the user in the app, by push and by email.
+notify the user in Logjam Web and Logjam GPS, by push and by email.
 [`infra/scripts/pin-release.sh`](../infra/scripts/pin-release.sh) declares
 which family runs which image.
 
 **Data.** RDS Postgres is private to the VPC (not publicly accessible). The
 API and the migrate task connect as a least-privilege role over verified TLS
-([0001](decisions/0001-rds-tls-via-bundled-ca.md)). The app's S3 buckets are
+([0001](decisions/0001-rds-tls-via-bundled-ca.md)). Logjam's S3 buckets are
 private. Clients read and write them only through short-lived presigned URLs,
 and CloudFront reads them through origin access control:
 

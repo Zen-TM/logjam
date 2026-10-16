@@ -31,7 +31,8 @@ export type GeoPdfImport = {
   bbox: [number, number, number, number] | null;
   minzoom: number | null;
   maxzoom: number | null;
-  /** maxResidualFractionOfWidth — > RESIDUAL_WARN_FRACTION shows a warning. */
+  /** maxResidualFractionOfWidth: the fit's worst residual, as a fraction of
+   *  the map's width (compare RESIDUAL_WARN_FRACTION). */
   residualFraction: number | null;
   opacity: number;
   visible: boolean;

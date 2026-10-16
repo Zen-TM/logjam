@@ -105,14 +105,17 @@ describe("notificationDestination", () => {
   it("only points at a sent file once it has been kept, and by its kind", () => {
     expect(
       notificationDestination(
-        notification("file_sent", { fileSendId: "f1", filename: "Ranon.gpx" }),
+        notification("file_sent", {
+          fileSendId: "f1",
+          filename: "test-track.gpx",
+        }),
       ),
     ).toBeNull();
     expect(
       notificationDestination(
         notification("file_sent", {
           fileSendId: "f1",
-          filename: "Ranon.gpx",
+          filename: "test-track.gpx",
           fileSendStatus: "accepted",
         }),
       ),
@@ -127,7 +130,7 @@ describe("notificationDestination", () => {
       notificationDestination(
         notification("file_sent", {
           fileSendId: "f2",
-          filename: "Bell Creek.PDF",
+          filename: "test-map.PDF",
           fileSendStatus: "accepted",
         }),
       ),

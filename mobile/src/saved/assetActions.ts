@@ -599,7 +599,7 @@ export function trackActions(track: Track): AssetActions {
  * Order matters: the media row goes FIRST. If that fails the local track
  * survives with its `mediaId` intact and the delete can be retried; the other
  * way round loses the points and leaves an orphan file in the account that
- * nothing on this phone still points at.
+ * nothing on this phone still points at (assetActions.test.ts).
  */
 async function deleteRecordedTrack(track: Track): Promise<void> {
   if (track.mediaId) {

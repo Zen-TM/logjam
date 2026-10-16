@@ -6,7 +6,8 @@
 // the same line in `SharePanel.tsx` (ADR 0016), and the promise below is its
 // sentence, word for word.
 //
-// PRIVACY: usernames only, never email (root AGENTS.md).
+// PRIVACY: usernames only. `TFriend` has no email field because the friends
+// endpoints never send one (api src/__tests__/friends.test.ts).
 import { Fragment, type ReactNode } from "react";
 import {
   contractSectionKeys,

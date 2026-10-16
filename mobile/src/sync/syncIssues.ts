@@ -1,4 +1,4 @@
-// Parked-ops + conflict-shelf surface (stage8-sync.md §8.4/§8.5). The
+// Parked-ops + conflict-shelf surface. The
 // fail-loudly rule applied to sync: ops the server rejected (blocked) or that
 // lost an edit↔delete race (deadRemote), plus shelved conflict values, are
 // never silently dropped — they surface here with explicit user actions.
@@ -465,7 +465,8 @@ export async function discardParkedOp(seq: number): Promise<void> {
       // Discarding a create discards its lineage. The row will never exist
       // server-side, so a queued update or delete still pointing at it is no
       // longer merely deferred (nothing is `blocked` any more) — it flushes,
-      // 404s, and parks as a FRESH sync issue. One discard became a cascade.
+      // 404s, and parks as a FRESH sync issue. One discard became a cascade
+      // (syncIssues.test.ts).
       await db.runAsync(
         "DELETE FROM outbox WHERE entity_id = ? AND seq != ?",
         row.entity_id,

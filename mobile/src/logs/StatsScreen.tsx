@@ -129,9 +129,9 @@ export function StatsScreen({
   const range: LogbookRange =
     ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
 
-  // OWN PLACES ONLY. A place shared with this account is someone else's ground;
-  // counting it would inflate "places visited" and the completion meter with
-  // rows the user never chose to keep.
+  // OWN PLACES ONLY (mobile/AGENTS.md, Rules). A place shared with this account
+  // is someone else's ground; counting it would inflate "places visited" and
+  // the completion meter with rows the user never chose to keep.
   const ownPlaces = useMemo(
     () => places.filter((place) => place.syncRole !== "shared"),
     [places],

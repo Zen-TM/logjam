@@ -64,7 +64,7 @@ export function readPref(key: string): string | null {
 /**
  * Record a value. Returns false when it could not be stored, so the caller can
  * say so — silently dropping a preference the user just set is the one failure
- * mode this file must not have.
+ * mode this file must not have (prefsDb.test.ts).
  */
 export function writePref(key: string, value: string): boolean {
   const db = openDatabase();

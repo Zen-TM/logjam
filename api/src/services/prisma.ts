@@ -16,8 +16,8 @@ const databaseUrl = databaseUrlFromEnv();
 // DATABASE_SSL=disable forces a plain connection even when the CA file is
 // present. Needed for local-dev worker containers: they run the prod image
 // (which bundles the CA) against the local non-SSL Postgres, where verified TLS
-// would otherwise fail with "server does not support SSL connections". Never
-// set in prod.
+// would otherwise fail with "server does not support SSL connections".
+// validateEnv refuses it in production (lib/env.unit.test.ts).
 const sslDisabled = process.env.DATABASE_SSL === "disable";
 const caPath = process.env.DATABASE_SSL_CA ?? "/app/rds-ca.pem";
 if (process.env.DATABASE_SSL_CA && !existsSync(process.env.DATABASE_SSL_CA)) {

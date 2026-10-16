@@ -253,7 +253,9 @@ router.post(
             errorMessage: say`Couldn't start this GeoPDF. Try again.`,
           },
         });
-        throw new AppError(500, say`Couldn't start that GeoPDF. Try again.`);
+        // 503: ECS is ours, and the request never reached a worker, so this is
+        // a dependency of ours that is unavailable rather than a client fault.
+        throw new AppError(503, say`Couldn't start that GeoPDF. Try again.`);
       }
     }
 

@@ -1247,8 +1247,8 @@ export function SavedScreen({
     // the same time.
     //
     // Deduped against the local recordings by `track.mediaId`, which is exactly
-    // what that column is for: the same trip must not appear twice because this
-    // phone happens to hold both halves of it.
+    // what that column is for: this phone can hold both halves of one trip,
+    // and it is listed once.
     const localTrackMediaIds = new Set(
       savedTracks
         .map((track) => track.mediaId)

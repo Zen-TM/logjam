@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
+import { MAX_SCOPED_PLACE_TYPES } from "@logjam/shared";
 import {
   API_URL,
   ALICE_SUB,
@@ -742,5 +743,46 @@ describe("sync push — a definition keeps a one-sided bound", () => {
       .delete(`/custom-fields/trip-log/${key}`)
       .set(as(ALICE_SUB));
     expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+  });
+});
+
+// The other half of the REST/sync pair: `parseScoping` in routes/customFields.ts
+// caps `placeTypeIds`, so a definition arriving by push is capped too — a phone
+// could otherwise write a row the web's own dialog refuses. Per-op 413, not a
+// whole-batch abort, because the op is terminally bad and its neighbours are not.
+describe("sync push — a definition's scoping is capped", () => {
+  it("rejects a scoping past the ceiling with a 413 on that op alone", async () => {
+    const defId = randomUUID();
+    const key = `scoped_${Date.now()}`.slice(0, 24);
+    const pushed = await push(ALICE_SUB, [
+      {
+        opId: `def-capped-${defId}`,
+        entity: "customFieldDef",
+        op: "create",
+        id: defId,
+        fields: {
+          entity: "place",
+          key,
+          label: "Over-scoped",
+          type: "string",
+          placeTypeIds: Array.from({ length: MAX_SCOPED_PLACE_TYPES + 1 }, () =>
+            randomUUID(),
+          ),
+        },
+      },
+    ]);
+
+    expect(pushed.body.results[0], JSON.stringify(pushed.body)).toMatchObject({
+      status: "rejected",
+      error: { code: 413 },
+    });
+
+    // Nothing was written on the way to the refusal.
+    const list = await request(API_URL)
+      .get("/custom-fields/place")
+      .set(as(ALICE_SUB));
+    expect(
+      (list.body.fields as { key: string }[]).some((def) => def.key === key),
+    ).toBe(false);
   });
 });

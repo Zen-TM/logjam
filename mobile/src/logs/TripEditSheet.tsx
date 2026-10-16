@@ -137,9 +137,9 @@ export function TripEditSheet({
   const [saving, setSaving] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
   const [dateTarget, setDateTarget] = useState<DateTarget>({ kind: "trip" });
-  // Place-cap refusal (rule: a tap a picker refuses is that picker's
-  // FieldError, not a toast) and a failed save (rule: a failure while the form
-  // stays open is the banner above Save, not a toast either).
+  // Place-cap refusal (the picker's FieldError) and a failed save (the banner
+  // above Save): each error in its one place, neither a toast while the form is
+  // open (shared/DESIGN.md §11).
   const [placesError, setPlacesError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // Custom-field VALUES are held as strings while editing (like the web form)
@@ -319,8 +319,8 @@ export function TripEditSheet({
   const togglePlace = useCallback(
     (place: MirrorPlace) => {
       if (selected.some((link) => link.id === place.id)) {
-        // Deselecting makes room again — same "clears on edit" rule a field
-        // error follows.
+        // Deselecting makes room again, so the error clears as a field's does
+        // when it is edited (shared/DESIGN.md §11).
         setPlacesError(null);
         setSelected(selected.filter((link) => link.id !== place.id));
         return;

@@ -4,11 +4,12 @@
 // shared parse and the same stats engine over the file's own points, so the
 // two clients chart one file the same way. Derived, never stored.
 //
-// The file comes from its presigned URL (the API never echoes a track's
-// contents) through the download the map already shares (`fetchTrackText`).
+// The file comes from its presigned URL (the API never serves a track's
+// contents itself) through the download the map already shares
+// (`fetchTrackText`).
 //
 // PRIVACY: the series is precise location history. It is held only while the
-// page is open and neither it nor a parse failure is ever logged.
+// page is open, and a parse failure is not logged (useTrackFileDetail.test.ts).
 import { useEffect, useEffectEvent, useState } from "react";
 import {
   computeTrackDetail,

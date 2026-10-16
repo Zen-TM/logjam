@@ -100,13 +100,10 @@ export function TrackOptionsSheet({
   const online = useConnectivity() === "online";
   const [busy, setBusy] = useState(false);
 
-  // A closed sheet forgets its sub-mode: reopening on the next track must not
-  // land in a rename form carrying the last one's name.
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // shipped: the route sheet opened straight into its share panel, and the
-  // options list became unreachable.
+  // set would make the NEXT open land inside it (a rename form carrying the
+  // last track's name) instead of on the verb list.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -120,7 +117,7 @@ export function TrackOptionsSheet({
 
   // The stats read the whole series back, so they run only while that sub-mode
   // is actually open — the same `enabled` gate `useTrackDetail` exists for
-  // (mobile/CLAUDE.md, Battery).
+  // (mobile/AGENTS.md, Privacy and battery).
   const { detail, loading, line, gpsFixes } = useTrackDetail(
     track?.id ?? null,
     visible && showingStats && track != null,

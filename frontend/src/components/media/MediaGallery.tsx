@@ -32,7 +32,7 @@ export default function MediaGallery({
   // recovery. Route through the same ConfirmDialog every other destructive
   // surface uses (e.g. the track-card delete in PlaceDetailPanel).
   const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null);
-  // Thumbnails that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked
+  // Thumbnails that failed to load (e.g. a 404'd S3 object). Tracked
   // by id so a broken thumb shows a labelled fallback instead of the browser's
   // broken-image glyph.
   const [failedThumbIds, setFailedThumbIds] = useState<Set<string>>(new Set());
@@ -50,7 +50,7 @@ export default function MediaGallery({
       onDeleted(id);
       // Only close the confirm on success — an error leaves it open (with the
       // banner inside) so the user sees why and can retry, matching the
-      // track-card delete in PlaceDetailPanel.
+      // track-card delete in PlaceDetailPanel (MediaGallery.test.tsx).
       setPendingDelete(null);
     } catch (err) {
       console.error(err);

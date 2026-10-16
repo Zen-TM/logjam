@@ -1,19 +1,20 @@
-// Tile-pyramid region downloader (stage4a-basemaps.md §5) — the engine behind
+// Tile-pyramid region downloader — the engine behind
 // "save these maps for offline use".
 //
 // Client-direct: tiles come straight from the provider to the phone, and NO
 // part of this path talks to the Logjam API. That is a privacy property, not an
 // accident — the area a user is about to walk into never reaches our server
-// (mobile/CLAUDE.md: region-of-interest bboxes stay off the server).
+// (mobile/AGENTS.md, Privacy and battery).
 //
-// POLITENESS ENVELOPE (§5.4) — the contract that makes bulk-ish fetching
+// POLITENESS ENVELOPE — the contract that makes bulk-ish fetching
 // acceptable. Load shape, not disguise:
 //   - concurrency 2 (a panning browser opens ~6 connections; we stay under it)
 //   - token bucket, capacity 6 refilling 3/s with ±20 % jitter, so a burst looks
 //     like a pan and the sustained rate is ~3 tiles/s
 //   - default platform User-Agent, no referer spoofing, no browser impersonation
 //   - NO app-identifying headers: never `x-logjam-client`, never an auth token.
-//     A provider request must be a plain HTTP client, in both senses.
+//     A provider request must be a plain HTTP client, in both senses
+//     (regionTileDownload.test.ts).
 //   - a 403 or 429 stops the whole job immediately rather than retrying into it
 //
 // The ToS gate (DESIGN.md) was cleared by the operator for the three NSW SIX rasters,

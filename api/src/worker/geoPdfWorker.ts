@@ -1,16 +1,16 @@
 // geoPdfWorker.ts
 // -----------------
 // ECS Fargate worker. Processes a single GeoPdfJob then exits. Mirrors
-// topo/export_worker.py's claim/render/terminal-write lifecycle (Design L1):
+// topo/export_worker.py's claim/render/terminal-write lifecycle:
 //
 //   1. Claim: queued → running, guarded (`WHERE status = 'queued'`), with
 //      started_at set. 0 rows updated = reaped or duplicate launch — exit 0.
 //   2. Render the PDF via the existing generateGeoPdf service (unchanged).
 //   3. Upload to s3://S3_BUCKET_TOPO/exports/geo-pdf/{jobId}/logjam-export.pdf.
 //   4. Terminal write guarded on `running`: completed (with the storage charge
-//      in the SAME transaction, ARCH-003) or failed. 0 rows updated = reaped
+//      in the SAME transaction) or failed. 0 rows updated = reaped
 //      mid-run — delete the uploaded object and exit 0.
-//   5. Notification row (+ optional SES email — TODO, see below).
+//   5. Notification row (+ optional completion email, best-effort).
 //
 // Required env: GEO_PDF_JOB_ID, DB_HOST/DB_PORT/DB_NAME (ECS-injected
 // DB_USER/DB_PASSWORD), S3_BUCKET_TOPO (via getEnv()).
@@ -75,8 +75,8 @@ export function parseStoredVectorStyle(snapshot: unknown): VectorStyleSettings {
  * upload → terminal write (+ storage charge in the same transaction) → notify.
  * Returns 0 on success or a clean no-op (job reaped / not `queued` / missing),
  * 1 on render failure. Called by the CLI worker entrypoint below (the ECS
- * Fargate task) — all lifecycle invariants (Design L1, ARCH-003, privacy rule)
- * live here, not in the wrapper.
+ * Fargate task) — all lifecycle invariants (claim and terminal guards, the
+ * storage charge, the privacy rule) live here, not in the wrapper.
  */
 export async function processGeoPdfJob(jobId: string): Promise<number> {
   const env = getEnv();
@@ -88,9 +88,10 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     return 1;
   }
 
-  // Guarded on `queued` (Design L1): if the job was reaped or deleted while
-  // the task spun up, claim nothing and exit cleanly. started_at anchors the
-  // reaper's running-timeout (mirrors topo_export_jobs.started_at).
+  // Guarded on `queued`: if the job was reaped or deleted while the task spun
+  // up, claim nothing and exit cleanly. started_at anchors the reaper's
+  // running-timeout (mirrors topo_export_jobs.started_at)
+  // (geoPdfWorker.unit.test.ts).
   const claim = await prisma.geoPdfJob.updateMany({
     where: { id: jobId, status: "queued" },
     data: { status: "running", startedAt: new Date() },
@@ -124,7 +125,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   } catch (err) {
     // Keep the raw exception (which may reference tile URLs / extents) out of
     // the user-facing/stored error message — log only the error class, never
-    // place coords/names (CLAUDE.md privacy rule).
+    // place coords/names (root AGENTS.md, Privacy).
     logger.error(
       {
         jobId,
@@ -135,9 +136,9 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     errorMessage = GENERIC_FAILURE_MESSAGE;
   }
 
-  // Terminal write guarded on `running` (Design L1). On success the storage
-  // charge shares the same transaction as the status flip (ARCH-003) — never
-  // a separate commit.
+  // Terminal write guarded on `running`. On success the storage charge shares
+  // the same transaction as the status flip — never a separate commit
+  // (geoPdfWorker.unit.test.ts).
   let updated: number;
   let ok: boolean;
   if (errorMessage || resultKey === null) {
@@ -197,10 +198,10 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
 
   // Best-effort push, mirroring email — generic title + opaque IDs only. A
   // failed render pushes `geo_pdf_failed` ("GeoPDF failed"), not the cheerful
-  // complete title; the push carries no status field, so the type IS the title
-  // (APIC-002). The stored notification row above deliberately keeps the
-  // `geo_pdf_complete` type in both cases — mobile and web both switch on that
-  // type and branch on `payload.status` for the failure wording.
+  // complete title; the push carries no status field, so the type IS the
+  // title. The stored notification row above deliberately keeps the
+  // `geo_pdf_complete` type in both cases — Logjam GPS and Logjam Web both
+  // switch on that type and branch on `payload.status` for the failure wording.
   await sendPushToUser(job.userId, {
     type: ok ? "geo_pdf_complete" : "geo_pdf_failed",
     geoPdfJobId: jobId,
@@ -241,8 +242,8 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   return ok ? 0 : 1;
 }
 
-// CLI entrypoint: read the job ID from the env var the (legacy Fargate) launch
-// path and `make geo-pdf-run` pass, then delegate to the shared processor.
+// CLI entrypoint: read the job ID from the env var the Fargate launch path and
+// `make geo-pdf-run` pass, then delegate to the shared processor.
 async function main(): Promise<number> {
   const jobId = process.env.GEO_PDF_JOB_ID;
   if (!jobId) {

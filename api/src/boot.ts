@@ -11,13 +11,15 @@
 // Database migrations are NOT run here. They run in a gated one-shot Fargate
 // task (aws_ecs_task_definition.api_migrate) BEFORE the EB version swap, driven
 // by .github/workflows/deploy-api.yml, so a failing migration aborts the deploy
-// instead of crash-looping this container at boot (ARCH-001 half B). Instance
+// instead of crash-looping this container at boot. Instance
 // replacement reuses an already-migrated image, so no pending migrations exist
 // at plain container start. New schema is applied before the new image serves;
 // migrations MUST stay backward-compatible with the currently-running image for
-// the swap window (expand/contract — see api/CLAUDE.md).
+// the swap window (expand/contract — see api/AGENTS.md).
 //
-// Fails loud (exit 1) on any error. Never logs secret values.
+// Fails loud (exit 1) on any error. Never logs secret values. Writes with
+// console.error, not logger: logger runs getEnv() as it loads, which would
+// exit on the very credentials this file has yet to resolve.
 
 import { resolveDbCredentials } from "./lib/resolveDbCredentials";
 import { resolveOriginVerifySecret } from "./lib/resolveOriginVerifySecret";

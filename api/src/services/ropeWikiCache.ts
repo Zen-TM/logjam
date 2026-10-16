@@ -2,11 +2,11 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "./awsClients";
 import { getEnv } from "../lib/env";
 import { logger, safeErrorForLog } from "../lib/logger";
-import { say } from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
 import {
   fetchAndParseRopeWiki,
   parseRopeWikiCsv,
+  ROPEWIKI_UNAVAILABLE,
   type RopeWikiCanyon,
 } from "./ropewiki";
 
@@ -52,8 +52,6 @@ export type RopeWikiData = {
 type CacheEntry = RopeWikiData & { loadedAt: number };
 
 let cache: CacheEntry | null = null;
-
-const ROPEWIKI_UNAVAILABLE = say`RopeWiki's canyon list isn't available right now.`;
 
 async function loadSnapshotFromS3(): Promise<RopeWikiData> {
   const bucket = getEnv().S3_BUCKET_MEDIA;

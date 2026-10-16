@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createCanvas } from "canvas";
 import type { GeoPdfConfig } from "@logjam/shared";
 import { buildPdf } from "./generateGeoPdf";
@@ -65,5 +67,24 @@ describe("generateGeoPdf buildPdf georef block", () => {
     const gpts = numbersIn(await buildGeorefPdf(), "GPTS");
     // BL, BR, TR, TL
     expect(gpts).toEqual([south, west, south, east, north, east, north, west]);
+  });
+});
+
+// PRIVACY: at a GeoPDF's zooms a tile index IS an approximate coordinate of the
+// area the user chose to export, so a tile that fails to fetch logs which
+// source, which zoom and the error — never x/y (root AGENTS.md: no coordinates
+// in logs). `lib/logger.unit.test.ts` guards the redaction underneath this; this
+// guards the call sites, which is where the leak would actually be typed.
+// Mutation: add `x: tile.x` (or `y`, or `tile.x`) to any warn call below.
+describe("a failed tile fetch never logs tile x/y", () => {
+  it("names no coordinate-shaped field in any log call", () => {
+    const source = readFileSync(join(__dirname, "generateGeoPdf.ts"), "utf8");
+    const calls = source.match(/logger\.\w+\([\s\S]*?\);/g) ?? [];
+    // Guards the guard: a regex that matched nothing would pass vacuously.
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call).not.toMatch(/\b(tile\.)?[xy](coord|index)?\s*:/i);
+      expect(call).toMatch(/err:/); // the failure itself is still reported
+    }
   });
 });

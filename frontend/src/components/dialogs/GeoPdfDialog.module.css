@@ -17,7 +17,7 @@
 
 /* Drawing an area on a map and typing six-figure coordinates are desktop work;
    the dialog still fits a phone, but it says so rather than pretending
-   otherwise (frontend/CLAUDE.md, "Heavy authoring tools"). */
+   otherwise. */
 .wideHint {
   composes: detail from "../../textRoles.generated.module.css";
   display: none;
