@@ -61,6 +61,24 @@ export interface PlaceResult {
   lat: number;
 }
 
+/** `POST` with a PlaceSearchRequest body: the query never goes in the URL,
+ *  where access logs would keep it. */
+export const PLACE_SEARCH_API_PATH = "/places/search";
+
+/** Most results a search returns, and the API's default. */
+export const PLACE_SEARCH_MAX_RESULTS = 20;
+
+export interface PlaceSearchRequest {
+  q: string;
+  limit?: number;
+}
+
+export interface PlaceSearchResponse {
+  results: PlaceResult[];
+  /** The registry version that answered, as in its pointer. */
+  version: string;
+}
+
 export function isPlaceRegistryPointer(
   value: unknown,
 ): value is PlaceRegistryPointer {
