@@ -1,25 +1,16 @@
 """Helpers both ECS worker entrypoints need, in one place.
 
 `worker.py` and `export_worker.py` are separate entrypoints that share a
-database, a notification table and a connection-string format, and each used to
-carry its own copy of these three functions under a "Mirrored in <the other
-file> — keep both copies in sync" comment. That comment is the anti-pattern
-this repo has a rule about (root CLAUDE.md: "two lists that must agree = one
-declaration + a test"), and it had already failed quietly: by 2026-08-29 the
-copies had drifted in three places — `str | None` vs `Optional[str]`, and two
-docstrings — with nothing to notice.
-
-None of that drift changed behaviour, which is exactly why it survived. One
-declaration removes the question.
+database, a notification table and a connection-string format.
 
 DELIBERATELY NOT HERE:
   - `update_status` — the two copies must differ. `topo_jobs` has an
     `updated_at` column and `topo_export_jobs` does not, so a shared version
-    would break every export status flip (review finding STP-008).
+    would break every export status flip.
   - `delete_s3_prefix_best_effort` — reads each worker's own module-level
     `BUCKET`, `s3` and `log`, so sharing it means threading three arguments
     through for two copies that differ only in a docstring. Guarded against
-    real drift by a test instead (`tests/test_worker_common.py`).
+    drift by a test instead (`tests/test_worker_common.py`).
 """
 
 import json

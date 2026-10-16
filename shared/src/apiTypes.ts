@@ -1,10 +1,6 @@
 /**
- * The server's REST response shapes, as both clients see them.
- *
- * These lived twice — `frontend/src/placeUtils.ts` and `mobile/src/api/types.ts`
- * — as two hand-maintained copies of one contract kept in step by a comment.
- * They are declared here once; both clients re-export them from their old
- * homes, so every existing import keeps working and neither copy can drift.
+ * The server's REST response shapes, as both clients see them. Declared here
+ * so both clients share the wire contract and neither can drift.
  *
  * Wire shapes only: no logic, no client-specific fields. The SYNC protocol's
  * row shapes are a different contract and live in `sync.ts` — a mirror row is
@@ -25,11 +21,9 @@ export type TPlace = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
-  /** Metres. Came in with the phase 1c waypoint fold — a canyon has never
-   *  carried one, a marker usually does. */
+  /** Metres. A canyon does not carry one; a marker usually does. */
   elevation: number | null;
-  /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
-   *  grade columns and the free-form `attributes` blob; internal `_`-prefixed
+  /** Type-specific values, keyed by CustomFieldDef.key. Internal `_`-prefixed
    *  keys (`_sources` today) are not user fields. */
   fieldValues: Record<string, unknown>;
   /** Values that came in on a copy keyed by definitions this owner does not
@@ -69,8 +63,7 @@ export type TUser = {
   storageUsedBytes: number;
   storageQuotaBytes: number;
   /** Monthly worker allowance and usage, in credits (= vCPU-minutes). See
-   * computeCredits.ts. Replaced the tile quota, which only covered the topo
-   * worker and did not measure cost. */
+   * computeCredits.ts. */
   monthlyComputeCredits: number;
   monthlyComputeUsage: number;
   monthlyComputeResetAt: string;

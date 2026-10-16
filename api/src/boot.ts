@@ -15,7 +15,7 @@
 // replacement reuses an already-migrated image, so no pending migrations exist
 // at plain container start. New schema is applied before the new image serves;
 // migrations MUST stay backward-compatible with the currently-running image for
-// the swap window (expand/contract — see api/AGENTS.md).
+// the swap window (expand/contract — see api/AGENTS.md and ADR 0003).
 //
 // Fails loud (exit 1) on any error. Never logs secret values. Writes with
 // console.error, not logger: logger runs getEnv() as it loads, which would

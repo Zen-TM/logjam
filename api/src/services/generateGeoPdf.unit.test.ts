@@ -45,7 +45,7 @@ function numbersIn(pdf: string, key: string): number[] {
 describe("generateGeoPdf buildPdf georef block", () => {
   it("writes WKT as a literal string, never a PDF name", async () => {
     const pdf = await buildGeorefPdf();
-    // The fix: literal string (…) — not the name /GEOGCS that GDAL cannot parse.
+    // Literal string (…) — not the name /GEOGCS that GDAL cannot parse.
     expect(pdf).toContain("/WKT (GEOGCS[");
     expect(pdf).not.toContain("/WKT /GEOGCS");
   });

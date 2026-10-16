@@ -149,10 +149,9 @@ describe("notificationActions", () => {
     expect(body).toContain("bob");
   });
 
-  // The invariant that replaced "the notification query and the inbox endpoint
-  // use one filter": expired sends are deliberately KEPT by the server so the
-  // row can explain itself, and it is this that stops them offering a button
-  // the endpoint would refuse.
+  // Expired sends are deliberately kept by the server so the row can explain
+  // itself, and this stops them offering a button the inbox endpoint would
+  // refuse.
   it("offers nothing at all once the send has expired", () => {
     expect(
       notificationActions(

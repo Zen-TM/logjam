@@ -1,4 +1,4 @@
-// CRS resolution for GeoPDF viewports (Stage 6 §2.5).
+// CRS resolution for GeoPDF viewports.
 //
 // Resolution order, first hit wins:
 //   1. EPSG integer → built-in proj-string table below.
@@ -72,11 +72,11 @@ export function resolveCrs(crs: GeoPdfCrs): ResolvedCrs {
   if (epsg !== undefined) {
     const entry = EPSG_TABLE[epsg];
     if (entry) {
-      // The EPSG code used to win outright and the WKT was never consulted.
-      // A producer that writes the wrong code — a zone-54 code on a zone-56
-      // sheet, say — then yields an overlay misplaced by ~500 km, and the
-      // residual check cannot catch it: the affine is fitted IN the wrong
-      // plane, so it fits perfectly. When both are present they must agree.
+      // If the EPSG code wins outright without consulting the WKT, a producer
+      // that writes the wrong code — a zone-54 code on a zone-56 sheet, say —
+      // yields an overlay misplaced by ~500 km, and the residual check cannot
+      // catch it: the affine is fitted in the wrong plane, so it fits
+      // perfectly. When both are present they must agree.
       assertCrsDescriptionsAgree(entry.def, crs);
       return {
         key: `EPSG:${epsg}`,

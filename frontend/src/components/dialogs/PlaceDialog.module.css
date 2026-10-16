@@ -1,6 +1,5 @@
 /* Layout only; the kit does the look (DESIGN.md). The values here match
-   TripLogDialog's — the two forms are the same shape and were drifting apart
-   is what the shared sub-components exist to prevent. */
+   TripLogDialog's to keep the two forms consistent. */
 .form {
   display: flex;
   flex-direction: column;

@@ -308,7 +308,7 @@ function SidebarPanel({
 
   // Switching panels (a tab tap) while the sheet is at peek would otherwise
   // swap the panel content behind an almost-fully-collapsed sheet — the new
-  // panel is effectively invisible (MOBILE-9). Raise to "half" on any panel
+  // panel is effectively invisible. Raise to "half" on any panel
   // change, unless a map-pick flow is the one driving the sheet to peek (that
   // collapse is intentional — leave it alone).
   const [shownPanel, setShownPanel] = useState(activePanel);

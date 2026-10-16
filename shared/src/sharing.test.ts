@@ -131,9 +131,8 @@ describe("copyAndRemoveConfirm", () => {
     }
   });
 
-  // FOUND ON THE EMULATOR, not by a test: the unnamed fallback appears in two
-  // positions and one of them starts a sentence, so a single lower-case form
-  // rendered "…on every device. the owner keeps the original."
+  // The unnamed fallback appears in two positions and one starts a sentence,
+  // so the casing must match the position.
   it("capitalises the unnamed owner where it starts a sentence, and not where it does not", () => {
     const body = copyAndRemoveConfirm({
       kindLabel: "route",

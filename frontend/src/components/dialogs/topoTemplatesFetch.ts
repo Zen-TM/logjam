@@ -1,7 +1,7 @@
 import { apiFetch } from "../../placeUtils";
 import type { TopoTemplate } from "./TopoDialog";
 
-// Module-level in-flight dedup for GET /topo-templates (TOPO-6).
+// Module-level in-flight dedup for GET /topo-templates.
 //
 // Two surfaces fetch the template list independently (LidarPanel on mount,
 // TopoDialog on open), and React StrictMode double-invokes mount effects in

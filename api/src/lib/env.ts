@@ -43,7 +43,7 @@ const baseSchema = z.object({
     .regex(/^\d+\.\d+\.\d+$/, "must be a bare semver like 1.2.3")
     .default("0.0.0"),
 
-  // CloudFront origin-verify (WAF-bypass guard, SEC). CloudFront injects a
+  // CloudFront origin-verify (WAF-bypass guard). CloudFront injects a
   // secret X-Origin-Verify header on every origin fetch; a request lacking the
   // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.
   // The app compares that header to ORIGIN_VERIFY_SECRET, which is resolved at
@@ -70,8 +70,8 @@ const baseSchema = z.object({
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  // Protomaps basemap archive the region-clip endpoint extracts from
-  // (stage 4a). s3:// URI in prod (go-pmtiles reads S3 natively under the
+  // Protomaps basemap archive the region-clip endpoint extracts from.
+  // s3:// URI in prod (go-pmtiles reads S3 natively under the
   // task role); an https:// URL works for local dev (public CDN archive).
   // Optional: the endpoint 503s when unset instead of crashing the API.
   PROTOMAPS_ARCHIVE_URI: z.string().optional(),
@@ -85,7 +85,7 @@ const baseSchema = z.object({
   EMAIL_FROM: z.string().optional(),
   FRONTEND_URL: z.string().url().optional(),
 
-  // Stuck-topo-job reaper (ARCH-002). A job stuck in `pending` longer than the
+  // Stuck-topo-job reaper. A job stuck in `pending` longer than the
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
   // Python `except` ran) is force-failed by the periodic sweep. Set
@@ -102,7 +102,7 @@ const baseSchema = z.object({
     .default(900_000), // 15 min
   // A processing job is reaped when its render/PDAL progress STALLS for this
   // long (the worker heartbeats lastProgressAt through the long phases), so a
-  // slow-but-advancing job is never force-failed (ARCH-001).
+  // slow-but-advancing job is never force-failed.
   TOPO_REAPER_PROGRESS_STALL_MS: z.coerce
     .number()
     .int()
@@ -118,8 +118,8 @@ const baseSchema = z.object({
     .default(21_600_000), // 6 h
   // Adaptive runtime estimator (routes/topoJobs.ts): the per-input-tile rate is
   // fitted from recent completed jobs once at least MIN_SAMPLES exist; until
-  // then it falls back to DEFAULT_SECONDS_PER_TILE (= the old 8.5 min/tile
-  // constant — conservative, self-corrects down as real jobs accumulate).
+  // then it falls back to DEFAULT_SECONDS_PER_TILE (conservative,
+  // self-corrects down as real jobs accumulate).
   TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce
     .number()
     .positive()
@@ -170,7 +170,7 @@ const baseSchema = z.object({
   // requester field. Only requests signed by the API are user downloads; the
   // workers' same-region reads and CloudFront's basemap reads share the same
   // buckets and must not be charged to anyone. An empty value matches nothing
-  // (fail closed — under-count rather than bill users for worker traffic).
+  // (fail closed — under-count rather than bill users for worker traffic). Guard: s3AccessLog.unit.test.ts ("charges nothing when the requester pattern is empty").
   EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
   // Ceiling on access-log objects consumed per sweep, so a backlog is worked
   // through over several passes instead of one unbounded run.
@@ -179,7 +179,7 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(500),
-  // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
+  // TopoExportJob sweeps: queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
   TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS: z.coerce
@@ -193,7 +193,7 @@ const baseSchema = z.object({
     .positive()
     .default(10_800_000), // 3 h
   // Completed exports older than this are swept: S3 object deleted, quota
-  // decremented, row removed (ARCH-006). 0 disables the sweep.
+  // decremented, row removed. 0 disables the sweep.
   TOPO_EXPORT_TTL_MS: z.coerce
     .number()
     .int()
@@ -223,7 +223,7 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(86_400_000), // 24 h
-  // Sync tombstones (Stage 8) older than this are swept by the reaper. A
+  // Sync tombstones older than this are swept by the reaper. A
   // client whose delta cursor predates the horizon is told to full-resync
   // (resetRequired), so the TTL bounds table growth, not correctness.
   // 0 disables the sweep (rows kept forever).
@@ -232,19 +232,18 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(7_776_000_000), // 90 days
-  // Fleet-wide full-resync lever (stage8 §10.5): bump when server-side data
+  // Fleet-wide full-resync lever: bump when server-side data
   // changes shape without moving updatedAt (e.g. a migration rewriting rows).
   // Clients whose cursor was minted under a different epoch get resetRequired.
   // 2: the places rework renames every canyon row and empties the tombstone
-  // log, so no pre-rework cursor can be resumed (plan §4 step 14).
+  // log, so no pre-rework cursor can be resumed.
   SYNC_EPOCH: z.coerce.number().int().positive().default(2),
 
   // Read at module load by services/prisma.ts (not via getEnv(), which would
   // run before boot.ts resolves DB credentials) — declared here so the values
   // are still validated at boot and appear in the var list. DATABASE_SSL is an
-  // exact-string compare against "disable": before this entry, a well-meant
-  // `DATABASE_SSL=DISABLED`/`false` silently left verified TLS on and the local
-  // worker died with an opaque pg_hba error. Now it fails loud at boot.
+  // exact-string compare against "disable" so invalid values fail loud at boot
+  // rather than silently leaving TLS enabled.
   DATABASE_SSL: z.enum(["disable"]).optional(),
   DATABASE_SSL_CA: z.string().optional(),
   // CI-only headroom for the global rate limiter (middleware/rateLimit.ts,

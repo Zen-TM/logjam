@@ -19,7 +19,7 @@ import {
 import { VALID_GEOPDF_OVERLAY_NAMES } from "./geoPdfConfig";
 import { TOPO_OVERLAY_SOURCE } from "./geoPdfBaseLayers";
 
-// ARCH-010: everything TS-side derives from the canonical TOPO_LAYERS list.
+// Topo derivations in TypeScript derive from the canonical TOPO_LAYERS list.
 // Most of the guarantee is compile-time (TopoLayerKey and the
 // TOPO_OVERLAY_SOURCE record are typed off the list); these pin the runtime
 // derivations.
@@ -152,7 +152,7 @@ describe("validateExportRequest", () => {
     ).toEqual({ ok: true });
   });
 
-  // TOPOEXP-1: GPX is features-only — the worker has no contour path.
+  // GPX is features-only — the worker has no contour path.
   it("rejects contours for gpx (features-only allowlist)", () => {
     expect(
       validateExportRequest({

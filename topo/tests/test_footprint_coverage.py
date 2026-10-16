@@ -125,7 +125,7 @@ class TestFootprintCoverage(unittest.TestCase):
         true_mask = _true_disk_mask()
         fp_mask = _rasterize_footprint_to_grid(self.fp)
         covered = (true_mask & fp_mask).sum() / true_mask.sum()
-        # The whole point of the fix: real (sparse) data must not be clipped.
+        # Real (sparse) data must not be clipped.
         self.assertGreaterEqual(
             covered,
             0.95,

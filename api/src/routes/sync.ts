@@ -1,6 +1,6 @@
-// Stage 8 delta sync — the mobile mirror's read path (stage8-sync.md §4).
+// Delta sync — the mobile mirror's read path.
 //
-// PRIVACY INVARIANTS (§4.6, test-enforced by __tests__/syncBoundary.test.ts):
+// PRIVACY INVARIANTS (test-enforced by __tests__/syncBoundary.test.ts):
 // 1. No request parameter ever names an entity — everything derives from the
 //    caller's own visibility set, so the endpoint cannot be an oracle for
 //    foreign ids at all (stronger than 404-not-403: no id slot to probe).
@@ -98,7 +98,7 @@ import {
 
 const router = Router();
 
-// `mobile/<semver>`-style client identification, required on /sync/* (§10.1)
+// `mobile/<semver>`-style client identification, required on /sync/*
 // and logged on every request, so the versions in the field can be counted
 // before MIN_MOBILE_VERSION moves (docs/operations/queries.md,
 // docs/decisions/0022-mobile-builds-supported-three-months.md).
@@ -177,7 +177,7 @@ router.get(
 
     // Cursor: absent/empty = initial full sync (everything changed since the
     // epoch start). Anything malformed, from another protocol version or
-    // epoch, or older than the tombstone horizon → resetRequired (§4.3): the
+    // epoch, or older than the tombstone horizon → resetRequired: the
     // client wipes its MIRROR (never the outbox) and re-pulls from "".
     const cursorParam =
       typeof req.query.cursor === "string" ? req.query.cursor : "";
@@ -196,7 +196,7 @@ router.get(
         // ts === 0 is the initial-sync watermark the server itself mints for
         // intermediate pages of a first pull — exempt from the horizon check
         // or a paged initial sync could never finish. A tampered ts=0 cursor
-        // only re-downloads the caller's own rows (§4.2: unsigned by design).
+        // only re-downloads the caller's own rows (unsigned by design).
         const pastTombstoneHorizon =
           env.SYNC_TOMBSTONE_TTL_MS > 0 &&
           cursorTs !== 0 &&
@@ -245,7 +245,7 @@ router.get(
     let remaining = limit;
     let hasMore = false;
 
-    // Visibility sets, computed ONCE per request (§4.5). Never an id from the
+    // Visibility sets, computed ONCE per request. Never an id from the
     // request.
     const sharedPlaceRows = await prisma.placeShare.findMany({
       where: { sharedWithId: user.id },
@@ -259,7 +259,7 @@ router.get(
 
     // Generic budget-fill step: fetch up to remaining+1 rows for one entity,
     // truncate, record the keyset when the entity didn't drain. Entities run
-    // in the fixed §4.4 order; once the budget is spent (hasMore), later
+    // in a fixed order; once the budget is spent (hasMore), later
     // entities are skipped entirely and resume from their absent keyset on
     // the next page.
     async function fill<Row extends { id: string }>(
@@ -409,7 +409,7 @@ router.get(
 
     // A link is OWNER-PRIVATE: both its endpoints belong to `ownerId` (asserted
     // server-side on create), so filtering to the caller's own rows IS the
-    // both-endpoints-visible rule of §2.5, expressed without a two-hop join on
+    // both-endpoints-visible rule, expressed without a two-hop join on
     // every page. A sharee gets no links at all — which is the point: they must
     // never learn the owner also filed that carpark under three places they
     // cannot see.
@@ -487,10 +487,10 @@ router.get(
                   },
                 ],
               },
-              // Keysets on updatedAt, not createdAt. A media row used to be
-              // immutable; linking a file to a place and unlinking it again
-              // mutates one, and a createdAt keyset would never redeliver it —
-              // the other device would show a stale parent forever.
+              // Keysets on updatedAt, not createdAt: linking a file to a place
+              // and unlinking it again mutates the row, so a createdAt keyset
+              // would never redeliver it — the other device would show a stale
+              // parent forever.
               keysetWhere("updatedAt", since, after),
             ],
           },
@@ -507,7 +507,7 @@ router.get(
           where: {
             AND: [
               // Caller is sharer or sharee — a sharee can never enumerate
-              // co-sharees (§4.6.1).
+              // co-sharees.
               { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
               keysetWhere("createdAt", since, after),
             ],
@@ -515,7 +515,7 @@ router.get(
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           take,
           include: {
-            // Username-only — email in a delta response is a regression.
+            // Username-only — email in a delta response is a regression. Guard: src/__tests__/syncBoundary.test.ts.
             sharedBy: { select: { id: true, username: true } },
             sharedWith: { select: { id: true, username: true } },
           },
@@ -603,7 +603,7 @@ router.get(
       hasMore = true;
     }
 
-    // Cursor advance rule (§4.4): ts moves (and keysets clear) only on the
+    // Cursor advance rule: ts moves (and keysets clear) only on the
     // final page; intermediate pages keep the old watermark + resume keysets.
     const nextCursor: SyncCursor = hasMore
       ? { v: SYNC_PROTOCOL, ts: cursor.ts, e: env.SYNC_EPOCH, k: nextKeysets }
@@ -613,7 +613,7 @@ router.get(
           e: env.SYNC_EPOCH,
         };
 
-    // Counts + cursor timestamps only — never row contents (§4.6.5).
+    // Counts + cursor timestamps only — never row contents.
     logger.info(
       {
         userId: user.id,
@@ -637,7 +637,7 @@ router.get(
 
     // Direct-share fan-out for the rows on THIS page, two grouped queries
     // rather than one per row. Scoped to OWNED ids at the call site: a share
-    // count is owner-private derived cardinality (root CLAUDE.md), so a
+    // count is owner-private derived cardinality (root AGENTS.md), so a
     // recipient's copy of a row must not carry one.
     const routeShareCounts = await shareCountsFor(
       "route",
@@ -681,13 +681,13 @@ router.get(
             syncRole: isOwner ? "owner" : "shared",
             ...route,
             // Owner-only: the fan-out of a share is owner-private derived
-            // cardinality (root CLAUDE.md).
+            // cardinality (root AGENTS.md).
             ...(isOwner
               ? { sharedCount: routeShareCounts.get(route.id) ?? 0 }
               : {}),
           };
         }),
-        // Metadata only: no S3 keys, no presigned URLs (§7.3 — blobs are
+        // Metadata only: no S3 keys, no presigned URLs (blobs are
         // fetched via POST /media/download-urls). BigInt → string.
         media: media.map((row) => ({
           id: row.id,
@@ -700,7 +700,7 @@ router.get(
           origin: row.origin,
           displayName: row.displayName,
           // Row-level stats, so the other device can LIST an import or a
-          // recording without downloading its blob (§7.3).
+          // recording without downloading its blob.
           metadata: readMediaMetadata(row.origin, row.metadata),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
@@ -729,15 +729,15 @@ router.get(
   },
 );
 
-// ── POST /sync/push — the outbox write path (§8) ────────────────────────────
+// ── POST /sync/push — the outbox write path ────────────────────────────
 //
 // Applies up to SYNC_PUSH_MAX_OPS ops strictly in array order, each in its
 // own transaction: one bad op must not roll back applied predecessors — the
 // client learns per-op outcomes and partial progress + resume is the normal
 // case for flaky field connectivity. Validation is IDENTICAL to the REST
-// routes (same exported helpers — divergence here is the SEC-001 failure
-// mode). Media ops are NOT accepted (the three-phase presign flow owns them).
-// Conflict rule (§6): arrival-order field-scoped LWW — `baseUpdatedAt` is
+// routes (same exported helpers — divergence here would bypass validation).
+// Media ops are NOT accepted (the three-phase presign flow owns them).
+// Conflict rule: arrival-order field-scoped LWW — `baseUpdatedAt` is
 // used only to DETECT that a receipt is owed, never to resolve.
 
 type PushOpResult = {
@@ -754,7 +754,7 @@ type PushOpResult = {
 };
 
 // Per-entity field whitelists. An unknown key is a per-op 400 (`rejected`),
-// never silently dropped (§10.4) — the client parks the op visibly instead
+// never silently dropped — the client parks the op visibly instead
 // of losing a field a newer app version wrote.
 // `foreignFields` is DELIBERATELY ABSENT and must stay absent. It is written
 // only by copy and by a place-type change — never by a user edit — because it
@@ -811,7 +811,7 @@ function assertKnownFields(
 // while your base was stale", not "the server changed this field". The
 // client holds the base row, so it filters: a receipt whose serverValue
 // equals the client's own base value is a self-conflict and is dropped
-// before shelving (flush-engine rule, PR-5).
+// before shelving (flush-engine rule).
 //
 // Values are compared as VALUES, not as serialisations: jsonb returns object
 // keys in its own order and a name is trimmed on the way in, so a replay after
@@ -852,7 +852,7 @@ export function conflictReceipts(
   return receipts;
 }
 
-// Wire shape + entity/op vocabulary live in shared/src/sync.ts (§11: one
+// Wire shape + entity/op vocabulary live in shared/src/sync.ts (one
 // protocol definition for api + mobile).
 type PushOp = SyncPushOp;
 
@@ -906,13 +906,13 @@ export function parsePushOp(raw: unknown, index: number): PushOp {
   };
 }
 
-// Dependency extraction moved to shared (§11 single source — the client's
+// Dependency extraction moved to shared (single source — the client's
 // flush engine runs the same closure). Re-exported so existing imports and
 // the unit suite keep working.
 export const opDependencies = pushOpDependencies;
 
 /**
- * A trip's `date` is a DATE, stored as UTC midnight (CH-001) — `tripFilter`'s
+ * A trip's `date` is a DATE, stored as UTC midnight — `tripFilter`'s
  * whole-day comparisons depend on it. The push path accepted any parseable
  * string, so a client sending an instant stored a trip with a nonzero time
  * that its own day's `dateTo` filter then excluded. Normalize at the boundary
@@ -955,7 +955,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (op.op === "delete") {
     const deleted = await deletePlacesCascade(userId, [op.id]);
     // Row already gone (or never visible): idempotent success — a delete's
-    // goal state is "not there" (§8.1), and distinguishing foreign from
+    // goal state is "not there", and distinguishing foreign from
     // missing would be an oracle.
     return {
       opId: op.opId,
@@ -966,7 +966,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   const fields = op.fields ?? {};
   assertKnownFields(fields, PLACE_FIELDS);
   // Same two validators the REST twins run, in the same order — REST/sync
-  // divergence here is the SEC-001 failure mode, and a mistyped free-text field
+  // divergence here would bypass validation, and a mistyped free-text field
   // that reaches Prisma throws a non-AppError, which the per-op catch re-throws
   // and 500s the WHOLE batch (a poison pill that never drains).
   const textRefusal = validatePlaceTextFields(fields);
@@ -991,7 +991,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     }
     const typeId = await resolvePlaceTypeId(userId, fields.placeTypeId);
     // Same two validators the REST twin runs, in the same order — REST/sync
-    // divergence here is the SEC-001 failure mode. The field-value bounds come
+    // divergence here would bypass validation. The field-value bounds come
     // from the definitions in force for the type, so they can only be resolved
     // once the type is.
     const createError = placePayloadRefusal(fields, {
@@ -1020,14 +1020,14 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // update
   const place = await prisma.place.findUnique({ where: { id: op.id } });
   // Deleted-or-foreign → the same 404 the REST PATCH gives (client parks as
-  // deadRemote; delete-wins per §6).
+  // deadRemote; delete-wins).
   if (!place || place.ownerId !== userId)
     throw new AppError(404, say`Couldn't find that place.`);
 
   // A type change is a legal edit (miscategorising is inevitable, and
   // delete-and-recreate would lose media, route, links and trips). Values the
   // NEW type has no definition for are PARKED in `foreignFields` rather than
-  // destroyed or left in `fieldValues` where nothing renders them — §2.6, and
+  // destroyed or left in `fieldValues` where nothing renders them, and
   // the second of that field's two writers (the other is copy).
   const typeId =
     fields.placeTypeId !== undefined
@@ -1239,7 +1239,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
             position,
           })),
         },
-        // Watermark force-touch — same §3.1 trap as the REST PATCH.
+        // Watermark force-touch — same trap as the REST PATCH.
         updatedAt: new Date(),
       }),
     },
@@ -1490,7 +1490,7 @@ async function applyNotificationOp(
   // from a purged one and neither the status nor an error can confirm that a
   // notification exists (the house anti-oracle rule, as in routes/notifications.ts).
   //
-  // A row purged by PRIV cleanup counts as success — there is nothing left to
+  // A row purged by cleanup counts as success — there is nothing left to
   // apply. markRead/markUnread are idempotent writes of one bit rather than a
   // monotonic latch, so a replayed op is harmless; the outbox's FIFO order is
   // what makes the last flip the winner.
@@ -1572,7 +1572,7 @@ function parsePlaceTypeIds(value: unknown): string[] | undefined {
  * the propagation problem that got the "append it to the notes field" design
  * rejected: B copies A's place, B shares it with C, and C reads A's field
  * labels and values. Enforced HERE rather than by the client declining to
- * render it — a client that looks away is not a boundary (the SEC-001 shape).
+ * render it — a client that looks away is not a boundary.
  *
  * `fieldDefsSnapshot` is what a sharee gets instead, and only for a place of a
  * type they do not own: the labels and bounds for the keys on this row, derived
@@ -1589,9 +1589,9 @@ function serializePlace(
   // One denylist for every sharee-facing surface (lib/placeVisibility.ts), so
   // the delta and the REST responses cannot disagree about what is
   // owner-private — and so a column added to `Place` reaches a sharee only
-  // after someone classifies it. This used to strip `foreignFields` by name,
-  // which meant `importKey` and `importBatchId` — the owner's filing, not the
-  // record — rode along.
+  // after someone classifies it. Stripping only specific fields by name would
+  // allow unclassified columns (such as `importKey` and `importBatchId`) to
+  // leak to sharees.
   const snapshot = defsByType.get(place.placeTypeId);
   return {
     syncRole: "shared" as const,
@@ -1601,7 +1601,7 @@ function serializePlace(
 }
 
 // A place type is created, renamed and deleted OFFLINE like every other
-// user-made row (§2.9), so it needs a push op — building type creation as an
+// user-made row, so it needs a push op — building type creation as an
 // online-only path would make it the one thing a user could not do in a gorge,
 // and would break guest installs entirely.
 const PLACE_TYPE_FIELDS = new Set(["name", "iconKey", "color", "position"]);
@@ -1616,7 +1616,7 @@ async function applyPlaceTypeOp(
       select: { id: true },
     });
     // Already gone is idempotent success — a delete's goal state is "not
-    // there" (§8.1), and the push path replays ops. A SYSTEM type also lands
+    // there", and the push path replays ops. A SYSTEM type also lands
     // here (it has no owner), and answering alreadyApplied for one would be a
     // lie the phone then acts on, so it is a rejection instead.
     if (!existing) {
@@ -1712,7 +1712,7 @@ async function applyCustomFieldDefOp(
     // Strips the orphaned values off every trip log / place that carried one
     // and writes the tombstone, in one transaction (lib/customFieldDefs.ts).
     // A definition already gone is idempotent success — a delete's goal state
-    // is "not there" (§8.1).
+    // is "not there".
     const result = await deleteFieldDef(userId, op.id);
     return {
       opId: op.opId,
@@ -1744,7 +1744,7 @@ async function applyCustomFieldDefOp(
     // on its way through this path — and one-sided is the normal case for a
     // "how many" field, three of the system defs included. The def then landed
     // unbounded, so the form stopped showing the range and nothing refused a
-    // negative. `assertValidDef` accepts either alone (§5.1).
+    // negative. `assertValidDef` accepts either alone.
     const def = assertValidDef({
       key: fields.key,
       label: fields.label,
@@ -1848,7 +1848,7 @@ router.post(
     const results: PushOpResult[] = [];
     // Ids whose create (or a create they depended on) failed in THIS batch —
     // dependents are skipped as dependencyFailed instead of being sent to a
-    // guaranteed 404 (§8.3).
+    // guaranteed 404.
     const failedIds = new Set<string>();
     // Ids created earlier in this batch (successfully) — a dependency on one
     // of these is satisfied even though it didn't exist when the batch began.
@@ -1900,13 +1900,13 @@ router.post(
         } else {
           // Unexpected failure: abort the whole request (500). Applied ops
           // stay applied; the client's whole-batch retry is safe — every op
-          // class is idempotent (§8.1).
+          // class is idempotent.
           throw err;
         }
       }
     }
 
-    // Counts only — never op contents (§4.6.5).
+    // Counts only — never op contents.
     logger.info(
       {
         userId: user.id,

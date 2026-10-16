@@ -1,8 +1,7 @@
-# Two MiniStack S3 buckets, replacing scripts/seed-localstack.sh. They need a
-# CORS rule: media/topo uploads are browser-direct presigned PUTs from the Vite
-# dev origin, and the browser enforces CORS against the bucket's config (served
-# by MiniStack) — without it the upload is blocked. Mirrors the prod buckets'
-# CORS but scoped to the localhost dev origins.
+# Local S3 buckets. They need a CORS rule: media/topo uploads are browser-direct
+# presigned PUTs from the Vite dev origin, and the browser enforces CORS against
+# the bucket's config (served by MiniStack) — without it the upload is blocked.
+# Mirrors the prod buckets' CORS but scoped to the localhost dev origins.
 
 locals {
   dev_cors = [{

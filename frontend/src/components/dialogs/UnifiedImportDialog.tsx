@@ -157,8 +157,8 @@ type ReviewState = {
 type ImportOutcome =
   // `skipped` is the server's merge-policy skip count (from bulkPlaceImport);
   // `droppedRows` is unrelated — source CSV rows this client never sent at all
-  // because a required field couldn't be read (FECO-006/D5). Both are real
-  // counts kept under separate names so neither silently hides the other.
+  // because a required field couldn't be read. Both are real counts kept under
+  // separate names so neither silently hides the other.
   | {
       kind: "place";
       batchId: string;
@@ -192,7 +192,7 @@ function genBatchId(): string {
 
 // PapaParse parses the whole file into memory synchronously; a place/trip
 // CSV is a few hundred KB at most, so this is generous headroom, not a tight
-// budget (FECO-003).
+// budget.
 const MAX_CSV_FILE_BYTES = 20 * 1024 * 1024;
 
 // Split a CSV `type` cell into multiple trip types: ";"-separated, each part
@@ -224,7 +224,7 @@ function toMatchCandidate(c: TPlace): MatchCandidate {
 
 // Numeric place fields that are silently left empty when a cell can't be
 // parsed. A non-empty-but-unparseable cell in one of these produces a per-field
-// coercion warning surfaced in the import result (IMPORT-5).
+// coercion warning surfaced in the import result.
 const NUMERIC_WARN_ROLES = new Set<PlaceFieldRole>([
   "vGrade",
   "aGrade",
@@ -237,11 +237,11 @@ const NUMERIC_WARN_ROLES = new Set<PlaceFieldRole>([
 
 // Why the cell was dropped, phrased so the user can act on it. Declared as a
 // total Record over MismatchKind so adding a reason fails the build here rather
-// than inheriting some other reason's wording — this warning used to hardcode
-// "isn't a number" for every failure, which lied about e.g. a quality of 0.5
-// (a number, but outside the 1-5 range). Reasons the numeric parsers can't
-// currently produce still get honest text: NUMERIC_WARN_ROLES is the only
-// caller today, but the reason is the parser's to choose, not this map's.
+// than inheriting some other reason's wording (which would mischaracterise e.g.
+// a quality of 0.5, a number outside the 1–5 range, as not being a number).
+// Reasons the numeric parsers can't currently produce still get honest text:
+// NUMERIC_WARN_ROLES is the only caller today, but the reason is the parser's
+// to choose, not this map's.
 const MISMATCH_EXPLANATIONS: Record<
   MismatchKind,
   (range: [number, number] | undefined) => string
@@ -274,12 +274,10 @@ function coercionWarning(
   return `${label} "${raw}" ${explanation} — left empty`;
 }
 
-// Build a BulkPlaceInput from a mapped place row. Mirrors the field mapping in
-// the (now removed) PlaceCsvImportDialog, but without the per-cell mismatch UI:
-// values that don't parse are dropped (left null) — the importer is additive and
+// Values that don't parse are dropped (left null) — the importer is additive and
 // merge fills nulls, so a bad cell never blocks the row. Non-empty cells that
 // fail to parse into a numeric field are collected as `warnings` so the result
-// summary can tell the user which values were left empty (IMPORT-5).
+// summary can tell the user which values were left empty.
 function buildPlaceInput(
   row: Record<string, string>,
   assignments: Record<string, PlaceFieldRole>,
@@ -384,13 +382,10 @@ function buildPlaceInput(
 
 // Switch labels for the merge-settings accordion.
 //
-// This USED TO BE a total Record over a fixed nine-entry MergeableField union,
-// which is what made it a build-time check. It cannot be one any more: the
-// mergeable fields are the KEYS of the definitions the target type carries, an
-// open set that differs per user. So the label for a field is the DEFINITION'S
-// OWN label — which is better than a hand-written one anyway, because it is
-// what the user called the field — and only the structural entry needs
-// spelling here.
+// The mergeable fields are the keys of the definitions the target type carries,
+// an open set that differs per user. The label for a field is the definition's
+// own label — what the user called the field — and only the structural entry
+// needs spelling here.
 const STRUCTURAL_MERGE_LABELS: Record<string, string> = {
   notes: "Notes",
 };
@@ -516,21 +511,21 @@ function UnifiedImportDialog({
   const [preparedPlaceRows, setPreparedPlaceRows] = useState<
     PreparedPlaceRow[]
   >([]);
-  // Per-field coercion warnings collected while preparing place rows (IMPORT-5),
-  // plus per-row "couldn't be read — skipped" entries (FECO-006/D5).
+  // Per-field coercion warnings collected while preparing place rows,
+  // plus per-row "couldn't be read — skipped" entries.
   const [placeWarnings, setPlaceWarnings] = useState<string[]>([]);
   // Source rows dropped entirely (missing name / unreadable lat-lon) before
-  // reaching the server (FECO-006/D5) — reported in the outcome summary
-  // alongside `created`/`merged`, distinct from the server's merge-skip count.
+  // reaching the server — reported in the outcome summary alongside
+  // `created`/`merged`, distinct from the server's merge-skip count.
   const [placeDroppedRows, setPlaceDroppedRows] = useState<number>(0);
   const [preparedTripRows, setPreparedTripRows] = useState<PreparedTripRow[]>(
     [],
   );
-  // Per-row coercion warnings collected while preparing trip rows (IMPORT-5),
-  // plus per-row "couldn't be read — skipped" entries (FECO-006/D5).
+  // Per-row coercion warnings collected while preparing trip rows,
+  // plus per-row "couldn't be read — skipped" entries.
   const [tripWarnings, setTripWarnings] = useState<string[]>([]);
   // Source rows dropped entirely (unreadable date) before reaching the server
-  // (FECO-006/D5) — reported in the outcome summary alongside `imported`.
+  // — reported in the outcome summary alongside `imported`.
   const [tripDroppedRows, setTripDroppedRows] = useState<number>(0);
   const [reviewState, setReviewState] = useState<ReviewState>({
     decisions: {},
@@ -598,8 +593,8 @@ function UnifiedImportDialog({
 
   // Reset everything whenever the dialog (re)opens — unless we are returning
   // from a map-pick (the dialog is hidden during picking, then reopens). Only
-  // opening: a new currentUser object while open (a refetch) used to land here
-  // too and threw away the file, the column map and the review
+  // on opening: a new currentUser object while open (a refetch) must not land
+  // here, which would throw away the file, the column map and the review
   // (UnifiedImportDialog.render.test.tsx).
   useEffect(() => {
     if (!open) return;
@@ -696,7 +691,7 @@ function UnifiedImportDialog({
     // PapaParse reads the whole file into memory with no streaming — an
     // accidentally-picked huge file (a photo mis-selected as CSV, an export of
     // something else entirely) would otherwise freeze the tab before any of
-    // the row/column checks below even run (FECO-003).
+    // the row/column checks below even run.
     if (file.size > MAX_CSV_FILE_BYTES) {
       setError(
         `"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB) — CSV imports are capped at ${MAX_CSV_FILE_BYTES / (1024 * 1024)} MB.`,
@@ -726,7 +721,7 @@ function UnifiedImportDialog({
 
     // Non-fatal PapaParse row/header problems (unbalanced quotes, a renamed
     // duplicate column) — the file still loaded, but fields may be misaligned
-    // from here on, so flag it rather than staying silent (FECO-002).
+    // from here on, so flag it rather than staying silent.
     if (parsed.parseErrors.length > 0) {
       toast.info(
         `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} (see console) — some fields may be misaligned. Check the column mapping before importing.`,
@@ -745,8 +740,8 @@ function UnifiedImportDialog({
     // One file of each kind at a time. Picking a second file of a kind that's
     // already loaded REPLACES it (with its column mapping reset below) — the user
     // is almost always correcting a wrong-file pick, so silently keeping the old
-    // one (and ignoring the new) is the surprising behaviour (IMPORT-2). The
-    // filename chip updates to the new name, which is the visible confirmation.
+    // one (and ignoring the new) is the surprising behaviour. The filename chip
+    // updates to the new name, which is the visible confirmation.
     const loaded: LoadedFile = {
       fileName: file.name,
       headers: parsed.headers,
@@ -862,8 +857,7 @@ function UnifiedImportDialog({
   } {
     if (!placeFile) return { rows: [], warnings: [], droppedRows: 0 };
     // Raw source value for a row dropped on a missing/unreadable required field
-    // (FECO-006/D5) — resolved once outside the loop since assignments don't
-    // vary per row.
+    // — resolved once outside the loop since assignments don't vary per row.
     const latHeader = Object.entries(placeAssignments).find(
       ([, role]) => role === "latitude",
     )?.[0];
@@ -878,7 +872,7 @@ function UnifiedImportDialog({
         row,
         placeAssignments,
       );
-      // CSV line number: header is line 1, so the first data row is line 2 (IMPORT-7).
+      // CSV line number: header is line 1, so the first data row is line 2.
       const line = rowIndex + 2;
       const dropReason = describeDroppedPlaceRow({
         name: input.name,
@@ -946,8 +940,8 @@ function UnifiedImportDialog({
     const out: PreparedTripRow[] = [];
     // Per-row/per-field coercion notices: a non-empty cell that can't parse into
     // its numeric field is left unset and reported (mirrors the place path's
-    // IMPORT-5 warnings) — a lenient coerce would silently store "5.5" as 5 or
-    // "abc" as null.
+    // numeric coercion warnings) — a lenient coerce would silently store "5.5"
+    // as 5 or "abc" as null.
     const warnings: string[] = [];
     let droppedRows = 0;
     rows.forEach((row, rowIndex) => {
@@ -1155,7 +1149,7 @@ function UnifiedImportDialog({
   // Rows whose place matched confidently (or is clearly new / place-less) and
   // therefore never appear in the review list — they'll be imported automatically
   // on Apply. Surfaced here for transparency so the review step can say how many
-  // (IMPORT-3: the auto-import is intended; the silence about it was the problem).
+  // (the auto-import is intended; silence about it would be confusing).
   const autoResolvedCount = useMemo(() => {
     const surfaced = new Set(surfacedKeys);
     if (activeKind === "place") {
@@ -1293,7 +1287,7 @@ function UnifiedImportDialog({
   // Server per-row errors carry a `rowIndex` into the POST body (== index into
   // preparedPlaceRows, since resolvedPlaceBody maps them in order). Turn that
   // back into the original CSV line number (header = line 1) so the message
-  // matches the user's file — a single, consistent index (IMPORT-7).
+  // matches the user's file — a single, consistent index.
   function formatPlaceRowErrors(
     errs: { rowIndex: number; message: string }[],
   ): string[] {
@@ -1462,7 +1456,7 @@ function UnifiedImportDialog({
       // Rows the user chose to discard are dropped entirely (not imported).
       // sentRowCsvLines[i] = original CSV line of trips[i] (header = line 1), so
       // server per-row errors can be labelled with the line in the user's file
-      // rather than the post-filter body index (IMPORT-7).
+      // rather than the post-filter body index.
       let discarded = 0;
       const sentRowCsvLines: number[] = [];
       const trips = preparedTripRows.flatMap((row) => {
@@ -2047,14 +2041,14 @@ function UnifiedImportDialog({
           ? [
               { count: outcome.created, label: "created" },
               { count: outcome.merged, label: "merged" },
-              // Row-level parse failures (FECO-006/D5) — distinct from `skipped`
+              // Row-level parse failures — distinct from `skipped`
               // below, which is the server's merge-policy skip count.
               { count: outcome.droppedRows, label: "couldn't be read" },
               { count: outcome.skipped, label: "skipped" },
             ]
           : [
               { count: outcome.imported, label: "imported" },
-              // Row-level parse failures (FECO-006/D5), reported next to imported.
+              // Row-level parse failures, reported next to imported.
               { count: outcome.droppedRows, label: "couldn't be read" },
               { count: outcome.updated, label: "updated" },
               { count: outcome.linked, label: "linked to a place" },
@@ -2077,7 +2071,7 @@ function UnifiedImportDialog({
       const warnings =
         outcome.warnings.length > 0 ? outcome.warnings : undefined;
       // ImportResultSummary hides the Undo button when every headline count is
-      // zero — but `droppedRows` (FECO-006/D5) now sits in that same headline
+      // zero — but `droppedRows` now sits in that same headline
       // array and is never itself undoable, so it must not be what keeps the
       // button visible when nothing was actually created/imported.
       const hasUndoableChange =
@@ -2148,9 +2142,9 @@ function UnifiedImportDialog({
   const handleDismiss = outcome ? onClose : (onBack ?? onClose);
 
   // Dirty once a file has been dropped and the import hasn't finished — losing
-  // a loaded file/mapping/review is real, non-trivial work (IMPORT-8). Once an
-  // outcome exists there's nothing left to lose, so handleDismiss (= onClose)
-  // runs unguarded.
+  // a loaded file/mapping/review is real, non-trivial work. Once an outcome
+  // exists there's nothing left to lose, so handleDismiss (= onClose) runs
+  // unguarded.
   const isDirty = !outcome && (placeFile != null || tripFile != null);
   const guard = useUnsavedChangesGuard(isDirty, handleDismiss);
 

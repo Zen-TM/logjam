@@ -198,10 +198,10 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
 
   // Best-effort push, mirroring email — generic title + opaque IDs only. A
   // failed render pushes `geo_pdf_failed` ("GeoPDF failed"), not the cheerful
-  // complete title; the push carries no status field, so the type IS the
-  // title. The stored notification row above deliberately keeps the
-  // `geo_pdf_complete` type in both cases — Logjam GPS and Logjam Web both
-  // switch on that type and branch on `payload.status` for the failure wording.
+  // complete title; the push carries no status field, so the type IS the title.
+  // The stored notification row above deliberately keeps the
+  // `geo_pdf_complete` type in both cases — Logjam GPS and Logjam Web both switch
+  // on that type and branch on `payload.status` for the failure wording.
   await sendPushToUser(job.userId, {
     type: ok ? "geo_pdf_complete" : "geo_pdf_failed",
     geoPdfJobId: jobId,
@@ -242,8 +242,8 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   return ok ? 0 : 1;
 }
 
-// CLI entrypoint: read the job ID from the env var the Fargate launch path and
-// `make geo-pdf-run` pass, then delegate to the shared processor.
+// CLI entrypoint: read the job ID from the env var the Fargate launch path
+// and `make geo-pdf-run` pass, then delegate to the shared processor.
 async function main(): Promise<number> {
   const jobId = process.env.GEO_PDF_JOB_ID;
   if (!jobId) {

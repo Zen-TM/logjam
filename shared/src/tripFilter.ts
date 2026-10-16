@@ -1,9 +1,9 @@
 /**
- * Trip-log list filtering — the single derivation shared by the web Trip Logs
- * panel and the mobile Logs screen. Both offer the same axes (free-text over
- * place/trip name, an inclusive from/to date range, a trip type, and a filter
- * per trip ATTRIBUTE), so the predicate lives here rather than being written
- * twice with subtly different edge cases.
+ * Trip-log list filtering — the single derivation shared by the Logjam Web
+ * Trip Logs panel and the Logjam GPS Logs screen. Both offer the same axes
+ * (free-text over place/trip name, an inclusive from/to date range, a trip
+ * type, and a filter per trip ATTRIBUTE), so the predicate lives here rather
+ * than being written twice with subtly different edge cases.
  *
  * The attribute axes answer the same question a place's do and are answered by
  * the same code (`passesCustomFieldFilters`): a trip's values live in
@@ -14,7 +14,8 @@
  * Dates: trip dates are stored as UTC-midnight date-only values, and the range
  * bounds are "YYYY-MM-DD" strings that `Date` also parses as UTC midnight — so
  * both ends of the range are inclusive of trips falling exactly on them. Never
- * compare these in local time (CH-001: AEST renders/compares the prior day).
+ * compare these in local time (AEST renders/compares the prior day; test:
+ * shared/src/tripFilter.test.ts, "treats both date bounds as inclusive").
  */
 
 import {
@@ -173,7 +174,8 @@ export const TRIP_SORT_OPTIONS: { key: TripSortKey; label: string }[] = [
 ];
 
 /** Sorts a COPY. Stable, so trips sharing a date keep the order they arrived
- *  in rather than shuffling as the user flips the axis. */
+ *  in rather than shuffling as the user flips the axis (test:
+ *  shared/src/tripFilter.test.ts, "sorts a copy, so the caller's list is untouched"). */
 export function sortTrips<T extends FilterableTrip>(
   trips: T[],
   sort: TripSortKey,

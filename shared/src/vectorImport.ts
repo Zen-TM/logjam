@@ -1,10 +1,10 @@
-// Vector file import parsers (mobile Stage 5): GPX / KML / GeoJSON → GeoJSON
+// Vector file import parsers: GPX / KML / GeoJSON → GeoJSON
 // features for a MapLibre ShapeSource. Pure text-in → features-out; all file
 // and picker I/O (and KMZ unzipping) lives in the caller.
 //
 // PRIVACY: imported files are the user's own track/waypoint data — parse
 // errors are STATIC strings and must never echo file content or coordinate
-// values.
+// values (test: shared/src/vectorImport.test.ts).
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
@@ -65,10 +65,8 @@ export const IMPORT_ERRORS = {
 // ── shared helpers ──────────────────────────────────────────────────────────
 
 function assertValidPosition(position: ImportedPosition): void {
-  // A non-array reached this via a structurally bad GeoJSON geometry
-  // (`"coordinates": [150.1, -33.1]` on a LineString, or none at all) and
-  // escaped as a raw `TypeError: position is not iterable` from positionsOf,
-  // straight to the user. Errors out of this module are static IMPORT_ERRORS.
+  // Guard against structurally bad GeoJSON (e.g. non-array coordinates) escaping
+  // as a raw TypeError; errors out of this module are static IMPORT_ERRORS.
   if (!Array.isArray(position))
     throw new Error(IMPORT_ERRORS.invalidCoordinates);
   const [lon, lat] = position;
@@ -86,9 +84,9 @@ function assertValidPosition(position: ImportedPosition): void {
   }
 }
 
-/** Nesting depth is part of a GeoJSON geometry's validity, and nothing
- * checked it: a Polygon whose `coordinates` were a bare position made this
- * iterate a number and escape as a raw TypeError. */
+/** Nesting depth is part of a GeoJSON geometry's validity: prevents a Polygon
+ * whose coordinates are a bare position from iterating a number and escaping
+ * as a raw TypeError. */
 function asNested<T>(value: T[]): T[] {
   if (!Array.isArray(value)) throw new Error(IMPORT_ERRORS.invalidCoordinates);
   return value;
@@ -225,10 +223,9 @@ function gpxCoordTimes(pts: GpxPoint[]): string[] | undefined {
 
 /**
  * fast-xml-parser's XMLParser does NOT validate — it never throws on a
- * mismatched, unclosed or crossed tag, which made the try/catch around
- * `.parse()` near-dead code. A GPX truncated mid-download therefore imported
- * as a SUCCESSFUL shorter track: a route that stops in the middle of a place,
- * with nothing on screen to say so.
+ * mismatched, unclosed or crossed tag. Without explicit validation, a GPX
+ * truncated mid-download would parse as a shorter track: a route that stops
+ * in the middle of a place, with nothing on screen to say so.
  */
 function parseXmlStrict(text: string): Record<string, unknown> {
   if (XMLValidator.validate(text) !== true) {
@@ -311,8 +308,8 @@ function kmlCoordinates(text: string): ImportedPosition[] {
   for (const tuple of text.trim().split(/\s+/)) {
     if (tuple === "") continue;
     const rawParts = tuple.split(",");
-    // `Number("")` is 0, so "150.1,-33.1," fabricated an altitude of exactly
-    // sea level for a tuple that simply had a trailing comma.
+    // Number("") is 0; prevent a trailing comma from fabricating sea-level
+    // altitude.
     if (rawParts.some((part) => part.trim() === "")) {
       throw new Error(IMPORT_ERRORS.invalidCoordinates);
     }
@@ -331,9 +328,8 @@ function kmlCoordinates(text: string): ImportedPosition[] {
 function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
   const geometries: ImportedGeometry[] = [];
   // An element that IS there and yields nothing is a dropped geometry, not an
-  // absent one. Skipping it quietly lost half a KML while still reporting
-  // success — `finalize` only complains when the whole file is empty, so the
-  // user saw an import that worked and a map missing features.
+  // absent one. Skipping it quietly would lose features while still reporting
+  // success (`finalize` only fails when the whole file is empty).
   const required = (coords: ImportedPosition[]): ImportedPosition[] => {
     if (coords.length === 0) throw new Error(IMPORT_ERRORS.invalidCoordinates);
     return coords;

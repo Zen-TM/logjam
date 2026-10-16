@@ -37,15 +37,14 @@ import { cacheProfile, cachedProfile } from "./elevationCache";
 
 // The server's REST response shapes are declared ONCE in shared/ and
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
-// file cannot drift — they used to be two hand-maintained copies kept in step
-// by a comment. Every existing `from "./placeUtils"` import still resolves.
+// file cannot drift. Every existing `from "./placeUtils"` import still resolves.
 export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 
 // Only http(s) URLs are safe to render as a clickable <a href> or store as a
 // place source link — any other scheme (javascript:, data:, vbscript:, ...)
-// is an XSS/hygiene sink. FEUI-012. Single source for both the save-time
-// reject in PlaceDialog and the render-time guard in PlaceDetailPanel.
+// is an XSS/hygiene sink. Single source for both the save-time reject in
+// PlaceDialog and the render-time guard in PlaceDetailPanel.
 export function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -142,7 +141,7 @@ export async function apiFetch<T>(
 // Like apiFetch but also surfaces the X-Total-Count header (the true owner-
 // filtered total before the server's list cap). `total` is null when the header
 // is absent or unparseable. Used by list hooks to show a "Showing N of TOTAL"
-// truncation caption (UX-001). The body shape is unchanged (a bare array), so
+// truncation caption. The body shape is unchanged (a bare array), so
 // non-paginated consumers keep using plain apiFetch.
 export async function apiFetchWithTotal<T>(
   path: string,
@@ -325,8 +324,7 @@ export type CreatePlaceData = {
    *  and no tab to appear under. */
   placeTypeId: string;
   notes?: string | null;
-  /** Type-specific values, keyed by definition key. Replaces the seven grade
-   *  members this type used to carry. */
+  /** Type-specific values, keyed by definition key. */
   fieldValues?: Record<string, unknown>;
 };
 
@@ -373,9 +371,8 @@ export type PlaceTrack = {
   color: string | null;
   displayUrl: string;
   /**
-   * What the file IS. Without these a place's track could only be listed as a
-   * kind of its own, named for its place, because nothing here said whether it
-   * was a recording or an import or what it was called (Ways, 2026-09-17).
+   * What the file is: whether it is a recording or an import, and its
+   * display name.
    */
   filename: string;
   displayName: string | null;
@@ -403,7 +400,7 @@ export function usePlaceTracks(enabled: boolean) {
     if (!enabled) return;
     // Guards against an earlier in-flight request landing after a newer one
     // (e.g. a write bumps refetch mid-request) and overwriting fresh state
-    // with stale data — mirrors useTopoExports (FECO-001).
+    // with stale data — mirrors useTopoExports.
     let cancelled = false;
     getPlaceTracks()
       .then((data) => {
@@ -426,17 +423,6 @@ export function usePlaceTracks(enabled: boolean) {
 
   return { tracks, loaded, error, refetch };
 }
-
-// ponytail: the web has no marker-specific surface at all until phase 6 — a
-// marker is listed, edited and mapped as the place it is. Upgrade path: the
-// type-tabbed places panel and the Linked places section, which need the
-// type-management screens beside them.
-//
-// Waypoints are GONE as a separate thing: phase 1c folded them into places of
-// the system "Marker" type, so the list, the map pins and the detail view are
-// the PLACE ones. The web's own marker surfaces (a type-tabbed places list, a
-// Linked places section) land with the rest of the web rework — until then a
-// marker is a place in the places panel, which is where it already appears.
 
 // ── Routes ───────────────────────────────────────────────────────────────
 // User-authored lines. Unlike tracks, geometry arrives INLINE (no presigned
@@ -531,12 +517,10 @@ export type ProfiledLine = [number, number][] | [number, number][][];
  * Loads a profile for the given points, keyed on the geometry itself: move a
  * vertex and it re-samples, reopen the same line and it does not.
  *
- * The second half of that is `elevationCache.ts`, and it was a promise this
- * docstring made without keeping until 2026-09-17 — opening a way, editing it
- * and leaving the editor were three requests for a line nobody had touched.
- * A cache hit is seeded SYNCHRONOUSLY, before the first paint, so a line that
- * has already been sampled draws its chart immediately rather than flashing
- * "Reading the terrain…" at someone who was just looking at it.
+ * Backed by `elevationCache.ts`. A cache hit is seeded SYNCHRONOUSLY, before
+ * the first paint, so a line that has already been sampled draws its chart
+ * immediately rather than flashing "Reading the terrain…" at someone who was
+ * just looking at it.
  */
 export function useElevationProfile(points: ProfiledLine | null) {
   const geometryKey = points ? JSON.stringify(points) : null;
@@ -605,7 +589,7 @@ export function useRoutes(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     getRoutes()
       .then((data) => {
@@ -649,7 +633,7 @@ export function usePlaces(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetchWithTotal<TPlace[]>("/places")
       .then(({ data, total }) => {
@@ -694,7 +678,7 @@ export function useSharedPlaces(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetch<TPlace[]>("/places/shared")
       .then((data) => {
@@ -772,14 +756,13 @@ export function useCurrentUser(enabled: boolean) {
         setCurrentUser(user);
         setError(null);
       })
-      // NOT best-effort, despite reading like it. This is the app's only source
-      // for the signed-in user, and `null` is load-bearing downstream:
+      // NOT best-effort, despite reading like it. This is Logjam Web's only
+      // source for the signed-in user, and `null` is load-bearing downstream:
       // Account renders "Loading…" for as long as it stays null, and
       // `currentUserId` feeds way ownership, where "no user" reads as "not
-      // mine" and hands a friend's shared route the OWNER's verbs. Swallowing
-      // the one failure meant a single 429 or 500 made both permanent, with
-      // nothing to retry. Every other data hook in this file returns `error`
-      // (frontend/CLAUDE.md, "Hook contract"); this one now does too.
+      // mine" and hands a friend's shared route the OWNER's verbs. Without
+      // surfacing `error`, a 429 or 500 leaves both permanent with nothing to
+      // retry.
       .catch((err) => {
         console.error(err);
         if (!cancelled)
@@ -907,17 +890,15 @@ export function reassignPlaceType(
 ): Promise<{ movedCount: number }> {
   return apiFetch<{ movedCount: number }>(`/place-types/${id}/reassign`, {
     method: "POST",
-    // The server reads `placeTypeId` (routes/placeTypes.ts, pinned by
-    // `__tests__/placeTypes.test.ts`). Sent as `toPlaceTypeId`, every move
-    // came back 400 "A different placeTypeId is required" — the destination
-    // simply was not in the payload the route read.
+    // The server reads `placeTypeId` (api/src/routes/placeTypes.ts, pinned by
+    // api/src/__tests__/placeTypes.test.ts), not `toPlaceTypeId`.
     body: { placeTypeId: toPlaceTypeId },
   });
 }
 
 /**
  * Adopt, discard or append one value the place is holding for a field this
- * owner has no definition for (§2.6).
+ * owner has no definition for.
  *
  * ONE endpoint for the three because they share every precondition and differ
  * only in what they do at the end. Returns the updated place, so a caller can
@@ -937,18 +918,10 @@ export function resolveForeignField(
 
 // ── custom field definitions: ROW-GRAIN, always ─────────────────────────────
 //
-// These used to go through `PATCH /users/me { placeCustomFields: [...] }` — a
-// whole-list reconcile of `{key,label,type,min,max}`. That path is GONE, and
-// its removal is not a tidy-up: the shape cannot express what a definition is
-// any more. It carries no `placeTypeIds` and no `appliesToAllTypes`, so every
-// save from a dialog that round-tripped the list would have wiped the scoping
-// off every definition — silently, because the payload does not mention it —
-// and it matched only the caller's own rows, so the SYSTEM definitions fell
-// through to the create branch and gave the user a private duplicate of every
-// built-in field, colliding under the same key.
-//
-// Per-row writes also mean two devices that each add a field both keep it,
-// which is the same reason the phone's definitions moved off the user record.
+// Custom field definitions are written per-row rather than as a whole list on
+// the user record. Whole-list updates cannot preserve scoping (`placeTypeIds`
+// and `appliesToAllTypes`) or handle shared system definitions, and per-row
+// writes allow two devices adding fields concurrently to preserve both.
 
 /** Every definition for one entity, WITH its scoping. */
 export function getCustomFields(
@@ -972,8 +945,7 @@ export function createCustomField(
 ): Promise<ScopedCustomFieldDef[]> {
   // The server answers with the ONE definition it made ({ field }), and every
   // caller wants the list that definition now belongs to, in the server's
-  // order — so read the list back. Taking `res.fields` off that answer handed
-  // callers `undefined`, and the trip form crashed on its next render.
+  // order — so read the list back (`res.fields` is not returned here).
   return apiFetch<{ field: ScopedCustomFieldDef }>(`/custom-fields/${entity}`, {
     method: "POST",
     body: { field, ...scope },
@@ -1263,7 +1235,7 @@ export function useTripLogs(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetchWithTotal<TTripLog[]>("/trips")
       .then(({ data, total }) => {
@@ -1609,7 +1581,7 @@ export function useFriends(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     getFriends()
       .then((data) => {
@@ -1739,9 +1711,8 @@ export function sendCopyOfMedia(
 }
 
 // NO `GET /file-sends/inbox` HELPER. The Inbox draws every send from the
-// notification each one writes, and answers it there; the Friends page held a
-// second, separately-fetched copy of that list until 2026-09-18, which could
-// disagree with the Inbox about what was still pending.
+// notification each one writes, and answers it there, avoiding a second
+// separately-fetched copy that could disagree about what is pending.
 
 /** Returns a short-lived presigned URL. Accepted rows stay downloadable until
  *  the send expires, which is what makes a re-download possible after a failed
@@ -1761,7 +1732,7 @@ export function declineFileSend(fileSendId: string): Promise<void> {
   });
 }
 
-// ── Sharing audit, per friend (fix 24) ────────────────────────
+// ── Sharing audit, per friend ─────────────────────────────────
 // Answers "what does Bob see?" from the Friends panel. Deliberately a dedicated
 // endpoint rather than share rows on the /places list payload: the list is
 // capped at 500 (so client-side grouping would silently under-count), and the
@@ -1815,8 +1786,8 @@ export type CopiedPlace = TPlace & {
  *
  * NO `copyMedia` IN THE BODY, deliberately: the server then falls back to the
  * account's `uiPreferences.copyPlaceMedia`, which is what the user last chose
- * on Logjam GPS. Sending a value here would silently override a preference this
- * app has no switch for. The response says what actually happened to the media,
+ * on Logjam GPS. Sending a value here would silently override a preference Logjam Web
+ * has no switch for. The response says what actually happened to the media,
  * which is what the caller reports.
  */
 export function copyPlace(placeId: string): Promise<CopiedPlace> {
@@ -1865,7 +1836,7 @@ export function useNotifications(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetchWithTotal<TNotification[]>("/notifications")
       .then(({ data, total }) => {
@@ -2196,7 +2167,6 @@ export function useLiveVectorStyle(enabled: boolean): {
   return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }
 
-// Renders `v3a4 III`, omitting unset segments (UX fix 4). Moved to
-// shared/src/canyonGrade.ts so web and mobile format identically; re-exported
-// here to keep existing import sites stable.
+// Renders `v3a4 III`, omitting unset segments. Re-exported from
+// shared/src/canyonGrade.ts so Logjam Web and Logjam GPS format identically.
 export { formatCanyonGrade } from "@logjam/shared";

@@ -8,7 +8,7 @@ import AxeBuilder from "@axe-core/playwright";
 // focus return are checked by hand (frontend/DESIGN.md).
 //
 // Local only: it needs fake auth and a seeded API, and prod smoke stays
-// auth-free (e2e/CLAUDE.md).
+// auth-free (frontend/AGENTS.md).
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 test.skip(
   !baseURL.startsWith("http://localhost"),
@@ -241,8 +241,7 @@ test.describe("desktop", () => {
     // holds 311 places whose rows are one component repeated — so the walk
     // answers the same question 311 times and charges 7.4s for it against 0.17s
     // for two rows, with an identical result. Three walks of that put the case
-    // at 51.7s alone and over the 60s cap under any parallel load; it is the
-    // seed growing from 37 places, not the app, that was failing it. Everything
+    // at 51.7s alone and over the 60s cap under any parallel load. Everything
     // the case is about survives the search: the hero, both chip rails, the
     // sort-and-filter button, a row and its menu.
     await aside.getByRole("button", { name: /^Search/ }).click();
@@ -286,8 +285,8 @@ test.describe("desktop", () => {
       .click();
 
     // The page leads with the place's name, and every attribute is stated once
-    // — the four canyon scalars used to be printed by name AND again by the
-    // loop over the type's definitions.
+    // — canyon scalars are not printed again by the loop over the type's
+    // definitions.
     await expect(
       list.getByRole("heading", { level: 2, name: "Claustral Canyon" }),
     ).toBeVisible();
@@ -396,8 +395,8 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
     await page.getByRole("menuitem", { name: "Add a place" }).click();
-    // The kit dialog, not MUI's: the place form was rebuilt onto `Dialog`
-    // (a native <dialog>), so the confirm now stands over one of our own.
+    // The kit dialog (`Dialog`, a native <dialog>), so the confirm stands over
+    // one of our own.
     const form = page.getByRole("dialog", { name: "Add a place" });
     await expect(form).toBeVisible();
     await form.getByLabel(/^Name/).first().fill("Unsaved name");
@@ -567,7 +566,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "aside");
 
     // The built-in Default template is always there, so there is always a menu —
-    // on the Templates tab, which is where a template lives now.
+    // on the Templates tab, where templates live.
     await aside.getByRole("radio", { name: /^Templates/ }).click();
     await aside.getByRole("button", { name: "Actions for Default" }).click();
     await expect(page.getByRole("menu")).toBeVisible();
@@ -1055,7 +1054,7 @@ test.describe("narrow web", () => {
     });
 
     // `size="large"` fills a narrow screen from the kit's own CSS — a different
-    // rule from the centred desktop dialog, and one axe had never walked.
+    // rule from the centred desktop dialog.
     await sheet
       .getByRole("button", { name: "Claustral Canyon", exact: true })
       .click();
@@ -1133,8 +1132,7 @@ test.describe("narrow web", () => {
 // account's recorded consent is current (so the gate never shows), and it holds
 // 311 places (so the first-login offer never fires). None of them is a viewport
 // variant of something above — they are screens the dev stack cannot reach by
-// navigation, which is why they went unchecked through seven packages of this
-// rework.
+// navigation.
 //
 // Two are reachable here anyway: the gate and the offer are ordinary responses
 // away, and SignIn is one env var away on the second local server. The third of
@@ -1221,9 +1219,8 @@ test.describe("surfaces fake auth never shows", () => {
     page,
   }) => {
     // It opens only on a load that SUCCEEDED and came back empty (App.tsx), so
-    // the stub is a real 200 with a real total — a failed fetch must NOT open
-    // it, which is the bug that put this dialog in a case's way in the first
-    // place. Nothing is written: the case presses neither row.
+    // the stub is a real 200 with a real total — a failed fetch must not open
+    // it. Nothing is written: the case presses neither row.
     await page.route("**/places", async (route) => {
       if (route.request().method() !== "GET") return route.continue();
       await route.fulfill({

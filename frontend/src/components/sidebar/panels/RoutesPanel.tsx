@@ -9,7 +9,7 @@
 // `wayActions.ts`, the same list the way's own page offers: a row shows the
 // full list and hands the ones needing a form (share, rename, delete) to the
 // page with that verb armed, so the two surfaces can never offer different
-// things. Nothing here renames or deletes in place any more.
+// things.
 import { useMemo, useState } from "react";
 import {
   exportFilename,

@@ -1,11 +1,8 @@
-# Least-privilege application database role (operator-trust-plan Part D).
+# Least-privilege application database role.
 #
-# Today the application connects to RDS as the master superuser (logjam_admin),
-# which makes app reads and operator reads indistinguishable at the DB-role
-# level. This provisions a dedicated, non-superuser, schema-owning role
-# (logjam_app) so that:
-#   - the app runs with least privilege (blast-radius reduction), and
-#   - the operator's honest path (master `psql`) is DISTINCT from app traffic in
+# Dedicated, non-superuser, schema-owning role (logjam_app) so that:
+#   - the API runs with least privilege (blast-radius reduction), and
+#   - the operator's honest path (master `psql`) is DISTINCT from API traffic in
 #     the pgaudit logs (audit.tf / rds.tf).
 #
 # This file only creates the SECRET CONTAINER and the read grant. Creating the
@@ -46,13 +43,14 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_app_db_password" {
 
 # EB instance role (logjam-eb-role) — the EB API container resolves logjam_app
 # credentials from DB_SECRET_ID at boot (api/src/boot.ts ->
-# resolveDbCredentials.ts) and re-resolves the password per connection
-# (lib/dbPassword.ts), so the EB instances need GetSecretValue on the new
-# secret. The role is EB-managed (created with the environment, not by this
-# config), so it is referenced by name rather than as a resource; the attachment
-# itself is tracked here so the grant is part of the committed proof artifact.
-# This MUST be applied before the EB env is cut over to the new DB_SECRET_ID,
-# or boot.ts fails closed (exit 1) unable to read the secret. See runbook D3.
+# api/src/lib/resolveDbCredentials.ts) and re-resolves the password per
+# connection (api/src/lib/dbPassword.ts), so the EB instances need
+# GetSecretValue on the new secret. The role is EB-managed (created with the
+# environment, not by this config), so it is referenced by name rather than as a
+# resource; the attachment itself is tracked here so the grant is part of the
+# committed proof artifact. This MUST be applied before the EB env is cut over
+# to the new DB_SECRET_ID, or boot.ts fails closed (exit 1) unable to read the
+# secret.
 resource "aws_iam_role_policy_attachment" "eb_instance_app_db_password" {
   role       = "logjam-eb-role"
   policy_arn = aws_iam_policy.app_db_password_access.arn

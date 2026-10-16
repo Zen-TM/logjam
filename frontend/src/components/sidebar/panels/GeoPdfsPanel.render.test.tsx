@@ -54,7 +54,7 @@ function renderPanel(loadsUserData: boolean) {
   );
 }
 
-// FECO-005: the gate held App's own hooks, but this panel fetched anyway —
+// The consent gate held App's own hooks, but this panel fetched anyway —
 // `useGeoPdfJobs(true)` polled the job list and an ungated effect loaded the
 // templates, both behind a consent screen the user had not answered.
 // Mutation: run the job poll with `true`, or drop the `loadsUserData` guard

@@ -16,7 +16,7 @@ export type PlaceStatus = "done" | "todo" | "shared";
 
 /** Rail and row labels. The glyph is per client (Feather vs lucide). "Visited"
  *  rather than "Done": the measure is one logged trip and nothing more, so a
- *  bailed descent counts — and it reads on a campsite, which "Done" did not. */
+ *  bailed descent counts — and it applies to campsites as well. */
 export const PLACE_STATUS_LABELS: Record<PlaceStatus, string> = {
   done: "Visited",
   todo: "Not visited",

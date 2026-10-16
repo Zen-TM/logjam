@@ -28,7 +28,7 @@ export default function MediaGallery({
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // FEUI-007: one-tap Trash2 permanently deletes the S3 object with no
+  // One-tap Trash2 permanently deletes the S3 object with no
   // recovery. Route through the same ConfirmDialog every other destructive
   // surface uses (e.g. the track-card delete in PlaceDetailPanel).
   const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null);

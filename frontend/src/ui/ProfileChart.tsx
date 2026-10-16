@@ -61,9 +61,8 @@ export function ProfileChart({
   // A pointer emits moves far faster than the screen redraws, and each one
   // costs a scan of the samples, a re-render of this panel AND a GeoJSON write
   // to the map's hover source. Coalescing to one frame makes the cost per
-  // FRAME rather than per EVENT, which is what the drag was lagging on
-  // (operator, 2026-09-17). The pending position is a ref so a superseded move
-  // is dropped rather than queued.
+  // FRAME rather than per EVENT, preventing drag lag. The pending position is
+  // a ref so a superseded move is dropped rather than queued.
   //
   // ABOVE the early return below, with every other hook: a chart with too few
   // known values returns null, and a hook after that return runs on some

@@ -38,7 +38,7 @@ import classes from "./SettingsPanel.module.css";
 type ListPage = "placeTypes" | "tripAttributes" | "placeAttributes";
 
 /**
- * Settings — how the app behaves, and the lists the user keeps.
+ * Settings — how Logjam Web behaves, and the lists the user keeps.
  *
  * NO HERO (shared/DESIGN.md §2): there is nothing to headline. A hero whose only
  * content is the word "Settings" is exactly the pattern the hero rule replaces,
@@ -46,10 +46,10 @@ type ListPage = "placeTypes" | "tripAttributes" | "placeAttributes";
  *
  * The three LISTS are pages of their own, reached from a row that carries the
  * count and returned from by the arrow in their hero (§2's step-inside-a-view).
- * Inline they were 18 rows of attributes under two rows of preferences, so the
- * settings this page exists for sat above a list nobody scrolled to the end of
- * — and "what am I keeping" is the question the count answers without opening
- * anything.
+ * Inline they would be 18 rows of attributes under two rows of preferences, so
+ * the settings this page exists for would sit above a list nobody scrolls to the
+ * end of — and "what am I keeping" is the question the count answers without
+ * opening anything.
  */
 function SettingsPanel({
   currentUser,
@@ -78,8 +78,8 @@ function SettingsPanel({
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(
     null,
   );
-  // WHICH switch is in flight, not THAT one is: a single boolean disabled all
-  // five for the length of the request, and five switches greying and
+  // WHICH switch is in flight, not THAT one is: a single boolean would disable
+  // all five for the length of the request, and five switches greying and
   // un-greying together reads as the whole list flickering.
   const [notifSavingKey, setNotifSavingKey] = useState<
     keyof NotificationPreferences | null

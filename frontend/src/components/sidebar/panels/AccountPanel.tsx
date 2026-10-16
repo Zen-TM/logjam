@@ -55,7 +55,7 @@ function percentUsed(used: number, quota: number): number {
  * the section order comes from.
  *
  * PRIVACY: username, email and byte counts. The email appears here and nowhere
- * else — friend search and lists are username-only (root CLAUDE.md).
+ * else — friend search and lists are username-only (api/src/__tests__/friends.test.ts).
  */
 const copy = ACCOUNT.copy;
 

@@ -131,9 +131,9 @@ COPY icons/ /app/icons/
 # Optional: RESEND_API_KEY, EMAIL_FROM, FRONTEND_URL, AWS_REGION (email is a
 #  no-op if RESEND_API_KEY/EMAIL_FROM unset — see email_send.py)
 #
-# Stage 2 plan called for headless MapLibre Native here. The current export
-# worker reuses pipeline' Python tile compositor instead, which avoids
-# the Mesa + node20 + libmaplibre-gl-native stack entirely. If we move to
-# MapLibre Native later, add the GL deps before this line and keep the same
-# entrypoint contract — export_worker.py orchestration stays unchanged.
+# The export worker reuses the Python tile compositor instead of headless
+# MapLibre Native, avoiding the Mesa + node20 + libmaplibre-gl-native stack
+# entirely. If moving to MapLibre Native later, add the GL deps before this
+# line and keep the same entrypoint contract — export_worker.py orchestration
+# stays unchanged.
 ENTRYPOINT ["python3", "/app/worker.py"]

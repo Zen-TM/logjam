@@ -4,7 +4,7 @@ name: CI
 # the workflow branch protection should require (jobs: shared, api,
 # api-integration, frontend, mobile, topo). The api-integration job stands up
 # the live API + Postgres + MiniStack the integration suite needs, so
-# api/src/__tests__ now gates PRs too; see CLAUDE.md "Testing".
+# api/src/__tests__ gates PRs too; see api/AGENTS.md "Testing".
 
 on:
   pull_request:
@@ -13,8 +13,7 @@ on:
 
 jobs:
   gitleaks:
-    # .gitleaks.toml (allowlist for public Cognito ids etc.) existed but
-    # nothing ran it (INF-003) — a committed secret would never be caught.
+    # Scan for committed secrets (.gitleaks.toml allowlists public Cognito ids etc.).
     # Pin the CLI to an exact release rather than a mutable Action tag.
     runs-on: ubuntu-latest
     steps:
@@ -81,8 +80,7 @@ jobs:
         working-directory: shared
         run: npm test
       # Every foreground/background pair both clients render, under all four
-      # theme schemes (root CLAUDE.md: "A colour pair is measured under all
-      # FOUR schemes"). Bare node: it parses the token sources, no build.
+      # theme schemes. Bare node: it parses the token sources, no build.
       - name: WCAG contrast
         run: node scripts/wcag-contrast.mjs
 
@@ -119,8 +117,7 @@ jobs:
     # api/src/__tests__ (31 files / ~250 tests) hits a LIVE API over HTTP — it
     # is the only coverage of the multi-actor privacy boundaries
     # (shareBoundary / syncBoundary / directShare / shareRevocation), which the
-    # mocked-Prisma unit tests structurally cannot reach. It was local-only
-    # until the first real run found three contract bugs.
+    # mocked-Prisma unit tests structurally cannot reach.
     #
     # This job is `make dev` reduced to what the suite actually needs:
     # Postgres + MiniStack (S3 only — no test drives POST /topo-jobs/:id/start
@@ -212,7 +209,7 @@ jobs:
       - name: Install
         working-directory: api
         run: npm ci
-      # npm ci no longer auto-generates the client (Prisma 7) — tsc fails without it.
+      # Prisma does not auto-generate the client on npm ci; tsc fails without it.
       - name: Prisma generate
         working-directory: api
         run: npx prisma generate
@@ -261,7 +258,7 @@ jobs:
       - name: Integration tests
         working-directory: api
         run: npm test
-      # topo/tests/INTEGRATION.md §1: the ARCH-001 status guard against a real
+      # topo/tests/INTEGRATION.md §1: the status guard against a real
       # Postgres. Rides on this job because it needs exactly this seeded DB
       # (it acts as the seeded alice). Only psycopg2 has to be real; the rest
       # of worker.py's native imports stay stubbed by tests/_native_stub.py.
@@ -351,12 +348,10 @@ jobs:
       - name: Unit tests
         working-directory: mobile
         run: npm test
-      # The only step here that runs Metro. Typecheck, lint and vitest all
-      # passed on a tree that could not bundle at all (SDK 54 left
-      # babel-preset-expo unhoisted, so every bundle request 500'd and the app
-      # never started) — a resolver, babel or plugin break is invisible to tsc
-      # by construction. ~1 min. The URLs are placeholders: config.ts throws
-      # on a missing one, and nothing here runs the bundle.
+      # The only step here that runs Metro. Typecheck, lint and vitest can pass
+      # on a tree that cannot bundle at all — a resolver, babel or plugin break
+      # is invisible to tsc by construction. ~1 min. The URLs are placeholders:
+      # config.ts throws on a missing one, and nothing here runs the bundle.
       - name: Bundle (Metro must be able to build the app)
         working-directory: mobile
         env:
@@ -371,7 +366,7 @@ jobs:
     # there aborts a prod deploy). An EMPTY database cannot fail a backfill;
     # `migration-upgrade` below covers existing rows. NOTE: runs as the Postgres superuser, so it does NOT
     # catch failures specific to the least-priv `logjam_app` role (a missing
-    # grant) — that half remains a prod-boot risk (see ARCH-001 half B).
+    # grant) — that half remains a prod-boot risk.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -416,8 +411,7 @@ jobs:
     # The migrations prod will actually run: from origin/main's schema, seeded
     # plus edge-case fixtures, up to this commit. Then asserts the data came
     # across (api/prisma/upgrade-check/) and that the upgraded DB matches
-    # schema.prisma exactly. Its first run found real drift the empty-DB job
-    # could not: media.updated_at carried a DB default schema.prisma omitted.
+    # schema.prisma exactly, catching drift the empty-DB job cannot.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -482,7 +476,7 @@ jobs:
         run: python -m unittest discover -s tests
 
   # The deploy workflows rewrite live ECS task definitions
-  # (infra/scripts/pin-ecs-task-image.sh, INF-009). Its one piece of real logic
+  # (infra/scripts/pin-ecs-task-image.sh). Its one piece of real logic
   # is the jq filter that strips the read-only fields `describe` returns and
   # `register` rejects — a list that only breaks when ECS adds an output field,
   # i.e. long after anyone remembers this exists. The script's --self-test runs

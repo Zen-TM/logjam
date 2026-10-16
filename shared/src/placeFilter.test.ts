@@ -20,7 +20,7 @@ import type {
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 
-// Named TPlace here because these cases were written against the web place
+// Named TPlace here because these cases test against the Logjam Web place
 // type; the predicate only ever reads the structural subset.
 type TPlace = PlaceFilterFields & {
   id: string;
@@ -40,9 +40,8 @@ function place(
     longitude: 150.3,
     altNames: [],
     placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
-    // The seven graded axes are ordinary field VALUES now — the predicate
-    // reads them through the same path as a user's own field, which is the
-    // point of the collapse.
+    // The seven graded axes are ordinary field VALUES — the predicate
+    // reads them through the same path as a user's own field.
     fieldValues: {
       v_grade: 3,
       a_grade: 3,
@@ -335,8 +334,8 @@ describe("passesFilters — date range", () => {
   it("created_at end bound is inclusive of the whole end day", () => {
     // Day bounds mean the VIEWER's day. These instants are built from local
     // wall-clock times so the assertion says the same thing in every zone —
-    // written as fixed Z instants it silently asserted UTC days, which is the
-    // bug (in Sydney, 18:30 UTC on the 16th is already the 17th).
+    // written as fixed Z instants it would silently assert UTC days (in Sydney,
+    // 18:30 UTC on the 16th is already the 17th).
     const localInstant = (wallClock: string) =>
       new Date(wallClock).toISOString();
     const f = filters({ created_at: [null, "2026-06-16"] });
@@ -396,7 +395,7 @@ describe("activeFilterCount", () => {
   });
 
   it("counts each active filter exactly once", () => {
-    // The graded axes count as CUSTOM entries now — they are custom fields.
+    // The graded axes count as CUSTOM entries — they are custom fields.
     const f = filters({
       ownership: "owned",
       ropewiki: "linked",
@@ -413,7 +412,6 @@ describe("activeFilterCount", () => {
   // An inactive custom filter is ABSENT from the map rather than present at its
   // full span: a range set to the whole span is committed as a deletion by the
   // UI, so "is it active" is `key in custom` and nothing has to know the span.
-  // That is what let the hardcoded bounds table go.
   it("does not count a custom filter that was cleared", () => {
     expect(activeFilterCount(filters({ custom: {} }))).toBe(0);
   });
@@ -652,8 +650,8 @@ describe("comparePlaces", () => {
 describe("passesFilters — date range timezone and validity", () => {
   it("files a place under the viewer's day, not UTC's", () => {
     // Added 09:00 on 15 January local. East of UTC that instant is still
-    // 14 January in UTC, and the filter used to file it under the 14th: it
-    // was excluded from "from the 15th" and included in "up to the 14th".
+    // 14 January in UTC; the filter must file it under the local day (15th)
+    // rather than UTC's 14th.
     const addedAt = new Date("2026-01-15T09:00:00").toISOString();
     expect(
       passesFilters(
@@ -672,8 +670,8 @@ describe("passesFilters — date range timezone and validity", () => {
   });
 
   it("an unparseable timestamp is unknown, not a universal match", () => {
-    // Every `<`/`>` against NaN is false, so a value like "15/01/2026" used to
-    // pass EVERY range — in or out of it.
+    // Every `<`/`>` against NaN is false; without the parse check a value like
+    // "15/01/2026" would pass EVERY range — in or out of it.
     const range: [string, string] = ["2026-01-01", "2026-01-31"];
     const shown = filters({ created_at: range, include_unknowns: true });
     const hidden = filters({ created_at: range, include_unknowns: false });

@@ -4,9 +4,7 @@
 //
 // What each client lists INSIDE its overlays pane is not declared here: Logjam
 // GPS draws every kind of line its phone holds (routes, imported ways, tracks)
-// and GeoPDFs as rows of their own, Logjam Web draws one "Ways" row. That is a
-// difference in what the two hold, listed in the Phase 5 report, not settled by
-// words.
+// and GeoPDFs as rows of their own, Logjam Web draws one "Ways" row.
 import type { ScreenContract } from "./types.js";
 
 export const MAP_LAYERS = {

@@ -4,9 +4,7 @@ import { isReservedFieldKey, nameKey } from "./placeTypes.js";
 
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
- * table column, the sync protocol, the mobile store and the web dialogs — it
- * used to be spelled separately in `mobile/src/api/queries.ts` and in the
- * `entityConfigs` of `api/src/routes/customFields.ts`.
+ * table column, the sync protocol, the Logjam GPS store and the Logjam Web dialogs.
  *
  * `"place"` stays ONE entity after the places rework rather than splitting per
  * place type: scoping a definition to types is a separate axis, carried by
@@ -32,10 +30,8 @@ export function isCustomFieldEntity(
  * "Field" is form jargon — it names the box, not the thing the box records — so
  * the UI says "attribute" and the code keeps saying field (the column, the
  * table, the sync entity and every function in this file). One constant rather
- * than forty string literals, so the next rename is one line and cannot leave
- * half of one client behind — which is what happened the first time: the phone
- * was renamed during the places rework and Logjam Web kept saying "Custom trip
- * fields" and "Add field" for another three months.
+ * than forty string literals, so a rename is one line and cannot leave half of
+ * one client behind.
  */
 export const ATTRIBUTE_NOUN = {
   one: "attribute",
@@ -117,9 +113,9 @@ export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
    * rename or delete.
    *
    * A form builder needs it because the alternative is offering verbs the
-   * server refuses: on the phone that was worse than an error, because the
-   * local half of a delete (strip the value off every place carrying the key)
-   * ran before the server no-opped the other half.
+   * server refuses: on Logjam GPS, the local half of a delete (stripping the
+   * value off every place carrying the key) would run before the server no-ops
+   * the other half.
    *
    * Optional so a definition assembled by an older client or a test is still a
    * definition; absent reads as "not a system row", which is the safe
@@ -131,12 +127,12 @@ export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
 /**
  * A built-in: not renameable, not deletable.
  *
- * BOTH HALVES ARE LOAD-BEARING. `ownerId === null` is the server's answer and
- * was once the whole test — but a definition created on the phone has no owner
- * id until the server sends one back, because the local INSERT has no column
- * for it. So a field the user had just added rendered with a padlock and no
- * verbs for the few seconds until the next delta landed, which reads as the app
- * refusing to let you edit your own field.
+ * BOTH HALVES ARE LOAD-BEARING. `ownerId === null` is the server's answer,
+ * but a definition created on Logjam GPS has no owner id until the server
+ * sends one back, because the local INSERT has no column for it. Without
+ * checking the key, a field the user just added would render with a padlock
+ * and no verbs until the next delta lands, which reads as refusing to let you
+ * edit your own field.
  *
  * The key settles it offline: `RESERVED_FIELD_KEYS` is derived from
  * `SYSTEM_FIELD_DEFS`, so every built-in's key is reserved by construction, and
@@ -147,6 +143,8 @@ export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
  *
  * `ownerId === undefined` (an older client, a test) still reads as "not a
  * built-in": it offers the verbs, and the server still refuses.
+ *
+ * test: shared/src/tripLogFields.test.ts (isSystemFieldDef)
  */
 export function isSystemFieldDef(def: ScopedCustomFieldDef): boolean {
   return def.ownerId === null && isReservedFieldKey(def.key);
@@ -209,13 +207,11 @@ export function tripFieldDefs(
 /**
  * The widest span that still reads as a rail rather than a ruler.
  *
- * A bounded integer is drawn as a row of stops instead of a number box, which
- * is how the canyon grades have always been drawn — they just used to be seven
- * hand-written controls (`PlaceEditSheet` on the phone, `PlaceDialog` on the
- * web) with their keys spelled out. They are ordinary bounded integers, so the
- * rail is a property of the TYPE and every field that shares that shape gets
- * it: a user's own "Difficulty, 1-5" is drawn exactly like the V grade,
- * without knowing anything about canyons.
+ * A bounded integer is drawn as a row of stops instead of a number box
+ * (`PlaceEditSheet` on Logjam GPS, `PlaceDialog` on Logjam Web). They are
+ * ordinary bounded integers, so the rail is a property of the TYPE and every
+ * field that shares that shape gets it: a user's own "Difficulty, 1-5" is
+ * drawn exactly like the V grade, without knowing anything about canyons.
  *
  * Above this the stops stop being tappable and a keyboard is faster. `hours`
  * and `num_abseils` are unbounded and were never rail candidates.
@@ -227,11 +223,9 @@ const MAX_RAIL_STOPS = 12;
  *
  * Derived from the definition's own bounds, which is the only place they are
  * declared — a rail that restated 1-7 would drift from the field it draws.
- * Shared rather than per-client: the phone had this first (as
- * `mobile/src/customFields/fieldValueCoercion.ts`) and a second copy for the
- * browser is the "two lists that must agree" failure in miniature — the web
- * would keep drawing a V grade as a number box the day the phone widened the
- * cap.
+ * Shared across Logjam GPS and Logjam Web so rail stops agree between clients.
+ *
+ * test: shared/src/tripLogFields.test.ts (railStops)
  */
 export function railStops(def: TripLogCustomFieldDef): number[] | null {
   if (def.type !== "integer") return null;
@@ -268,10 +262,8 @@ export const VALID_CUSTOM_FIELD_TYPES = new Set<string>([
  * visible everywhere the field is shown, without polluting the stored label.
  */
 export function customFieldDisplayLabel(def: TripLogCustomFieldDef): string {
-  // One-sided bounds get shown too. This used to require BOTH, so a min-only
-  // field — which every "how many" field now is — displayed with no hint that
-  // it was bounded at all, and the user only found out when a write was
-  // refused.
+  // One-sided bounds get shown too, so min-only and max-only fields display
+  // their bounds to the user before a write is attempted.
   if (def.min != null && def.max != null) {
     return `${def.label} (${def.min}-${def.max})`;
   }
@@ -385,8 +377,8 @@ export function renameCustomFieldLabel(
 
 /**
  * Raw form state for the "Add Custom Field" sub-form. Both PlaceDialog and
- * TripLogDialog feed this into `buildCustomFieldDef` to get a validated
- * `TripLogCustomFieldDef` or a user-facing error string.
+ * TripLogDialog on Logjam Web feed this into `buildCustomFieldDef` to get a
+ * validated `TripLogCustomFieldDef` or a user-facing error string.
  */
 export type CustomFieldDraft = {
   label: string;
@@ -455,7 +447,7 @@ export function buildCustomFieldDef(
 
 /**
  * The persisted shape of a definition — a `custom_field_defs` row on the
- * server, a `custom_field_defs` mirror row on the phone. Structural rather
+ * server, a `custom_field_defs` mirror row on Logjam GPS. Structural rather
  * than imported from `sync.ts` so this module stays free of protocol types;
  * both sides satisfy it.
  */
@@ -475,18 +467,12 @@ export type CustomFieldDefRow = {
  * `normalizeCustomFieldDefs` has always done with a malformed def: it was
  * unusable and invisible either way, and one bad row must not take out the
  * whole list.
- *
- * Bounds only survive together — a half-bounded numeric row would fail the
- * guard, so it is normalized to unbounded rather than dropped entirely.
  */
 export function customFieldDefFromRow(
   row: CustomFieldDefRow,
 ): TripLogCustomFieldDef | null {
-  // ONE-SIDED BOUNDS SURVIVE. This used to require both, so a min-only
-  // definition — which every "how many" field is, and which three of the system
-  // fields are — came back through this reader with no bound at all: the form
-  // stopped showing the range and the client-side check stopped refusing a
-  // negative, leaving the server as the only thing that still said no.
+  // One-sided bounds survive so min-only and max-only definitions preserve
+  // their bounds through this reader.
   const candidate = {
     key: row.key,
     label: row.label,
@@ -529,12 +515,8 @@ export function isTripLogCustomFieldDef(
     return false;
   }
   // Bounds are optional and ONE-SIDED IS LEGAL: min alone, max alone, or both.
-  //
-  // They used to be both-or-neither, which the system defs cannot satisfy —
-  // `hours`, `num_abseils` and `longest_abseil` are min-0-no-max, exactly as
-  // the numeric constraints on the old grade columns were. Requiring both would
-  // have meant inventing a ceiling for "how many pitches", which is a number
-  // nobody knows and every user would eventually hit.
+  // System defs like `hours`, `num_abseils` and `longest_abseil` are
+  // min-0-no-max (requiring both would mean inventing an artificial ceiling).
   //
   // Whatever is present must be a finite number of the right kind, and when
   // both are present min must be below max. Fail loud rather than silently

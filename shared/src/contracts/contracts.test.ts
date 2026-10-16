@@ -800,7 +800,6 @@ describe("the map point panel", () => {
     ]);
     for (const verb of MAP_POINT_VERBS)
       expect(verb.reason.length).toBeGreaterThan(0);
-    // The words Logjam GPS's sheet showed before the contract existed.
     expect(mapPointVerbs("gps")).toEqual([
       {
         id: "navigate",

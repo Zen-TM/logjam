@@ -27,7 +27,7 @@ describe("lonLatToTile", () => {
   });
 
   it("matches a known Katoomba z16 tile", () => {
-    // Katoomba ≈ 150.312, -33.714 → z16 slippy tile (spec §4.1 fixture zone).
+    // Katoomba ≈ 150.312, -33.714 → z16 slippy tile.
     const { x, y } = lonLatToTile(150.312, -33.714, 16);
     // Independent derivation: x = floor((150.312+180)/360 · 2^16) = 60131
     // y = floor((1 − asinh(tan(−33.714°))/π)/2 · 2^16) = 39293
@@ -54,7 +54,7 @@ describe("xyzToTmsRow", () => {
   });
 });
 
-// 10×10 km bbox at Blue Mountains latitude (spec §3.2 validation table).
+// 10×10 km bbox at Blue Mountains latitude.
 const TEN_KM: RegionBbox = {
   west: 150.26,
   south: -33.745,
@@ -185,13 +185,13 @@ describe("estimateRegionSize", () => {
   });
 
   it("brackets a real measured download", () => {
-    // Ground truth from a region actually downloaded to a phone on 2026-07-30:
-    // six-topo over central Katoomba, z8→16, these exact per-level counts, and a
-    // finished file of 839,680 bytes on disk.
+    // Ground truth from a region downloaded to a phone: six-topo over central
+    // Katoomba, z8→16, these exact per-level counts, and a finished file of
+    // 839,680 bytes on disk.
     //
     // The mean may sit under a town-only download (it is a mean over mixed
-    // terrain) but the p90 has to cover it — "up to" is a promise, and this is
-    // the case that broke the first, bush-only calibration.
+    // terrain) but the p90 has to cover it — "up to" is a promise, and a
+    // bush-only calibration would under-predict it.
     const measuredFileBytes = 839_680;
     const plan = {
       perZoom: [

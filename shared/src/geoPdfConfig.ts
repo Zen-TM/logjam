@@ -49,7 +49,7 @@ export const VALID_GEOPDF_BASE_LAYERS = new Set<string>([
   "six-imagery",
 ]);
 
-// Derived from the canonical TOPO_LAYERS list (ARCH-010) — cannot drift.
+// Derived from the canonical TOPO_LAYERS list — cannot drift.
 export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>(
   TOPO_LAYERS.map((l) => l.name),
 );
@@ -167,7 +167,7 @@ export interface GeoPdfJobView {
   // the generated-PDFs list. Null when the job had no title.
   title: string | null;
   // Adaptive processing-time estimate (seconds) computed at create. Null on
-  // rows created before the estimator existed — display falls back to a
+  // legacy rows where no estimate was recorded — display falls back to a
   // static "Generating…" label.
   estimatedSeconds: number | null;
   resultBytes: number | null;

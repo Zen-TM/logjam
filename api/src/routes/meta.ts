@@ -8,7 +8,7 @@ import {
 
 const router = Router();
 
-// Deliberately unauthenticated: the mobile app checks this before login (a
+// Deliberately unauthenticated: Logjam GPS checks this before login (a
 // stale build must learn it is stale even when its auth flow is broken), and
 // the response carries no user data — same exposure class as /health. Still
 // behind the global rate limiter.
@@ -16,7 +16,7 @@ router.get("/min-mobile-version", (_req: Request, res: Response) => {
   res.json({ minVersion: getEnv().MIN_MOBILE_VERSION });
 });
 
-// GET /meta — capability document (Stage 8 §10.2). Same exposure class as
+// GET /meta — capability document. Same exposure class as
 // above: server-wide constants only, no user data. The sync block is what a
 // client checks on foreground before relying on /sync/*. `sha` is the commit
 // the running image was built from (null outside a CI-built image): the

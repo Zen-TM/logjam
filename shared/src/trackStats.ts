@@ -1,11 +1,12 @@
-// Track recording pure core (mobile Stage 7). The recorder's native side is a
+// Track recording pure core. The recorder's native side is a
 // dumb pipe: expo-location hands fixes to these functions, accepted points are
 // batch-written to SQLite, and stats are recomputed from the stored series.
 // Everything with a branch lives here, under vitest, device-free.
 //
 // PRIVACY: recorded tracks are precise user location history. These helpers
 // never log, and callers must keep point data out of logs/telemetry/crash
-// reports (root privacy rules).
+// reports (root privacy rules; tests: api/src/lib/logger.unit.test.ts,
+// mobile/src/sentry/scrubEvent.test.ts).
 
 import { haversineMeters } from "./placeGeo.js";
 import { GPS_CLIMB_SOURCE, type DemSamples } from "./demSources.js";
@@ -34,12 +35,11 @@ export type CandidateFix = {
   /** Fix time, epoch ms. */
   timestampMs: number;
   /**
-   * The platform's own velocity and quality channels, RECORDED BUT NOT ACTED
-   * ON (2026-08-21). Nothing here reads them yet, and that is the point:
-   * whether they can separate a wandering fix from real travel is a question
-   * only a body of real recordings can answer, and a field not collected
-   * cannot be backfilled. They cost three columns and no extra work — the
-   * platform computes them for every fix and we were discarding them.
+   * The platform's own velocity and quality channels, recorded but not acted
+   * on. Nothing here reads them yet: whether they can separate a wandering
+   * fix from real travel is an empirical question, and a field not collected
+   * cannot be backfilled. They cost three columns and no extra work because
+   * the platform computes them for every fix.
    *
    * `speedMps` is the interesting one. On Android it comes from the GNSS
    * engine's Doppler solution, so it measures velocity INDEPENDENTLY of
@@ -69,8 +69,8 @@ export type CandidateFix = {
  * the only thing that can tell a stop from slow travel once the gap between
  * accepted points is long.
  *
- * Null means NOT MEASURED, never "nothing was suppressed": rows written before
- * the recorder counted have null, and an imported series has no field at all.
+ * Null means NOT MEASURED, never "nothing was suppressed": rows without
+ * stationary tracking have null, and an imported series has no field at all.
  */
 export type RecordedTrackPoint = CandidateFix & {
   segment: number;
@@ -90,43 +90,32 @@ export const MAX_ACCEPTED_ACCURACY_M = 50;
 // Floor for the movement gate below. A fix that moved less than this is a
 // duplicate, not progress, however good the fix is.
 //
-// It is the ONLY movement gate now. The recorder used to set a platform-level
-// `distanceInterval` as well, which meant the fixes this rejects were mostly
-// dropped natively and never seen — and a fix refused for being too close is
-// the single best evidence that the phone was standing still. Delivery is now
-// unfiltered so the refusals are counted (`RecordedTrackPoint.stationaryMs`).
+// Delivery is unfiltered so refusals are counted (`RecordedTrackPoint.stationaryMs`):
+// a fix refused for being too close is positive evidence that the phone was standing still.
+//
+// test: shared/src/trackStats.test.ts ("counts a long slow gap as stopped time, and keeps it out of moving pace")
 export const MIN_POINT_DISTANCE_M = 5;
 
-// Ground-speed ceiling for a plausible fix.
+// Ground-speed ceiling for walking-pace fixes (18 km/h).
 //
-// It was 5 m/s (18 km/h) — "a scramble or a jog", sized for walking pace. That
-// is the speed of the PARTY, and a recorder does not get to assume the phone is
-// walking: a track recorded on the drive in, on a bus, or on a bike is above it
-// continuously, and the failure is silent and self-sustaining. Measured on a
-// real bus trip (2026-08-18, 30 accepted points over 23 min): every fix
-// implying more than 5 m/s was rejected, which leaves `prev` pointing at the
-// last accepted fix, so the NEXT fix is measured over a longer baseline and is
-// rejected too — the gate only re-opens when the vehicle slows enough for the
-// average since `prev` to fall under the ceiling. The recorded result was a
-// series whose median gap was 27 s (max 217 s) with implied speeds pinned just
-// below the ceiling at 4.84 m/s, i.e. a chorded route that under-reads distance
-// and a speed profile that cannot exceed 18 km/h by construction.
+// A track recorded on a drive in, bus or bike exceeds walking pace continuously.
+// If a flat walking ceiling is applied to vehicle travel, every fast fix is
+// rejected, leaving `prev` pointing at the last accepted fix so subsequent fixes
+// across longer baselines are rejected too.
 //
-// But it cannot simply be raised, and the repo's own noise tests are what say
-// so: at 30 m accuracy a STATIONARY phone hops ~30 m between samples, which at
-// 3 s is 10 m/s — so the low ceiling was quietly doing half the anti-drift job,
-// and lifting it let a still phone record a kilometre it never walked.
+// However, the ceiling cannot simply be raised unconditionally: at 30 m
+// accuracy a stationary phone hops ~30 m between samples, which at 3 s is
+// 10 m/s, so an unconstrained ceiling lets stationary drift accumulate false
+// distance.
 //
-// A single fix cannot tell a bus from a jittering phone by distance alone. What
-// it CAN tell is whether the fix is good enough for the claim: 30 m of movement
-// measured by two fixes that are themselves 30 m uncertain demonstrates
-// nothing, while the same movement from a pair of 5 m fixes is real. So the
-// ceiling is chosen by fix quality — the vehicle allowance is only extended to
-// fixes precise enough to earn it, and a degraded fix keeps the walking-pace
-// ceiling it always had.
+// What distinguishes vehicle speed from stationary drift is fix precision:
+// movement measured between coarse fixes demonstrates nothing, while the same
+// movement between precise fixes is real. The ceiling is therefore chosen by
+// fix quality: `MAX_VEHICLE_SPEED_MPS` applies only when fixes are precise
+// enough (`TRUSTED_SPEED_ACCURACY_M`), while degraded fixes retain this
+// walking-pace ceiling.
 //
-// The bus trip above ran at a median accuracy of 6.3 m, so it gets the vehicle
-// ceiling; the place-noise tests run at 30 m and keep the walking one.
+// test: shared/src/trackStats.test.ts (rejectTrackFix drift and plausibility gates)
 export const MAX_TRACK_SPEED_MPS = 5;
 
 /** Ceiling for a fix precise enough to demonstrate vehicle speed. 126 km/h
@@ -144,11 +133,11 @@ export const TRUSTED_SPEED_ACCURACY_M = 10;
 
 // GPS altitude jitters ±5–15 m standing still, and that jitter is a RANDOM
 // WALK, not a sawtooth: any per-sample threshold leaks it, because the walk
-// eventually wanders past whatever threshold you pick. So the series is
+// eventually wanders past whatever threshold you pick. The series is
 // median-smoothed first (below) and only then run through hysteresis at a
-// threshold above the smoothed residual. Simulated 60 min walk with 15 m
-// vertical sigma and 400 m of real climb: shipped 8 m / unsmoothed read
-// 9472 m, this reads 435 m.
+// threshold above the smoothed residual.
+//
+// test: shared/src/trackStats.test.ts (noise rejection (random walk, not sawtooth))
 export const ELEVATION_HYSTERESIS_M = 15;
 
 // Odd, centred window for the altitude median. Median (not mean) because it
@@ -178,7 +167,8 @@ export type FixRejection =
  * `maxAccuracyM` is the user's accuracy gate; `0` disables it, which is the
  * setting that lets a deep slot record at all. It does NOT disable the movement
  * or speed gates below — those are what stop a stationary phone's drift being
- * booked as distance walked, and no preference may switch them off.
+ * booked as distance walked, and no preference may switch them off (test:
+ * shared/src/trackStats.test.ts, "keeps the movement gate whatever the accuracy ceiling is").
  */
 export function rejectTrackFix(
   prev: RecordedTrackPoint | null,
@@ -206,8 +196,8 @@ export function rejectTrackFix(
     const moved = haversineMeters(prev.lat, prev.lon, fix.lat, fix.lon);
     // Movement inside the fix's own error circle is drift, not travel. A
     // 30 m-accurate fix wanders 30 m while the phone sits on a rock, and a
-    // flat 5 m gate books every one of those hops as distance walked — a
-    // phone left still for 20 minutes recorded 10.5 km before this.
+    // flat 5 m gate would book every one of those hops as distance walked
+    // (test: shared/src/trackStats.test.ts, "scales the movement gate to the fix's own accuracy radius").
     const driftRadiusM = Math.max(
       MIN_POINT_DISTANCE_M,
       fix.accuracyM ?? 0,
@@ -355,9 +345,7 @@ function demonstratedStoppedMs(
  * already is, though — the step between two POSITION-smoothed points
  * (DISTANCE_SMOOTHING_WINDOW), the same steps the distance total is built from,
  * so moving time and distance agree with each other by construction. It also
- * means the classification inherits that smoothing's corner-cutting: measured
- * on a real bus trip, 159 s of stopped time against 90 s if the raw positions
- * are used.
+ * means the classification inherits that smoothing's corner-cutting.
  */
 export const SPEED_SMOOTHING_WINDOW = 5;
 
@@ -549,12 +537,12 @@ export function computeTrackDetail(
      * caller has one. Imports do not, and pass nothing.
      *
      * Without it, everything here is measured between the FIRST and LAST
-     * accepted fix, and a recording's real span is longer at both ends: the
-     * wait for a first fix, and — much bigger — the stretch where someone
-     * stands still until the Finish tap. Measured on a real 70.9-minute walk
-     * (2026-08-20): the last fix landed 19.1 minutes before Finish, so moving
-     * and stopped summed to 51.8 minutes against a clock reading 70.9, and a
-     * quarter of the trip belonged to neither.
+     * accepted fix, but a recording's real span is longer at both ends: the
+     * wait for a first fix, and the stretch where someone stands still until
+     * the Finish tap. If the last fix lands well before Finish, moving and
+     * stopped would otherwise fall short of the recording clock.
+     *
+     * test: shared/src/trackStats.test.ts ("books the time after the last fix as stopped, not as nothing")
      *
      * The remainder is booked as STOPPED, never as moving, and that is a
      * safety property rather than a guess: no distance was recorded across it,

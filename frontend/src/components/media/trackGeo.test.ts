@@ -100,8 +100,7 @@ describe("parseTrackGeoJSON", () => {
 describe("trackGeoCacheKey", () => {
   const entry = { mediaId: "m1", color: "#e6194b", stamp: { mediaId: "m1" } };
 
-  // The colour is baked into the parsed features, so a recolour that reused the
-  // cached entry kept drawing the old line until the page was reloaded.
+  // The colour is baked into the parsed features, so recolouring busts the cached entry.
   it("changes when the file's colour changes", () => {
     expect(trackGeoCacheKey(entry)).not.toBe(
       trackGeoCacheKey({ ...entry, color: "#469990" }),

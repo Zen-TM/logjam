@@ -34,10 +34,10 @@ import prisma from "../services/prisma";
 // friend check before anything under test runs.
 //
 // bob<->carol is ESTABLISHED BY THIS FILE rather than assumed, because a dev
-// database seeded before that row was added to seed.ts still lacks it (found
-// 2026-08-22) — and re-seeding to fix a test is a destructive
-// answer to a setup problem. `ensureFriends` is idempotent, so the suite is
-// correct on a fresh seed and on a stale one alike.
+// database seeded before that row was added to seed.ts still lacks it — and
+// re-seeding to fix a test is a destructive answer to a setup problem.
+// `ensureFriends` is idempotent, so the suite is correct on a fresh seed and
+// on a stale one alike.
 //
 // Synthetic content only — never a real place name in a filename here.
 
@@ -157,7 +157,7 @@ describe("file sends — recipient boundary", () => {
 
   it("404s a non-recipient's accept — never 403", async () => {
     // 403 would confirm the id exists to someone with no right to know it
-    // (the anti-oracle rule in root CLAUDE.md).
+    // (the anti-oracle rule in root AGENTS.md).
     const id = await sendCopy(ALICE_SUB, [BOB_ID]);
     // carol is not on this send at all.
     const res = await request(API_URL)
@@ -339,9 +339,9 @@ describe("file sends — sender boundary", () => {
   });
 });
 
-// The `file_sent` notification is what mobile renders Accept / Turn down on
-// (there is no "Received files" screen any more), so it has to carry enough to
-// answer with — and stop carrying it the moment the answer is no.
+// The `file_sent` notification is what mobile renders Accept / Turn down on,
+// so it has to carry enough to answer with — and stop carrying it the moment
+// the answer is no.
 describe("file sends — the actionable notification", () => {
   /**
    * Age a send past its TTL. This is what expiry IS — `expiresAt` in the past —
@@ -369,7 +369,7 @@ describe("file sends — the actionable notification", () => {
 
   // The recipient is entitled to know WHAT they are being offered before they
   // accept it — but it is resolved from the live send, never stored in the
-  // payload (PRIV-005).
+  // payload.
   it("resolves the filename, sender and status onto the recipient's notification", async () => {
     const id = await sendCopy(ALICE_SUB, [BOB_ID]);
 

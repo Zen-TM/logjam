@@ -1,11 +1,9 @@
 // Place filtering — the single source of the "which places match" decision,
 // shared by the web Places panel and the mobile Places screen.
 //
-// Moved here from frontend/src/placeUtils.ts when mobile needed the same
-// rules: a forked predicate means the two clients disagree about what "V3–5,
-// include unknowns" means, and the disagreement shows up as places that exist
-// on one device and not the other. `placeUtils` re-exports these under their
-// original names, so web callers are unchanged.
+// A forked predicate would mean Logjam Web and Logjam GPS disagree about
+// what filters mean (e.g. "V3–5, include unknowns"), showing up as places that
+// exist on one device and not the other.
 //
 // PRIVACY: pure predicates over values the caller already holds. Nothing here
 // logs. The `area` filter is the one place a coordinate reaches this module —
@@ -38,20 +36,6 @@ export type PlaceThresholdFilter = [
 
 export type PlaceFilters = {
   name: string | null;
-  /**
-   * The seven graded axes USED TO LIVE HERE as named fields (`v_grade`,
-   * `pitches`, ...). They are ordinary custom-field filters now, in `custom`,
-   * because the columns they read became field values and a place of a
-   * user-made type has no grades at all. Two of them changed key on the way:
-   * `pitches` -> `num_abseils` and `longest_pitch` -> `longest_abseil`, which
-   * are the reserved keys the values are actually stored under.
-   *
-   * Nothing is lost: a bounded def still renders as a double-ended slider
-   * (`numberRange`) and a min-only one as op+value (`number`) — the same two
-   * shapes the named fields had, now chosen from the definition instead of
-   * hardcoded. And a user's own bounded field gets the slider too, which it
-   * never did before.
-   */
   /** Keep only places of this type; null = every type. */
   placeTypeId: string | null;
   ownership: "all" | "owned" | "shared";
@@ -106,10 +90,9 @@ export type PlaceFilterFields = {
   longitude: number;
   /** The type this place belongs to, for the per-type tab/layer filter. */
   placeTypeId?: string;
-  /** Type-specific values, keyed by definition key. Replaces the seven grade
-   *  scalars AND the `attributes.customFields` sub-object they sat beside —
-   *  which is the whole point: a value keyed `v_grade` and a user's own value
-   *  are now read the same way, through the same predicate. */
+  /** Type-specific values, keyed by definition key. Values keyed by reserved
+   *  system keys (such as `v_grade`) and user-defined fields are read the
+   *  same way, through the same predicate. */
   fieldValues?: unknown;
   ropeWikiId?: number | null;
   createdAt?: string;
@@ -131,13 +114,6 @@ export const EMPTY_PLACE_FILTERS: PlaceFilters = {
   include_unknowns: false,
 };
 
-// PLACE_RANGE_BOUNDS and PLACE_THRESHOLD_KEYS are GONE. They restated the
-// bounds of the seven grade columns, which are now the `min`/`max` of the
-// system field definitions — so keeping them would have been two lists that
-// must agree, with the UI silently offering a slider over the wrong span when
-// they stopped. A range filter's bounds come from the definition now
-// (`customFilterKind`), which is also why a user's own bounded field finally
-// gets the same slider.
 const DATE_FILTER_KEYS = ["created_at", "updated_at"] as const;
 
 /**
@@ -224,9 +200,6 @@ export function placeMatchesSearch(
  * It's structural (which list the place came from / its mirror sync role), so
  * it can't be read off the place — callers pass it per bucket.
  */
-// isOwned distinguishes the owner's own places from places shared with them.
-// It's structural (which list the place came from), so it can't be read off the
-// place — callers pass it per bucket.
 // "Visited" = the viewer has at least one trip logged against this place, and
 // the label says exactly that: the predicate cannot tell a finished descent from
 // a bail, so "Done" overclaimed. Self-only: only readable for places
@@ -352,8 +325,7 @@ export function comparePlaces(
       return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
     case "grade": {
       // Reads the reserved canyon keys out of `fieldValues`. A place of a type
-      // that has no grades sorts to the bottom, exactly as an ungraded canyon
-      // always did — same rule, one fewer special case.
+      // that has no grades sorts to the bottom, like an ungraded canyon.
       const av = numericFieldValue(a.fieldValues, "v_grade") ?? Infinity;
       const bv = numericFieldValue(b.fieldValues, "v_grade") ?? Infinity;
       if (av !== bv) return av - bv;

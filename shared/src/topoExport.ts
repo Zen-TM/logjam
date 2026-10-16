@@ -1,4 +1,4 @@
-// Stage 2 — on-demand export pipeline shared types and compatibility matrix.
+// On-demand export pipeline shared types and compatibility matrix.
 //
 // Both API validation and frontend dialog disable/enable logic read from
 // EXPORT_FORMAT_RULES below so the rules can only diverge in one place.
@@ -12,8 +12,8 @@ import type {
 } from "./topoSettings.js";
 
 export type ExportFormat = "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx";
-// KMZ is intentionally deferred (Stage 3) until Avenza-structure quirks are
-// validated in user testing. Adding it later is purely additive.
+// KMZ is deferred until Avenza-structure quirks are validated in user testing.
+// Adding it later is purely additive.
 
 export type ExportBundling = "composite" | "per-layer";
 
@@ -27,7 +27,7 @@ export const EXPORT_FORMATS: ExportFormat[] = [
   "gpx",
 ];
 
-// Derived from the canonical TOPO_LAYERS list (ARCH-010) so a new layer can
+// Derived from the canonical TOPO_LAYERS list so a new layer can
 // never be missed here.
 export const RASTER_LAYERS: TopoLayerKey[] = TOPO_LAYERS.filter(
   (l) => l.format === "raster",
@@ -47,7 +47,7 @@ export interface ExportFormatRule {
   // When set, only these layers are exportable in this format, further
   // narrowing the raster/vector gates. GPX is features-only: the worker
   // (topo/renderers/gpx.py) renders points→waypoints/lines→routes from the
-  // features GeoJSON and has no contour path (TOPOEXP-1).
+  // features GeoJSON and has no contour path.
   layerAllowlist?: TopoLayerKey[];
   label: string;
   description: string;
@@ -108,7 +108,7 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
  * Whether a layer may appear in an export of the given format. The single
  * eligibility predicate behind validateExportRequest, reconcileExportSelection
  * and the export dialog's checkbox enable/disable — keep every surface on this
- * so per-format layer rules can't drift (TOPOEXP-1).
+ * so per-format layer rules can't drift.
  */
 export function isLayerEligibleForFormat(
   format: ExportFormat,
@@ -228,8 +228,7 @@ export interface ExportSelection {
 
 /**
  * Prune an export selection to a legal state for its format and a set of
- * available layers. Pure — the single source of the legality logic the export
- * dialog applied inline (drop layers that are absent or n/a for the format;
+ * available layers (drop layers that are absent or n/a for the format;
  * if nothing remains, default to every available+eligible layer; coerce
  * bundling to a value the format allows). Shared by the dialog, the auto-export
  * tab, and the reaper.

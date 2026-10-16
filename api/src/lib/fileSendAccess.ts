@@ -92,7 +92,7 @@ export function fileSendKey(
   return `file-sends/${senderId}/${fileSendId}/copy.${extension}`;
 }
 
-/** Declared size must be inside the cap before we sign a PUT for it. */
+/** Declared size must be inside the cap before we sign a PUT for it. Guard: fileSendAccess.unit.test.ts ("assertSendableSize"). */
 export function assertSendableSize(sizeBytes: unknown): number {
   if (
     typeof sizeBytes !== "number" ||
@@ -142,7 +142,7 @@ export function inboxWhere(userId: string, now: Date) {
  * and the offer should be withdrawn, while a throttle, a timeout or a denied
  * permission means try again later and must never be mistaken for the first.
  * Pure so the branch has a test — it decides whether a user permanently loses
- * access to a file.
+ * access to a file. Guard: src/routes/fileSends.unit.test.ts ("isMissingObjectError").
  */
 export function isMissingObjectError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;

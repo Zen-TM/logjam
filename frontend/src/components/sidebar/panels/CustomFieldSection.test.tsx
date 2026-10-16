@@ -60,10 +60,9 @@ function renderSection(defs: ScopedCustomFieldDef[]) {
 afterEach(cleanup);
 
 /**
- * The server looks a definition up under the CALLER's id, so a built-in is a
- * 404 to both `PATCH` and `DELETE` — "Custom field not found" is what Rename on
- * "Quality" used to produce. A button that fails is worse than one that is
- * absent, so the guard is that the built-in row carries no verbs at all.
+ * The server looks a definition up under the caller's ID, so a built-in is a
+ * 404 to both `PATCH` and `DELETE`. A button that fails is worse than one that
+ * is absent, so the guard is that the built-in row carries no verbs at all.
  */
 describe("a built-in attribute gets no verbs", () => {
   it("opens the user's own definitions to rename, and never a built-in", () => {

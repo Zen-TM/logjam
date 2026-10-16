@@ -6,7 +6,7 @@
  *
  * Every STORED date read here is UTC: trip dates are UTC-midnight date-only
  * values, and formatting or bucketing them in local time renders the previous
- * calendar day for anyone east of Greenwich (CH-001). The exception is a `now`
+ * calendar day for anyone east of Greenwich. The exception is a `now`
  * argument, which is a real-clock instant and is read in local fields — see
  * `currentCalendarMonth`. Reading UTC fields off the wall clock is the same
  * bug in the other direction, and `logbook.test.ts` pins both under a non-UTC
@@ -99,9 +99,8 @@ export function tripYear(isoDate: string): number {
  */
 export function groupTripsByYear<T extends { date: string }>(
   trips: T[],
-  // The year headings run the same way the trips inside them do. Fixed at
-  // newest-first, "Oldest first" put 2019 at the bottom of the panel and
-  // January at the top of it (2026-09-17).
+  // The year headings run the same way the trips inside them do; otherwise
+  // "Oldest first" puts the earliest year at the bottom of the panel.
   order: "newest" | "oldest" = "newest",
 ): { year: number; trips: T[] }[] {
   const byYear = new Map<number, T[]>();
@@ -198,8 +197,8 @@ export type LogbookRange = {
  * The relative ranges people actually ask for, relative to now.
  *
  * LOCAL today, not UTC. In AEDT before 11:00 the UTC date is yesterday, so
- * "This year" was labelled with last year on New Year's morning and, every
- * other morning, set `to` = yesterday and hid a trip logged today.
+ * a UTC date would label "This year" with last year on New Year's morning and
+ * set `to` = yesterday, hiding a trip logged today.
  *
  * Declared once and read in three places: both clients' Logs date filters offer
  * these as presets, and the stats pill rail leads with them. They must all mean
@@ -366,7 +365,7 @@ export function statsSpark(
 /**
  * The spark's caption and the cadence lines under it. They ride in the SAME
  * caption block as the spark: they are the day-level reading of the shape above
- * them, and a card around them made three muted sentences look like a fourth
+ * them, and a card around them would make three muted sentences look like a fourth
  * statistic.
  */
 export function statsCadence(
@@ -468,11 +467,10 @@ export type FieldStatDisplay = {
 /**
  * One attribute's stat as a row, chosen by the stat's SHAPE and never by its
  * name. NO TOTALS on a quantity, deliberately: a total is only honest for a
- * quantity a trip SPENDS and nothing in a definition says which ones those are
- * (root CLAUDE.md, "A TOTAL needs a declaration"). An average and a highest are
- * never wrong for either kind. No per-year progression on a rating either: it
- * read as a claim about the user getting better, which a grade distribution
- * over trips does not measure.
+ * quantity a trip SPENDS and nothing in a definition says which ones those are.
+ * An average and a highest are never wrong for either kind. No per-year
+ * progression on a rating either: it would read as a claim about the user
+ * getting better, which a grade distribution over trips does not measure.
  */
 export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
   switch (stat.kind) {
@@ -564,7 +562,7 @@ export function humanizeFieldKey(key: string): string {
 }
 
 /** A stored value as it reads in an attribute table. A date is stored
- *  date-only, so `formatDateKey` reads it in UTC (CH-001). */
+ *  date-only, so `formatDateKey` reads it in UTC. */
 export function formatFieldValue(value: unknown, type?: string | null): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";

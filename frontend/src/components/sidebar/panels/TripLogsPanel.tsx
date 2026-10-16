@@ -135,7 +135,7 @@ function TripLogsPanel({
   // Ephemeral filters — session-scoped, matching the place search. They survive
   // the panel's unmount-on-close (and a tab switch) so a mid-task filter isn't
   // retyped, but they're gone next session: a date range remembered for a month
-  // hides trips the user never asked to hide (UX finding 5).
+  // hides trips the user never asked to hide.
   const [search, setSearch] = useStoredState(
     "logjam.tripSearch",
     "",

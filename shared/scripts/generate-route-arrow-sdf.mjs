@@ -1,13 +1,13 @@
 // Regenerates src/routeArrowSdf.ts — the direction arrowhead drawn along
 // routes and tracks. Run with `node scripts/generate-route-arrow-sdf.mjs`.
 //
-// WHY AN IMAGE AND NOT A GLYPH. The arrows were a text symbol until 2026-08-30,
-// which limited them to what the bundled Noto Sans pack ships, and it ships no
-// arrowhead: the geometric block has exactly one glyph (U+25CC) and the arrows
-// block only U+2190-2199, every one of them stemmed. A stem drawn along a line
-// is a second line — at any size that reads as a bulge in the route rather than
-// a mark on it, and sizing the arrow up thickens the stem past the 3dp line it
-// rides on. See mobile/CLAUDE.md for the centring rule that applies to both.
+// WHY AN IMAGE AND NOT A GLYPH. Text symbols are limited to what the bundled
+// Noto Sans pack ships, and it ships no arrowhead: the geometric block has
+// exactly one glyph (U+25CC) and the arrows block only U+2190-2199, every one
+// of them stemmed. A stem drawn along a line is a second line — at any size that
+// reads as a bulge in the route rather than a mark on it, and sizing the arrow up
+// thickens the stem past the 3dp line it rides on. See src/routeArrow.test.ts
+// for the centring rule that applies to both.
 //
 // WHY SDF. A plain PNG icon would be one fixed colour for every route. An SDF
 // is a mask the GPU thresholds, so `iconColor` still takes the per-feature
@@ -18,7 +18,7 @@
 // expo-asset, and in a locally-built debuggable release that path is broken:
 // expo-asset hands standalone builds off to expo-updates' local-asset store,
 // which is EMPTY in such a build, so every asset comes back with `uri: ''` and
-// MLRN draws no icon and logs nothing (see mobile/CLAUDE.local.md). The arrow
+// MLRN draws no icon and logs nothing. The arrow
 // is 389 bytes; inlining it as base64 sidesteps the asset registry, the
 // packaging step and that bug in one go, and costs less than the `require`
 // would. Anything big enough for this to be the wrong trade belongs in assets/.

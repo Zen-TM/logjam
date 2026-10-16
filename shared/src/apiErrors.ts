@@ -1,6 +1,6 @@
-// Shared API/auth error types + user-facing message mapping, used by both web
-// (frontend) and mobile. Moved from frontend/src/errors/ so the two clients
-// can never diverge on error semantics (same motivation as consent.ts).
+// Shared API/auth error types + user-facing message mapping, used by both
+// Logjam Web and Logjam GPS so the two clients never diverge on error
+// semantics.
 //
 // ApiError identity matters: messageFromError branches on `instanceof ApiError`,
 // so every client must construct and check the SAME class — always import it

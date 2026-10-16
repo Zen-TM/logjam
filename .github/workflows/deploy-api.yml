@@ -1,13 +1,12 @@
 name: Deploy API
 
 # Gated on CI: fires only after the `CI` workflow (ci.yml) completes
-# successfully for a push to main (ARCH-001). A red CI on that push means the
-# deploy job's `if:` guard is false, so a failing test/lint/typecheck can no
-# longer ship an image. workflow_run does NOT support a `paths:` filter, so the
-# previous api/**|shared/** path scoping is dropped — this workflow now runs
-# after every green push-to-main CI, rebuilding+redeploying the (content-
-# addressed, idempotent) API image even for changes outside api/shared. The
-# guard excludes pull_request CI runs (event == 'push'), so it does not
+# successfully for a push to main. A red CI on that push means the
+# deploy job's `if:` guard is false, so a failing test/lint/typecheck cannot
+# ship an image. workflow_run does NOT support a `paths:` filter, so this
+# workflow runs after every green push-to-main CI, rebuilding+redeploying the
+# (content-addressed, idempotent) API image even for changes outside api/shared.
+# The guard excludes pull_request CI runs (event == 'push'), so it does not
 # double-fire. workflow_run always uses this file as it exists on the default
 # branch.
 on:
@@ -112,12 +111,10 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Point the two logjam-api task definitions at the image just pushed, by
-      # sha. Both used to carry `:latest`, so what a RunTask launched was
-      # whatever that moving tag happened to resolve to — including a stale
-      # image if the `:latest` push failed after the sha push succeeded, which
-      # would run the migration on one build and the API on another. This step
-      # runs BEFORE the migration below for exactly that reason.
+      # Point the two logjam-api task definitions at the image just pushed,
+      # by sha, rather than `:latest`: a moving tag can resolve to a stale image
+      # if a push fails, running the migration on one build and the API on another.
+      # This step runs BEFORE the migration below for exactly that reason.
       - name: Pin ECS task definitions to this image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -125,21 +122,21 @@ jobs:
         # Every family that runs this image: infra/scripts/pin-release.sh.
         run: infra/scripts/pin-release.sh "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      # Gated pre-deploy migration (ARCH-001 half B). Run `prisma migrate deploy`
+      # Gated pre-deploy migration. Run `prisma migrate deploy`
       # in a one-shot Fargate task on the sha-pinned revision registered above, and gate
       # the EB swap on its exit code. A failing migration aborts the deploy here
       # (EB untouched, old version keeps serving) instead of crash-looping the
-      # new container at boot. boot.ts no longer migrates.
+      # new container at boot. boot.ts does not migrate.
       #
       # SUBNETS mirrors network.tf's `data "aws_subnet" "worker_a"/"worker_b"`,
       # which are literal ids on both sides — a human edits both or neither.
-      # SECURITY_GROUP is NOT a literal any more (INF-012): it is a Terraform
-      # *managed* resource, so its id is generated and a replacement mints a new
-      # one, leaving a hardcoded id here silently pointing at nothing while
-      # Terraform is perfectly happy. Look it up by the name Terraform sets
-      # (network.tf `aws_security_group.worker`, name = logjam-worker-sg) — the
-      # one identity that survives replacement. This is the SG that RDS ingress
-      # admits (CP-003), so a wrong or empty value must abort, never fall back.
+      # SECURITY_GROUP is not a literal: it is a Terraform *managed* resource,
+      # so its id is generated and a replacement mints a new one, leaving a
+      # hardcoded id here silently pointing at nothing while Terraform is
+      # perfectly happy. Look it up by the name Terraform sets (network.tf
+      # `aws_security_group.worker`, name = logjam-worker-sg) — the one identity
+      # that survives replacement. This is the SG that RDS ingress admits, so a
+      # wrong or empty value must abort, never fall back.
       - name: Run DB migrations (gated pre-deploy)
         env:
           CLUSTER: logjam-cluster
@@ -216,13 +213,10 @@ jobs:
           # uploaded version instead of erroring on the duplicate label.
           use_existing_version_if_available: true
           # The action's default post-update health wait is 30s, and this
-          # environment does not reliably recover that fast: on 2026-08-29 EB
-          # logged "Environment update completed successfully" at 04:59:17 and
-          # went RED -> GREEN at 05:00:13 — 56s — so the action failed a deploy
-          # that had in fact succeeded and was serving. A deploy reported red
-          # while it is actually green is worse than a slow one: it trains
-          # everyone to disbelieve red. Single-instance environments take the
-          # whole app down during the swap and come back cold, so give it real
+          # environment does not reliably recover that fast: single-instance
+          # environments take the whole service down during the swap and come
+          # back cold. A deploy reported red while it is actually green is worse
+          # than a slow one: it trains everyone to disbelieve red, so give it real
           # headroom rather than shaving it.
           wait_for_environment_recovery: 180
           wait_for_deployment: true

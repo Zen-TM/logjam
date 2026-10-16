@@ -3,15 +3,11 @@
 // Reads the Protomaps PMTiles archive DIRECTLY, at a fixed zoom, over the bbox
 // spanning the segment being drawn.
 //
-// The obvious alternative — asking the live map what it has rendered — is what
-// this replaces, and it was the cause of every snapping complaint. A rendered
-// map only holds tiles for the current viewport at the current zoom, so a way
-// that continued off-screen arrived truncated: the graph lost its middle and
-// A* either refused or routed the long way round. It also chained snapping to
-// the vector basemap being the active one, and to being zoomed in far enough.
-// Measured against complete tiles the same algorithm refuses 0% of segments
-// and returns the optimal path 99% of the time, so the data source was the
-// whole fault.
+// The obvious alternative — asking the live map what it has rendered — only
+// yields tiles for the current viewport at the current zoom, so a way that
+// continues off-screen arrives truncated: the graph loses its middle and A*
+// either refuses or routes the long way round. It also chains snapping to the
+// vector basemap being the active one, and to being zoomed in far enough.
 //
 // Reading the archive instead is independent of zoom, of the active basemap,
 // and of what happens to be on screen.
@@ -36,7 +32,7 @@ import type { SnapLine, SnapMode } from "./snapToPath.js";
  * Zoom to read ways at. The archive's max is 15, and detail falls off a cliff
  * below 14 — a canyoning tile at z12 carries one "river" and no streams at
  * all, where z15 carries several streams and every path. Fixed rather than
- * following the camera: that coupling is the bug this module exists to remove.
+ * following the camera: following the camera couples detail to camera zoom.
  */
 export const SNAP_TILE_ZOOM = 15;
 
@@ -59,10 +55,10 @@ export const SNAP_MAX_TILES = 25;
  * Protomaps schema kinds worth following.
  *
  * "Trails" INCLUDES ROADS, which reads oddly until you try to draw in a town:
- * `path` alone is the whole OSM footpath/track world and nothing else, so
- * snapping worked in the bush and silently did nothing the moment a route
- * crossed a fire trail's gate onto a road. The approach to a place is very
- * often a road walk, and the road is the correct line to follow there.
+ * `path` alone is the OSM footpath/track world and nothing else, so without
+ * roads snapping would silently do nothing when a route crosses a fire
+ * trail's gate onto a road. The approach to a place is very often a road walk,
+ * and the road is the correct line to follow there.
  *
  * Ordered coarse-last only for readability; the graph treats every way the
  * same, and A* picks by distance rather than class — snapping is "follow the

@@ -5,7 +5,7 @@
 # `terraform plan -generate-config-out`) so the plan stays clean — editing it
 # registers a new task-def revision.
 #
-# WHO OWNS THE IMAGE TAG (INF-009). Terraform owns everything in these defs
+# WHO OWNS THE IMAGE TAG. Terraform owns everything in these defs
 # EXCEPT the image: after each deploy, CI registers a further revision with the
 # image pinned to the commit sha it just pushed
 # (infra/scripts/pin-ecs-task-image.sh, called from deploy-api.yml and
@@ -19,8 +19,7 @@
 # which is a real (if brief) un-pinning. Re-run the matching deploy workflow
 # after any apply that touches a task definition.
 #
-# The cluster (aws_ecs_cluster) lives in ecs_cluster.tf, added after its
-# CloudFormation stack is retired.
+# The cluster (aws_ecs_cluster) lives in ecs_cluster.tf.
 
 resource "aws_ecs_task_definition" "geo_pdf_worker" {
   container_definitions = jsonencode([{
@@ -57,10 +56,10 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "noreply@notifications.logjamnsw.com"
       }, {
       name = "ECS_SECURITY_GROUPS"
-      # CP-003: dedicated worker SG (was the VPC default sg-0543d2bbce86b5d2a).
-      # Vestigial here (geoPdfWorker is a leaf, never calls RunTask) but kept in
-      # sync so no stale default-SG id lingers in a committed task def. The
-      # operative value is the EB env property of the same name (operator-owned).
+      # Dedicated worker SG. Vestigial here (geoPdfWorker is a leaf, never
+      # calls RunTask) but kept in sync so no stale default-SG id lingers in
+      # a committed task def. The operative value is the EB env property of
+      # the same name (operator-owned).
       value = aws_security_group.worker.id
       }, {
       name  = "ECS_SUBNETS"
@@ -82,7 +81,7 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "https://logjamnsw.com"
     }]
     essential = true
-    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
     logConfiguration = {
       logDriver = "awslogs"
@@ -150,7 +149,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       value = "s3://logjam-topo-jobs/svtm/svtm_formation.tif"
     }]
     essential = true
-    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
     logConfiguration = {
       logDriver = "awslogs"
@@ -194,12 +193,12 @@ resource "aws_ecs_task_definition" "topo_worker" {
 
 # One-shot task that runs `prisma migrate deploy` against RDS as the least-priv
 # logjam_app role (same logjam/app-db-password secret + logjam-api image the EB
-# container used at boot). The deploy workflow (.github/workflows/deploy-api.yml)
-# RunTasks this BEFORE the EB version swap and gates the deploy on its exit code
-# (ARCH-001 half B): a failing migration aborts the deploy and the old version
-# keeps serving, instead of crash-looping the new container at boot. No task
-# role — migrate makes no AWS API calls; secret injection is the execution
-# role's job. Runs on the dedicated worker SG so RDS ingress (CP-003) admits it.
+# container uses at boot). The deploy workflow (.github/workflows/deploy-api.yml)
+# RunTasks this BEFORE the EB version swap and gates the deploy on its exit code:
+# a failing migration aborts the deploy and the old version keeps serving,
+# instead of crash-looping the new container at boot. No task role — migrate
+# makes no AWS API calls; secret injection is the execution role's job. Runs on
+# the dedicated worker SG so RDS ingress admits it.
 resource "aws_ecs_task_definition" "api_migrate" {
   container_definitions = jsonencode([{
     command = ["npx", "prisma", "migrate", "deploy"]
@@ -220,7 +219,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
       value = "production"
     }]
     essential = true
-    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
     logConfiguration = {
       logDriver = "awslogs"
@@ -282,7 +281,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       value = "logjam-topo-jobs"
     }]
     essential = true
-    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
     logConfiguration = {
       logDriver = "awslogs"

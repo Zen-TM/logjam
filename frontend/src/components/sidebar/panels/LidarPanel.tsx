@@ -3,18 +3,16 @@
 // templates topos are made with.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (shared/DESIGN.md §2): the hero counts the topos, a TAB each for the topos, the
-// files exported from them and the templates, and what is still being made
-// pinned under all three. It used to be two buttons, a ribbon stack and four
-// accordions that opened closed, and then one scrolling list that buried the
-// templates under a year of topos (operator, 2026-09-18).
+// (shared/DESIGN.md §2): the hero counts the topos; a TAB each for the topos, the
+// files exported from them and the templates prevents templates being buried
+// under older topos; and what is still being made is pinned under all three so
+// in-flight progress stays immediately visible.
 //
 // A topo's body CENTRES the map on it (DESIGN.md, "Opening a thing centres
 // the map on it"), and turns LiDAR topos on so there is something there to see.
-// Whether a topo is DRAWN is not this page's business any more: it carried a
-// switch per row, and Layers → LiDAR topos carries the same switch for the same
-// topo — two controls for one setting, on two surfaces that disagreed about
-// where it lived. Visibility belongs to the layer (DESIGN.md).
+// Whether a topo is DRAWN is not this page's business: visibility belongs to
+// the layer (DESIGN.md), which keeps the switch in Layers → LiDAR topos rather
+// than duplicating it here.
 //
 // How topos draw their vector layers opens beside the page as a sheet
 // (`TopoStyleSheet`), so the map stays in view while it changes.
@@ -133,7 +131,7 @@ export default function LidarPanel({
   /** Told when the style sheet opens or closes, so the map insets for it. */
   onSheetOpenChange: (open: boolean) => void;
   onExpandSheet?: () => void;
-  /** App's own `authenticated && consentSettled` (FECO-005), the value every
+  /** App's own `authenticated && consentSettled` — the value every
    *  user-data hook in this app takes as `enabled`: the template fetch below
    *  waits for it like the rest. */
   loadsUserData: boolean;
@@ -163,12 +161,12 @@ export default function LidarPanel({
   } | null>(null);
 
   // A template saved from TopoDialog's "Save as template" bumps
-  // `templateRefetchTrigger`, so the list is never a reload behind (TOPO-1).
+  // `templateRefetchTrigger`, so the list is never a reload behind.
   useEffect(() => {
     // Behind the consent gate this is one more user-data request the gate
-    // exists to hold (FECO-005), so it waits with every other fetch.
+    // exists to hold, so it waits with every other fetch.
     if (!loadsUserData) return;
-    // Concurrent-duplicate-safe fetch shared with TopoDialog (TOPO-6).
+    // Concurrent-duplicate-safe fetch shared with TopoDialog.
     fetchTopoTemplates()
       .then(setTemplates)
       .catch((err) => {
@@ -219,7 +217,7 @@ export default function LidarPanel({
     const label = topoLabel(job);
     // Export is NOT owner-gated: a recipient can already see the overlay, and
     // POST /topo-exports accepts a shared source job, making the export under
-    // the recipient's own account.
+    // the recipient's own account (api/src/__tests__/topoExports.test.ts).
     const exportEntry: MenuEntry = {
       id: "export",
       label: "Export…",
@@ -274,7 +272,8 @@ export default function LidarPanel({
       ];
     }
     // A topo is only ever shared DIRECTLY — it has no place to inherit
-    // visibility from — so a shared row always has a share of its own to drop.
+    // visibility from — so a shared row always has a share of its own to drop
+    // (api/src/lib/shareAccess.unit.test.ts).
     const confirm = removeShareConfirm({ kindLabel: "topo", itemName: label });
     return [
       exportEntry,
@@ -657,7 +656,7 @@ export default function LidarPanel({
                 label="LiDAR topos view"
                 options={[
                   // The Templates chip counts the built-in Default too, so it
-                  // can't say 0 over a list with something in it (TOPO-5).
+                  // can't say 0 over a list with something in it.
                   {
                     value: "topos",
                     label: "Topos",

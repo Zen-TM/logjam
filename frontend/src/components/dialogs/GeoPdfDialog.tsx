@@ -220,7 +220,7 @@ function GeoPdfDialog({
   const [gridLinesMode, setGridLinesMode] = useState<CoordMode>("latlon");
 
   // Place overlays. Persisted so a deliberate opt-in survives reopen.
-  // Shared places default OFF (PRIV-006): a friend consented to in-app
+  // Shared places default OFF: a friend consented to in-app
   // viewing, not to being named on a printable artifact — opt-in only.
   const [showOwnedPlacesOnPdf, setShowOwnedPlacesOnPdf] = useStoredState(
     "logjam.geoPdf.showOwnedPlaces",
@@ -689,10 +689,10 @@ function GeoPdfDialog({
     extentState.east > extentState.west &&
     extentState.scale > 0;
 
-  // Inline validation of the raw extent/scale inputs (GEOPDF-1). A field left
+  // Inline validation of the raw extent/scale inputs. A field left
   // in an invalid state (non-numeric, out of range, North not above South,
-  // East not right of West) shows a FieldError and blocks Generate — the old
-  // behaviour silently discarded the input while still displaying it.
+  // East not right of West) shows a FieldError and blocks Generate rather
+  // than discarding the input while displaying it.
   const extentInputErrors = extentFieldErrors(
     { n: rawN, s: rawS, e: rawE, w: rawW },
     extentState,
@@ -737,7 +737,7 @@ function GeoPdfDialog({
     };
 
     // Build place markers from places within the current extent. Shared
-    // places are opt-in only (PRIV-006) — boundary enforced and tested in
+    // places are opt-in only — boundary enforced and tested in
     // buildPlaceMarkers.
     const markers = buildPlaceMarkers(places, sharedPlaces, config.extent, {
       includeOwned: showOwnedPlacesOnPdf,
@@ -774,10 +774,8 @@ function GeoPdfDialog({
     scaleBarEnabled,
     gridLinesEnabled,
     gridLinesMode,
-    // The place-marker inputs are dependencies like any other. Left out, a
-    // session that only touched these four kept the callback it was built
-    // with — so turning Shared places OFF and pressing Generate still drew
-    // them, which is the one direction of this bug that matters (PRIV-006).
+    // The place-marker inputs must be included so toggling Shared places OFF
+    // updates the callback before Generate runs, preserving the privacy boundary.
     places,
     sharedPlaces,
     showOwnedPlacesOnPdf,
@@ -1358,7 +1356,7 @@ function GeoPdfDialog({
 /**
  * One edge of the extent. The typing is held here and only a VALID number is
  * applied, so a half-finished coordinate stays on screen under its own error
- * instead of being silently discarded (GEOPDF-1); leaving the field with a good
+ * instead of being silently discarded; leaving the field with a good
  * one commits it, and Enter is the same as leaving.
  */
 function ExtentField({

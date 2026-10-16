@@ -3,11 +3,9 @@
 //
 // The page answers "what maps have I made, and what is still being made?"
 // (shared/DESIGN.md §2). Its hero counts the finished GeoPDFs; a TAB each for the maps
-// and the templates they are made from; and what is still being made pinned
-// under both. It was two buttons, a stack of job ribbons and two accordions
-// that opened closed — so the page's own answer was behind a click — and then
-// one scrolling list, which buried the templates under a year of GeoPDFs
-// (operator, 2026-09-18).
+// and the templates they are made from prevents templates being buried under
+// older GeoPDFs; and what is still being made is pinned under both so in-flight
+// progress stays immediately visible.
 //
 // A GeoPDF's body DOWNLOADS it. A PDF has nowhere in this app to open to — the
 // list view carries no extent to centre the map on — and in a browser opening a
@@ -77,7 +75,7 @@ export default function GeoPdfsPanel({
   geoPdfJobsRefetch: number;
   /** Friends a generated GeoPDF can be shared with. */
   friends: TFriend[];
-  /** App's own `authenticated && consentSettled` (FECO-005), the value every
+  /** App's own `authenticated && consentSettled` — the value every
    *  user-data hook in this app takes as `enabled`. Nothing here fetches — the
    *  job poll included — until it is true. */
   loadsUserData: boolean;
@@ -159,7 +157,7 @@ export default function GeoPdfsPanel({
       : [];
     // Owner-only: a GeoPDF shared with you is yours to read and download, not
     // to share on or delete, and the API answers both with 403 — so they are
-    // absent rather than offered and refused (DESIGN.md).
+    // absent rather than offered and refused (DESIGN.md, api/src/lib/shareAccess.unit.test.ts).
     if (job.syncRole === "owner") {
       return [
         ...download,
@@ -348,9 +346,9 @@ export default function GeoPdfsPanel({
           <h3 id="maps-geopdfs" className="visually-hidden">
             GeoPDFs
           </h3>
-          {/* The reaper's `expireCompletedGeoPdfJobs`, on the same TTL as topo
-            exports. The page never said so, and a GeoPDF quietly vanishing a
-            week later reads as data loss. */}
+          {/* Kept via `expireCompletedGeoPdfJobs` on the same TTL as topo
+            exports; explaining the retention prevents a vanishing GeoPDF from
+            reading as data loss. */}
           <p className={classes.note}>
             {made.length === 0 ? "None finished yet. " : ""}Kept for 7 days
             after they're made — download one to keep it.

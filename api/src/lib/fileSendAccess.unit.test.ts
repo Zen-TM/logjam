@@ -128,9 +128,8 @@ describe("assertSendableSize", () => {
     expect(statusOf(() => assertSendableSize(-1))).toBe(400);
   });
 
-  // Derived from the constant, never a literal: this cap has already moved once
-  // (30 MB → 64 MB, when GeoPDFs became sendable) and a hardcoded copy here is
-  // a second list that has to agree with the first.
+  // Derived from the constant, never a literal: avoid a hardcoded copy here
+  // that would be a second declaration that has to agree with the first.
   it("rejects an oversized file with 413 and accepts one exactly at the cap", () => {
     expect(statusOf(() => assertSendableSize(FILE_SEND_MAX_BYTES + 1))).toBe(
       413,

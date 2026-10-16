@@ -1,10 +1,9 @@
 // COLLAPSING the notifications one bulk share created into a single expandable
 // row.
 //
-// The problem: a friend who shares 23 things in one gesture used to put 23 rows
-// in your inbox, and (before the server started batching the push) 23 buzzes in
-// your pocket. The buzz is fixed at the source — one push per bulk action. The
-// ROWS are fixed here, and deliberately NOT at the source.
+// Bulk shares generate one push per bulk action, but produce per-item rows on
+// the server. Those rows are grouped here on the client, deliberately NOT at
+// the source.
 //
 // WHY NOT ONE AGGREGATE NOTIFICATION ROW SERVER-SIDE, which is the obvious fix:
 //
@@ -13,17 +12,17 @@
 //     knowing what is on offer. One row saying "bob sent you 8 files" deletes
 //     the surface those answers live on.
 //  2. A shared-item row is DROPPED at read time when its share is revoked
-//     (PRIV-001/003) — the payload holds ids and the display strings resolve
-//     from the live rows. One row holding 23 ids would have to partially
-//     resolve, recount its own label, and delete itself at zero.
+//     (api/src/__tests__/notifications.test.ts) — the payload holds ids and
+//     the display strings resolve from the live rows. One row holding 23 ids
+//     would have to partially resolve, recount its own label, and delete
+//     itself at zero.
 //
 // Both stay true with per-item rows and a client-side collapse, and the whole
 // cost is this file. The server's only part is stamping the same opaque
 // `batchId` on every notification one action creates.
 //
 // SPLIT BATCHES ARE NORMAL. The Unread and Read buckets split a half-read batch
-// in two, and a search narrows it further (the list itself was once sorted
-// unread-first, which scattered members too). So a batch is gathered over the
+// in two, and a search narrows it further. So a batch is gathered over the
 // WHOLE list rather than from a run of adjacent rows, and it is the FIRST
 // member in list order that stands for it.
 //
@@ -66,11 +65,11 @@ export type NotificationBatch = {
 /**
  * The header is its OWN row, not one of the members wearing the group's words.
  *
- * It was the representative at first, and that quietly hid an item: expanding
- * "alice shared 2 items with you" listed only the OTHER one, because the row
- * that would have named the first was busy being the header. A synthetic id
- * gives the header a key of its own, so an expanded batch can list every member
- * underneath it and the group's own row can go on saying only the count.
+ * If the representative doubled as the header, expanding "alice shared 2 items
+ * with you" would list only the other one, hiding the first member. A
+ * synthetic id gives the header a key of its own, so an expanded batch can
+ * list every member underneath it and the group's own row can go on saying
+ * only the count.
  */
 const BATCH_ROW_PREFIX = "batch:";
 
@@ -228,10 +227,10 @@ export function batchPendingFileSends(
  * How many notifications a run of rows REPRESENTS — a batch being one of them.
  *
  * The day headers count the list, and the list is rows: expanding a group of
- * twelve turned "3" into "14" and collapsing it turned it back, which reads as
- * notifications arriving and leaving while the user looks at them. A batch is
- * one thing that happened — one friend, one gesture, one push — so it counts as
- * one, and the tally holds still while the group opens and shuts.
+ * twelve would turn "3" into "14" and collapsing it would turn it back,
+ * reading as notifications arriving and leaving while the user looks at them.
+ * A batch is one thing that happened — one friend, one gesture, one push — so
+ * it counts as one, and the tally holds still while the group opens and shuts.
  *
  * That makes the header a count of EVENTS, not of rows on screen. The
  * alternative (always the member count) would have been just as stable, and was
@@ -257,10 +256,9 @@ export type NotificationTally = { total: number; unread: number };
  * Count a list the way the user sees it: ONE bulk share is one thing that
  * happened, however many rows it left behind.
  *
- * The inbox already collapsed a batch into a single row and `countBatchRows`
- * already made the day headers agree — but the tab badge, the hero and the
- * bucket chips were still counting members, so a friend sharing twelve items
- * put "12" on the More tab and opened an inbox showing one row. The badge is
+ * The tab badge, hero and bucket chips must agree with the collapsed list
+ * rather than counting raw members, so a friend sharing twelve items does not
+ * put "12" on the More tab when the inbox shows one row. The badge is the
  * the number a user acts on ("is there anything new?"), so it has to mean the
  * same thing the list does.
  *
@@ -295,11 +293,10 @@ export function tallyNotifications(
 /**
  * Replace every picked BATCH HEADER with the rows it stands for.
  *
- * The header is not a row of its own — it is one member of the batch wearing
- * the batch's words — so a group verb that acted only on it would mark one of
- * twelve read, or delete one of twelve and strand the rest. Deduped by id
- * because an EXPANDED batch can have its header and its members picked
- * separately.
+ * A synthetic header row stands for the batch (`batchHeaderRow`), so a group
+ * verb acting on the selection must act on every member it represents rather
+ * than the synthetic row alone. Deduped by id because an expanded batch can
+ * have its header and its members picked separately.
  */
 export function expandBatchSelection(
   selected: TNotification[],

@@ -2,18 +2,14 @@
 
 `api/src/services/push.ts` and `topo/push_send.py` each keep their own copy of
 two things: the notification-type -> static title map, and the allowlist of
-payload keys a push may carry. Nothing failed when they diverged, and the
-divergence is not visible from either side.
+payload keys a push may carry.
 
-It is not hypothetical. The places rework renamed `canyon_shared` to
-`place_shared` and `canyonId` to `placeId` on the TS side; the Python sender
-would have kept the old names, and `build_push_messages` RAISES on a
-non-allowlisted key — so every push of that type from the Python worker would
-have thrown, for a rename in a file the worker does not import. The plan noted
-that no guard covered these constants; this is that guard.
+`build_push_messages` raises on a non-allowlisted key, so renaming or adding
+keys on the TS side without updating Python causes worker push sends to fail
+at runtime. This guard keeps the cross-language mirrors in sync.
 
 Modelled on test_layer_sync.py, which closes the same class for TOPO_LAYERS —
-the other structurally unavoidable cross-LANGUAGE mirror.
+the other structurally unavoidable cross-language mirror.
 
 The two sides are deliberately NOT required to be equal:
   * TITLES: every type Python knows must exist in TS with the SAME title. TS may

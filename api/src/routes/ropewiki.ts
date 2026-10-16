@@ -89,8 +89,7 @@ async function applyAutoLinkAndCreate(
         const c = withOzUltimate(parsedByRwId.get(p.ropeWikiId)!);
         return {
           ownerId,
-          // RopeWiki is a CANYON source, hardwired to the system Canyon type.
-          // It stays canyon-specific through the places rework (plan §5.2) —
+          // RopeWiki is a CANYON source, hardwired to the system Canyon type:
           // there is no generic form of a V grade.
           placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
           name: c.name,
@@ -223,8 +222,8 @@ type ApplyDecision = {
 
 // Cap decisions per request: each one does a target lookup plus a chunked
 // update write, so an unbounded array turns one call into thousands of writes.
-// Same both-ends contract as the other bulk endpoints (0 → 400, over cap → 413,
-// SEC-001); the RopeWiki corpus is far smaller than this.
+// Same both-ends contract as the other bulk endpoints (0 → 400, over cap → 413);
+// the RopeWiki corpus is far smaller than this.
 const APPLY_DECISION_LIMIT = 2000;
 
 // POST /ropewiki/import/apply — resolve review-tier decisions returned from
@@ -342,8 +341,7 @@ router.post(
           const c = withOzUltimate(rawC);
           return {
             ownerId: user.id,
-            // RopeWiki is a CANYON source, hardwired to the system Canyon type.
-            // It stays canyon-specific through the places rework (plan §5.2) —
+            // RopeWiki is a CANYON source, hardwired to the system Canyon type:
             // there is no generic form of a V grade.
             placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
             name: c.name,

@@ -1,6 +1,6 @@
-// Page ↔ world transform built from GeoPDF control points (Stage 6 Part B).
+// Page ↔ world transform built from GeoPDF control points.
 //
-// Model (§3 of the stage spec): pick a working plane P —
+// Model: pick a working plane P —
 //   • PROJCS → that projection (affine page→P is exact for any correctly
 //     rendered projected map, including rotated grid-north-up sheets);
 //   • GEOGCS → EPSG:3857 (exact for Logjam exports, whose page raster is an

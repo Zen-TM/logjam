@@ -25,18 +25,11 @@ import { saveSeedSnapshot } from "../src/__tests__/_seedBaseline";
 
 // ── Seeded vector files ─────────────────────────────────────────────────────
 //
-// These rows used to be metadata with NO object behind them ("the rows exist to
-// populate media-list code paths"). That was defensible while a file was only
-// ever a row in a list. It stopped being defensible when Ways gave every file a
-// page of its own and the map began drawing them: a row promising 27 KB of
-// "Coin Slot descent" with nothing in S3 behind it is data no client could have
-// produced, and it reads as a broken app (operator, 2026-09-17).
+// Every vector file row has a real S3 object behind it: a row with nothing in
+// S3 behind it is data no client can produce.
 //
 // Every figure a row states is DERIVED from the bytes actually uploaded —
 // extent, point count, length, size — so a row cannot contradict its own file.
-// The hand-written ones had already drifted apart: the Du Faur bbox excluded
-// the last point of its own line, and the Wollangambe recording's bbox did not
-// contain its line at all.
 
 /**
  * When the two seeded recordings ran: stated once, for the row and the file.
@@ -121,8 +114,7 @@ function seededFile(
  * BEST EFFORT on purpose: a box brought up with `docker compose up postgres
  * ministack` skips `make _ministack-tf`, so no bucket exists (CLAUDE.local.md).
  * Failing the seed over that would block every other fixture for the sake of
- * five small files, so this warns and leaves the rows — which then behave
- * exactly as they did before this change.
+ * five small files, so this warns and leaves the rows.
  */
 async function uploadSeededFiles(files: SeededFile[]): Promise<void> {
   const bucket = process.env.S3_BUCKET_MEDIA;
@@ -157,7 +149,7 @@ const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
 const prisma = new PrismaClient({ adapter });
 
 // ---------------------------------------------------------------------------
-// Rich synthetic seed (operator-trust plan, Part A).
+// Rich synthetic seed.
 //
 // Goal: realistic volume + edge cases so prod data is never needed to develop
 // or debug. Places are well-published NSW classics (drawn from the public
@@ -191,15 +183,14 @@ const PLACE_IDS = [
   cid(5),
 ];
 
-// Custom-field definitions are ROWS in `custom_field_defs` (they used to live
-// on the user's uiPreferences); trip customFields JSON is keyed by these
-// `key`s. Ids come from seedId like every other seeded row — the sync push
-// path validates op ids with isUuidV4 and rejects the whole request on a
-// mismatch, so a hand-written id here would make alice's definitions
-// permanently unsyncable from the phone.
+// Custom-field definitions are ROWS in `custom_field_defs`; trip customFields
+// JSON is keyed by these `key`s. Ids come from seedId like every other seeded
+// row — the sync push path validates op ids with isUuidV4 and rejects the whole
+// request on a mismatch, so a hand-written id here would make alice's
+// definitions permanently unsyncable from the phone.
 /** Marker-place and route ids — prefixes "6" and "7" (prisma/seedIds.ts). The
- * "6" space is the old waypoint space: the phase 1c migration preserved
- * waypoint ids as place ids, so the seed does too. */
+ * "6" space is the waypoint space: waypoint ids are preserved as place ids, so
+ * the seed does too. */
 const wpid = (n: number) => seedId("6", n);
 const rtid = (n: number) => seedId("7", n);
 
@@ -216,9 +207,7 @@ const BOB_SHARED_PLACE_ID = seedId("2", 2);
 //
 // Every line STARTS ON THE PLACE IT BELONGS TO and runs a kilometre or two
 // downstream from it, so opening a way centres the map on ground that matches
-// its name. They used to wander: the Claustral file's extent sat 15 km from
-// Claustral, which is the sort of thing that reads as a broken app rather than
-// as thin fixtures (operator, 2026-09-17).
+// its name.
 const CLAUSTRAL_LINE: [number, number][] = [
   [150.4033, -33.5603],
   [150.4041, -33.5611],
@@ -321,9 +310,7 @@ const KANANGRA_LINE: [number, number][] = [
 
 // `appliesToAllTypes` SPELLED OUT, not left to the column default: a definition
 // with the flag off and no place types scoped to it appears on no form at all,
-// and a trip-log definition has no type picker to answer the question with. The
-// seed wrote all three with the default and they were invisible on the trip
-// form until 20260911140000 repaired them.
+// and a trip-log definition has no type picker to answer the question with.
 //
 // `rope_length_m` is scoped to the `canyoning` TRIP TYPE rather than to every
 // trip, so dev has an attribute that appears and disappears as a trip's tags
@@ -353,10 +340,9 @@ const ALICE_TRIP_FIELD_DEFS = [
   },
 ];
 
-// A place type ALICE made herself, so copy reconciliation (§2.6) is
-// exercisable in dev: bob receiving a copy of one of these has to match it by
-// NAME against his own types, and there is no way to try that without a user
-// type existing.
+// A place type ALICE made herself, so copy reconciliation is exercisable in
+// dev: bob receiving a copy of one of these has to match it by NAME against his
+// own types, and there is no way to try that without a user type existing.
 const ALICE_TYPE_ID = seedId("9", 1);
 
 // Place-scoped definitions alice owns. `access_beta` is scoped to her own type;
@@ -364,8 +350,9 @@ const ALICE_TYPE_ID = seedId("9", 1);
 // free — the case join rows cannot express.
 //
 // NONE of these may use a reserved key: `assertKeyNotReserved` refuses them on
-// the API path, and the seed writing one directly would create the exact
-// two-writers-one-key state the reservation exists to prevent.
+// the API path (src/__tests__/placeTypes.test.ts), and the seed writing one
+// directly would create the exact two-writers-one-key state the reservation
+// exists to prevent.
 const ALICE_PLACE_FIELD_DEFS = [
   {
     id: seedId("5", 10),
@@ -409,15 +396,7 @@ type SeedPlace = {
   forkedFromId?: string;
 };
 
-// `sandstone()` IS GONE. It wrote `rockType` and `wetsuit` into the attributes
-// blob — two keys the owner added early, decided were too niche, and has asked
-// to have dropped. They were never declared in TPlaceAttributes either, so the
-// seed was the only thing that made them look like part of the model. Anyone
-// who wants them adds them back as ordinary custom fields, which is what they
-// always should have been.
-//
-// What replaces it is `sources()`: the one non-customFields key that survives,
-// under the reserved `_sources` key.
+// `sources()` stores entries under the reserved `_sources` key.
 const sources = (...entries: [string, string][]): Record<string, unknown> => ({
   [SOURCES_FIELD_KEY]: entries,
 });
@@ -866,15 +845,12 @@ const ALICE_PLACES: SeedPlace[] = [
 
   // ── the field machinery, made visible in dev ─────────────────────────────
   //
-  // Before the places rework NO seeded place carried a custom-field value, so
-  // the shape every prod canyon may hold was invisible here and the migration's
-  // hoist had to be proved against a hand-built fixture instead of dev data.
-  // These three make each case reachable by opening the app:
+  // These three make each case reachable in dev:
   //
   //  * a canyon carrying a user-defined value on the system type
   //    (`permit_no`, which is appliesToAllTypes — the flag a new type inherits)
   //  * a place of a USER type carrying a value scoped to that type, which is
-  //    what a copy has to reconcile (§2.6)
+  //    what a copy has to reconcile
   //  * a place of a SYSTEM type that is not Canyon, so the Places screen has
   //    more than one populated tab and the zero-places hide rule is observable
   {
@@ -1067,9 +1043,6 @@ function buildTrips(): SeedTrip[] {
               // the wrong type READS AS ABSENT everywhere (the forgiving-read
               // rule in shared/src/fieldValues.ts), so a stringified integer is
               // not a harmless variation — it is a value no reader can use.
-              // Seeded as strings until 2026-09-13, which made two of alice's
-              // three trip attributes invisible to anything that aggregates
-              // them while still rendering as text on the trip screen.
               rope_length_m: 15 + ((seed * 5) % 50),
               wetsuit: seed % 2 === 0,
             }
@@ -1137,8 +1110,7 @@ async function main() {
   // statement). Every seeded table is NAMED here even where `user.deleteMany()`
   // would cascade it: this is a hand-kept list that must agree with what the
   // seed writes, and relying on cascade order means a future table with no user
-  // FK survives the wipe silently — the ARCH-001 shape in the root CLAUDE.md.
-  // Guarded by src/lib/seedWipe.unit.test.ts.
+  // FK survives the wipe silently. Guarded by src/lib/seedWipe.unit.test.ts.
   await prisma.$transaction([
     prisma.share.deleteMany(),
     prisma.placeShare.deleteMany(),
@@ -1252,12 +1224,9 @@ async function main() {
     })),
   });
 
-  // Place-scoped definitions alice owns, plus their scoping rows. This is what
-  // makes the field machinery VISIBLE in dev: before the places rework the seed
-  // had no place-scoped definitions and no place carried a custom-field value
-  // at all, so the nested `attributes.customFields` shape that every prod
-  // canyon may hold was invisible here — which is why the migration's hoist had
-  // to be proved against a hand-built fixture rather than against dev data.
+  // Place-scoped definitions alice owns, plus their scoping rows. Makes the
+  // field machinery VISIBLE in dev so the nested `attributes.customFields`
+  // shape is present in dev data.
   for (const [position, def] of ALICE_PLACE_FIELD_DEFS.entries()) {
     await prisma.customFieldDef.create({
       data: {
@@ -1343,19 +1312,12 @@ async function main() {
     },
   });
 
-  // MARKER places and routes. The seed had NO waypoints or routes at all until
-  // they were added for the Saved share marks; waypoints are places of the
-  // system Marker type since phase 1c, so what was five waypoints is five more
-  // places here.
-  //
+  // MARKER places and routes. Waypoints are places of the system Marker type.
   // The set covers every combination the row builders branch on:
   //   owned, unshared            → no mark
   //   owned + a place share      → the fan-out glyph
   //   received via place share   → "From bob": the owner resolves through the
   //                                mirrored place_shares row.
-  //
-  // `symbol` is gone with the fold — the icon is the place TYPE's now — and the
-  // notes came across unchanged.
   await prisma.place.createMany({
     data: [
       {
@@ -1407,7 +1369,7 @@ async function main() {
   });
 
   // Links between places — navigational only. A link grants NO visibility, so
-  // wpid(4) does NOT reach alice through bob's shared place any more: she sees
+  // wpid(4) does NOT reach alice through bob's shared place: she sees
   // the place she was shared, and nothing it points at. Both endpoints of every
   // link belong to one owner, which the server asserts on create.
   await prisma.placeLink.createMany({
@@ -1432,8 +1394,7 @@ async function main() {
 
   // A place holds ONE way — a drawn route or an attached file, never both
   // (shared/mobile routeSlot.ts, and assertPlaceTrackSlotFree on the media
-  // side). The seed used to put a route AND a track file on Claustral and on
-  // Coin Slot, which no client can produce. Each place below carries at most
+  // side), as no client can produce both. Each place below carries at most
   // one, and the places that carry a FILE are named in the media block.
   await prisma.route.createMany({
     data: [
@@ -1455,7 +1416,7 @@ async function main() {
         points: DU_FAUR_LINE,
         anchors: Prisma.DbNull,
       },
-      // Bob's route is UNLINKED now, so his Coin Slot can carry the track file
+      // Bob's route is unlinked, so his Coin Slot can carry the track file
       // below. It keeps its direct share to alice, which is the whole point of
       // it: a route shared with you on its own row, removable by you.
       {
@@ -1509,8 +1470,7 @@ async function main() {
   // Direct per-item shares — the second, independent visibility source
   // (lib/shareAccess.ts), and the only thing that puts a number in a ROUTE's
   // sharedCount. A place is never shared this way (PlaceShare is its own
-  // table), and a waypoint no longer exists to be, so what was three rows is
-  // one. alice's fan-out is 1 because bob is her only friend: carol is shared
+  // table). alice's fan-out is 1 because bob is her only friend: carol is shared
   // nothing and is not her friend, and sharing.test.ts asserts a 403 on
   // share->carol.
   await prisma.share.createMany({
@@ -1613,12 +1573,11 @@ async function main() {
   // believable JPEG is a different job from generating a believable track, and
   // a photo is not what a way's page draws.
   //
-  // Covers all three parent states, because they behave differently and only
-  // the first one used to exist: a photo ATTACHED to a place (dies with it), a
-  // standalone import LINKED as a place's way (survives the place, and is the
-  // shape a sharee sees), and an unlinked recording (owner-private, in Saved
-  // and nowhere else). A seed with only attachments leaves every standalone
-  // path untested by the integration suite.
+  // Covers all three parent states, because they behave differently: a photo
+  // ATTACHED to a place (dies with it), a standalone import LINKED as a place's
+  // way (survives the place, and is the shape a sharee sees), and an unlinked
+  // recording (owner-private, in Saved and nowhere else). A seed with only
+  // attachments leaves every standalone path untested by the integration suite.
   await prisma.media.createMany({
     data: [
       {
@@ -1634,9 +1593,7 @@ async function main() {
       },
       // Empress Falls carries a FILE as its way (no route is linked to it), and
       // its extent sits on Empress Falls. Every extent below is the file's own,
-      // so it brackets the place it belongs to by construction: a file whose
-      // extent is nowhere near its own name is what made the old fixtures read
-      // as broken data.
+      // so it brackets the place it belongs to by construction.
       {
         id: seedId("4", 2),
         ownerId: ALICE_ID,
@@ -1692,7 +1649,8 @@ async function main() {
           elevationGainM: 95,
           elevationLossM: 130,
           // The finest source, so opening the page finds nothing finer and
-          // writes nothing: the a11y e2e cases must not change the account.
+          // writes nothing: the a11y e2e cases (frontend/e2e/a11y.spec.ts) must
+          // not change the account.
           elevationSource: "nsw-5m",
           pointCount: wollangambeFile.positionCount,
           ...WOLLANGAMBE_RECORDED,
@@ -1700,8 +1658,7 @@ async function main() {
       },
       // BOB's file on the place he shares with alice. This is the only way a
       // track on someone ELSE's place is reachable in dev, and it is what the
-      // Ways page lists beside alice's own files — the case that had no fixture
-      // at all, so its column read as permanently empty.
+      // Ways page lists beside alice's own files.
       {
         id: seedId("4", 5),
         ownerId: BOB_ID,
@@ -1741,7 +1698,8 @@ async function main() {
           elevationGainM: 70,
           elevationLossM: 95,
           // The finest source, so opening the page finds nothing finer and
-          // writes nothing: the a11y e2e cases must not change the account.
+          // writes nothing: the a11y e2e cases (frontend/e2e/a11y.spec.ts) must
+          // not change the account.
           elevationSource: "nsw-5m",
           pointCount: bellCreekFile.positionCount,
           ...BELL_CREEK_RECORDED,

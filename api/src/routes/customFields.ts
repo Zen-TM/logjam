@@ -8,15 +8,14 @@
 // ONE definition at a time. That grain is what lets a phone edit offline and
 // merge rather than clobber.
 //
-// `PATCH /users/me` used to accept a whole list as well. It does not any more
-// and must not come back: that shape carries no `placeTypeIds` and no
-// `appliesToAllTypes`, so every save from a dialog that round-tripped the list
-// wiped the scoping off every definition — silently, because the payload simply
-// did not mention it. `routes/users.ts` answers it with a 400 naming the
-// replacement, and `__tests__/customFields.test.ts` pins that refusal.
+// `PATCH /users/me` must not accept a whole list: that shape carries no
+// `placeTypeIds` and no `appliesToAllTypes`, so saving from a dialog that
+// round-tripped the list would wipe the scoping off every definition — silently,
+// because the payload does not mention it. `routes/users.ts` answers it with
+// a 400 naming the replacement, and `__tests__/customFields.test.ts` pins that refusal.
 //
 // The impact/delete response key names (`tripLogCount`, `removedFromTripCount`
-// and their place equivalents) predate this rewrite and are kept verbatim —
+// and their place equivalents) are kept verbatim because
 // `frontend/src/placeUtils.ts` reads them by name.
 //
 // PRIVACY: labels are user-authored text. Nothing here logs one.
@@ -252,7 +251,7 @@ router.delete(
 
     const config = entityConfig(entity);
     res.json({
-      // Response key names are entity-specific and predate this router.
+      // Response key names are entity-specific (frontend/src/placeUtils.ts).
       [entity === "tripLog" ? "tripLogCustomFields" : "placeCustomFields"]:
         await loadScopedDefs(user.id, entity),
       [config.removedResponseKey]: result.removed,

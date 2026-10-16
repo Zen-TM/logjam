@@ -1,4 +1,4 @@
--- Least-privilege application database role (operator-trust-plan Part D).
+-- Least-privilege application database role.
 --
 -- Run ONCE as the master user (logjam_admin) against the prod database, during
 -- the operator-gated cutover. :app_password is the `password` field of the

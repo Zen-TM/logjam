@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * frontend/AGENTS.md: a size or a space is a custom property, never a px
+ * frontend/DESIGN.md §1: a size or a space is a custom property, never a px
  * literal. The kit (`src/ui`) is converted; the screens are not yet, so each
  * stylesheet outside it has a BUDGET of the literals it still writes, and the
  * budget only goes down — the `KNOWN_FAILURES` pattern of

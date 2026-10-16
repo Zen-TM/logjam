@@ -6,19 +6,15 @@
 // a friend's row on the Friends page, which replaces the list: at 380px there
 // is no room for both, and this is a page you go and read.
 //
-// EVERY KIND THE PAYLOAD CARRIES. It listed places only until 2026-09-18, and
-// said so in a comment — "the sections say Places, so filter to places" — which
-// made an audit answer its own question with a subset while Bob could also see
-// a route, a LiDAR topo and a GeoPDF of yours. Which rows get which verb is
-// `buildShareCards` in @logjam/shared, the same call Logjam GPS makes.
+// EVERY KIND THE PAYLOAD CARRIES. The audit covers every kind the payload
+// carries (places, routes, LiDAR topos and GeoPDFs) rather than a subset. Which
+// rows get which verb is `buildShareCards` in @logjam/shared, the same call
+// Logjam GPS makes.
 //
 // SELECTION, LIKE EVERY OTHER LIST THAT ACTS IN BULK. The tile is the checkbox
 // and the bar takes the rail's place at the same height (DESIGN.md), as on
 // Places, Logs and the Inbox — and as on Logjam GPS's own FriendSharesScreen,
-// which is the screen this one mirrors. It shipped instead with a per-row verb
-// and one "Unshare all", which is the shape to notice: an all-or-nothing bulk
-// verb in an app that lets you pick everywhere else, when the real sentence is
-// "these five, not those eight" (operator, 2026-09-18).
+// which is the screen this one mirrors.
 //
 // THE TWO DIRECTIONS GET DIFFERENT VERBS, and that is the design, not an
 // omission:
@@ -93,7 +89,7 @@ import {
 
 /** The glyph and hue per kind — lucide's four, the same identity these kinds
  *  wear on Ways and Maps. Per client, because an icon key resolves in one
- *  client's set and not the other's (root CLAUDE.md). */
+ *  client's set and not the other's (docs/decisions/0020-share-the-decision-not-the-drawing.md). */
 const KIND_IDENTITY: Record<
   FriendShareRow["entityType"],
   { icon: Glyph; hue: string }
@@ -113,7 +109,7 @@ const KIND_IDENTITY: Record<
      remove my access → confirm, and `RemoveSharedButton` owns it: small, but
                         only the OWNER can undo it, and every web surface that
                         lists shared things asks that question with the same
-                        words. This page used to word it itself. */
+                        words. */
 
 /** Which bulk verb is waiting on an answer. */
 type PendingBulk = "unshare" | "remove" | null;
@@ -528,7 +524,7 @@ function FriendSharingSection({
             // ZERO on purpose: the sentence it unlocks offers to save a copy
             // first, and this screen has no copy verb to offer. Saying so
             // mid-confirm would send someone looking for a control that is on
-            // the place's own page (Phase B package 6) and nowhere near here.
+            // the place's own page and nowhere near here.
             copyableCount: 0,
           }).title
         }

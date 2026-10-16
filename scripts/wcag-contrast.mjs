@@ -138,8 +138,8 @@ const { ink: INK, onScrim: ON_SCRIM, scrimHeavyAlpha: SCRIM_HEAVY_ALPHA, assetHu
 // Every identity hue. An identity hue is only ever a FILL — a tile with an
 // `onFill` glyph, an active chip with an `onFill` label, a swatch, a mark on
 // the map — never a glyph, line or text on a theme surface, so the label on it
-// is the only pair it has. Mid-light hues fail 3:1 as glyphs on a light page,
-// and some did on dark cards (Logjam GPS's old wash tile).
+// is the only pair it has. Mid-light hues fail 3:1 as glyphs on a light page
+// and on dark cards.
 const IDENTITY_FILLS = [
   ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
   ["shared heath", SHARED_MARKER],
@@ -214,7 +214,7 @@ function pairsFor({ mode, tokens: t }) {
     },
     // ── Washes: a tint of a role laid over a surface ──
     // An "on" icon button wears the same wash with a `text` glyph: an accent
-    // glyph on a wash of itself fell to 2.7:1 on the light page.
+    // glyph on a wash of itself falls to 2.7:1 on the light page.
     {
       name: "text on accent wash over page (active icon button)",
       fg: t.text,
@@ -223,7 +223,7 @@ function pairsFor({ mode, tokens: t }) {
     },
     // The sign-in success banner: the same idea over a CARD at 15%. A wash
     // does not carry the ratio the flat surface does, which is why this pair
-    // exists separately (found 2026-09-19 by the a11y spec's sign-in case).
+    // exists separately.
     {
       name: "text on accent wash over card (sign-in success banner)",
       fg: t.text,
@@ -231,7 +231,7 @@ function pairsFor({ mode, tokens: t }) {
       min: textMin,
     },
     // ProgressBar: the fill in its `field` track. A wash of the text colour
-    // darkened the light page's track until the fill fell to 2.5:1.
+    // darkens the light page's track until the fill falls to 2.5:1.
     { name: "accent on field (ProgressBar fill in its track)", fg: t.accent, bg: t.field, min: 3 },
     { name: "warning on field (failed ProgressBar fill in its track)", fg: t.warning, bg: t.field, min: 3 },
   ];

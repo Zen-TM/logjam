@@ -10,9 +10,9 @@ import { Button, Checkbox, ErrorBanner } from "../ui";
 import classes from "./ConsentGate.module.css";
 
 /**
- * Full-screen blocking re-consent surface (PRIV-002). Rendered instead of the
- * app shell when the signed-in user's recorded consentVersion is stale or
- * absent — fulfils the privacy.html / tos.html promise that users are asked
+ * Full-screen blocking re-consent surface. Rendered instead of the
+ * Logjam Web shell when the signed-in user's recorded consentVersion is stale
+ * or absent — fulfils the privacy.html / tos.html promise that users are asked
  * to re-consent on next sign-in after a material change. Deliberately not a
  * dismissible dialog: the only ways out are agreeing or signing out.
  *

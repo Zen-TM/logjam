@@ -1,10 +1,7 @@
 // Sizes and durations as a person reads them, for both clients.
 //
-// Moved out of Logjam GPS's `mobile/src/format.ts` when Logjam Web needed the
-// same two answers for its Maps page (2026-09-17). The web had five private
-// copies of a byte formatter, no two alike — "118.3 MB" on one page, "118 MB"
-// on the phone for the same file — which is the drift DESIGN.md exists to
-// stop.
+// Shared by Logjam GPS and Logjam Web so both clients present identical
+// figures without drift.
 
 /**
  * Bytes as a size a person can act on: GB with one decimal, whole MB, whole KB.
@@ -24,10 +21,8 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * "How long will this take", in the words the download screen has always used.
- * Lives here because the GeoPDF import now quotes a duration too, and two
- * surfaces phrasing the same wait differently is how a user learns to distrust
- * both numbers.
+ * "How long will this take", phrased consistently across download and import
+ * surfaces so two surfaces do not phrase the same wait differently.
  */
 export function formatMinutes(seconds: number): string {
   if (seconds < 90) return "under a minute";

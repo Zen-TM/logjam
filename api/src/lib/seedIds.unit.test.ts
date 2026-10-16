@@ -4,12 +4,9 @@ import { join } from "node:path";
 import { SYNC_ENTITY_TYPES, UUID_V4_REGEX, systemRowIds } from "@logjam/shared";
 import { seedId, cid, SEED_ID_PREFIXES } from "../../prisma/seedIds";
 
-// The dev seed used to hand-mint version-nibble-0 ids
-// ("10000000-0000-0000-0000-000000000001"), which mobile's sync push rejects
-// at the envelope with 400 "id must be a UUIDv4" (parsePushOp,
-// src/routes/sync.ts) — so NO seeded place could sync ANY edit from the
-// phone, silently, because the local mirror still updated and the UI looked
-// right. The rule was a comment until this test.
+// Mobile sync push rejects non-UUIDv4 ids at the envelope with 400 "id must
+// be a UUIDv4" (parsePushOp, src/routes/sync.ts), so seeded rows must be valid
+// UUIDv4s for edits from Logjam GPS to sync.
 describe("hand-minted seed ids", () => {
   it("seedId mints real UUIDv4s across every prefix and index", () => {
     for (const prefix of SEED_ID_PREFIXES) {
@@ -46,7 +43,7 @@ describe("hand-minted seed ids", () => {
     expect(literals).toEqual([]);
   });
 
-  // Two lists that must agree (root CLAUDE.md): the prefixes seed.ts actually
+  // Two lists that must agree (root AGENTS.md): the prefixes seed.ts actually
   // mints under, and the SEED_ID_PREFIXES the test above iterates. A new
   // prefix used in the seed but never added to the declaration would go
   // unchecked for UUIDv4 shape — which is the whole failure this file exists
@@ -118,11 +115,9 @@ describe("hand-minted seed ids", () => {
   // shared/src/placeTypes.ts because the forward MIGRATION mints them too, so
   // they are a second id space the seed knows nothing about.
   //
-  // The two spaces overlapped for real: system place types and the seed's
-  // user-created place types were both on prefix "9", so `seedId("9", 1)` came
-  // out byte-identical to the Canyon type. That is a unique-constraint
-  // violation on a good day and a user-owned row shadowing a system one on a
-  // bad one — a type every user shares, silently owned by whoever seeded last.
+  // An overlap between system place types and the seed's user-created
+  // place types would cause a unique-constraint violation or a user-owned row
+  // shadowing a system type that every user shares.
   it("system row ids are real UUIDv4s", () => {
     for (const id of systemRowIds()) {
       expect(id).toMatch(UUID_V4_REGEX);

@@ -90,21 +90,21 @@ router.post(
           throw err;
         });
       // The delta's shared-place visibility is a WHERE-restriction layered on
-      // `updatedAt > since`, so GRANTING visibility moves no watermark and the
-      // place is simply not in the recipient's next page. A sharee who had
-      // ever synced before received the share row pointing at a place they
-      // never got — until the owner happened to edit it. Only a first-ever
-      // pull (since = epoch) was unaffected, which is why it went unnoticed.
+      // `updatedAt > since`, so GRANTING visibility must touch `updatedAt` to
+      // advance the watermark into the recipient's next delta page. Without
+      // this, a recipient who has already synced receives the share row
+      // pointing at a place whose record they never receive until the owner
+      // edits it.
       await tx.place.update({
         where: { id: placeId },
         data: { updatedAt: new Date() },
       });
       if (notifyRecipient) {
         // Store only reference IDs — never denormalise plaintext place names
-        // or usernames into the payload (PRIV-005). Display strings are resolved
+        // or usernames into the payload. Display strings are resolved
         // from the live place/user rows at read time in notifications.ts. This
-        // is what makes revoked/deleted shares stop surfacing a name at all
-        // (PRIV-001/003): if the reference is gone there is nothing to resolve.
+        // is what makes revoked/deleted shares stop surfacing a name at all:
+        // if the reference is gone there is nothing to resolve.
         await tx.notification.create({
           data: {
             userId: sharedWithUserId,
@@ -141,7 +141,7 @@ router.delete(
     const targetUserId = rawUserId === "me" ? user.id : rawUserId;
 
     // Authorize BEFORE any share lookup so the response can't become an
-    // existence oracle for a (placeId, targetUserId) share pair (SEC-001).
+    // existence oracle for a (placeId, targetUserId) share pair.
     // Revoke is permitted for the place owner (sharer) or the named sharee
     // removing their own share. A caller who is neither gets 404 — identical
     // to the no-place / no-share path — so a third party cannot distinguish
@@ -155,9 +155,8 @@ router.delete(
     if (!isSharer && !isSharee)
       throw new AppError(404, say`Couldn't find that place.`);
 
-    // Every row, not one: the duplicate check on grant is not atomic and the
-    // table has no unique key, so a raced pair can exist, and any survivor
-    // would keep the sharee's access.
+    // Every row, not one: defensive cleanup so any duplicate survivor
+    // would not keep the sharee's access.
     const shares = await prisma.placeShare.findMany({
       where: { placeId, sharedWithId: targetUserId },
       select: { id: true },
@@ -166,7 +165,7 @@ router.delete(
       throw new AppError(404, say`This isn't shared with them any more.`);
 
     // Revoke the share AND remove the recipient's place_shared notification
-    // for this place in one transaction (PRIV-001). The read-time filter would
+    // for this place in one transaction. The read-time filter would
     // already hide the name, but revocation should purge the recipient's
     // residual row, not leave it at rest. Sync tombstones ride the same
     // transaction: the sharee must forget the place record + its place-level

@@ -133,12 +133,9 @@ function App() {
   const toast = useToast();
   // Session-scoped, like the search box beside it: every member of TFilters
   // hides places, and a filter the user set last month greets them as "my
-  // places are missing" rather than as a favour (UX finding 5). The search box
-  // moved for that reason while this — grades, ownership, completion, dates,
-  // custom fields, the larger hider — was left on localStorage. Same principle,
-  // same polarity. Sort order is the counter-example and stays in localStorage:
-  // it reorders, it never hides. Survives the panel's unmount-on-close
-  // (PLACE-12) without surviving the week.
+  // places are missing" rather than as a favour. Sort order is the
+  // counter-example and stays in localStorage: it reorders, it never hides.
+  // Survives the panel's unmount-on-close without surviving the week.
   const [storedFilters, setFilters] = useStoredState<TFilters>(
     "logjam.filters",
     emptyFilters,
@@ -220,7 +217,7 @@ function App() {
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // True when the unified importer was opened from the onboarding wizard, so its
-  // Back/close returns to the welcome hub instead of dropping into an empty app.
+  // Back/close returns to the welcome hub instead of dropping onto an empty map.
   const [importedFromOnboarding, setImportedFromOnboarding] = useState(false);
   // Whether the first-login onboarding check has run (once, below).
   const [importChecked, setImportChecked] = useState(false);
@@ -296,8 +293,7 @@ function App() {
   // Page ↔ map: a sheet beside the list pushes the map's chrome over and the
   // row under the pointer lights its pin. Any page's sheet, not just
   // Places': a page is unmounted when it closes and `usePanelSheet` clears this
-  // on the way out, so the panel it belongs to never needs naming here — naming
-  // it is what left Logs' date sheet out (operator, 2026-09-16).
+  // on the way out, so the panel it belongs to never needs naming here.
   const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [placeHighlight] = useState(createPlaceHighlight);
 
@@ -321,7 +317,7 @@ function App() {
   const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
-  // "unavailable" badge in the Layers panel (LAYERS-1).
+  // "unavailable" badge in the Layers panel.
   const [unavailableTopoEntryIds, setUnavailableTopoEntryIds] = useState<
     Set<string>
   >(new Set());
@@ -391,7 +387,7 @@ function App() {
   >(null);
 
   // Bumped when TopoDialog saves a template inline, so LidarPanel's template
-  // list refreshes without waiting for an accordion re-open (TOPO-1)
+  // list refreshes without waiting for an accordion re-open.
   const [topoTemplateRefetch, setTopoTemplateRefetch] = useState(0);
 
   // Place fly-to target
@@ -514,7 +510,7 @@ function App() {
 
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
-  // user once — silently missing layers were the LAYERS-1 finding.
+  // user once.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
       // Not a topo area's layer, and nothing the user switched on: the map is
@@ -572,7 +568,7 @@ function App() {
   /**
    * The map's visible bounds, kept in a ref rather than in state: "Filter to
    * the current view" reads them once, when the button is pressed, and putting
-   * them in state would re-render the app on every pan for a value nothing
+   * them in state would re-render App on every pan for a value nothing
    * renders.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
@@ -627,11 +623,10 @@ function App() {
     refetchCurrentUser,
     applyCurrentUser,
   } = useCurrentUser(authenticated);
-  // FECO-005. `authenticated` is NOT enough to start fetching the user's data:
-  // a user whose recorded consent is stale gets ConsentGate rendered instead of
-  // the app, but rendering is all that used to stop — every hook and boot
-  // effect below still pulled their places, trips, friends and notifications
-  // out of the API behind the gate. `loadsUserData` is what they wait on now.
+  // `authenticated` is NOT enough to start fetching the user's data: a user
+  // whose recorded consent is stale gets ConsentGate rendered instead of
+  // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
+  // `loadsUserData` is what they wait on.
   //
   // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
   // the answer arrives. Everything downstream of them gates on this instead.
@@ -668,12 +663,9 @@ function App() {
   // Standalone files: the user's own imports and Logjam GPS recordings. They
   // hang off no place, so Ways is the only page they surface on.
   //
-  // The "Ways" OVERLAY draws them now. It used to be a switch on each file's
-  // own detail page — a per-item control you had to open a page to find, and
-  // one that could never answer "show me my lines" (operator, 2026-09-17).
-  // Presigned URLs are still minted only for what is actually drawn, so the
-  // egress gate on POST /media/download-urls is unchanged; it is the overlay
-  // that opens it now rather than a switch per row.
+  // The "Ways" overlay draws them. Presigned URLs are minted only for what is
+  // actually drawn, so the egress gate on POST /media/download-urls is
+  // unchanged.
   const {
     files: standaloneFiles,
     loaded: standaloneFilesLoaded,
@@ -1223,9 +1215,7 @@ function App() {
   // "Welcome to Logjam — load the NSW place database?" over the places they
   // already have. Worse than alarming: the offer they are most likely to take
   // is the one that writes a second copy of a dataset they cannot see. It
-  // needs a load that SUCCEEDED and came back empty. (Found 2026-09-19 as the
-  // a11y suite's fourteenth case failing behind an onboarding dialog it never
-  // asked for; the suite is what pushes the dev limiter hard enough to see it.)
+  // needs a load that SUCCEEDED and came back empty.
   // Checked during render, the first time the places have loaded.
   if (placesLoaded && !importChecked) {
     setImportChecked(true);
@@ -1262,11 +1252,9 @@ function App() {
     setEditingRouteId(null);
     setDrawColor(null);
     routeHover.set(null);
-    // The tool is a PAGE, so leaving it has to go somewhere. Clearing the draft
-    // while the panel still showed "way-draw" rendered nothing at all, which is
-    // the blank panel left behind after a discard (operator, 2026-09-17). Back
-    // to the way being edited, or to the list a new route came from. A save
-    // calls this too and then opens the saved way, which wins.
+    // The tool is a PAGE, so leaving it has to go somewhere: back to the way
+    // being edited, or to the list a new route came from. A save calls this
+    // too and then opens the saved way, which wins.
     setActivePanel(
       editingRouteId && selectedWay?.id === editingRouteId
         ? "way-detail"
@@ -1276,18 +1264,14 @@ function App() {
     afterRouteCancel.current = null;
   };
 
-  // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
-  // deliberate map clicks, plus `reset()` also drops the undo history) with
-  // no confirm. Reuse the same discard-guard the dialogs already use for
-  // unsaved changes — "dirty" here means at least one placed vertex.
+  // Discard guard for in-progress route drawing/editing (the same discard-guard
+  // the dialogs use for unsaved changes).
   //
   // These two sit ABOVE the loading/unauthenticated early returns below: a
   // hook after an early return runs on some renders and not others, so the
   // sign-in -> map transition would shift every later hook's slot.
   // "Dirty" for a NEW route is any point placed; for an EDIT it is the geometry
-  // differing from what was opened. Closing an edit you made no change to used
-  // to raise a discard confirm over work that did not exist, which teaches
-  // people to dismiss the confirm that matters (operator, 2026-09-17).
+  // differing from what was opened.
   const editingOriginal = editingRouteId
     ? (routes.find((route) => route.id === editingRouteId) ?? null)
     : null;
@@ -1342,7 +1326,7 @@ function App() {
    * Open a way's own page, and centre the map on it.
    *
    * Opening and centring are ONE action: a page describing a line while the map
-   * shows somewhere else is two halves of an answer (operator, 2026-09-17).
+   * shows somewhere else is two halves of an answer.
    */
   const openWay = (way: WayItem, verb?: WayVerbId) => {
     setSelectedWay(way);
@@ -1434,9 +1418,9 @@ function App() {
     }
   };
 
-  // Blocking re-consent gate (PRIV-002): a signed-in user whose recorded
-  // consent version is stale or absent must re-consent before using the app
-  // (the privacy.html / tos.html "re-consent on next sign-in" promise). The
+  // Blocking re-consent gate: a signed-in user whose recorded consent version
+  // is stale or absent must re-consent before using Logjam Web (the
+  // privacy.html / tos.html "re-consent on next sign-in" promise). The
   // pending-key fast path keeps the gate from flashing for fresh sign-ups
   // whose consent PATCH (recorded by the effect above) is still in flight.
   // Decided once, up beside the data hooks the same answer holds back
@@ -1694,10 +1678,8 @@ function App() {
                 onClear={clearRouteGuard.requestClose}
                 onReverse={routeDraft.reverse}
                 routeHover={routeHover}
-                // Editing keeps the name it already has. Asking again on every
-                // save made a rename the price of moving one point, and the
-                // dialog's only honest default was the answer it already had
-                // (operator, 2026-09-17). Naming belongs to CREATING a route.
+                // Editing keeps the name it already has; naming belongs to
+                // CREATING a route.
                 onSave={() => {
                   const existing = routes.find((r) => r.id === editingRouteId);
                   if (existing) void saveDrawnRoute(existing.name);
@@ -1791,7 +1773,7 @@ function App() {
           }}
           // The Maps views fetch their own lists (GeoPDF jobs and templates,
           // topo templates) — the same gate as every hook above, so a pending
-          // or stale consent holds them too (FECO-005).
+          // or stale consent holds them too.
           loadsUserData={loadsUserData}
           friends={friends}
           friendRequests={friendRequests}
@@ -1876,10 +1858,7 @@ function App() {
           onDrawPointDelete={routeDraft.deleteAnchorAt}
           onDrawPointInsert={routeDraft.insertAnchorAt}
           selectPlace={(id) => {
-            // A pin opens the place, wherever you pressed it from. It used to
-            // scroll to the row instead while the Places list was open, which
-            // made one gesture mean two things depending on a panel the user
-            // may not have been looking at (operator, 2026-09-19).
+            // A pin opens the place, wherever you pressed it from.
             setSelectedPlaceID(id);
             setActivePanel("place-detail");
           }}

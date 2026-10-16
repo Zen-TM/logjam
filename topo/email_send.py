@@ -3,10 +3,11 @@ email_send.py
 -------------
 Transactional email via Resend, shared by worker.py and export_worker.py.
 
-Replaces the previous boto3 SES path: AWS SES production access was denied, so
-the app moved to Resend, which needs only DNS domain verification. Sends are
-best-effort — callers create the in-app notification first, so a failure here is
-logged and swallowed, never raised.
+Uses Resend instead of AWS SES: AWS SES production access was denied, while
+Resend needs only DNS domain verification. Sends are best-effort — callers create
+the in-app notification first, so a failure here is logged and swallowed, never
+raised.
+
 
 Env:
   RESEND_API_KEY  - Resend API key. Unset → send_email is a logged no-op.
@@ -25,9 +26,9 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
 
 def send_email(to_email: str, subject: str, text: str, html: str) -> None:
     """Send one transactional email. No-op (logged) when RESEND_API_KEY or
-    EMAIL_FROM is unset — mirrors the old `if not ses` guard so local dev and
-    misconfigured envs degrade quietly instead of crashing. `resend` is imported
-    lazily so pure-logic tests on the dev host don't need the package."""
+    EMAIL_FROM is unset so local dev and misconfigured envs degrade quietly
+    instead of crashing. `resend` is imported lazily so pure-logic tests on the
+    dev host don't need the package."""
     if not RESEND_API_KEY or not EMAIL_FROM:
         log.info("Email skipped (RESEND_API_KEY/EMAIL_FROM unset)")
         return

@@ -300,12 +300,9 @@ describe("attributesSourcesEqual", () => {
 
 // ── the query URL, and the field keys it writes ─────────────────────────────
 //
-// Added after the places rework rewrote `Category%3ACanyons` to
-// `Category%3APlaces` inside this URL. It is percent-encoded, so no
-// word-boundary protection could see it, and NOTHING would have reported the
-// damage: RopeWiki answers a query for a category that does not exist with an
-// empty CSV and HTTP 200. The import would have succeeded, imported nothing,
-// and looked exactly like the Cloudflare block coming back (root CLAUDE.md).
+// RopeWiki answers a query for a category that does not exist with an
+// empty CSV and HTTP 200, so an accidental rename or typo would silently import
+// nothing (AGENTS.md).
 describe("the RopeWiki query URL", () => {
   const source = readFileSync(join(import.meta.dirname, "ropewiki.ts"), "utf8");
 

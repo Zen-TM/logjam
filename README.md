@@ -1,6 +1,6 @@
 # Logjam
 
-A private mapping and logbook app for canyoning in New South Wales.
+A private mapping and logbook tool for canyoning in New South Wales.
 
 ## About
 
@@ -93,7 +93,7 @@ logjam/
 │   ├── envs/local/         # MiniStack S3 + ECS task defs + generates root .env.local
 │   └── templates/
 ├── scripts/                # snapshot, log-retention, task-def template
-├── docs/                   # audits, etc.
+├── docs/                   # architecture, ADRs, operations, dev-setup
 ├── docker-compose.yml      # local Postgres + MiniStack
 └── Makefile                # dev / reset / snapshot targets
 ```
@@ -240,7 +240,7 @@ GitHub Actions (`.github/workflows/`):
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | every PR + push to `main` | unit tests, lint, typecheck for `shared`/`api`/`frontend`/`topo` (integration tests stay local — they need `make dev`) |
+| `ci.yml` | every PR + push to `main` | unit tests, lint, typecheck, API integration suite, migrations, secret scan |
 | `terraform-ci.yml` | PRs touching `infra/terraform/**` | `terraform fmt -check` + `validate`, and `envs/github`'s guard test (no AWS access) |
 | `terraform-plan.yml` | PRs touching `infra/terraform/{envs/prod,modules,templates}/` (`plan-prod`) or `infra/terraform/envs/github/` (`plan-github`) | read-only `terraform plan` of prod AWS or of this repository's GitHub settings, posted as a PR comment |
 | `terraform-apply.yml` | push to `main` (path-filtered) | applies each plan the merged PR showed, and refuses any other ([0026](docs/decisions/0026-plan-fingerprint-covers-planned-values.md), [0025](docs/decisions/0025-github-settings-in-terraform.md)) |
@@ -270,7 +270,7 @@ The default `AUTH_MODE=fake` with `FAKE_USER_SUB=fake-alice-sub` means all API c
 
 ## Deployment
 
-The app is deployed to AWS in the `ap-southeast-2` (Sydney) region.
+Logjam is deployed to AWS in the `ap-southeast-2` (Sydney) region.
 
 | Component          | Service           |
 | ------------------ | ----------------- |

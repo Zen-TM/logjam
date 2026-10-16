@@ -299,7 +299,7 @@ function TripLogDialog({
 
   // Snapshot of the form fields as populated below, taken in the same effect
   // that sets them — used by the unsaved-changes guard to tell a real edit
-  // apart from "the dialog is open" (TRIP-3). Moves when the form is
+  // apart from "the dialog is open". Moves when the form is
   // re-populated, which includes restoring a draft.
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(
     null,
@@ -496,7 +496,7 @@ function TripLogDialog({
   );
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
-  // dialog was (re)populated — not just "the dialog is open" (TRIP-3). Media
+  // dialog was (re)populated — not just "the dialog is open". Media
   // is excluded: uploads persist immediately (or via the self-cleaning draft
   // trip in create mode), so they're never "unsaved" by the time a close is
   // attempted.
@@ -945,7 +945,7 @@ function TripLogDialog({
       return;
     }
     // Block save if any custom numeric field is invalid (e.g. "5.5" in an
-    // integer field) so it can't be silently mangled on save (TRIP-1/TRIP-2).
+    // integer field) so it can't be silently mangled on save.
     const customFieldInvalid = visibleFieldDefs.some(
       (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
     );

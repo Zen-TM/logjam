@@ -151,7 +151,7 @@ export function fetchTrackText(
   return text;
 }
 
-/** Test seam: a tab reload is the only reset the app needs. */
+/** Test seam: a tab reload is the only reset Logjam Web needs. */
 export function clearTrackTexts(): void {
   trackTexts.clear();
 }

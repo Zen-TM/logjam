@@ -96,7 +96,7 @@ const MM_PER_INCH = 25.4;
 const STYLE_DPI = 96;
 const CONCURRENCY = 8;
 const LINE_LABEL_MIN_DISTANCE = 450; // px — min spacing between named line-feature labels (tracks, rivers, ...)
-const CONTOUR_LABEL_MIN_DISTANCE = 450; // px — 3x sparser than before; contour-only
+const CONTOUR_LABEL_MIN_DISTANCE = 450; // px — min spacing between contour elevation labels
 
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const DEG_TO_RAD = Math.PI / 180;
@@ -178,10 +178,6 @@ function mmToPt(mm: number): number {
   return (mm * 72) / MM_PER_INCH;
 }
 
-// MIN_ZOOM, computeZoom and TARGET_DPI now live in the pure, unit-tested
-// ./geoPdfTileMath module (imported above) — also used by the GeoPDF runtime
-// estimator (lib/runtimeEstimates.ts) via geoPdfNativeMegapixels.
-
 /**
  * The display zoom MapLibre would render this print scale at on a 96-DPI screen.
  * Unlike `computeZoom` (a tile-resolution zoom inflated by the 300-DPI print
@@ -223,10 +219,6 @@ function formatDistance(m: number): string {
   if (m >= 1000) return `${m / 1000} km`;
   return `${m} m`;
 }
-
-// ── Tile transform helpers ──────────────────────────────────────────────────
-// TileCoord, TileToMapTransform and computeTileToMapTransform now live in the
-// pure, unit-tested ./geoPdfTileMath module (imported above).
 
 /** Buffered label (contour elevation or feature name) — drawn after all overlay
  * lines to keep labels on top. `text` may contain "\n" for stacked lines. */
@@ -688,7 +680,7 @@ async function fetchAndDrawHttpTilesDirect(
         mapCtx.fillStyle = "#e8e8e8";
         mapCtx.fillRect(dx0, dy0, dx1 - dx0, dy1 - dy0);
         // Privacy: never log tile x/y — at these zooms a tile index is an
-        // approximate coordinate of the export AOI (SEC-002).
+        // approximate coordinate of the export AOI.
         logger.warn(
           { source: "http-tile", z: tile.z, err: safeErrorForLog(err) },
           "GeoPDF: failed to fetch base-layer tile",
@@ -2043,7 +2035,7 @@ export async function buildPdf(
 
       const gcsRef = (doc as any).ref({
         Type: "GEOGCS",
-        // WKT MUST be a String object: pdfkit serializes a primitive JS string as a PDF
+        // WKT MUST be a String object (generateGeoPdf.unit.test.ts): pdfkit serializes a primitive JS string as a PDF
         // name (/GEOGCS…), and the `[ ] "` delimiters in WKT make that an invalid name
         // that GDAL cannot parse ("Dictionary key must be a name object" → CRS dropped).
         // A String object forces a literal string value: (GEOGCS…).

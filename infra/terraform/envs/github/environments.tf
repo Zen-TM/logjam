@@ -11,7 +11,7 @@ locals {
   }
 
   # For the import only: GitHub does not show a deployment policy's ID to
-  # Terraform before import, so these came from
+  # Terraform before import, so these come from
   # `gh api repos/Zen-TM/logjam/environments/<env>/deployment-branch-policies`.
   deployment_policy_ids = {
     prod           = "61014124"

@@ -23,7 +23,7 @@ import type { Response } from "express";
 const BASE = "2026-07-24T00:00:00.000Z";
 const LATER = "2026-07-24T01:00:00.000Z";
 
-describe("conflictReceipts (§6 detection, arrival-order resolution)", () => {
+describe("conflictReceipts (detection, arrival-order resolution)", () => {
   it("no baseUpdatedAt → blind write, no receipts", () => {
     expect(
       conflictReceipts(
@@ -156,7 +156,7 @@ describe("parsePushOp", () => {
   });
 });
 
-describe("opDependencies (§8.3 dependency closure)", () => {
+describe("opDependencies (dependency closure)", () => {
   const id = "a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
   const placeA = "b2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
   const placeB = "c2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";

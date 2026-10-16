@@ -14,10 +14,7 @@
 // PICKING A FRIEND SHARES, THERE AND THEN — no ticking, no Confirm. Logjam GPS
 // draws the same distinction in `SharePanel.tsx` and says why: a share is
 // revocable, so the press can be the whole action, while a copy is not and has
-// to wait behind a footer button. This dialog used to make you search, press
-// Add, watch a chip appear and then press Confirm Share — four presses for
-// something one press can undo, and no footer button in sight for the friends
-// already listed underneath.
+// to wait behind a footer button.
 //
 // PRIVACY: usernames only. `TFriend` has no email field because the friends
 // endpoints never send one (api src/__tests__/friends.test.ts).

@@ -176,8 +176,8 @@ class TestWantsEmail(unittest.TestCase):
     _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
 )
 class TestSendFailureEmail(unittest.TestCase):
-    """A reaped/failed topo job must mail its owner (APIC-005) — worker.py used
-    to email only on success. Captures the send_email call instead of sending."""
+    """A reaped/failed topo job must mail its owner. Captures the send_email call
+    instead of sending."""
 
     def setUp(self):
         self.sent = []

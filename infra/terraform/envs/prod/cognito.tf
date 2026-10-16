@@ -1,6 +1,6 @@
 # Cognito user pool + app client. The pool ID and client ID are baked into the
 # frontend build (VITE_COGNITO_*), the JWT issuer, and the API's aud check
-# (middleware/auth.ts) — replacing either would invalidate every token and lock
+# (api/src/middleware/auth.ts) — replacing either would invalidate every token and lock
 # users out. prevent_destroy guards that; ignore_changes on schema stops a
 # subtle attribute drift from forcing pool replacement. The pool already
 # carries deletion_protection = ACTIVE server-side too.

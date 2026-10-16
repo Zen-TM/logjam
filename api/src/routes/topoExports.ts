@@ -1,4 +1,4 @@
-// Stage 2 — on-demand export pipeline.
+// On-demand export pipeline.
 //
 // Users submit POST /topo-exports with {sourceJobIds, layers, format,
 // bundling}. The server snapshots the live vector style, persists a
@@ -56,7 +56,7 @@ const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
 // Server-side cap on the exports list. X-Total-Count carries the true total so
-// the client can show a truncation caption when this cap bites (UX-002).
+// the client can show a truncation caption when this cap bites.
 const EXPORT_LIST_CAP = 50;
 
 async function presignResult(
@@ -114,7 +114,7 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
 
-    // Entry gate (ARCH-012): every byte-producing flow checks storage quota at
+    // Entry gate: every byte-producing flow checks storage quota at
     // submission. The worker charges result_bytes unconditionally on
     // completion, so without this an over-quota user could keep accruing.
     // No pre-render size estimate exists, so this is the same soft gate the
@@ -172,7 +172,7 @@ router.post(
       }
     }
 
-    // Reject pre-Stage-2 jobs whose outputs predate the COG export source:
+    // Reject jobs whose outputs predate the COG export source:
     // they would otherwise fail deep inside the export worker. Only raster
     // layers need a COG; vector layers export from raw GeoJSON.
     const requestedRasterLayers = layers.filter((l) =>
@@ -195,8 +195,8 @@ router.post(
       (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
     // Cap-checked create + ECS launch — shared with the reaper's auto-export
-    // pass so both enforce the same per-user concurrency limit (ARCH-009) and
-    // fail-on-launch semantics (ARCH-002).
+    // pass so both enforce the same per-user concurrency limit and
+    // fail-on-launch semantics.
     const exportJobId = await createAndLaunchTopoExport({
       userId: user.id,
       sourceJobIds,
@@ -237,7 +237,7 @@ router.get(
         ),
       ),
     );
-    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    // True total (pre-cap) so the client can flag a truncated view.
     res.set("X-Total-Count", String(total));
     res.json({ exports: views });
   },
@@ -251,7 +251,7 @@ router.get(
     const user = await getUser(req.user!.sub);
     // Owner-scoped lookup: a foreign export id gets the SAME 404 a
     // non-existent one gets, so the status is no existence oracle for export
-    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    // ids the caller may not see (matching topoJobs.ts).
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
@@ -275,7 +275,7 @@ router.delete(
     const user = await getUser(req.user!.sub);
     // Owner-scoped lookup: a foreign export id gets the SAME 404 a
     // non-existent one gets, so the status is no existence oracle for export
-    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    // ids the caller may not see (matching topoJobs.ts).
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });

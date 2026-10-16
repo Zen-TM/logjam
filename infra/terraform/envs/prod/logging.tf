@@ -1,8 +1,6 @@
 # How long every operational log is kept: one figure for all of them, which
 # privacy.html states once. Operational logs exist to debug the last incident,
-# and two weeks covers an incident noticed after a week away. Before this each
-# group carried its own number (7, 14, 30, 90, and none at all for the RDS log
-# export), none of them for a reason the others lacked.
+# and two weeks covers an incident noticed after a week away.
 #
 # The audit trail is the one exception: it is kept for accountability rather
 # than debugging (var.audit_log_retention_days, audit.tf).
@@ -33,7 +31,7 @@ resource "aws_cloudwatch_log_group" "geo_pdf_worker" {
   retention_in_days = local.operational_log_retention_days
 }
 
-# Pre-deploy migrate one-shot (ARCH-001 half B). Pre-created here because
+# Pre-deploy migrate one-shot. Pre-created here because
 # ecsTaskExecutionRole has no logs:CreateLogGroup (standard task-exec policy) —
 # the task def OMITS awslogs-create-group entirely (ECS rejects "false"; see
 # ecs.tf:217) and relies on this group already existing. Migrate logs carry
@@ -44,11 +42,11 @@ resource "aws_cloudwatch_log_group" "api_migrate" {
 }
 
 # The RDS log export (pgaudit and connection lines; see audit.tf and rds.tf).
-# RDS creates the group when the export starts, so Terraform never named it and
-# nothing here bounded it (the AWS default keeps events forever). The subscription filter in audit.tf copies each line
-# to the audit bucket within minutes, and the pgaudit_delivery_stalled alarm
-# fires after 24 h without a delivery, so this copy only has to outlive a
-# stalled pipeline long enough to be noticed.
+# RDS creates the group when the export starts (the AWS default keeps events
+# forever); managing it here bounds its retention. The subscription filter in
+# audit.tf copies each line to the audit bucket within minutes, and the
+# pgaudit_delivery_stalled alarm fires after 24 h without a delivery, so this
+# copy only has to outlive a stalled pipeline long enough to be noticed.
 import {
   to = aws_cloudwatch_log_group.rds_postgresql
   id = "/aws/rds/instance/logjam-db-enc/postgresql"
@@ -61,7 +59,7 @@ resource "aws_cloudwatch_log_group" "rds_postgresql" {
 
 # Logjam GPS versions in the field, kept as a metric because the log group
 # keeps only 14 days (docs/operations/queries.md reads it). One dimension, the
-# version: every distinct string the API accepted (CLIENT_HEADER_REGEX in
+# version: every distinct string the API accepts (CLIENT_HEADER_REGEX in
 # api/src/routes/sync.ts, signed-in requests only) is one metric at about
 # $0.30 a month while it keeps syncing, and CloudWatch disables a filter that
 # emits too many distinct values, which bounds anyone sending made-up versions.

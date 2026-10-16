@@ -1,7 +1,7 @@
 // Which columns of a place a SHAREE may see, stated as two lists that together
 // have to cover the model.
 //
-// The rule they enforce is the hybrid share model's (root CLAUDE.md): a
+// The rule they enforce is the hybrid share model's (root AGENTS.md): a
 // recipient sees the place RECORD, including its place-level notes and media,
 // while the owner's private annotations on it do not travel. The trap is that
 // this is a DENYLIST — the response spreads the row and removes what must not
@@ -9,7 +9,7 @@
 // added to `Place` reaches every sharee from the moment it exists until someone
 // remembers this file.
 //
-// That is the `_count` lesson in the root CLAUDE.md, one column lower down. So
+// That is the `_count` lesson in the root AGENTS.md, one column lower down. So
 // the denylist is paired with a completeness guard: `placeVisibility.unit.test`
 // reads the columns out of schema.prisma and fails when one appears that is
 // classified by neither list. A new column cannot leak by omission — it cannot
@@ -26,15 +26,14 @@
  * own responses; stripped from everything a sharee can reach.
  */
 export const OWNER_PRIVATE_PLACE_FIELDS: Record<string, string> = {
-  // §2.6. Holds what the SENDER's definitions said about values this owner has
+  // Holds what the SENDER's definitions said about values this owner has
   // no definition for. Re-emitting it down a share chain is the propagation
   // objection that got the "append it to notes" design rejected: B copies A's
   // place, B shares it with C, and C reads A's field labels and values. A
   // sharee gets `fieldDefsSnapshot` instead — derived live from the OWNER's
   // current definitions, so it says what THIS place's values mean and nothing
   // about anyone else's schema.
-  foreignFields:
-    "another user's field labels and values, carried in on a copy (§2.6)",
+  foreignFields: "another user's field labels and values, carried in on a copy",
   // The importer's idempotency keys. Not sensitive in themselves, but they are
   // the owner's filing system: `importKey` is derived from name+coords and
   // `importBatchId` groups one import run, so together they tell a recipient
