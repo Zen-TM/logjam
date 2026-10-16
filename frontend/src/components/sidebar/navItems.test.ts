@@ -62,9 +62,7 @@ describe("partitionNavItems", () => {
   });
 });
 
-// `NavItemId` is a hand-kept `Exclude` of `PanelId`, and it drifted: when
-// `route-detail` was replaced by `way-detail` plus the draw and measure pages,
-// four programmatic panels stayed typed as nav items. Mutation: add a panel to
+// `NavItemId` is a hand-kept `Exclude` of `PanelId`. Mutation: add a panel to
 // `PanelId` and `PANEL_TITLES` without giving it a rail entry, a More entry, or
 // a place in `NavItemId`'s exclusion list.
 describe("every panel is either a nav item or programmatic", () => {

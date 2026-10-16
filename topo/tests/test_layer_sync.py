@@ -370,8 +370,7 @@ class TestSvtmFormationSync(unittest.TestCase):
 
 # ---------------------------------------------------------------------------
 # pipeline.py's three hand-synced mirrors, each carrying a "must match" or
-# "keep in lockstep" comment and nothing enforcing it (the sweep that found the
-# three above did not look here).
+# "keep in lockstep" comment and nothing enforcing it.
 #   pipeline.py COMPOSITE_LAYER_ORDER       ↔ topoSettings.ts TOPO_LAYERS (order)
 #   pipeline.py CONTOUR_WIDTH_UNITS_PER_PX  ↔ topoSettings.ts CONTOUR_WIDTH_UNITS_PER_PX
 #   pipeline.py SVTM_FORMATION_MU           ↔ build_svtm_formation.py SVTM_FORMATION_MU
@@ -423,8 +422,7 @@ class TestPipelineMirrorSync(unittest.TestCase):
 
     def test_contour_width_units_match_the_ts_constant(self):
         # The divisor that makes a baked contour the same thickness as the one
-        # the user tunes on the live map. It drifted once already (the bake had
-        # its own zoom/16/6), which is what the shared constant exists for.
+        # the user tunes on the live map.
         self.assertEqual(
             _py_int(_PIPELINE, "CONTOUR_WIDTH_UNITS_PER_PX"),
             _ts_number("CONTOUR_WIDTH_UNITS_PER_PX"),

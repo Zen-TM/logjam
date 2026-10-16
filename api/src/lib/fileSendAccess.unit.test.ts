@@ -77,12 +77,13 @@ describe("a sent file's name never reaches a log", () => {
   it("refuses a filename without repeating it back", () => {
     let refusal: unknown;
     try {
-      sanitizeSendFilename({ place: "Alpha Creek" });
+      sanitizeSendFilename({ toString: () => "Alpha Creek" });
     } catch (error) {
       refusal = error;
     }
     expect(refusal).toBeInstanceOf(AppError);
-    expect(JSON.stringify(refusal)).not.toContain("Alpha Creek");
+    expect((refusal as AppError).message).not.toContain("Alpha Creek");
+    expect((refusal as AppError).devDetail).not.toContain("Alpha Creek");
   });
 });
 

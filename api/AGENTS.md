@@ -9,8 +9,8 @@
   unauthenticated on purpose — a build too old to authenticate must still be
   told it is stale, and the body carries server constants only (`meta.ts`);
   `/elevation` needs auth but no user row, because nothing it touches is stored
-  (`elevation.ts`). All of them stay behind the global rate limiter; a further
-  exception needs the same kind of reason.
+  (`elevation.ts`). `/meta` and `/elevation` stay behind the global rate limiter; `/health` and
+  `/ready` sit before it. A further exception needs the same kind of reason.
 - **Every read or write of a user-owned row checks ownership** (`ownerId: user.id`
   or a join through `shares`); never trust an id from the body alone.
 - **A place reaches anyone but its owner only through `lib/placeAccess.ts`**
@@ -28,7 +28,7 @@
   `malformed(detail)`; the detail is logged, so it holds no name, coordinate,
   tag, field value or label. Guard: `src/userCopy.unit.test.ts`.
   [0033](../docs/decisions/0033-the-api-writes-the-sentence-a-user-reads.md)
-- **An array in a request body is capped at both ends:** empty is 400, over
+- **An array in a request body is capped at both ends:** empty is 400 (unless empty is meaningful, like a scoping list's "all types"), over
   its limit 413; the body-size cap is no substitute (`src/__tests__/placesBulk.test.ts`).
 
 ## Logging and config

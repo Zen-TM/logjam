@@ -317,6 +317,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
   });
 
   // Logjam Web's FriendSharingSection relies on this: names, never places.
+  // Mutation: add `latitude` to the shares query's select.
   it("carries no coordinates, geometry or notes", async () => {
     const res = await request(API_URL)
       .get(`/friends/${aliceBobFriendshipId}/shares`)

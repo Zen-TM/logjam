@@ -84,7 +84,7 @@ function parseScoping(body: {
     if (body.placeTypeIds.length > MAX_SCOPED_PLACE_TYPES) {
       throw new AppError(
         413,
-        say`A field can apply to up to ${MAX_SCOPED_PLACE_TYPES} place types.`,
+        say`An attribute can apply to up to ${MAX_SCOPED_PLACE_TYPES} place types.`,
       );
     }
     out.placeTypeIds = body.placeTypeIds as string[];

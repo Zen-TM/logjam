@@ -6,7 +6,8 @@
 // What is duplicated here is only the thin React wrapper around it, because
 // `shared/` is React-free by design and adding React to it to save fifty lines
 // would be a bad trade. If the two drift, the shared module is the one that
-// matters.
+// matters. The undo rules below are held by the frontend copy's test
+// (`useRouteDraft.test.ts` there); mobile has no React hook test harness.
 //
 // Undo is a stack of whole drafts rather than inverse operations: a draft is a
 // handful of coordinate pairs, so snapshotting one is free, and it makes every

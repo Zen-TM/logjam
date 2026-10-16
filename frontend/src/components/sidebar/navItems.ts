@@ -5,8 +5,7 @@ import { type Glyph } from "../../ui";
  * Panels reachable from the nav. The rest of `PanelId` is opened
  * programmatically — a pin, a row, a line on the map — and is never a nav item.
  * `navItems.test.ts` keeps this list equal to the panels the rail does not
- * carry; it went stale once already (`route-detail` outlived the rename that
- * split it into `way-detail` plus the two tool pages).
+ * carry.
  */
 export type NavItemId = Exclude<
   PanelId,

@@ -75,7 +75,7 @@ describe("generateGeoPdf buildPdf georef block", () => {
 // source, which zoom and the error — never x/y (root AGENTS.md: no coordinates
 // in logs). `lib/logger.unit.test.ts` guards the redaction underneath this; this
 // guards the call sites, which is where the leak would actually be typed.
-// Mutation: add `x: tile.x` (or `y`, or `tile.x`) to any warn call below.
+// Mutation: add `x: tile.x` (or `y:`, `xCoord:`) to any warn call below.
 describe("a failed tile fetch never logs tile x/y", () => {
   it("names no coordinate-shaped field in any log call", () => {
     const source = readFileSync(join(__dirname, "generateGeoPdf.ts"), "utf8");

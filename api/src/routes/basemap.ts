@@ -190,7 +190,12 @@ router.get(
       // to destroy the response; before that the errorHandler still gets to
       // answer with an AppError.
       if (res.headersSent) res.destroy(err);
-      else next(new AppError(503, say`That download failed. Start it again.`));
+      else {
+        // The clip headers are already set; the JSON answer is not a clip.
+        res.removeHeader("Content-Type");
+        res.removeHeader("Content-Length");
+        next(new AppError(503, say`That download failed. Start it again.`));
+      }
     });
   },
 );

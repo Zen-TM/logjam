@@ -85,6 +85,7 @@ describe("sharing routes (fake auth = alice)", () => {
     }
   });
 
+  // Mutation: look the target user up and answer 404 before the friendship check.
   it("POST share answers an unknown user id exactly as it answers a non-friend", async () => {
     const placeId = await createPlace("CH-003 unknown-user share");
     try {

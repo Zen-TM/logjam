@@ -69,7 +69,7 @@ def problems(found):
             errors.append(
                 f'{ENVS}/{name} declares no `backend "s3"`. Prod and GitHub '
                 "settings apply from a shared, locked state file, never from a "
-                "file on one machine (infra/AGENTS.md)."
+                "file on one machine (see this script's docstring)."
             )
     for name, declared in sorted(found.items()):
         if name not in S3_BACKENDS and declared:

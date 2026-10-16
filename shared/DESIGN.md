@@ -277,6 +277,7 @@ renumber.
 ## 12. Copy and helper text
 
 - **Name the surface: Logjam Web or Logjam GPS.**
+- **A custom field is an "attribute"** in anything a user reads, never "field".
 - **A button is a verb** ("Make a map", not "Map").
 - **Helper text is the exception.** Where a label and an icon are not enough:
   one plain sentence saying what the setting means, an example over a rule
