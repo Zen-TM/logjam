@@ -123,7 +123,7 @@ def _square(lon0, lat0, side=0.02):
 class TestFootprintTileCoords(unittest.TestCase):
     """Processing-side prune: render only tiles intersecting the footprint, per
     connected component, never the union bbox that spans the gap between a
-    non-adjacent capture's tiles (the wasted-render fix in generate_all_tiles)."""
+    non-adjacent capture's tiles."""
 
     def test_scattered_footprint_skips_the_gap(self):
         from shapely.ops import unary_union

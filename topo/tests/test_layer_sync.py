@@ -1,12 +1,9 @@
-"""Cross-language drift guard for the canonical topo-layer list (ARCH-010).
+"""Cross-language drift guard for the canonical topo-layer list.
 
 `shared/src/topoSettings.ts → TOPO_LAYERS` is the single source of truth; the
 TS side all derives from it, but `topo/worker.py` keeps a hand-synced Python
 mirror (ALL_LAYERS / RASTER_LAYERS / VECTOR_LAYERS) — the only structurally
-unavoidable copy. Nothing previously failed when the two diverged. The
-2026-06-11 consent-version prod incident was exactly this class of bug
-(a constant duplicated across packages drifting silently); this test closes it
-for the one remaining cross-LANGUAGE mirror.
+unavoidable copy. This test prevents cross-language constants from drifting silently.
 
 Pure text parsing — no GDAL/PDAL, no worker import. Runs on the dev host via
 `python -m unittest discover -s tests`.
@@ -173,11 +170,10 @@ class TestTopoLayerSync(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# STP-004: three more cross-language constant mirrors, same treatment.
-#   worker.py VECTOR_STYLE_DEFAULTS   ↔ topoSettings.ts VECTOR_STYLE_DEFAULTS
-#   pipeline.py OSM_STYLE_META        ↔ topoSettings.ts OSM_POINT_ICON
-#   build_svtm_formation.py SVTM_FORMATION_MU ↔ topoSettings.ts SVTM_FORMATIONS
-# Each was documented with a "must match" comment and nothing enforcing it.
+# Cross-language constant mirrors:
+#   worker.py VECTOR_STYLE_DEFAULTS            ↔ topoSettings.ts VECTOR_STYLE_DEFAULTS
+#   pipeline.py OSM_STYLE_META                 ↔ topoSettings.ts OSM_POINT_ICON
+#   build_svtm_formation.py SVTM_FORMATION_MU  ↔ topoSettings.ts SVTM_FORMATIONS
 # ---------------------------------------------------------------------------
 
 _PIPELINE = os.path.join(_HERE, "..", "pipeline.py")

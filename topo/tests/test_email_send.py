@@ -1,9 +1,9 @@
 """email_send.send_email no-op guard.
 
 Pure-logic: with RESEND_API_KEY / EMAIL_FROM unset the helper must return
-without importing or calling `resend` (mirrors the old `if not ses` guard so
-local dev and unconfigured workers never crash). The real Resend send path runs
-only in the worker container and is not exercised here.
+without importing or calling `resend`, so local dev and unconfigured workers
+never crash. The real Resend send path runs only in the worker container and
+is not exercised here.
 """
 
 import importlib

@@ -95,12 +95,11 @@ class _FakeResponse:
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestOverpassDegradesOnBadBody(unittest.TestCase):
-    """STP-003: fetch_osm_features degrades to an empty features layer.
+    """fetch_osm_features degrades to an empty features layer.
 
-    A mirror returning 200 with an HTML interstitial used to raise
-    JSONDecodeError from a resp.json() sitting OUTSIDE the retry loop, and the
-    sole caller has no handler — so one flaky mirror failed the entire topo
-    job instead of dropping the features layer as designed.
+    A mirror returning 200 with an HTML interstitial must not raise
+    JSONDecodeError outside the retry loop — if all mirrors fail, the
+    pipeline drops the features layer instead of failing the job.
     """
 
     def _run(self, payload):
@@ -128,7 +127,7 @@ class TestOverpassDegradesOnBadBody(unittest.TestCase):
         self.assertEqual(len(set(calls)), 3, "all mirrors tried")
 
     def test_json_but_not_an_object_returns_none(self):
-        # A bare list would have blown up later on raw.get("elements").
+        # A bare list would fail later on raw.get("elements").
         result, _ = self._run([1, 2, 3])
         self.assertIsNone(result)
 

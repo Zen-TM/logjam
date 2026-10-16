@@ -1,4 +1,4 @@
-# Topo worker integration tests (gap 3)
+# Topo worker integration tests
 
 The host-side unit tests stub the native stack (`_native_stub.py`), so the seam
 between the guarded status logic and a **real** runtime is not exercised by
@@ -9,8 +9,8 @@ discovery.
 ## 1. Status-guard against a real Postgres — `test_status_guard_db.py`
 
 Proves a live database enforces the `WHERE status = ...` guard, so a
-reaped-but-alive worker cannot resurrect a force-failed job (ARCH-001) or charge
-storage for it (ARCH-007). Needs a real `psycopg2` (the host stubs it) and a
+reaped-but-alive worker cannot resurrect a force-failed job or charge
+storage for it. Needs a real `psycopg2` (the host stubs it) and a
 reachable DB; gated on `RUN_DB_IT=1`. **CI runs it** in the `api-integration` job, against that job's seeded DB.
 
 **Lightest local run (no image build)** — against the `make dev` Postgres:
@@ -50,7 +50,7 @@ Steps:
    `JOB_ID=<that id>` and the DB/S3 env pointing at the dev stack.
 4. **Happy path:** let it finish; assert the row reaches `complete`, output keys
    are populated, and tiles land in the `S3_BUCKET_TOPO` bucket.
-5. **Resurrection check (ARCH-001):** start a fresh job, `docker kill` the
+5. **Resurrection check:** start a fresh job, `docker kill` the
    container mid-render, then force-fail the row (`UPDATE topo_jobs SET
    status='failed'`) as the reaper would. Re-launch a worker for the **same**
    `JOB_ID`; confirm its guarded terminal write leaves the row `failed` (the
