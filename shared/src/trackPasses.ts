@@ -20,7 +20,8 @@ export const PASS_SLACK_M = 25;
 
 /**
  * Two visits closer together than this are one: a party sitting at the edge
- * of the radius drifts in and out of it without having left.
+ * of the radius drifts in and out of it without having left
+ * (test: shared/src/trackPasses.test.ts).
  */
 export const PASS_MERGE_MS = 5 * 60_000;
 
@@ -44,7 +45,7 @@ export function trackPassesNear(
 
   // The closest approach of each interval BETWEEN fixes, not of each fix:
   // fixes can be a hundred metres apart and the tap lands on the line drawn
-  // between them.
+  // between them (test: shared/src/trackPasses.test.ts).
   const approaches: {
     distanceM: number;
     atMs: number;
@@ -55,7 +56,7 @@ export function trackPassesNear(
     const a = points[i - 1]!;
     const b = points[i]!;
     // The gap across a pause is drawn as no line, so it is not somewhere the
-    // track was.
+    // track was (test: shared/src/trackPasses.test.ts).
     if (a.segment !== b.segment) continue;
     if (a.timestampMs == null || b.timestampMs == null) return [];
     const dx = x(b) - x(a);

@@ -1,11 +1,9 @@
 // What a notification lets you DO from the inbox row, as data.
 //
 // Two kinds of notification are a QUESTION rather than a report — a friend
-// request and a file a friend sent — and until now mobile answered neither in
-// the inbox: the friend request was tap-through to Friends, and the file send
-// had a whole screen of its own (`screens/ReceivedFilesScreen.tsx`, deleted
-// 2026-08-30). Both are one accept/decline pair, so both are the same widget,
-// and this module is the one place that says which pair a notification carries.
+// request and a file a friend sent. Both are one accept/decline pair, so both
+// are the same widget, and this module is the one place that says which pair a
+// notification carries.
 //
 // Shared by both inboxes, so Logjam GPS and Logjam Web offer the same answers
 // in the same words. Where a word names one client's surface ("find it in
@@ -34,7 +32,7 @@ export type NotificationInlineAction = {
    * confirm in a dialog, which is where the explanation goes).
    *
    * Both declines carry one, and the friend-request decline carries one even
-   * though neither web nor the Friends screen asks: on THOSE surfaces decline
+   * though neither Logjam Web nor the Friends screen asks: on THOSE surfaces decline
    * lives behind an overflow sheet, which is the house rule that "no" is never
    * a mis-tap away from "yes" (FriendsScreen's own note). Side by side in a
    * list row there is no sheet left to be that guard, so the dialog is.
@@ -46,10 +44,9 @@ export type NotificationInlineAction = {
    */
   failure: string;
   /**
-   * The sentence confirming it worked. Accepting a file used to be silent — the
-   * row restyled itself and the import landed two tabs away with nothing said,
-   * which reads as "the button did nothing". Every action reports (DESIGN.md
-   * §6: toasts, not banners, for the outcome of an action).
+   * The sentence confirming it worked. Every action reports (DESIGN.md
+   * §6: toasts, not banners, for the outcome of an action), rather than
+   * staying silent and reading as "the button did nothing".
    */
   success: string;
 };
@@ -134,9 +131,9 @@ export function notificationActions(
     // invariant now that the notification query deliberately keeps expired
     // sends the inbox endpoint drops.
     if (payload.fileSendStatus === "expired") return null;
-    // `accepted` means the download URL was ISSUED, not that the bytes landed
-    // (mobile/CLAUDE.md), so accept stays on offer as a retry and there is
-    // nothing left to turn down.
+    // `accepted` means the download URL was ISSUED, not that the bytes landed,
+    // so accept stays on offer as a retry and there is nothing left to turn
+    // down.
     const accepted = payload.fileSendStatus === "accepted";
     if (accepted) {
       return {
@@ -182,7 +179,7 @@ export function notificationActions(
             //
             // "send it again", never "share it again": a share is the other
             // verb — live and revocable — and blurring them here is exactly the
-            // confusion the two verbs exist to prevent (mobile/CLAUDE.md).
+            // confusion the two verbs exist to prevent (ADR 0016).
             body: `You won't get a copy of ${filename}. If you want it back, you'd have to ask ${sender ?? "them"} to send it again.`,
             confirmLabel: "Turn down",
           },
@@ -197,10 +194,10 @@ export function notificationActions(
 /**
  * Is this failure "the question was already answered somewhere else"?
  *
- * A friend request accepted in the Friends screen, or a send declined on the
- * web, leaves a notification whose buttons are permanently dead rather than
- * retryable — so the row should clear like a successful action rather than pop
- * back with live buttons that will fail again (web's NOTIF-1, ported).
+ * A friend request accepted in the Friends screen, or a send declined in
+ * Logjam Web, leaves a notification whose buttons are permanently dead rather
+ * than retryable — so the row should clear like a successful action rather
+ * than pop back with live buttons that will fail again.
  *   400 — no longer pending / already actioned.
  *   404 — the friendship or the recipient row is gone (declining DELETES it).
  *   409 — conflicting state.

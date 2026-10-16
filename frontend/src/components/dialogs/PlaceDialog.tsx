@@ -70,17 +70,9 @@ const LNG_CONSTRAINTS: NumericFieldConstraints = {
 /**
  * A place: what it is, where it is, and what this type of place records.
  *
- * EVERY ATTRIBUTE IS DRAWN FROM ITS DEFINITION. The seven canyon grades were
- * seven hand-written controls keyed to a list of their keys — two selects
- * of literal 1-7, a roman-numeral one, four number boxes and their tooltips —
- * and the rest of the type's fields rendered generically underneath, with the
- * seven subtracted so they were not asked twice. They are ordinary field
- * values with ordinary definitions, so they render like every other field now
- * (`CustomFieldInput`, `railStops`), exactly as Logjam GPS already draws them.
- * Three things follow: the subtraction is gone, a user's own "Difficulty, 1-5"
- * gets the same rail a V grade does, and the sentences that were tooltips are
- * `hint`s on the definitions themselves (`SYSTEM_FIELD_DEFS`), where a user's
- * own field could have one too.
+ * Every attribute is drawn from its definition. Canyon grades and custom
+ * fields render generically through CustomFieldInput/railStops matching Logjam GPS,
+ * with descriptions drawn from hints on the definitions (SYSTEM_FIELD_DEFS).
  */
 function PlaceDialog({
   place,
@@ -134,11 +126,9 @@ function PlaceDialog({
   );
 
   /**
-   * The fields THIS type has. `defsForType` is the shared rule (a definition
+   * The fields this type has. `defsForType` is the shared rule (a definition
    * appears on a type it is scoped to, or on every type when it is flagged),
-   * so the phone and the browser cannot disagree about which fields a campsite
-   * has — and nothing is subtracted from it any more, because nothing else on
-   * this form draws a field.
+   * ensuring Logjam GPS and Logjam Web agree on which fields each place type has.
    */
   const typeFieldDefs = useMemo(
     () => defsForType(customFieldDefs, placeTypeId),
@@ -184,7 +174,7 @@ function PlaceDialog({
 
   // Snapshot of the form fields as populated below, taken in the same step
   // that sets them — used by the unsaved-changes guard to tell a real edit
-  // apart from "the dialog is open" (PLACE-3). Sources/fieldValues are
+  // apart from "the dialog is open". Sources/fieldValues are
   // compared by JSON value, not identity.
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(
     null,
@@ -225,9 +215,9 @@ function PlaceDialog({
     let initialSources: Source[];
     let initialFieldValues: Record<string, string>;
     // Editing keeps the place's own type; creating defaults to Canyon, which
-    // is what this app is for. Retyping IS allowed on an edit: miscategorising
+    // is what Logjam is for. Retyping IS allowed on an edit: miscategorising
     // is inevitable, and the server parks any value the new type has no
-    // definition for rather than dropping it (§2.6).
+    // definition for rather than dropping it.
     const initialPlaceTypeId =
       place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon;
     if (place) {
@@ -243,9 +233,7 @@ function PlaceDialog({
           : []
       ).map(([label, url]) => ({ label, url }));
       // Existing field values as strings — the grades among them, which is
-      // what makes them ordinary. Reads the TOP level of fieldValues; these
-      // used to be nested under `attributes.customFields`, and the forward
-      // migration hoisted them.
+      // what makes them ordinary. Reads the top level of fieldValues.
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = fieldValue(place.fieldValues, def.key);
@@ -307,7 +295,7 @@ function PlaceDialog({
   }, [formSession]);
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
-  // dialog was (re)populated — not just "the dialog is open" (PLACE-3).
+  // dialog was (re)populated — not just "the dialog is open".
   // Media/custom-field-def edits are excluded: both persist immediately
   // (media uploads, and add/delete-field through their own endpoints), so
   // they're never "unsaved" by the time a close is attempted.
@@ -461,7 +449,7 @@ function PlaceDialog({
       }
 
       // Range/format validation for the coordinates and for every attribute
-      // this form SHOWED (PLACE-1/PLACE-2). Scoped for the same reason the
+      // this form showed. Scoped for the same reason the
       // write below is: a field this form did not render cannot have an
       // invalid value the user could go and fix, so blocking Save on one would
       // be an unfixable error message.
@@ -478,8 +466,9 @@ function PlaceDialog({
         return;
       }
 
-      // FEUI-012: reject non-http(s) source URLs (javascript:, data:, ...)
-      // rather than storing them verbatim to later render as a clickable href.
+      // Reject non-http(s) source URLs (javascript:, data:, ...)
+      // rather than storing them verbatim to later render as a clickable href
+      // (see isHttpUrl.test.ts).
       const invalidSourceUrl = sources.some(
         (s) => s.url.trim() && !isHttpUrl(s.url.trim()),
       );
@@ -581,10 +570,8 @@ function PlaceDialog({
     setAddingField(true);
     setAddFieldError(null);
     try {
-      // ROW-GRAIN (see the note in placeUtils.ts): the whole-list PATCH is
-      // gone, and it would have wiped the scoping off every definition.
-      // Scoped to the type this place IS, because that is the form the user
-      // was looking at when they added the field.
+      // Scoped to the type this place is, because that is the form the user
+      // was looking at when they added the field (see note in placeUtils.ts).
       const updatedDefs = await createCustomField("place", result.def, {
         placeTypeIds: [placeTypeId],
       });
@@ -763,11 +750,9 @@ function PlaceDialog({
                     showError={showFieldErrors}
                   />
                 </div>
-                {/* ABSENT on a built-in, not disabled (DESIGN.md): the
-                    server owns those definitions and refuses the delete, so
-                    the verb does not exist here rather than being unavailable
-                    right now. It never arose while the grades were drawn by
-                    hand — they were the seven fields this list excluded. */}
+                {/* Absent on a built-in, not disabled (DESIGN.md): the
+                    server owns those definitions and refuses deletion, so
+                    the action does not exist here rather than being disabled. */}
                 {!isSystemFieldDef(def) && (
                   <IconButton
                     icon="delete"

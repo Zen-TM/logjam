@@ -28,11 +28,11 @@ import {
 } from "./tripLogFields.js";
 
 describe("system row ids", () => {
-  // The seedIds.ts incident, in its new home. parsePushOp validates every
-  // client-minted entity id with isUuidV4 and rejects the WHOLE request on a
-  // mismatch, so a hand-minted id with a version nibble of 0 makes every place
-  // of a system type permanently unsyncable — invisibly, because the local
-  // mirror still updates and only the outbox row holds the 400.
+  // parsePushOp validates every client-minted entity id with isUuidV4 and
+  // rejects the WHOLE request on a mismatch, so a hand-minted id with a version
+  // nibble of 0 makes every place of a system type permanently unsyncable —
+  // invisibly, because the local mirror still updates and only the outbox row
+  // holds the 400.
   it("are real UUIDv4s, version and variant nibbles included", () => {
     for (const id of systemRowIds()) {
       expect(isUuidV4(id), `${id} is not a UUIDv4`).toBe(true);
@@ -77,9 +77,8 @@ describe("the three system place types", () => {
     );
   });
 
-  // Marker carries no fields at all — it is where every existing Waypoint lands
-  // in phase 1c, and a waypoint that was never about anything must not acquire
-  // a form to fill in.
+  // Marker carries no fields at all — it is where waypoints land, and a
+  // waypoint must not acquire a form to fill in.
   it("give Marker no fields", () => {
     const scoped = SYSTEM_FIELD_DEFS.filter((def) =>
       def.placeTypes.includes("marker"),
@@ -134,7 +133,7 @@ describe("system field definitions", () => {
 
 describe("reserved keys", () => {
   // DERIVED, not restated. A hardcoded copy is the "two lists that must agree"
-  // failure the root CLAUDE.md rule names — a tenth system def would join one
+  // failure the root AGENTS.md rule names — a tenth system def would join one
   // list and not the other, and the collision would surface as a RopeWiki
   // import writing a value nothing can render.
   it("are exactly the system definitions' keys", () => {
@@ -189,10 +188,9 @@ describe("the internal `_` namespace", () => {
   });
 });
 
-// FILL IS THE TYPE, RING IS SHARED (§2.8) — two axes, so they cannot share
-// ink. The first palette had the shared marker's own blue in it, and
-// `SYSTEM_PLACE_TYPES.marker` used exactly that value: a shared Marker was a
-// blue dot with a blue ring, i.e. indistinguishable from an owned one.
+// FILL IS THE TYPE, RING IS SHARED — two axes, so they cannot share
+// ink. If the palette contained the shared marker's blue, a shared Marker
+// would be a blue dot with a blue ring, indistinguishable from an owned one.
 describe("SHARED_PLACE_COLOR", () => {
   it("is not available as a type colour", () => {
     expect(

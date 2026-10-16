@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 // Standalone vitest config (not the app vite.config.ts, whose CSP meta plugin
-// and build settings are irrelevant to tests). jsdom so the useLocalStorage
+// and build settings are irrelevant to tests). jsdom so the useStoredState
 // hook test has a localStorage; pure-logic suites ignore the environment.
 export default defineConfig({
   test: {

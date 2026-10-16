@@ -3,9 +3,7 @@ import { describe, it, expect } from "vitest";
 import { TOPO_JOB_SELECT, serializeTopoJobFor } from "./topoJobs";
 
 // The job view is the one place three endpoints agree on what a client may see
-// of a TopoJob. Before it existed each stripped fields by hand and they had
-// already drifted: the detail endpoint stamped no syncRole, so a client polling
-// a shared job could not tell from that response it was read-only.
+// of a TopoJob.
 //
 // Two rules are load-bearing and both are privacy, not cosmetics: userId never
 // leaves the API (a recipient has no business learning the owner's internal
@@ -43,7 +41,7 @@ describe("serializeTopoJobFor", () => {
     expect(serializeTopoJobFor(row, SHAREE)).not.toHaveProperty("s3OutputKeys");
   });
 
-  it("stamps syncRole on EVERY surface — the drift that made this exist", () => {
+  it("stamps syncRole on every surface", () => {
     expect(serializeTopoJobFor(row, OWNER).syncRole).toBe("owner");
     expect(serializeTopoJobFor(row, SHAREE).syncRole).toBe("shared");
   });

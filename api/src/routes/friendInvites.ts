@@ -6,7 +6,7 @@
 //
 // WHAT THE LINK IS WORTH, and so what a leaked one gives away: a friendship
 // with the inviter, once, within FRIEND_INVITE_TTL_DAYS. A friendship shows
-// nothing by itself (sharing stays per place, ADR 0002); it puts the holder in
+// nothing by itself (sharing stays per place, docs/decisions/0002-place-share-visibility.md); it puts the holder in
 // the inviter's share picker and lets them send the inviter copies. The
 // inviter is told who joined and can remove them.
 //
@@ -203,7 +203,7 @@ async function redeemInvite(token: unknown, callerId: string) {
     }
     if (notifyInviter) {
       // The type an accepted request writes, so every supported build of
-      // Logjam GPS already draws it (ADR 0022); `viaInvite` lets a build
+      // Logjam GPS already draws it (docs/decisions/0022-mobile-builds-supported-three-months.md); `viaInvite` lets a build
       // that knows it word the row for a link. Ids only; the username is
       // resolved at read time.
       await tx.notification.create({

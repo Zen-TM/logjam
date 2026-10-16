@@ -21,14 +21,13 @@
  * Places are absent deliberately: they keep `PlaceShare`, which is
  * load-bearing in sync, notifications and tombstones. Two tables, ONE reader —
  * `api/src/lib/shareAccess.ts` unions them, and nothing else re-derives the
- * decision (root CLAUDE.md, SEC-001).
+ * decision.
  */
 export const SHARABLE_ENTITY_TYPES = [
-  // `waypoint` LEFT this list when waypoints became places: a place is shared
-  // through a `PlaceShare` row, not a polymorphic `Share` one, and admitting
-  // "place" here would silently widen /shares to a table it cannot write.
-  // See BULK_SHARE_ITEM_TYPES below, which is where "place" is admitted and
-  // the only caller that fans a mixed list across both tables.
+  // A place is shared through a `PlaceShare` row, not a polymorphic `Share`
+  // one, and admitting "place" here would silently widen /shares to a table
+  // it cannot write. See BULK_SHARE_ITEM_TYPES below, which is where "place"
+  // is admitted and the only caller that fans a mixed list across both tables.
   "route",
   "topoJob",
   "geoPdfJob",
@@ -163,8 +162,8 @@ export const MAX_BULK_SHARE_ITEMS = 200;
  *
  * Deliberately not per-id: an id-keyed result ("that one wasn't yours") is an
  * existence oracle on ids the caller may have guessed, which is the rule
- * `/shares` already follows by answering 404 rather than 403 (SEC-001). The
- * caller supplied the list, so it can label its own rows from the totals.
+ * `/shares` already follows by answering 404 rather than 403. The caller
+ * supplied the list, so it can label its own rows from the totals.
  */
 export type BulkShareResult = {
   /** New share rows written, summed over items x recipients. */
@@ -186,13 +185,11 @@ export type BulkShareResult = {
 // directions, and DELETE /friends/:id/shares is the bulk revoke of the forward
 // one.
 //
-// A ROW IS NOT A PLACE. The payload used to be place-only (`placeId`), which
-// made the surface understate itself the moment direct item sharing shipped:
-// routes, LiDAR topos and GeoPDFs live in the `Share` table, and a
-// friend holding six of them saw an audit screen that said "nothing shared".
-// The row therefore carries the same (entityType, entityId) pair the bulk share
-// speaks, so the two halves of the feature cannot disagree about what a
-// shareable thing is.
+// A ROW IS NOT A PLACE: routes, LiDAR topos and GeoPDFs live in the `Share`
+// table, and an audit screen that only looked at places would show "nothing
+// shared" for them. The row carries the same (entityType, entityId) pair the
+// bulk share speaks, so the two halves of the feature cannot disagree about
+// what a shareable thing is.
 //
 // WHAT IT STILL DOES NOT SAY: a shared place carries its place-level notes,
 // its place-level media and its linked route with it, with no `Share` row of
@@ -200,7 +197,7 @@ export type BulkShareResult = {
 // unsharing the PLACE is what takes them back. Every surface listing these
 // rows has to say so, or the user unshares three routes and believes the
 // friend is blind. (A place LINKED to a shared place carries nothing: a link
-// grants no visibility at all, which is what phase 1c settled.)
+// grants no visibility at all.)
 
 /**
  * One thing one friend can see, in either direction.
@@ -221,8 +218,8 @@ export type FriendShareRow = {
    *
    * The SERVER answers this, because only the server can. A client deriving it
    * from its own mirror is right only once the mirror has pulled the linked
-   * row: on a phone that had not yet synced, the same route offered a Remove
-   * that would silently undo itself (seen on device, 2026-09-05).
+   * row: on a phone that has not yet synced, the same route would offer a
+   * Remove that silently undoes itself.
    */
   alsoViaPlace?: true;
 };
@@ -314,10 +311,9 @@ export function copyAndRemoveConfirm(args: {
   mediaLeftBehind?: number;
 }): { title: string; body: string } {
   // TWO FORMS OF THE SAME FALLBACK, because it appears in two positions and
-  // the generic one is not a proper noun: "…on every device. the owner keeps
-  // the original." shipped to the emulator and reads as a rendering fault.
-  // `removeShareConfirm` has always capitalised its sentence-initial one; this
-  // needs both, so it spells both.
+  // the generic one is not a proper noun: in sentence-initial position, a
+  // lowercase "the owner" reads as a rendering fault. `removeShareConfirm`
+  // capitalises its sentence-initial one; this needs both, so it spells both.
   const owner = args.ownerName ?? "the owner";
   const Owner = args.ownerName ?? "The owner";
   const left = args.mediaLeftBehind ?? 0;

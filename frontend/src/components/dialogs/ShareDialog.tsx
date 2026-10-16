@@ -14,13 +14,10 @@
 // PICKING A FRIEND SHARES, THERE AND THEN — no ticking, no Confirm. Logjam GPS
 // draws the same distinction in `SharePanel.tsx` and says why: a share is
 // revocable, so the press can be the whole action, while a copy is not and has
-// to wait behind a footer button. This dialog used to make you search, press
-// Add, watch a chip appear and then press Confirm Share — four presses for
-// something one press can undo, and no footer button in sight for the friends
-// already listed underneath.
+// to wait behind a footer button.
 //
 // PRIVACY: usernames only, never email. The friends endpoints are
-// username-only server-side (root CLAUDE.md) and this must not become the
+// username-only server-side (root AGENTS.md) and this must not become the
 // surface that wants more.
 import { Fragment, type ReactNode } from "react";
 import {

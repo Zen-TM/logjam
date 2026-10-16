@@ -1,11 +1,12 @@
-// Pure pieces of the Protomaps region-clip endpoint (stage4a §7): request
+// Pure pieces of the Protomaps region-clip endpoint: request
 // validation/caps and the short-lived opaque-token store. Kept free of
 // express/S3 so the privacy-relevant logic is unit-testable.
 //
 // PRIVACY: a region bbox is place-area knowledge. It exists transiently in
-// the POST body (redacted from logs — see redactPaths in lib/logger.ts) and
-// in this process's memory until the clip is streamed or expires. It must
-// never appear in URLs, filenames, error messages, or persisted storage.
+// the POST body (redacted from logs — see redactPaths in lib/logger.ts; Guard:
+// api/src/lib/logger.unit.test.ts) and in this process's memory until the clip
+// is streamed or expires. It must never appear in URLs, filenames, error
+// messages, or persisted storage.
 import { randomUUID } from "crypto";
 import { AppError, malformed } from "../middleware/errorHandler";
 import {
@@ -25,7 +26,7 @@ export const ARCHIVE_BOUNDS: RegionBbox = {
   north: -28.0,
 };
 
-/** Server-side caps (stage4a §7.2). */
+/** Server-side caps. */
 /** Re-exported from shared so the client offers exactly what this accepts. */
 export const MAX_CLIP_AREA_KM2 = MAX_REGION_AREA_KM2; // 40×40 km
 export const MAX_CLIP_ZOOM = 15;
@@ -181,7 +182,7 @@ export function pmtilesExtractArgs(
 
 // ── Token store ──────────────────────────────────────────────────────────────
 //
-// SINGLE-INSTANCE ASSUMPTION (same as ARCH-007 in middleware/rateLimit.ts):
+// SINGLE-INSTANCE ASSUMPTION (same assumption as in middleware/rateLimit.ts):
 // the token→file map is in-process and the temp file is instance-local, so
 // POST and GET must hit the same process. True today (single EB container).
 // If the API ever scales out, this endpoint needs rework (sticky sessions or

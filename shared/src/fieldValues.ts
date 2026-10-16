@@ -1,17 +1,15 @@
 // Reading and writing `Place.fieldValues`.
 //
-// The seven grade columns became JSON keys, which means a Postgres type check
-// became an application one. Every site that used to say `place.vGrade` now
-// reaches into an untyped blob, and if each does it its own way they will
-// disagree about the three cases that matter: a missing key, a stored `null`,
-// and a value of the wrong type. This module is the one answer, so that
-// disagreement cannot happen.
+// Grade and custom field values are stored as JSON keys, which means type
+// checking is application-level. Every site reaching into this untyped blob
+// must handle the three cases that matter consistently: a missing key, a
+// stored `null`, and a value of the wrong type. This module is the one
+// answer, so that disagreement cannot happen.
 //
 // The rules, all three deliberate:
 //  * MISSING AND NULL ARE THE SAME THING — "no value". `setFieldValue(k, null)`
 //    deletes the key rather than storing a null, because a stored null renders
-//    as an empty field and satisfies a "has a value" filter. The old columns
-//    were nullable and absent-vs-null never arose; here it would.
+//    as an empty field and satisfies a "has a value" filter.
 //  * A WRONG-TYPED VALUE READS AS ABSENT rather than throwing. These blobs
 //    outlive the definitions that describe them: a def can be retyped from
 //    integer to string while values are already stored, and a renderer that
@@ -48,8 +46,8 @@ export function numericFieldValue(
     : undefined;
 }
 
-/** The nullable-column shape the old scalar columns had, for call sites that
- *  still speak `number | null` (Prisma selects, API responses, exports). */
+/** Return number | null, for call sites that speak `number | null` (Prisma
+ *  selects, API responses, exports). */
 export function numericFieldValueOrNull(
   values: unknown,
   key: string,
@@ -115,9 +113,8 @@ export function userFieldValues(values: unknown): FieldValues {
  * this is not a third field mechanism.
  *
  * Written ONLY by copy and by a place-type change — never by a user edit, and
- * never present on a delta row with syncRole "shared". Phase 4 owns the
- * behaviour; the column and this type exist from phase 1b so the schema is
- * settled before anything writes it.
+ * never present on a delta row with syncRole "shared". Guards:
+ * `api/src/routes/placeFields.unit.test.ts`, `api/src/lib/placeVisibility.unit.test.ts`.
  */
 export type ForeignFieldValue = {
   key: string;

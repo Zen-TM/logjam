@@ -128,20 +128,20 @@ def update_status(
     updated.
 
     If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
-    incremented in the SAME transaction/commit as the status update — the
-    two-commit window worker.py already closed (ARCH-003): a crash between a
-    `completed` commit and a separate storage commit would leave a
-    downloadable export whose bytes were never quota-accounted.
+    incremented in the SAME transaction/commit as the status update: a crash
+    between a `completed` commit and a separate storage commit would leave a
+    downloadable export whose bytes were never quota-accounted (guarded by
+    tests/test_status_guards.py).
 
     With expected_status the UPDATE is guarded (`AND status = %s`), making
-    transitions write-once (Design L1): a reaped/deleted export matches 0
+    transitions write-once: a reaped/deleted export matches 0
     rows, the storage charge is SKIPPED, and the caller must self-clean and
     skip notification/email.
     """
     # No `updated_at = NOW()` here, unlike worker.py's twin: topo_export_jobs
     # has no updated_at column (schema.prisma TopoExportJob / migration
     # 20260528000001) — created_at, started_at and completed_at only. The two
-    # copies differ because the two tables do (STP-008).
+    # copies differ because the two tables do.
     set_clauses = ["status = %s"]
     values: list = [status]
     for col, val in kwargs.items():
@@ -228,7 +228,7 @@ def main():
         log.error(f"Could not load export job: {e}")
         sys.exit(1)
 
-    # Guarded on `queued` (Design L1): if the export was reaped or deleted
+    # Guarded on `queued`: if the export was reaped or deleted
     # while the task spun up, claim nothing and exit cleanly. started_at
     # anchors the reaper's running-timeout (mirrors topo_jobs.started_at).
     claimed = update_status(
@@ -320,9 +320,9 @@ def main():
         log.error(f"Unexpected failure: {e}", exc_info=True)
         error_msg = failure_sentence(e)
 
-    # Terminal write guarded on `running` (Design L1). On success the storage
-    # charge shares the same commit as the status flip (ARCH-003) — never a
-    # separate commit.
+    # Terminal write guarded on `running`. On success the storage charge shares
+    # the same commit as the status flip (guarded by
+    # tests/test_status_guards.py) — never a separate commit.
     if error_msg or result_key is None:
         updated = update_status(
             conn,
@@ -358,7 +358,7 @@ def main():
         conn.close()
         return
 
-    # Everything past the terminal flip is best-effort (STP-002): the row is
+    # Everything past the terminal flip is best-effort: the row is
     # already correct and the artefact uploaded, so a transient DB blip in the
     # notification tail must not kill the process or skip the email.
     try:

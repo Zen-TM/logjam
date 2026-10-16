@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { decodeVectorTileLayer } from "./geoPdfVectorTile";
 
 // Regression guard for the vector-tile3 / pbf5 decode path
-// (`new VectorTile(new PbfReader(...))`) that shipped verified by tsc only.
+// (`new VectorTile(new PbfReader(...))`).
 // sample.mvt is a tiny committed fixture (api/src/services/__fixtures__): two
 // layers — "contours" (1 LineString, ele="100") and "features" (1 Point,
 // natural="peak").

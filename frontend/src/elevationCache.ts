@@ -2,11 +2,8 @@
 //
 // WHY THIS EXISTS. A profile is a round trip to the DEM, and the same geometry
 // is asked for repeatedly: opening a way, editing it, and leaving the editor
-// are three requests for a line nobody touched (measured 2026-09-17). Now that
-// the editor shows the same page the detail view does, that is three answers to
-// one question. `useElevationProfile` already claimed this in its docstring —
-// "reopening the same route does not [re-sample]" — and did not do it; this is
-// the implementation that makes the sentence true, with a test so it stays so.
+// are three requests for a line nobody touched. Keying the cache on the exact
+// point list avoids redundant round trips for unchanged geometry.
 //
 // WHY CACHING IS SAFE HERE, when `shared/src/elevation.ts` says a profile is
 // never persisted. That rule is about STORING a profile against a Route: it
@@ -55,7 +52,7 @@ export function cacheProfile(key: string, profile: CachedProfile): void {
   }
 }
 
-/** Test seam. Nothing in the app clears this: a tab reload is the only reset,
+/** Test seam. Nothing in Logjam Web clears this: a tab reload is the only reset,
  *  and a profile cannot go stale for geometry that has not changed. */
 export function clearProfileCache(): void {
   entries.clear();

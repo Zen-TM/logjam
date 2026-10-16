@@ -1,16 +1,13 @@
-"""Every local module the workers import must be COPYed into the image (STP-006).
+"""Every local module the workers import must be COPYed into the image.
 
-`push_send.py` (added 2026-07-23) was never added to the Dockerfile's COPY
-list, so any freshly built image raised ModuleNotFoundError at worker.py's
-lazy `from push_send import send_push` — which fires AFTER the `complete`
-status flip has committed, taking the self-clean path that deletes the
-finished job's S3 outputs. The exact same defect had already happened once
-(743b1a3, "copy email_send.py into worker image").
+If an imported module is missing from the Dockerfile's COPY list, lazy
+imports (such as `push_send` or `email_send` in worker.py) raise
+ModuleNotFoundError at runtime after the status flip has committed.
 
 Two hand-kept lists that must agree — the modules the entrypoints import and
-the Dockerfile COPY list — so per CLAUDE.md they get a deriving test rather
-than a comment. This walks the import graph from the two ENTRYPOINT targets
-and fails if anything reachable is missing from the image.
+the Dockerfile COPY list — get a deriving test rather than a comment.
+This walks the import graph from the two ENTRYPOINT targets and fails if
+anything reachable is missing from the image.
 
 Pure AST + text parsing: no imports of the modules themselves, so it runs on
 the dev host with no GDAL/PDAL/psycopg2 (`python -m unittest discover -s tests`).

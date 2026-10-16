@@ -7,7 +7,8 @@ import { todayDateKey } from "./logbook.js";
  * `date` is the track's own LOCAL day, not its UTC day: a descent that started
  * at 7:30 on an AEDT morning began the evening before in UTC, and a trip filed
  * under the day before is the first thing a user would notice. `timeZone` is
- * for tests; the clients leave it out and get the device's.
+ * for tests (test: shared/src/trackTrip.test.ts); the clients leave it out
+ * and get the device's.
  *
  * `placeIds` is the place the track is linked to, if it is on one. The name is
  * left to the form: a track's own name is rarely a trip's.

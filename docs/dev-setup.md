@@ -275,7 +275,7 @@ job to run slower than on an x86 machine.
 
 ## Logjam GPS on an emulator or phone
 
-Logjam GPS is an Expo app with a dev client (a debug build of the app that
+Logjam GPS is an Expo app with a dev client (a debug build of Logjam GPS that
 loads its JavaScript from Metro), not Expo Go. A real phone is better than an
 emulator for anything involving GPS, the camera or the biometric prompt;
 `mobile/AGENTS.md` has the rules of the dev loop.
@@ -337,13 +337,13 @@ npm run dev:android                     # after that
 ```
 
 `npm run dev:android` (add `-- --emulator` to boot the `logjam` AVD first)
-reverses the ports the app dials on `127.0.0.1` (8081 Metro, 8080 API, 4566
+reverses the ports Logjam GPS dials on `127.0.0.1` (8081 Metro, 8080 API, 4566
 MiniStack), installs the dev client if it is missing and launches it. It
 prints each port it reversed and whether anything was listening there.
 Building the dev client takes 10–20 minutes the first time; you only rebuild
 it after a native change.
 
-**It worked if** the app opens on alice's places. If it opens but shows
+**It worked if** Logjam GPS opens on alice's places. If it opens but shows
 nothing, or edits never sync, rerun `npm run dev:android`: a reverse tunnel
 died.
 

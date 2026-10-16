@@ -80,8 +80,7 @@ describe("WAY_KINDS", () => {
     expect(Object.keys(WAY_KIND_LABELS).sort()).toEqual([...WAY_KINDS].sort());
   });
 
-  // Where a way lives is a property of the row. It was briefly a fourth chip,
-  // which put "what a thing is" and "where it lives" on one axis.
+  // Where a way lives is a property of the row, not a kind axis.
   it("names only what a way IS", () => {
     expect([...WAY_KINDS]).toEqual(["route", "track", "import"]);
   });
@@ -247,9 +246,7 @@ describe("buildWays", () => {
     expect(way).toMatchObject({ shared: true, viaPlace: true });
   });
 
-  // The list used to be routes, then files, then a friend's tracks — the order
-  // the three fetches happened to be written in, which means nothing to the
-  // reader: a track recorded this morning sat below a route drawn last year.
+  // Routes, files, and tracks are ordered together newest first.
   it("orders every kind together, newest first", () => {
     const ways = build({
       routes: [

@@ -88,7 +88,7 @@ describe("CSP allowlist agreement", () => {
 // thread outside script-src. Mutation that turns it red: add blob: (or any
 // host) to worker-src in CSP_PROD.
 describe("CSP worker-src", () => {
-  it("allows workers only from the app's own origin", () => {
+  it("allows workers only from Logjam Web's own origin", () => {
     const workerSrc = CSP_PROD.split(";")
       .map((directive) => directive.trim())
       .find((directive) => directive.startsWith("worker-src "));

@@ -56,7 +56,7 @@ describe("describeDroppedTripRow", () => {
     expect(describeDroppedTripRow("2023-06-15", "15/06/2023")).toBeNull();
   });
 
-  it("reports an unreadable date with the offending raw value, matching the D5 example wording", () => {
+  it("reports an unreadable date with the offending raw value", () => {
     expect(describeDroppedTripRow(null, "15.06.2023")).toBe(
       'date "15.06.2023" couldn\'t be read',
     );

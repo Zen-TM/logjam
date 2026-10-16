@@ -8,9 +8,7 @@ import { logger } from "../lib/logger";
  * thrown.
  *
  * No-op (logged) when RESEND_API_KEY or EMAIL_FROM is unset — keeps local dev
- * and any unconfigured worker quiet instead of failing. This replaces the
- * former AWS SES path (SES production access was denied; Resend needs only DNS
- * domain verification).
+ * and any unconfigured worker quiet instead of failing.
  */
 export async function sendEmail(params: {
   to: string;
@@ -43,8 +41,8 @@ export async function sendEmail(params: {
       );
     }
   } catch (err) {
-    // Never reference recipient/place detail in the log (CLAUDE.md privacy
-    // rule); the send is best-effort and the notification row already exists.
+    // Never reference recipient/place detail in the log (logger.unit.test.ts);
+    // the send is best-effort and the notification row already exists.
     logger.warn(
       { errClass: err instanceof Error ? err.constructor.name : typeof err },
       "email_send_failed",

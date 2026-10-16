@@ -8,7 +8,7 @@ export
 # mise.toml pins the toolchain. Put its tools first on PATH for every recipe,
 # so make behaves the same in a shell that never ran `mise activate` (an agent,
 # an IDE task, a script) as in an interactive one. Without this, such a shell
-# got the system Node and pip, and `make setup` died on PEP 668.
+# gets the system Node and pip, and `make setup` dies on PEP 668.
 MISE_PATH := $(shell command -v mise >/dev/null 2>&1 && mise bin-paths 2>/dev/null | paste -sd: -)
 ifneq ($(MISE_PATH),)
 export PATH := $(MISE_PATH):$(PATH)
@@ -32,8 +32,8 @@ dev: shared build-workers
 	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
 	@echo "Seeding fixtures..."
 	@# A sub-make, so the seed reads the .env.local that _ministack-tf just wrote:
-	@# this make parsed before it existed on a first run, and the seed then
-	@# skipped uploading media for want of S3_BUCKET_MEDIA.
+	@# otherwise make parses before the file exists on a first run, and the seed
+	@# skips uploading media for want of S3_BUCKET_MEDIA.
 	@$(MAKE) seed
 	@echo ""
 	@echo "  Infra ready. Start app servers in separate terminals:"
@@ -77,7 +77,7 @@ reset: shared build-workers
 	@echo "Reset complete."
 
 ## Build the shared package — api + frontend import @logjam/shared via file:../shared
-## and read from shared/dist/, so dist must exist before either app starts.
+## and read from shared/dist/, so dist must exist before api or Logjam Web starts.
 shared:
 	@echo "Building shared package..."
 	cd shared && npm run build
@@ -85,7 +85,7 @@ shared:
 ## Build the worker Docker images that MiniStack RunTask launches locally. The
 ## local ECS task defs (infra/terraform/envs/local/ecs.tf) reference these tags;
 ## rebuild after changing worker code (local analogue of CI's ECR push). Docker
-## layer caching keeps this fast when nothing changed.
+## layer caching keeps this fast when nothing changes.
 ## Pinned to linux/amd64 because prod's ECS tasks run X86_64 and api/Dockerfile
 ## fetches an x86-64 pmtiles binary, so an arm64 build (Apple Silicon) fails.
 build-workers:

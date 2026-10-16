@@ -119,7 +119,7 @@ export async function getMonthlyCreditUsage(
  * Read-then-throw is racy on its own; the authoritative call sites run inside a
  * transaction that locks the user row (`SELECT … FOR UPDATE`) and pass `db =
  * tx`, so concurrent submissions serialise — the same treatment the per-user
- * concurrency caps get (ARCH-009).
+ * concurrency caps get.
  *
  * A null estimate means the adaptive estimator has too little history to have
  * an opinion. That must NOT be read as "free": the job is still admitted only

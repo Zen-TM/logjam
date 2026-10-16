@@ -26,17 +26,16 @@ import {
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// COPYING A SHARED PLACE, from the recipient's side (plan §2.6, §7.1, §7.13,
-// §7.16). Everything here is a two-actor test on purpose: the rules being
-// pinned are about what one account can see of another's, and a mocked-Prisma
-// unit test cannot reach any of them.
+// COPYING A SHARED PLACE, from the recipient's side. Everything here is a
+// two-actor test on purpose: the rules being pinned are about what one account
+// can see of another's, and a mocked-Prisma unit test cannot reach any of them.
 //
 // The three rules, in the order they are easiest to half-implement:
 //
 //  1. A sharee of a place whose TYPE they do not own gets `fieldDefsSnapshot`
 //     on the delta row. Without it they see bare keys — and this is the same
 //     shape of bug as `loadDefRows` filtering to `ownerId`, which hid the
-//     SYSTEM definitions from their own owner in phase 1b.
+//     SYSTEM definitions from their own owner.
 //  2. `foreignFields` is OWNER-PRIVATE: absent from every surface a sharee can
 //     reach, and never on a delta row with syncRole "shared". Without it the
 //     design inherits the propagation objection that got the notes-dump
@@ -607,10 +606,9 @@ describe("a place-type change parks what the new type cannot hold", () => {
     ]);
   });
 
-  // The REST half of the same rule. `PATCH /places/:id` dropped `placeTypeId`
-  // on the floor and answered 200, so Logjam Web — which has no push path —
-  // offered a type picker on an existing place that did nothing at all. Found
-  // by retyping a place in the browser (2026-09-19).
+  // The REST half of the same rule: `PATCH /places/:id` retypes and parks what
+  // the new type cannot hold, so Logjam Web — which has no push path — can
+  // retype a place.
   it("PATCH /places/:id retypes, and parks what the new type cannot hold", async () => {
     const stamp = Date.now();
     const key = `chok_${stamp}`.slice(0, 20);

@@ -1,8 +1,7 @@
 // One way: what it is as numbers, and what can be done with it.
 //
-// EVERY kind gets this page, not just routes (operator, 2026-09-17): opening a
-// recorded track or an imported file used to do nothing at all, so the only way
-// to learn anything about one was to draw it on the map and look.
+// Every kind gets this page, not just routes: recorded tracks and imported
+// files also need inspection without drawing them on the map.
 //
 // What each kind can say for itself differs, and the page says only what it
 // knows. A ROUTE carries its geometry inline, so it gets measured figures and a
@@ -204,8 +203,8 @@ export default function WayDetailPanel({
 
   // The colour as the user last PICKED it, not as the server has confirmed it.
   // A pick is a round trip plus a refetch, and showing the old swatch until
-  // both land made the palette feel slow at exactly the moment it should feel
-  // instant (operator, 2026-09-17). Cleared once the refetched route agrees.
+  // both land makes the palette feel slow when it should feel instant.
+  // Cleared once the refetched route agrees.
   const [pendingColour, setPendingColour] = useState<string | null>(null);
   const colour = route?.color ?? file?.color ?? way.color;
   if (pendingColour !== null && colour === pendingColour)
@@ -254,11 +253,9 @@ export default function WayDetailPanel({
   // WHICH PLACE, from the live row rather than from `way`.
   //
   // `way` is the snapshot taken when the page was opened and App never replaces
-  // it, so linking a route updated the server, refetched the route, and changed
-  // nothing on screen: the picker stayed and the place never appeared
-  // (operator, 2026-09-17). The route and the file ARE refetched, so they are
-  // the authority on where this way lives; `way` is the fallback for a kind
-  // that has neither in hand (a friend's place's track).
+  // it. The route and the file ARE refetched, so they are the authority on
+  // where this way lives; `way` is the fallback for a kind that has neither in
+  // hand (a friend's place's track).
   const placeId = route?.placeId ?? file?.linkedPlaceId ?? way.placeId;
   const live = { ...way, placeId };
   const properties = wayProperties(live);
@@ -290,7 +287,7 @@ export default function WayDetailPanel({
     ? [
         // Distance takes the row and climb/descent pair beneath it: those two
         // are one fact about the line, and side by side is what makes them
-        // comparable (operator, 2026-09-17).
+        // comparable.
         {
           label: "Distance",
           value: formatDistanceM(routeLengthM(route.points)),
@@ -640,9 +637,9 @@ export default function WayDetailPanel({
                   </p>
                 )}
                 {/* The chart's axes named: an unlabelled height profile reads as
-                    height over TIME to anyone not told otherwise (mobile §7).
-                    This IS the section's heading — a second "Elevation" above it
-                    said the same thing twice (operator, 2026-09-17). */}
+                    height over time to anyone not told otherwise.
+                    This is the section's heading — a second "Elevation" above it
+                    would say the same thing twice. */}
                 <SectionHeader title="Elevation vs distance" />
                 <ProfileChart
                   series={elevationSeries(profile)}
@@ -704,7 +701,7 @@ export default function WayDetailPanel({
             // Typed, not scrolled. A dropdown of every place the user has is
             // hundreds of options deep, and the platform's own type-to-find
             // matches the START of the primary name only — so a place known by
-            // an alternative name was unreachable (operator, 2026-09-17).
+            // an alternative name would be unreachable.
             <PlacePicker
               label="Link to a place"
               places={ownedPlaces}
@@ -730,9 +727,8 @@ export default function WayDetailPanel({
         </section>
 
         {/* What this way IS to the reader, and nothing to press. Removing it
-            is a verb and lives in the ⋯ with the others — as a button here it
-            was the one action on the page outside the menu, and it read as a
-            leftover from another app (operator, 2026-09-17). */}
+            is a verb and lives in the ⋯ with the others — an inline button
+            here would be an isolated action outside the menu. */}
         {!owned && (
           <section className={classes.section}>
             <p className={classes.note}>

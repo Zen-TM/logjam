@@ -1,7 +1,6 @@
 """Tests for the render-settings loader in pipeline.py.
 
-Guards the constants refactor: defaults must match the values that were
-previously hard-coded inside the render and gdaldem call sites.
+Defaults must match the expected values used by the render and gdaldem call sites.
 
 Plain unittest (no pytest dep) so it runs in the worker Docker image as-is.
 """

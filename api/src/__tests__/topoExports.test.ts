@@ -6,14 +6,14 @@ import { API_URL, BOB_SUB, as } from "./_actors";
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
 // No auth header = alice. Launch-free surfaces only (auth, list + truncation
 // header, validation, not-found) — a valid POST would spawn a MiniStack export
-// worker, so it is intentionally not exercised (CH-004).
+// worker, so it is intentionally not exercised.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 // Note: no unauthenticated-401 case — the integration suite runs only under
 // AUTH_MODE=fake, where a request with no token defaults to the seeded alice
 // (api/src/middleware/auth.ts). That path is unreachable here.
 describe("topo-exports route (fake auth)", () => {
-  it("lists exports and exposes the true total via X-Total-Count (UX-002)", async () => {
+  it("lists exports and exposes the true total via X-Total-Count", async () => {
     const res = await request(API_URL).get("/topo-exports").set(AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.exports)).toBe(true);

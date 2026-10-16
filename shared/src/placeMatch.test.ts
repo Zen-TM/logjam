@@ -188,7 +188,7 @@ describe("nameTier", () => {
   });
 });
 
-// The 19 positive corpus pairs (plan §5a). CSV/place imports carry coords, so
+// The 19 positive corpus pairs. CSV/place imports carry coords, so
 // every one resolves to "auto".
 describe("matchPlace — 19 positive corpus pairs (with coords)", () => {
   const cases: Array<{ input: string; candidates: MatchCandidate[] }> = [
@@ -381,9 +381,8 @@ describe("defaultsToMergeOnImport", () => {
     );
   });
 
-  // The reported harm: a name-similar place 1.8 km away arrived pre-checked to
-  // merge. It stays on the review list as a tickable option; it just no longer
-  // starts selected.
+  // A name-similar place 1.8 km away stays on the review list as an option,
+  // but does not default to merge.
   it("defaults to create-as-new for a name-similar match 1.8 km away", () => {
     expect(defaultsToMergeOnImport(scored(1800))).toBe(false);
   });

@@ -17,10 +17,9 @@ import {
 // reaches the visibility logic under test here.
 const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
 
-// PLACE LINKS, from the outside. This file was `waypoints.test.ts` until the
-// phase 1c fold: a waypoint is a place of the system Marker type now, so its
-// CRUD is `places.test.ts`'s and what is left here is the LINK — the thing a
-// waypoint's `canyonIds` used to be.
+// PLACE LINKS, from the outside. A waypoint is a place of the system Marker
+// type; its CRUD is in `places.test.ts`, while this file tests place-to-place
+// links.
 //
 // The rule the whole file exists to pin: **a link grants NO visibility.**
 // Sharing is per place, explicit, through PlaceShare. Linking a carpark to a
@@ -146,8 +145,8 @@ describe("place links over REST", () => {
 
 describe("a link grants no visibility (§2.5)", () => {
   it("does not carry a linked place to the sharee of the place it hangs off", async () => {
-    // Alice links a private carpark to a place bob CAN see. Under the old
-    // waypoint model this handed bob the carpark; under links it must not.
+    // Alice links a private carpark to a place bob CAN see: linking grants no
+    // visibility, so bob must not see the carpark.
     const carpark = await createMarker(ALICE_SUB, "Private carpark");
     const shared = await request(API_URL)
       .post("/places")
@@ -238,7 +237,7 @@ describe("a link grants no visibility (§2.5)", () => {
 
 describe("place links over the sync push protocol", () => {
   // The client-facing shape: per-link create/delete ops with client-minted
-  // ids, NOT a whole-list field on the place row (§6). Two devices linking the
+  // ids, NOT a whole-list field on the place row. Two devices linking the
   // same pair collide on the unique index instead of clobbering each other.
   function opEnvelope(ops: unknown[]) {
     return { protocol: 1, ops };
@@ -249,7 +248,7 @@ describe("place links over the sync push protocol", () => {
     const second = await createMarker(ALICE_SUB, "Push marker B");
     // Minted per run, not pinned: the delete at the end leaves a TOMBSTONE for
     // the id, and `createAlreadyTombstoned` then answers alreadyApplied to any
-    // later create of it — correct protocol behaviour (delete wins, §6), and
+    // later create of it — correct protocol behaviour (delete wins), and
     // it makes a hardcoded id single-use.
     const linkId = randomUUID();
     const op = {
@@ -299,7 +298,7 @@ describe("place links over the sync push protocol", () => {
     expect(other.body.results[0].status).toBe("alreadyApplied");
     expect(other.body.results[0].row.id).toBe(linkId);
 
-    // §7.18, the round trip: what was pushed comes back down the delta, and
+    // The round trip: what was pushed comes back down the delta, and
     // the link arrives with both of its endpoints — a link whose places were
     // not delivered renders as nothing on the phone.
     const delta = await request(API_URL)

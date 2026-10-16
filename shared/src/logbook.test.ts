@@ -32,7 +32,7 @@ const fromDateKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 
 describe("date handling", () => {
   it("reads a UTC-midnight date as its own calendar day", () => {
-    // The CH-001 trap: in AEST, a local-time read of this instant is 14 March.
+    // In AEST, a local-time read of this instant is 14 March.
     expect(tripYear("2026-01-01T00:00:00.000Z")).toBe(2026);
     expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("15");
     expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("2026");

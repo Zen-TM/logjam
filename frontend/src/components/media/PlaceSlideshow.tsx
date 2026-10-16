@@ -14,7 +14,7 @@ const MAX_DOTS = 7;
 export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
-  // Slides that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked by
+  // Slides that failed to load (e.g. a 404'd S3 object). Tracked by
   // id so a broken slide shows a labelled fallback instead of the browser's
   // broken-image glyph on the black letterbox.
   const [failedSlideIds, setFailedSlideIds] = useState<Set<string>>(new Set());

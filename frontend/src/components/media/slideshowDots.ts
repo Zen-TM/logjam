@@ -1,7 +1,8 @@
 // Pure pagination-dot model for the place slideshow. A place can have many
-// photos, so the dot strip must never overflow: we render at most `maxDots`
-// dots as a window centred on the active slide, shrinking the window-edge dots
-// when more slides exist beyond them (the common carousel-pagination pattern).
+// photos, so the dot strip must never overflow (slideshowDots.test.ts): we render
+// at most `maxDots` dots as a window centred on the active slide, shrinking the
+// window-edge dots when more slides exist beyond them (the common
+// carousel-pagination pattern).
 
 export type DotSize = "small" | "medium" | "full";
 

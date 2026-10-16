@@ -1,6 +1,6 @@
 // Topo generation render settings.
 //
-// As of Stage 1, settings are split into two slices:
+// Settings are split into two slices:
 //
 //   RasterTemplateSettings — persisted on TopoTemplate.config. Drives raster
 //     bake (hillshade tint, vegetation colors, slope bins, contour interval
@@ -16,7 +16,7 @@
 // Frontend, API, and worker all import these types + validators from here.
 
 // ---------------------------------------------------------------------------
-// Topo layers — canonical list (ARCH-010)
+// Topo layers — canonical list
 // ---------------------------------------------------------------------------
 // The single source of truth for the layers rendered on the map and selectable
 // as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
@@ -62,7 +62,7 @@ export type TopoLayerMeta = (typeof TOPO_LAYERS)[number];
 // Derived from the list so the union and the list cannot diverge.
 export type TopoLayerKey = TopoLayerMeta["name"];
 export type TopoSurveyPick = TopoLayerMeta["surveyPick"];
-// Alias kept for call sites that grew up on the api/frontend constant files.
+// Alias kept for call sites using the api/frontend constant files.
 export type TopoLayerName = TopoLayerKey;
 export type TopoLayerFormat = TopoLayerMeta["format"];
 
@@ -83,7 +83,7 @@ export interface HillshadeSettings {
 
 // Numeric bounds for the hillshade fields — single source shared by the
 // stored-settings validator (validateHillshade) and the frontend's inline
-// field validation (TOPO-2), so the two can't drift.
+// field validation, so the two can't drift.
 export const HILLSHADE_LIMITS = {
   azimuth: { min: 0, max: 360 },
   altitude: { min: 0, max: 90 },
@@ -121,7 +121,7 @@ export interface ContourZoomBand {
 }
 
 // Raster-bake-only contour fields. Vector contour colors/widths live in
-// VectorStyleSettings now and apply at composite-bake time via the snapshot.
+// VectorStyleSettings and apply at composite-bake time via the snapshot.
 export interface RasterContoursSettings {
   enabled: boolean;
   zoomBands: ContourZoomBand[]; // length 3, indices/zooms fixed
@@ -278,8 +278,8 @@ export const OSM_FEATURE_TAG_HINTS: Record<OsmFeatureKey, string> = {
 };
 
 // Formation list must match topo/build_svtm_formation.py SVTM_FORMATION_MU
-// keys (index 0 = "Not classified"). Mirrored here so the frontend can render
-// the weights table without round-tripping the worker.
+// keys (index 0 = "Not classified"; test: topo/tests/test_layer_sync.py). Mirrored
+// here so the frontend can render the weights table without round-tripping the worker.
 export const SVTM_FORMATIONS: string[] = [
   "Not classified",
   "Rainforests",
@@ -462,8 +462,9 @@ export function validateVectorStyleSettings(
   validateVectorContours(input.contours, errors);
   validateVectorFeatures(input.features, errors);
 
-  // labelScale is a later addition: pre-existing stored styles omit it, so an
-  // absent value is valid and normalises to 1. A present value must be in range.
+  // Stored styles may omit labelScale, so an absent value is valid and
+  // normalises to 1. A present value must be in range
+  // (test: shared/src/topoSettings.test.ts).
   if (input.labelScale !== undefined) {
     pushIf(
       errors,
@@ -581,11 +582,12 @@ function validateSlope(v: unknown, errors: string[]): void {
 }
 
 /**
- * User-facing validity check for the slope-band editor. Stricter than the
- * stored-settings validator: bands must be contiguous integer ranges within
- * 0..90 (each band starts exactly where the previous ends). Returns the first
- * problem as a short message, or null when valid. Used by SlopeSettings to
- * render a notice and to gate the template Save / topo Generate buttons.
+ * User-facing validity check for the slope-band editor (test:
+ * shared/src/topoSettings.test.ts). Stricter than the stored-settings
+ * validator: bands must be contiguous integer ranges within 0..90 (each band
+ * starts exactly where the previous ends). Returns the first problem as a
+ * short message, or null when valid. Used by SlopeSettings to render a notice
+ * and to gate the template Save / topo Generate buttons.
  */
 export function slopeBandsError(bands: SlopeBand[]): string | null {
   if (bands.length === 0) return "Add at least one slope band.";
@@ -610,12 +612,12 @@ export function slopeBandsError(bands: SlopeBand[]): string | null {
 }
 
 /**
- * User-facing validity check for the hillshade settings tab (TOPO-2). Same
- * role as slopeBandsError: the tab lets an out-of-range number into state so
- * the inline field error can point at it, and this gates the template Save /
- * topo Generate buttons until it's fixed. Returns the first problem as a
- * short message, or null when valid. Bounds come from HILLSHADE_LIMITS — the
- * same ranges validateHillshade enforces at submit.
+ * User-facing validity check for the hillshade settings tab (test:
+ * shared/src/topoSettings.test.ts). Same role as slopeBandsError: the tab lets
+ * an out-of-range number into state so the inline field error can point at it,
+ * and this gates the template Save / topo Generate buttons until it's fixed.
+ * Returns the first problem as a short message, or null when valid. Bounds come
+ * from HILLSHADE_LIMITS — the same ranges validateHillshade enforces at submit.
  */
 export function hillshadeSettingsError(h: HillshadeSettings): string | null {
   const { azimuth, altitude, zFactor } = HILLSHADE_LIMITS;
@@ -904,17 +906,15 @@ export function rgbaCssFromHex(hex: RgbaHex): string {
  * ground: they are this many times a pixel width. The factor is kept rather than
  * migrated away because it is baked into every stored style, every template
  * snapshot and the Python worker; the UI divides by it so that a contour and an
- * OSM line asked for the same number get the same line (operator, 2026-09-18).
+ * OSM line asked for the same number get the same line.
  */
 export const CONTOUR_WIDTH_UNITS_PER_PX = 8;
 
 /**
- * Zoom stops {z12, z18} for a line width in pixels at z18 — ONE taper for every
- * vector line, contours and OSM features alike. They had one each (0.4 from a
- * floor of 0.3, and 0.25 from a floor of 0.25), so two lines of the same width
- * at z18 were different widths at every other zoom — and tuning happens at z13
- * to z16, not z18. The gentler of the two is the one kept: a road at the old
- * feature taper was a 0.75px hairline across the whole mid range.
+ * Zoom stops {z12, z18} for a line width in pixels at z18 — a single shared
+ * taper for vector lines, contours and OSM features alike, so two lines of the
+ * same width at z18 remain the same width across all zoom levels
+ * (test: shared/src/topoSettings.test.ts).
  */
 export function lineWidthStops(widthPxZ18: number): {
   z12: number;

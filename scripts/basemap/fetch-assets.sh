@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Vendors the Protomaps glyph/sprite assets into the mobile app bundle
-# (stage 4a §8.3: offline regions must render labels with zero network).
+# Vendors the Protomaps glyph/sprite assets into the Logjam GPS bundle so
+# offline regions render labels with zero network.
 #
 # Produces:
 #   mobile/assets/basemap/basemap-assets.zip   — fonts + sprites, extracted to
@@ -48,7 +48,7 @@ echo "$TARBALL_SHA256  $WORK/assets.tar.gz" | sha256sum -c - >/dev/null
 tar -xzf "$WORK/assets.tar.gz" -C "$WORK"
 SRC="$WORK/basemaps-assets-$COMMIT"
 
-# Stage exactly what the app needs.
+# Stage exactly what Logjam GPS needs.
 STAGE="$WORK/stage"
 mkdir -p "$STAGE/fonts" "$STAGE/sprites/v4"
 for stack in "${FONT_STACKS[@]}"; do

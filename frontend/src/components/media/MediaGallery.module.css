@@ -108,10 +108,8 @@
   cursor: default;
 }
 
-/* A control revealed BY HOVER does not exist on a touch screen, which has no
-   hover to give — so the only way to delete a photo there was to find that a
-   tap happens to fire :hover first. Where the pointer is coarse it is simply
-   always there. */
+/* A control revealed by hover cannot be reached cleanly on a touch screen.
+   Where the pointer is coarse, the delete button is always visible. */
 @media (pointer: coarse) {
   .deleteBtn {
     opacity: 1;

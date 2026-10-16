@@ -117,8 +117,8 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         };
       }
       return { text: "GeoPDF ready" };
-    // Egress has no meter in the app - the allowance sits far above real use,
-    // so these two rows are its entire user-facing surface.
+    // Egress has no meter in Logjam GPS or Logjam Web - the allowance sits far
+    // above real use, so these two rows are its entire user-facing surface.
     case "egress_quota_warning":
       return { text: "Approaching your monthly download limit" };
     case "egress_quota_exceeded":
@@ -221,11 +221,10 @@ export const NOTIFICATIONS_LIST_CAP = 500;
 /**
  * Whether the server's cap cut the inbox short, from the total it reported.
  *
- * NOT `total > notifications.length`, which both clients used to test: the
- * total counts every stored row, and the endpoint then drops the rows it can no
- * longer resolve (a revoked share, a removed friendship — PRIV-001/003). So an
- * inbox of 13 rows showing 7 said "Showing 7 of 13. Older ones aren't loaded"
- * with nothing older at all. Only a total past the cap means a row was left out.
+ * The total counts every stored row, and the endpoint drops rows it can no
+ * longer resolve (a revoked share, a removed friendship). Comparing against
+ * `notifications.length` would make an inbox with dropped rows claim older
+ * ones are not loaded. Only a total past the cap means a row was left out.
  */
 export function notificationsTruncated(total: number | null): boolean {
   return total !== null && total > NOTIFICATIONS_LIST_CAP;
@@ -233,15 +232,14 @@ export function notificationsTruncated(total: number | null): boolean {
 
 /**
  * NEWEST FIRST, and never re-sorted by read state. The server returns
- * `read: asc` then `createdAt: desc`, which made acting on a row teleport it
+ * `read: asc` then `createdAt: desc`, but acting on a row must not teleport it
  * to the bottom of the list mid-gesture — and, because the day grouping runs
- * over whatever order it is handed, it could also emit "Today" twice with a
- * week in between. A list ordered by time stays put while you work down it.
+ * over whatever order it is handed, re-sorting by read state could emit "Today"
+ * twice with a week in between. A list ordered by time stays put while you work
+ * down it.
  *
- * Both inboxes read this. Logjam GPS learned it first; Logjam Web kept the
- * server's order until 2026-09-14, and marking a row read there moved it below
- * every unread one. An unparseable timestamp sorts last rather than poisoning
- * the comparison.
+ * Both inboxes read this. An unparseable timestamp sorts last rather than
+ * poisoning the comparison.
  */
 export function newestNotificationsFirst(
   notifications: readonly TNotification[],
@@ -264,7 +262,7 @@ export type NotificationDay = {
 /**
  * A LOCAL calendar day key. `createdAt` is a true instant (not a date-only
  * value), and the day it belongs to is the user's day: reading it in UTC files
- * the first hours of every AEST morning under yesterday (§11).
+ * the first hours of every AEST morning under yesterday.
  */
 function localDayKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");

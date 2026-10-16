@@ -1,13 +1,9 @@
 // One place: what it is, what this kind of place records, and what can be done
 // with it.
 //
-// EVERY ATTRIBUTE IS READ FROM ITS DEFINITION. Four canyon scalars used to be
-// printed by name — quality, pitches, longest pitch, hours — above a generic
-// loop over the type's definitions that had since come to include those very
-// fields, so a canyon listed each of them TWICE, once with a unit and once
-// without ("Longest Pitch: 15m" and "Longest pitch: 15"). The fix is the one
-// PlaceDialog got: the definitions are the list, and `SYSTEM_FIELD_DEFS` is
-// where a built-in's unit lives.
+// Every attribute is read from its definition: definitions are the list,
+// and `SYSTEM_FIELD_DEFS` is where a built-in's unit lives, so built-in
+// and custom attributes render through the same definition loop.
 //
 // Which verbs it offers is `placeVerbs` (placesModel.ts), not this file's
 // judgement — the same rule `wayActions.ts` holds for ways, so a place's row
@@ -222,15 +218,13 @@ function PlaceDetailPanel({
   // deleted here — the place-scoped refetch below only updates this panel.
   onRefetchTripLogs: () => void;
   // Leave the (now-empty) place-detail panel after a delete so it doesn't
-  // dead-end in "No place selected" (PLACE-8 / MOBILE-4).
+  // dead-end in "No place selected".
   onAfterDelete: () => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  // Copy and Remove shipped with NO confirm while plain Remove had one — the
-  // more consequential button asking less. `copyAndRemoveConfirm` is the same
-  // wording Logjam GPS shows.
+  // `copyAndRemoveConfirm` uses the same confirmation wording as Logjam GPS.
   const [confirmCopyAndRemove, setConfirmCopyAndRemove] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -327,10 +321,10 @@ function PlaceDetailPanel({
   );
 
   // Both fetch effects below guard on a request key held in a ref: StrictMode
-  // (dev) runs each effect twice with identical deps, which fired
-  // GET /places/:id and GET /places/:id/shares twice per place selection
-  // (PLACE-13). The refs survive the double-invoke, so the second identical
-  // run skips. Each key includes every dep that should trigger a refetch.
+  // (dev) runs each effect twice with identical deps, which would fire
+  // GET /places/:id and GET /places/:id/shares twice per place selection.
+  // The refs survive the double-invoke, so the second identical run skips.
+  // Each key includes every dep that should trigger a refetch.
   const sharesFetchKeyRef = useRef<string | null>(null);
   const detailFetchKeyRef = useRef<string | null>(null);
 
@@ -349,10 +343,9 @@ function PlaceDetailPanel({
     sharesFetchKeyRef.current = fetchKey;
     getPlaceShares(place.id)
       .then((shares) => {
-        // FEUI-013: a slower response for a place/dialog-state the user has
-        // since navigated away from must not overwrite what's now showing —
-        // same stale-response race as FEUI-006 below. The ref already moved
-        // on if this fetch is no longer current.
+        // Stale-response guard: a slower response for a place/dialog-state
+        // the user has since navigated away from must not overwrite what's
+        // now showing. The ref already moved on if this fetch is no longer current.
         if (sharesFetchKeyRef.current !== fetchKey) return;
         setPlaceShares(shares);
       })
@@ -385,9 +378,9 @@ function PlaceDetailPanel({
     // One fetch yields place-level media plus (for owners) the trip logs.
     getPlaceDetail(requestedId)
       .then((detail) => {
-        // FEUI-006: a slower place-A response landing after a since-selected
-        // place-B's must not overwrite B's panel. The dedup ref has already
-        // moved to B by the time this resolves if that happened.
+        // Stale-response guard: a slower place-A response landing after a
+        // since-selected place-B's must not overwrite B's panel. The dedup
+        // ref has already moved to B by the time this resolves if that happened.
         if (detailFetchKeyRef.current !== requestedId) return;
         setTripLogs(detail.tripLogs ?? []);
         setPlaceMedia(detail.media);
@@ -568,8 +561,7 @@ function PlaceDetailPanel({
     const requestedId = current.id;
     getPlaceDetail(requestedId)
       .then((detail) => {
-        // FEUI-006: same stale-response guard as the detail-fetch effect —
-        // don't apply a response for a place the user has since left.
+        // Stale-response guard: don't apply a response for a place the user has since left.
         if (detailFetchKeyRef.current !== requestedId) return;
         setPlaceMedia(detail.media);
       })
@@ -743,7 +735,7 @@ function PlaceDetailPanel({
         </section>
       ) : null,
 
-    // PARKED VALUES (§2.6). Named for the CONDITION: a type change strands
+    // PARKED VALUES (api/src/__tests__/placeCopy.test.ts). Named for the CONDITION: a type change strands
     // what the new type has no field for, and a copy carries values keyed by
     // the sender's fields. Owner-only, and structurally so: the server never
     // sends `foreignFields` on a row a sharee can reach.
@@ -852,8 +844,9 @@ function PlaceDetailPanel({
       </section>
     ),
 
-    // NAVIGATIONAL ONLY: a link grants no visibility (§2.5), so this is the
-    // owner's own filing and a recipient is sent no links at all.
+    // NAVIGATIONAL ONLY: a link grants no visibility (ADR 0019;
+    // api/src/__tests__/placeLinks.test.ts), so this is the owner's own filing
+    // and a recipient is sent no links at all.
     linkedPlaces: () => (
       <section className={classes.section}>
         <SectionHeader

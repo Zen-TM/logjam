@@ -19,7 +19,7 @@ Required environment variables:
 Optional environment variables:
   RESEND_API_KEY    - Resend API key (skips email if unset; see email_send.py)
   EMAIL_FROM        - Verified sender address (skips email if unset)
-  FRONTEND_URL      - Base URL of the Logjam web app (e.g. https://logjam.app)
+  FRONTEND_URL      - Base URL of Logjam Web (e.g. https://logjam.app)
                       Used to build the deep link in the completion email.
                       If unset, email is skipped with a warning.
   AWS_REGION        - defaults to ap-southeast-2
@@ -93,8 +93,8 @@ JOB_ID = os.environ["JOB_ID"]
 
 # Python mirror of the canonical layer list — keep in sync with
 # shared/src/topoSettings.ts → TOPO_LAYERS (the TS side all derives from it;
-# this is the only remaining hand-synced copy, ARCH-010). Composite is
-# intentionally absent — Stage 2 builds it on demand in the export worker.
+# this is the only remaining hand-synced copy). Composite is intentionally
+# absent — the export worker builds it on demand.
 ALL_LAYERS: frozenset[str] = frozenset(
     {
         "hillshade",
@@ -109,7 +109,7 @@ RASTER_LAYERS: frozenset[str] = frozenset({"hillshade", "vegetation", "slope"})
 VECTOR_LAYERS: frozenset[str] = frozenset({"contours", "features"})
 
 # Per-layer survey-pick policy — hand-synced mirror of the `surveyPick` field on
-# shared/src/topoSettings.ts → TOPO_LAYERS (ARCH-010; guarded by
+# shared/src/topoSettings.ts → TOPO_LAYERS (guarded by
 # tests/test_layer_sync.py). "density" = prefer densest survey (terrain/bedrock,
 # fire-irrelevant); "recency" = prefer most-recent capture (vegetation, post-fire
 # state matters); "none" = not LiDAR-derived (OSM features). Consumed by
@@ -217,18 +217,17 @@ def update_status(
 
     If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
     incremented in the SAME transaction/commit as the status update. This closes
-    the ARCH-009 partial-failure window: a crash between the "complete" status
-    write and the storage increment could otherwise leave a completed job whose
-    bytes were never quota-accounted (under-count, no reconciliation given the
+    the partial-failure window: a crash between the "complete" status write and
+    the storage increment could otherwise leave a completed job whose bytes
+    were never quota-accounted (under-count, no reconciliation given the
     no-reaper-for-storage gap).
 
     With expected_status the UPDATE is guarded (`AND status = %s`), making
-    status transitions write-once (Design L1): if the job was reaped or
-    deleted mid-run the write matches 0 rows, the storage increment is
-    SKIPPED, and the caller must skip notification/email and self-clean any
-    uploaded outputs. This is what stops a reaped-but-alive worker from
-    resurrecting a `failed` job to `complete` (ARCH-001) or charging storage
-    for a job the user no longer has (ARCH-007).
+    status transitions write-once: if the job was reaped or deleted mid-run
+    the write matches 0 rows, the storage increment is SKIPPED, and the
+    caller must skip notification/email and self-clean any uploaded outputs.
+    This stops a reaped-but-alive worker from resurrecting a `failed` job to
+    `complete` or charging storage for a job the user no longer has.
     """
     set_clauses = ["status = %s", "updated_at = NOW()"]
     values = [status]
@@ -270,7 +269,7 @@ def _heartbeat_loop(
     not safe to share across threads). Every write is status-guarded
     (expected_status="processing"): it's a no-op self-write that touches only
     the progress columns, and matches 0 rows once the job is reaped/completed —
-    so it can never resurrect a terminal job (ARCH-001). Fully best-effort: any
+    so it can never resurrect a terminal job. Fully best-effort: any
     DB/file error is logged and swallowed; the thread never raises into the job,
     whose success/failure stays owned by the main thread's subprocess result.
     """
@@ -363,8 +362,8 @@ def send_completion_email(
         return
 
     base = FRONTEND_URL.rstrip("/")
-    # Stage 2: job-completion email links the user to the topo job so they can
-    # open the Export… dialog. Downloads are now produced on demand by the
+    # Job-completion email links the user to the topo job so they can
+    # open the Export… dialog. Downloads are produced on demand by the
     # export worker; the job itself only provides display PMTiles + COG sources.
     open_url = f"{base}/?topoJob={job_id}"
 
@@ -415,7 +414,7 @@ def send_completion_email(
 
 
 def send_failure_email(to_email: str, job_id: str, error_message: str):
-    """Failure sibling of send_completion_email (APIC-005). Both are gated on the
+    """Failure sibling of send_completion_email. Both are gated on the
     same `topoEmail` preference, which means "finishes or fails" — the export
     worker's send_completion_email carries ok/error in one function instead;
     here a separate function keeps the osm-warning branches out of the way."""
@@ -557,8 +556,7 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 # jobs trivially coexist. Anti-leech: AWS WAF per-IP rate-limit on the
 # distribution + a CloudFront Function that rejects requests without an
 # expected Referer header. Vector tiles (contours/features) are served the
-# same way as `.pbf` with `Content-Encoding: gzip`. See the architecture
-# discussion on 2026-05-11 for the cost analysis and tradeoffs.
+# same way as `.pbf` with `Content-Encoding: gzip`.
 
 
 # ── Core processing ───────────────────────────────────────────────────────────
@@ -671,7 +669,7 @@ def process_job(
 
     # ── Vector tiles for contours + OSM features ────────────────────────
     # pipeline.py writes raster contours.mbtiles / features.mbtiles
-    # (used for the composite + Gaia downloads). The web app needs the
+    # (used for the composite + Gaia downloads). Logjam Web needs the
     # vector versions — run tippecanoe on the GeoJSON exports and put the
     # resulting MBTiles in vector_dir; the upload loop picks them up for
     # the vector layers' pmtiles conversion.
@@ -689,7 +687,7 @@ def process_job(
     osm_failed = features_vector is None
 
     # ── Upload raw vector GeoJSONs for the export worker ────────────────
-    # Stage 2: the export worker reads these directly when producing
+    # The export worker reads these directly when producing
     # GeoJSON / GPX / GPKG outputs.
     output_prefix = f"outputs/{job_id}"
     for geojson_name in ("contours_5m.geojson", "osm_features.geojson"):
@@ -725,11 +723,11 @@ def process_job(
                 log.info(f"Debug artefact {fname} not present — skipped")
 
     # ── Per-job upload (COG + PMTiles) ──────────────────────────────────
-    # Stage 2: raster layers store a single styled COG (canonical source for
-    # downstream export rendering) + PMTiles (in-app display). Vector layers
-    # store PMTiles only — the raw GeoJSON uploaded above is the export
-    # source. Per-layer raster MBTiles and composite.mbtiles are no longer
-    # uploaded; the export worker produces those on demand.
+    # Raster layers store a single styled COG (canonical source for downstream
+    # export rendering) + PMTiles (in-app display). Vector layers store
+    # PMTiles only — the raw GeoJSON uploaded above is the export source.
+    # Per-layer raster MBTiles and composite.mbtiles are not uploaded; the
+    # export worker produces those on demand.
     cog_dir = Path(tmp) / "cog"
     cog_dir.mkdir(exist_ok=True)
     output_keys = []
@@ -783,7 +781,7 @@ def process_job(
         # raster layers reuse the styled MBTiles.
         pmtiles_source = vector_mbtiles_by_layer.get(name, styled_mbtiles)
         # closing(): sqlite3's own context manager commits but does NOT close,
-        # leaking an fd on a multi-hundred-MB MBTiles per layer (STP-009).
+        # leaking an fd on a multi-hundred-MB MBTiles per layer.
         with contextlib.closing(sqlite3.connect(str(pmtiles_source))) as _conn:
             _row = _conn.execute(
                 "SELECT value FROM metadata WHERE name='maxzoom'"
@@ -829,10 +827,10 @@ def main():
 
     conn = db_connect()
     job = get_job(conn, JOB_ID)
-    # started_at anchors the reaper's "processing" staleness timeout (ARCH-002):
+    # started_at anchors the reaper's "processing" staleness timeout:
     # it distinguishes a long-but-alive job from a dead one. NOW() rather than a
     # column passthrough so it reflects actual worker start.
-    # Guarded on `pending` (Design L1): if the job was reaped or deleted while
+    # Guarded on `pending`: if the job was reaped or deleted while
     # the task spun up, claim nothing and exit cleanly without processing.
     claimed = update_status(
         conn,
@@ -851,7 +849,7 @@ def main():
 
     # Set once the `complete` flip has committed. After that point the job's
     # outputs are referenced by the row and MUST NOT be self-cleaned, however
-    # the post-completion notification/push/email sequence fails (STP-001).
+    # the post-completion notification/push/email sequence fails.
     completed = False
 
     try:
@@ -883,8 +881,8 @@ def main():
 
         delete_input_zip_best_effort(job["s3_input_key"])
 
-        # Status flip + storage increment committed together (ARCH-009).
-        # Guarded on `processing` (Design L1): if the job was reaped or
+        # Status flip + storage increment committed together.
+        # Guarded on `processing`: if the job was reaped or
         # DELETEd mid-run, 0 rows match — the storage increment is skipped
         # inside update_status, and we self-clean the re-uploaded outputs and
         # skip notification/email instead of resurrecting a failed job.
@@ -934,7 +932,7 @@ def main():
     except Exception as e:
         if completed:
             # The job IS complete and its outputs are live — only the
-            # best-effort notification/push/email tail raised (STP-001).
+            # best-effort notification/push/email tail raised.
             # Never self-clean here: the guarded `failed` write below would
             # match 0 rows (status is `complete`, not `processing`) and the
             # 0-rowcount branch would delete the finished job's outputs.
@@ -977,9 +975,9 @@ def main():
 
         send_push(conn, job["user_id"], {"type": "topo_failed", "jobId": JOB_ID})
 
-        # Failure email (APIC-005), gated on the same `topoEmail` preference as
+        # Failure email, gated on the same `topoEmail` preference as
         # the completion email. Wrapped for the same reason export_worker.py
-        # wraps its notification tail (STP-002): the row is already `failed`, so
+        # wraps its notification tail: the row is already `failed`, so
         # a mail problem must not change the job outcome or the exit code.
         try:
             email = get_user_email(conn, job["user_id"])

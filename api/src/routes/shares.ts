@@ -7,7 +7,7 @@
 // see the header of shared/src/sharing.ts.
 //
 // Every access decision here comes from lib/shareAccess.ts. Nothing in this
-// file re-derives an owner or share check inline (SEC-001), and denials follow
+// file re-derives an owner or share check inline, and denials follow
 // the house anti-oracle rule: no access → 404, sharee attempting an
 // owner-only action → 403.
 import { Router, Response } from "express";
@@ -63,7 +63,7 @@ router.post(
 
     // Friends only — same rule place sharing enforces, and checked BEFORE the
     // target-user lookup so an unknown id and an existing non-friend get the
-    // same 403 rather than 404-vs-403 (PRIV-101).
+    // same 403 rather than 404-vs-403.
     const friendship = await prisma.friendship.findFirst({
       where: {
         status: "accepted",
@@ -111,7 +111,7 @@ router.post(
       await touchSharedForDelta(tx, entityType, [entityId]);
       if (notifyRecipient) {
         // Reference IDs ONLY — never a waypoint/route name or any coordinate in
-        // a notification payload (PRIV-005). Display strings are resolved from
+        // a notification payload. Display strings are resolved from
         // the live rows at read time in notifications.ts, so a revoked share has
         // nothing left to resolve and surfaces no stale name.
         await tx.notification.create({
@@ -188,7 +188,7 @@ router.delete(
 
 // ── GET /shares/:entityType/:entityId ─────────────────────────
 // Who this item is shared with. Owner only — a recipient must never be able to
-// enumerate co-recipients (the §4.6.1 rule place shares already follow).
+// enumerate co-recipients (place shares follow the same rule).
 router.get(
   "/:entityType/:entityId",
   requireAuth,
@@ -208,7 +208,7 @@ router.get(
       where: { entityType, entityId },
       include: {
         // Username-only: email on a friends/sharing surface is a regression
-        // (root CLAUDE.md).
+        // (AGENTS.md). Guarded by directShare.test.ts.
         sharedWith: { select: { id: true, username: true } },
       },
       orderBy: { createdAt: "asc" },

@@ -3,7 +3,7 @@
 # endpoint mean this provider physically CANNOT touch real AWS — it is walled
 # off to the local MiniStack container. s3_use_path_style mirrors the
 # forcePathStyle:true in api/src/services/awsClients.ts so presigned-URL host
-# shapes match between Terraform-created buckets and the app.
+# shapes match between Terraform-created buckets and the API.
 #
 # ECS endpoint registers the cluster + worker task defs (see ecs.tf) into
 # MiniStack so the API's RunTask launches them locally. ses/cognito/secretsmanager

@@ -3,9 +3,9 @@
 // A PANEL, NOT A DIALOG (DESIGN.md). Looking at something is not a task
 // with an end — you arrive at it, follow a place out of it, come back, leave
 // it open beside the map — so it is a page like a place's and a way's, and the
-// form that edits it is the dialog this page raises. It was a dialog until
-// 2026-09-19, which meant the only way to READ a trip put the whole app behind
-// a modal, and opening the place it linked had to close the trip first.
+// form that edits it is the dialog this page raises. Reading a trip in a dialog
+// would put Logjam Web behind a modal and require closing the trip to open
+// linked places.
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   attributeRows,
