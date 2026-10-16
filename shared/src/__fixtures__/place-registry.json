@@ -5,6 +5,7 @@
   "licence": "ODbL-1.0",
   "kinds": [
     "place=town",
+    "highway=primary",
     "natural=valley",
     "tourism=viewpoint",
     "waterway=waterfall",
@@ -14,16 +15,19 @@
     "highway=residential"
   ],
   "rows": [
-    ["Blackheath", 0, 150.285, -33.633, -1],
-    ["Katoomba", 0, 150.312, -33.714, -1],
-    ["Devil's Hole", 1, 150.3, -33.715, 1],
-    ["Govetts Leap", 2, 150.31, -33.628, 0, ["Govett's Leap Lookout"]],
-    ["Katoomba Falls", 3, 150.307, -33.73, 1],
-    ["Katoomba Falls Kiosk", 4, 150.306, -33.729, 1],
-    ["Katoomba Falls Road", 5, 150.305, -33.725, 1],
-    ["Mount Solitary", 6, 150.32, -33.76, 1],
-    ["Ruined Castle", 6, 150.29, -33.74, 1],
-    ["Station Street", 7, 150.287, -33.632, 0],
-    ["Station Street", 7, 150.311, -33.712, 1]
+    ["Blackheath", 0, 150.285, -33.633, 1],
+    ["Katoomba", 0, 150.312, -33.714, 0],
+    ["Castlereagh Highway", 1, 150.15, -33.48, 0],
+    ["Devil's Hole", 2, 150.3, -33.715, 1],
+    ["Echo Point Lookout", 3, 150.312, -33.732, 1],
+    ["Govetts Leap", 3, 150.31, -33.628, 0, ["Govett's Leap Lookout"]],
+    ["Katoomba Falls", 4, 150.307, -33.73, 1],
+    ["Katoomba Falls Inn", 5, 150.306, -33.729, 1],
+    ["Katoomba Falls Road", 6, 150.305, -33.725, 1],
+    ["Mount Solitary", 7, 150.32, -33.76, 1],
+    ["Newcastle Street", 8, 150.313, -33.716, 1],
+    ["Ruined Castle", 7, 150.29, -33.74, 1],
+    ["Station Street", 8, 150.287, -33.632, 0],
+    ["Station Street", 8, 150.311, -33.712, 1]
   ]
 }

@@ -7,7 +7,7 @@
 // query ranks the same online and offline. Guard: placeRegistry.test.ts.
 //
 // PRIVACY: the typed query is the sensitive part, often the name of a place
-// the user would rather not publish. Nothing here logs it or sends it anywhere.
+// the user would rather not publish.
 
 /** Bumped when the file's shape changes. Each format has its own prefix, so
  *  an older client keeps reading builds in the format it knows. */
@@ -61,8 +61,8 @@ export interface PlaceResult {
   lat: number;
 }
 
-/** `POST` with a PlaceSearchRequest body: the query never goes in the URL,
- *  where access logs would keep it. */
+/** `POST` with a PlaceSearchRequest body, so the query travels in the body
+ *  and not the URL that access logs keep. */
 export const PLACE_SEARCH_API_PATH = "/places/search";
 
 /** Most results a search returns, and the API's default. */
@@ -89,6 +89,7 @@ export function isPlaceRegistryPointer(
     typeof v.version === "string" &&
     typeof v.path === "string" &&
     // The path is joined onto our CDN URL, so it may only name a file there.
+    // Guard: placeRegistry.test.ts.
     /^[\w-][\w.-]*$/.test(v.path) &&
     typeof v.bytes === "number"
   );
@@ -152,7 +153,8 @@ export function placeKindLabel(kind: string): string {
 }
 
 // Among equally good name matches, what someone navigating the bush means
-// first, lowest first. A kind not listed here ranks last.
+// first, lowest first. A kind not listed here ranks last; `place` is listed
+// value by value, so a farm ranks last too. Guard: placeRegistry.test.ts.
 const KIND_RANKS: Record<string, number> = {
   "place=city": 0,
   "place=town": 0,
@@ -175,12 +177,7 @@ const KIND_RANKS: Record<string, number> = {
 const OTHER_KIND_RANK = 4;
 
 export function placeKindRank(kind: string): number {
-  return (
-    KIND_RANKS[kind] ??
-    // `place` is listed value by value: a farm is not a town.
-    (kind.startsWith("place=") ? undefined : KIND_RANKS[kind.split("=")[0]]) ??
-    OTHER_KIND_RANK
-  );
+  return KIND_RANKS[kind] ?? KIND_RANKS[kind.split("=")[0]] ?? OTHER_KIND_RANK;
 }
 
 /** Lowercase, accents and apostrophes dropped, punctuation as spaces. */
@@ -205,7 +202,7 @@ export interface PlaceIndex {
 
 // Normalized strings joined by "\n", which normalizing never leaves in one,
 // with where each starts. One native indexOf over the whole registry finds
-// the few rows holding the query's first word; a loop over 350,000 strings
+// the few rows holding the query's first word; a loop over 320,000 strings
 // cost ten times as long, which a phone feels on every keystroke.
 type Haystack = { text: string; starts: number[]; strings: string[] };
 
@@ -294,7 +291,9 @@ export function searchPlaces(
   limit: number,
 ): PlaceResult[] {
   const needle = normalizeSearchText(query);
-  if (needle.length < PLACE_SEARCH_MIN_QUERY_LENGTH || limit < 1) return [];
+  // A NaN or huge limit would make the top-k below unbounded.
+  const most = Math.min(Math.floor(limit), PLACE_SEARCH_MAX_RESULTS);
+  if (needle.length < PLACE_SEARCH_MIN_QUERY_LENGTH || !(most >= 1)) return [];
   const words = needle.split(" ");
   const spaced = words.map((w) => ` ${w}`);
   const { names, alternates, ranks } = index;
@@ -305,15 +304,15 @@ export function searchPlaces(
     names.strings[a.row].length - names.strings[b.row].length ||
     a.row - b.row;
 
-  // The best `limit` so far, kept sorted: a two-letter query matches tens of
+  // The best `most` so far, kept sorted: a two-letter query matches tens of
   // thousands of rows, and sorting them all is most of the search's time.
   const best: Hit[] = [];
   const offer = (hit: Hit) => {
-    if (best.length === limit && better(hit, best[limit - 1]) >= 0) return;
+    if (best.length === most && better(hit, best[most - 1]) >= 0) return;
     let at = best.length;
     while (at > 0 && better(hit, best[at - 1]) < 0) at--;
     best.splice(at, 0, hit);
-    if (best.length > limit) best.pop();
+    if (best.length > most) best.pop();
   };
 
   // Every tier needs the first word somewhere in the name.

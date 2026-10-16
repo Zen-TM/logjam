@@ -7,57 +7,67 @@ import {
   indexPlaceRegistry,
   isPlaceRegistryPointer,
   normalizeSearchText,
+  PLACE_REGISTRY_ATTRIBUTION,
+  PLACE_SEARCH_MAX_RESULTS,
   placeKindLabel,
   placeKindRank,
   placeRegistryUrl,
   type PlaceRegistryFile,
+  type PlaceRegistryRow,
   searchPlaces,
 } from "./placeRegistry.js";
 
-// Written by topo/build_place_registry.py: topo/tests/test_place_registry.py
-// fails when the builder stops writing exactly this, so the reader is tested
+// Both written by topo/build_place_registry.py: topo/tests/test_place_registry.py
+// fails when the builder stops writing exactly these, so the reader is tested
 // against the builder's real output, not a hand-made guess at it.
-const fixture = JSON.parse(
-  readFileSync(
-    join(import.meta.dirname, "__fixtures__", "place-registry.json"),
-    "utf8",
-  ),
-) as PlaceRegistryFile;
+const readFixture = (name: string): unknown =>
+  JSON.parse(
+    readFileSync(join(import.meta.dirname, "__fixtures__", name), "utf8"),
+  );
+const fixture = readFixture("place-registry.json") as PlaceRegistryFile;
+const pointer = readFixture("place-registry-pointer.json");
+
 const index = indexPlaceRegistry(fixture);
 const names = (query: string, limit = 10) =>
   searchPlaces(index, query, limit).map((r) => r.name);
 
 describe("searchPlaces", () => {
   it("ranks the whole name, then a prefix, then word starts, then a substring", () => {
-    // Mutation: swap two tiers in nameTier → red.
-    expect(names("katoomba")).toEqual([
+    // Mutation: swap any two tiers in nameTier → red.
+    expect(names("katoomba").slice(0, 2)).toEqual([
       "Katoomba",
       "Katoomba Falls",
-      "Katoomba Falls Road",
-      "Katoomba Falls Kiosk",
     ]);
+    expect(names("castle")).toEqual([
+      "Castlereagh Highway",
+      "Ruined Castle",
+      "Newcastle Street",
+    ]);
+  });
+
+  it("matches every typed word at a word start, in any order", () => {
     expect(names("falls kat")).toEqual([
       "Katoomba Falls",
       "Katoomba Falls Road",
-      "Katoomba Falls Kiosk",
+      "Katoomba Falls Inn",
     ]);
-    expect(names("castle")).toEqual(["Ruined Castle"]);
-    expect(names("astle")).toEqual(["Ruined Castle"]);
   });
 
   it("puts the kind a walker means before a shorter name", () => {
-    // The kiosk's name is shorter than the road's; a road still comes first.
-    // Mutation: compare length before kind → red.
+    // The inn's name is shorter than the road's; the road still comes first.
+    // Mutation: compare length before kind in `better` → red.
     expect(names("katoomba falls")).toEqual([
       "Katoomba Falls",
       "Katoomba Falls Road",
-      "Katoomba Falls Kiosk",
+      "Katoomba Falls Inn",
     ]);
   });
 
   it("matches alternate names below every main-name match", () => {
+    // Govetts Leap matches only by its alternate "Govett's Leap Lookout", and
+    // its name is shorter. Mutation: drop the `4 +` on an alternate's tier → red.
+    expect(names("lookout")).toEqual(["Echo Point Lookout", "Govetts Leap"]);
     expect(names("govett's leap lookout")).toEqual(["Govetts Leap"]);
-    expect(names("lookout")).toEqual(["Govetts Leap"]);
   });
 
   it("ignores case, accents, apostrophes and punctuation", () => {
@@ -73,6 +83,7 @@ describe("searchPlaces", () => {
       ["Street", "Blackheath"],
       ["Street", "Katoomba"],
     ]);
+    expect(searchPlaces(index, "katoomba", 1)[0].near).toBe("Blackheath");
   });
 
   it("returns a point and a readable kind", () => {
@@ -92,6 +103,20 @@ describe("searchPlaces", () => {
     expect(names("  ")).toEqual([]);
     expect(names("ka", 2)).toHaveLength(2);
   });
+
+  it("answers nothing for a limit that is not a number, and caps a large one", () => {
+    // Mutation: drop the clamp → the NaN case returns every match.
+    expect(names("ka", Number.NaN)).toEqual([]);
+    expect(names("ka", 0)).toEqual([]);
+    const rows: PlaceRegistryRow[] = Array.from(
+      { length: PLACE_SEARCH_MAX_RESULTS + 5 },
+      (_, i) => [`Ka ${i}`, 0, 150, -33, -1],
+    );
+    const many = indexPlaceRegistry({ ...fixture, rows });
+    expect(searchPlaces(many, "ka", 1_000_000)).toHaveLength(
+      PLACE_SEARCH_MAX_RESULTS,
+    );
+  });
 });
 
 describe("indexPlaceRegistry", () => {
@@ -99,6 +124,11 @@ describe("indexPlaceRegistry", () => {
     expect(() => indexPlaceRegistry({ ...fixture, format: 2 })).toThrow(
       /format 2/,
     );
+  });
+
+  it("reads a file crediting OpenStreetMap as the results do", () => {
+    // Mutation: change ATTRIBUTION in the builder → red.
+    expect(fixture.attribution).toBe(PLACE_REGISTRY_ATTRIBUTION);
   });
 });
 
@@ -118,7 +148,7 @@ describe("placeKindLabel", () => {
 
 describe("placeKindRank", () => {
   it("ranks a town before a farm, though both are `place`", () => {
-    // Mutation: rank `place=*` by its key → red.
+    // Mutation: add `place: 0` to KIND_RANKS → red.
     expect(placeKindRank("place=town")).toBeLessThan(
       placeKindRank("natural=peak"),
     );
@@ -129,26 +159,22 @@ describe("placeKindRank", () => {
 });
 
 describe("isPlaceRegistryPointer", () => {
-  const pointer = {
-    format: 1,
-    version: "2026-10-01",
-    path: "places-2026-10-01.json.gz",
-    bytes: 4_000_000,
-  };
-
   it("accepts the builder's pointer and builds its URL", () => {
+    // Mutation: rename a field in the builder's pointer() → red.
     expect(isPlaceRegistryPointer(pointer)).toBe(true);
+    if (!isPlaceRegistryPointer(pointer)) return;
     expect(placeRegistryUrl("https://cdn.example", pointer)).toBe(
-      "https://cdn.example/master/places/v1/places-2026-10-01.json.gz",
+      `https://cdn.example/master/places/v1/${pointer.path}`,
     );
   });
 
   it("refuses another format, and a path that leaves the prefix", () => {
     // Mutation: drop the path pattern → red.
-    expect(isPlaceRegistryPointer({ ...pointer, format: 2 })).toBe(false);
-    expect(isPlaceRegistryPointer({ ...pointer, path: "../x" })).toBe(false);
-    expect(isPlaceRegistryPointer({ ...pointer, path: "a/b" })).toBe(false);
-    expect(isPlaceRegistryPointer({ ...pointer, path: ".." })).toBe(false);
+    const good = pointer as Record<string, unknown>;
+    expect(isPlaceRegistryPointer({ ...good, format: 2 })).toBe(false);
+    expect(isPlaceRegistryPointer({ ...good, path: "../x" })).toBe(false);
+    expect(isPlaceRegistryPointer({ ...good, path: "a/b" })).toBe(false);
+    expect(isPlaceRegistryPointer({ ...good, path: ".." })).toBe(false);
     expect(isPlaceRegistryPointer(null)).toBe(false);
   });
 });
