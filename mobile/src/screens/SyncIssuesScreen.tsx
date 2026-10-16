@@ -1,14 +1,11 @@
 // Account sync issues — "what didn't save, and what do you want me to do?"
 //
-// ONE LIST, and the merge is the point (2026-09-02). It used to be two tabs:
-// Stuck, a change that never reached the server, and Lost, a value that reached
-// it and was then beaten by another device's. That split described OUR
-// mechanism. To the person reading it both rows say the same thing — a change I
-// made is not in my account — and only one of them was being counted, so the
-// silent loss was the one nobody was told about. Both are counted now
-// (`countSyncIssues`), both are actionable, and nothing on this screen expires:
-// a countdown to deleting the last copy of someone's writing is the exact
-// failure this page exists to prevent.
+// ONE LIST: stuck changes (push failures) and lost values (pull LWW drops) are
+// unified because to the user both mean the same thing — a change made locally
+// is not in their account. Both are counted (`countSyncIssues`), both are
+// actionable, and nothing on this screen expires: a countdown to deleting the
+// last copy of someone's writing is the exact failure this page exists to
+// prevent.
 //
 // WHAT REACHES THIS SCREEN IS WHAT THE APP CANNOT DO ITSELF. A rejection the
 // server might answer differently next time (503, 429, a dropped connection)
@@ -39,7 +36,8 @@
 //
 // PRIVACY: an op's own field values are what is in question here, so a name can
 // appear (user-supplied text, allowed). Never a coordinate: `previewValue`
-// deliberately refuses to render latitude/longitude, which a place create op
+// deliberately refuses to render latitude/longitude (guard:
+// `mobile/src/screens/syncIssueDisplay.test.ts`), which a place create op
 // carries (§11 — a list is what ends up in a screenshot).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Text, View } from "react-native";
@@ -149,9 +147,9 @@ export function SyncIssuesScreen({
 
   // Every action fires SEVERAL loads — the write's own `notifyMirrorChanged`,
   // the enqueue's, and the explicit one in `act` — and they are not guaranteed
-  // to resolve in the order they started. The earliest one winning is what left
-  // a row on screen after Keep both had already deleted it: the list only
-  // corrected itself when the user left and came back. Last load STARTED wins.
+  // to resolve in the order they started. Without this, an earlier load resolving
+  // after a newer one would leave a stale row on screen after Keep both had
+  // already deleted it. Last load STARTED wins.
   const loadToken = useRef(0);
   const load = useCallback(() => {
     const token = (loadToken.current += 1);
@@ -538,7 +536,7 @@ export function SyncIssuesScreen({
 
       {total > 0 ? (
         // ONE rail, always the same height: the hint when idle, the bar while
-        // selecting. Rendering the bar only when it appears is what made the
+        // selecting. Rendering the bar only when it appears would make the
         // list jump under the finger that started the selection.
         <View style={styles.rail}>
           {selecting ? (
@@ -787,7 +785,7 @@ function LostMenu({
   const styles = useStyles();
 
   // The other device's value is absent when it CLEARED the field — there is no
-  // "Kept" to show, and a block reading "(empty)" was three lines of chrome
+  // "Kept" to show, and a block reading "(empty)" would be three lines of chrome
   // around nothing.
   const hasKept = entry.serverValue !== null;
   return (

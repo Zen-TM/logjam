@@ -2,12 +2,9 @@
 // slot from its own options sheet: a route you drew, a recorded track, an
 // imported file.
 //
-// It was `routes/LinkPlaceSheet`, a sheet of its own that the route's options
-// sheet closed itself to open. Two more kinds wanted the same list, and three
-// near-copies of a place picker is how one of them ends up with a different
-// filter or a different warning. It returns `{ header, body }` — the shape
-// `useSharePanel` established — so the sheet that owns the verb renders it as a
-// SUB-MODE and never stacks a second sheet (DESIGN.md).
+// Returns `{ header, body }` so the sheet that owns the verb renders it as a
+// sub-mode and never stacks a second sheet. Sharing one panel ensures all route
+// slot sources use consistent place filtering and warnings.
 //
 // Reads places from the MIRROR, so it works with no signal: the link is an
 // outbox op like any other edit. Only places the user OWNS are offered — the

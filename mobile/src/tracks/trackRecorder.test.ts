@@ -1,7 +1,6 @@
 // Regression tests for the two ways a recorder can lie about recording:
-// a write chain that stops writing (MLIFE-001) and a resume that marks the row
-// live without arming the service (MLIFE-002). Both were invisible to a green
-// suite, and both cost the user the rest of their trip.
+// a write chain that stops writing and a resume that marks the row
+// live without arming the service.
 //
 // The native surface is mocked, so this runs on the host: what is under test is
 // the ordering and the failure handling, neither of which is device-dependent.
@@ -16,7 +15,7 @@ type TaskHandler = (event: {
 
 let taskHandler: TaskHandler | null = null;
 
-// The stats recompute is foreground-only now, so the batch handler reads
+// The stats recompute is foreground-only, so the batch handler reads
 // AppState. Default to active: the existing tests assert the stats write.
 const appState = { currentState: "active" as string };
 vi.mock("react-native", () => ({
@@ -58,7 +57,7 @@ vi.mock("./sensorLog", () => ({
   stopSensorLog: () => stopSensorLog(),
 }));
 
-// The finish path now serialises the recording into a standalone media row.
+// The finish path serialises the recording into a standalone media row.
 // That pulls the whole sync/upload stack, none of which exists in this process
 // — and none of which these tests are about. `trackBackup.test.ts` covers it.
 const backUpFinishedTrack = vi.fn(async () => "media-1");
@@ -193,7 +192,7 @@ beforeEach(async () => {
 
 // The fixes the recorder REFUSES are the only positive evidence that anyone
 // stood still — a stop and a very slow walk look identical from the accepted
-// points alone. Losing them is what the platform `distanceInterval` used to do.
+// points alone.
 describe("counting the fixes it refuses", () => {
   it("credits a run of too-close fixes to the point they were measured against", async () => {
     activeTrack = recordingTrack();
@@ -344,12 +343,11 @@ describe("the map boost", () => {
 });
 
 describe("a backgrounded recorder only writes points", () => {
-  // The stats are display-only. Recomputing them per batch meant a full read of
-  // the series plus O(points) of arithmetic for every fix of a trip, in a
-  // headless task nobody was looking at — and it got more expensive the longer
-  // the recording ran. They are settled on return to the foreground instead
-  // (refreshActiveTrackStats), so the only thing this may cost is a HUD that is
-  // one batch stale at the moment the screen comes back on.
+  // The stats are display-only. Recomputing them per batch is avoided because it
+  // requires a full read of the series plus O(points) of arithmetic in a
+  // background task. They are settled on return to the foreground instead
+  // (refreshActiveTrackStats), so the only cost is a HUD that is one batch
+  // stale at the moment the screen comes back on.
   it("appends without recomputing stats while backgrounded", async () => {
     activeTrack = recordingTrack();
     appState.currentState = "background";
@@ -360,7 +358,7 @@ describe("a backgrounded recorder only writes points", () => {
     expect(updateTrack).not.toHaveBeenCalled();
   });
 
-  it("does recompute them while the app is in front of someone", async () => {
+  it("does recompute them while Logjam GPS is in front of someone", async () => {
     activeTrack = recordingTrack();
 
     await taskHandler!({ data: { locations: [fixAt(0), fixAt(1)] } });
@@ -370,7 +368,7 @@ describe("a backgrounded recorder only writes points", () => {
   });
 });
 
-describe("location batch write chain (MLIFE-001)", () => {
+describe("location batch write chain", () => {
   it("keeps writing after a failed batch instead of poisoning the chain", async () => {
     activeTrack = recordingTrack();
     expect(taskHandler).not.toBeNull();
@@ -409,7 +407,7 @@ describe("location batch write chain (MLIFE-001)", () => {
   });
 });
 
-describe("arming and marking (MLIFE-002)", () => {
+describe("arming and marking", () => {
   it("restores the pause when resume cannot arm the location task", async () => {
     const pausedAt = new Date(1_700_000_100_000).toISOString();
     const track = {
@@ -523,9 +521,8 @@ describe("arming and marking (MLIFE-002)", () => {
 });
 
 describe("rejected fixes are kept, and cannot cost a recording", () => {
-  // Every diagnosis of a bad fix so far needed the fix AFTER it, and a refused
-  // fix used to be unrecoverable — so no candidate filter could be tested
-  // against the fixes it would have to judge. See private/todo/track-accuracy.md.
+  // Diagnosing fix quality requires comparing against later fixes; storing
+  // refused fixes preserves the raw data needed to evaluate candidate filters.
   it("stores a refused fix with the reason the filter gave", async () => {
     activeTrack = recordingTrack();
 
@@ -554,9 +551,9 @@ describe("rejected fixes are kept, and cannot cost a recording", () => {
   });
 
   // THE POINT OF THE SEPARATION: this table is diagnostic, so a failure writing
-  // it must not reach the write the trip depends on. Before the try/catch, a
-  // throw here propagated out of handleLocationBatch and the batch's accepted
-  // points were never appended.
+  // it must not reach the write the trip depends on. A throw here must not
+  // propagate out of handleLocationBatch or prevent accepted points from being
+  // appended.
   it("still appends the accepted points when the diagnostic write throws", async () => {
     activeTrack = recordingTrack();
     appendRejectedFixes.mockRejectedValueOnce(new Error("database is locked"));

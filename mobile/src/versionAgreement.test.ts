@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 import appConfig from "../app.config";
 import packageJson from "../package.json";
 
-// The app version is declared once, in package.json. The x-logjam-client header
+// The Logjam GPS version is declared once, in package.json. The x-logjam-client header
 // and the Expo config both read it; if either drifts, the server's
 // MIN_MOBILE_VERSION gate blocks everyone or no one, silently.
-describe("app version has one declaration", () => {
+describe("Logjam GPS version has one declaration", () => {
   const appJson = JSON.parse(
     readFileSync(join(__dirname, "../app.json"), "utf8"),
   ) as { expo: Record<string, unknown> };
@@ -17,7 +17,7 @@ describe("app version has one declaration", () => {
   it("app.json does not declare its own version", () => {
     expect(
       appJson.expo,
-      "package.json is the one declaration of the app version; app.config.ts and src/config.ts read it",
+      "package.json is the one declaration of the Logjam GPS version; app.config.ts and src/config.ts read it",
     ).not.toHaveProperty("version");
   });
 

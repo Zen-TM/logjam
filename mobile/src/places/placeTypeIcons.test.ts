@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { PLACE_TYPE_ICON_KEYS, SYSTEM_PLACE_TYPES } from "@logjam/shared";
 
-// Plan §7.8, the MOBILE half. A place type's `iconKey` is platform-neutral and
-// each client maps it to its own icon set — mobile draws Feather, web draws
-// lucide. Neither client can check the other, so the guard is two tests, one on
-// each side, over the same curated list.
+// A place type's `iconKey` is platform-neutral and each client maps it to its
+// own icon set — mobile draws Feather, web draws lucide. Neither client can
+// check the other, so the guard is two tests, one on each side, over the same
+// curated list.
 //
 // Read from the vendored glyph map rather than by rendering: this is a vitest
 // suite with no native runtime, and the glyph map is the actual thing
@@ -26,9 +26,8 @@ describe("place type icon keys resolve in Feather", () => {
     ).toEqual([]);
   });
 
-  // The system types ship with icons chosen before any picker existed, so they
-  // are the ones most likely to have been set to a name from the wrong set —
-  // `waves` and `tent` are lucide-only, and both were the first choice here.
+  // System types are defined statically; ensure they resolve to Feather icons
+  // (`waves` and `tent` are lucide-only).
   it("has every system type's icon", () => {
     for (const type of SYSTEM_PLACE_TYPES) {
       expect(

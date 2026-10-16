@@ -1,4 +1,4 @@
-// Delta pull loop (stage8-sync.md §4): page through GET /sync/delta from the
+// Delta pull loop: page through GET /sync/delta from the
 // persisted cursor, apply each page as one SQLite transaction (upserts +
 // tombstone cascade + cursor advance — atomic, so a crash mid-page replays
 // the whole page idempotently), loop until hasMore clears. resetRequired
@@ -53,9 +53,9 @@ import {
   withSyncTransaction,
 } from "./syncDb";
 
-/** Every pending op, in the shape the shared rebase helpers take. One mapper
- * for the whole app (`rowToEntry`): the near-duplicate that used to live here
- * synthesised `opId` from the seq instead of reading `op_id`. */
+/** Every pending op, in the shape the shared rebase helpers take. Uses the
+ * single app-wide `rowToEntry` mapper so `opId` preserves `op_id` rather
+ * than synthesizing from `seq`. */
 export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
   return (await loadOutboxRows()).map(rowToEntry);
 }
@@ -67,9 +67,8 @@ export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
  * The push path (`flush.ts`) can afford to throw: it has already deleted the
  * outbox row, so the local value stands and the next pull corrects it. The pull
  * path cannot. A throw here aborts `applyPage`, which rolls back the cursor
- * write with it, so every later pull re-fetches the same bad page forever —
- * byte for byte the MSYNC-001 failure that started the audit, just triggered by
- * the server instead of by our own schema.
+ * write with it, so every later pull re-fetches the same bad page forever,
+ * freezing sync on the device.
  *
  * So a bad row is dropped, named (fields only — never values; these rows carry
  * place names and coordinates), and the rest of the page applies. The cursor
@@ -100,8 +99,8 @@ function parsedRows<Row>(
  *
  * A distinct failure MODE, not a distinct failure: retrying re-fetches the
  * same page and fails the same way, forever, while the health line blames the
- * network and promises a retry that cannot work. That is exactly what a
- * cascade writing a dropped column did — 200 from the server, rollback on the
+ * network and promises a retry that cannot work. That is what a cascade
+ * writing a dropped column causes — 200 from the server, rollback on the
  * phone, cursor frozen, "Can't reach your account" on screen.
  */
 export class SyncApplyError extends Error {
@@ -125,7 +124,7 @@ async function applyPage(
   }
 }
 
-/** Rebase-on-pull (§8.5): server row + pending dirty fields replayed over
+/** Rebase-on-pull: server row + pending dirty fields replayed over
  * it. Returns the effective row and which fields stayed locally dirty. */
 function rebase<Row extends { id: string }>(
   row: Row,
@@ -211,10 +210,10 @@ export async function runDeltaPull(
         skipped,
       ),
       // `satisfies` is the derivation: DELTA_ENTITY_ORDER is the declared set
-      // of change keys, and this object must cover it exactly. An eighth
-      // protocol entity now fails to compile here instead of being fetched,
-      // never read, and acknowledged by the advancing cursor — permanently
-      // absent from every phone with nothing to show for it.
+      // of change keys, and this object must cover it exactly. A new
+      // protocol entity fails to compile here instead of being fetched,
+      // never read, and acknowledged by the advancing cursor — which would
+      // leave it permanently absent from every phone with nothing to show for it.
     } satisfies Record<DeltaEntityKey, unknown[]>;
 
     // The other direction: a SERVER newer than this app version sends a key

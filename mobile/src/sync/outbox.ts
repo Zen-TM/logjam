@@ -1,5 +1,5 @@
-// Outbox enqueue path (stage8-sync.md §8.2): local mutations write the
-// mirror optimistically (effective row materialized into columns, §8.5) and
+// Outbox enqueue path: local mutations write the
+// mirror optimistically (effective row materialized into columns) and
 // append a push op to the FIFO outbox via the shared coalescing planner.
 // Flushing is flush.ts's job; a debounced sync request fires after every
 // enqueue so field edits batch into one cycle.
@@ -116,9 +116,10 @@ export async function loadOutboxRows(): Promise<OutboxRow[]> {
 
 /**
  * One row's ops. The rebase after a confirmed push needs the pending ops for
- * that entity and nothing else — it used to re-read and re-parse the ENTIRE
- * outbox once per applied op, i.e. fifty full-table scans per push batch, with
- * route geometry in the rows. Indexed by `outbox(entity, entity_id)`.
+ * that entity and nothing else — reading only matching rows avoids re-reading
+ * and re-parsing the entire outbox per applied op (fifty full-table scans per
+ * push batch, with route geometry in the rows). Indexed by
+ * `outbox(entity, entity_id)`.
  */
 export async function loadOutboxRowsFor(
   entity: string,
@@ -141,7 +142,7 @@ function mintUuid(): string {
 // ── place link mutation surface ──────────────────────────────────────────────
 //
 // A link has no fields, so its vocabulary is `create` and `delete` and nothing
-// else — there is no update op and nothing for the §6 conflict machinery to
+// else — there is no update op and nothing for the conflict machinery to
 // merge. Two phones linking the same pair from opposite ends both send a
 // create; the server canonicalises the pair, the unique index collides, and the
 // second one comes back alreadyApplied with the row that won.
@@ -214,7 +215,7 @@ export async function deletePlaceLinkLocal(id: string): Promise<void> {
 }
 
 // A string list: the mirror stores it as JSON text while the OUTBOX carries the
-// real array, exactly as route geometry does, so a §6 conflict compares arrays
+// real array, exactly as route geometry does, so conflict resolution compares arrays
 // against the server's arrays rather than against our JSON encoding.
 const stringListColumn = (column: string): ColumnSpec => ({
   column,
@@ -249,11 +250,10 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
   const id = mintUuid();
   const now = new Date().toISOString();
   const db = await getSyncDb();
-  // The colour is chosen HERE, not left to the server. Leaving it null meant
-  // every freshly drawn route rendered in the same fallback accent, and then
-  // changed to a random palette colour when the create op came back — so the
-  // route you had just finished appeared to recolour itself the moment you
-  // drew the next one. The server honours a palette colour it is given.
+  // The colour is chosen HERE, not left to the server. Leaving it null would
+  // cause every freshly drawn route to render in the fallback accent and then
+  // recolour itself when the create op returns with an assigned palette colour.
+  // The server honours a palette colour it is given.
   let color = draft.color;
   if (!color) {
     const existing = await db.getAllAsync<{ color: string | null }>(
@@ -304,7 +304,7 @@ const ROUTE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   color: "color",
   // The mirror stores geometry as JSON text, so the value is encoded into the
   // column while the OUTBOX carries the real array — and decode reads the base
-  // snapshot back in the op's shape, so a §6 conflict compares arrays against
+  // snapshot back in the op's shape, so conflict resolution compares arrays against
   // the server's arrays rather than against our JSON encoding.
   points: {
     column: "points_json",
@@ -361,8 +361,7 @@ export async function deleteRouteLocal(id: string): Promise<void> {
 // The whole reason definitions moved off the user record: they are now written
 // exactly like a place or a route — materialized into the mirror immediately,
 // queued for the server, flushed whenever there is a connection. A guest's
-// writes are the same writes, simply never flushed (mobile/CLAUDE.md), so the
-// account-state branch that used to live in `fieldDefsStore` is gone.
+// writes are the same writes, simply never flushed (mobile/AGENTS.md).
 //
 // `key` and `entity` are create-only. Every stored value is keyed by `key`, so
 // changing it would orphan them all; `entity` decides which rows those values
@@ -420,10 +419,9 @@ export async function createCustomFieldDefLocal(
     label: def.label,
     type: def.type,
     position,
-    // EACH BOUND INDEPENDENTLY. Requiring both dropped every one-sided bound —
+    // EACH BOUND INDEPENDENTLY. Requiring both would drop every one-sided bound —
     // which is what every "how many" field has, because there is no honest
-    // ceiling for one — and the field reached the server unbounded. Same bug
-    // `customFieldDefFromRow` had on the read side (fixed in 1b).
+    // ceiling for one — leaving the field unbounded.
     ...(def.min != null && { min: def.min }),
     ...(def.max != null && { max: def.max }),
     // The scoping travels WITH the create: `CustomFieldDefPlaceType` is not a
@@ -517,7 +515,7 @@ export async function deleteCustomFieldDefLocal(id: string): Promise<void> {
 // simply had no way to send them, so a type could only ever be made on the web.
 //
 // SYSTEM types are not touched from here. They belong to no account, the server
-// refuses a rename and a delete with a 404 (anti-oracle, root CLAUDE.md), and
+// refuses a rename and a delete with a 404 (anti-oracle, root AGENTS.md), and
 // the local half of a delete would run first and for real — so the editor
 // refuses the verbs rather than offering ones that destroy locally and fail
 // remotely.
@@ -620,8 +618,8 @@ export async function deletePlaceTypeLocal(id: string): Promise<void> {
 
 // ── place / trip update surface ─────────────────────────────────────────────
 //
-// Field-scoped updates over the generic enqueueUpdate path (§8.2 coalescing,
-// §8.5 optimistic materialization). Only own rows are pushable: a shared
+// Field-scoped updates over the generic enqueueUpdate path (coalescing and
+// optimistic materialization). Only own rows are pushable: a shared
 // place's update would 404 server-side and park deadRemote, so callers gate
 // the edit UI on syncRole === "owner". These maps list ONLY scalar columns —
 // array/object fields (altNames, attributes, types, customFields, place
@@ -633,7 +631,7 @@ const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   latitude: "latitude",
   longitude: "longitude",
   placeTypeId: "place_type_id",
-  // Folded in with the waypoints (phase 1c). `symbol` did not come: the icon
+  // Elevation is stored directly on places. `symbol` did not come: the icon
   // is the place TYPE's.
   elevation: "elevation",
   altNames: {
@@ -641,12 +639,11 @@ const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
     encode: (value) => JSON.stringify(value ?? []),
     decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
   },
-  // Every type-specific value, INCLUDING what used to be the seven grade
-  // columns. Callers pass the WHOLE object — the server replaces it wholesale,
-  // so an edit that drops a key another client put there loses it. Use
-  // `setFieldValues` over the place's existing values rather than building a
-  // fresh object, which also keeps the internal `_sources` entry that lives in
-  // here now.
+  // Every type-specific value, including the grade values. Callers pass the
+  // whole object — the server replaces it wholesale, so an edit that drops a
+  // key another client put there loses it. Use `setFieldValues` over the
+  // place's existing values rather than building a fresh object, which also
+  // keeps the internal `_sources` entry that lives in here.
   //
   // `foreignFields` is deliberately ABSENT and must stay absent: it is written
   // only by copy and by a type change, never by a user edit, and it is not in
@@ -770,11 +767,10 @@ export async function createPlaceLocal(
  * sharee's delete would 404 server-side and park deadRemote.
  *
  * The mirror-side cascade is `cascadePlaceDelete` — the SAME function the
- * server tombstone runs, so the two paths cannot diverge again. They did:
- * this path used to scrub links and shares only, leaving the place's media
- * rows, their cached blobs and `routes.place_id` behind until a later delta
- * pull cleaned up — i.e. never, for a guest, whose device is never registered
- * for pulls at all.
+ * server tombstone runs, so the two paths agree. Deleting a place cascades to
+ * its links, shares, media rows, cached blobs and `routes.place_id`; without
+ * this, orphaned media and routes would persist indefinitely for a guest,
+ * whose device is never registered for pulls.
  */
 export async function deletePlaceLocal(id: string): Promise<void> {
   const db = await getSyncDb();
@@ -813,7 +809,7 @@ const TRIP_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
 };
 
 export type TripDraftFields = {
-  /** UTC-midnight ISO instant for a date-only value (CH-001). */
+  /** UTC-midnight ISO instant for a date-only value. */
   date: string;
   displayName?: string | null;
   notes?: string | null;
@@ -946,7 +942,7 @@ export async function deleteTripLocal(id: string): Promise<void> {
 
 // ── notification read-state + delete surface ─────────────────────────────────
 //
-// Notifications aren't in the delta protocol (§4.7 refetch-and-cache), so none
+// Notifications aren't in the delta protocol (refetch-and-cache), so none
 // of these has a mirror row to touch — the inbox cache is patched separately
 // (patchCachedRead / removeCachedNotifications). They route through the SAME
 // outbox as every other mutation so they survive offline: the ops flush on the
@@ -999,18 +995,18 @@ type Db = Awaited<ReturnType<typeof getSyncDb>>;
 async function appendOp(
   db: Db,
   incoming: SyncPushOp,
-  /** Server-confirmed values for the fields this op newly dirties (§6
-   * conflict base). An argument rather than module state: a throw inside the
+  /** Server-confirmed values for the fields this op newly dirties (conflict
+   * base). An argument rather than module state: a throw inside the
    * enqueue transaction rolls SQLite back but not a JS variable, so a shared
-   * mutable leaked the failed op's base map into whatever enqueued next. */
+   * mutable would leak a failed op's base map into whatever enqueues next. */
   baseSnapshot: Record<string, unknown> = {},
 ): Promise<void> {
   // planOutboxEnqueue inspects exactly two things: the incoming row's own
   // queued ops, and the queue TAIL (an update merges into an adjacent update
   // only — merging into anything earlier would reorder the queue). Reading the
-  // whole outbox on every enqueue, JSON-parsing each row, made the guest→link
-  // drain quadratic: a season of account-less use is thousands of ops, and a
-  // route op carries its whole geometry.
+  // whole outbox on every enqueue and JSON-parsing each row would make the
+  // guest→link drain quadratic: a season of account-less use is thousands of ops,
+  // and a route op carries its whole geometry.
   const rows = await db.getAllAsync<OutboxRow>(
     `SELECT * FROM outbox WHERE entity = ? AND entity_id = ?
      UNION
@@ -1061,7 +1057,7 @@ async function appendOp(
  * How an op field maps onto its mirror column. A bare string is the scalar
  * case (column name, value bound raw). Array/object fields need the pair:
  * SQLite can't bind them, and the conflict base snapshot has to be read back
- * in the op's own shape (§6 compares base against the server's field values,
+ * in the op's own shape (conflict resolution compares base against the server's field values,
  * not against our JSON encoding).
  */
 type ColumnSpec =
@@ -1155,18 +1151,17 @@ async function enqueueUpdate(
   scheduleMutationSync();
 }
 
-// ── Stage 7 → Stage 8 waypoint migration ─────────────────────────────────────
+// ── Legacy waypoint migration ────────────────────────────────────────────────
 //
-// Stage 7 stored dropped waypoints in a local-only table (logjam-offline.db
-// `waypoint`). Stage 8 made waypoints a synced entity; promote any legacy rows
-// into the mirror + outbox once, then DROP the legacy table — a fresh install
-// never creates it (it is no longer in SCHEMA_SQL), so its absence is the
+// Dropped waypoints were originally stored in a local-only table
+// (logjam-offline.db `waypoint`). Waypoints are now a synced entity; promote any
+// legacy rows into the mirror + outbox once, then DROP the legacy table — a fresh
+// install never creates it (it is no longer in SCHEMA_SQL), so its absence is the
 // normal case and the promotion is a no-op from then on.
 //
-// Since the phase 1c fold they are promoted as PLACES of the system Marker
-// type, which is what a waypoint is now. The path still has to exist: a phone
-// that has been offline since Stage 7 still holds these rows, and they are
-// points the user dropped in the field.
+// They are promoted as PLACES of the system Marker type, which is what a
+// waypoint is now. The path still has to exist: a phone that has been offline
+// may still hold these rows, and they are points the user dropped in the field.
 
 export async function migrateLegacyWaypoints(): Promise<void> {
   // Lazy import: keeps offline/ and sync/ decoupled at module load.
@@ -1191,7 +1186,7 @@ export async function migrateLegacyWaypoints(): Promise<void> {
     // between the insert and the legacy DELETE (two different SQLite files —
     // no transaction can span them) replays onto the row it already wrote
     // instead of minting a second place and a second create op.
-    // Stage 7 ids that aren't UUIDv4 can't be pushed at all, so those get a
+    // Legacy ids that aren't UUIDv4 can't be pushed at all, so those get a
     // fresh one and accept the (narrow) duplicate window.
     const id = isUuidV4(row.id) ? row.id : undefined;
     const already =
@@ -1222,11 +1217,11 @@ export async function migrateLegacyWaypoints(): Promise<void> {
 type UpdateTarget = { table: string; columns: Record<string, ColumnSpec> };
 
 /**
- * TOTAL over the push entities on purpose — `Partial<Record<…>>` let `route`
- * be forgotten, so discarding a rejected route edit left the refused geometry
- * on the map and the fields permanently dirty (every later pull replayed them
- * over the server row). A new entity now fails to compile until it answers
- * here; `notification` answers null because a markRead materializes nothing.
+ * TOTAL over the push entities on purpose — `Partial<Record<…>>` would allow
+ * an entity to be forgotten, where discarding a rejected edit would leave the
+ * refused geometry or values on the map and the fields permanently dirty (every
+ * later pull replaying them over the server row). A new entity fails to compile
+ * until it answers here; `notification` answers null because a markRead materializes nothing.
  */
 export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
   place: { table: "places", columns: PLACE_UPDATE_COLUMNS },
@@ -1251,8 +1246,7 @@ export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
  * discarding the op has to undo that write — otherwise the rejected value sits
  * on screen indefinitely (the place keeps the name the server refused), and
  * the field stays in `dirty_fields_json`, which then makes the NEXT edit skip
- * its base snapshot and shelve spurious conflicts. Only the create case used
- * to be cleaned up.
+ * its base snapshot and shelve spurious conflicts.
  *
  * `remainingDirty` are the fields a still-pending op owns: those are left
  * alone, because a newer edit — not the discarded one — is what the column
@@ -1369,7 +1363,7 @@ export function canRestoreField(entity: string, field: string): boolean {
  * conflict on the WHOLE object and merging it is a key-by-key affair, not a
  * concatenation. That is the deferred case, not this one.
  *
- * Guarded by `outbox.unit.test.ts`: every entry must be a field
+ * Guarded by `shelfActions.test.ts`: every entry must be a field
  * `canRestoreField` accepts for some entity, because Keep both writes through
  * `updateEntityFieldLocal` and a field only this set knew about would throw
  * from inside the transaction the user's tap opened.

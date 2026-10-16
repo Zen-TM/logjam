@@ -35,12 +35,11 @@ import {
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
  *
- * It was a switch, which has no empty state — so a form wrote `false` for every
- * toggle it showed, touched or not. On a trip that left a "No" nobody gave on
- * every trip the attribute was ever shown on: counted as answered in the stats,
- * and still there after the tag that asked for it came off, with no way to clear
- * it. The same row of stops a bounded integer draws, for the same reason: unset
- * has to stay reachable.
+ * A toggle switch has no empty state and would write `false` for every toggle
+ * shown, touched or not — leaving an unintended "No" on every trip the
+ * attribute was shown on, counted as answered in stats with no way to clear it.
+ * The same row of stops a bounded integer draws, for the same reason: unset
+ * must stay reachable.
  */
 const BOOLEAN_OPTIONS: ChipOption<string>[] = [
   { value: "", label: "—" },

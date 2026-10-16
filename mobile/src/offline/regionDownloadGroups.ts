@@ -74,8 +74,8 @@ export function groupRegionJobs(jobs: RegionJob[]): RegionDownloadGroup[] {
         groupJobs.length,
       settled: groupJobs.every(isJobSettled),
       // Over EVERY job, not `ready === mapCount`: `ready` counts maps only, so
-      // comparing it to the job count left a finished run permanently
-      // unfinished — a red "0 maps didn't finish" card that never cleared.
+      // comparing it to the job count would leave a finished run permanently
+      // unfinished (a red "0 maps didn't finish" card).
       done: groupJobs.every((job) => job.state.kind === "ready"),
     };
   });

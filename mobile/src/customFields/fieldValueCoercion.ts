@@ -29,21 +29,16 @@ export function fieldValueStrings(
  *
  * AN EMPTIED FIELD IS `null`, NOT ABSENT, and that distinction is the whole
  * point. The place form merges this over the stored object, where `null` means
- * "remove the key" and absent means "leave it alone" — so skipping an empty
- * value made clearing a field impossible: the user deleted the text, saved,
- * and the old value was still there with no error and often no toast, because
- * nothing had changed. The seven canyon axes never had this bug; they write an
- * explicit null for a cleared axis, and this is that rule applied to every
- * other field. Only definitions the form actually RENDERED may be passed in,
- * or this clears fields nobody was asked about.
+ * "remove the key" and absent means "leave it alone" — skipping an empty
+ * value would make clearing a field impossible, leaving the old value intact
+ * (Guard: fieldValueCoercion.test.ts). Only definitions the form actually
+ * RENDERED may be passed in, or this clears fields nobody was asked about.
  *
  * A YES/NO IS THREE STATES, and unset is a null like any other field's. No is
- * an explicit `false`. It used to write `false` for every toggle the form
- * showed, touched or not (UX-004: "an unchecked box IS an explicit No"), which
- * on a trip left a No nobody gave behind on every trip the attribute was ever
- * shown on — counted as answered by the stats, and kept after the tag that
- * asked for it came off. Logjam Web still draws a checkbox, and still writes
- * that false, until its rework.
+ * an explicit `false`. Writing `false` for every toggle shown, touched or not,
+ * would leave an unintended No on every trip the attribute was shown on —
+ * counted as answered by stats and retained after tags change
+ * (Guard: fieldValueCoercion.test.ts).
  *
  * A caller that REPLACES rather than merges (the trip form) drops the nulls
  * itself — see `withoutClearedFields`.
@@ -64,11 +59,11 @@ export function coerceCustomFields(
 /**
  * Whether two stored value objects say the same thing, key ORDER ignored.
  *
- * Comparing `JSON.stringify` output reported a change on nearly every save:
+ * Comparing `JSON.stringify` output would report a change on nearly every save:
  * Postgres `jsonb` hands keys back in its own order (shortest first), and a form
- * builds them in the definitions' order. So every trip edit re-sent every
- * attribute, and a notes-only edit could overwrite an attribute changed on
- * another device since the last sync.
+ * builds them in the definitions' order. Key order must be ignored so an edit
+ * does not falsely overwrite unchanged attributes
+ * (Guard: fieldValueCoercion.test.ts).
  */
 export function sameFieldValues(
   a: Record<string, unknown>,

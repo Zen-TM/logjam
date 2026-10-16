@@ -1,4 +1,4 @@
-// The one way this app asks Amplify for a session.
+// The one way Logjam GPS asks Amplify for a session.
 //
 // `fetchAuthSession` has no timeout of its own, and on a flaky link its
 // connect neither succeeds nor fails — the same failure `apiFetch` already

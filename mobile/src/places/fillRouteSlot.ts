@@ -28,8 +28,8 @@ function confirmDisplacement(
       { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
       {
         text: "Replace",
-        // Nothing here destroys anything any more — both occupants are
-        // unlinked and both survive — so the button is never the red one.
+        // Nothing here destroys anything — both occupants are unlinked and
+        // both survive — so the button is never the red one.
         style: "default",
         onPress: () => resolve(true),
       },
@@ -70,8 +70,7 @@ export async function fillRouteSlot({
             // the one place — the state the confirm just said would not exist.
             updateRouteLocal(occupant.id, { placeId: null })
           : // UNLINK, never delete: the file is the user's own import or
-            // recording and lives on in Saved. Deleting it here is what the
-            // copy-into-the-place model used to have to do.
+            // recording and lives on in Saved.
             linkStandaloneMediaLocal(occupant.media.id, null)
     : null;
 

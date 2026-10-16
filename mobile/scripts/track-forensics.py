@@ -3,11 +3,11 @@
 
     ./scripts/track-forensics.py <logjam-offline.db> [trackId] [--sensors log.csv]
 
-Companion to private/todo/track-accuracy.md. It exists because the last round of
-this analysis lived in a session scratchpad and was lost, so every number in the
-doc had to be re-derived from scratch.
+Written for track accuracy analysis. It exists because an earlier round of
+this analysis lived in a session scratchpad and was lost, so every number
+had to be re-derived from scratch.
 
-WHAT IT ANSWERS, in the order the doc asks:
+WHAT IT ANSWERS:
   - How bad are the fixes, and where. Step lengths, accuracy, outage gaps.
   - Does the Doppler channel disagree with position differencing, and where.
     The TRAPEZOID form ((v1+v2)/2 * dt vs the haversine step), which is the one
@@ -78,7 +78,9 @@ def pick_track(db, track_id):
     if len(rows) > 1:
         print("tracks (most recent first):")
         for row in rows:
-            print(f"  {row[0]}  {row[2]:<10} {row[3]:>6} pts  {row[4]/1000:7.2f} km  {row[5]}")
+            print(
+                f"  {row[0]}  {row[2]:<10} {row[3]:>6} pts  {row[4] / 1000:7.2f} km  {row[5]}"
+            )
         print()
     return rows[0]
 
@@ -115,18 +117,16 @@ def report_points(db, track_id):
 
     fmt("step length", steps)
     fmt("gap between fixes", gaps, "s")
-    print(f"  {'total (raw haversine)':<28} {sum(steps)/1000:8.2f} km")
+    print(f"  {'total (raw haversine)':<28} {sum(steps) / 1000:8.2f} km")
 
     if ratios:
         print()
         print("DOPPLER vs POSITION (trapezoid form)")
         fmt("actual / predicted", ratios, "x")
         fmt("|actual - predicted|", [abs(e) for e in excesses])
-        # The candidate gate from track-accuracy.md. It fires on nothing in the
+        # Candidate velocity gate. It fires on nothing in the
         # 2026-08-23 car track; what it does on a canyon is the open question.
-        flagged = [
-            (r, e) for r, e in zip(ratios, excesses) if r > 2 and e > 100
-        ]
+        flagged = [(r, e) for r, e in zip(ratios, excesses) if r > 2 and e > 100]
         print(f"  {'gate ratio>2 and excess>100m':<28} {len(flagged)} hits")
     else:
         print("\n  (no speedMps on these points — recorded before 2026-08-21)")
@@ -221,7 +221,7 @@ def report_sensors(path):
         # weather, and a submersion reads as an ~820 m drop per metre of water.
         drop_m = (max(hpa) - min(hpa)) * 8.4
         print()
-        print(f"  barometer: {span_s/60:.1f} min, {min(hpa):.2f}-{max(hpa):.2f} hPa")
+        print(f"  barometer: {span_s / 60:.1f} min, {min(hpa):.2f}-{max(hpa):.2f} hPa")
         print(f"             = {drop_m:.1f} m of apparent elevation range")
         if drop_m > 200:
             print("             WARNING: >200 m range — check for submersion spikes")
@@ -254,7 +254,7 @@ def main():
     db = sqlite3.connect(f"file:{args.database}?mode=ro", uri=True)
     track = pick_track(db, args.track_id)
     print(f"TRACK {track[0]}  {track[2]}  started {track[5]}")
-    print(f"  stored distance {track[4]/1000:.2f} km over {track[3]} points")
+    print(f"  stored distance {track[4] / 1000:.2f} km over {track[3]} points")
     print()
     report_points(db, track[0])
     report_rejected(db, track[0])

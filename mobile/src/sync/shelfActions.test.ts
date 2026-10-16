@@ -3,10 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The two ways out of a lost value that WRITE something, plus the list that
 // decides which of them is offered.
 //
-// Both used to be one function that marked the shelf row instead of deleting
-// it, so a value the user had already dealt with stayed on the screen asking to
-// be dealt with again. The delete is the behaviour under test — a leftover row
-// is the bug, not a detail.
+// A resolved shelf value must be deleted rather than marked: otherwise a value
+// the user has already dealt with stays on the screen asking to be dealt with
+// again. The delete is the behaviour under test.
 //
 // getSyncDb reaches for expo-sqlite, which throws outside a native runtime, so
 // the DB is a recording stand-in and the assertions are on the SQL.
@@ -117,7 +116,7 @@ describe("the mergeable-field list", () => {
   it("only names fields a local update can actually write", () => {
     // Keep both writes through `updateEntityFieldLocal`, so a field only this
     // list knew about would throw from inside the transaction the user's tap
-    // opened. The two lists must agree (root CLAUDE.md).
+    // opened. The two lists must agree (root AGENTS.md).
     for (const field of mergeableTextFields()) {
       const writable = ["place", "tripLog", "waypoint", "route"].some(
         (entity) => canRestoreField(entity, field),
@@ -169,8 +168,8 @@ describe("restoreShelfValue", () => {
         value: "Exit track overgrown past the second crossing.",
       },
     ]);
-    // The issue is dealt with. A row that stayed behind — which is what the
-    // `restored_at` marker did — asked the user to decide it a second time.
+    // The issue is dealt with. A row left behind would ask the user to decide
+    // it a second time.
     expect(
       runCalls.some((call) =>
         call.sql.startsWith("DELETE FROM conflict_shelf"),

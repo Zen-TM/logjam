@@ -18,8 +18,8 @@
 // screen so a second one (a deep link, a back-stack restore) can't reopen it.
 //
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
-// `/friends/search` never return an email (root CLAUDE.md convention) and nothing
-// here would have somewhere to put one.
+// `/friends/search` never return an email (guard: api/src/__tests__/friends.test.ts)
+// and nothing here would have somewhere to put one.
 import {
   Fragment,
   memo,

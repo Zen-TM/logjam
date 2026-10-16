@@ -16,12 +16,10 @@ vi.mock("@react-native-community/netinfo", () => ({
 }));
 vi.mock("../prefsDb", () => ({ readPref: vi.fn(), writePref: vi.fn() }));
 
-// The regression: every metered job in the app asked `isConnectionExpensive`
-// except the biggest one. `regionTileDownload.connectionAllows` gated on
-// `state.type === "wifi" || "ethernet"`, so a phone tethered to another phone —
-// Wi-Fi by type, mobile data by cost — pulled a whole region at full pace with
-// the "Use mobile data" toggle never shown, under copy that promised the
-// opposite. One rule, one function, both callers.
+// Every metered job in Logjam GPS asks `isConnectionExpensive`: a phone
+// tethered to another phone is Wi-Fi by type but mobile data by cost, and
+// must honor the "Use mobile data" preference. One rule, one function,
+// all callers.
 
 const wifi = {
   isConnected: true,
@@ -61,17 +59,16 @@ describe("connectionAllowsMetered", () => {
 
   it("treats an unanswerable connection as free, as the platform does", () => {
     // NetInfo omits `isConnectionExpensive` on some transports; only an
-    // explicit `true` is expensive, which is what canRunNow has always done.
+    // explicit `true` is expensive, which is what canRunNow does.
     expect(
       connectionAllowsMetered({ isConnected: true, type: "ethernet" }, false),
     ).toBe(true);
   });
 });
 
-// Seen on the emulator: after airplane mode, cellular comes back four seconds
-// before Wi-Fi. Resuming on "online again" restarted a Wi-Fi-only download on
-// cellular, which paused it again, and the Wi-Fi that followed was no edge at
-// all, so the download waited for good.
+// After airplane mode, cellular comes back before Wi-Fi. Resuming on "online
+// again" would restart a Wi-Fi-only download on cellular, which pauses it again;
+// connectionWorthResuming waits for an appropriate connection.
 // Mutation: drop the `connectionAllowsMetered` term and the first line goes
 // red; accept an unknown reachability and the last does.
 describe("connectionWorthResuming", () => {
@@ -97,8 +94,7 @@ describe("connectionWorthResuming", () => {
 // NetInfo.fetch() answers from the last state it was SENT. Android sends none
 // when it lifts the network block it puts on an app behind another app, and
 // the state sent under that block calls Wi-Fi metered, so back in front a
-// Wi-Fi-only job read "mobile data" on Wi-Fi until the next real change.
-// Seen on the Android 15 emulator with region downloads.
+// Wi-Fi-only job would read "mobile data" on Wi-Fi until the next real change.
 // Mutation: read `NetInfo.fetch()` again and the first test goes red.
 describe("canRunNow", () => {
   it("asks the platform now, not the last state NetInfo was sent", async () => {
@@ -118,10 +114,8 @@ describe("canRunNow", () => {
 });
 
 describe("isMeteredAllowed", () => {
-  // MOT-006: media uploads (up to 30 MB an image, 500 MB a video) got the
-  // same "allowed on mobile data by default" treatment as a few kilobytes of
-  // sync JSON. Its default has to sit with its actually-large siblings, not
-  // with sync.
+  // Media uploads (up to 30 MB an image, 500 MB a video) have large payload
+  // sizes. The default must sit with its large siblings, not with small sync JSON.
   it("defaults every job the same way its cost class always has", () => {
     vi.mocked(readPref).mockReturnValue(null);
     expect(isMeteredAllowed("sync")).toBe(true);
@@ -142,7 +136,7 @@ describe("meteredness", () => {
     expect(meteredness(hotspot)).toBe(true);
   });
 
-  // The whole reason it exists beside isExpensive: MAPP-002's hard block is
+  // The whole reason it exists beside isExpensive: the hard block is
   // allowed on a definite false and on nothing else, so "the platform did not
   // say" must stay distinguishable from "it said no".
   it.each([

@@ -2,8 +2,8 @@
 #
 # Build, install and wire up the on-device verification APK.
 #
-# This is the debuggable-release loop (mobile/CLAUDE.local.md): a release-shaped
-# build with `debuggable true`, used because Metro cannot run on the dev laptop.
+# This is the debuggable-release loop: a release-shaped build with
+# `debuggable true`, used when Metro cannot run on the development host.
 # Doing it by hand means remembering four separate things, and each of them
 # fails SILENTLY or misleadingly:
 #
@@ -11,12 +11,12 @@
 #      invalidate `createBundleReleaseJsAndAssets`, so `assembleRelease` prints
 #      BUILD SUCCESSFUL in ~10s and reships the PREVIOUS bundle with the old URL
 #      baked in. We delete the generated bundle to force it.
-#   2. Cleartext is blocked in a release variant, so the app cannot reach a
+#   2. Cleartext is blocked in a release variant, so Logjam GPS cannot reach a
 #      local http API at all. LOGJAM_LOCAL_API=1 turns on the loopback-only
 #      exemption (plugins/withLocalApiCleartext.js).
 #   3. The Sentry sourcemap upload fails the build when no org/project is
 #      configured, which is every local build.
-#   4. `:app:packageRelease` is flaky above one worker on this laptop.
+#   4. `:app:packageRelease` is flaky above one worker on constrained hosts.
 #
 # 1, 2 and 3 all present as something OTHER than a build problem — a bare
 # `TypeError: Network request failed` with no console output, which reads as a
@@ -25,8 +25,8 @@
 # Usage:  ./scripts/build-local-apk.sh [--no-install]
 #
 # Assumes the API + MiniStack are reachable on the HOST at 8080 / 4566 (over an
-# ssh tunnel if they run on another machine) and that `.env` points the app at
-# http://127.0.0.1:8080 — loopback plus `adb reverse` is the one configuration
+# ssh tunnel if they run on another machine) and that `.env` points Logjam GPS
+# at http://127.0.0.1:8080 — loopback plus `adb reverse` is the one configuration
 # that works on the emulator and a physical device alike, so it never needs
 # editing per target. Never 10.0.2.2: that is emulator-only and routes nowhere
 # on a phone.

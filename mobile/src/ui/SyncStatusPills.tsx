@@ -1,15 +1,13 @@
 // The offline / "N waiting to sync" pill pair, carried in the hero of every
 // list screen (DESIGN.md).
 //
-// One component because it was three identical copies — Places, Logs and
-// Saved — and guest mode gave the duplication teeth: **"3 waiting to sync" is a
-// lie to a guest.** Nothing is waiting; there is no account for it to be
-// waiting on, and the outbox rows behind that count are the permanent state of
-// their data rather than a queue. The three copies would have had to be fixed
-// three times, and the fourth screen to grow a hero would have got it wrong.
+// Carried by Places, Logs and Saved. **"3 waiting to sync" is a lie to a
+// guest.** Nothing is waiting; there is no account for it to be waiting on, and
+// the outbox rows behind that count are the permanent state of their data
+// rather than a queue.
 //
 // The offline pill still shows for a guest: being offline is true regardless of
-// whether an account exists, and it explains why the map went blank.
+// whether an account exists, and it explains why the map is blank.
 import { StyleSheet, View } from "react-native";
 
 import { useAccountState } from "../auth/AccountStateContext";

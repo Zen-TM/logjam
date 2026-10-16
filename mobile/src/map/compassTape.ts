@@ -81,7 +81,7 @@ export function compassTicks(
  * direction is that much SMALLER — 000° true is 347.5° magnetic in NSW, not
  * 012.5°. The value used is whatever `heading.ts` is currently correcting BY,
  * so the tape and the map can never disagree about it. Getting that sign backwards is a 25° error in the direction people
- * walk, which is why it is a named function with a test rather than an
+ * walk, which is why it is a named function with a test (compassTape.test.ts) rather than an
  * expression inside the view.
  */
 export function displayHeading(
@@ -91,7 +91,7 @@ export function displayHeading(
   if (reference !== "magnetic") return trueHeading;
   // Exactly what the forward path added, not a second copy of the constant:
   // `resolveTrueHeading` adds the LEARNED declination once a fix has supplied
-  // one, so subtracting the NSW literal here left the tape's labels adrift from
-  // the map by `learned - 12.5` — small in NSW, unbounded outside it.
+  // one, so subtracting the NSW literal here would leave the tape's labels adrift
+  // from the map by `learned - 12.5` — small in NSW, unbounded outside it.
   return (((trueHeading - currentDeclinationDeg()) % 360) + 360) % 360;
 }

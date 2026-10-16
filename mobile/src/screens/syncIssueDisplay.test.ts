@@ -100,8 +100,8 @@ describe("opTitle", () => {
   });
 
   it("names a media op by its filename and its own verb", () => {
-    // "media — create" was the raw column values reaching the screen, and every
-    // stuck upload looked like every other one.
+    // Without filename and verb, stuck uploads would look identical under raw
+    // column values.
     expect(
       opTitle(
         parked({ entity: "media", op: "create", entityName: "Davies.kml" }),
@@ -145,9 +145,9 @@ describe("opAdvice", () => {
   });
 
   it("treats a validation rejection as permanent and names no hint", () => {
-    // Retry on a 400 can only park it a second time, which is what taught users
-    // the button does nothing (§7 — a verb that can only refuse is absent). The
-    // rows below the line are the advice, so there is no hint.
+    // Retrying on a 400 can only park it again (shared/DESIGN.md §7 — a verb
+    // that can only refuse is absent). The rows below the line are the advice,
+    // so there is no hint.
     const advice = opAdvice(parked({ error: { code: 400 } }));
     expect(advice.line).toBe("This change can't be saved as it is.");
     expect(advice.canRetry).toBe(false);
@@ -156,9 +156,8 @@ describe("opAdvice", () => {
 
   it("says a temporary refusal lasted a day, and blames neither the change nor the signal", () => {
     // A 503 only reaches this screen after `shouldGiveUpOnSyncOp` let it: the
-    // account answered, and kept answering no, for a day. "Better signal" was
-    // written for the old five-tries cap and sends the reader to look for
-    // something that was never missing.
+    // account answered, and kept answering no, for a day. Blaming signal would
+    // send the reader to look for something that was never missing.
     const refused = opAdvice(parked({ error: { code: 503 }, attempts: 40 }));
     expect(refused.line).toBe("Your account kept turning this down for a day.");
     expect(refused.canRetry).toBe(true);
@@ -212,8 +211,8 @@ describe("opAdvice shows a rejection in the server's sentence", () => {
     opAdvice(parked(overrides)).line;
 
   it("says what the server said, whatever the op looks like", () => {
-    // A trip refused for listing one place twice used to read "names a place
-    // that no longer exists": a guess from the fields, and wrong.
+    // The rejection sentence from the server must be shown rather than guessing
+    // from fields, which can produce inaccurate reasons.
     expect(
       line({
         entity: "tripLog",
@@ -276,8 +275,8 @@ describe("rejectedFields / salvageableFields", () => {
   });
 
   it("splits a rejected edit into what the server refused and what it didn't", () => {
-    // One bad number used to take a paragraph of notes down with it: the API
-    // validates the whole payload, so the whole op parks.
+    // Without salvaging valid fields, one bad number takes valid notes down
+    // with it because the API validates the whole payload and parks the op.
     // The whole `fieldValues` blob is ONE dirty field on the wire, so that is
     // the granularity a "send the rest" offer can work at — the client cannot
     // resend half a JSON column.
@@ -373,9 +372,10 @@ describe("opChanges", () => {
   });
 
   it("marks WHICH line the rejection is about", () => {
-    // Two changes over one complaint left the reader guessing which had caused
-    // it. The client runs the same range rules as the API (`shared/`), so it
-    // can point at the field without reading the server's English.
+    // Without marking which line was rejected, multiple changes leave the
+    // reader guessing. The client runs the same range rules as the API
+    // (`shared/`), so it can point at the field without reading the server's
+    // English.
     const changes = opChanges(
       parked({
         fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
@@ -448,8 +448,8 @@ describe("opTarget", () => {
 
 describe("discardExplanation", () => {
   it("promises no copy anywhere, because discarding no longer keeps one", () => {
-    // It used to shelve what was typed, and the row it left behind asked the
-    // user to decide the same thing twice. This dialog is now the last place
+    // Discarding drops what was typed rather than shelving it to avoid asking
+    // the user to decide the same thing twice. This dialog is now the last place
     // the cost can be stated.
     const text = discardExplanation(parked({ entity: "place" }));
     expect(text).not.toMatch(/Lost/);
@@ -478,9 +478,8 @@ describe("canRecreate", () => {
   });
 
   it("is false where that call would quietly discard instead", () => {
-    // The button said "Saves what you typed as a new one" for every deadRemote
-    // op, and for anything but a place with a local row the implementation
-    // falls back to a discard — a button that deletes the change it promises
+    // For anything other than a place with a local row, recreation would fall
+    // back to a discard — a button that deletes the change it promises
     // to keep.
     expect(
       canRecreate(
@@ -511,8 +510,8 @@ describe("shelf copy", () => {
     expect(shelfTitle(shelved())).toBe(
       "Your notes for “Claustral” were overwritten",
     );
-    // Agreement follows the FIELD, and got this wrong on a shipped row: "your
-    // water grade WERE overwritten".
+    // Agreement follows the FIELD: e.g. "Your water grade was overwritten"
+    // rather than "were".
     expect(shelfTitle(shelved({ field: "v_grade" }))).toBe(
       "Your water grade for “Claustral” was overwritten",
     );
@@ -590,11 +589,9 @@ describe("shelf copy", () => {
   });
 
   it("says what happened to the thing, for every reason a restore is refused", () => {
-    // Two reasons, not four: `readOnly` was unreachable (a shelf entry only
-    // exists for a row the push was APPLIED to, i.e. one the user owns) and
-    // `restored` went with the row, which is now deleted on restore.
-    // And it NAMES the kind: the shelf row records the entity, so "the thing
-    // this belonged to" was a sentence written without looking.
+    // Two reasons, not four: a shelf entry only exists for a row the push was
+    // APPLIED to (one the user owns), and a restored row is deleted on restore.
+    // It names the kind from the recorded entity rather than generic phrasing.
     expect(restoreBlockReason(shelved({ restoreBlock: "gone" }))).toBe(
       "The place this belonged to has been deleted, so there's nothing to restore it into.",
     );

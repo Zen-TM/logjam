@@ -26,7 +26,7 @@ describe("notificationTapTarget", () => {
     });
   });
 
-  // MAPP-009: the draft beats the payload, whatever the payload is. A tap that
+  // The draft beats the payload, whatever the payload is. A tap that
   // navigated would leave the user in PlaceDetail with the pen still armed.
   it.each([
     ["a place push", { type: "placeShared", placeId: "c-1" }],

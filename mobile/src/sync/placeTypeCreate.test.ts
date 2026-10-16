@@ -2,10 +2,10 @@
 //
 // The local INSERT cannot name an owner (a guest has none, and nobody has one
 // offline until the server sends the row back), so the mirror row's `owner_id`
-// is NULL: the same value a built-in carries. Reading that NULL as "built-in"
-// listed the type the user had just made under "Built in" with no way to
-// rename or delete it, gave the next type the same position, and — on an
-// install whose mirror held nothing else — replaced Canyon, Campsite and
+// is NULL: the same value a built-in carries. Treating that NULL as "built-in"
+// would list the type the user had just made under "Built in" with no way to
+// rename or delete it, give the next type the same position, and — on an
+// install whose mirror holds nothing else — replace Canyon, Campsite and
 // Marker in every picker.
 //
 // Real SQLite, because every one of those is a claim about rows.

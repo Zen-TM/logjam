@@ -96,7 +96,7 @@ export const HEADING_TICK_MS = 32;
  * How often `DeviceMotion` is asked to DISPATCH, in ms. It is not the rate the
  * orientation actually changes at, and the difference matters.
  *
- * MEASURED ON A PIXEL 9 (2026-08-17, `HDGPROBE` log over 35 s at rest):
+ * MEASURED ON A PIXEL 9 (35 s at rest):
  * dispatches arrive at the interval asked for, but distinct `rotation` values
  * arrive at **8 Hz — a 133 ms median gap**. `setUpdateInterval` is a dispatch
  * throttle only; the native registration rate is chosen in
@@ -106,9 +106,8 @@ export const HEADING_TICK_MS = 32;
  * sensorservice`: rotation vector maxRate 200 Hz) for a compass that needs
  * about eight. There is no middle setting reachable from JS.
  *
- * So this is set to comfortably beat the data rate and no more. At 30 ms it
- * was, and 22 of every 30 dispatches carried a byte-identical bearing across
- * the bridge; 60 ms halves that traffic and still cannot miss a value.
+ * So this is set to comfortably beat the data rate and no more: 60 ms
+ * avoids redundant bridge traffic and still cannot miss a value.
  * TIMING IS NOT LOST BY SLOWING IT DOWN, because gaps are measured from the
  * sensor's own timestamp (`deviceSampleTimeMs`) rather than from arrival.
  *
@@ -154,20 +153,18 @@ export const HEADING_RATE_TAU_MS = 150;
 /**
  * Longest gap between two target moves that may still be read as a turn rate.
  *
- * IT MUST CLEAR THE REAL SAMPLE CADENCE WITH ROOM TO SPARE, and briefly did
- * not: it was derived from HEADING_SENSOR_MS (120 ms) while the measured gap
- * between distinct readings is 133 ms median / 135 ms p90, so it rejected most
- * genuine moves and the rate estimator — the whole point of the design — was
- * silently inert, leaving a pure position chaser with 320 ms of lag. Pinned to
- * a measured number now, not to a dispatch interval that has nothing to do with
- * it: three times the observed cadence.
+ * IT MUST CLEAR THE REAL SAMPLE CADENCE WITH ROOM TO SPARE. The measured gap
+ * between distinct readings is 133 ms median / 135 ms p90; deriving this from
+ * a dispatch interval like HEADING_SENSOR_MS would reject genuine moves and
+ * leave the rate estimator inert. Pinned to a measured number, not to a dispatch
+ * interval: three times the observed cadence.
  *
  * A move that arrives after a long quiet spell is the FIRST move of a new turn,
  * not evidence of one already running: the phone was still for most of that
- * gap, so "degrees / gap" describes nothing. Feeding it in anyway made the very
- * first flick of a rested phone dead-reckon off a fabricated rate — a lurch, in
- * whatever direction that one sample pointed. The rate is left where it is
- * (zero, after the stall decay) and the next few moves build it honestly.
+ * gap, so "degrees / gap" describes nothing. Feeding it in anyway would make the
+ * very first flick of a rested phone dead-reckon off a fabricated rate — a
+ * lurch, in whatever direction that one sample pointed. The rate is left where
+ * it is (zero, after the stall decay) and the next few moves build it honestly.
  */
 const HEADING_RATE_MAX_GAP_MS = 400;
 
@@ -219,14 +216,12 @@ export const HEADING_CATCHUP_TAU_MS = 1000;
 export const HEADING_LEAD_DEG = 3;
 export const HEADING_LEAD_MS = 60;
 /**
- * ...AND A HARD CEILING ON THE WHOLE THING, which is the part that was missing.
+ * ...AND A HARD CEILING ON THE WHOLE THING.
  *
- * The rate-scaled term above has no bound of its own, so the cap meant to LIMIT
- * overshoot grew with the very quantity it was limiting: a wrist flick at
- * ~1000°/s produced `3 + 1000 × 0.06` = 63° of permitted lead, and the map
- * duly ran 60° past where the phone was pointing and then crawled back. The
- * measured "under 5°" that this was signed off on came from a 110°/s turn and
- * did not generalise.
+ * The rate-scaled term above has no bound of its own. Without a ceiling, the
+ * cap meant to LIMIT overshoot grows with the very quantity it limits: a wrist
+ * flick at ~1000°/s produces `3 + 1000 × 0.06` = 63° of permitted lead, running
+ * the map 60° past where the phone points before crawling back.
  *
  * 8° is the knee: overshoot off a hard flick drops from tens of degrees to ~7°
  * at every rate from 200 to 700°/s, with no measurable cost to the ripple at
@@ -257,13 +252,11 @@ const HEADING_RATE_STALL_FLOOR_MS = 150;
  * tremor. A real turn drags the target continuously, offset by this much, so
  * there is no staircase — which is what killed the old ≥3° gate.
  *
- * IT WAS 2.5° AGAINST THE OLD SENSOR, sized to the 2.03° quantum
- * `expo-location` reported in. It is 1° now, and what sizes it is HAND TREMOR,
- * not sensor noise: a Pixel 9 lying still measures 0.053° peak-to-peak of
- * wander (`HDGPROBE`, 35 s, 2026-08-17), twenty times inside this band, so the
- * gyro-fused source contributes essentially nothing towards moving the target.
- * A phone being HELD wanders far more than that, and that is real rotation
- * rather than noise — absorbing it is this constant's actual job.
+ * Sized to HAND TREMOR, not sensor noise: a Pixel 9 lying still measures
+ * 0.053° peak-to-peak of wander (35 s at rest), twenty times inside this band,
+ * so the gyro-fused source contributes essentially nothing towards moving the
+ * target. A phone being HELD wanders far more than that, and that is real
+ * rotation rather than noise — absorbing it is this constant's actual job.
  *
  * THAT MARGIN IS THE BATTERY ARGUMENT, and it is narrower than it looks. The
  * "a still phone stops the ticker" property holds only while the wander stays
@@ -308,14 +301,14 @@ export const HEADING_MAX_SLEW_DEG_PER_S = 360;
 // ── course-up's camera ───────────────────────────────────────────────────────
 //
 /**
- * THE ANIMATION MUST BE LINEAR, AND THAT IS THE WHOLE TRICK. MLRN sends no
- * animation mode unless you ask for one, and the Android side defaults to
- * `CameraMode.EASE` → `easeCamera(update, duration, true)`, whose `true` is an
- * accelerate-decelerate interpolator (`CameraUpdateItem.java`). Every stop
- * therefore STARTS FROM REST. Issue one per sensor sample and the camera spends
- * its whole life in the slow opening of an ease it never finishes: the map
- * lurches, pauses, lurches. A small turn producing two stops reads as exactly
- * two jumps, which is what it was doing.
+ * THE ANIMATION MUST BE LINEAR, AND THAT IS THE WHOLE TRICK. Guard:
+ * mobile/src/map/cameraStop.test.ts. MLRN sends no animation mode unless you ask
+ * for one, and the Android side defaults to `CameraMode.EASE` →
+ * `easeCamera(update, duration, true)`, whose `true` is an accelerate-decelerate
+ * interpolator (`CameraUpdateItem.java`). Every stop therefore STARTS FROM REST.
+ * Issue one per sensor sample and the camera spends its whole life in the slow
+ * opening of an ease it never finishes: the map lurches, pauses, lurches. A
+ * small turn producing two stops would read as exactly two jumps.
  *
  * `linearTo` maps to `easeCamera(update, duration, false)` — constant angular
  * velocity — so consecutive stops hand over without either of them braking, and
@@ -325,8 +318,8 @@ export const HEADING_MAX_SLEW_DEG_PER_S = 360;
  * exactly as long as the segment it is covering. That is now trivial, because
  * the writes come from the fixed HEADING_TICK_MS ticker rather than from sensor
  * samples: every segment is the same length, so the angular velocity is the
- * same from one to the next. Driving them off the irregular sample stream is
- * what made the rotation seem to slow down and pick up again mid-turn.
+ * same from one to the next. Driving them off the irregular sample stream would
+ * make the rotation seem to slow down and pick up again mid-turn.
  *
  * The deadband is what keeps a phone held still from writing at all, so the
  * renderer still goes idle — and the ticker stops entirely on top of that.
@@ -340,8 +333,8 @@ export const HEADING_MAX_SLEW_DEG_PER_S = 360;
  * early and stall. A little more than the tick means the cancel always lands
  * inside the segment — and because the segment is linear, being cancelled
  * part-way through costs nothing: the velocity there is the same as anywhere
- * else in it. Kept just above 1 now that the interval is regular; the old 1.25
- * left the camera a visible fraction of a step behind the filter.
+ * else in it. Kept just above 1: larger headroom leaves the camera a visible
+ * fraction of a step behind the filter.
  */
 export const POV_ANIMATION_HEADROOM = 1.15;
 /** Clamp, so a stalled timer cannot produce a long glide and a burst of catch-up
@@ -355,10 +348,9 @@ export const POV_ANIMATION_MAX_MS = 400;
  *
  * ONE implementation, because there is more than one continuous writer: the
  * heading ticker and the double-tap zoom ramp (`startZoomRamp` in MapScreen)
- * both stream stops at their own cadence, and the ramp shipped with
- * `duration: <its own interval>` — exactly the no-headroom case the constant
- * above exists to prevent. Two copies of a rule is a parallel list that
- * drifts; this is the list.
+ * both stream stops at their own cadence; the constant above prevents the
+ * zero-headroom case where duration matches interval. Two copies of a rule is a
+ * parallel list that drifts; this is the list.
  */
 export function povStopDurationMs(sinceLastWriteMs: number): number {
   return Math.min(
@@ -809,11 +801,11 @@ export function headingFromDeviceRotation(
  *
  * `trueHeading` is -1 whenever expo-location has no location fix to compute
  * declination from — which is the norm on a cold start in the bush, exactly
- * where this matters. The old code silently fell back to `magHeading` and drew
- * it as if it were true, so the arrow pointed 12.5° off while the
- * navigate-to-waypoint chip beside it printed a real great-circle bearing:
- * two different norths on one screen. Walk a kilometre on that arrow and you
- * arrive ~220 m from where you aimed.
+ * where this matters. Silently falling back to `magHeading` and drawing it as
+ * if it were true points the arrow 12.5° off while the navigate-to-waypoint
+ * chip beside it prints a real great-circle bearing: two different norths on
+ * one screen. Walk a kilometre on that arrow and you arrive ~220 m from where
+ * you aimed.
  */
 export function resolveTrueHeading(sample: {
   trueHeading: number;
@@ -860,16 +852,11 @@ export function normalizeBearing(heading: number): number {
 /**
  * Android's `SENSOR_STATUS_ACCURACY_*`: 0 unreliable, 1 low, 2 medium, 3 high.
  *
- * BACK TO 1 (LOW), which is where Android's own compass app prompts, and where
- * the user expects us to agree with it: after a reboot the system app said LOW
- * and asked for a calibration while this said nothing at all.
- *
- * It was briefly 0, because warning at LOW with no confirmation put a banner up
- * more or less permanently. Requiring COMPASS_BAD_PROBES_TO_WARN consecutive
- * probes is the better answer to that: a transient is filtered, a real LOW
- * persists. Which of those the noise actually was is still unproven — see the
- * diagnostics line in Settings → Map, which exists so the next change to this
- * constant is made from numbers rather than from guesses.
+ * Set to 1 (LOW), which is where Android's own compass app prompts, and where
+ * the user expects agreement. Warning at LOW with no confirmation would put a
+ * banner up almost permanently; requiring COMPASS_BAD_PROBES_TO_WARN
+ * consecutive probes filters transients while catching persistent LOW.
+ * See the diagnostics line in Settings → Map to check readings on device.
  *
  * The reason is that the number is not what it appears to be.
  * `LocationModule.kt:851-853` is
@@ -1057,10 +1044,9 @@ export function magneticInterference(window: FieldWindow): boolean {
  * The compass's own state, in the plainest words that are still true, for the
  * diagnostics line in Settings → Map.
  *
- * It exists because none of this was observable. "Is my compass all right"
- * could not be answered on the device, which made every threshold in here a
- * guess and left a user with a wrong bearing no way to tell whether the app
- * knew. For a navigation app that is the wrong way round.
+ * It exists so "Is my compass all right" can be answered on the device,
+ * rather than leaving every threshold as a guess and leaving a user with a wrong
+ * bearing no way to tell whether Logjam GPS knows.
  */
 export function compassDiagnostics(
   accuracy: number | null,
@@ -1106,14 +1092,12 @@ export function lastCompassDiagnostics(): string {
 // ── the live heading, deliberately outside React state ───────────────────────
 //
 // THIS IS A BATTERY BOUNDARY, not a style preference. The compass is on by
-// default and the platform delivers up to about five samples a second, and
-// while the heading lived in
-// MapScreen's `useState` every one of those samples re-rendered the whole map
-// screen: MapView, the ~71 Protomaps basemap layers (MLRN memoises none of
-// them, and re-runs `transformStyle` + a native prop commit per layer per
-// render), every topo overlay, every route layer, and every bottom sheet's
-// element tree including the ones that are shut. Twenty times a second, for as
-// long as the app was open.
+// default and the platform delivers up to about five samples a second; putting
+// the heading in MapScreen's `useState` would cause every sample to re-render
+// the whole map screen: MapView, the ~71 Protomaps basemap layers (MLRN memoises
+// none of them, and re-runs `transformStyle` + a native prop commit per layer
+// per render), every topo overlay, every route layer, and every bottom sheet's
+// element tree including the ones that are shut.
 //
 // Exactly two things draw the heading — the location arrow and the compass
 // tape. They subscribe here instead, so a sample re-renders those two and

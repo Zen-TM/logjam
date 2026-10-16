@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScopedCustomFieldDef } from "@logjam/shared";
 
-// Definitions are rows in the local mirror now, written through the outbox.
-// These tests hold the two properties that change bought: every path works with
-// the API layer untouched (so it works for a guest, and offline), and the WRITES
-// are per-row rather than a whole list (so two devices merge instead of one
+// Definitions are rows in the local mirror, written through the outbox.
+// These tests hold two properties: every path works with the API layer
+// untouched (so it works for a guest, and offline), and the WRITES are
+// per-row rather than a whole list (so two devices merge instead of one
 // erasing the other).
 
 type DefRow = {
@@ -375,9 +375,8 @@ describe("removeFieldDef", () => {
   });
 
   // `_sources` is written only by the web, and it lives in the SAME object as
-  // the field values now rather than beside them — so a strip that rebuilt
-  // fieldValues from the user keys alone would silently drop it. That is a
-  // sharper trap than before the rework, not a milder one.
+  // the field values rather than beside them — so a strip that rebuilds
+  // fieldValues from the user keys alone would silently drop it.
   it("preserves the rest of a place's field values", async () => {
     defRows = [row(party, "place", 0)];
     places = [
@@ -411,12 +410,11 @@ describe("removeFieldDef", () => {
   });
 });
 
-// A SYSTEM definition belongs to no account. The phone could not see that —
-// the mirror threw `ownerId` away — so the editor offered Delete on a built-in
-// field, and `removeFieldDefById` did its half FIRST: strip the value off every
-// owned place carrying the key. The server then answered the definition delete
-// with "already applied", so the field came back on the next pull and the
-// values did not. Every star rating in an account, gone in two taps.
+// A SYSTEM definition belongs to no account. If the mirror throws `ownerId`
+// away, the editor offers Delete on a built-in field, and `removeFieldDefById`
+// strips the value off every owned place carrying the key. The server rejects
+// deleting system definitions, which would cause the field to reappear on the
+// next pull without the stripped values.
 describe("a built-in definition is not the account's to change", () => {
   const builtIn: ScopedCustomFieldDef = {
     key: "quality",
@@ -464,9 +462,9 @@ describe("a built-in definition is not the account's to change", () => {
 
 // A definition made on this phone has no owner id until the server sends the
 // row back: the local INSERT has no column value for it. Reading that NULL as
-// "built-in" made a field the user had just added impossible to edit or delete
-// until the next pull, and for a guest for ever. The save reported success and
-// wrote nothing. Mutation: `row.ownerId === null` alone as the built-in test.
+// "built-in" would make a newly added field impossible to edit or delete
+// until the next pull, and permanently impossible for a guest.
+// Mutation: `row.ownerId === null` alone as the built-in test.
 describe("a definition made on this phone, not yet synced", () => {
   const unsynced: ScopedCustomFieldDef = { ...water, ownerId: null };
 

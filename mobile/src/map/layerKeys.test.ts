@@ -18,15 +18,13 @@ import { describe, expect, it } from "vitest";
 // With no heading the dot is child 0; when a heading arrives the beam becomes
 // child 0 and the dot becomes child 1. Keyless siblings of the same type
 // reconcile BY INDEX, so React reuses the dot's fiber for the beam, the id
-// changes underneath it, and the throw takes the whole app to the root error
-// boundary. Observed on device: press locate, switch tabs, "Something went
-// wrong".
+// changes underneath it, and the throw takes Logjam GPS to the root error
+// boundary.
 //
 // A `key` equal to the id makes the reconciliation key-based, so a fiber can
 // never be reused across two ids. It costs nothing on the layers that are not
 // conditional today and removes the trap for the ones that become conditional
-// tomorrow — which is why this test covers ALL of them rather than the two that
-// were actually broken.
+// tomorrow — which is why this test covers ALL of them.
 const SRC = join(__dirname, "..");
 
 function tsxFilesUnder(dir: string): string[] {

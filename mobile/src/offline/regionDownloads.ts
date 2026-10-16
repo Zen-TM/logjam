@@ -1,4 +1,4 @@
-// Protomaps region download (stage4a §7.2 client side): POST the bbox to the
+// Protomaps region download: POST the bbox to the
 // clip endpoint (body-only — never a URL), stream the clip via the opaque
 // token GET into app-private storage, verify, register in the artifact
 // registry. The resolver picks the region up from the registry with no map
@@ -37,11 +37,9 @@ export type RegionDownloadProgress = {
  */
 export async function downloadProtomapsRegion(
   /**
-   * The QUEUE's job, id and label included. This used to mint its own id and
-   * take no label at all: the Saved list then showed the clip as "Offline map
-   * region" instead of the name the download screen had composed, and cancelling
-   * a still-QUEUED clip job asked `deleteAbandonedRegion(spec.id)` to delete a
-   * `<spec.id>.mbtiles` that could never exist under that id. One id, both ends.
+   * The QUEUE's job, id and label included, so the Saved list shows the
+   * name the download screen composed and cancelling a still-queued clip
+   * deletes under the matching id. One id, both ends.
    */
   spec: {
     id: string;
@@ -105,7 +103,7 @@ export async function downloadProtomapsRegion(
       throw new Error("Region download failed");
     }
 
-    // Verify: exact size + PMTiles magic bytes (stage4a §9 http-file verify).
+    // Verify: exact size + PMTiles magic bytes.
     const info = await FileSystem.getInfoAsync(fileUri);
     if (!info.exists || info.size !== clip.sizeBytes) {
       throw new Error("Region download incomplete");

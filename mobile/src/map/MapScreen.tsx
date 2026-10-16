@@ -1,7 +1,7 @@
-// Map core (Stage 2, online) — full-bleed map with raster + Protomaps vector
+// Map core — full-bleed map with raster + Protomaps vector
 // basemaps, place overlay (owned vs shared theming), raster + vector topo
 // overlays (user vectorStyle), tap → detail, locate-me. Every tile source
-// flows through the resolver so Stage 4 offline downloads change data, not
+// flows through the resolver so offline downloads change data, not
 // this screen.
 //
 // NOTE (Android): MapLibre runs the Vulkan backend (app.json MLRN plugin
@@ -349,7 +349,7 @@ import {
 } from "./TopoVectorOverlay";
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
-// file:// assets once installed (stage 4a §8.3), remote host as the
+// file:// assets once installed, remote host as the
 // install-failure fallback. Fonts: the Noto Sans stacks the generated basemap
 // layers reference — place labels use the same stack so one glyph source
 // serves everything.
@@ -395,7 +395,7 @@ const CAMERA_DEFAULTS = {
 };
 
 /**
- * The scale "where am I" always lands on: opening the app, and entering either
+ * The scale "where am I" always lands on: opening Logjam GPS, and entering either
  * follow mode. Around 300 m across on a phone — the next few minutes of
  * walking, with the creek and the contours either side of it still legible.
  *
@@ -548,8 +548,8 @@ const UserLocationMarker = memo(function UserLocationMarker({
   /**
    * How much the position under the arrow is worth (`gpsSignal.ts`). Anything
    * but "live" draws the grey arrow: the marker is the one thing on this map a
-   * person acts on directly, and it used to look identical whether the fix
-   * behind it was three seconds or three hours old.
+   * person acts on directly, and cannot look identical whether the fix
+   * behind it is three seconds or three hours old.
    */
   quality: FixQuality;
   /**
@@ -669,19 +669,18 @@ function UserMarkerLayers({
  * Locate-me sprite: one baked PNG per Settings → Map colour (MARKER_COLORS),
  * picked by `iconImage` — not a single image recoloured at runtime via SDF.
  *
- * SDF was the first approach (one image, `sdf: true`, `iconColor`/
- * `iconHaloColor` at the layer) and it rendered wrong: MapLibre's SDF path
+ * Runtime SDF recolouring (one image, `sdf: true`, `iconColor`/
+ * `iconHaloColor` at the layer) renders poorly here: MapLibre's SDF path
  * expects the source alpha channel to encode a genuine distance field with a
- * broad gradient, and `user-arrow.png` was a normal icon with an ordinary
- * ~1px anti-aliased edge — fed through the SDF renderer that edge came back
- * as a ragged, semi-transparent fringe rather than a clean halo (worse at
- * the larger 0.42 iconSize than it was at 0.28). The colour set is small and
- * fixed (six entries, `mapPreferences.ts`), so baking each one — fill plus a
- * properly anti-aliased outline, generated once and committed as a PNG — is
- * both simpler and correct, at the cost of one extra registered image per
- * colour instead of one.
+ * broad gradient, and a standard icon with an ordinary ~1px anti-aliased edge
+ * fed through the SDF renderer produces a ragged, semi-transparent fringe
+ * rather than a clean halo (worse at the larger 0.42 iconSize than at 0.28).
+ * The colour set is small and fixed (six entries, `mapPreferences.ts`), so
+ * baking each one — fill plus a properly anti-aliased outline, generated once
+ * and committed as a PNG — is both simpler and correct, at the cost of one
+ * extra registered image per colour instead of one.
  *
- * Module constant + memo: as an inline object literal this re-registered
+ * Module constant + memo: an inline object literal would re-register
  * every image with the native map on every render of the screen.
  *
  * The `require` calls have to stay static string literals — Metro resolves
@@ -730,9 +729,8 @@ const UserMarkerImages = memo(function UserMarkerImages() {
  *
  * Inlined as a data URI rather than `require`d, unlike those: a locally-built
  * debuggable release resolves every `require`d asset to an empty uri and draws
- * nothing, silently (mobile/CLAUDE.local.md), which cost an evening of "the
- * arrows render on the emulator and not on the phone". At 389 bytes the base64
- * is cheaper than the asset entry would be.
+ * nothing, silently. At 389 bytes the base64 is cheaper than the asset entry
+ * would be.
  */
 const ROUTE_ARROW_IMAGES = {
   [ROUTE_ARROW_IMAGE]: { source: { uri: ROUTE_ARROW_SDF_URI }, sdf: true },
@@ -862,7 +860,7 @@ export function MapScreen({
     setOfflineOnlyMode(offlineOnly);
   });
   const { artifacts } = useMapArtifacts();
-  // Bundled glyph/sprite install (§8.3). Map render is gated below until it
+  // Bundled glyph/sprite install. Map render is gated below until it
   // resolves — swapping the style's glyphs URL after mount rebuilds the whole
   // style. Post-install launches resolve in ~ms; install failure falls back
   // to the remote asset host (online-only labels).
@@ -1166,7 +1164,7 @@ export function MapScreen({
       return next;
     });
   }, []);
-  // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
+  // Follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
   // button cycles off → follow → course-up → off.
   const [followMode, setFollowMode] = useState<FollowMode>("off");
@@ -1310,14 +1308,13 @@ export function MapScreen({
   // changed the behaviour; collapse them once this has been in the field.
   const firstFix = useRef(false);
 
-  // Unmount teardown for the sensors is the effects' own cleanup below. It used
-  // to be a screen-level effect plus an `unmounted` flag checked at every
-  // assignment, because both subscriptions are assigned from an `await` and one
-  // resolving after teardown is a sensor held for the life of the process
-  // (MLIFE-007). Each effect now carries that guard itself, for its own
-  // teardown — which is a blur or a background as well as an unmount.
+  // Unmount teardown for the sensors is the effects' own cleanup below. Both
+  // subscriptions are assigned from an `await` and one resolving after
+  // teardown would leak a sensor for the life of the process. Each effect
+  // carries that guard for its own teardown — which is a blur or a background
+  // as well as an unmount.
 
-  // Place overlay reads the offline mirror (Stage 8): instant, and the map
+  // Place overlay reads the offline mirror: instant, and the map
   // keeps its pins in airplane mode.
   const places = useMirrorPlaces();
   // Every place route ATTACHMENT on the account. Read here rather than beside
@@ -1411,12 +1408,10 @@ export function MapScreen({
    * What the offline notice knows: whether the basemap being drawn has saved
    * tiles on screen, and whether any OTHER basemap does.
    *
-   * Both answers come from the VIEWPORT. The notice used to be gated on the
-   * resolver instead, and the resolver reports a basemap as available the
-   * moment any region exists for it anywhere — so a phone with one saved
-   * Katoomba region stayed silent while showing blank ground three valleys
-   * away, which is precisely the case the notice exists for. It fired "rarely,
-   * and never for a basemap you had actually downloaded something for".
+   * Both answers come from the VIEWPORT rather than the resolver, because the
+   * resolver reports a basemap as available the moment any region exists for it
+   * anywhere — a phone with one saved region elsewhere must still warn when
+   * looking at blank ground.
    */
   const coverageHere = useMemo(() => {
     if (connectivity === "online" || viewportBbox == null) {
@@ -1593,8 +1588,8 @@ export function MapScreen({
   );
 
   /** Re-snap after a handle is dropped. An anchor in the middle of a line has a
-   *  segment on EITHER side of it, and both followed the track to where the
-   *  point used to be — re-running only one leaves the other straight. */
+   *  segment on EITHER side of it, and both followed the track to the anchor's
+   *  previous position — re-running only one leaves the other straight. */
   const snapAroundAnchor = useCallback(
     (handle: RouteDraftHandle, index: number, moved: [number, number]) => {
       const anchors = handle.anchors.map((anchor, i) =>
@@ -1751,7 +1746,7 @@ export function MapScreen({
           routeDraft.open({ points: stored.points, anchors: stored.anchors });
           setEditingRouteId(stored.editingRouteId);
           // Frame it too. A HUD announcing 22 points over an empty map reads
-          // as "the app lost my route" — the camera is the confirmation that
+          // as "Logjam GPS lost my route" — the camera is the confirmation that
           // it came back. Handed to an effect below because fitCameraToBbox is
           // declared after this one.
           setPendingDraftFit(
@@ -1899,9 +1894,8 @@ export function MapScreen({
     (tool: MapTool) => {
       setToolsOpen(false);
       // Measure and route both want the map's taps, so arming one must disarm
-      // the other — in BOTH directions. Measure used to arm without clearing a
-      // route draft, which left two HUDs stacked and every tap going to
-      // whichever tool won the race.
+      // the other — in BOTH directions, to avoid two HUDs stacking and competing
+      // for map taps.
       if (tool === "measure") {
         // Leaving measure bins its points without asking — a measurement is a
         // question you asked once, not an asset (shared/DESIGN.md §11).
@@ -1965,10 +1959,8 @@ export function MapScreen({
     (lon: number, lat: number): boolean => {
       if (!activeDraft?.draft) return false;
       // Tolerance in degrees, derived from the current zoom so the reach feels
-      // the same however far in you are. `degreesPerDp` owns the conversion —
-      // this used to inline a 256-based world size AND divide by the display
-      // density, which made every reach here roughly three quarters of what it
-      // said (see scaleBar.ts).
+      // the same however far in you are. `degreesPerDp` owns the conversion
+      // (see scaleBar.ts).
       const perDp = degreesPerDp(camera.zoom);
       // A press-and-hold ON an anchor is the start of a DRAG, and MLRN 11
       // delivers it here as well as to the annotation (see anchorHit.ts).
@@ -2020,7 +2012,7 @@ export function MapScreen({
       // A tool armed owns every tap; nothing else on this handler runs.
       if (collectingPoints) {
         // A tap that lands ON an existing anchor SELECTS it rather than
-        // appending — it used to stack a duplicate vertex straight on top of
+        // appending, avoiding stacking a duplicate vertex straight on top of
         // the handle the user was aiming at. The hit test is the map's own,
         // not the annotation's `onSelect`, so the selection does not depend on
         // that callback firing (see anchorHit.ts).
@@ -2036,10 +2028,8 @@ export function MapScreen({
         void addToolPoint(lon, lat);
         return;
       }
-      // A tap is not a pan, so it no longer stops follow mode. It used to,
-      // which meant looking at anything cost you the lock — and now that a tap
-      // opens the point panel, "what is that spot" would end with the map no
-      // longer following you.
+      // A tap is not a pan, so it does not stop follow mode — looking at a
+      // spot on the map or opening the point panel should not drop follow mode.
       setTappedPoint({ latitude: lat, longitude: lon });
     },
     [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
@@ -2060,10 +2050,10 @@ export function MapScreen({
         return;
       }
       const props = event.nativeEvent.features[0]?.properties;
-      // The OPTIONS sheet, not the detail screen: the same six verbs the
-      // Places list offers, with "Open place" first because that is what this
-      // tap used to do (DESIGN.md). Held as an id so an edit made from
-      // inside the sheet re-renders it rather than showing a stale copy.
+      // The OPTIONS sheet, not the detail screen: the same verbs the
+      // Places list offers, with "Open place" first (DESIGN.md). Held as an id
+      // so an edit made from inside the sheet re-renders it rather than showing
+      // a stale copy.
       if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
     [addToolPoint, collectingPoints],
@@ -2154,14 +2144,13 @@ export function MapScreen({
               ? headingFilter.current.value
               : null;
           // DURATION 0 — A JUMP PER FRAME, exactly like the pinch
-          // (`useMapPinchGesture`), and for the same reason. An ANIMATED stop
-          // per tick is what made this jitter: a stop does not blend into the
+          // (`useMapPinchGesture`), and for the same reason. An animated stop
+          // per tick causes jitter: a stop does not blend into the
           // one in flight, it calls `cancelTransitions()` and starts a fresh
           // ease from wherever the last one had reached, so a stream of them is
-          // a restart every tick — the map alternately eases and is yanked,
-          // which reads exactly as the two-mechanisms-fighting it was. With no
-          // animation there is nothing to cancel: each frame simply IS the
-          // camera, the pinch's proven-smooth shape for the same job.
+          // a restart every tick — the map alternately eases and is yanked.
+          // With no animation there is nothing to cancel: each frame simply IS
+          // the camera, the pinch's proven-smooth shape for the same job.
           setCameraStop({
             center: latestFix.current,
             zoom,
@@ -2192,10 +2181,10 @@ export function MapScreen({
    * screen took its zoom away.
    *
    * `touchZoom` is false for the whole of follow mode (the pinch is ours; two
-   * drivers on the same two fingers is what used to shake follow loose), and
+   * drivers on the same two fingers would shake follow loose), and
    * double-tap is one of MapLibre's zoom gestures rather than a separate press
-   * handler — so it went with it, and the only way to zoom in without a second
-   * finger was to leave the mode. Recognised here instead, from the same
+   * handler — so without custom handling, the only way to zoom in without a second
+   * finger would be to leave the mode. Recognised here instead, from the same
    * capture-phase touch stream the pan detector uses: this claims nothing (the
    * capture handler still returns `observeTouches`' answer, so MapLibre's own
    * gestures are untouched) and it drops no follow mode — a double tap is not
@@ -2250,10 +2239,10 @@ export function MapScreen({
     [collectingPoints, followModeRef, latestFix, startZoomRamp, zoomRef],
   );
 
-  // Stage 4b topo overlays + Stage 5 vector-import file management (save
-  // offline / import file / delete) relocated to SavedScreen — viewport-
-  // independent asset management. This screen keeps only the per-asset
-  // visibility toggles (registry/hooks below feed both screens).
+  // Topo overlays and vector-import file management (save offline / import file /
+  // delete) live in SavedScreen — viewport-independent asset management. This
+  // screen keeps only the per-asset visibility toggles (registry/hooks below
+  // feed both screens).
   const { imports } = useVectorImports();
   // `path` null means the file synced as a row but its bytes are not on this
   // phone yet — there is nothing to draw. Filtered here rather than guarded at
@@ -2262,16 +2251,15 @@ export function MapScreen({
     ? imports.filter((imported) => imported.visible && imported.path !== null)
     : [];
 
-  // Stage 6: GeoPDF imports. Import/resume/account-import/delete relocated
-  // to SavedScreen (viewport-independent management); this screen keeps only
-  // the ready layers it renders.
+  // GeoPDF imports: file management lives in SavedScreen (viewport-independent
+  // management); this screen keeps only the ready layers it renders.
   const { geoPdfImports } = useGeoPdfImports();
   const readyGeoPdfs = geoPdfImports.filter((gp) => gp.state === "ready");
   const readyGeoPdfImports = showGeoPdfs
     ? readyGeoPdfs.filter((gp) => gp.visible)
     : [];
 
-  // Stage 7: track recording + waypoints + navigate-to-point. The recorder
+  // Track recording, markers and navigate-to-point. The recorder
   // itself lives in tracks/trackRecorder (background task); this screen only
   // starts it and renders state. (The start/navigate callbacks live below
   // handleLocateMe — they depend on it.)
@@ -2420,8 +2408,8 @@ export function MapScreen({
   //
   // On every return to the foreground, not only on mount: this screen mounts
   // once per process (bottom-tab navigator), so a service killed by an OEM
-  // battery manager or by Doze while the app stayed mounted left the HUD
-  // claiming to record until the next cold launch (MLIFE-006).
+  // battery manager or by Doze while the app stays mounted would leave the HUD
+  // claiming to record until the next cold launch.
   //
   // It also settles the stats the backgrounded recorder deliberately did not
   // compute (see refreshTrackStats): the HUD's distance and ascent are right by
@@ -2447,10 +2435,10 @@ export function MapScreen({
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
 
-  // Dropping a MARKER: a place of the system Marker type, which is what a
-  // waypoint became in the phase 1c fold. The drop never waits on a form — the
-  // place is written first and its verb sheet opens over it, so cancelling
-  // leaves a saved, auto-named marker rather than losing the mark.
+  // Dropping a MARKER: a place of the system Marker type. The drop never
+  // waits on a form — the place is written first and its verb sheet opens
+  // over it, so cancelling leaves a saved, auto-named marker rather than losing
+  // the mark.
   //
   // ponytail: the auto-name is a count of marker places, not of every place —
   // "Marker 4" beside three canyons reads right: it is a place of the system
@@ -2502,11 +2490,8 @@ export function MapScreen({
         }
         if (kind === "pdf") {
           // Through the shared background runner, exactly like the Saved tab's
-          // import: a progress card, a toast on the outcome, and the app usable
-          // throughout. This path used to read the whole file as base64 and
-          // decode it a character at a time on the UI thread, then run the
-          // import with an empty progress callback — minutes of frozen app with
-          // nothing on screen to say why.
+          // import: a progress card, a toast on the outcome, and Logjam GPS
+          // usable throughout with progress reporting.
           const outcome = await runGeoPdfImport(
             "Shared map",
             (onProgress, token) =>
@@ -2614,10 +2599,9 @@ export function MapScreen({
   // INSIDE the effect (like the sibling draw/edit/continue/navigate/start
   // arrival effects below), not just listed as a dep: `mergedOverlays` is a
   // useMemo that gets a new identity on every overlay/artifact registry
-  // change (e.g. a background region download finishing), which re-ran this
-  // whole body — including `setFollowMode("off")` and a fresh
-  // `fitCameraToBbox` — and yanked the camera away from the user's own
-  // panning while following (MMO-002).
+  // change (e.g. a background region download finishing), which would re-run
+  // this whole body — including `setFollowMode("off")` and a fresh
+  // `fitCameraToBbox` — and yank the camera away from the user's own panning.
   const handledFocusNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!focus) return;
@@ -2634,8 +2618,8 @@ export function MapScreen({
       switch (focus.reveal.category) {
         case "track":
           // The item's own visible flag is necessary but not sufficient — a
-          // saved track also needs the Tracks master switch on (bug 6's
-          // showTracks), or it stays hidden regardless.
+          // saved track also needs the Tracks master switch on (`showTracks`),
+          // or it stays hidden regardless.
           setShowTracks(true);
           updateTrack(focus.reveal.key, { visible: true }).catch(console.error);
           break;
@@ -2676,9 +2660,8 @@ export function MapScreen({
     }
     // Being asked to look at something else ENDS follow mode, exactly as a
     // place search does (handleSelectPlace). While following, the fix watcher
-    // writes a camera stop per sample, so the fit below was overwritten within
-    // a frame: tapping "Show on map" — or a place's route attachment — did
-    // nothing at all, silently, for as long as the dot was on.
+    // writes a camera stop per sample, which would overwrite the camera fit
+    // within a frame.
     setFollowMode("off");
     fitCameraToBbox(focus.bbox);
     // …and say WHICH rectangle — but only for a saved REGION, the one asset
@@ -2897,8 +2880,7 @@ export function MapScreen({
       }
       // What is actually on screen, for the offline notice. Carried on the
       // settle event itself rather than derived, because a rotated view's
-      // extent is not its centre plus its zoom. (Under MLRN 10 this was an
-      // async getVisibleBounds() round trip per settle; the event brings it.)
+      // extent is not its centre plus its zoom.
       const [west, south, east, north] = bounds;
       setViewportBbox((prev) =>
         prev &&
@@ -3014,12 +2996,11 @@ export function MapScreen({
     // than low accuracy or six have been seen (expo-location's Location.js),
     // and samples need 2° of movement — so on a phone sitting still it can
     // simply never return, holding an accelerometer + magnetometer
-    // registration open while it waits. Recording the position up front (the
-    // first version of this) meant one such stall pinned the app to the NSW
-    // constant until the user travelled 55 km. Recording on success instead
-    // would retry on every 3 s fix and stack up those registrations, so the
-    // in-flight guard is what makes retrying safe: at most one ever exists,
-    // and the first one to resolve wins.
+    // registration open while it waits. Recording the position up front
+    // would pin Logjam GPS to the NSW constant on such a stall until travelling
+    // 55 km. Recording on success instead could retry on every 3 s fix and stack
+    // up those registrations, so the in-flight guard keeps retrying safe: at
+    // most one ever exists, and the first one to resolve wins.
     if (declinationInFlight.current) return;
     declinationInFlight.current = true;
     void Location.getHeadingAsync()
@@ -3035,11 +3016,9 @@ export function MapScreen({
   /**
    * Whether the marker is shown. ALWAYS TRUE once the map exists.
    *
-   * It used to start false and be raised by the locate button or by starting a
-   * recording, which meant a marker that came and went for reasons the user
-   * could not see — most visibly across an app restart, where the recording
-   * survived (the record button reads the database) and this did not. "Where
-   * am I" is not a mode a map should make you ask for.
+   * Keeping this true ensures the marker is visible immediately and consistent
+   * across app restarts (where a recording survives in the database). "Where am
+   * I" is not a mode a map should make you ask for.
    *
    * The cost is the position watcher running whenever the map tab is focused
    * AND foregrounded — never with the screen off, and never on another tab.
@@ -3062,7 +3041,7 @@ export function MapScreen({
   });
 
   /**
-   * Fold one fix into the dot and, in a follow mode, into the camera.
+   * Fold one fix into the marker and, in a follow mode, into the camera.
    */
   const applyFix = useCallback(
     (coord: [number, number]) => {
@@ -3071,7 +3050,7 @@ export function MapScreen({
       refreshDeclination(coord);
       // The readout's switch can be the ONLY reason this watcher is running
       // (see the effect below), and in that case none of what follows applies:
-      // there is no dot to move and no camera to recentre, and flying to the
+      // there is no marker to move and no camera to recentre, and flying to the
       // first fix would yank a map the user never asked to be moved.
       if (!dotWantedRef.current) return;
       const mode = followModeRef.current;
@@ -3228,24 +3207,23 @@ export function MapScreen({
   //
   // THE SENSORS RUN ONLY WHILE THIS TAB IS FOCUSED AND THE APP IS IN THE
   // FOREGROUND. This screen mounts once per process (bottom tabs) and in
-  // practice never unmounts, and nothing used to stop either watcher: one
-  // locate-me tap left a GPS fix every 3 s, and the magnetometer and
-  // accelerometer behind it, running for the rest of the process — on every
-  // other tab, and with the phone asleep in a pack all day. That is the idle
-  // drain, and neither sensor can draw anything the user can see while it is
-  // happening.
+  // practice never unmounts. Stopping both watchers when blurred or backgrounded
+  // avoids running a GPS fix every 3 s, and the magnetometer and accelerometer
+  // behind it, for the rest of the process — on every other tab, and with the
+  // phone asleep in a pack all day. That would be idle drain, and neither sensor
+  // can draw anything the user can see while it is happening.
   //
   // Both are owned by effects rather than by imperative start/stop helpers with
   // their own "already starting" flags. That is not a style choice: the
-  // subscriptions are awaited, so every hand-rolled version of this has to
-  // invent its own guard for a watcher that resolves after the reason for it
-  // went away, and the ones here kept disagreeing with each other about whether
-  // "the dot is on" meant a subscription object or a user's intention.
+  // subscriptions are awaited, so hand-rolled versions have to invent guards
+  // for a watcher that resolves after the reason for it went away, risking
+  // disagreement about whether "the marker is on" means a subscription object
+  // or a user's intention.
   // `!== "background"`, not `=== "active"`: Android reports `"unknown"` until
   // the first AppState event, and the bundle can evaluate before the activity
   // resumes. Reading that as inactive would leave `sensorsActive` false for the
   // whole launch if the resume event had already fired before this mounted — no
-  // dot, no compass, no course-up, self-healing only after a real background
+  // marker, no compass, no course-up, self-healing only after a real background
   // cycle. Fail open, the same direction syncEngine's retry gate chose.
   const [appActive, setAppActive] = useState(
     () => AppState.currentState !== "background",
@@ -3261,7 +3239,7 @@ export function MapScreen({
   // A recording follows the same lifecycle: while someone is looking at the map
   // it records at the finest rate, and it drops back to their "Track detail"
   // rate the moment the tab loses focus or the app backgrounds.
-  // `setRecordingMapFocusBoost` says why the dot watcher below cannot do this
+  // `setRecordingMapFocusBoost` says why the marker watcher below cannot do this
   // on its own. Keyed on `sensorsActive` so the two cannot disagree about
   // whether anyone is looking.
   useEffect(() => {
@@ -3354,10 +3332,10 @@ export function MapScreen({
   /**
    * Why a position watcher is running at all.
    *
-   * TWO reasons now, not one: the location dot, and the speed + elevation chip
+   * TWO reasons now, not one: the user marker, and the speed + elevation chip
    * (Settings → Map), which needs a fix and has no other source for one. The
    * chip's switch is off by default and its settings row says it keeps GPS
-   * running, because this is the one preference in the app that turns a sensor
+   * running, because this is the one preference in Logjam GPS that turns a sensor
    * on for as long as the map is open without anything appearing on the map to
    * account for it.
    */
@@ -3423,7 +3401,7 @@ export function MapScreen({
       .catch(() => undefined);
   }, []);
 
-  // The dot's own position watcher.
+  // The marker's own position watcher.
   //
   // It stays at 3 s whether or not a track is recording, deliberately. The
   // recording fix rate does NOT govern it: this is the marker a person reads to
@@ -3433,12 +3411,10 @@ export function MapScreen({
   // foreground, which is the phone out of the pack with the screen on, and the
   // screen dominates the power bill in that state anyway.
   //
-  // It does NOT speed a recording up, though this comment once said it did.
-  // expo-location pins each request's minimum update interval to its own
-  // interval, so the fused provider kept delivering to the recorder at the
-  // recorder's rate while this watcher moved the dot every 3 s — and a short
-  // sky window under a wall moved the dot without ever reaching the track. The
-  // recorder is sped up explicitly instead, by the boost effect above.
+  // It does NOT speed a recording up. expo-location pins each request's minimum
+  // update interval to its own interval, so the fused provider delivers to the
+  // recorder at the recorder's rate while this watcher moves the marker every
+  // 3 s. The recorder is sped up explicitly instead, by the boost effect above.
   useEffect(() => {
     if (!sensorsActive || !fixWanted) return;
     let subscription: Location.LocationSubscription | null = null;
@@ -3451,9 +3427,8 @@ export function MapScreen({
       };
       noteGpsQuality();
     };
-    // The displacement filter that used to be the OS's `distanceInterval`,
-    // measured from the last fix we ACTED on — same 5 m, same semantics, so the
-    // dot, the camera and the readout behave exactly as they did.
+    // Displacement filter measured from the last fix we ACTED on — 5 m
+    // threshold so the marker, camera, and readout do not jitter on GPS noise.
     const movedFarEnough = (position: Location.LocationObject) => {
       const previous = latestFix.current;
       if (!previous) return true;
@@ -3476,11 +3451,11 @@ export function MapScreen({
       if (lastKnown) {
         // Cached MEANS old, and how old is the whole question the arrow's
         // colour answers: this fix can be last week's drive to the trailhead,
-        // and drawing it in the user's colour is the exact failure this batch
-        // exists to fix. It goes through the same rule as a live one, so an
-        // hours-old one arrives already grey.
+        // and drawing it in the user's colour would be misleading. It goes
+        // through the same rule as a live one, so an hours-old one arrives
+        // already grey.
         noteFixArrived(lastKnown);
-        // The readout gets it too, and for the same reason the dot does: a
+        // The readout gets it too, and for the same reason the marker does: a
         // chip showing two dashes until the first watch callback lands reads
         // as broken, and indoors that callback can be minutes away. A cached
         // fix is stale by definition, which is exactly what `atMs` and the
@@ -3494,16 +3469,13 @@ export function MapScreen({
         {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: 3000,
-          // NO `distanceInterval`, since 2026-09-05 — the same conclusion the
-          // RECORDER's presets reached (recordingPreferences.ts). Android ANDs
-          // it with the interval, so it never saved a wakeup: it only discarded
-          // fixes the GNSS engine had already been woken to produce. Here it
-          // discarded the one thing the arrow's colour depends on. A standing
-          // phone crosses no 5 m threshold, so it received NOTHING, and "no
-          // deliveries" is exactly what losing the sky looks like — with the
-          // filter in the OS the two were the same observation and neither
-          // could be reported. The filter still runs, in `movedFarEnough`
-          // above, so nothing downstream sees a change.
+          // NO `distanceInterval` — matching the recorder presets
+          // (recordingPreferences.ts). Android ANDs it with the interval, so
+          // it does not save a wakeup: it only discards fixes the GNSS engine
+          // has already been woken to produce. A standing phone crosses no 5 m
+          // threshold, receiving no deliveries, which is indistinguishable from
+          // losing the sky. Running the filter in `movedFarEnough` above
+          // preserves signal freshness reporting while filtering camera moves.
           distanceInterval: 0,
         },
         (position) => {
@@ -3517,7 +3489,7 @@ export function MapScreen({
         return null;
       });
       // Resolved after the effect was torn down: nothing else will ever remove
-      // it, so the GPS request would outlive the screen (MLIFE-007).
+      // it, so the GPS request would outlive the screen.
       if (!started) return;
       if (cancelled) started.remove();
       else subscription = started;
@@ -3544,15 +3516,12 @@ export function MapScreen({
   //
   // DEVICE MOTION, NOT LOCATION. `rotation.alpha` is Android's gyro-fused
   // TYPE_ROTATION_VECTOR (see heading.ts) — six times the sample rate of
-  // `expo-location`'s heading watcher and, more importantly, immune to the hand
-  // acceleration that made the old accelerometer+magnetometer fusion report a
-  // backwards turn at the start of a real one.
+  // `expo-location`'s heading watcher and immune to the hand acceleration that
+  // makes raw accelerometer+magnetometer fusion report a backwards turn at the
+  // start of a real one.
   //
-  // It also needs NO PERMISSION, so the location-permission check this effect
-  // used to carry is gone, and with it the `permissionNonce` that existed only
-  // to re-run that check after a grant made on another screen. The tape and the
-  // arrow's bearing now work on a fresh install with location denied — only the
-  // DOT needs a fix, and its own watcher above still asks for one.
+  // It needs no location permission: the tape and the arrow's bearing work even
+  // when location is denied — only the marker position requires a fix.
   //
   // `userCoord`, not `dotWanted`: the arrow does not mount until there is a
   // position (see the marker in the JSX), so between the locate-me tap and the
@@ -3565,14 +3534,14 @@ export function MapScreen({
     let live = true;
     // NO ROTATION VECTOR MEANS NO GYROSCOPE, and there are Android phones
     // without one. `DeviceMotion` still dispatches (the accelerometer is
-    // universal) but never carries `rotation`, so the compass would simply
-    // never appear — a regression against the expo-location watcher, which
-    // managed accelerometer+magnetometer alone. Falling back on the ABSENCE OF
-    // DATA rather than on `isAvailableAsync` is deliberate: that probe demands
-    // all five of DeviceMotion's sensors, four of which the framework
-    // synthesises, so it can answer false on hardware that would have worked.
-    // Waiting for the thing we actually need cannot be wrong, and costs a
-    // second of no compass on the phones that need the fallback.
+    // universal) but never carries `rotation`, so the compass would not
+    // appear without a fallback to the expo-location watcher (which uses
+    // accelerometer+magnetometer alone). Falling back on the ABSENCE OF DATA
+    // rather than on `isAvailableAsync` is deliberate: that probe demands all
+    // five of DeviceMotion's sensors, four of which the framework synthesises,
+    // so it can answer false on hardware that would work. Waiting for the data
+    // we actually need avoids false negatives, costing only a one-second delay
+    // on devices requiring the fallback.
     let sawRotation = false;
     let fallback: Location.LocationSubscription | null = null;
     const subscription = DeviceMotion.addListener((motion) => {
@@ -3721,20 +3690,19 @@ export function MapScreen({
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
-    // Drive the dot from expo-location directly — MLRN's built-in
-    // UserLocation engine produced no updates on-device (silent), and we
-    // need expo-location's watcher for Stage 7 track recording anyway.
+    // Drive the marker from expo-location directly — MLRN's built-in
+    // UserLocation engine produces no updates on-device (silent), and
+    // expo-location's watcher is needed for track recording anyway.
     //
     // The test is the user's INTENTION, not whether a subscription object
     // happens to exist: the watcher is torn down and rebuilt whenever the tab
     // blurs, the app backgrounds or a recording starts, and a tap landing in
-    // one of those windows used to take the cold-start branch — flying the
-    // camera to FOLLOW_ZOOM and throwing away the zoom the user had set.
+    // one of those windows should not reset to cold-start zoom (FOLLOW_ZOOM)
+    // and discard the user's zoom.
     if (dotWanted) {
       // Cycle the follow mode. Every mode change also RECENTRES: fixes arrive
-      // seconds to minutes apart, so without this the map stayed wherever the
-      // user had panned it until they walked somewhere — which reads as the
-      // follow button doing nothing at all.
+      // seconds to minutes apart, so recentring immediately prevents the map
+      // from staying panned until new movement arrives.
       if (followModeRef.current === "off") {
         setFollowMode("follow");
         recentre();
@@ -3778,7 +3746,7 @@ export function MapScreen({
         requestPovRecentre(heading ?? undefined);
         return;
       }
-      // Third tap drops follow but KEEPS the dot and its watchers: "don't
+      // Third tap drops follow but KEEPS the marker and its watchers: "don't
       // chase me" is a different request from "stop showing me", and a
       // canyoner who wants to look at the next drop still wants to see where
       // they are. Stopping the watchers is what leaving the screen does.
@@ -3937,10 +3905,10 @@ export function MapScreen({
     if (!(await ensureForegroundLocationPermission())) return;
     try {
       await startTrackRecording();
-      // Recording without seeing yourself is disorienting — start the dot +
+      // Recording without seeing yourself is disorienting — start the marker +
       // follow if it isn't already running.
       if (!dotWanted) handleLocateMe();
-      // A pulsing dot is not a discoverable button. Said once, at the only
+      // A pulsing marker is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
       notify("Recording — tap your location dot for stats.", "info");
     } catch (err) {
@@ -4323,8 +4291,8 @@ export function MapScreen({
    * MLRN adds an unpinned layer at the TOP of the style, in mount order — so a
    * layer that mounts later than the marker draws over it, and several here
    * mount late by nature: a track line appears when a recording starts, a
-   * layer switch turns a whole group on, the pen arms mid-session. The marker
-   * was mounted last and still ended up under the track the user was recording.
+   * layer switch turns a whole group on, the pen arms mid-session. Without this,
+   * the marker can end up under the track being recorded.
    *
    * Changing this key unmounts and re-adds the two top layers, which puts them
    * back on top of whatever just arrived. It is a string of everything BELOW
@@ -4340,9 +4308,8 @@ export function MapScreen({
     drawingRoute,
     measuring,
     // The draft's LINE layer is added and removed as the point count crosses
-    // two, and a re-added layer lands on top of the stack — which is what put
-    // the line over the delete button below. Re-inserting the top stack when
-    // it changes puts the button back above it.
+    // two, and a re-added layer lands on top of the stack. Re-inserting the
+    // top stack when it changes keeps the vertex button above the line.
     (activeDraft?.points.length ?? 0) >= 2,
     navLineShape != null,
     focusPulse?.nonce ?? "",
@@ -4467,9 +4434,7 @@ export function MapScreen({
         attribution={false}
         logo={false}
         // The compass is the NATIVE ornament: it tracks the camera frame by
-        // frame, fades itself out at north, and resets north on tap — all
-        // things the JS button did badly or not at all (it only redrew once a
-        // gesture settled, and a rotated Feather glyph is not a needle).
+        // frame, fades itself out at north, and resets north on tap.
         // Bottom-left (position 2), above the JS instruments — it answers a
         // different question from the compass tape (which way the MAP faces, vs
         // which way the USER does), so both are on screen at once. The margin is
@@ -4477,12 +4442,10 @@ export function MapScreen({
         // `ornamentMarginY`), so the ornament tracks the top of the stack.
         // MLRN 11 does have a native scale bar, but Android only puts it
         // top-left, so ours stays drawn in JS.
-        // HIDDEN IN COURSE-UP, and not only because tapping it snapped the
-        // map back to north against the mode that was steering it — a fight
-        // the compass won for exactly as long as it took the next sensor
-        // sample to arrive. In that mode the map's heading IS the user's
-        // heading, which the compass tape along the bottom already reports, so
-        // the ornament has nothing left to say that isn't said better below.
+        // HIDDEN IN COURSE-UP: tapping it would snap the map to north against
+        // the active heading steering it. In that mode the map's heading is the
+        // user's heading, which the compass tape along the bottom already
+        // reports, so the ornament is redundant.
         compass={followMode !== "course-up"}
         // Follows the instruments to whichever edge they are on (see
         // `instrumentsEdge`) — the position IS the margin in MLRN 11, which
@@ -4496,9 +4459,9 @@ export function MapScreen({
         // followed. While following, this screen drives scale and rotation
         // together from one start reference (see handlePinchMove), and leaving
         // either with MapLibre would put two drivers on the same two fingers —
-        // which is exactly how an incidental twist during a pinch used to
-        // shake follow mode loose. Pan stays MapLibre's throughout: a
-        // one-finger drag still pans, and still means "stop following".
+        // where an incidental twist during a pinch could shake follow mode
+        // loose. Pan stays MapLibre's throughout: a one-finger drag still pans
+        // and stops follow mode.
         touchZoom={followMode === "off"}
         touchRotate={followMode === "off" && !northUpLocked}
         // PAN IS OFF FOR THE WHOLE OF FOLLOW MODE, not just during a pinch.
@@ -4512,11 +4475,11 @@ export function MapScreen({
         // Measured: 3-7 MapLibre camera reports per mistimed pinch against 0
         // for a clean one, which is the same split the eye sees.
         //
-        // Taking the gesture away for the duration was tried first and cannot
-        // work: `twoFingerLock` is React state, so `dragPan` reaches the
-        // native view 48-92 ms after the second finger lands (measured), and the
-        // jump is in the first frame. The detector has to be disarmed BEFORE the
-        // gesture starts, which means for as long as the map is following.
+        // Taking the gesture away only for the pinch duration cannot work:
+        // `twoFingerLock` is React state, so `dragPan` reaches the native view
+        // 48-92 ms after the second finger lands, but the jump occurs in the
+        // first frame. The detector must be disarmed before the gesture starts,
+        // which means for as long as the map is following.
         //
         // The cost is that a one-finger drag no longer pans by itself while
         // following — `observeTouches` recognises it and drops follow, which
@@ -4629,7 +4592,7 @@ export function MapScreen({
           )),
         )}
 
-        {/* GeoPDF imports (Stage 6): device-tiled MBTiles rendered through
+        {/* GeoPDF imports: device-tiled MBTiles rendered through
             the resolver's local-artifact path — one translucent RasterLayer
             per ready import, above the overlay band. */}
         {geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
@@ -4640,19 +4603,18 @@ export function MapScreen({
                 type="raster"
                 id={`geopdf-layer-${geoPdf.id}`}
                 beforeId={groundBefore[`geopdf-layer-${geoPdf.id}`]}
-                // FULL, not `geoPdf.opacity`. Nothing writes that column
-                // since the layers sheet lost its opacity rail, so reading it
-                // only meant imports made before that change stayed
-                // permanently washed out with no control to fix them. A
-                // future opacity control re-wires this line and the default
-                // in importPipeline together.
+                // Full opacity (1), not `geoPdf.opacity`: the layers sheet has
+                // no opacity control, so reading the column would leave
+                // imports with no way to adjust opacity. A future opacity
+                // control re-wires this line and the default in
+                // importPipeline together.
                 style={{ rasterOpacity: 1 }}
               />
             </ResolvedSource>
           )),
         )}
 
-        {/* Vector imports (Stage 5): device-local GeoJSON from user files,
+        {/* Vector imports: device-local GeoJSON from user files,
             above the overlay band, below the place layers. Each
             import is one GeoJSONSource read straight off disk. */}
         {visibleImports.map((imported) => (
@@ -4715,9 +4677,9 @@ export function MapScreen({
         ) : null}
 
         {/* Saved routes, below the point markers — a route is ink on the map and
-            a waypoint or place marker must stay above it (the draft layer below
+            a marker or place pin must stay above it (the draft layer below
             is exempt: while editing, the line you are working on is the thing
-            that has to stay readable). Mounted before the tracks/waypoints and
+            that has to stay readable). Mounted before the tracks/markers and
             place pins for exactly that reason. Always mounted (RoutesLayer
             keeps an empty source rather than unmounting) so the 0↔1 route
             transition cannot re-add its layers to the top of the stack. */}
@@ -4730,7 +4692,7 @@ export function MapScreen({
           onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
         />
 
-        {/* Recorded tracks (Stage 7): unpinned, mounted before the place
+        {/* Recorded tracks: unpinned, mounted before the place
             sources so places draw on top. Markers are places now and draw with
             them — one pin layer, not two. */}
         <TrackMapLayers
@@ -4740,7 +4702,7 @@ export function MapScreen({
           onTrackPress={handleTrackPress}
         />
 
-        {/* Navigate-to-waypoint sight line: latest fix → target. */}
+        {/* Navigate-to-marker sight line: latest fix → target. */}
         {navLineShape ? (
           <GeoJSONSource id="nav-line" data={navLineShape}>
             <Layer
@@ -4812,8 +4774,8 @@ export function MapScreen({
             />
           ) : null}
 
-          {/* The spot the user tapped. Deliberately NOT a waypoint pin: a
-              waypoint is a thing they created and kept, this is a cursor. A
+          {/* The spot the user tapped. Deliberately NOT a saved marker: a
+              marker is a thing they created and kept, this is a cursor. A
               small ringed dot reads as "here is where you pointed" and
               disappears the moment the panel is dismissed. */}
           {tappedPointShape ? (
@@ -4839,13 +4801,11 @@ export function MapScreen({
               A `Marker`, not a `ViewAnnotation`: on Android a ViewAnnotation is
               rasterised to a bitmap and drawn as a Symbol inside the GL layer
               stack, whose SymbolLayer is created ONCE at style-load at the
-              bottom of the data layers — so every route/track/import line added
-              afterwards drew over the button, and no re-mount moved it (the
-              SymbolLayer itself, not the symbol, was the thing pinned down).
-              A Marker renders a real native view on the map projection, above
-              the GL surface, so it stays above every line for free. It is not
-              draggable, which is the one thing the anchor handles need and this
-              button does not.
+              bottom of the data layers — where route/track/import lines added
+              afterwards would draw over the button. A Marker renders a real
+              native view on the map projection, above the GL surface, staying
+              above every line. It is not draggable, which is the one thing the
+              anchor handles need and this button does not.
 
               `anchor` names the part of the BUTTON put on the coordinate, so
               sitting it to the LEFT of the point means anchoring its RIGHT edge
@@ -4962,8 +4922,8 @@ export function MapScreen({
       >
         {/* The recording's numbers live behind the record button now, but this
             one line cannot: a recorder that is not saving points must say so
-            without being asked (MLIFE-001). Everything else about a running
-            recording is a tap away; this is the exception. */}
+            without being asked. Everything else about a running recording is a
+            tap away; this is the exception. */}
         {activeTrack && recordingWriteFailing ? (
           <Notice icon="warning" tone="warning">
             Points aren&apos;t being saved — finish the recording and check free
@@ -5024,11 +4984,9 @@ export function MapScreen({
             VIEWPORT, not by what the resolver managed to resolve — see
             `coverageHere`. Online it can only mean the source itself is down.
 
-            A plain banner, not a button. It sat one tap from the layers sheet
-            and the layers sheet is one tap from anywhere, so the shortcut
-            bought nothing and cost the two words it took to advertise itself —
-            which wrapped the banner onto a second line — plus a mystery sheet
-            for anyone who brushed it while panning. */}
+            A plain banner, not a button: the layers sheet is one tap away, so a
+            button shortcut on the banner would add clutter, risk wrapping onto
+            a second line, and open unexpectedly when panning. */}
         {/* SAY THAT THE MODE IS ON, because everything it causes looks like a
             fault otherwise: the basemap notice below says "Offline" on a phone
             with full bars, and elevation stops answering outside saved areas.
@@ -5088,11 +5046,9 @@ export function MapScreen({
             reports here rather than only from the Saved tab.
 
             Counts finished MAPS, not a percentage: the queue runs one job per
-            basemap in sequence, so a percentage crossed 100 % and restarted at
-            zero once per chosen map — which reads as the download failing and
-            starting over. "2 of 4" only ever goes up. Same banner as the other
-            map notices; it used to be an accent-outlined pill that matched
-            nothing else on the screen. */}
+            basemap in sequence, so a percentage would cross 100 % and restart
+            at zero per chosen map. "2 of 4" only ever goes up. Uses the same
+            banner as other map notices. */}
         {downloadProgress ? (
           <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
@@ -5107,10 +5063,10 @@ export function MapScreen({
         {/* THE TOOL GROUP IS AT THE TOP OF THE COLUMN, and that is a layout
             constraint rather than a preference. Its tray opens SIDEWAYS, across
             the map towards the opposite edge — which is where the instruments
-            live. Third from the bottom, the tray ran straight through the
-            speed/elevation chip; from the top it clears the whole stack. It is
-            also the least-reached button of the four, so the two that are
-            reached (layers, locate) keep the thumb end of the column. */}
+            live. Placed lower, the tray would collide with the speed/elevation
+            chip; from the top it clears the whole stack. It is also the
+            least-reached button of the four, so the two that are reached
+            (layers, locate) keep the thumb end of the column. */}
         <MapToolGroup
           side={controlsOnLeft ? "left" : "right"}
           open={toolsOpen}
@@ -5137,8 +5093,8 @@ export function MapScreen({
         >
           {/* Three states, three glyphs: a crosshair you are not following, a
               crosshair locked on you, a compass rose when the map itself turns
-              to face where you are looking. Colour alone said "active" but
-              never said WHICH active. */}
+              to face where you are looking. Colour alone would not distinguish
+              which active mode is on. */}
           <Icon
             idea={LOCATE_ICON[followMode]}
             size={FAB_ICON}
@@ -5182,7 +5138,7 @@ export function MapScreen({
         ) : null}
       </View>
 
-      {/* Navigate-to-waypoint readout: live distance + bearing from the
+      {/* Navigate-to-marker readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
       {navTarget ? (
         <View
@@ -5213,8 +5169,8 @@ export function MapScreen({
         </View>
       ) : null}
 
-      {/* Attribution is required by the providers but ate the bottom of the
-          map; it now lives behind the (i) button. */}
+      {/* Attribution is required by the providers and lives behind the (i)
+          button to preserve map space. */}
       <BottomSheet
         visible={namingRoute}
         onClose={() => setNamingRoute(false)}
@@ -5253,7 +5209,7 @@ export function MapScreen({
           </Text>
         ))}
         {/* Elevation is derived from a DIFFERENT source than whatever basemap
-            is drawn — every height in the app (point readout, route profile,
+            is drawn — every height in Logjam GPS (point readout, route profile,
             gain/loss) comes from it, online or off, so its credit is
             unconditional rather than tied to the active layer. */}
         {demCredits().map((line) => (
@@ -5297,9 +5253,9 @@ export function MapScreen({
         <View style={styles.sheetBody}>
           <Row
             icon="flag"
-            // A marker IS a place, of the system Marker type — the row two
-            // below makes one with a form, this one makes one with a name and
-            // nothing else. "Waypoint" is the noun the rework retired.
+            // A marker is a place with the system Marker type — "Add a place"
+            // below opens the full place form, while this drops a marker with
+            // a name and default pin.
             title="Drop a marker"
             subtitle="A quick pin, no form"
             onPress={() => {
@@ -5528,14 +5484,9 @@ function RouteNameForm({
 
   useEffect(() => {
     // autoFocus runs before the field is attached and is unreliable here.
-    // The rAF alone was not enough either: this form lives inside a Modal that
-    // slides in, and a focus landed mid-animation is dropped — so the sheet
-    // opened with no keyboard and the first tap went into raising it. Retry
-    // once the slide is done; focusing an already-focused field is a no-op.
-    // Retried rather than attempted once: the sheet is a Modal that slides in,
-    // and a focus landed before its window is attached is dropped silently —
-    // the sheet then opens with no keyboard and the first tap goes into raising
-    // one. Keeps trying until the field reports focus, then stops.
+    // The form lives inside a Modal that slides in, and a focus attempt landed
+    // mid-animation is dropped silently before its window is attached. Retries
+    // focus until the field reports focus, then stops.
     let attempts = 0;
     const timer = setInterval(() => {
       attempts += 1;
@@ -5604,8 +5555,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderWidth: 2,
     borderColor: theme.page,
   },
-  // The field and its Save button were flush against each other, which read as
-  // one control and put the button under the thumb aiming for the input.
+  // Separates the field and its Save button so they do not read as one control.
   nameForm: { gap: spacing(2) },
   root: { flex: 1, backgroundColor: theme.page },
   map: { flex: 1 },

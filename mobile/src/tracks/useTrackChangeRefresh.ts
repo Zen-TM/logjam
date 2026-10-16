@@ -6,8 +6,8 @@
 // tables and re-renders MapScreen (MLRN memoises no layer and re-commits props
 // per layer per render, ~71 of them in the Protomaps band), and
 // `useTrackDetail` re-reads the entire point series. None of that is visible
-// while the app is backgrounded, and the recorder is the one part of this app
-// that keeps writing when nothing is on screen.
+// while Logjam GPS is backgrounded, and the recorder is the one part of
+// Logjam GPS that keeps writing when nothing is on screen.
 //
 // So a write arriving in the background is REMEMBERED, not answered: the flag
 // is set, the read is skipped, and a single read happens on return to the

@@ -2,11 +2,9 @@
 // app's life. One screen, two states: the sign-in form, and the explainer that
 // stands between "continue without an account" and actually doing it.
 //
-// It renders for BOTH `chooser` and `signIn` — they were two screens with the
-// sign-in form one tap behind a menu, and a second copy of the form in
-// `AuthFlow`. The only difference left is which way out is offered: a fresh
-// install can go on without an account, a guest linking one (or a rejected
-// session) goes back to where they came from.
+// It renders for both `chooser` and `signIn`. The only difference is which way
+// out is offered: a fresh install can go on without an account, while a guest
+// linking one (or a rejected session) goes back to where they came from.
 //
 // Load-bearing rather than decorative:
 //
@@ -19,9 +17,9 @@
 //  2. Cognito errors arrive pre-mapped through `messageFromError`/
 //     `mapAuthError` — never raw text in the banner.
 //
-// The crash-report question is NOT here any more: it is a one-time dialog shown
-// once the user is inside the app (`CrashReportConsent`, mounted from App.tsx),
-// for a guest and a signed-in user alike.
+// Crash-report consent is asked once the user is inside Logjam GPS
+// (`CrashReportConsent`, mounted from App.tsx), for a guest and a signed-in
+// user alike.
 import { useState } from "react";
 import {
   Image,
@@ -44,8 +42,8 @@ export function LandingScreen({ auth }: { auth: Auth }) {
   // A guest LINKING an account is the only visitor with somewhere else to go,
   // so they get "Back"; everyone else can still go on without an account.
   // Not `auth.state === "chooser"`: this screen renders for `signIn` too, and
-  // keying on the state showed a "Back" that went to the screen it was already
-  // on (see useAuth.offersGuestEntry).
+  // keying on the state would show a "Back" that goes to the screen it is
+  // already on (see useAuth.offersGuestEntry).
   const offersGuest = auth.offersGuestEntry;
   const [mode, setMode] = useState<"signIn" | "guestExplainer">("signIn");
 

@@ -3,12 +3,11 @@
 // by the confirmation that asks first (`signOutConfirm.ts`) and by the guard
 // that holds the two together (`wipedStores.test.ts`).
 //
-// It exists because the confirmation used to be a count of the outbox and
-// nothing else, while the wipe also deleted saved map regions, imported
-// GeoPDFs, LiDAR topos, recordings not yet backed up and an unfinished route:
-// the user was warned about the least of what they were losing. A list kept
-// beside the wipe drifts out of it, so every store the wipe deletes is given a
-// FATE here, and the guard fails when the wipe gains one without a fate:
+// It exists so the confirmation accounts for every store the wipe deletes
+// that the account cannot restore: saved map regions, imported GeoPDFs, LiDAR
+// topos, recordings not yet backed up, and route drafts. Every store the wipe
+// deletes is given a FATE here, and the guard fails when the wipe gains one
+// without a fate:
 //
 //   - `loses`: it holds something that exists only on this phone, so the
 //     confirmation names it (`Loss`, counted in `signOutCounts.ts`, worded in
@@ -51,11 +50,11 @@ export const SYNC_LOCAL_TABLE_FATE: Record<string, StoreFate> = {
  * Every table in `logjam-offline.db`, with its fate. The wipe clears exactly
  * these (`wipeLocalData.ts`), so a table cannot be wiped without a fate here.
  *
- * There is no "waypoint": Stage 8 made waypoints a synced entity, so they live
- * in logjam.db and go with the mirror. The legacy table is not created on a
- * fresh install any more, so a DELETE naming it would throw "no such table" and
- * take the WHOLE offline wipe down; the wipe DROPs it instead, for the upgraded
- * device that has not run the promotion yet.
+ * There is no "waypoint": waypoints are synced entities, so they live in
+ * logjam.db and go with the mirror. The legacy table is not created on a fresh
+ * install, so a DELETE naming it would throw "no such table" and take the
+ * offline wipe down; the wipe DROPs it instead, for upgraded devices that have
+ * not migrated yet.
  */
 export const OFFLINE_TABLE_FATE = {
   map_artifact: { loses: ["regions", "topos", "geoPdfs"] },

@@ -1,11 +1,10 @@
-// "Auto-download finished GeoPDFs" — DEVICE-scoped, as of the settings split.
+// "Auto-download finished GeoPDFs" — DEVICE-scoped.
 //
-// It used to live on the user record (`uiPreferences.autoDownloadGeoPdfs`),
-// which made it a claim about a person when it is a claim about a handset:
-// whether THIS phone should spend tens of megabytes and a couple of minutes of
-// rasterising on a file it may not need is not an opinion the user's other
-// devices share. Device-scoped also means it reads synchronously, works for a
-// guest, and can be changed with no signal — none of which was true before.
+// Stored per-device rather than on the user record
+// (`uiPreferences.autoDownloadGeoPdfs`): whether this phone should spend
+// tens of megabytes and minutes rasterising a file it may not need is a handset
+// choice, not an account-wide setting. Device-scoped storage also reads
+// synchronously, works for a guest, and can be changed with no signal.
 //
 // The account copy is not deleted: the web still writes and reads it, and it is
 // what seeds this device the first time (see `seedAutoDownloadFromAccount`), so

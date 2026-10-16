@@ -1,8 +1,8 @@
-// Track recording engine (Stage 7): expo-location background updates →
+// Track recording engine: expo-location background updates →
 // shared acceptance filter → SQLite batches. The task callback is the only
 // writer of track points; UI reads via tracksDb listeners.
 //
-// Background model (per plan): recording starts in the FOREGROUND with a
+// Background model: recording starts in the FOREGROUND with a
 // visible Android foreground service (location FGS type via the expo-location
 // config plugin), so ACCESS_BACKGROUND_LOCATION is never requested. Recording
 // survives app kill — expo-task-manager re-launches the JS task headless and
@@ -10,7 +10,7 @@
 //
 // A BACKGROUNDED RECORDER DOES ONE THING: append the accepted fixes. The
 // derived stats (distance, ascent, duration) are display-only, so they are
-// recomputed when the app is in front of someone — per batch while it is, and
+// recomputed when Logjam GPS is in front of someone — per batch while it is, and
 // once on return to the foreground — never in the headless task. See
 // `refreshTrackStats`.
 //
@@ -58,7 +58,7 @@ import {
 
 export const TRACK_RECORDING_TASK = "logjam-track-recording";
 
-// Battery posture from the plan: 5 m distance filter, no high-rate polling.
+// Battery posture: 5 m distance filter, no high-rate polling.
 // High = GPS-priority in every preset — correct for recording outdoors
 // (Balanced is for the indoor locate-me dot; a recorded track wants GPS fixes,
 // not wifi centroids). What the user's "Track detail" choice moves is the RATE
@@ -85,10 +85,8 @@ function locationOptions(): Location.LocationTaskOptions {
  * Push the current recording preferences at a recorder that is ALREADY running.
  * Returns false when nothing was recording, which is not an error.
  *
- * Changing "Track detail" mid-trip used to do nothing at all — the preference
- * was written and `locationOptions()` was only ever read at start/resume — so a
- * user who dropped to the finest rate for one tricky navigation got the coarse
- * rate anyway, and the setting silently lied for the rest of the recording.
+ * Pushes changed options to the running task so a "Track detail" change
+ * mid-trip takes effect immediately rather than waiting for start/resume.
  *
  * Re-registering the SAME task is the whole mechanism, and it is not a
  * stop/start: expo-task-manager's `registerTask` recognises the existing task
@@ -133,11 +131,11 @@ export async function applyRecordingOptionsToActiveTrack(): Promise<boolean> {
  * changed. Start, resume and continue all read it through `locationOptions()`.
  *
  * TURNING IT DOWN NEEDS A NATIVE PATCH (`patches/expo-location+*.patch`). The
- * unboost happens as the app backgrounds, and stock expo-location refuses
+ * unboost happens as Logjam GPS backgrounds, and stock expo-location refuses
  * `startLocationUpdatesAsync` with a foreground service from the background —
  * its foreground flag flips at the same moment React Native emits the event, so
- * JS always arrives too late. Measured on the Pixel before the patch: Home with
- * the map open left the recorder at 3 s. The patch lets an update to an
+ * JS always arrives too late. Without the patch, navigating Home with the map
+ * open leaves the recorder at 3 s. The patch lets an update to an
  * already-running task through (it starts no service); `expoLocationPatch.test.ts`
  * fails if the installed copy lacks it.
  *
@@ -155,9 +153,9 @@ export async function setRecordingMapFocusBoost(
 
 /**
  * Elapsed recording time from the wall clock. The point-derived duration in
- * TrackStats stops at the last accepted fix, so standing still froze the
- * on-screen clock and the Finish tap's trailing minutes never made it into the
- * saved track. `endedAtMs` is null while the recording is still live.
+ * TrackStats stops at the last accepted fix, so standing still would freeze the
+ * on-screen clock and omit the Finish tap's trailing minutes from the saved
+ * track. `endedAtMs` is null while the recording is still live.
  */
 export function trackDurationMs(
   track: Track,
@@ -177,14 +175,13 @@ export function trackDurationMs(
  * its stored points.
  *
  * SEPARATE FROM RECORDING ON PURPOSE. These numbers exist to be displayed —
- * nothing in the app acts on them — so they are computed when something can
- * display them, not on the arrival of every batch. Recomputing per batch meant
- * a full read of the series plus O(points) of arithmetic for every fix, all
- * night, in a headless task nobody was looking at, and it got more expensive
- * the longer the trip ran.
+ * nothing in Logjam GPS acts on them — so they are computed when something can
+ * display them, not on the arrival of every batch. Recomputing per batch would
+ * require a full read of the series plus O(points) of arithmetic for every fix
+ * in a headless background task.
  *
  * ponytail: still a full recompute rather than an incremental one. That is
- * cheap now that it runs only while the app is open (and at the shipped 30 s
+ * cheap now that it runs only while Logjam GPS is open (and at the shipped 30 s
  * fix rate); make it incremental if a device profile says otherwise.
  */
 async function refreshTrackStats(trackId: string): Promise<void> {
@@ -208,7 +205,7 @@ async function refreshTrackStats(trackId: string): Promise<void> {
 /** The live recording's stats, brought up to date. Called on every return to
  *  the foreground, which is where the batches that skipped the computation are
  *  paid for — once, rather than one at a time. Paused counts too: a recording
- *  paused while the app was away holds points nothing has added up yet. */
+ *  paused while Logjam GPS was away holds points nothing has added up yet. */
 export async function refreshActiveTrackStats(): Promise<void> {
   const active = await findActiveTrack();
   if (active) await refreshTrackStats(active.id);
@@ -232,10 +229,9 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   void startSensorLog(track.id, true);
 
   // Only the LAST stored point, not the series: it is all the acceptance filter
-  // needs for `prev`, and it is one indexed row rather than a read that grows
-  // with the recording (MLIFE-004 — the in-memory series that used to stand in
-  // for this is gone, and with it a copy of the user's location history that
-  // lived in the process for the whole trip).
+  // needs for `prev`, and it is one indexed row rather than an in-memory series
+  // that would grow with the recording and hold the user's location history in
+  // process memory.
   const lastPoint = await lastTrackPoint(track.id);
   // A resumed segment starts fresh: measured against the PREVIOUS segment's
   // last point, every fix after a resume-in-place reads "too-close" and the
@@ -254,8 +250,8 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // dropped — it is the recorder watching someone stand still, and it is the
   // only evidence that separates a stop from slow travel once the gap between
   // accepted points is long (shared/trackStats.ts, `demonstratedStoppedMs`).
-  // The platform used to swallow these natively via `distanceInterval`; it no
-  // longer does, so they are counted here.
+  // Because `distanceInterval` is not used on the platform request, refused
+  // fixes are counted here.
   //
   // The count belongs to the point they were measured AGAINST, which is very
   // often already in the database — a whole delivery can be nothing but
@@ -288,20 +284,18 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       accuracyM: location.coords.accuracy,
       timestampMs: location.timestamp,
       // Collected, not acted on — see `CandidateFix`. Nothing below reads
-      // these; they are here so the recordings made between now and whenever
-      // the acceptance filter is revisited can answer questions the current
-      // one cannot.
+      // these; they are stored so diagnostic queries can evaluate filter
+      // behavior.
       speedMps: location.coords.speed,
       headingDeg: location.coords.heading,
       altitudeAccuracyM: location.coords.altitudeAccuracy,
     };
     const rejection = rejectTrackFix(prev, fix, maxAccuracyM);
     if (rejection !== null) {
-      // Kept, not dropped. Every diagnosis of a bad fix so far needed the fix
-      // AFTER it, and until now a refused fix was gone the instant it was
-      // refused — so no candidate filter could be tested against the fixes it
-      // would have to judge. Diagnostic only: a separate table nothing draws,
-      // measures or exports (`appendRejectedFixes`).
+      // Kept, not dropped: diagnosing fix quality requires comparing against
+      // later fixes, so candidate filters can be tested against the fixes they
+      // judge. Diagnostic only: a separate table nothing draws, measures or
+      // exports (`appendRejectedFixes`).
       rejected.push({
         ...fix,
         reason: rejection,
@@ -369,8 +363,7 @@ async function stopLocationUpdatesIfRunning(): Promise<void> {
   // Every path that disarms the recorder — pause, finish, discard, wipe —
   // funnels through here, so the research logger is stopped in ONE place
   // rather than at four call sites that each have to remember. Same rule as
-  // mobile/CLAUDE.md's "a second caller inherits the first one's guards",
-  // which this module has already been bitten by.
+  // mobile/AGENTS.md's "a second caller inherits the first one's guards".
   stopSensorLog();
   if (await Location.hasStartedLocationUpdatesAsync(TRACK_RECORDING_TASK)) {
     await Location.stopLocationUpdatesAsync(TRACK_RECORDING_TASK);
@@ -475,13 +468,11 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
 /**
  * Pick a FINISHED recording back up — the same track, a new segment.
  *
- * The trip that comes back to the car for a dropped rope, the party that stops
- * for two hours at the exit and walks out later, the recording someone finished
- * by accident: all of them used to mean a second track that has to be
- * remembered, exported and read alongside the first. This is `resume` for a
- * track that was ended rather than paused, and it produces exactly what a pause
- * would have: a segment break, so the line does not draw a teleport across the
- * gap, and the gap itself excluded from the duration.
+ * Handles a trip that continues after being finished — for example, returning to
+ * the car for a dropped rope, or walking out after a long stop at an exit. This
+ * resumes a track that was ended rather than paused, producing what a pause
+ * would: a segment break so the line does not draw a teleport across the gap,
+ * with the gap excluded from duration.
  *
  * NOT folded into `resumeTrackRecording`. The two differ in where the gap
  * starts (`endedAt` rather than `pausedAt`) and in what a refused start has to
@@ -606,7 +597,7 @@ export async function discardTrackRecording(trackId: string): Promise<void> {
  * Called on mount AND on every return to the foreground: an OEM battery
  * manager, a Doze-time kill or a swiped-away notification stops the location
  * task while the JS process survives, and a mount-only check never re-runs
- * inside a process that stayed alive (MLIFE-006). It is also the backstop for
+ * inside a process that stayed alive. It is also the backstop for
  * a recorder that died any other way.
  */
 export async function reconcileTrackRecording(): Promise<void> {
@@ -630,7 +621,7 @@ export async function reconcileTrackRecording(): Promise<void> {
     // The platform persists a task's options and keeps delivering across a
     // process death, so a process that died with the map boost on leaves the
     // recorder at 3 s with nothing left to turn it down — for the rest of the
-    // trip, if the app then reopens on another tab. Re-register only on a
+    // trip, if Logjam GPS then reopens on another tab. Re-register only on a
     // mismatch, so an ordinary return to the foreground costs no re-request.
     const stored =
       await TaskManager.getTaskOptionsAsync<Location.LocationTaskOptions>(

@@ -104,9 +104,8 @@ export function TrackOptionsSheet({
   // land in a rename form carrying the last one's name.
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // shipped: the route sheet opened straight into its share panel, and the
-  // options list became unreachable.
+  // set means the NEXT open lands inside it instead of on the verb list,
+  // making the options list unreachable.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -120,7 +119,7 @@ export function TrackOptionsSheet({
 
   // The stats read the whole series back, so they run only while that sub-mode
   // is actually open — the same `enabled` gate `useTrackDetail` exists for
-  // (mobile/CLAUDE.md, Battery).
+  // (mobile/AGENTS.md, Privacy and battery).
   const { detail, loading, line, gpsFixes } = useTrackDetail(
     track?.id ?? null,
     visible && showingStats && track != null,
@@ -180,7 +179,7 @@ export function TrackOptionsSheet({
       if (!actions?.createRouteFrom)
         throw new Error("This track can't become a route.");
       // RDP always throws points away; saying how many survived is what stops
-      // the user concluding the app lost their recording.
+      // the user concluding Logjam GPS lost their recording.
       const { name, pointCount } = await actions.createRouteFrom(placeId);
       onInfo(
         `Saved “${name}” — ${pointCount} points — as ${placeName}'s route.`,
@@ -323,8 +322,8 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          {/* The same verb, word and glyph as the web's, first among the verbs
-              after the one that goes to the line. */}
+          {/* The same verb, word and glyph as Logjam Web's, first among the
+              verbs after the one that goes to the line. */}
           {actions.logTrip ? (
             <Row
               title={wayVerbLabel("logTrip", "gps")}
@@ -381,7 +380,7 @@ export function TrackOptionsSheet({
                 close();
                 actions.createRouteFrom?.().then(
                   // RDP always throws points away; saying how many survived is
-                  // what stops the user concluding the app lost their track.
+                  // what stops the user concluding Logjam GPS lost their track.
                   ({ name, pointCount }) =>
                     onInfo(`Saved “${name}” — ${pointCount} points.`),
                   (err: unknown) => {

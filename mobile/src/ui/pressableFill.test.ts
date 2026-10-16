@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 // selected chip is a fill with a check, so it is neither. Without this the three
 // look-alikes drift back together one tone at a time.
 //
-// Mutations that turn it red: give a StatusPill style a `backgroundColor` (what
-// the accent tone had); drop `backgroundColor: theme.card` from Button's base;
+// Mutations that turn it red: give a StatusPill style a `backgroundColor` (e.g.
+// an accent tone); drop `backgroundColor: theme.card` from Button's base;
 // drop the check from an active Chip.
 const source = (name: string) =>
   readFileSync(new URL(`./${name}`, import.meta.url), "utf8");

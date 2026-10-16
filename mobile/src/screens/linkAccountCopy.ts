@@ -6,7 +6,7 @@
 // places who signs into an account holding 200 ends up with 250, permanently.
 // The confirmation is the only place that can say so.
 //
-// PRIVACY: counts only. Never a place name.
+// PRIVACY: counts only. Never a place name (guard: `mobile/src/screens/linkAccountCopy.test.ts`).
 import type { LocalEntityCounts } from "../sync/syncDb";
 
 function plural(count: number, singular: string, pluralForm: string): string {

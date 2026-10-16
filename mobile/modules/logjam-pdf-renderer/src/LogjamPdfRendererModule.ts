@@ -2,11 +2,10 @@ import { NativeModule, requireNativeModule } from "expo";
 
 import type { TileJob } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
 
-// Stage 6 native rasteriser contract (stage6-geopdf.md §4.1). All pixel work
-// (render, warp, PNG encode, SQLite insert) happens natively; JS sends warp
-// specs and receives counts. Android implementation is authoritative
-// (PdfRenderer-backed); the iOS side still carries the Stage 0 spike surface
-// and is rebuilt when iOS work starts (no local iOS toolchain on this host).
+// Native rasteriser contract: all pixel work (render, warp, PNG encode, SQLite
+// insert) happens natively; JS sends warp specs and receives counts. Android
+// implementation is authoritative (PdfRenderer-backed); the iOS side still
+// carries the initial spike surface and is rebuilt when iOS work starts.
 
 export interface PdfPageInfo {
   widthPt: number;

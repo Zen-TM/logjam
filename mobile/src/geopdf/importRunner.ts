@@ -6,9 +6,9 @@
 // rasteriser is doing the work on its own executor. There is no reason to hold
 // the user on one screen for it, so the run outlives the screen that started
 // it: the Saved list shows a progress card, a toast announces the outcome
-// wherever the user has got to, and the import keeps going in between. (The
-// screen that started it used to be a full-screen modal for the whole run,
-// which is what actually made the app feel frozen for minutes.)
+// wherever the user has got to, and the import keeps going in between.
+// Holding the user on the initiating screen as a full-screen modal would
+// make the app feel frozen for minutes.
 //
 // ONE AT A TIME, and the guard lives here rather than in each caller. The
 // picker, the account-GeoPDF list, the share sheet and the Wi-Fi auto-download
@@ -65,10 +65,8 @@ export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
 /**
  * Phases where cancelling actually does something.
  *
- * It used to be the two rasteriser phases only, because the token was read
- * between batches and nowhere else — so a large sheet's parse, plan and copy
- * (the front half, which on a big file is the part that looks hung) offered a
- * button that ignored you. The pipeline now checks the token at each front-phase
+ * A large sheet's parse, plan and copy can appear hung if cancellation is only
+ * read between batches. The pipeline checks the token at each front-phase
  * boundary too. `hashing` stays out: it is a single native call with nothing to
  * interrupt inside it.
  */
@@ -137,10 +135,10 @@ export function cancelGeoPdfImportRun(): void {
  * Cancel and WAIT — the account-transition contract, called by
  * `wipeAllLocalData` before it deletes anything.
  *
- * An import still unwinding while the wipe ran re-created `imports/geopdf/`
- * and re-registered its row after the wipe reported success, and `current`'s
- * label (a map sheet name) outlived the sign-out for the life of the JS
- * context. Cancelling alone doesn't fix either: cancellation lands at the next
+ * If an import continues unwinding during a wipe, it can recreate
+ * `imports/geopdf/` and re-register its row after the wipe reports success,
+ * leaving `current`'s label outliving the sign-out for the life of the JS
+ * context. Cancelling alone is insufficient: cancellation lands at the next
  * rasteriser batch, and the caller has to know when that has happened.
  */
 export async function stopGeoPdfImportRun(): Promise<void> {
@@ -188,8 +186,8 @@ export async function runGeoPdfImport(
   //
   // ONLY FOREGROUND TIME COUNTS. Android stops a backgrounded app's timers, and
   // the document picker is a different activity, so the gap while the user
-  // chooses a file is a gap in the MEASUREMENT, not a freeze — uncorrected it
-  // reported a 50-second stall on an 11-second import.
+  // chooses a file is a gap in the MEASUREMENT, not a freeze — uncorrected,
+  // picking a file would measure as a multi-second stall on an import.
   //
   // The correction has to come from an AppState listener rather than a check
   // inside the tick: while the app is backgrounded the tick does not run at

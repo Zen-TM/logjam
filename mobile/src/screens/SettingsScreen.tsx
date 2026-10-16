@@ -1,17 +1,14 @@
 // Settings — the menu of preference pages, plus the two things that are lists
 // rather than settings (your own fields) and the version.
 //
-// WHY PAGES RATHER THAN ONE LIST: this was a single scroll of six sections, and
-// it mixed two kinds of preference with different failure modes. Theme, app lock
-// and compass are DEVICE prefs — synchronous, no account, no signal needed.
-// Notifications live on the user record, so they need both, and every one of
-// those rows had to carry its own "Needs an account" subtitle to say so. Split
-// by page, each page is one backend and can state that once (see
-// `NotificationSettingsScreen`). Custom-field definitions are DEVICE-side too:
-// they are rows in the local mirror written through the outbox
-// (`customFields/fieldDefsStore.ts`), so those rows never gate on anything —
-// they used to gate on connection, back when an account's list lived on the
-// user record.
+// WHY PAGES RATHER THAN ONE LIST: preferences are split into pages by backend
+// and failure mode. Display, map and privacy preferences are device-side —
+// synchronous, no account, no signal needed. Notifications live on the user
+// record, requiring both an account and a connection, which
+// `NotificationSettingsScreen` states once at the page level. Custom-field
+// definitions are device-side rows in the local mirror written through the
+// outbox (`customFields/fieldDefsStore.ts`), so they do not gate on connection
+// or an account.
 //
 // LAYOUT: a plain list, so per DESIGN.md it keeps `ScreenScroll` and the
 // native header rather than being given a hero. There is no headline metric

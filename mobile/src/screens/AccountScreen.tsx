@@ -6,12 +6,12 @@
 // signing out (which drops unsynced work — the confirmation lives in App.tsx)
 // and deleting the account.
 //
-// One sheet, four modes (§6 — never a second sheet): rename, change email
+// One sheet, four modes (shared/DESIGN.md §6 — never a second sheet): rename, change email
 // (two-step, the code goes to the new address), and delete.
 //
 // PRIVACY: username, email, byte counts and tile counts. The email appears here
-// and nowhere else in the app — friend search and lists are username-only, per
-// the root CLAUDE.md convention.
+// and nowhere else in Logjam GPS — friend search and lists are username-only, per
+// the privacy conventions (AGENTS.md).
 import {
   Fragment,
   useCallback,
@@ -575,7 +575,7 @@ function EmailForm({
 /**
  * Deletion confirms by typing the username, which is the web's bar and a higher
  * one than an Alert: the sheet can carry the whole consequence in readable copy,
- * where an Android Alert would ellipsise it (§7 — consequence copy belongs in the
+ * where an Android Alert would ellipsise it (shared/DESIGN.md §7 — consequence copy belongs in the
  * dialog, and here the sheet IS the dialog). No second Alert on top; the typing
  * is the confirmation.
  */

@@ -1,11 +1,11 @@
 // Authenticated API client — port of the web apiFetch (frontend/src/
 // placeUtils.ts) with mobile offline-session semantics.
 //
-// Differences from web, both deliberate (MOBILE_APP_PLAN Stage 1):
+// Differences from web, both deliberate:
 //  - Every request carries the x-logjam-client version header (forced-upgrade
 //    lever — never drop it).
 //  - No auto-sign-out on token trouble. The web flips to the sign-in screen on
-//    any 401/refresh failure; here that would brick the app mid-trip. The
+//    any 401/refresh failure; here that would brick Logjam GPS mid-trip. The
 //    session-rejected handler fires ONLY when Cognito actively rejects the
 //    refresh while online (classifySessionError), never on network failure.
 import { ApiError } from "@logjam/shared";

@@ -1,9 +1,9 @@
 // MapSourceResolver — pure resolution of logical map layers to concrete tile
-// sources (map-sources.md §4/§5). Every tile source on the mobile map flows
-// through here, so later stages (offline downloads, imports) change *data*
-// (the artifacts registry), never the map screen.
+// sources. Every tile source on the mobile map flows through here, so later
+// stages (offline downloads, imports) change *data* (the artifacts registry),
+// never the map screen.
 //
-// Policy (DESIGN.md):
+// Policy (shared/DESIGN.md):
 //  - Full-coverage artifacts (topo overlays, imports): local-first ALWAYS once
 //    downloaded — connectivity flaps never remount a mid-place overlay.
 //  - Subset-coverage artifacts (basemap regions): remote online, local
@@ -41,7 +41,7 @@ export type LogicalLayerRef =
       remoteUrl: string | null;
       attribution?: string;
     }
-  /** The statewide contour lines (shared nswContours.ts). */
+  /** The statewide contour lines (`shared/src/nswContours.ts`). */
   | { kind: "nsw-contours" }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
@@ -151,14 +151,12 @@ function localArtifactSource(
     status: "ok",
     key,
     sourceType: artifact.sourceType,
-    // PMTiles rides the source `url`; MBTiles rides `tiles` (matches the
-    // spike-verified MLRN 10.4.2 behaviour).
+    // PMTiles rides the source `url`; MBTiles rides `tiles`.
     ...(artifact.format === "pmtiles" ? { url: uri } : { tiles: [uri] }),
     // SIX region tiles are 256; a GeoPDF import is written at 512 by the tile
-    // planner. Declaring 256 for both didn't move the map — z/x/y pin the
-    // geography — but it made MapLibre pick a tile z one level deeper than it
-    // should, so an import hit its maxZoom a level early and overzoomed:
-    // blurry at exactly the zoom a canyoner reads it at.
+    // planner. Declaring 256 for both would make MapLibre pick a tile z one level
+    // deeper than it should, hitting maxZoom a level early and overzooming:
+    // blurry at walking zoom.
     ...(artifact.sourceType === "raster" && {
       tileSize:
         artifact.kind === "geopdf-import" ? GEOPDF_TILE_SIZE : RASTER_TILE_SIZE,
@@ -184,7 +182,7 @@ function resolveBasemap(
   if (basemapId === "protomaps") {
     // Self-hosted vector basemap. Remote archive lives on our CDN (catalog
     // urlTemplate = CDN-relative archive path); offline it needs a downloaded
-    // region (Stage 4).
+    // region.
     const protomapsEntry = catalogEntry("protomaps");
     if (!protomapsEntry) {
       throw new Error("protomaps missing from BASEMAP_CATALOG");
@@ -261,7 +259,7 @@ function resolveTopoOverlay(
 ): ResolvedTileSource[] {
   const logicalKey = `${ref.jobId}/${ref.layer}`;
   const logicalId = `topo-overlay:${logicalKey}`;
-  // Full-coverage: local-first ALWAYS (§5.1) — even online.
+  // Full-coverage: local-first ALWAYS — even online.
   const local = ctx.artifacts.find(
     (a) => a.kind === "topo-overlay" && a.logicalKey === logicalKey,
   );
@@ -347,10 +345,10 @@ function resolveImport(
  * than anything simpler. The resolver reports a basemap as available the moment
  * ANY region exists for it, wherever on earth — which is right for the resolver
  * (it is choosing a source, not judging coverage) and useless as a notice: a
- * phone with one saved Katoomba region said nothing at all while showing blank
- * ground in the Budawangs, because the basemap "resolved". Asking what overlaps
- * the rectangle actually on screen is the only version of the question the user
- * is asking.
+ * saved region in one area does not provide coverage when viewing blank ground
+ * in another, even though the basemap "resolved". Asking what overlaps the
+ * rectangle actually on screen is the only version of the question the user is
+ * asking.
  *
  * Overlap, not containment: if any part of a saved region is on screen there is
  * real map under the mask, and telling someone to switch away from it would be

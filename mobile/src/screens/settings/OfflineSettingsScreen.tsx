@@ -2,11 +2,11 @@
 // what it may spend mobile data on, and where the things it already holds are
 // managed.
 //
-// The auto-download switches became DEVICE preferences with this page (see
+// The auto-download switches are DEVICE preferences (see
 // `geopdf/autoDownloadPreference.ts`, `offline/topoAutoDownload.ts`): whether
 // this handset should spend tens of megabytes and a couple of minutes of
 // rasterising is a fact about the handset, not about the person, and as account
-// preferences they needed a connection to change — which is the state you are
+// preferences they would need a connection to change — which is the state you are
 // most likely to be in when you want them off.
 //
 // The data switches are separate from the download switches on purpose. "Should
@@ -95,10 +95,10 @@ const METERED_ROWS: {
     title: "Syncing trips and places",
     subtitle: "Usually a few kilobytes.",
   },
-  // MOT-006: media PUTs (up to 30 MB an image, 500 MB a video) used to ride
-  // the `sync` allowance above, sized for a few kilobytes of JSON. No
-  // `needs`: an attach isn't gated by either auto-download switch — it
-  // happens whenever the user attaches something.
+  // Media PUTs (up to 30 MB an image, 500 MB a video) have their own allowance
+  // distinct from the sync allowance above (which is sized for a few kilobytes
+  // of JSON). No `needs`: an attach isn't gated by either auto-download
+  // switch — it happens whenever the user attaches something.
   {
     job: "mediaUpload",
     title: "Uploading photos and videos",
@@ -146,8 +146,7 @@ export function OfflineSettingsScreen({
   );
   // Optimistic with rollback, and re-seeded on the VALUE rather than on the
   // user id — a preference changed on another device and pulled in by a
-  // refetch while this screen stayed mounted was otherwise silently dropped
-  // (the notifications page learnt this first).
+  // refetch while this screen stays mounted would otherwise be silently dropped.
   const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
   const serverCopyMedia = userQuery.data
     ? (userQuery.data.uiPreferences?.copyPlaceMedia ?? true)
@@ -257,10 +256,9 @@ export function OfflineSettingsScreen({
           onPress={onOpenSaved}
         />
         {/* The sync boundary, stated once, where someone goes LOOKING for it.
-            It lived at the top of the Saved tab and cost two lines of the most
-            valuable space on that screen for a sentence read once — while the
-            answer a user actually wants there is per item, which the cloud mark
-            on a synced Saved row now gives them.
+            The answer a user wants on the Saved tab is per item (which the cloud
+            mark on a synced Saved row gives them), while the general rule
+            belongs here.
 
             A FOOTNOTE, not a Row: a row on this page is a control, and three of
             the four above it are switches. Wrapping a statement of fact in the

@@ -1,10 +1,10 @@
 // The map's JS-driven two-finger gesture, and the one-finger drag that ends a
-// follow mode. Lifted out of MapScreen.tsx unchanged (MCH-004): it owns its own
-// refs, it is the whole of the touch-responder contract, and the maths at the
-// top is now testable on its own.
+// follow mode. Extracted from MapScreen.tsx: it owns its own refs, it is the
+// whole of the touch-responder contract, and the maths at the top is testable
+// on its own.
 //
 // PRIVACY: coordinates pass through here (the fix the camera is pinned to) and
-// are never logged.
+// are never logged. Guard: mobile/src/sentry/scrubEvent.test.ts.
 import { useCallback, useRef, useState } from "react";
 import type { MutableRefObject, RefObject } from "react";
 import type { GestureResponderEvent } from "react-native";
@@ -88,13 +88,10 @@ type PinchStart = {
  * MapLibre zooms about the midpoint between the fingers, and there is no way
  * to tell it otherwise from React Native: the focal point it uses is
  * `constantFocalPoint` if the host app set one and the gesture's own focus
- * otherwise, and MLRN exposes no way to set the former. So a pinch always
- * translates the map, and "keep following" could only ever mean letting it
- * drift and then yanking it back when the fingers lifted — which is what the
- * first version did, and it read as the map fighting you: the view slid, then
- * snapped, and the zoom it settled on was not always the one you had let go
- * at, because the corrective stop and the gesture's own inertia both wrote
- * the camera.
+ * otherwise, and MLRN exposes no way to set the former. A native pinch always
+ * translates the map, so letting it drift and yanking it back on finger lift
+ * reads as the map fighting the user: the view slides, snaps, and the zoom
+ * on release can conflict with gesture inertia.
  *
  * Instead the root view CLAIMS the responder the moment a second finger lands
  * while following. MapLibre gets an ACTION_CANCEL, never starts a scale
@@ -133,10 +130,8 @@ export function useMapPinchGesture(params: {
    * Non-null IS the answer to "is the user scaling/rotating rather than
    * panning", and it is the only thing the follow-mode guard consults. It is
    * set the instant a second finger lands and cleared on release, so it cannot
-   * be confused by MapLibre's own event stream — which is what the old
-   * max-fingers counter was, and why follow kept dropping mid-pinch: the
-   * counter was reset by `onRegionDidChange`, and MapScreen's own camera
-   * writes fire that on every move.
+   * be confused by MapLibre's own event stream (camera writes fire
+   * `onRegionDidChange` on every move).
    */
   pinchStart: MutableRefObject<PinchStart | null>;
   observeTouches: (
@@ -172,7 +167,7 @@ export function useMapPinchGesture(params: {
    * Lifting one finger of a pinch hands the responder back to the capture
    * handlers with the OTHER finger still down, which arrives looking exactly
    * like a one-finger drag — from an origin set where the first finger of the
-   * pinch landed, so a slop breach is guaranteed and follow mode was dropped at
+   * pinch landed, which would guarantee a slop breach and drop follow mode at
    * the end of nearly every pinch. A pinch is ONE gesture until the last finger
    * lifts; its tail is not a pan.
    */
@@ -202,9 +197,8 @@ export function useMapPinchGesture(params: {
       //
       // Anchored on a ONE-FINGER touch START, the only event that says "a new
       // gesture begins". There is no matching end — these two capture props
-      // fire on start and move only, which is what left the old `firstTouchAt`
-      // holding a timestamp from a gesture several seconds back — so every
-      // reset here has to hang off a start.
+      // fire on start and move only (there is no guaranteed touch-end event),
+      // so every reset here has to hang off a start.
       if (touches.length > 1) gestureHadTwoFingers.current = true;
       if (touches.length === 1) {
         const [only] = touches;
@@ -266,11 +260,10 @@ export function useMapPinchGesture(params: {
       const zoom = pinchZoomLevel(start.zoom, start.distance, distance);
       zoomRef.current = zoom;
       // ROTATION IS PART OF THE SAME GESTURE. No real pinch is a pure scale —
-      // fingers always turn a few degrees — and while MapLibre owned that
-      // rotation it was a second camera driver on the same two fingers, which
-      // is what made follow mode let go "sometimes": the pinch stayed locked,
-      // the incidental twist did not. Both axes are driven here now, from one
-      // start reference, so a twist is either applied or ignored on purpose.
+      // fingers always turn a few degrees. Allowing MapLibre to own rotation would
+      // create a second camera driver on the same two fingers and drop follow mode
+      // on incidental twist. Both axes are driven here from one start reference,
+      // so a twist is either applied or ignored on purpose.
       //
       // Course-up is the deliberate exception: its heading belongs to the
       // compass, so two fingers there scale and nothing else. Turning the map
@@ -286,7 +279,7 @@ export function useMapPinchGesture(params: {
         : null;
       if (heading != null) headingRef.current = heading;
       setCameraStop({
-        // The fix, unmoved — the whole point of following, and now the only
+        // The fix, unmoved — the whole point of following, and the only
         // thing that ever writes this screen's centre during a pinch. Nothing
         // else can have moved the map to recover from: MapLibre's pan is off
         // for the whole of follow mode.

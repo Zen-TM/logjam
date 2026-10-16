@@ -1,4 +1,4 @@
-# Stage 1 real-Cognito sign-in flow. Needs EXPO_PUBLIC_AUTH_MODE=cognito in
+# Real-Cognito sign-in flow. Needs EXPO_PUBLIC_AUTH_MODE=cognito in
 # mobile/.env AND a confirmed test Cognito user (operator-provided — never a
 # real account, never committed creds; privacy rule mirrors
 # frontend/e2e/auth-lifecycle.spec.ts):

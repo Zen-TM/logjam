@@ -14,9 +14,9 @@
 //
 // WHY IT ASKS AT ALL ON A PLAIN COPY. It does not, much — the confirm exists
 // because "Save a copy" does not say where the copy goes or what happens when
-// the friend stops sharing (`copyConfirm` has always said so). What is NEW is
-// the remove variant, and there the sentence has to name what the copy leaves
-// behind: after the remove there is no second chance to notice.
+// the friend stops sharing (`copyConfirm` says so). For the remove variant,
+// the sentence has to name what the copy leaves behind: after the remove there
+// is no second chance to notice.
 //
 // PRIVACY: place names reach this sheet — a user cannot decide about "3 things"
 // — and nothing here logs.
@@ -115,7 +115,7 @@ export function useCopyPanel({
 
   const visible = active;
   const { accountState } = useAccountState();
-  // Gated on `active` as well as on having an account: this hook now lives
+  // Gated on `active` as well as on having an account: this hook lives
   // inside two sheets that stay MOUNTED between openings, so an ungated query
   // would fetch on every sheet mount for a panel nobody opened. (`/users/me` is
   // cached for 60 s in apiFetch, which makes the open itself free anyway.)

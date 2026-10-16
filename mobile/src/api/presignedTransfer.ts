@@ -37,9 +37,9 @@ export class TransferTimeoutError extends Error {
  * no bytes by the deadline. Once `hasMoved()` is true the deadline lapses and
  * the transfer runs to completion on its own.
  *
- * ponytail: first byte only — a transfer that starts and then stalls forever
- * still hangs. Make it a rolling stall timeout if that shows up in the field,
- * but note the progress callback is suppressed while the app is backgrounded,
+ * First byte only — a transfer that starts and then stalls forever still
+ * hangs. Make it a rolling stall timeout if that shows up in the field, but
+ * note the progress callback is suppressed while Logjam GPS is backgrounded,
  * so a rolling one would have to ignore time spent out of the foreground.
  */
 async function awaitStart<T>(

@@ -94,8 +94,8 @@ export function DatePicker({
     PanResponder.create({
       // CAPTURE, not bubble. A disabled cell still swallows the touch on the way
       // down, so a bubbling responder never sees a swipe that starts over one —
-      // which made a future month (every day disabled) and the future half of a
-      // year page completely unswipeable while the arrows still worked.
+      // which would make a future month (every day disabled) and the future
+      // half of a year page completely unswipeable while the arrows still worked.
       // Capturing claims the gesture before any child, and the predicate keeps
       // taps and vertical sheet scrolling working.
       onMoveShouldSetPanResponderCapture: (_event, gesture) =>
@@ -173,13 +173,13 @@ export function DatePicker({
       {/* `collapsable={false}` matters on Android: a View whose children are all
           plain layout Views (an all-in-the-future month, where every cell is
           inert) gets optimised out of the native hierarchy, and the touch then
-          never reaches this responder at all — the grid became unswipeable
-          exactly when nothing in it was pressable. */}
+          never reaches this responder at all — the grid would become
+          unswipeable exactly when nothing in it is pressable. */}
       <View style={styles.viewport} collapsable={false} {...swipe.panHandlers}>
         <Animated.View style={{ transform: [{ translateX: pan }] }}>
           {pickingYear
             ? // Explicit rows rather than flex-wrap: wrapped cells size
-              // themselves independently, which left the first row's pills
+              // themselves independently, which leaves the first row's pills
               // sitting at slightly different heights.
               chunk(years, YEAR_COLUMNS).map((row, rowIndex) => (
                 <View key={rowIndex} style={styles.yearRow}>
@@ -310,11 +310,11 @@ function DayCell({
   // Both alternatives break the swipe that pages the grid, for the same
   // underlying reason: RN's touch dispatch looks for a JS touch target under
   // the finger, and an inert View isn't one. In a month entirely in the future
-  // EVERY cell is unavailable, so nothing under the finger was a target, the
-  // gesture went to the sheet's native ScrollView, and the pan responder was
-  // never consulted — the grid became unswipeable exactly when nothing in it
-  // was pressable. Keeping them pressable keeps the responder chain alive;
-  // `accessibilityState` still announces them as unavailable.
+  // EVERY cell is unavailable, so nothing under the finger is a target, the
+  // gesture goes to the sheet's native ScrollView, and the pan responder is
+  // never consulted — the grid would become unswipeable exactly when nothing
+  // in it is pressable. Keeping them pressable keeps the responder chain
+  // alive; `accessibilityState` still announces them as unavailable.
   return (
     <Pressable
       accessibilityRole="button"
@@ -513,13 +513,13 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // Pill sized to the glyph and centred in its cell, not filling it.
   //
-  // Two Android-specific details, both learned the hard way: the radius is
-  // exactly half the box rather than `radius.pill`'s 999, and the background is
-  // always set (transparent when unselected) instead of appearing only on the
-  // selected state. RN Android draws corner radii through the view's background
-  // drawable, so a cell that gains a background AFTER it was first laid out —
-  // which is what happens when the grid pages away and back and React reuses
-  // the same cell for a different date — could come back square.
+  // Two Android-specific details: the radius is exactly half the box rather
+  // than `radius.pill`'s 999, and the background is always set (transparent
+  // when unselected) instead of appearing only on the selected state. RN
+  // Android draws corner radii through the view's background drawable, so a
+  // cell that gains a background after it was first laid out — which happens
+  // when the grid pages away and back and React reuses the same cell for a
+  // different date — can come back square.
   dayPill: {
     width: DAY_PILL_SIZE,
     height: DAY_PILL_SIZE,

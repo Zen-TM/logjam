@@ -5,7 +5,7 @@
 // compass reads badly is a phone-specific problem), not an account preference
 // to push to the user's other devices.
 //
-// Defaults to OFF (operator decision, 2026-08-17, on the battery pass). It runs
+// Defaults to OFF. It runs
 // the magnetometer AND the accelerometer for as long as the map tab is open —
 // expo-location registers both at SENSOR_DELAY_NORMAL and there is no way to
 // ask for less — and the tape is an instrument most trips never look at. The

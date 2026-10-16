@@ -27,8 +27,8 @@
 //   Clear  — empty the points, stay in the tool. Start the line again.
 //   Trash  — discard and leave. Route draw confirms first (in the caller);
 //            measure does not, because a measurement is a question asked once.
-// They used to be the other way round, which read as "cancel throws my work
-// away" and left the trash looking like the safer of the two.
+// Having these the other way round would read as "cancel throws my work away"
+// and leave the trash looking like the safer of the two.
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
@@ -185,10 +185,9 @@ export function DraftToolPanel({
           ) : null}
           {/* THE SWATCH IS THE CONTROL, not a glyph tinted with the colour: a
               droplet asks the user to decode a metaphor before they can see
-              what it is set to, while a filled square IS the answer. Same
-              shape the route sheet used before this moved onto the toolbar.
-              It keeps an IconButton's 40pt box so it lines up with the buttons
-              either side of it and stays a real tap target. */}
+              what it is set to, while a filled square IS the answer. It keeps
+              an IconButton's 40pt box so it lines up with the buttons either
+              side of it and stays a real tap target. */}
           {onColorChange ? (
             <ColourField
               label="Route colour"

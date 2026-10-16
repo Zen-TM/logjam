@@ -2,24 +2,22 @@
 // sheet the map opens when a route line is tapped.
 //
 // ONE component for both on purpose. The two surfaces offering different verbs
-// for the same object is exactly the drift DESIGN.md is about, and the
-// actions themselves already have a single source in saved/assetActions.ts.
-// This is that descriptor rendered.
+// for the same object is a common source of drift, and the actions themselves
+// already have a single source in saved/assetActions.ts. This is that
+// descriptor rendered.
 //
 // A tap on the map opens THIS, not the stats — the stats are a sub-mode one
 // tap in ("View stats"), reached the same way from either surface. Rename is a
-// sub-mode too rather than a caller callback, because a callback is only as
-// good as the caller that remembers to pass it: the map never did, so a route
-// tapped on the map could not be renamed at all.
+// sub-mode too rather than a caller callback, ensuring routes opened from
+// either surface can be renamed.
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 //
-// There is ONE "Edit" row, not three. Edit points, Reverse direction and Colour
-// were separate rows that all edited the route, two of them acting on a line
-// the user could not see while deciding. Edit now opens the map's draw tool on
-// this route, and reverse and colour are controls in the tool's own panel,
-// acting on the draft (DraftToolPanel.tsx).
+// There is ONE "Edit" row, not three: Edit opens the map's draw tool on this
+// route, where points, reverse direction and colour are controls in the
+// tool's own panel acting on the draft (DraftToolPanel.tsx) with the line
+// visible.
 import { useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import {
@@ -71,7 +69,7 @@ export function RouteOptionsSheet({
   /**
    * Fly the map to this route. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md: "View on map" is the one row the two surfaces differ by).
+   * ("View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: () => void;
   /** Arm the map's draw tool on this route. Editing is a map gesture, so both
@@ -89,9 +87,7 @@ export function RouteOptionsSheet({
   const [busy, setBusy] = useState(false);
   // The share panel is rendered HERE rather than handed to the caller: this
   // one component is both Saved's three-dots sheet and the map's route sheet,
-  // and a callback would have given the verb to whichever surface remembered
-  // to pass it. That asymmetry is the bug this sheet exists to prevent
-  // (DESIGN.md).
+  // avoiding asymmetric verbs between the two surfaces.
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
@@ -102,9 +98,7 @@ export function RouteOptionsSheet({
 
   // Reset every sub-mode when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it. That is exactly what shipped:
-  // after sharing once, tapping a route's ⋯ went straight to the share panel
-  // and the verb list could not be reached again.
+  // set would cause the next open to land inside it rather than the verb list.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -126,7 +120,7 @@ export function RouteOptionsSheet({
   const viaPlaces = (places.data ?? []).filter((place) =>
     (actions?.sharedViaPlaceIds ?? []).includes(place.id),
   );
-  // Declared AFTER `actions`, which it now reads: the route's own id. A route
+  // Declared AFTER `actions`, which it reads: the route's own id. A route
   // drawn in the field is not on the server until the outbox flushes, and the
   // verb dims with the reason rather than firing a grant at a row that isn't
   // there.
@@ -169,8 +163,8 @@ export function RouteOptionsSheet({
     targets: copyTargets,
     mode: copyMode ?? "copy",
     // No username reaches a mirrored row, so the confirms spell their own
-    // fallback — in both sentence positions. Passing "the owner" here is what
-    // put a lowercase word at the start of a sentence on the device.
+    // fallback — in both sentence positions — rather than hardcoding "the owner"
+    // which would break sentence capitalization.
     friendName: null,
     busy,
     online,
@@ -207,8 +201,8 @@ export function RouteOptionsSheet({
   });
 
   // THE place picker, as a sub-mode of this sheet rather than a second sheet
-  // the caller had to remember to mount (DESIGN.md). Same panel a track's
-  // and an import's options render.
+  // the caller had to remember to mount. Same panel a track's and an import's
+  // options render.
   const placePicker = usePlacePicker({
     source: "route",
     active: linking,
@@ -300,7 +294,7 @@ export function RouteOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md — a sub-mode swaps the content, it never stacks).
+  // sheet — a sub-mode swaps the content, it never stacks.
   const leaveSubMode = sharing
     ? () => setSharing(false)
     : renaming
@@ -333,9 +327,8 @@ export function RouteOptionsSheet({
                 : route.name
       }
       // A sub-mode REPLACES the verb list rather than expanding inside it —
-      // same shape as the waypoint sheet and the place sheet. Shown inline the
-      // share panel pushed "Delete route" below the friend picker, which put a
-      // destructive verb in the middle of a sharing flow.
+      // same shape as the waypoint sheet and the place sheet, avoiding showing
+      // destructive verbs in the middle of a sharing flow.
       onBack={leaveSubMode ?? undefined}
       footer={sharing ? share.footer : copyMode ? copy.footer : undefined}
       header={linking ? placePicker.header : undefined}

@@ -792,15 +792,14 @@ export function PlacesScreen({
           (the user's own vocabulary) and WHERE it is in the tick list. Only the
           bucket rail gives way to the selection bar — the type rail is the
           heading for what is selected, not a control over it. */}
-        {/* ALWAYS ON SCREEN now, where it used to appear only once a second type
-          had places in it: the rail carries the only way to create a type from
-          this tab, and hiding it from exactly the accounts that have not made
-          one yet would have hidden the affordance from everyone who needs it. */}
-        {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
-          ~52pt of chrome out from under the finger that had just long-pressed a
-          row, sliding every row up mid-gesture — the same jump DESIGN.md
-          fixed once for the bucket rail. A filter that cannot be changed during
-          a selection still has to say what the selection is drawn from. */}
+        {/* ALWAYS ON SCREEN: the rail carries the only way to create a type from
+          this tab, and hiding it from accounts that have not made one yet
+          would hide the affordance from everyone who needs it. */}
+        {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it would
+          take ~52pt of chrome out from under the finger that had just long-pressed
+          a row, sliding every row up mid-gesture. A filter that cannot be
+          changed during a selection still has to say what the selection is drawn
+          from. */}
         <View
           style={[styles.typeRail, selecting && styles.railInert]}
           pointerEvents={selecting ? "none" : "auto"}

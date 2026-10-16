@@ -1,4 +1,4 @@
-// What the owner does with a value that arrived on a copy (plan §2.6).
+// What the owner does with a value that arrived on a copy.
 //
 // `foreignFields` is a self-describing park — `[{key,label,type,min,max,value}]`
 // on the place row — holding values whose definitions the recipient does not

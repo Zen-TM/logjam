@@ -22,11 +22,11 @@
 // metre apart. This screen's question is "which places", answered at
 // kilometres, so everything else is clutter over the box being drawn.
 //
-// The basemap rail in particular was tried and removed. Anything pinned to a
+// There is no basemap rail: anything pinned to a
 // screen edge is an obstacle to a frame whose handles live on those edges: a
 // rail top-right puts pressable thumbs exactly where the right handle travels
 // as the frame is reshaped, and a handle under a thumb cannot be grabbed back.
-// Clamping the frame away from it then silently narrowed a restored area on a
+// Clamping the frame away from it would silently narrow a restored area on a
 // round trip that changed nothing. The basemap carries over from the map the
 // user was last looking at (`lastCamera`), which is the one they know.
 //
@@ -75,7 +75,7 @@ import {
   type ResolveContext,
 } from "./sourceResolver";
 
-/** Matches `MapScreen`'s — every map in the app renders the same vector basemap. */
+/** Matches `MapScreen`'s — every map in Logjam GPS renders the same vector basemap. */
 const PROTOMAPS_FLAVOR = "light" as const;
 
 /**
@@ -335,7 +335,7 @@ export function PickAreaScreen({
 const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
-  // was dark on dark in Daylight).
+  // would be dark on dark in Daylight).
   // After the back button, which owns the top left.
   hint: {
     position: "absolute",

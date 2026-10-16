@@ -1,10 +1,10 @@
 // Getting rid of something a friend shared WITH you — the phone's half of the
-// recipient-side revoke both share endpoints have always accepted
+// recipient-side revoke both share endpoints accept
 // (`DELETE …/me`). The web's twin is frontend/src/components/common/
 // RemoveSharedButton.tsx; the wording both of them use comes from
 // `removeShareConfirm` in shared/src/sharing.ts.
 //
-// ONLINE-ONLY, exactly like granting a share (api/shares.ts says why): the
+// ONLINE-ONLY, exactly like granting a share (../api/shares.ts says why): the
 // outbox carries entity mutations, not permission changes, and a queued
 // "forget this for me" would leave the row on screen for an unbounded time
 // while claiming it had gone.

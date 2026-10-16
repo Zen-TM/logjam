@@ -27,7 +27,7 @@ import { stopSourcePress } from "./sourcePress";
  * line that says nothing about where it goes, and a state-wide view of every
  * route you have ever drawn is just ink over the map.
  *
- * Matches the web's ROUTE_MIN_ZOOM — roughly a 50 km view. The route being DRAWN is exempt (the draft
+ * Matches Logjam Web's ROUTE_MIN_ZOOM — roughly a 50 km view. The route being DRAWN is exempt (the draft
  * layer has no floor) — hiding what the user is working on would be absurd.
  */
 export const SAVED_ROUTE_MIN_ZOOM = 10;
@@ -93,7 +93,7 @@ export const RoutesLayer = memo(function RoutesLayer({
       // A 3px line is far thinner than a fingertip; the hitbox is what makes
       // tapping one a reasonable thing to ask. MLRN's default is 44pt — the
       // platform minimum touch target, and the right number here for the same
-      // reason — so this no longer sets one.
+      // reason — so this does not set one.
       onPress={
         onPressRoute &&
         ((event) => {

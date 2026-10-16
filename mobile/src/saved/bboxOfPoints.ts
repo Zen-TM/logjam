@@ -1,5 +1,5 @@
 // Pure geometry helper, kept out of SavedScreen.tsx so the unit suite can
-// import it without pulling React Native in (see CLAUDE.md testing notes).
+// import it without pulling React Native in.
 export type Bbox = [number, number, number, number];
 
 export function bboxOfPoints(

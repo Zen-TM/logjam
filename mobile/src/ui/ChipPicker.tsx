@@ -20,8 +20,8 @@ import { SectionHeader } from "./SectionHeader";
  * always allowed (`TRIP_TYPE_SUGGESTIONS` is a seed, not an enum).
  *
  * Chips stay in VOCABULARY order whatever is selected. Moving a chip to the
- * front on selection made the user re-read the whole layout after every tap,
- * and put the chip they were reaching for somewhere else. `onAdd` renders a
+ * front on selection makes the user re-read the whole layout after every tap,
+ * and puts the chip they are reaching for somewhere else. `onAdd` renders a
  * trailing "+ Add" chip that swaps into an inline field; omit it for a closed
  * vocabulary.
  */

@@ -1,9 +1,9 @@
 /**
  * Pure calendar math for `DatePicker`. Kept RN-free so it is unit-testable.
  *
- * Everything is UTC. Trip dates are stored as UTC-midnight date-only values
- * (CH-001), so a picker that built its grid in local time would hand back the
- * previous day for every AEST user.
+ * Everything is UTC. Trip dates are stored as UTC-midnight date-only values,
+ * so a picker that built its grid in local time would hand back the previous
+ * day for every AEST user.
  */
 
 /** "YYYY-MM-DD" for a Date, read in UTC. */

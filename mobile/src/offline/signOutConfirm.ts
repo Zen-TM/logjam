@@ -1,9 +1,9 @@
 // The words of the sign-out confirmation, from what this phone holds that is
 // not in the account (`wipedStores.ts` says what that can be).
 //
-// One confirm that says what goes and what stays, and counts it (shared/
-// DESIGN.md §9). A line appears only for a kind that has something in it, and
-// with nothing to lose there is no confirm at all.
+// One confirm that says what goes and what stays, and counts it
+// (`shared/DESIGN.md` §9). A line appears only for a kind that has something
+// in it, and with nothing to lose there is no confirm at all.
 //
 // PRIVACY: counts and a total size, never a name, a coordinate or a bounding
 // box: an alert is the screen most likely to be screenshotted.

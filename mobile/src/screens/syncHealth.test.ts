@@ -186,10 +186,9 @@ describe("syncHealth", () => {
   });
 
   describe("a failure the network is not to blame for", () => {
-    // Observed on device: the server answered 200 to every request while the
-    // app failed to apply the page locally, and the hero said "Can't reach your
-    // account … It will keep retrying." Both halves were false, and the true
-    // one — that nothing new will ever arrive until this is fixed — was nowhere.
+    // When the server answers 200 to every request while applying the page
+    // locally fails, attributing the problem to the connection or promising
+    // retry is false; nothing new can arrive until this is fixed.
     it("does not blame the connection", () => {
       const health = syncHealth(
         input({ state: "error", errorKind: "applyFailed" }),

@@ -293,9 +293,9 @@ describe("basemapsCoveringViewport", () => {
   });
 
   it("drops a basemap whose region is off screen", () => {
-    // Inside the six-topo region, well clear of the protomaps clip. This is
-    // the case the old any-region-anywhere check got wrong: it reported the
-    // vector basemap as available over ground it has nothing for.
+    // Inside the six-topo region, well clear of the protomaps clip: an
+    // unconstrained region check would wrongly report the vector basemap as
+    // available over ground it has nothing for.
     expect(
       basemapsCoveringViewport(
         saved,

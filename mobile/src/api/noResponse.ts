@@ -7,7 +7,7 @@
 // upload task with whatever the platform threw.
 //
 // A mark rather than a wrapper class so every existing `catch` still sees the
-// error it always saw.
+// original error.
 const unanswered = new WeakSet<object>();
 
 export function markNoResponse<T>(err: T): T {

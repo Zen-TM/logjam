@@ -25,8 +25,8 @@ import { finishTrackRecording } from "./trackRecorder";
 /**
  * Said ONCE, on the first recording that actually reaches the account.
  *
- * Recording location is the most sensitive thing this app holds and it used to
- * stay on the handset, so the change is stated rather than switched on quietly.
+ * Recording location is sensitive user data backed up to the account, so the
+ * backup is stated clearly rather than switched on quietly.
  * Short and factual on purpose: it is not a consent dialog with a way out (the
  * user can delete the file), it is a statement of where their track now lives.
  *

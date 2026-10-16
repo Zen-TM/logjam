@@ -1,7 +1,7 @@
 // The font and size of every label drawn by a MapLibre symbol layer, declared
 // once. A map label is drawn from the basemap's glyph files at a size MapLibre
 // resolves per zoom, so none of the type roles (and none of the text-size
-// preference) reaches it. `eslint.config.js` bans `textSize` and `textFont`
+// preference) reaches it. `mobile/eslint.config.js` bans `textSize` and `textFont`
 // everywhere else.
 
 const MAP_LABEL_FONT = ["Noto Sans Medium"];
@@ -12,8 +12,9 @@ export const PIN_LABEL_TEXT = {
   textSize: 12,
 };
 
-// Base label-size bump matching the web live map (WEB_LABEL_BASE_SCALE — the
-// export bakers deliberately diverge with their own larger base).
+// Base label-size bump matching Logjam Web's live map
+// (`frontend/src/components/map/Map.tsx`, `WEB_LABEL_BASE_SCALE` — the export
+// bakers deliberately diverge with their own larger base).
 const TOPO_LABEL_BASE_SCALE = 1.75;
 
 /** A topo overlay's label, growing with the zoom; `scale` is the user's own

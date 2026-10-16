@@ -1,7 +1,7 @@
 // The contextual bar a multi-select swaps into the rail's ChipRail slot.
 // Cancel / count / select-all / destroy, fixed to CHIP_RAIL_HEIGHT so the
-// rail's height cannot differ between the two states and the list below does not
-// jump (the bug the Saved screen fixed in 2026-08-24 — see its selectionBar note).
+// rail's height cannot differ between the two states and the list below does
+// not jump.
 import { Text, View } from "react-native";
 
 import { spacing, makeStyles, useTheme } from "../theme";
@@ -44,7 +44,7 @@ export function SelectionBar({
    * the word: the per-friend sharing screen puts "unshare these" and "remove my
    * access" here, which are destructive in the same way (irreversible from this
    * screen) and destructive of something else entirely (a grant, not a record).
-   * Naming it delete there would have promised to destroy the place.
+   * Naming it delete there would promise to destroy the place.
    */
   onDelete: () => void;
   /** Glyph for that slot: `delete` unless the verb is not deletion. */

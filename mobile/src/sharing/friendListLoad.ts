@@ -1,5 +1,4 @@
-// When the friend list asks the server for friends — and, since MAPP-007, when
-// it asks again.
+// When the friend list asks the server for friends — and when it asks again.
 //
 // Its own module, free of React Native imports, so it can be unit-tested:
 // SharePanel pulls in the RN runtime and vitest cannot parse React Native's
@@ -9,12 +8,12 @@
  * A key identifying the load the friend list should be running right now, or
  * null for "issue no request".
  *
- * A KEY rather than a boolean, because the retry is the whole of MAPP-007: a
+ * A KEY rather than a boolean, because the retry depends on identity change: a
  * failed load leaves the list null and changes none of the other inputs, so a
- * predicate reads identically before and after the user taps Retry and the
- * load never runs a second time — the panel said "Couldn't load friends."
- * until the whole sheet was closed and reopened. Bumping `attempt` changes the
- * key, and a changed key IS the retry.
+ * boolean predicate reads identically before and after the user taps Retry and
+ * the load would never run a second time (leaving the panel stuck on "Couldn't
+ * load friends." until the whole sheet is closed and reopened). Bumping
+ * `attempt` changes the key, and a changed key triggers the retry.
  *
  * Null covers the three states that must not reach the network: a sheet that
  * is closed (nothing on screen is waiting for an answer), a caller without the

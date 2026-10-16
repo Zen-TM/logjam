@@ -1,12 +1,11 @@
-// An import, as this app sees it: the synced media row joined to what is true
+// An import, as Logjam GPS sees it: the synced media row joined to what is true
 // about it ON THIS PHONE.
 //
-// It used to be one device-only table. An import is now a standalone media row
-// (`linked_type` "none", `origin` "import"), so its name, colour, extent and
-// counts are server-authoritative and arrive by delta — which is what lets an
-// import made on one device appear on another, and on Logjam Web. What stays
-// here is only what could not be shared: whether it is drawn on THIS map, and
-// where its bytes are on THIS disk.
+// An import is a standalone media row (`linked_type` "none", `origin` "import"),
+// so its name, colour, extent and counts are server-authoritative and arrive by
+// delta — which is what lets an import made on one device appear on another,
+// and on Logjam Web. What stays here is only what could not be shared: whether
+// it is drawn on THIS map, and where its bytes are on THIS disk.
 //
 // The join is done in JS because the two live in different SQLite files
 // (logjam.db for the mirror, logjam-offline.db for device state) and there is
@@ -14,8 +13,8 @@
 // versioning and app-lock posture of the two stores are deliberately separate.
 //
 // PRIVACY: imports are the user's own tracks — place-area coordinates. Rows,
-// bboxes and paths never reach logs, telemetry or crash reports; having any
-// import on disk arms the Stage 4 app lock (see AppLockGate).
+// bboxes and paths never reach logs, telemetry or crash reports (Guard:
+// src/sentry/scrubEvent.test.ts).
 import {
   mediaDisplayName,
   TRACK_COLORS,

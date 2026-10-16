@@ -1,11 +1,11 @@
 // The map's live speed + elevation readout — the value, and where it comes
 // from.
 //
-// OUTSIDE REACT STATE, for the same reason the heading is (mobile/CLAUDE.md,
-// Battery): a value that moves with every fix, put in `MapScreen`'s state,
-// re-renders the whole map — MLRN memoises none of its layer components and
-// re-commits props per layer per render, and the Protomaps band alone is ~71
-// layers. The chip subscribes; nothing else does.
+// OUTSIDE REACT STATE, for the same reason the heading is (mobile/AGENTS.md,
+// Privacy and battery): a value that moves with every fix, put in
+// `MapScreen`'s state, re-renders the whole map — MLRN memoises none of its
+// layer components and re-commits props per layer per render, and the
+// Protomaps band alone is ~71 layers. The chip subscribes; nothing else does.
 //
 // PRIVACY: a speed and a height. No position is stored here and none is
 // published — the coordinate that produced them stays in `MapScreen`.
@@ -20,9 +20,10 @@ import { haversineMeters } from "@logjam/shared";
  * `distanceInterval` (Android ANDs them), so a phone standing still stops
  * producing fixes ENTIRELY — with no staleness rule the chip would keep
  * reporting the speed of the last time the user walked, indefinitely, which is
- * the one number it must never show. 20 s is a comfortable six watcher
- * intervals: long enough that an ordinary skipped fix does not blank the chip,
- * short enough that a stop reads as a stop.
+ * the one number it must never show (Guard: mobile/src/map/liveReadout.test.ts).
+ * 20 s is a comfortable six watcher intervals: long enough that an ordinary
+ * skipped fix does not blank the chip, short enough that a stop reads as a
+ * stop.
  */
 export const READOUT_STALE_MS = 20_000;
 

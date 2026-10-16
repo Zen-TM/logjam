@@ -4,7 +4,7 @@ import { withDefaultEasing } from "./cameraStop";
 
 describe("withDefaultEasing", () => {
   it("eases a stop that names only a duration", () => {
-    // The MLRN 11 regression: this used to ease by default and now jumps.
+    // MLRN 11 defaults to a jump; withDefaultEasing supplies an ease.
     expect(
       withDefaultEasing({ center: [150.4, -33.5], duration: 600 }),
     ).toEqual({
@@ -17,7 +17,7 @@ describe("withDefaultEasing", () => {
   it("leaves an explicit easing alone", () => {
     // The heading ticker asks for "linear" on purpose: a stream of eases never
     // leaves the slow opening of a curve it never finishes, which reads as one
-    // lurch per camera write (see mobile/CLAUDE.md).
+    // lurch per camera write (ADR 0011).
     const stop = withDefaultEasing({
       bearing: 12,
       duration: 120,

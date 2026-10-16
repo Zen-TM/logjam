@@ -2,7 +2,8 @@
 //
 // It SUBSCRIBES to the readout rather than being handed it as a prop, and it is
 // memoised, so a new fix re-renders this one small component and nothing else —
-// the rule the compass tape already follows (mobile/CLAUDE.md, Battery).
+// the rule the compass tape already follows (mobile/AGENTS.md, Privacy and
+// battery).
 //
 // It owns a slow ticker of its own, and that is not decoration. The map's fix
 // watcher is `timeInterval` AND `distanceInterval`, so a phone standing still
@@ -95,11 +96,11 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
       </View>
       <View style={styles.divider} />
       <View style={styles.column}>
-        {/* No provenance glyph on screen. It said something true — a DEM
-            reading and a GPS one are not the same measurement — but it said it
-            to everyone, permanently, in a two-word chip, and the distinction
-            only matters to someone already asking. The screen reader still
-            gets it, on the value below. */}
+        {/* No provenance glyph on screen: a DEM reading and a GPS one are not
+            the same measurement, but displaying that permanently in a
+            two-word chip clutters the UI when the distinction only matters to
+            someone already asking. The screen reader still gets it, on the
+            value below. */}
         <Text style={styles.label}>Elevation</Text>
         <Text
           style={styles.value}

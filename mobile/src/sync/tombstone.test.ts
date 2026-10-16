@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The place tombstone cascade — the code path that killed sync on every fresh
-// install. It ran `UPDATE waypoints SET place_id = NULL`, a column the schema
-// stopped declaring when waypoint→place links went many-to-many, so the whole
-// delta transaction rolled back, the cursor never advanced, and the same page
-// re-failed every cycle forever.
+// The place tombstone cascade. Waypoint→place links are many-to-many
+// via place_links; the tombstone cascade must not reference dropped columns
+// so delta transactions apply cleanly.
 //
 // getSyncDb reaches for expo-sqlite (no native runtime here), so the database
-// is a recording stand-in: this asserts the STATEMENTS, which is where the bug
-// was. Column existence is checked against the schema in mirrorSchema.test.ts.
+// is a recording stand-in: this asserts the SQL statements executed.
+// Column existence is checked against the schema in mirrorSchema.test.ts.
 
 type Call = { sql: string; args: unknown[] };
 const calls: Call[] = [];
@@ -53,20 +51,18 @@ function sqlText(): string {
   return calls.map((call) => call.sql).join("\n");
 }
 
-// The other half of the tolerance the shared parser now allows: a type from a
-// newer server reaches here, and must touch NOTHING — not the mirror, and not
-// the outbox (the pending-op parking at the end of applyTombstone would
-// otherwise mark a local row deadRemote against an id it knows nothing about).
+// Tolerance for newer server entity types: a type from a newer server reaches
+// here, and must touch nothing — not the mirror, and not the outbox (the
+// pending-op parking at the end of applyTombstone would otherwise mark a local
+// row deadRemote against an id it knows nothing about).
 describe("a tombstone type this build does not know", () => {
   beforeEach(() => {
     calls.length = 0;
   });
 
   it("issues no statement at all", async () => {
-    // `placeType` used to stand in for "an entity a NEWER server knows and this
-    // build does not". It is a real entity now, so the stand-in has to be
-    // something genuinely unknown — which is the point of the test, not the
-    // particular word.
+    // The stand-in has to be something genuinely unknown to verify tolerance
+    // for entity types from a newer server.
     const orphaned = await applyTombstone(db as never, {
       type: "somethingFromTheFuture",
       id: "from-a-newer-server",
@@ -136,10 +132,8 @@ describe("place tombstone cascade", () => {
 });
 
 describe("deletePlaceLocal runs the SAME cascade as the tombstone", () => {
-  // The divergence this pins: the local delete used to scrub links and shares
-  // only, so the place's media rows (and their cached blobs) and any route
-  // pointing at it survived until a later delta pull tidied up — i.e. forever
-  // for a guest, whose device is never registered for pulls at all.
+  // Local place delete cascades media rows, shares, and route links
+  // immediately so un-synced or guest data does not leak.
   beforeEach(() => {
     calls.length = 0;
     linkRows = [];

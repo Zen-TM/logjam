@@ -1,11 +1,11 @@
 // Classify a failed Cognito session refresh (pure — vitest-tested).
 //
-// Offline-session semantics (MOBILE_APP_PLAN Stage 1, load-bearing for every
-// later stage): NEVER auto-sign-out on token expiry or network unreachability —
-// that would brick the app mid-trip. Force re-auth only when the refresh was
-// *actively rejected* by Cognito while online (revoked/disabled/password
-// change). Everything else — airplane mode, flaky reception, server hiccup —
-// is transient: keep the session, keep local data usable.
+// Offline-session semantics: NEVER auto-sign-out on token expiry or network
+// unreachability — that would brick the app mid-trip. Force re-auth only when
+// the refresh was *actively rejected* by Cognito while online
+// (revoked/disabled/password change). Everything else — airplane mode, flaky
+// reception, server hiccup — is transient: keep the session, keep local data
+// usable (Guard: sessionErrors.test.ts).
 
 /** Cognito error names that mean "this refresh token is no longer accepted". */
 const REJECTION_ERROR_NAMES = new Set([

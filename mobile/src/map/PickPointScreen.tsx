@@ -335,8 +335,8 @@ export function PickPointScreen({
 
       {/* NO `insets.bottom` here: this screen is pushed inside a tab stack, so
           the tab bar is already sitting below it and has already taken the
-          gesture inset. Adding it again floated the buttons a full navigation
-          bar's height above the tabs. */}
+          gesture inset. Adding it again would float the buttons a full
+          navigation bar's height above the tabs. */}
       <View style={styles.actions}>
         <View style={styles.action}>
           <Button label="Cancel" variant="outlineAccent" onPress={onCancel} />
@@ -372,7 +372,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // The ring has to be ROUNDER than the tile it wraps, by exactly its own
   // width, or its corners cut across the thumb's — a 4 px ring around an 8 px
-  // tile left a visible notch at each corner.
+  // tile would leave a visible notch at each corner.
   thumb: {
     borderRadius: radius.md + THUMB_RING,
     borderWidth: THUMB_RING,

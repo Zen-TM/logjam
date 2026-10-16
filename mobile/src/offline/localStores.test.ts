@@ -2,12 +2,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// The regression this file exists for: the sign-out wipe is the privacy
-// boundary between two users of one phone, and three separate stores had
-// drifted out of it — GPX track exports written to `cacheDirectory`, the
-// scratch PDFs beside them, and MapLibre's ambient tile cache. Each was
-// invisible the same way: a path literal written at the producer, and a wipe
-// list maintained somewhere else that nobody thought to join.
+// The sign-out wipe is the privacy boundary between two users of one phone.
+// Stores (GPX track exports written to `cacheDirectory`, scratch PDFs beside
+// them, and MapLibre's ambient tile cache) must not drift out of the wipe list:
+// a path literal written at the producer must be joined by a wipe entry.
 //
 // So: read the source. A file that reaches for a filesystem root without going
 // through `localStores.ts` fails this test, which makes "add a store, forget
@@ -120,9 +118,9 @@ describe("the wipe stops the producers before it deletes", () => {
   );
 
   it("cancels both background workers", () => {
-    // A run still going re-created the directory the wipe had deleted and
-    // re-inserted its map_artifact row — the departing user's bbox landing in
-    // the next user's install after the wipe reported success.
+    // A running worker would re-create the deleted directory and re-insert its
+    // map_artifact row, leaking the departing user's bbox into the next
+    // user's install.
     expect(wipe).toContain("cancelAllRegionDownloads()");
     expect(wipe).toContain("stopGeoPdfImportRun()");
   });
@@ -137,8 +135,7 @@ describe("the wipe stops the producers before it deletes", () => {
   });
 
   it("clears MapLibre's ambient tile cache", () => {
-    // Confirmed on device: 13 tile rows (z/x/y of the areas browsed) survived
-    // a full sign-out byte-for-byte, because nothing owned that store.
+    // Tile rows (z/x/y of browsed areas) would otherwise survive sign-out.
     expect(wipe).toContain("OfflineManager");
     expect(wipe).toContain("resetDatabase()");
   });
@@ -151,12 +148,11 @@ describe("the wipe empties the app cache directory", () => {
   );
 
   it("sweeps the cache ROOT, not a list of picker paths", () => {
-    // MOT-005: the OS pickers keep their own copy of every attached photo and
-    // file in a subdirectory of the cache. Decision D6 rejected adding those
-    // paths to WIPED_DIRS — they mirror a third-party native module's
-    // internals and drift on upgrade — in favour of emptying the whole cache
-    // directory, which names nothing that can drift and also catches the files
-    // earlier builds already left behind.
+    // The OS pickers keep their own copy of every attached photo and
+    // file in a subdirectory of the cache. Adding those paths to WIPED_DIRS
+    // would mirror third-party native module internals and drift on upgrade;
+    // emptying the whole cache directory avoids naming volatile internals
+    // and catches any leftover files.
     expect(wipe).toContain("readDirectoryAsync(CACHE_ROOT)");
     expect(code(wipe)).not.toMatch(/ImagePicker|DocumentPicker/);
   });

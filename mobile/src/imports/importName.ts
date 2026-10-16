@@ -1,8 +1,8 @@
 // What an imported file is CALLED once it lands in Saved.
 //
-// Its own RN-free module so the rule has a test: `vectorImports.ts` pulls in
-// `expo-file-system`, which vitest cannot parse — the same split, and the same
-// reason, as `notifications/tapTarget.ts`.
+// Its own RN-free module so the rule has a test (Guard: importName.test.ts):
+// `vectorImports.ts` pulls in `expo-file-system`, which vitest cannot parse —
+// the same split, and the same reason, as `notifications/tapTarget.ts`.
 //
 // Two names compete, and they are genuinely different things:
 //   - the FILE name  — what the file is called on disk (`Ridge approach.gpx`),
@@ -25,12 +25,12 @@ export function fileNameWithoutExtension(filename: string): string {
  * The recipient was told "bob sent you Ridge approach.gpx". If the item that
  * appears in Saved is called "Track 001" — because that is what the GPX says
  * about itself — then as far as they can tell the thing they accepted is not
- * the thing they got. The inbox made a promise about a name, so that name wins;
- * anywhere else there was no promise to keep.
+ * the thing they got. The inbox makes a promise about a name, so that name wins;
+ * anywhere else there was no promise to keep (Guard: importName.test.ts).
  *
  * `sentBy` is exactly the "arrived through Send a copy" signal and the only
  * import path with a notification to match. (The GeoPDF path already names from
- * the file — `geopdf/importPipeline.ts` — so it has always agreed.)
+ * the file — `geopdf/importPipeline.ts` — so it agrees.)
  */
 export function importDisplayName(args: {
   /** The name inside the file, if it has one. */

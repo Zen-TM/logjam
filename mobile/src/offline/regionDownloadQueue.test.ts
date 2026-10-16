@@ -72,8 +72,8 @@ beforeEach(async () => {
 });
 
 describe("a download waiting for a connection", () => {
-  // The wait was timed from when the job paused, so minutes spent waiting with
-  // Logjam GPS in front came off what it was allowed behind another app.
+  // If the wait were timed from when the job paused, minutes spent waiting with
+  // Logjam GPS in front would come off what it was allowed behind another app.
   // Mutation: leave the wait timer running across an app state change.
   it("gets the whole wait behind another app, however long it waited in front", async () => {
     enqueueRegionDownloads([job("job-1")]);
@@ -90,7 +90,7 @@ describe("a download waiting for a connection", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(service.stop).not.toHaveBeenCalled();
 
-    // And the wait is still bounded (ADR 0013).
+    // And the wait is still bounded ([0013](../../../docs/decisions/0013-background-work-battery-rules.md)).
     await vi.advanceTimersByTimeAsync(BACKGROUND_WAIT_MS);
     expect(service.stop).toHaveBeenCalled();
   });

@@ -5,9 +5,9 @@
 //
 // - GEOPDF auto-download: tens of megabytes per file, Wi-Fi by default.
 // - TOPO overlay auto-download: same order or larger, Wi-Fi by default.
-// - SYNC: a few kilobytes of JSON, ALLOWED on mobile data by default — that is
-//   the behaviour the app has always had, and a queued trip log that waits for
-//   Wi-Fi is a trip log that is only on one phone when it matters.
+// - SYNC: a few kilobytes of JSON, ALLOWED on mobile data by default — a queued
+//   trip log that waits for Wi-Fi is a trip log that is only on one phone when
+//   it matters.
 //
 // The check is `isConnectionExpensive`, the platform's own answer, not
 // `type === "cellular"`: a metered hotspot is Wi-Fi by type and mobile data by
@@ -31,9 +31,8 @@ const KEYS: Record<MeteredJob, string> = {
   geoPdfDownload: "meteredGeoPdfDownload",
   topoDownload: "meteredTopoDownload",
   sync: "meteredSync",
-  // MOT-006: media PUTs ride this op, not `sync` — up to 30 MB an image, 500
-  // MB a video, nothing like the "a few kilobytes of JSON" `sync` was sized
-  // for.
+  // Media PUTs ride this op, not `sync` — up to 30 MB an image, 500 MB a video,
+  // nothing like the "a few kilobytes of JSON" `sync` was sized for.
   mediaUpload: "meteredMediaUpload",
 };
 
@@ -70,9 +69,9 @@ export type ConnectionState = {
  *
  * `true` = costs money, `false` = definitely free, `null` = no answer (the
  * property is absent, or there are no details at all because there is no
- * connection). MAPP-002 needs the third: only a definite `false` may hard-block
- * a too-old build, because the user standing in a place on a hotspot has to
- * keep their maps and their in-progress track. Every OTHER caller here wants
+ * connection). The upgrade gate needs the third: only a definite `false` may
+ * hard-block a too-old build, because the user standing in a place on a hotspot
+ * has to keep their maps and their in-progress track. Every OTHER caller here wants
  * the collapse below, so both live in this file rather than one being derived
  * at each call site.
  */
@@ -92,14 +91,11 @@ export function isExpensive(state: ConnectionState): boolean {
 }
 
 /**
- * THE RULE, as a pure function of the state — the one every metered job asks.
+ * The rule, as a pure function of the state — the one every metered job asks.
  *
- * It is a function rather than four copies of the same `if` because it was four
- * copies of the same `if` and one of them said something else: the region
- * downloader — the single largest data cost in the app — gated on
- * `type === "wifi"`, so a metered hotspot (Wi-Fi by type, mobile data by cost)
- * downloaded tens of megabytes at full pace with the "Use mobile data" toggle
- * never even shown.
+ * Gating purely on `type === "wifi"` would allow a metered hotspot (Wi-Fi by
+ * type, mobile data by cost) to download tens of megabytes at full pace with
+ * the "Use mobile data" toggle never shown.
  */
 export function connectionAllowsMetered(
   state: ConnectionState,
@@ -140,10 +136,11 @@ export function connectionWorthResuming(
  * `refresh()`, not `fetch()`: `fetch()` answers from the last state NetInfo was
  * sent, and Android sends none when it lifts the network block it puts on an
  * app behind another app. The state sent under that block calls Wi-Fi metered,
- * so a Wi-Fi-only job back in front read "mobile data" on Wi-Fi until the next
- * real change. `refresh()` is one local call to the platform: it sends nothing
- * over the radio and arms nothing, so it is no background wakeup
- * (docs/decisions/0013). Guard: `networkPolicy.test.ts` ("canRunNow").
+ * so a Wi-Fi-only job back in front would read "mobile data" on Wi-Fi until the
+ * next real change. `refresh()` is one local call to the platform: it sends
+ * nothing over the radio and arms nothing, so it is no background wakeup
+ * ([0013](../../../docs/decisions/0013-background-work-battery-rules.md)).
+ * Guard: `networkPolicy.test.ts` ("canRunNow").
  */
 export async function canRunNow(job: MeteredJob): Promise<boolean> {
   try {
@@ -161,7 +158,7 @@ export async function canRunNow(job: MeteredJob): Promise<boolean> {
  * Connection changes, for a caller that must RE-DECIDE rather than re-ask.
  *
  * Here, not in the caller, for the same reason as everything else in this file:
- * NetInfo is imported in one place. MAPP-002's upgrade gate subscribes because
+ * NetInfo is imported in one place. The upgrade gate subscribes because
  * a user warned on mobile data has to escalate to the hard block the moment
  * they reach an unmetered connection, and the server's min-version answer has
  * not changed — only the connection has, so re-fetching would be the wrong
