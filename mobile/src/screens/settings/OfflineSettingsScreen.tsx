@@ -29,7 +29,7 @@
 // treatment the notifications page states once, because unlike its neighbours
 // it cannot be changed offline.
 //
-// PRIVACY: six booleans. No place names, no regions named.
+// PRIVACY: seven booleans. No place names, no regions named.
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -90,6 +90,12 @@ const METERED_ROWS: {
     subtitle: "Tens of megabytes each.",
     needs: "topo",
   },
+  // No `needs`: there is no switch for it, only the file in Settings → Map.
+  {
+    job: "placeNames",
+    title: "Place names for search",
+    subtitle: "About 5 MB a month.",
+  },
   {
     job: "sync",
     title: "Syncing trips and places",
@@ -132,6 +138,7 @@ export function OfflineSettingsScreen({
   const [metered, setMetered] = useState<Record<MeteredJob, boolean>>(() => ({
     geoPdfDownload: isMeteredAllowed("geoPdfDownload"),
     topoDownload: isMeteredAllowed("topoDownload"),
+    placeNames: isMeteredAllowed("placeNames"),
     sync: isMeteredAllowed("sync"),
     mediaUpload: isMeteredAllowed("mediaUpload"),
   }));

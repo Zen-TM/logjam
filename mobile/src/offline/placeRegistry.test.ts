@@ -1,0 +1,298 @@
+import { gzipSync, strToU8 } from "fflate";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// When the place registry is fetched, on what connection, and that a bad
+// download never replaces a good file (ADR 0034). The filesystem, the CDN and
+// NetInfo are fakes; the decisions and the swap are the real module.
+
+const DIR = "file:///docs/place-registry/";
+const CDN = "https://cdn.test";
+const POINTER_URL = `${CDN}/master/places/v1/latest.json`;
+
+const files = new Map<string, Uint8Array | string>();
+/** What the CDN serves, by URL. */
+const served = new Map<string, unknown>();
+const prefs = new Map<string, string>();
+const network = { expensive: false, connected: true };
+const offlineOnly = { on: false };
+
+const download = vi.hoisted(() => vi.fn());
+vi.mock("../api/presignedTransfer", () => ({
+  downloadFromPresignedUrl: download,
+}));
+vi.mock("expo-file-system/legacy", () => ({
+  makeDirectoryAsync: async () => {},
+  deleteAsync: async (uri: string) => {
+    for (const key of [...files.keys()]) {
+      if (key === uri || (uri.endsWith("/") && key.startsWith(uri))) {
+        files.delete(key);
+      }
+    }
+  },
+  moveAsync: async ({ from, to }: { from: string; to: string }) => {
+    files.set(to, files.get(from) as Uint8Array);
+    files.delete(from);
+  },
+  writeAsStringAsync: async (uri: string, text: string) => {
+    files.set(uri, text);
+  },
+  readDirectoryAsync: async (dir: string) =>
+    [...files.keys()]
+      .filter((key) => key.startsWith(dir))
+      .map((key) => key.slice(dir.length)),
+}));
+vi.mock("expo-file-system", () => ({
+  File: class {
+    constructor(private uri: string) {}
+    get exists() {
+      return files.has(this.uri);
+    }
+    textSync() {
+      return files.get(this.uri) as string;
+    }
+    async bytes() {
+      const body = files.get(this.uri);
+      if (!(body instanceof Uint8Array)) throw new Error("no such file");
+      return body;
+    }
+  },
+}));
+vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  InteractionManager: { runAfterInteractions: (run: () => void) => run() },
+}));
+vi.mock("@react-native-community/netinfo", () => ({
+  default: {
+    refresh: async () => ({
+      isConnected: network.connected,
+      details: { isConnectionExpensive: network.expensive },
+    }),
+  },
+}));
+vi.mock("../prefsDb", () => ({
+  readPref: (key: string) => prefs.get(key) ?? null,
+  writePref: (key: string, value: string) => {
+    prefs.set(key, value);
+    return true;
+  },
+}));
+vi.mock("./localStores", () => ({ PLACE_REGISTRY_DIR: DIR }));
+vi.mock("./offlineOnlyMode", () => ({ isOfflineOnly: () => offlineOnly.on }));
+vi.mock("../config", () => ({ config: { topoCdnBaseUrl: CDN } }));
+vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
+
+const fetchMock = vi.fn(async (url: string) => {
+  const body = served.get(url);
+  return { ok: body !== undefined, json: async () => body };
+});
+vi.stubGlobal("fetch", fetchMock);
+
+function build(version: string, names = ["Mount Solitary"]) {
+  const path = `places-${version}.json.gz`;
+  const data = gzipSync(
+    strToU8(
+      JSON.stringify({
+        format: 1,
+        version,
+        attribution: "© OpenStreetMap contributors",
+        licence: "ODbL-1.0",
+        coordScale: 1e5,
+        kinds: ["natural=peak"],
+        names,
+        kind: names.map(() => 0),
+        lon: names.map(() => 15_030_000),
+        lat: names.map(() => -3_370_000),
+        near: names.map(() => -1),
+        alternates: [],
+      }),
+    ),
+  );
+  return { pointer: { format: 1, version, path, bytes: data.length }, data };
+}
+
+/** Put a build on the CDN as the current one. */
+function publish(
+  built: ReturnType<typeof build>,
+  data: Uint8Array = built.data,
+) {
+  served.set(POINTER_URL, built.pointer);
+  served.set(`${CDN}/master/places/v1/${built.pointer.path}`, data);
+}
+
+/** Put a build on the phone, as an earlier session left it. */
+function holdOnPhone(built: ReturnType<typeof build>) {
+  files.set(`${DIR}pointer.json`, JSON.stringify(built.pointer));
+  files.set(`${DIR}${built.pointer.path}`, built.data);
+}
+
+function half(data: Uint8Array): Uint8Array {
+  return data.slice(0, Math.floor(data.length / 2));
+}
+
+type Registry = typeof import("./placeRegistry");
+async function load(): Promise<Registry> {
+  vi.resetModules();
+  return import("./placeRegistry");
+}
+
+beforeEach(() => {
+  files.clear();
+  served.clear();
+  prefs.clear();
+  network.expensive = false;
+  network.connected = true;
+  offlineOnly.on = false;
+  fetchMock.mockClear();
+  download.mockReset().mockImplementation(async (url: string, to: string) => {
+    const body = served.get(url);
+    if (!(body instanceof Uint8Array)) return { status: 404 };
+    files.set(to, body);
+    return { status: 200 };
+  });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("the first download", () => {
+  it("comes with the first region download, from the CDN with nothing else sent", async () => {
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.placeRegistryWithRegion(false);
+    await registry.fetchPlaceRegistry({});
+    expect(registry.hasPlaceRegistry()).toBe(true);
+    // Mutation: add headers (a token, an account id) to the pointer request.
+    expect(fetchMock.mock.calls[0]).toEqual([
+      POINTER_URL,
+      { signal: expect.any(AbortSignal) },
+    ]);
+  });
+
+  it("goes on mobile data when the user allowed it for the maps", async () => {
+    network.expensive = true;
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.placeRegistryWithRegion(true);
+    await registry.fetchPlaceRegistry({ allowMetered: true });
+    expect(registry.hasPlaceRegistry()).toBe(true);
+  });
+
+  it("is not fetched again by a region download after the user removed it", async () => {
+    publish(build("2026-10-15"));
+    const registry = await load();
+    await registry.requestPlaceRegistry();
+    await registry.removePlaceRegistry();
+    registry.placeRegistryWithRegion(false);
+    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect([...files.keys()]).toEqual([]);
+  });
+});
+
+describe("the refresh", () => {
+  it("fetches nothing for a phone that never asked for the file", async () => {
+    publish(build("2026-10-15"));
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the `canRunNow("placeNames")` check from the refresh.
+  it("waits for Wi-Fi by default", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    network.expensive = true;
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    network.expensive = false;
+    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect(files.has(`${DIR}places-2026-10-15.json.gz`)).toBe(true);
+    expect(files.has(`${DIR}places-2026-09-15.json.gz`)).toBe(false);
+  });
+
+  it("takes mobile data once the user allows it", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    prefs.set("meteredPlaceNames", "on");
+    publish(build("2026-10-15"));
+    network.expensive = true;
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+  });
+
+  it("does nothing in offline-only mode", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    offlineOnly.on = true;
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("downloads nothing when the phone has the current build", async () => {
+    const current = build("2026-10-15");
+    holdOnPhone(current);
+    prefs.set("placeRegistryWanted", "on");
+    publish(current);
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("current");
+    expect(download).not.toHaveBeenCalled();
+  });
+});
+
+describe("a bad download never replaces a good file", () => {
+  // Mutation: move the download into place before `readIndex` checks it.
+  it.each([
+    ["is not gzip", strToU8("<html>503</html>")],
+    ["is cut short", half(build("2026-10-15").data)],
+    ["is another build than its pointer says", build("2026-11-15").data],
+  ])("keeps the old build when the new one %s", async (_case, data) => {
+    const good = build("2026-09-15", ["Mount Solitary", "Narrow Neck"]);
+    holdOnPhone(good);
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"), data);
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect([...files.keys()].sort()).toEqual(
+      [`${DIR}places-2026-09-15.json.gz`, `${DIR}pointer.json`].sort(),
+    );
+    const index = await registry.loadPlaceIndex();
+    expect(index?.names).toEqual(["Mount Solitary", "Narrow Neck"]);
+  });
+
+  it("keeps the old build when the pointer is not one this build reads", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    served.set(POINTER_URL, {
+      format: 2,
+      version: "x",
+      path: "../x",
+      bytes: 1,
+    });
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(registry.hasPlaceRegistry()).toBe(true);
+  });
+});
+
+describe("the index in memory", () => {
+  it("is swapped for the new build only when one was loaded", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15", ["Wollangambe"]));
+    const registry = await load();
+    expect(registry.placeIndex()).toBeNull();
+    await registry.loadPlaceIndex();
+    await registry.refreshPlaceRegistry();
+    expect(registry.placeIndex()?.names).toEqual(["Wollangambe"]);
+  });
+
+  it("is not built by a refresh nobody searched after", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    const registry = await load();
+    await registry.refreshPlaceRegistry();
+    expect(registry.placeIndex()).toBeNull();
+  });
+});
