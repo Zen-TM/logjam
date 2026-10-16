@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Plan §7.10 — run the places-rework migrations against a populated database and
+# Run the places-rework migrations against a populated database and
 # assert what came out the other side.
 #
 # WHY THIS IS A SCRIPT AND NOT A VITEST: it needs a real Postgres, it creates
@@ -145,8 +145,8 @@ check "grade column lifted" "3" \
 check "null grade omitted, not stored as null" "f" \
   "$(query "select (field_values ? 'v_grade') from places where name='Empress Falls'")"
 
-# Stored merge policies are keyed by MERGEABLE_FIELD, which was column names and
-# is now field keys. Unmigrated, they do not error — every field silently falls
+# Stored merge policies are keyed by MERGEABLE_FIELD (field keys rather than
+# legacy column names). Unmigrated, they do not error — every field silently falls
 # back to the default policy.
 check "merge policy keys rewritten" "useIncoming" \
   "$(query "select ui_preferences->'importMergePolicy'->>'v_grade' from users where username='alice'")"
@@ -182,8 +182,8 @@ INSERT INTO waypoints (id, owner_id, name, latitude, longitude, elevation, symbo
 VALUES
   ('60000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','Grand Canyon carpark',-33.65,150.31,1010,'parking','at the gate','{carpark,access}',now(),now()),
   ('60000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','Claustral anchor',-33.56,150.40,880,'anchor',NULL,'{abseil}',now(),now()),
-  -- bob's, and directly shared with alice: the `shares` row below is what §4
-  -- step 11 converts.
+  -- bob's, and directly shared with alice: the `shares` row below is converted
+  -- to a place share.
   ('60000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','Coin Slot pothole',-33.12,150.32,720,'hazard',NULL,'{hazard}',now(),now());
 
 INSERT INTO place_waypoints (place_id, waypoint_id)
@@ -259,14 +259,14 @@ case "$(printf '%s' "$DUPLINK" | head -1)" in
   *) echo "  FAIL  a duplicate link was ACCEPTED: $DUPLINK"; fail=$((fail + 1)) ;;
 esac
 
-# §4 step 11: a directly-shared waypoint keeps its recipient, through the table
+# A directly-shared waypoint keeps its recipient, through the table
 # a place is shared in.
 check "waypoint share converted to a place share" "1" \
   "$(query "select count(*) from place_shares where place_id='60000000-0000-4000-8000-000000000003' and shared_with_id='00000000-0000-4000-8000-000000000001'")"
 check "no orphan waypoint share left behind" "0" \
   "$(query "select count(*) from shares where entity_type='waypoint'")"
 
-# §4 step 12: the notification follows the share into the place path, and one
+# The notification follows the share into the place path, and one
 # that can no longer point anywhere is removed rather than left at rest.
 check "notification became a place_shared" "place_shared" \
   "$(query "select type from notifications where id='90000000-0000-4000-8000-000000000001'")"
@@ -279,7 +279,7 @@ check "a notification with nowhere to point is deleted" "0" \
 check "no notification still names a waypoint" "0" \
   "$(query "select count(*) from notifications where payload->>'entityType' = 'waypoint'")"
 
-# The vocabulary changed under every client, so the tombstone log cannot be
+# The vocabulary changes under every client, so the tombstone log cannot be
 # resumed across it.
 check "tombstone log cleared" "0" "$(query 'select count(*) from sync_tombstones')"
 

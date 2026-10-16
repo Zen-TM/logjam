@@ -113,7 +113,7 @@ jobs:
               LIVE=${IMAGE##*:} ;;
             *) LIVE="" ;;
           esac
-          # A lookup that failed, index.html from before release-sha existed,
+          # A lookup that failed, index.html missing release-sha metadata,
           # or a task def Terraform reset to :latest all land here.
           if ! [[ "$LIVE" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::warning::could not tell which release of $TARGET is live (got '$LIVE'). Deploying, but a failed smoke test cannot roll back automatically."

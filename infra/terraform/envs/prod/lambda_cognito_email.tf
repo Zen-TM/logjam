@@ -1,12 +1,11 @@
 # Cognito CustomEmailSender Lambda — sends verification codes via Resend so they
-# land in the inbox (the COGNITO_DEFAULT sender mailed from an unaligned AWS
-# domain and Gmail spam-binned every code; SES is unavailable — see cognito.tf).
+# land in the inbox (the COGNITO_DEFAULT sender uses an unaligned AWS domain
+# that triggers spam filters; SES is unavailable — see cognito.tf).
 #
-# First Lambda and first KMS key in this root. The function source lives in
-# infra/lambda/cognito-email-sender. terraform-plan.yml and terraform-apply.yml
-# build it the same way, and the plan fingerprint includes source_code_hash, so
-# the apply refuses a build that differs from the one the PR planned. For a
-# local plan, build it first:
+# The function source lives in infra/lambda/cognito-email-sender.
+# terraform-plan.yml and terraform-apply.yml build it the same way, and the
+# plan fingerprint includes source_code_hash, so the apply refuses a build that
+# differs from the one the PR planned. For a local plan, build it first:
 #   cd infra/lambda/cognito-email-sender && npm ci && npm run build
 # archive_file zips the prebuilt dist/ — a stale/missing build will surface as a
 # plan diff on source_code_hash.
@@ -20,8 +19,8 @@ data "archive_file" "cognito_email_sender" {
   source_dir  = "${local.cognito_email_lambda_src}/dist"
   output_path = "${path.module}/.build/cognito-email-sender.zip"
   # Normalize file modes in the zip: source_code_hash must not depend on the
-  # building machine's umask (local 664 vs CI-runner 644 produced different
-  # hashes for byte-identical bundles → phantom lambda diff in plan-on-PR).
+  # building machine's umask (preventing different umasks from producing
+  # different hashes for byte-identical bundles and phantom lambda diffs).
   output_file_mode = "0644"
 }
 
