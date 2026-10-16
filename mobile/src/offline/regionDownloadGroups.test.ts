@@ -24,7 +24,7 @@ function job(
       basemapId,
       label: "SIX Maps Topo",
       groupId,
-      groupLabel: "Blue Gum Forest",
+      groupLabel: "Test region",
       bbox: { west: 150, south: -34, east: 151, north: -33 },
       zMax: 15,
       allowCellular: false,
@@ -127,7 +127,7 @@ describe("the DEM that rides along with every run", () => {
     ]);
     expect(group.demUnfinished).toBe(true);
     expect(regionGroupToastText(group)).toBe(
-      "Blue Gum Forest saved · 1 map · no elevation data",
+      "Test region saved · 1 map · no elevation data",
     );
   });
 });
@@ -140,18 +140,18 @@ describe("regionGroupToastText", () => {
   ])[0];
 
   it("names the area and the tally", () => {
-    expect(regionGroupToastText(base)).toBe("Blue Gum Forest saved · 3 maps");
+    expect(regionGroupToastText(base)).toBe("Test region saved · 3 maps");
   });
 
   it("says how many didn't finish", () => {
     expect(regionGroupToastText({ ...base, ready: 2, unfinished: 1 })).toBe(
-      "Blue Gum Forest saved · 2 maps · 1 map didn't finish",
+      "Test region saved · 2 maps · 1 map didn't finish",
     );
   });
 
   it("does not claim a save when nothing landed", () => {
     expect(regionGroupToastText({ ...base, ready: 0, unfinished: 3 })).toBe(
-      "Blue Gum Forest · nothing saved · 3 maps didn't finish",
+      "Test region · nothing saved · 3 maps didn't finish",
     );
   });
 });
@@ -206,7 +206,7 @@ describe("downloadNotice", () => {
     expect(downloadNotice([], 3)).toBeNull();
     expect(
       downloadNotice([job("a", "run-1", { kind: "downloading" })], 3)?.text,
-    ).not.toContain("Blue Gum Forest");
+    ).not.toContain("Test region");
   });
 });
 

@@ -655,8 +655,8 @@ function numberText(value: number | null | undefined): string {
 
 /**
  * A picked coordinate at 6 decimal places — about 10 cm, which is finer than any
- * map press or GPS fix, and readable. Stored values are never re-rounded on the
- * way through the edit form: only a NEW point gets this.
+ * map press or GPS fix, and readable. Only a NEW point gets this: an existing
+ * place's stored value seeds the form through `numberText`, unrounded.
  */
 const SEED_COORD_DECIMALS = 6;
 function seedCoord(value: number | null | undefined): string {

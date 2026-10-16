@@ -13,7 +13,8 @@
 //     like a pan and the sustained rate is ~3 tiles/s
 //   - default platform User-Agent, no referer spoofing, no browser impersonation
 //   - NO app-identifying headers: never `x-logjam-client`, never an auth token.
-//     A provider request must be a plain HTTP client, in both senses.
+//     A provider request must be a plain HTTP client, in both senses
+//     (regionTileDownload.test.ts).
 //   - a 403 or 429 stops the whole job immediately rather than retrying into it
 //
 // The ToS gate (DESIGN.md) was cleared by the operator for the three NSW SIX rasters,

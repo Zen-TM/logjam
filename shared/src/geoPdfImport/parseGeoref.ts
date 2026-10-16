@@ -6,13 +6,14 @@
 // streams, object streams and Flate predictors handled by its parser layer).
 //
 // NOT exported from the shared barrel (shared/src/index.ts): pdf-lib must not
-// ride into the web frontend bundle. Consumers import the subpath
-// (shared/dist/geoPdfImport/…).
+// ride into the web frontend bundle (src/index.test.ts). Consumers import the
+// subpath (shared/dist/geoPdfImport/…).
 //
 // Fail-loud policy: every anomaly is either a named quirk (parse proceeds,
 // quirk recorded on the viewport) or a typed GeoPdfParseError. No silent
-// nulls. Error `detail` may contain file-derived strings — it is shown in-app
-// only and must never be logged or sent anywhere (privacy rule).
+// nulls. Error `detail` may contain file-derived strings, so it is kept out of
+// the error's message, which is what a log or crash report prints
+// (parseGeoref.test.ts).
 import {
   PDFArray,
   PDFDict,
@@ -89,7 +90,7 @@ export class GeoPdfParseError extends Error {
   detail?: string;
 
   constructor(code: GeoPdfParseErrorCode, detail?: string) {
-    super(detail ? `${code}: ${detail}` : code);
+    super(code);
     this.name = "GeoPdfParseError";
     this.code = code;
     this.detail = detail;

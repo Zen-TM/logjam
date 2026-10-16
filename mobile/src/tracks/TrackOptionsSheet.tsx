@@ -100,12 +100,10 @@ export function TrackOptionsSheet({
   const online = useConnectivity() === "online";
   const [busy, setBusy] = useState(false);
 
-  // A closed sheet forgets its sub-mode: reopening on the next track must not
-  // land in a rename form carrying the last one's name.
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list,
-  // making the options list unreachable.
+  // set would make the NEXT open land inside it (a rename form carrying the
+  // last track's name) instead of on the verb list.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);

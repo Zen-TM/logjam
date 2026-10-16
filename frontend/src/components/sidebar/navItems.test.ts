@@ -9,6 +9,7 @@ import {
   type NavItem,
   type NavItemId,
 } from "./navItems";
+import { PANEL_TITLES, type PanelId } from "./panels";
 
 const { ALL_ITEMS, PAGE_ITEMS, PERSONAL_ITEMS } = NAV_ITEMS_FOR_TEST;
 
@@ -58,6 +59,26 @@ describe("partitionNavItems", () => {
 
   it("puts the badged item first in More", () => {
     expect(partitionNavItems(true).moreItems[0].id).toBe("inbox");
+  });
+});
+
+// `NavItemId` is a hand-kept `Exclude` of `PanelId`. Mutation: add a panel to
+// `PanelId` and `PANEL_TITLES` without giving it a rail entry, a More entry, or
+// a place in `NavItemId`'s exclusion list.
+describe("every panel is either a nav item or programmatic", () => {
+  const PROGRAMMATIC: PanelId[] = [
+    "place-detail",
+    "trip-detail",
+    "way-detail",
+    "way-draw",
+    "measure",
+  ];
+
+  it("accounts for exactly the panels PanelId declares", () => {
+    const navIds: PanelId[] = ids(ALL_ITEMS);
+    expect([...navIds, ...PROGRAMMATIC].sort()).toEqual(
+      (Object.keys(PANEL_TITLES) as PanelId[]).sort(),
+    );
   });
 });
 

@@ -383,7 +383,10 @@ export async function generateGeoPdf(
   // the overlay path is swallowed as "this job has no such layer" (the
   // deliberate 404-tolerance below), so a wrong bucket renders every GeoPDF
   // with its overlays silently missing and nothing in the logs. env.ts makes
-  // S3_BUCKET_TOPO prod-required, so this can only bite local dev.
+  // S3_BUCKET_TOPO prod-required, so this can only bite local dev. A bare Error
+  // is right here and an AppError would be wrong: this runs in the worker,
+  // where geoPdfWorker.ts catches it and marks the job failed with its own
+  // generic sentence — no request errorHandler ever sees it.
   const topoBucket = getEnv().S3_BUCKET_TOPO ?? "";
   if (config.overlays.length > 0 && !topoBucket) {
     throw new Error("S3_BUCKET_TOPO is not set — cannot render overlay layers");

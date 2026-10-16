@@ -1,8 +1,8 @@
 -- Least-privilege application database role.
 --
 -- Run ONCE as the master user (logjam_admin) against the prod database, during
--- the operator-gated cutover. See docs/operator-trust-runbook.md for the full
--- sequence and how to obtain :app_password.
+-- the operator-gated cutover. :app_password is the `password` field of the
+-- app_db secret in infra/terraform/envs/prod/db_app_role.tf.
 --
 -- Usage (psql variable substitution keeps the password off the command line /
 -- shell history — supply it via a prompt or an env var, never inline):

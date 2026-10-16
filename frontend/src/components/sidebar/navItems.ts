@@ -1,9 +1,16 @@
 import type { PanelId } from "./panels";
 import { type Glyph } from "../../ui";
 
-/** Panels reachable from the nav. `place-detail` and `route-detail` are opened
- *  programmatically (from the map / a list), never from a nav item. */
-export type NavItemId = Exclude<PanelId, "place-detail" | "route-detail">;
+/**
+ * Panels reachable from the nav. The rest of `PanelId` is opened
+ * programmatically — a pin, a row, a line on the map — and is never a nav item.
+ * `navItems.test.ts` keeps this list equal to the panels the rail does not
+ * carry.
+ */
+export type NavItemId = Exclude<
+  PanelId,
+  "place-detail" | "trip-detail" | "way-detail" | "way-draw" | "measure"
+>;
 
 export type NavItem = {
   id: NavItemId;

@@ -32,11 +32,11 @@ router.post(
     const { sharedWithUserId } = req.body;
     if (!sharedWithUserId) throw malformed("sharedWithUserId is required");
 
-    // Friendship FIRST, target-user lookup second. Probing arbitrary internal
-    // user IDs could answer 404 for an unknown ID and 403 for an existing
-    // non-friend — a user-row existence oracle. An accepted friendship
-    // implies the row exists, so checking it first collapses both cases onto
-    // the same 403.
+    // Friendship first, target-user lookup second: looking the user up first
+    // would answer 404 for an unknown id and 403 for a non-friend, an oracle
+    // for which user ids exist. An accepted friendship implies the row
+    // exists, so this order gives both the same 403 (sharing.test.ts,
+    // "unknown user id").
     const friendship = await prisma.friendship.findFirst({
       where: {
         status: "accepted",

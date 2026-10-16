@@ -368,5 +368,89 @@ class TestSvtmFormationSync(unittest.TestCase):
         self.assertEqual(len(self.ts), len(set(self.ts)))
 
 
+# ---------------------------------------------------------------------------
+# pipeline.py's three hand-synced mirrors, each carrying a "must match" or
+# "keep in lockstep" comment and nothing enforcing it.
+#   pipeline.py COMPOSITE_LAYER_ORDER       ↔ topoSettings.ts TOPO_LAYERS (order)
+#   pipeline.py CONTOUR_WIDTH_UNITS_PER_PX  ↔ topoSettings.ts CONTOUR_WIDTH_UNITS_PER_PX
+#   pipeline.py SVTM_FORMATION_MU           ↔ build_svtm_formation.py SVTM_FORMATION_MU
+# ---------------------------------------------------------------------------
+
+
+def _py_list(path, anchor):
+    """literal_eval the Python list literal assigned at `anchor` in `path`."""
+    return ast.literal_eval(_balanced_block(_read(path), anchor, "[", "]"))
+
+
+def _py_int(path, name):
+    """The integer right-hand side of `name = <int>` in `path`."""
+    match = re.search(rf"^{name}\s*=\s*(\d+)\s*$", _read(path), re.MULTILINE)
+    if not match:
+        raise AssertionError(
+            f"Could not locate {name} = <int> in {path} — "
+            "update test_layer_sync.py to match the current declaration."
+        )
+    return int(match.group(1))
+
+
+def _ts_number(name):
+    """The integer right-hand side of `export const name = <int>`."""
+    match = re.search(
+        r"export const " + name + r"\s*=\s*(\d+)",
+        _read(_TOPO_SETTINGS),
+    )
+    if not match:
+        raise AssertionError(
+            f"Could not locate export const {name} in topoSettings.ts — "
+            "update test_layer_sync.py to match the current declaration."
+        )
+    return int(match.group(1))
+
+
+class TestPipelineMirrorSync(unittest.TestCase):
+    """pipeline.py's mirrors of the TS settings and of the SVTM builder."""
+
+    def test_composite_layer_order_matches_the_ts_list(self):
+        # An ORDER, not a set: tile_compose.py stacks these bottom→top for the
+        # bake, so a reordering changes which layer wins where they overlap.
+        self.assertEqual(
+            _py_list(_PIPELINE, "COMPOSITE_LAYER_ORDER ="),
+            list(_parse_ts_layers()),
+            "pipeline.py COMPOSITE_LAYER_ORDER drifted from TOPO_LAYERS "
+            "(shared/src/topoSettings.ts) — names or their order.",
+        )
+
+    def test_contour_width_units_match_the_ts_constant(self):
+        # The divisor that makes a baked contour the same thickness as the one
+        # the user tunes on the live map.
+        self.assertEqual(
+            _py_int(_PIPELINE, "CONTOUR_WIDTH_UNITS_PER_PX"),
+            _ts_number("CONTOUR_WIDTH_UNITS_PER_PX"),
+            "pipeline.py CONTOUR_WIDTH_UNITS_PER_PX drifted from "
+            "topoSettings.ts CONTOUR_WIDTH_UNITS_PER_PX.",
+        )
+
+    def test_svtm_formation_mu_matches_the_builder(self):
+        # Same names, same μ: pipeline.py weights vegetation with its own copy
+        # while the builder writes the raster, so a μ edited in one place only
+        # would weight the same forest two ways on two runs.
+        self.assertEqual(
+            _parse_py_dict(_PIPELINE, "SVTM_FORMATION_MU: Dict[str, float] ="),
+            _parse_py_dict(_SVTM_BUILDER, "SVTM_FORMATION_MU: Dict[str, float] ="),
+            "pipeline.py SVTM_FORMATION_MU drifted from "
+            "build_svtm_formation.py SVTM_FORMATION_MU.",
+        )
+
+    def test_svtm_not_classified_comes_first_here(self):
+        # pipeline.py indexes its copy POSITIONALLY into a 256-entry lookup
+        # (_build_svtm_mu_lookup), so its order is load-bearing: raster
+        # value 0 is "Not classified". The builder's copy is a name→μ map and
+        # re-pins index 0 itself, which is why only this one is asserted.
+        # Mutation: sort the dict, or move "Not classified" down.
+        entries = _parse_py_dict(_PIPELINE, "SVTM_FORMATION_MU: Dict[str, float] =")
+        self.assertEqual(next(iter(entries)), "Not classified")
+        self.assertEqual(entries["Not classified"], 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

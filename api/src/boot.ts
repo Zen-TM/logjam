@@ -17,7 +17,9 @@
 // migrations MUST stay backward-compatible with the currently-running image for
 // the swap window (expand/contract — see api/AGENTS.md and ADR 0003).
 //
-// Fails loud (exit 1) on any error. Never logs secret values.
+// Fails loud (exit 1) on any error. Never logs secret values. Writes with
+// console.error, not logger: logger runs getEnv() as it loads, which would
+// exit on the very credentials this file has yet to resolve.
 
 import { resolveDbCredentials } from "./lib/resolveDbCredentials";
 import { resolveOriginVerifySecret } from "./lib/resolveOriginVerifySecret";

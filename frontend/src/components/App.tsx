@@ -1771,6 +1771,10 @@ function App() {
             setInitialTopoTemplateId(templateId);
             setShowTopo(true);
           }}
+          // The Maps views fetch their own lists (GeoPDF jobs and templates,
+          // topo templates) — the same gate as every hook above, so a pending
+          // or stale consent holds them too.
+          loadsUserData={loadsUserData}
           friends={friends}
           friendRequests={friendRequests}
           onRefetchFriends={refetchFriends}

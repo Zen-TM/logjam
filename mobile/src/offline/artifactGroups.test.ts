@@ -65,7 +65,7 @@ describe("groupArtifacts", () => {
         artifact({
           id: "1",
           groupId: "run-1",
-          groupLabel: "Blue Gum",
+          groupLabel: "Test region",
           sizeBytes: 10,
           bbox: [150, -34, 151, -33],
         }),
@@ -73,7 +73,7 @@ describe("groupArtifacts", () => {
         artifact({
           id: "3",
           groupId: "run-1",
-          groupLabel: "Blue Gum",
+          groupLabel: "Test region",
           sizeBytes: 7,
           bbox: [149, -34, 150, -33],
         }),
@@ -84,7 +84,7 @@ describe("groupArtifacts", () => {
     expect(groups[0].sizeBytes).toBe(17);
     expect(groups[0].members).toHaveLength(2);
     expect(groups[0].bbox).toEqual([149, -34, 151, -33]);
-    expect(groups[0].label).toBe("Blue Gum");
+    expect(groups[0].label).toBe("Test region");
   });
 
   it("prefers the group name over a single row's rename, and falls back to it", () => {

@@ -26,6 +26,6 @@ export function configureAmplify(): void {
     },
   });
   // Tokens go to Keychain/Keystore via the chunked SecureStore adapter — never
-  // Amplify's default AsyncStorage (mobile/CLAUDE.md hard rule).
+  // Amplify's default AsyncStorage (amplifyConfig.test.ts).
   cognitoUserPoolsTokenProvider.setKeyValueStorage(secureKeyValueStorage);
 }

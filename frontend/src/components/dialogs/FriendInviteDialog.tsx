@@ -39,8 +39,8 @@ function FriendInviteDialog({
     if (!enabled) return;
     const token = pendingFriendInvite();
     if (!token) return;
-    // Cleared before the answer, not after: a link that fails must not ask
-    // again on every reload.
+    // Cleared before the answer, not after, so a link that fails is not asked
+    // about again on every reload.
     clearPendingFriendInvite();
     previewFriendInvite(token)
       .then(({ inviter, alreadyFriends }) => {

@@ -38,7 +38,9 @@ export type SendableExtension = (typeof SENDABLE_EXTENSIONS)[number];
  * unbounded string on a row every recipient reads.
  *
  * PRIVACY: this is the one user-supplied string on a send, and a place's name
- * is exactly the kind of thing that ends up in it. It must never be logged.
+ * is exactly the kind of thing that ends up in it. It must never be logged —
+ * including on the way out of this function, where `malformed`'s detail is
+ * logged (fileSendAccess.unit.test.ts).
  */
 export function sanitizeSendFilename(value: unknown): string {
   if (typeof value !== "string") {
@@ -119,11 +121,11 @@ export function fileSendExpiresAt(now: Date = new Date()): Date {
  * expired. Expiry is repeated here rather than left to the sweep because the
  * sweep is periodic — a row can outlive its usefulness by up to one interval.
  *
- * ONE DECLARATION, two readers. `GET /file-sends/inbox` uses it to build the
- * list, and `GET /notifications` uses it to decide which `file_sent`
- * notification still resolves — and, since those notifications now carry
- * Accept/Decline actions, the two must agree or the inbox offers a verb the
- * send endpoint answers with a 404.
+ * ONE READER: `GET /file-sends/inbox`. `GET /notifications` asks a deliberately
+ * WIDER question — it keeps expired sends, because a send that lapsed before
+ * the recipient saved it is the one expiry worth telling them about, and it
+ * labels that row `expired` rather than offering a verb the send endpoint would
+ * refuse (routes/notifications.ts).
  */
 export function inboxWhere(userId: string, now: Date) {
   return {

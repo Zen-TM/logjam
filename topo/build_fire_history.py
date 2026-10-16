@@ -8,8 +8,8 @@ recent calendar year in which that ground was known to have burned, or 0
 (nodata) if the ground has never burned or has no usable date on record.
 
 Input  : NPWS Fire History ESRI shapefile (.shp + sidecars), NOT committed —
-         the raw NPWS export lives outside the repo (see topo/CLAUDE.md fire-
-         history convention). Pass its path via --input.
+         the raw NPWS export is a licensed download that lives outside the
+         repo. Pass its path via --input.
 Outputs: topo/fire/fire_history_year.tif        (uint16, EPSG:3577, 25 m)
          topo/fire/fire_history_year_legend.json (provenance + year range)
 

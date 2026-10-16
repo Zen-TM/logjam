@@ -36,6 +36,7 @@ import {
   enforceCanyoningTag,
   isCustomFieldEntity,
   isUuidV4,
+  MAX_SCOPED_PLACE_TYPES,
   SYNC_DELTA_DEFAULT_LIMIT,
   SYNC_DELTA_MAX_LIMIT,
   SYNC_DELTA_ROUTE_LIMIT,
@@ -1550,6 +1551,12 @@ function parsePlaceTypeIds(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((id) => typeof id !== "string")) {
     throw malformed("placeTypeIds must be an array of ids");
+  }
+  // The same ceiling as the REST twin in routes/customFields.ts, because a
+  // definition must arrive the same way whichever door it comes through
+  // (src/__tests__/syncPush.test.ts).
+  if (value.length > MAX_SCOPED_PLACE_TYPES) {
+    throw malformed(`At most ${MAX_SCOPED_PLACE_TYPES} placeTypeIds`, 413);
   }
   return value as string[];
 }

@@ -347,8 +347,8 @@ function TripLogsPanel({
     return () => root.removeEventListener("keydown", onKeyDown);
   }, [selecting, selectableIds, clearSelection]);
 
-  // A narrower axis can hide a picked row, and a group verb must not reach
-  // rows the user can no longer see.
+  // A narrower axis can hide a picked row. `selected` already leaves it out;
+  // clearing here also stops it coming back picked when the axis widens.
   const changeType = (next: string) => {
     clearSelection();
     setTypeFilter(next);

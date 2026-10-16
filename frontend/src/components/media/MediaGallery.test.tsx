@@ -1,7 +1,25 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { MediaItem } from "@logjam/shared";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import MediaGallery from "./MediaGallery";
+
+const { deleteMedia } = vi.hoisted(() => ({ deleteMedia: vi.fn() }));
+vi.mock("../../placeUtils", () => ({ deleteMedia }));
+
+// jsdom has no modal <dialog>; the kit's Dialog calls both.
+HTMLDialogElement.prototype.showModal = function showModal() {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function close() {
+  this.removeAttribute("open");
+};
 
 afterEach(cleanup);
 
@@ -57,5 +75,36 @@ describe("a track in the gallery is a row", () => {
     );
     expect(screen.getByRole("link", { name: "descent.gpx" })).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+describe("deleting a file", () => {
+  // Mutation: close the confirm in `finally` rather than after the delete.
+  it("keeps the confirm open, with the reason inside, when the delete fails", async () => {
+    deleteMedia.mockRejectedValueOnce(new Error("offline"));
+    const onDeleted = vi.fn();
+    const photo = {
+      ...track,
+      id: "i1",
+      mediaType: "image/jpeg",
+      filename: "a.jpg",
+    };
+    render(
+      <MediaGallery
+        media={[photo]}
+        variant="visual"
+        canDelete
+        onDeleted={onDeleted}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete a.jpg" }));
+    const confirm = screen.getByRole("alertdialog");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(within(confirm).getByText("Couldn't delete file.")).toBeTruthy(),
+    );
+    expect(screen.getByRole("alertdialog")).toBe(confirm);
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 });

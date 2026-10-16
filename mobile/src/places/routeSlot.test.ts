@@ -47,12 +47,12 @@ describe("routeSlotOccupant", () => {
 
   it("finds the drawn route linked to this place", () => {
     expect(
-      routeSlotOccupant("c1", [route("r1", "Claustral", "c1")], []),
-    ).toEqual({ kind: "route", id: "r1", name: "Claustral" });
+      routeSlotOccupant("c1", [route("r1", "Alpha Creek", "c1")], []),
+    ).toEqual({ kind: "route", id: "r1", name: "Alpha Creek" });
   });
 
   it("finds the attached track file", () => {
-    const file = media("m1", "c1", GPX, "claustral.gpx");
+    const file = media("m1", "c1", GPX, "alpha-creek.gpx");
     expect(routeSlotOccupant("c1", [], [file])).toEqual({
       kind: "file",
       media: file,

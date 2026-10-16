@@ -2,8 +2,8 @@
 // lives in secureKeyValueStorage.ts so this logic is vitest-testable).
 //
 // Why: Amplify persists Cognito tokens through a KeyValueStorageInterface, and
-// our store is expo-secure-store (Keychain/Keystore — mobile/CLAUDE.md rule:
-// never AsyncStorage). Android's Keystore-backed SecureStore warns above
+// our store is expo-secure-store (Keychain/Keystore, never AsyncStorage:
+// amplifyConfig.test.ts). Android's Keystore-backed SecureStore warns above
 // 2048 bytes per value, and Cognito JWTs regularly exceed that. So values are
 // split into byte-bounded chunks, each stored under a derived key, with a
 // small header at the base key describing the chunk count.

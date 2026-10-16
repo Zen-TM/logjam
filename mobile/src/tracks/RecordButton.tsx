@@ -10,8 +10,8 @@
 // is idle, a filled ring pulsing is recording, a filled ring holding still is
 // paused.
 //
-// The long press is not a shortcut, it is the ONLY one-gesture way to stop —
-// finishing must not need the panel found first. Wet hands, cold hands, and
+// The long press is not a shortcut, it is the ONLY one-gesture way to stop, so
+// finishing never waits on finding the panel first. Wet hands, cold hands, and
 // nothing in Logjam GPS is worse than a recording that will not stop.
 import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, View } from "react-native";
@@ -38,8 +38,8 @@ export function RecordButton({
   /**
    * Whether the pulse may run — the map's own `mapFocused && appActive`. A
    * looping animation behind a dark screen or another tab is frames nobody
-   * sees, on the one screen that stays open for a whole trip
-   * (mobile/AGENTS.md, Privacy and battery).
+   * sees, on the one screen that stays open for a whole trip (mobile/AGENTS.md,
+   * Privacy and battery).
    */
   animate: boolean;
   onPress: () => void;

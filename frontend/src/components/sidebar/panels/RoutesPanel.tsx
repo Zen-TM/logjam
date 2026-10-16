@@ -81,7 +81,7 @@ const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   delete: "delete",
 };
 
-/** Export never touches the server — a route's geometry is already here. */
+/** Export is made in the browser, from the route's geometry already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
   const anchor = document.createElement("a");

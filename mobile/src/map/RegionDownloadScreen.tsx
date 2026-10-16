@@ -74,6 +74,7 @@ import { savesVectorOnly, vectorClipFor } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
@@ -174,9 +175,6 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  * up in the field; making the panel scrollable again just hides the Save button.
  */
 const PANEL_HEIGHT = 250;
-
-/** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
-const PROTOMAPS_FLAVOR = "light" as const;
 
 export function RegionDownloadScreen({
   onBack,

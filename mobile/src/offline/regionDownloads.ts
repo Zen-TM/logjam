@@ -1,11 +1,10 @@
-// Protomaps region download: POST the bbox to the
-// clip endpoint (body-only — never a URL), stream the clip via the opaque
-// token GET into app-private storage, verify, register in the artifact
-// registry. The resolver picks the region up from the registry with no map
-// code changes.
+// Protomaps region download: POST the bbox to the clip endpoint (body-only —
+// never a URL), stream the clip via the opaque token GET into app-private
+// storage, verify, register in the artifact registry. The resolver picks the
+// region up from the registry with no map code changes.
 //
-// PRIVACY: the bbox rides the authed POST body only; progress/errors are
-// logged (console) as state words and counts, never coordinates or paths.
+// PRIVACY: the bbox rides the authed POST body only (regionDownloads.test.ts).
+// Nothing here logs.
 import * as FileSystem from "expo-file-system/legacy";
 
 import { apiFetch, getAuthedRequestHeaders } from "../api/apiFetch";

@@ -6,7 +6,8 @@
 // What is duplicated here is only the thin React wrapper around it, because
 // `shared/` is React-free by design and adding React to it to save fifty lines
 // would be a bad trade. If the two drift, the shared module is the one that
-// matters.
+// matters. The undo rules below are held by the frontend copy's test
+// (`useRouteDraft.test.ts` there); mobile has no React hook test harness.
 //
 // Undo is a stack of whole drafts rather than inverse operations: a draft is a
 // handful of coordinate pairs, so snapshotting one is free, and it makes every
@@ -79,7 +80,7 @@ export function useRouteDraft(): RouteDraftHandle {
     setDraft((current) => {
       if (!current) return current;
       const updated = next(current);
-      // A no-op must not consume an undo step, or Undo appears to do nothing.
+      // A no-op leaves the history alone, or Undo would appear to do nothing.
       if (updated === current) return current;
       history.current = [...history.current, current].slice(-MAX_HISTORY);
       setCanUndo(true);

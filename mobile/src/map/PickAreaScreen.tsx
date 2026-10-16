@@ -55,6 +55,7 @@ import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
@@ -74,9 +75,6 @@ import {
   type BasemapId,
   type ResolveContext,
 } from "./sourceResolver";
-
-/** Matches `MapScreen`'s — every map in Logjam GPS renders the same vector basemap. */
-const PROTOMAPS_FLAVOR = "light" as const;
 
 /**
  * Breathing room around a restored area, so the frame that comes back has

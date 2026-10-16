@@ -86,8 +86,9 @@ logging.basicConfig(
 log = logging.getLogger("topo")
 
 # Composite stacking order, bottom→top. Hand-synced mirror of TOPO_LAYERS in
-# shared/src/topoSettings.ts — keep in lockstep when layers change. Imported by
-# renderers/tile_compose.py so the order lives in one place.
+# shared/src/topoSettings.ts, which is canonical: a layer is added there first,
+# and tests/test_layer_sync.py fails if this list or its order drifts from it.
+# Imported by renderers/tile_compose.py so the order lives in one place.
 COMPOSITE_LAYER_ORDER = ["hillshade", "vegetation", "slope", "contours", "features"]
 
 # ---------------------------------------------------------------------------
@@ -394,8 +395,13 @@ else:
 # Multiplies the structural NRD so hard/thorny vegetation (Heathlands,
 # Dry Sclerophyll) reads as harder going than clear-floored vegetation
 # (Rainforest, Grasslands) at the same LiDAR point density.
-# Formation index order must match build_svtm_formation.py exactly.
-# Index 0 is always "Not classified" (μ=1.0).
+# The μ VALUES must match build_svtm_formation.py, which writes the raster this
+# multiplies — same names, same multiplier (tests/test_layer_sync.py).
+#
+# The ORDER here is load-bearing in a way the builder's copy is not:
+# _build_svtm_mu_lookup indexes this dict POSITIONALLY, so raster value 0
+# must be "Not classified" (μ=1.0) — the nodata default. The builder builds its
+# index by pinning "Not classified" itself rather than by its dict's order.
 SVTM_FORMATION_MU: Dict[str, float] = {
     "Not classified": 1.0,
     "Rainforests": 0.7,
@@ -466,9 +472,10 @@ CONTOUR_DEFAULTS = {
 }
 
 # How many stored contour-width units make one pixel at z18. Mirrors
-# CONTOUR_WIDTH_UNITS_PER_PX in shared/src/topoSettings.ts: a contour and an OSM
-# feature line asked for the same width must be the same line, in the composite
-# bake as on the live map.
+# CONTOUR_WIDTH_UNITS_PER_PX in shared/src/topoSettings.ts, which is canonical
+# (tests/test_layer_sync.py compares the two): a contour and an OSM feature line
+# asked for the same width must be the same line, in the composite bake as on
+# the live map.
 CONTOUR_WIDTH_UNITS_PER_PX = 8
 
 # Contour smoothing. Raw gdal_contour output on a LiDAR DTM is extremely knobbly

@@ -3,7 +3,7 @@
 //
 // WHEN IT CHECKS: on app start, on return to the foreground, and when a
 // connection is regained — the three moments the sync engine uses, and never a
-// background timer, because battery is a field resource.
+// background timer, because battery is a field resource (ADR 0013).
 //
 // WHAT IT TAKES: every layer of every completed job the account has, once each.
 // That is deliberately the same rule as the GeoPDF feature rather than
@@ -20,7 +20,8 @@
 // this phone already HAS (so a layer saved by hand is never fetched again), and
 // a handled-key marker says what it has already TRIED (so a layer that fails to
 // download is attempted once rather than on every foreground for the life of
-// the install). The Saved tab can still fetch it by hand.
+// the install: topoAutoDownload.test.ts). The Saved tab can still fetch it by
+// hand.
 //
 // PRIVACY: job ids and layer names. The bundles land in the same app-private,
 // backup-excluded store as every other artifact, behind the app lock.

@@ -31,7 +31,6 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
 - **A guest syncs nothing yet:** gate a new server call through
   `auth/capabilities.ts` so a guest makes none, and never add a guest-only
   write path. [0007](../docs/decisions/0007-guest-mode-is-dont-sync-yet.md)
-- **An aggregate of the user's own data filters out `syncRole === "shared"`.**
 
 ## Privacy and battery
 

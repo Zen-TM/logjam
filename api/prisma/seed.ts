@@ -1207,8 +1207,8 @@ async function main() {
       ownerId: ALICE_ID,
       name: "Swimming hole",
       iconKey: "droplet",
-      // From the curated palette, like any type a user could make — the seed
-      // must not be the one row that fails `isPlaceTypeColor`.
+      // From the curated palette, like any type a user could make, so dev
+      // holds no colour the API would refuse to save.
       color: PLACE_TYPE_COLORS[6],
       position: 0,
     },

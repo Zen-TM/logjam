@@ -80,7 +80,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
 # overnight.
 resource "aws_cloudwatch_metric_alarm" "pgaudit_delivery_stalled" {
   alarm_name        = "logjam-pgaudit-delivery-stalled"
-  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the RDS log export is broken (see audit.tf, INF-001)."
+  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the RDS log export is broken (see audit.tf)."
 
   namespace   = "AWS/Firehose"
   metric_name = "IncomingBytes"

@@ -63,6 +63,7 @@ export default function GeoPdfsPanel({
   refetchTrigger,
   geoPdfJobsRefetch,
   friends,
+  loadsUserData,
 }: {
   /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
@@ -74,6 +75,10 @@ export default function GeoPdfsPanel({
   geoPdfJobsRefetch: number;
   /** Friends a generated GeoPDF can be shared with. */
   friends: TFriend[];
+  /** App's own `authenticated && consentSettled` — the value every
+   *  user-data hook in this app takes as `enabled`. Nothing here fetches — the
+   *  job poll included — until it is true. */
+  loadsUserData: boolean;
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
@@ -94,7 +99,7 @@ export default function GeoPdfsPanel({
     loaded: jobsLoaded,
     error: jobsError,
     refetch: refetchJobs,
-  } = useGeoPdfJobs(true);
+  } = useGeoPdfJobs(loadsUserData);
 
   useEffect(() => {
     if (geoPdfJobsRefetch > 0) refetchJobs();
@@ -105,6 +110,9 @@ export default function GeoPdfsPanel({
   }, [jobsError, toast]);
 
   useEffect(() => {
+    // The template list is user data too: behind the consent gate it is one
+    // more request the gate exists to hold (GeoPdfsPanel.render.test.tsx).
+    if (!loadsUserData) return;
     apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
       .then(setTemplates)
       .catch((err) => {
@@ -112,7 +120,7 @@ export default function GeoPdfsPanel({
         toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
       })
       .finally(() => setTemplatesLoaded(true));
-  }, [toast, refetchTrigger]);
+  }, [toast, refetchTrigger, loadsUserData]);
 
   const deleteJob = useCallback(
     async (id: string) => {

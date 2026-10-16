@@ -64,7 +64,7 @@ export function useRouteDraft(): RouteDraftHandle {
     setDraft((current) => {
       const updated = next(current);
       // A no-op action must not consume an undo step — otherwise pressing
-      // Undo appears to do nothing.
+      // Undo appears to do nothing (useRouteDraft.test.ts).
       if (updated === current) return current;
       history.current = [...history.current, current].slice(-MAX_HISTORY);
       setCanUndo(true);
@@ -114,7 +114,8 @@ export function useRouteDraft(): RouteDraftHandle {
     // Deliberately NOT through `commit`: a snapped run arriving is not
     // something the user did, so it must not consume an undo step. Undo after
     // "click, click, snap lands" should take back the click — not silently
-    // straighten the line and leave the point where it was.
+    // straighten the line and leave the point where it was
+    // (useRouteDraft.test.ts).
     applySnap: useCallback(
       (from: RoutePoint, to: RoutePoint, between: RoutePoint[]) =>
         setDraft((current) => {

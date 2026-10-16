@@ -47,7 +47,8 @@ const WEB_MERCATOR =
 
 /** Residual fraction beyond which a 4-point fit upgrades to a homography. */
 const HOMOGRAPHY_THRESHOLD = 0.001;
-/** Residual fraction beyond which the caller must warn the user. */
+/** Residual fraction beyond which a fit is poor enough to warn the user about.
+ *  Nothing reads it yet: no surface shows that warning. */
 export const RESIDUAL_WARN_FRACTION = 0.005;
 
 /** Row-major n×n Gaussian elimination with partial pivoting. */

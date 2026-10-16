@@ -40,6 +40,7 @@ import {
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
+  SAVED_ROUTE_MIN_ZOOM,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
@@ -129,15 +130,10 @@ const HANDLE_CLICK_SUPPRESS_MS = 400;
 /** Movement below this is a click, not a drag, so it inserts nothing. */
 const DRAG_INSERT_MIN_PIXELS = 6;
 
-/**
- * Zoom below which saved routes stop drawing. 7 is where the route line-width
- * ramp starts and is Logjam Web's initial zoom, so a first load still shows them
- * while a state- or continent-wide view isn't hazed over with lines.
- */
-// Saved routes vanish below this. z7 is most of NSW — a threshold you had to
-// go looking for — where z10 is roughly a 50 km view, past the point a few
-// kilometres of route says anything about where it goes.
-const ROUTE_MIN_ZOOM = 10;
+// Saved routes vanish below SAVED_ROUTE_MIN_ZOOM, which lives in
+// `@logjam/shared` (`routeArrow.ts`): Logjam GPS draws the same routes at the
+// same floor, and why that zoom (and why the route being drawn is exempt) is
+// documented there.
 
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
@@ -1035,8 +1031,6 @@ function Map({
     // Privacy: this is entirely browser-native. MapLibre reads the position via
     // navigator.geolocation and renders it as a map marker in this page — the
     // position is never sent to the API, and no analytics/telemetry observes it.
-    // Keep it that way: do not wire the `geolocate` event to anything that
-    // persists or transmits the coordinates.
     const geolocate = new maplibregl.GeolocateControl({
       // High accuracy: the difference between the right side of a creek and
       // the wrong one. Costs battery, which is the correct trade for a
@@ -1262,14 +1256,14 @@ function Map({
       // never tint it.
       // Saved routes are local detail — a state-wide view of them is a smear of
       // lines, not information — so every routes-* layer drops out below zoom
-      // ROUTE_MIN_ZOOM. The hit target carries the same floor as the line it
+      // SAVED_ROUTE_MIN_ZOOM. The hit target carries the same floor as the line
       // targets: a clickable line you cannot see is a click that does nothing.
       // The route being drawn/edited lives on route-draft and is never hidden.
       map.addLayer({
         id: "routes-hit",
         type: "line",
         source: "routes",
-        minzoom: ROUTE_MIN_ZOOM,
+        minzoom: SAVED_ROUTE_MIN_ZOOM,
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -1281,7 +1275,7 @@ function Map({
         id: "routes-lines",
         type: "line",
         source: "routes",
-        minzoom: ROUTE_MIN_ZOOM,
+        minzoom: SAVED_ROUTE_MIN_ZOOM,
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -1741,10 +1735,9 @@ function Map({
               entry.color,
               entry.stamp,
             ).catch((err: unknown) => {
-              // One bad track must not blank the whole layer. The thrown error
-              // carries only the HTTP status — never log the presigned URL,
-              // whose place-name-derived filename must stay out of logs
-              // (privacy rule).
+              // One bad track blanks only itself. Safe to log: the thrown
+              // error carries the HTTP status, not the presigned URL whose
+              // filename is the place's name (trackGeo.test.ts).
               console.error(err);
               if (!failedTrackToastedRef.current.has(entry.mediaId)) {
                 failedTrackToastedRef.current.add(entry.mediaId);
@@ -3037,8 +3030,7 @@ function Map({
         duration: 1500,
       });
     } else {
-      // Don't log the coordinates themselves (privacy rule: no place coords in
-      // logs/errors) — just note the fly-to was skipped.
+      // The warning names no coordinate: they are the place's.
       console.warn("Skipping fly-to: place coordinates out of range");
     }
     onFlyToPlaceConsumedRef.current?.();

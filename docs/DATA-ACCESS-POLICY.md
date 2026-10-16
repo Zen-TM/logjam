@@ -40,9 +40,10 @@ roles in this repository: no user data, no secret values, no logs and no user
 directory. Signing in requires multi-factor authentication, and every change
 goes through the Terraform in `infra/terraform/envs/prod/iam_contributor.tf`.
 
-There is **no admin UI inside the app** — Logjam has no "god mode" screen. All
-operator access happens at the AWS/infrastructure layer, which is exactly why the
-controls below live in infrastructure, not in application code.
+There is **no admin UI inside Logjam Web or Logjam GPS** — Logjam has no "god
+mode" screen. All operator access happens at the AWS/infrastructure layer, which
+is exactly why the controls below live in infrastructure, not in application
+code.
 
 This is **not** end-to-end encryption. Your data is encrypted in transit, but I
 hold the keys the application uses. Losing your password does **not** mean your
@@ -80,8 +81,9 @@ _deliberate, recorded, and impossible-to-hide_:
   topo/LiDAR artifacts. Operational logs are scrubbed so canyon names and
   coordinates never appear in plain text — and the audit logs above record SQL
   with bound parameters _omitted_, so they do not leak coordinates either.
-- **You can leave with your data.** The app has self-service "Download my data"
-  and "Delete account" — no request to me required.
+- **You can leave with your data.** Logjam Web has self-service "Download my
+  data"; Logjam Web and Logjam GPS each have "Delete account" — no request to
+  me required.
 
 ## The honest limits
 

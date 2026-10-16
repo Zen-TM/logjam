@@ -4,7 +4,9 @@
 //
 // PRIVACY: the only thing sent to the external service (OpenStreetMap Nominatim)
 // is the user-typed place string. No place names, coordinates, or account data
-// ever leave the app through this path. Results bias toward NSW, Australia.
+// ever leave the app through this path (geocode.test.ts). Whether the typed
+// string goes at all is the caller's: see shared/DESIGN.md §13. Results bias
+// toward NSW, Australia.
 
 export interface GeocodeResult {
   displayName: string;

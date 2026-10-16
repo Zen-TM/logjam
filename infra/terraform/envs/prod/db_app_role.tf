@@ -8,7 +8,7 @@
 # This file only creates the SECRET CONTAINER and the read grant. Creating the
 # role itself is SQL (scripts/bootstrap-app-db-role.sql, run once as master) and
 # pointing the app at it (EB DB_SECRET_ID + ECS task-def secret refs) is an
-# operator-gated cutover. Full sequence: docs/operator-trust-runbook.md.
+# operator-gated cutover.
 #
 # The password VALUE is deliberately NOT managed here — mirroring the
 # RDS-managed master secret, Terraform never sees it (kept out of state). The

@@ -362,7 +362,15 @@ describe("stats presentation", () => {
         customFields: {},
       },
     ],
-    places: [{ id: "p", name: "Claustral", placeTypeId: "t", fieldValues: {} }],
+    places: [
+      {
+        id: "p",
+        name: "Claustral",
+        placeTypeId: "t",
+        fieldValues: {},
+        owned: true,
+      },
+    ],
     tripDefs: [],
     placeDefs: [],
     placeTypes: [{ id: "t", name: "Canyon", color: "#000000" }],

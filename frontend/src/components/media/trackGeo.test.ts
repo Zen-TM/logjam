@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { parseTrackGeoJSON, trackGeoCacheKey } from "./trackGeo";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import {
+  clearTrackTexts,
+  fetchTrackText,
+  parseTrackGeoJSON,
+  trackGeoCacheKey,
+} from "./trackGeo";
 
 const GPX = `<?xml version="1.0"?>
 <gpx version="1.1" creator="test">
@@ -106,5 +111,24 @@ describe("trackGeoCacheKey", () => {
     expect(trackGeoCacheKey(entry)).not.toBe(
       trackGeoCacheKey({ ...entry, stamp: { placeId: "p1" } }),
     );
+  });
+});
+
+describe("fetchTrackText", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    clearTrackTexts();
+  });
+
+  // Map.tsx logs this error. Mutation: put the URL in the thrown message.
+  it("fails with the status only, never the presigned URL or its filename", async () => {
+    const url =
+      "https://s3.example/media/Secret%20Creek.gpx?X-Amz-Signature=abc";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 403 })),
+    );
+    const err: Error = await fetchTrackText("m1", () => url).catch((e) => e);
+    expect(err.message).toBe("Couldn't fetch track (403)");
   });
 });

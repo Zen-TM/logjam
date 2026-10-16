@@ -457,7 +457,8 @@ export async function discardParkedOp(seq: number): Promise<void> {
       // Discarding a create discards its lineage. The row will never exist
       // server-side, so a queued update or delete still pointing at it is no
       // longer merely deferred (nothing is `blocked` any more) — it flushes,
-      // 404s, and parks as a fresh sync issue. Otherwise one discard becomes a cascade.
+      // 404s, and parks as a FRESH sync issue. One discard became a cascade
+      // (syncIssues.test.ts).
       await db.runAsync(
         "DELETE FROM outbox WHERE entity_id = ? AND seq != ?",
         row.entity_id,

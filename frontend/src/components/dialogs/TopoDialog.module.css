@@ -3,8 +3,7 @@
    and every size and colour is a token (DESIGN.md). */
 
 /* Ordering LiDAR and tuning rasters is desktop work; the dialog still fits a
-   phone, but it says so rather than pretending otherwise (frontend/CLAUDE.md,
-   "Heavy authoring tools"). */
+   phone, but it says so rather than pretending otherwise. */
 .wideHint {
   composes: detail from "../../textRoles.generated.module.css";
   display: none;

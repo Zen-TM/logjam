@@ -647,7 +647,8 @@ const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   //
   // `foreignFields` is deliberately ABSENT and must stay absent: it is written
   // only by copy and by a type change, never by a user edit, and it is not in
-  // the server's PLACE_FIELDS allowlist either — an op carrying it is a 400.
+  // the server's PLACE_FIELDS allowlist either — an op carrying it is a 400
+  // (routeOutbox.test.ts; the server's: api placeFields.unit.test.ts).
   fieldValues: {
     column: "field_values_json",
     encode: (value) => JSON.stringify(value ?? {}),

@@ -10,7 +10,7 @@
 //   4. Terminal write guarded on `running`: completed (with the storage charge
 //      in the SAME transaction) or failed. 0 rows updated = reaped
 //      mid-run — delete the uploaded object and exit 0.
-//   5. Notification row (+ optional email).
+//   5. Notification row (+ optional completion email, best-effort).
 //
 // Required env: GEO_PDF_JOB_ID, DB_HOST/DB_PORT/DB_NAME (ECS-injected
 // DB_USER/DB_PASSWORD), S3_BUCKET_TOPO (via getEnv()).
@@ -75,7 +75,8 @@ export function parseStoredVectorStyle(snapshot: unknown): VectorStyleSettings {
  * upload → terminal write (+ storage charge in the same transaction) → notify.
  * Returns 0 on success or a clean no-op (job reaped / not `queued` / missing),
  * 1 on render failure. Called by the CLI worker entrypoint below (the ECS
- * Fargate task) — all lifecycle invariants live here, not in the wrapper.
+ * Fargate task) — all lifecycle invariants (claim and terminal guards, the
+ * storage charge, the privacy rule) live here, not in the wrapper.
  */
 export async function processGeoPdfJob(jobId: string): Promise<number> {
   const env = getEnv();
@@ -87,9 +88,10 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     return 1;
   }
 
-  // Guarded on `queued`: if the job was reaped or deleted while
-  // the task spun up, claim nothing and exit cleanly. started_at anchors the
-  // reaper's running-timeout (mirrors topo_export_jobs.started_at).
+  // Guarded on `queued`: if the job was reaped or deleted while the task spun
+  // up, claim nothing and exit cleanly. started_at anchors the reaper's
+  // running-timeout (mirrors topo_export_jobs.started_at)
+  // (geoPdfWorker.unit.test.ts).
   const claim = await prisma.geoPdfJob.updateMany({
     where: { id: jobId, status: "queued" },
     data: { status: "running", startedAt: new Date() },
@@ -123,7 +125,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   } catch (err) {
     // Keep the raw exception (which may reference tile URLs / extents) out of
     // the user-facing/stored error message — log only the error class, never
-    // place coords/names (AGENTS.md privacy rule).
+    // place coords/names (root AGENTS.md, Privacy).
     logger.error(
       {
         jobId,
@@ -135,7 +137,8 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   }
 
   // Terminal write guarded on `running`. On success the storage charge shares
-  // the same transaction as the status flip — never a separate commit.
+  // the same transaction as the status flip — never a separate commit
+  // (geoPdfWorker.unit.test.ts).
   let updated: number;
   let ok: boolean;
   if (errorMessage || resultKey === null) {

@@ -50,7 +50,7 @@ export default function MediaGallery({
       onDeleted(id);
       // Only close the confirm on success — an error leaves it open (with the
       // banner inside) so the user sees why and can retry, matching the
-      // track-card delete in PlaceDetailPanel.
+      // track-card delete in PlaceDetailPanel (MediaGallery.test.tsx).
       setPendingDelete(null);
     } catch (err) {
       console.error(err);

@@ -75,7 +75,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
           }
           drawn += 1;
         } catch (err) {
-          // A single unreadable file must not empty the whole layer.
+          // Counted and skipped: the rest of the layer still draws.
           console.error(err);
           unavailable += 1;
         }

@@ -518,3 +518,10 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # prod and github apply from the shared, locked S3 state; local's is
+      # disposable and must never bind to it. Neither direction is visible in a
+      # plan until it is too late, so it is checked here.
+      - name: Terraform roots declare the right backend
+        run: |
+          infra/scripts/check-terraform-backends.py --self-test
+          infra/scripts/check-terraform-backends.py

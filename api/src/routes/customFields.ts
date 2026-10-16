@@ -20,7 +20,11 @@
 //
 // PRIVACY: labels are user-authored text. Nothing here logs one.
 import { Router, Response } from "express";
-import { say, type CustomFieldEntity } from "@logjam/shared";
+import {
+  MAX_SCOPED_PLACE_TYPES,
+  say,
+  type CustomFieldEntity,
+} from "@logjam/shared";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { userPatchLimiter } from "../middleware/rateLimit";
@@ -76,6 +80,12 @@ function parseScoping(body: {
       body.placeTypeIds.some((id) => typeof id !== "string")
     ) {
       throw malformed("placeTypeIds must be an array of ids");
+    }
+    if (body.placeTypeIds.length > MAX_SCOPED_PLACE_TYPES) {
+      throw new AppError(
+        413,
+        say`An attribute can apply to up to ${MAX_SCOPED_PLACE_TYPES} place types.`,
+      );
     }
     out.placeTypeIds = body.placeTypeIds as string[];
   }

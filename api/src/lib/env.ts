@@ -216,8 +216,8 @@ const baseSchema = z.object({
   // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
   // called — no Media row exists) are orphans in S3 with no quota charge.
   // Objects older than this with no confirmed row are deleted by the periodic
-  // sweep. Must comfortably exceed UPLOAD_URL_TTL_SECONDS so an in-flight
-  // upload+confirm is never raced. 0 disables the sweep.
+  // sweep. A value near the 15-minute upload URL lifetime (routes/media.ts)
+  // would race an upload still waiting for its confirm. 0 disables the sweep.
   MEDIA_ORPHAN_TTL_MS: z.coerce
     .number()
     .int()
@@ -263,8 +263,8 @@ const baseSchema = z.object({
   // Commit the image was built from, baked in by api/Dockerfile's GIT_SHA
   // build arg; GET /meta reports it so a deploy can prove what is serving.
   // Not a sha regex: a build without the arg bakes in "", and a malformed
-  // value must not stop the API booting. No dev value, so it is absent from
-  // the env.local Terraform template.
+  // value must not stop the API booting (env.unit.test.ts). No dev value, so
+  // it is absent from the env.local Terraform template.
   GIT_SHA: z.string().optional(),
 });
 
@@ -277,6 +277,8 @@ type Env = z.infer<typeof baseSchema> & {
 const required = (key: keyof z.infer<typeof baseSchema>, val: unknown) =>
   val === undefined || val === "" ? key : null;
 
+// console.error, not logger: logger calls getEnv() as it loads, so it cannot
+// report getEnv's own failure.
 export function validateEnv(): Env {
   const parsed = baseSchema.safeParse(process.env);
   if (!parsed.success) {
@@ -301,6 +303,13 @@ export function validateEnv(): Env {
 
   if (env.AUTH_MODE === "fake" && env.NODE_ENV === "production") {
     console.error("AUTH_MODE=fake is forbidden in production.");
+    process.exit(1);
+  }
+
+  // services/prisma.ts reads DATABASE_SSL at module load, before this runs;
+  // refusing here still stops a prod process that would talk plain to RDS.
+  if (env.DATABASE_SSL === "disable" && env.NODE_ENV === "production") {
+    console.error("DATABASE_SSL=disable is forbidden in production.");
     process.exit(1);
   }
 

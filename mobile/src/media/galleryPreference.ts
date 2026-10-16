@@ -21,7 +21,7 @@ import { readPref, writePref } from "../prefsDb";
 const GALLERY_SAVE_KEY = "mediaSaveToGallery";
 
 /** Only an explicit "on" is on — an unreadable or absent preference reads as
- *  off, the same fail-closed posture as the app lock. */
+ *  off, the same fail-closed posture as the app lock (galleryPreference.test.ts). */
 export function savesCapturesToGallery(): boolean {
   return readPref(GALLERY_SAVE_KEY) === "on";
 }

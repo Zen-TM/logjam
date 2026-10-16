@@ -129,10 +129,10 @@ export type TripLogTrack = {
  * Log or edit a trip — one form for both, because the fields are identical and
  * a second form would drift (Logjam GPS's `TripEditSheet`).
  *
- * Choosing places is a MODE of this dialog, not a dialog of its own (DESIGN.md
- * §6): the body swaps to a searchable list, the title says which step this is,
- * and Escape, the close button and Done all back out to the form rather than
- * out of the dialog.
+ * Choosing places is a MODE of this dialog, not a dialog of its own
+ * (shared/DESIGN.md §10, "One modal at a time"): the body swaps to a searchable
+ * list, the title says which step this is, and Escape, the close button and
+ * Done all back out to the form rather than out of the dialog.
  */
 function TripLogDialog({
   open,

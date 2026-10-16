@@ -25,9 +25,9 @@ import {
  *
  * The whole file goes through `JSON.parse` into one JS object graph, and Hermes
  * has no JIT — the import pipeline's own history is a catalogue of what that
- * costs on device (mobile/CLAUDE.md, GeoPDF import). A half-million-position
- * file is inside `MAX_IMPORT_POSITIONS` and would freeze the UI thread for
- * seconds to produce numbers nobody asked for twice.
+ * costs on device. A half-million-position file is inside `MAX_IMPORT_POSITIONS`
+ * and would freeze the UI thread for seconds to produce numbers nobody asked for
+ * twice.
  *
  * ponytail: a flat refusal, not a decimator. If real files start landing above
  * it, the upgrade path is a streaming reader, not a bigger number.

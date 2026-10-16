@@ -3,9 +3,9 @@ import { defineConfig } from "prisma/config";
 
 // Inline mirror of src/lib/databaseUrl.ts composeDatabaseUrl — this file is
 // loaded by the Prisma CLI during the Docker build BEFORE src/ is copied in
-// (`prisma generate` runs right after `npm ci`), so it must not import from
-// src/. Keep in sync with the canonical helper.
-function composeDatabaseUrl(parts: {
+// (`prisma generate` runs right after `npm ci`), so it cannot import from
+// src/. Parity: src/lib/databaseUrl.unit.test.ts.
+export function composeDatabaseUrl(parts: {
   host: string;
   port?: string;
   name: string;
@@ -20,7 +20,7 @@ function composeDatabaseUrl(parts: {
 // DB_PASSWORD are injected at container runtime) doesn't need a real DB
 // connection - only `migrate deploy`/`db seed` do. Compose from process.env
 // directly (with a build-time placeholder fallback when DB_HOST is unset)
-// rather than the env() helper, which throws eagerly for every CLI command
+// rather than getEnv(), which exits on a missing var for every CLI command
 // including `generate`. services/prisma.ts and prisma/seed.ts independently
 // fail loud via databaseUrlFromEnv() if the DB_* vars are unset at runtime.
 export default defineConfig({
