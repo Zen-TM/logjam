@@ -21,6 +21,6 @@
   but not the API; bring that up first.
 - `e2e/a11y.spec.ts` is the per-surface a11y gate. A case never writes to the
   account: reach a state with a `page.route` stub that calls `route.fetch()`
-  and rewrites only the field the decision reads. Fixtures are synthetic.
+  and rewrites only the field the decision reads.
 - **Against prod, only unauthenticated runs:** assert the sign-in screen and
   nothing more, unless the maintainer signs off.

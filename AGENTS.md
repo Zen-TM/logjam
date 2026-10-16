@@ -16,6 +16,9 @@ platform: privacy constrains every feature. Each package has its own
 - Logs and error reports never carry a place's coordinates, name, tags, field
   values or field labels in plain text. Guards: `api/src/lib/logger.unit.test.ts`,
   `mobile/src/sentry/scrubEvent.test.ts`.
+- A committed example (fixture, seed, screenshot, demo) is published or made
+  up, never a user's, in any form. Guard: `scripts/snapshot-scrub.sql` for
+  snapshots; review for the rest.
 
 ## Environments
 
@@ -77,7 +80,9 @@ code already says or how it got there. If a rename would do, rename.
 - Cite what a reader can open (an ADR, a test): no audit codes (`SEC-001`),
   private plans or chat links. An issue, only while open, for a hold or
   workaround.
-- A comment stating a rule names its test; a rule with no test is a defect.
+- A comment states a rule only when it names its guard: the test that turns
+  red when the rule breaks or, where no test can, the mechanism that holds it
+  (`prevent_destroy`, a CI check, an ADR). A test that cannot fail is no guard.
 
 ## Testing
 
