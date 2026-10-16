@@ -54,8 +54,10 @@ const copy = SETTINGS_LIST.copy;
  *  - A SYSTEM type (Canyon, Campsite, Marker) belongs to no account. It is
  *    listed — the picker offers it, places live in it — but it cannot be
  *    renamed or deleted, so it gets no verbs. The server answers 404 rather
- *    than 403 for either, the same way every id-addressed surface does.
- *  - A type with places IN it cannot be deleted, so the verb on one is MERGE:
+ *    than 403 for either, the same way every id-addressed surface does
+ *    (`api/src/__tests__/placeTypes.test.ts`).
+ *  - A type with places IN it cannot be deleted
+ *    (`api/src/__tests__/placeTypes.test.ts`), so the verb on one is MERGE:
  *    its places move to a type you pick and the empty category goes. "Move
  *    places", which is what the two API calls are called, describes the
  *    plumbing — nobody sets out to move their places, they set out to stop
@@ -64,7 +66,8 @@ const copy = SETTINGS_LIST.copy;
  *    a free key resolves in one client's icon set and not the other's, the
  *    colour because it is a map marker colour and the WCAG 3:1 guarantee can
  *    only be asserted over a closed set. A free picker would not fail that
- *    check, it would DELETE it — which is why `ColourField` is not used here.
+ *    check, it would DELETE it — which is why a free-form colour input is not
+ *    used here.
  *
  * BUILT-INS LAST, like the phone's editor and like the attribute list beside
  * it: the user's own types are the half with verbs on them. This is the
@@ -104,8 +107,8 @@ function PlaceTypeSection({
 
   // `placeCount` moves whenever a place is made, retyped or deleted ANYWHERE in
   // the app, and the list App holds was fetched at boot. The counts are what
-  // decide which verb each row offers, so a type that has since taken a place
-  // offered Delete and got a 409 — read them once on the way in.
+  // decide which verb each row offers, so refresh them once on entry to avoid
+  // offering Delete for a type that now holds places.
   // Best-effort: the list already on screen is the fallback.
   useEffect(() => {
     refresh().catch(console.error);

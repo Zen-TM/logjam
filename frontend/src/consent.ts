@@ -1,6 +1,5 @@
 // Thin re-export — the canonical consent version and needsReconsent() live in
-// shared/src/consent.ts so api and frontend can never diverge again
-// (they did on 2026-06-11: "Invalid consentVersion" in prod).
+// shared/src/consent.ts so api and frontend do not diverge.
 import { CURRENT_CONSENT_VERSION, needsReconsent } from "@logjam/shared";
 
 export { CURRENT_CONSENT_VERSION, needsReconsent };
@@ -8,14 +7,13 @@ export { CURRENT_CONSENT_VERSION, needsReconsent };
 export const PENDING_CONSENT_STORAGE_KEY = "logjam.pendingConsentVersion";
 
 /**
- * The single consent decision, used twice: to render ConsentGate INSTEAD of the
- * app, and to hold every `enabled=authenticated` data hook and boot effect
- * until consent is settled (FECO-005 — the gate blocked the UI but not the
- * app's own API traffic, so a stale-consent user's places, trips, friends and
- * notifications were fetched before they agreed).
+ * The single consent decision, used twice: to render ConsentGate INSTEAD of
+ * Logjam Web, and to hold every user-data hook and boot effect until consent
+ * is settled (frontend/AGENTS.md, src/consent.test.ts).
  *
  * Two callers, one derivation, on purpose: a gate that renders on a different
- * condition than the one holding the fetches is the bug this replaces.
+ * condition than the one holding the fetches would allow user data to load
+ * behind the gate.
  *
  * `blocked` and `settled` are not opposites — while `currentUser` is still
  * loading neither is true, which is what makes the prefetches wait rather than

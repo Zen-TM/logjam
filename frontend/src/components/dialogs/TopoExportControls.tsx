@@ -50,9 +50,8 @@ interface Props {
  * `reconcileExportSelection` / `validateExportRequest`.
  *
  * Each rail says what the chosen option MEANS underneath it (a `hint`, visible
- * and read with the control), where the old radio lists hid a format's
- * description in a tooltip nobody hovered and left the disabled bundling
- * choices unexplained.
+ * and read with the control), rather than hiding a format's description in a
+ * tooltip or leaving disabled bundling choices unexplained.
  */
 export default function TopoExportControls({
   value,
@@ -137,8 +136,8 @@ export default function TopoExportControls({
           </p>
         )}
         {layers.map((l) => {
-          // Single legality source (TOPOEXP-1) — never re-derive
-          // format/layer rules inline.
+          // Single legality source (shared/src/topoExport.test.ts) — never
+          // re-derive format/layer rules inline.
           const eligible = isLayerEligibleForFormat(value.format, l.name);
           return (
             <Checkbox

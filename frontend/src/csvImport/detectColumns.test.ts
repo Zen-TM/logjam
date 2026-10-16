@@ -34,7 +34,7 @@ describe("detectColumns", () => {
     expect(result["water_level"]).toBe("cf:water_level");
   });
 
-  it("maps the app's own logbook template headers (name/date/type/notes)", () => {
+  it("maps Logjam Web's own logbook template headers (name/date/type/notes)", () => {
     // frontend/public/templates/logbook-import-template.csv headers.
     const result = detectColumns(
       ["name", "date", "type", "notes", "Party"],
@@ -45,7 +45,7 @@ describe("detectColumns", () => {
     expect(result["type"]).toBe("type");
     expect(result["notes"]).toBe("notes");
     // "Party" has no built-in trip field (TripLog has no participants column),
-    // so it is left for the user to map or ignore. Documented in the fix report.
+    // so it is left for the user to map or ignore.
     expect(result["Party"]).toBe("discard");
   });
 

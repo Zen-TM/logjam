@@ -40,7 +40,7 @@ const TYPE_ALIASES = new Set(["type", "activity", "trip type"]);
 
 function normalize(s: string): string {
   // Split camelCase / letter-digit runs before lowercasing so camelCase headers
-  // and custom-field labels collapse to the same spaced tokens (IMPORT-4).
+  // and custom-field labels collapse to the same spaced tokens.
   return s
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()

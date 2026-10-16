@@ -9,11 +9,8 @@
 // A track on a place a FRIEND shared reaches this page through
 // `GET /places/tracks`, which is the only surface that carries it — it is not
 // one of the user's own files and appears nowhere else. It is an ordinary
-// Track or Import here, not a kind of its own: the endpoint now returns the
-// file's name and `origin` alongside its colour, so there is nothing left that
-// makes it a different sort of thing. It used to return a place id, a media id
-// and a colour, which is why Ways briefly had a fourth chip named for where a
-// file lived rather than for what it was (operator, 2026-09-17).
+// Track or Import here, not a kind of its own: the endpoint returns the
+// file's name and `origin` alongside its colour.
 import {
   mediaDisplayName,
   routeLengthM,
@@ -59,9 +56,7 @@ export type WayItem = {
    * The difference is what can be done about it: a directly-shared way has a
    * share row of its own and the user can drop it ("Remove"), while one seen
    * through a place has none — the only way to stop seeing it is to remove the
-   * PLACE, and offering Remove here would be a button that cannot work. Both
-   * surfaces used to re-derive this from `sharedPlaces`, and only the detail
-   * page got it right (operator, 2026-09-17).
+   * PLACE, and offering Remove here would be a button that cannot work.
    */
   viaPlace: boolean;
   /** The place this way belongs to, where it belongs to one. */
@@ -156,9 +151,7 @@ export function buildWays({
   sharedPlaceIds: ReadonlySet<string>;
 }): WayItem[] {
   const fileIds = new Set(standaloneFiles.map((file) => file.id));
-  // NEWEST FIRST, across every source — the list was routes, then files, then
-  // a friend's tracks, which is the order they were fetched in and means
-  // nothing to the reader (operator, 2026-09-17). A recording made this morning
+  // NEWEST FIRST, across every source: a recording made this morning
   // belongs at the top whatever produced it. Undated rows keep their relative
   // order at the bottom, which `Array.prototype.sort`'s stability guarantees.
   return sortNewestFirst([

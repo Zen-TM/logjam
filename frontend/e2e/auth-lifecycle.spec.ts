@@ -1,13 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-// Real-Cognito auth-lifecycle coverage (gap 4).
+// Real-Cognito auth-lifecycle coverage.
 //
 // All other local testing uses fake auth, so token expiry/refresh, the Amplify
 // useAuth state transitions, and the consent pending-key fast path
 // (SignIn.tsx → PENDING_CONSENT_STORAGE_KEY → App.tsx → ConsentGate) only ever
-// run under jsdom mocks. The 2026-06-11 prod consent incident lived exactly in
-// that real-auth + consent seam. This spec drives a REAL Cognito-backed
-// deployment.
+// run under jsdom mocks. This spec drives a REAL Cognito-backed deployment to
+// exercise that real-auth + consent seam.
 //
 // Gated on env so nothing runs (and no credentials are committed — privacy
 // rule) unless an operator points it at a staging pool with a pre-provisioned,
@@ -21,8 +20,7 @@ import { test, expect } from "@playwright/test";
 //   E2E_AUTH_BASE_URL=https://staging.example \
 //   E2E_TEST_EMAIL=... E2E_TEST_PASSWORD=... npm run e2e -- auth-lifecycle
 //
-// NOT covered here (need external email access / long-running waits — operator
-// extensions documented alongside this file):
+// NOT covered here (need external email access / long-running waits):
 //   • sign-up → email-code confirm → first login: requires a mailbox API
 //     (e.g. Mailosaur) to read the Cognito verification code.
 //   • full token-expiry → silent-refresh: requires either a short-lived-token

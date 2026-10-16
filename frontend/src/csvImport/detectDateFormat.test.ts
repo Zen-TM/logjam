@@ -18,7 +18,7 @@ describe("parseWithFormat", () => {
     expect(parseWithFormat("2023/06/15", "DD/MM/YYYY")).toBeNull();
   });
 
-  it("rejects an impossible date instead of letting it roll forward (FECO-007)", () => {
+  it("rejects an impossible date instead of letting it roll forward", () => {
     // JS Date silently normalizes 30/02 into Mar 2 rather than failing — the
     // regex matches, but the round-trip check must catch the rollover and
     // return null instead of a wrong-but-valid-looking Date.

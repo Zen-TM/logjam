@@ -2,7 +2,7 @@
 // one control behind it on every web surface that lists shared things: places,
 // waypoints, routes, LiDAR topos and GeoPDFs.
 //
-// It is NOT a delete and must never be styled or worded as one. The owner keeps
+// It is NOT a delete and must never be styled or worded as one (shared/src/sharing.test.ts). The owner keeps
 // their row; this drops the caller's own share (`DELETE .../me`, which both
 // share endpoints have always accepted), so the confirm comes from
 // `removeShareConfirm` in shared/src/sharing.ts rather than from five panels
@@ -73,9 +73,8 @@ export default function RemoveSharedButton({
     <>
       {/* A caller that brings its own class is a panel not yet rebuilt onto the
           kit, and keeps the icon row or button it already styles. Everything
-          else gets the kit's own button: the bare `.btn btnGhost` default read
-          as a leftover from another app beside rebuilt controls (operator,
-          2026-09-17). */}
+          else gets the kit's own button: the bare `.btn btnGhost` styling looks
+          out of place beside rebuilt controls. */}
       {className ? (
         <button
           type="button"

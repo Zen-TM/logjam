@@ -85,8 +85,7 @@ function RouteNameForm({
         />
         {/* No colour here: it is a property of the DRAFT, chosen in the draw
             tool where the line is on the map in that colour as it is built.
-            Asking again at save time was two controls for one property
-            (operator, 2026-09-17). */}
+            Asking again at save time is two controls for one property. */}
       </form>
     </Dialog>
   );

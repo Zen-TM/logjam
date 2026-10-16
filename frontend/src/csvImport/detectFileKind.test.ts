@@ -44,12 +44,7 @@ describe("detectFileKind", () => {
     expect(detectFileKind([])).toBe("unknown");
   });
 
-  // FECO-004: detectFileKind used to keep its own copy of the header
-  // normalizer, which never got the camelCase-splitting fix placeColumns.ts
-  // added for IMPORT-4 — so a `latDD`/`lonDD` file (with no override, since an
-  // unknown-kind file never becomes a LoadedFile) failed detection outright.
-  // Now both share placeColumns.ts's `normalize`.
-  it("recognises camelCase coordinate headers (latDD/lonDD) — FECO-004", () => {
+  it("recognises camelCase coordinate headers (latDD/lonDD)", () => {
     expect(detectFileKind(["Name", "latDD", "lonDD"])).toBe("place");
   });
 });

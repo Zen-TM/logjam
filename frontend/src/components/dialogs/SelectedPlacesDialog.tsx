@@ -83,7 +83,6 @@ function SelectedPlacesDialog({
   const [placeSearch, setPlaceSearch] = useState("");
   const toast = useToast();
 
-  // Closing clears the searches and the share picks.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
