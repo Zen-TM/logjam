@@ -24,3 +24,20 @@ module "topo" {
   bucket_name = "logjam-topo-local"
   cors_rules  = local.dev_cors
 }
+
+# The API's copy of the flow network layer, at the key it reads
+# (api/src/lib/flowNetwork/objectKey.ts).
+resource "aws_s3_object" "flow_network" {
+  bucket = module.topo.bucket_id
+  key    = "private/flow-network/flow-network.gpkg"
+  source = local.flow_network_gpkg
+  etag   = filemd5(local.flow_network_gpkg)
+}
+
+locals {
+  flow_network_gpkg = (
+    var.flow_network_gpkg != ""
+    ? var.flow_network_gpkg
+    : "${local.repo_root}/api/src/__tests__/__fixtures__/flow-network.gpkg"
+  )
+}

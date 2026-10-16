@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
+import { MAP_INK } from "@logjam/shared";
 import { Icon, type Glyph } from "./Icon";
 import classes from "./MapControl.module.css";
 
@@ -69,17 +70,23 @@ export function Notice({
   children,
   action,
   tone = "info",
+  announce = false,
 }: {
   icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
   tone?: "info" | "warning";
+  /**
+   * Read out as it changes: for a notice that is the only answer to
+   * something the user just did, after focus has gone back to the map.
+   */
+  announce?: boolean;
 }) {
   return (
     <div
       className={[classes.notice, action ? classes.withAction : ""].join(" ")}
       data-tone={tone}
-      role={tone === "warning" ? "alert" : undefined}
+      role={tone === "warning" ? "alert" : announce ? "status" : undefined}
     >
       {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
       <span className={classes.noticeText}>{children}</span>
@@ -95,4 +102,61 @@ export function Notice({
  */
 export function MapPointDot() {
   return <span className={classes.pointDot} aria-hidden />;
+}
+
+/**
+ * The creek point a catchment was measured at: a drop of water, so it never
+ * reads as the press's own dot beside it. Drawn in `MAP_INK` because it sits on
+ * the map, not on the scheme. The pointer passes through it.
+ */
+export function MapCreekPoint() {
+  return (
+    <svg className={classes.creekPoint} viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M12 2.5C11.6 3 5.5 10.2 5.5 14.7a6.5 6.5 0 0 0 13 0C18.5 10.2 12.4 3 12 2.5Z"
+        fill={MAP_INK.waterLarge}
+        stroke={MAP_INK.ring}
+        strokeWidth={2}
+        strokeLinejoin="round"
+        paintOrder="stroke"
+      />
+      <path
+        d="M9.2 15.2a3 3 0 0 0 2.3 2.6"
+        fill="none"
+        stroke={MAP_INK.ring}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        opacity={0.8}
+      />
+    </svg>
+  );
+}
+
+/**
+ * Which way the water runs at a creek point: an arrowhead at the top of a box
+ * centred on the point, so a marker rotated to the water's bearing swings it
+ * round the drop to the downstream side.
+ */
+export function MapFlowArrow() {
+  return (
+    <svg className={classes.flowArrow} viewBox="0 0 48 48" aria-hidden>
+      <path
+        d="M24 0.5 33 13.5 24 10 15 13.5Z"
+        fill={MAP_INK.waterLarge}
+        stroke={MAP_INK.ring}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        paintOrder="stroke"
+      />
+    </svg>
+  );
+}
+
+/**
+ * A figure that follows the mouse over something drawn on the map (a creek's
+ * own catchment). Hover only, so it repeats what a press can find out, and the
+ * pointer passes through it.
+ */
+export function MapTip({ children }: { children: ReactNode }) {
+  return <span className={classes.tip}>{children}</span>;
 }

@@ -62,6 +62,7 @@ export const ICONS = {
   measure: { web: "ruler", gps: "mci:ruler" },
   pickArea: { web: "square-dashed", gps: "mci:selection" },
   scan: { web: "scan", gps: "maximize" },
+  fitTo: { web: "maximize-2", gps: "maximize-2" }, // fit the map to a drawn thing
   zoomIn: { web: "zoom-in", gps: "zoom-in" },
   zoomOut: { web: "zoom-out", gps: "zoom-out" },
   navigateTo: { web: "navigation", gps: "navigation" },
@@ -110,6 +111,7 @@ export const ICONS = {
   importedFile: { web: "file-plus", gps: "file-plus" },
   geoPdf: { web: "file-text", gps: "file-text" },
   lidar: { web: "mountain", gps: "mci:image-filter-hdr-outline" },
+  catchment: { web: "waves", gps: "mci:waves" }, // the creeks that drain to a point
   layers: { web: "layers", gps: "layers" }, // the layer picker
   template: { web: "layout-template", gps: "layout" },
   notes: { web: "align-left", gps: "align-left" },

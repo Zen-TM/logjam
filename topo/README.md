@@ -266,6 +266,98 @@ the same week.
 
 ---
 
+## Building the flow network layer
+
+`build_flow_network.py` turns the same 5 m DEM sheets into a GeoPackage of
+creeks for one or more drainage basins. Each creek is cut into segments at
+every junction, and each segment carries:
+
+| Field | Meaning |
+|---|---|
+| `id` | the segment |
+| `flows_into` | the `id` of the segment its water goes to next (empty at a basin's outlet) |
+| `catchment_start_km2` | catchment area at its top, just below the junction it starts at |
+| `catchment_end_km2` | catchment area at its bottom, just above the next junction |
+| `stream_order` | Strahler order |
+| `basin` | the basin it was built in |
+
+Between two junctions a creek gains area only from the hillside beside it, so
+the catchment at any point on a segment is a straight-line blend of its two
+values. A second layer, `basins`, holds each basin's outline and `name`: the
+area the layer covers.
+
+It needs GDAL with its Python bindings, NumPy, Shapely (the worker image has
+all three) and the `whitebox_tools` binary from
+[WhiteboxTools](https://www.whiteboxgeo.com/download-whiteboxtools/) on PATH.
+
+The basins are a polygon file (GeoPackage, GeoJSON or shapefile, any CRS) with
+one feature per basin; `--name-field` names the attribute that holds each
+basin's name. Basins share no water, so each is built on its own, and a file
+with one basin or a hundred is the same command.
+
+```bash
+# The sheets the basins need, then the build.
+python3 build_flow_network.py sheets basins.gpkg --name-field name > sheets.txt
+python3 build_nsw_dem.py fetch dem/src $(cat sheets.txt)
+python3 build_flow_network.py build dem/src basins.gpkg dem/flow-work dem/flow-network.gpkg \
+  --extracted "October 2026" --name-field name
+```
+
+Each basin's working files go in their own directory under `dem/flow-work`,
+and a stage that finished is skipped, so a stopped run carries on where it
+left off. `3-d8.tif` there is the basin's flow-direction raster; keep it to
+trace a catchment's outline later (GRASS `r.water.outlet` in QGIS).
+
+| Option | Default | |
+|---|---|---|
+| `--cell-m` | 5 | grid cell size; 20 for a coarser, cheaper build |
+| `--min-catchment-km2` | 0.02 | the catchment at which a creek starts; about where two-thirds of the creeks on the SIX topo map start |
+| `--buffer-m` | 2000 | extra DEM around each basin, for water its published boundary puts on the wrong side of a divide |
+| `--breach-max-m` | 500 | the longest channel a breach may cut through a road embankment or similar |
+
+Only segments whose bottom is inside the basin are kept: everything upstream
+of them is inside too, so their catchment is whole.
+
+Measured on the Grose River (669 km², Geofabric's outline; 4 sheets, a grid
+of 54 million cells): 92 seconds on 20 cores, about 1.5 GB of memory at
+most, 13,490 segments, and an outlet catchment within 1% of Geofabric's.
+WhiteboxTools holds the basin's whole bounding box in memory, so memory
+grows with that box: the whole Hawkesbury–Nepean is a box of 2.2 billion
+cells, which by the same measure needs roughly 50 to 70 GB. Accumulation is
+float32, so above 2²⁴ cells (420 km² at 5 m) it is exact only to a few
+cells; the build's checks allow for that.
+
+### Trying a layer locally
+
+`make dev` puts the Govetts Creek test layer
+(`api/src/__tests__/__fixtures__/flow-network.gpkg`) in the local topo
+bucket. To try a build of your own instead, name it in
+`infra/terraform/envs/local/flow-network.auto.tfvars` (gitignored) and run
+`make dev` again:
+
+```hcl
+flow_network_gpkg = "/path/to/flow-network.gpkg"
+```
+
+Then press a creek inside the basin on Logjam Web's map.
+
+### Publishing the layer
+
+Publishing is a prod change and the maintainer's to make. The layer goes to
+the topo bucket outside `master/`, so the CDN never serves it; only the API
+reads it ([ADR 0034](../docs/decisions/0034-catchment-lookups-run-on-the-api-from-a-private-geopackage.md)):
+
+```bash
+aws s3 cp dem/flow-network.gpkg \
+  s3://logjam-topo-jobs/private/flow-network/flow-network.gpkg
+```
+
+No deploy is needed: the API checks the file's ETag every five minutes and
+swaps in a new build. Until the first upload, catchment lookups answer that
+they aren't available.
+
+---
+
 ## Troubleshooting
 
 **`pdal: command not found`**

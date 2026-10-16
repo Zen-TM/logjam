@@ -12,6 +12,8 @@ import type {
   MediaOrigin,
   PlaceMergePolicy,
   ElevationProfile,
+  FlowNetworkLookup,
+  FlowNetworkLookupRequest,
   TrackClimb,
   SharableEntityType,
 } from "@logjam/shared";
@@ -576,6 +578,67 @@ export function useElevationProfile(points: ProfiledLine | null) {
   }, [fetchKey]);
 
   return { profile, loading, error };
+}
+
+/**
+ * How much land drains through the creek nearest a point (shared
+ * flowNetwork.ts). POST, so the point is never in a URL or an access log.
+ */
+export function getFlowNetworkLookup(
+  request: FlowNetworkLookupRequest,
+): Promise<FlowNetworkLookup> {
+  return apiFetch<FlowNetworkLookup>("/flow-network/lookup", {
+    method: "POST",
+    body: request,
+  });
+}
+
+/**
+ * The catchment lookup for one point, without the upstream lines. A new point
+ * starts again; a late answer about an old one is dropped. `fallback` is the
+ * caller's words for a failure that carried no sentence of the API's.
+ */
+export function useFlowNetworkLookup(
+  point: { longitude: number; latitude: number } | null,
+  fallback: string,
+) {
+  const key = point ? `${point.longitude},${point.latitude}` : null;
+  const [state, setState] = useState<{
+    key: string | null;
+    lookup: FlowNetworkLookup | null;
+    error: string | null;
+  }>({ key: null, lookup: null, error: null });
+
+  useEffect(() => {
+    if (!key) return;
+    let current = true;
+    const [longitude, latitude] = key.split(",").map(Number);
+    getFlowNetworkLookup({ longitude, latitude })
+      .then((lookup) => {
+        if (current) setState({ key, lookup, error: null });
+      })
+      .catch((err) => {
+        // Never the point itself: an ApiError names only the route.
+        console.error(err);
+        if (current)
+          setState({
+            key,
+            lookup: null,
+            error: messageFromError(err, fallback),
+          });
+      });
+    return () => {
+      current = false;
+    };
+  }, [key, fallback]);
+
+  // An answer about another point is no answer about this one.
+  const settled = state.key === key && key !== null;
+  return {
+    lookup: settled ? state.lookup : null,
+    error: settled ? state.error : null,
+    loading: key !== null && !settled,
+  };
 }
 
 /** Fetches routes only while the map layer is enabled, mirroring

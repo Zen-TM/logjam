@@ -90,7 +90,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          # 22, not 20: the flow network lookup reads its GeoPackage through
+          # node:sqlite, unflagged from 22.13. api/Dockerfile runs 26.
+          node-version: 22
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared and imports from shared/dist
@@ -199,7 +201,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          # 22 for node:sqlite, as the api job.
+          node-version: 22
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared and imports from shared/dist.
@@ -236,6 +239,13 @@ jobs:
           done
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      # Before the API starts: it remembers for five minutes that the layer was
+      # missing. flowNetwork.test.ts uploads it too, for a stack started without.
+      - name: Upload the flow network fixture
+        run: >-
+          aws --endpoint-url=http://localhost:4566 s3 cp
+          api/src/__tests__/__fixtures__/flow-network.gpkg
+          "s3://$S3_BUCKET_TOPO/private/flow-network/flow-network.gpkg"
       # dist/index.js, not dist/boot.js: boot resolves DB creds from Secrets
       # Manager, which this job doesn't run.
       - name: Start API

@@ -59,6 +59,8 @@ export * from "./routeExport.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
 export * from "./demSources.js";
+export * from "./flowNetwork.js";
+export * from "./catchmentOutline.js";
 export * from "./nswContours.js";
 export * from "./demTiles.js";
 export * from "./demSlope.js";

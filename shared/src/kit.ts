@@ -32,6 +32,15 @@ export const KIT_COMPONENTS = {
   MapPointDot: web(
     "the dot a press on the map leaves at the spot it asked about; Logjam GPS asks in a sheet and draws its cursor in the map layers",
   ),
+  MapCreekPoint: web(
+    "the water drop at the creek point a catchment was measured at; Logjam GPS does not ask the flow network yet",
+  ),
+  MapFlowArrow: web(
+    "which way the water runs at that creek point; Logjam GPS does not ask the flow network yet",
+  ),
+  MapTip: web(
+    "a figure that follows the mouse over a line on the map; a finger has no hover",
+  ),
 
   // — chips and filters —
   Chip: both,

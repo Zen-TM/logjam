@@ -26,8 +26,14 @@ import {
   MAP_MEASURE_START_NOTE,
   MAP_MEASURE_VERBS,
   MAP_SNAP_OPTIONS,
+  formatCatchmentKm2,
+  mapPointCatchment,
+  mapPointCatchmentNote,
   mapPointFacts,
+  mapPointStreamOrder,
+  mapPointUpstreamNotice,
   mapPointVerbs,
+  type MapPointCatchment,
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
   MAP_POINT_VERBS,
@@ -823,10 +829,152 @@ describe("the map point panel", () => {
       elevation: { state: "unavailable" },
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
+      catchment: { state: "checking" },
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");
     expect(MAP_POINT_NO_FIX_NOTE.gps).toContain("locate button");
+  });
+
+  // Mutation: offer "Show the creeks upstream" before a creek is found, or
+  // after the lookup found none, and the API is asked for nothing.
+  it("offers the creeks upstream only once a creek is found", () => {
+    expect(
+      mapPointVerbs("web", { creekFound: true }).map((verb) => verb.id),
+    ).toEqual(["addPlace", "measure", "copy", "upstream"]);
+    expect(mapPointVerbs("web", { creekFound: false })).toEqual(
+      mapPointVerbs("web"),
+    );
+    expect(
+      mapPointVerbs("gps", { creekFound: true }).map((verb) => verb.id),
+    ).not.toContain("upstream");
+  });
+
+  // Mutation: show a dash for a creek that is not there or a basin not built
+  // yet, or reword the API's sentence: each reads as a different answer.
+  it("says which answer the catchment lookup gave, last among the figures", () => {
+    const facts = (catchment: MapPointCatchment) =>
+      mapPointFacts({
+        point,
+        elevation: { state: "known", metres: 412 },
+        from: null,
+        catchment,
+      }).at(-1);
+    expect(
+      facts({
+        state: "found",
+        catchmentKm2: 4.23,
+        streamOrder: 3,
+        biggerNearbyKm2: null,
+      }),
+    ).toEqual({
+      key: "catchment",
+      label: "Catchment",
+      value: "4.2 km²",
+      tag: { text: "Order 3", spoken: "Stream order 3" },
+    });
+    expect(facts({ state: "checking" })!.value).toBe("Checking…");
+    expect(facts({ state: "noCreek" })!.value).toBe("No creek within 50 m");
+    expect(facts({ state: "notCovered" })!.value).toBe("Not covered yet");
+    expect(
+      facts({ state: "failed", message: "Too many requests. Wait a minute." }),
+    ).toEqual({
+      key: "catchment",
+      label: "Catchment",
+      value: "Too many requests. Wait a minute.",
+      span: true,
+    });
+    expect(
+      mapPointFacts({
+        point,
+        elevation: { state: "checking" },
+        from: null,
+      }).map((fact) => fact.key),
+    ).not.toContain("catchment");
+  });
+
+  it("reads each lookup status as its own state", () => {
+    const attribution = "credit";
+    expect(
+      mapPointCatchment({
+        status: "found",
+        snapped: point,
+        distanceM: 12,
+        catchmentKm2: 4.2,
+        streamOrder: 3,
+        biggerNearby: { catchmentKm2: 14 },
+        attribution,
+      }),
+    ).toEqual({
+      state: "found",
+      catchmentKm2: 4.2,
+      streamOrder: 3,
+      biggerNearbyKm2: 14,
+    });
+    expect(mapPointCatchment({ status: "no-creek", attribution })).toEqual({
+      state: "noCreek",
+    });
+    expect(mapPointCatchment({ status: "not-covered", attribution })).toEqual({
+      state: "notCovered",
+    });
+  });
+
+  // Mutation: round every catchment to whole km², and a 0.03 km² gully
+  // reads "0 km²".
+  it("shows a gully's catchment and a river's at a precision each can use", () => {
+    expect(formatCatchmentKm2(0.001)).toBe("<0.01 km²");
+    expect(formatCatchmentKm2(0.034)).toBe("0.03 km²");
+    expect(formatCatchmentKm2(0.996)).toBe("1.0 km²");
+    expect(formatCatchmentKm2(4.23)).toBe("4.2 km²");
+    expect(formatCatchmentKm2(9.96)).toBe("10 km²");
+    expect(formatCatchmentKm2(663.4)).toBe("663 km²");
+    expect(formatCatchmentKm2(1234.5)).toBe("1,235 km²");
+    expect(formatCatchmentKm2(Number.NaN)).toBe("—");
+  });
+
+  it("mentions a much bigger creek in range, in the same unit", () => {
+    expect(
+      mapPointCatchmentNote({
+        state: "found",
+        catchmentKm2: 0.4,
+        streamOrder: 1,
+        biggerNearbyKm2: 14.2,
+      }),
+    ).toBe("A creek draining 14 km² is also nearby.");
+    expect(
+      mapPointCatchmentNote({
+        state: "found",
+        catchmentKm2: 0.4,
+        streamOrder: 1,
+        biggerNearbyKm2: null,
+      }),
+    ).toBeNull();
+    expect(mapPointCatchmentNote({ state: "noCreek" })).toBeNull();
+    expect(mapPointCatchmentNote(undefined)).toBeNull();
+  });
+
+  it("says on the map when smaller creeks were left out", () => {
+    expect(
+      mapPointUpstreamNotice({ catchmentKm2: 4.23, creeks: 1, trimmed: false }),
+    ).toBe("Creeks upstream · 4.2 km² · 1 creek");
+    expect(
+      mapPointUpstreamNotice({
+        catchmentKm2: 663,
+        creeks: 3689,
+        trimmed: true,
+      }),
+    ).toBe("Creeks upstream · 663 km² · 3,689 creeks · smaller ones left out");
+    // A count is a number, and a zero is left out (shared/DESIGN.md §11).
+    expect(
+      mapPointUpstreamNotice({ catchmentKm2: 4.23, creeks: 0, trimmed: false }),
+    ).toBe("Creeks upstream · 4.2 km²");
+  });
+
+  it("names a creek's stream order in full out loud", () => {
+    expect(mapPointStreamOrder(3)).toEqual({
+      text: "Order 3",
+      spoken: "Stream order 3",
+    });
   });
 
   // Mutation: give the point panel's verb words of its own.

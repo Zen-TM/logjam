@@ -113,3 +113,37 @@
   box-shadow: var(--shadow-float);
   pointer-events: none;
 }
+
+/* The drop stands on the map like a pin's head: a white edge and the float
+   shadow separate it from any basemap, as the point dot's ring does. */
+.creekPoint {
+  display: block;
+  width: var(--space-3);
+  height: var(--space-3);
+  overflow: visible;
+  filter: drop-shadow(var(--shadow-float));
+  pointer-events: none;
+}
+
+.flowArrow {
+  display: block;
+  width: var(--space-6);
+  height: var(--space-6);
+  overflow: visible;
+  filter: drop-shadow(var(--shadow-float));
+  pointer-events: none;
+}
+
+/* The tooltip's inverted surface, without its popover machinery: it follows
+   the pointer as a marker. */
+.tip {
+  composes: meta from "../textRoles.generated.module.css";
+  display: block;
+  padding: var(--space-0-5) var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-inverse);
+  color: var(--color-on-inverse);
+  white-space: nowrap;
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}

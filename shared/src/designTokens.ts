@@ -37,6 +37,15 @@ export const MAP_INK = {
   ring: "#FFFFFF",
   /** The light halo behind a LiDAR topo's own label colour. */
   labelHalo: "rgba(255,255,255,0.8)",
+  /**
+   * Water, from the smallest creek drawn to the biggest: the creeks upstream
+   * of a point blend between the two by the land each drains, and the land
+   * itself is a wash of `waterLarge`. Blue because it is water on every map
+   * people know; light at the small end so a thousand gullies stay quiet
+   * beside the trunk.
+   */
+  waterSmall: "#4F86E8",
+  waterLarge: "#0D3B9E",
 } as const;
 
 /**
