@@ -258,6 +258,7 @@ import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import { GEOPDF_ERRORS, importGeoPdfFile } from "../geopdf/importPipeline";
 import { runGeoPdfImport } from "../geopdf/importRunner";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
+import { misalignedGeoPdfNotice } from "../geopdf/geoPdfMisalignment";
 import { setVectorImportVisible } from "../imports/importsDb";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
@@ -4340,6 +4341,11 @@ export function MapScreen({
       : "Offline — no map saved for this area.";
   })();
 
+  const geoPdfNoticeText = misalignedGeoPdfNotice(
+    readyGeoPdfImports,
+    viewportBbox,
+  );
+
   // Once each: offline, every saved clip of a source carries the same credit.
   const attributionText = [
     ...new Set(
@@ -4996,6 +5002,15 @@ export function MapScreen({
         ) : null}
 
         {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
+
+        {/* A GeoPDF whose control points disagree is drawn off the ground it
+            shows, so the dot over it is read wrong. Said while one is on
+            screen, the same viewport test as the offline notice. */}
+        {geoPdfNoticeText ? (
+          <Notice icon="warning" tone="warning">
+            {geoPdfNoticeText}
+          </Notice>
+        ) : null}
 
         {/* The compass is confidently wrong and nothing else on screen would
             say so — every app on the phone reads the same miscalibrated

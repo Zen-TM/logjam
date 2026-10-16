@@ -22,14 +22,11 @@ import {
   moveAnchor,
   reverseDraft,
   setFiller,
+  withUndoStep,
   type RouteDraft,
   type RoutePoint,
   MAX_ROUTE_POINTS,
 } from "@logjam/shared";
-
-/** Deepest undo stack. Far past what anyone reaches for, and bounded so a long
- *  drawing session can't grow without limit. */
-const MAX_HISTORY = 100;
 
 export type RouteDraftHandle = {
   draft: RouteDraft;
@@ -63,10 +60,9 @@ export function useRouteDraft(): RouteDraftHandle {
   const commit = useCallback((next: (current: RouteDraft) => RouteDraft) => {
     setDraft((current) => {
       const updated = next(current);
-      // A no-op action must not consume an undo step — otherwise pressing
-      // Undo appears to do nothing (useRouteDraft.test.ts).
-      if (updated === current) return current;
-      history.current = [...history.current, current].slice(-MAX_HISTORY);
+      const nextHistory = withUndoStep(history.current, current, updated);
+      if (!nextHistory) return current;
+      history.current = nextHistory;
       setCanUndo(true);
       return updated;
     });

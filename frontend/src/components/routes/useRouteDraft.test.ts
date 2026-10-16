@@ -8,7 +8,7 @@ const B: RoutePoint = [150.31, -33.71];
 const MID: RoutePoint = [150.305, -33.705];
 
 describe("useRouteDraft undo", () => {
-  // Mutation: push history in `commit` before the `updated === current` check.
+  // Mutation: push history in `commit` without going through `withUndoStep`.
   it("spends no undo step on an action that changed nothing", () => {
     const { result } = renderHook(() => useRouteDraft());
     act(() => result.current.addAnchor(A));

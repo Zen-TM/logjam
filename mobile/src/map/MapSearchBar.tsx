@@ -7,9 +7,11 @@
 // for a full-width rounded rectangle would make the icon jump left and up,
 // disconnecting the two shapes.
 //
-// Locations come from Nominatim via `geocode`: 3-char minimum, 350 ms
-// debounce, tap a result to recentre. Logjam Web's MapSearchBox differs here:
-// it asks the geocoder only when the user picks "Search locations for …".
+// Locations come from Nominatim via `geocode`, and only when asked: the last
+// row is "Search locations for …" (or the keyboard's Search key), as on Logjam
+// Web. Nominatim's usage policy forbids search-as-you-type, and a box that
+// geocoded every keystroke would send every canyon name typed to a third
+// party. Tap a result to recentre.
 //
 // IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
 // A box that can find Katoomba but not the place you saved last week answers
@@ -34,7 +36,13 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
+import {
+  geocode,
+  GEOCODE_MIN_QUERY_LENGTH,
+  messageFromError,
+  searchLocationsLabel,
+  type GeocodeResult,
+} from "@logjam/shared";
 
 import {
   hitSlop,
@@ -49,8 +57,6 @@ import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { FieldError, Icon, type Glyph } from "../ui";
 
-const DEBOUNCE_MS = 350;
-const MIN_QUERY_LENGTH = 3;
 const GLYPH = 20;
 /** Keeps the glyph on the circle's centre line at every width. */
 const GLYPH_INSET = (SEARCH_SIZE - GLYPH) / 2;
@@ -112,7 +118,10 @@ export function MapSearchBar({
 
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
-  // Tagged with the query it answers, so a short or still-pending query reads
+  // The query the user asked the geocoder about. Typing on past it leaves the
+  // answer behind and offers the ask row again.
+  const [asked, setAsked] = useState<string | null>(null);
+  // Tagged with the query it answers, so a stale or still-pending answer reads
   // as "no answer" without being cleared from an effect.
   const [search, setSearch] = useState<{
     query: string;
@@ -120,9 +129,10 @@ export function MapSearchBar({
     error: string | null;
   } | null>(null);
   const trimmed = query.trim();
-  const searchable = expanded && trimmed.length >= MIN_QUERY_LENGTH;
-  const answer = searchable && search?.query === trimmed ? search : null;
-  const loading = searchable && answer === null;
+  const searchable = expanded && trimmed.length >= GEOCODE_MIN_QUERY_LENGTH;
+  const askedHere = searchable && asked === trimmed;
+  const answer = askedHere && search?.query === trimmed ? search : null;
+  const loading = askedHere && answer === null;
   const results = answer?.results ?? [];
   const error = answer?.error ?? null;
   const inputRef = useRef<TextInput>(null);
@@ -143,28 +153,27 @@ export function MapSearchBar({
   }, [expanded, grow]);
 
   useEffect(() => {
-    if (!searchable) return;
+    if (asked === null) return;
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      geocode(trimmed, controller.signal)
-        .then((found) => {
-          setSearch({ query: trimmed, results: found, error: null });
-        })
-        .catch((err) => {
-          if (controller.signal.aborted) return;
-          console.error(err);
-          setSearch({
-            query: trimmed,
-            results: [],
-            error: messageFromError(err, "Couldn't search for that place."),
-          });
+    geocode(asked, controller.signal)
+      .then((found) => {
+        setSearch({ query: asked, results: found, error: null });
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.error(err);
+        setSearch({
+          query: asked,
+          results: [],
+          error: messageFromError(err, "Couldn't search for that place."),
         });
-    }, DEBOUNCE_MS);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [searchable, trimmed]);
+      });
+    return () => controller.abort();
+  }, [asked]);
+
+  const ask = () => {
+    if (searchable) setAsked(trimmed);
+  };
 
   // Focus AFTER the expansion has committed, not from the tap handler: the
   // field is `editable={expanded}`, and a focus() that lands on the frame
@@ -180,6 +189,7 @@ export function MapSearchBar({
     Keyboard.dismiss();
     setExpanded(false);
     setQuery("");
+    setAsked(null);
     setSearch(null);
   };
 
@@ -203,9 +213,11 @@ export function MapSearchBar({
     inputRange: [0, 1],
     outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2 - reservedWidth],
   });
+  const offerAsk = searchable && !askedHere;
   const showPanel =
     expanded &&
-    (loading ||
+    (offerAsk ||
+      loading ||
       error !== null ||
       results.length > 0 ||
       localMatches.length > 0);
@@ -250,6 +262,7 @@ export function MapSearchBar({
             accessibilityLabel="Search for a place to centre the map"
             autoCorrect={false}
             returnKeyType="search"
+            onSubmitEditing={ask}
             editable={expanded}
           />
           <Pressable
@@ -305,6 +318,22 @@ export function MapSearchBar({
               </Pressable>
             ))}
 
+            {offerAsk ? (
+              <Pressable
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.result,
+                  styles.savedResult,
+                  pressed && styles.resultPressed,
+                ]}
+                onPress={ask}
+              >
+                <Icon idea="search" size={16} color={theme.textMuted} />
+                <Text style={[styles.resultText, styles.savedText]}>
+                  {searchLocationsLabel(trimmed)}
+                </Text>
+              </Pressable>
+            ) : null}
             {loading ? <Text style={styles.status}>Searching…</Text> : null}
             {error !== null ? (
               <View style={styles.statusBox}>
