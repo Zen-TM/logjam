@@ -742,8 +742,8 @@ describe("sync push — a definition keeps a one-sided bound", () => {
 });
 
 // The other half of the REST/sync pair: `parseScoping` in routes/customFields.ts
-// caps `placeTypeIds`, so a definition arriving by push is capped too — a phone
-// could otherwise write a row the web's own dialog refuses. Per-op 413, not a
+// caps `placeTypeIds`, so a definition arriving by push is capped too — push
+// would otherwise be the way around the REST cap. Per-op 413, not a
 // whole-batch abort, because the op is terminally bad and its neighbours are not.
 describe("sync push — a definition's scoping is capped", () => {
   it("rejects a scoping past the ceiling with a 413 on that op alone", async () => {
