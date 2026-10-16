@@ -3,12 +3,11 @@
 # in budgets.tf). docs/operations/alarms.md lists each alarm and what to do
 # first when it fires.
 #
-# The topic and the alarms logjam-api-5xx and logjam-topo-stuck-task were made
-# by hand before Terraform owned monitoring; the `import` blocks adopt them. The
-# topic's email subscription is still unmanaged: its id is an ARN only AWS
-# knows, and an email subscription needs a person to confirm it anyway. The
-# topic's policy is the AWS default, which lets CloudWatch alarms in this
-# account publish; nothing else publishes to it.
+# The topic and the alarms logjam-api-5xx and logjam-topo-stuck-task are
+# imported into Terraform. The topic's email subscription is unmanaged: its id
+# is an ARN only AWS knows, and an email subscription needs a person to confirm
+# it anyway. The topic's policy is the AWS default, which lets CloudWatch alarms
+# in this account publish; nothing else publishes to it.
 
 import {
   to = aws_sns_topic.alerts
@@ -69,11 +68,10 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
-# The pgaudit -> WORM pipeline's only health signal. INF-001: the CloudWatch
-# subscription filter fed this stream from a log group that stopped existing at
-# the 2026-06-23 DB rename, so the stream sat ACTIVE and idle for two months
-# while the CloudTrail half kept writing to the same bucket — the audit sink
-# looked alive from every angle except the one nobody checked.
+# The pgaudit -> WORM pipeline's only health signal. If the log group or
+# subscription filter breaks, the Firehose stream sits ACTIVE and idle while
+# CloudTrail continues writing to the bucket — an idle stream can appear healthy
+# without an explicit delivery check.
 #
 # A starved Firehose emits NO datapoints rather than bad ones, so
 # treat_missing_data = "breaching" is the entire point of this alarm: absence of
@@ -188,9 +186,8 @@ resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
 
 # ── Workers ────────────────────────────────────────────────────────────────
 
-# Adopted as it was made by hand; the settings are the live ones. Despite the
-# name it watches the whole cluster: some task (any family) has been running in
-# every hour of the last six.
+# Despite the name it watches the whole cluster: some task (any family) has
+# been running in every hour of the last six.
 import {
   to = aws_cloudwatch_metric_alarm.topo_stuck_task
   id = "logjam-topo-stuck-task"
@@ -301,10 +298,10 @@ resource "aws_cloudwatch_log_metric_filter" "worker_failures" {
 }
 
 # Three in an hour. Every failed job exits 1 (topo/worker.py,
-# export_worker.py, geoPdfWorker.ts), so one bad upload is one failure, and a
-# user retrying it twice more is worth a look too. Jobs are rare, so a broken
-# worker image may take hours to fail three times; the user is told of each
-# failure meanwhile.
+# topo/export_worker.py, api/src/worker/geoPdfWorker.ts), so one bad upload is
+# one failure, and a user retrying it twice more is worth a look too. Jobs are
+# rare, so a broken worker image may take hours to fail three times; the user
+# is told of each failure meanwhile.
 resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   alarm_name        = "logjam-worker-failures"
   alarm_description = "3+ ECS worker tasks stopped with a non-zero exit or failed to start within an hour. First: read ${aws_cloudwatch_log_group.worker_failures.name} for the family, exit code and stoppedReason, then that worker's log group (/ecs/<family>); if a worker deploy just ran, roll the worker back (docs/operations/rollback.md). ${local.alarms_doc}"

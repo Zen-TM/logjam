@@ -65,8 +65,7 @@ describe("places routes (fake auth = alice)", () => {
     const placeName = "CH-003 detach test";
     const id = await createPlace(placeName);
 
-    // Attach a trip log so we exercise the detach path (creation moved to the
-    // global POST /trips surface — the nested POST was removed).
+    // Attach a trip log so we exercise the detach path.
     const tripRes = await request(API_URL)
       .post("/trips")
       .set(AUTH)
@@ -186,9 +185,9 @@ describe("places routes (fake auth = alice)", () => {
   });
 });
 
-// APIR-010: `name`/`altNames`/`notes`/`attributes` were unvalidated, so a
-// mistyped field passed validation and died inside Prisma as a raw 500 — and
-// on the sync push path one such op poisoned every flush of that batch.
+// Free-text fields (`name`, `altNames`, `notes`, `attributes`) must fail
+// validation (400) rather than dying inside Prisma as a raw 500, which on the
+// sync push path would poison every flush of that batch.
 describe("POST /places — free-text field validation", () => {
   const AUTH_LOCAL = { Authorization: "Bearer fake-token" } as const;
 

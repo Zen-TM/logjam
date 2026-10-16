@@ -133,10 +133,8 @@ describe("validateEnv — origin-verify", () => {
   });
 });
 
-// APIC-004: DATABASE_SSL / DATABASE_SSL_CA / GEO_PDF_JOB_ID were consumed but
-// absent from the schema, so nothing validated them. DATABASE_SSL is an exact
-// "disable" compare in services/prisma.ts — a near-miss value used to leave
-// verified TLS on and surface as an opaque pg_hba error.
+// DATABASE_SSL is an exact "disable" compare in services/prisma.ts — near-miss
+// values are rejected so invalid configurations fail loud at boot.
 describe("TLS + worker env vars are in the schema", () => {
   it("accepts DATABASE_SSL=disable and the CA path", () => {
     process.env.DATABASE_SSL = "disable";

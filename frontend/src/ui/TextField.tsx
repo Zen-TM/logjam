@@ -163,8 +163,8 @@ export function NumberField({
  * boundary pushed — replaces the draft, unless the draft already MEANS that
  * number, so "45." is not rewritten under the cursor.
  *
- * It was written three times over (the style sheet's widths, the hillshade
- * angles, the slope boundaries) before it came here.
+ * Used for the style sheet's widths, the hillshade angles and the slope
+ * boundaries.
  */
 export function LiveNumberField({
   value,
@@ -346,10 +346,10 @@ export function SearchField({
  *
  * It is the kit's only slider, and it earns that by being the only value of its
  * kind: bounded on both sides, continuous, with no unit of its own and nothing
- * to compare it against except the map it is redrawing. A box to type in was
- * tried and put back (operator, 2026-09-18) — it asked for a precision nobody
- * has, and it showed neither the bounds nor that the number is a multiplier.
- * Native, so the arrows, Home/End and the announcement are the platform's.
+ * to compare it against except the map it is redrawing. A box to type in
+ * would ask for a precision nobody has, and shows neither the bounds nor that
+ * the number is a multiplier. Native, so the arrows, Home/End and the
+ * announcement are the platform's.
  */
 export function RangeField({
   label,

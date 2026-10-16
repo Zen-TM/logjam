@@ -15,9 +15,8 @@ function place(overrides: Partial<Place> = {}): Place {
   } as unknown as Place;
 }
 
-/** A place carrying the given field values. The seven scalars are keys now, so
- *  "is it null" became "is the key absent" — the same question, because no
- *  write path stores a null. */
+/** A place carrying the given field values. "Is it null" is "is the key absent"
+ *  because no write path stores a null. */
 function placeWith(values: Record<string, unknown>): Place {
   return place({ fieldValues: values } as Partial<Place>);
 }

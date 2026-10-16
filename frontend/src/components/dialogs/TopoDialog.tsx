@@ -148,7 +148,7 @@ export default function TopoDialog({
   initialTemplateId?: string | null;
   existingTopoNames: string[];
   /** Notifies the owner that the inline "Save as template" created a template,
-   *  so panel-side template lists can refetch (TOPO-1). */
+   *  so panel-side template lists can refetch. */
   onTemplateSaved?: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -201,13 +201,14 @@ export default function TopoDialog({
 
   // Closing empties the form — but going off to draw the area CLOSES this
   // dialog too, and comes back to it (App reopens on `onBboxSelected`). Emptying
-  // it then threw away the ZIP the user had already chosen, their name and their
-  // settings, silently and without the unsaved-changes confirm, because App's
-  // own close never goes through the guard. `awaitingBbox` is the difference
-  // between the two, and it is App's to tell us: it is false again whether the
-  // box was drawn or the pick was abandoned, so a genuinely abandoned dialog
-  // still empties. Done during render, when the dialog becomes genuinely
-  // closed. (The file input needs no clearing: the closed Dialog unmounts it.)
+  // it in that case would throw away the ZIP the user had already chosen,
+  // their name and their settings, silently and without the unsaved-changes
+  // confirm, because App's own close never goes through the guard. `awaitingBbox`
+  // is the difference between the two, and it is App's to tell us: it is false
+  // again whether the box was drawn or the pick was abandoned, so a genuinely
+  // abandoned dialog still empties. Done during render, when the dialog becomes
+  // genuinely closed. (The file input needs no clearing: the closed Dialog
+  // unmounts it.)
   const closedForGood = !open && !awaitingBbox;
   const [wasClosedForGood, setWasClosedForGood] = useState(closedForGood);
   if (closedForGood !== wasClosedForGood) {
@@ -298,7 +299,7 @@ export default function TopoDialog({
       await refreshTemplates();
       setSelectedTemplateId(created.id);
       // Panel-side template lists render from their own state — tell the owner
-      // so they refresh without a page reload (TOPO-1).
+      // so they refresh without a page reload.
       onTemplateSaved?.();
     } catch (e) {
       console.error(e);
@@ -364,8 +365,8 @@ export default function TopoDialog({
       // Best-effort: quota display/gating only — a failure here leaves
       // creditsUsed/creditsQuota null (the client-side checks then skip,
       // and the server still enforces the quota on submit), so it's not worth
-      // a toast, but FEUI-011 wants the failure at least visible in the console
-      // rather than fully silent.
+      // a toast, but log the failure in the console rather than leaving it
+      // fully silent.
       .catch((err) => console.error(err));
   }, [open]);
 
@@ -806,7 +807,7 @@ export default function TopoDialog({
               >
                 {/* Until /topo-templates resolves, render the synthetic system
                   Default entry (always first in the server list) so the initial
-                  value "default" is never out of range (TOPO-3). */}
+                  value "default" is never out of range. */}
                 {templates.length === 0 ? (
                   <option value={DEFAULT_TEMPLATE_ID}>Default (system)</option>
                 ) : (
@@ -881,10 +882,10 @@ function ZipSummary({
         ]
       : null,
     ["Size", formatBytes(stats.uncompressedBytes)],
-    // Unambiguous quota copy (TOPO-8): creditsUsed already includes any
-    // queued/running jobs (the server sums non-failed jobs this month), so show
-    // the current figure and the projection side by side instead of a bare
-    // "N / Q after this job".
+    // Unambiguous quota copy: creditsUsed already includes any queued/running
+    // jobs (the server sums non-failed jobs this month), so show the current
+    // figure and the projection side by side instead of a bare "N / Q after
+    // this job".
     creditsUsed !== null && creditsQuota !== null
       ? [
           "Credits",

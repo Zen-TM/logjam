@@ -145,7 +145,7 @@ describe("POST /bulk-share", () => {
 
   it("COUNTS an id that isn't the caller's, and never says which", async () => {
     // Alice's place and an id that exists nowhere are indistinguishable in the
-    // response — the aggregate form of the 404-not-403 rule (SEC-001). Naming
+    // response — the aggregate form of the 404-not-403 rule. Naming
     // either one would confirm to bob that it exists.
     const mine = await createPlace(BOB_SUB, "Bulk share mine");
     const hers = await createPlace(ALICE_SUB, "Alice's own place");
@@ -228,7 +228,7 @@ describe("POST /bulk-share", () => {
         (n: { payload: { batchId?: string } }) => n.payload.batchId === batchId,
       );
       expect(batched).toHaveLength(2);
-      // Ids only in the payload (PRIV-005) — the place NAME is resolved at
+      // Ids only in the payload — the place NAME is resolved at
       // read time, so it appears in the response but was never stored.
       expect(batched[0].type).toBe("place_shared");
       expect(batched[0].payload.placeId).toBeTypeOf("string");

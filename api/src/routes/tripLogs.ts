@@ -13,9 +13,7 @@ const router = Router({ mergeParams: true });
 
 // ── GET /places/:placeId/trips ──────────────────────────────
 // Returns the caller's trip logs linked to a place — a filtered convenience
-// view over GET /trips. All trip mutations live on the global /trips surface;
-// the nested POST/PATCH/DELETE were removed with the trip↔place m2m cutover
-// (the frontend never called them).
+// view over GET /trips. All trip mutations live on the global /trips surface.
 router.get(
   "/",
   requireAuth,

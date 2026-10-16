@@ -1,11 +1,11 @@
 # Primary Postgres database. Imported from the live instance. The master
 # password is RDS-managed (manage_master_user_password) and rotated into the
 # rds!db-... Secrets Manager secret — the app re-resolves it per connection
-# (api/src/lib/dbPassword.ts), so Terraform must never own/replace it.
+# (api/src/lib/dbPassword.ts), so Terraform does not manage or replace it.
 #
 # prevent_destroy guards Terraform from destroying it; deletion_protection
-# guards AWS-side too. backup_retention_period = 7 enables daily snapshots +
-# point-in-time recovery (the live instance shipped with 0 = no backups).
+# guards AWS-side too. backup_retention_period = 7 enables daily snapshots and
+# point-in-time recovery.
 resource "aws_db_instance" "main" {
   allocated_storage               = 20
   apply_immediately               = true
@@ -25,13 +25,11 @@ resource "aws_db_instance" "main" {
   deletion_protection             = true
   enabled_cloudwatch_logs_exports = ["postgresql"]
   engine                          = "postgres"
-  # Enrolled in RDS Extended Support. The original logjam-db had this DISABLED
-  # (set at its creation), but engine_lifecycle_support is a create/restore-time
-  # setting — restore-db-instance-from-db-snapshot defaulted logjam-db-enc to
-  # enrolled and AWS rejects flipping it via ModifyDBInstance. No charge while
-  # Postgres 16 is in standard support; Extended Support billing would only start
-  # at PG16 EOL (~Nov 2027). Revisit before then (a fresh restore with the flag
-  # disabled is the only way to opt out) rather than re-migrate now.
+  # Enrolled in RDS Extended Support. engine_lifecycle_support is a create/restore-time
+  # setting: AWS rejects modifying it via ModifyDBInstance. No charge while
+  # Postgres 16 is in standard support; Extended Support billing only starts
+  # at PG16 EOL (~Nov 2027). A fresh restore with the flag disabled is required
+  # to opt out before then.
   engine_lifecycle_support            = "open-source-rds-extended-support"
   engine_version                      = "16.13"
   iam_database_authentication_enabled = true
@@ -54,7 +52,7 @@ resource "aws_db_instance" "main" {
   port                         = 5432
   publicly_accessible          = false
   skip_final_snapshot          = false
-  # INF-007: belt-and-suspenders behind prevent_destroy + deletion_protection —
+  # Belt-and-suspenders behind prevent_destroy + deletion_protection —
   # both already guard against an accidental terraform destroy or console
   # delete, but neither guards a *deliberate* one from losing everything. A
   # static identifier is fine: this only matters if the instance is actually
@@ -82,21 +80,21 @@ resource "aws_db_instance" "main" {
   }
 }
 
-# pgaudit parameter group (operator-trust-plan Part C). Replaces the default
-# parameter group so we can preload pgaudit and capture direct SQL.
+# pgaudit parameter group. Replaces the default parameter group so we can
+# preload pgaudit and capture direct SQL.
 #
 # IMPORTANT — applying this is NOT zero-downtime:
 #  - shared_preload_libraries is a STATIC parameter: it takes effect only after a
 #    DB REBOOT. Attaching this group + the reboot is an operator-gated step.
 #  - After the reboot, run `CREATE EXTENSION IF NOT EXISTS pgaudit;` once as the
-#    master user (see the operator-trust runbook) so the pgaudit.* settings
-#    below take effect.
+#    master user so the pgaudit.* settings below take effect.
 #
 # Privacy: pgaudit.log_parameter = 0 keeps bound query parameters OUT of the
 # logs. Prisma uses parameterized queries, so the logged statement text is
-# placeholders ($1, $2 …), never literal coordinates or canyon names — this is
-# what keeps the audit logs compliant with the "no coords/names in plaintext
-# logs" rule while still recording WHO read WHAT tables WHEN.
+# placeholders ($1, $2 …), never literal coordinates or canyon names — this keeps
+# the audit logs compliant with the rule against plaintext coordinates or names
+# in logs (Guard: api/src/lib/logger.unit.test.ts) while still recording who read
+# what tables when.
 #
 # Cost vs. signal: the GLOBAL pgaudit.log below is "read,write,ddl,role", so any
 # OPERATOR/master session (logjam_admin) logs reads too — that is the privacy

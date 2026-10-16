@@ -20,7 +20,8 @@ const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
 // unbounded IN-list lookup + multi-chunk write transaction (the import path does
 // per-element work proportional to length). Mirrors BULK_DELETE_LIMIT; the 1 MB
-// body cap and 300/min limiter are the other ceilings. See SEC-001.
+// body cap and 300/min limiter are the other ceilings. Guarded in
+// src/__tests__/tripLogsBulk.test.ts.
 const BULK_IMPORT_LIMIT = 2000;
 const CHUNK_SIZE = 200;
 

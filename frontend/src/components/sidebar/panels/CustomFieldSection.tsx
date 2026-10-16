@@ -53,15 +53,12 @@ function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
  * Settings.
  *
  * The page is a LIST, and making or changing one is a DIALOG, which is what
- * every other "new one of these" in Logjam Web is. It was a form in a card
- * inside the panel for adding and a row that turned into a text field for
- * renaming: two shapes invented here and used nowhere else.
+ * every other "new one of these" in Logjam Web is.
  *
- * BUILT-INS LAST, and with no verbs. A system definition belongs to no account:
- * the server looks a key up under the CALLER's id, so `PATCH` and `DELETE` are
- * both 404 on one, and offering Rename beside it produced "Custom field not
- * found" every time (fixed 2026-09-18). A row with no action reads as a fact;
- * a row whose action fails reads as a bug.
+ * BUILT-INS LAST, and with no verbs (CustomFieldSection.test.tsx). A system
+ * definition belongs to no account: the server looks a key up under the
+ * caller's ID, so `PATCH` and `DELETE` are both 404 on one. A row with no
+ * action reads as a fact; a row whose action fails reads as a bug.
  */
 function CustomFieldSection({
   entity,
@@ -253,7 +250,7 @@ function rowSubtitle(
 /**
  * Make one, or change one. The same form either way — the fields ARE the
  * definition — on the shared `AddCustomFieldForm`, so Settings, a place's own
- * dialog and a trip's cannot drift (UX-002/003).
+ * dialog and a trip's cannot drift.
  *
  * The TYPE is fixed once values exist under it: the server would take the
  * patch, and every answer already recorded would stay in the old shape. A
@@ -324,9 +321,8 @@ function AttributeDialog({
     setSaving(true);
     setError(null);
     try {
-      // ROW-GRAIN, both ways. The whole-list PATCH is gone (see placeUtils.ts):
-      // it could not express the scoping, so every save through it wiped the
-      // scoping off every definition.
+      // ROW-GRAIN, both ways. Scoping is per definition, so updates apply
+      // per row to preserve scoping across definitions.
       const updated = def
         ? await updateCustomField(entity, def.key, {
             label: result.def.label,

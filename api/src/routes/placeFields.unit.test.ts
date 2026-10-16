@@ -14,11 +14,12 @@ import {
 } from "./places";
 import { PLACE_FIELDS } from "./sync";
 
-// APIR-010. `validatePlacePayload` (shared) covers coordinates + numerics
-// only, so a mistyped name/altNames/notes/attributes used to pass validation
-// and die inside Prisma as a raw 500. On POST /sync/push that is worse than an
-// ugly status code: the per-op catch re-throws non-AppErrors, so ONE bad op
-// 500s every flush of that batch until someone intervenes by hand.
+// `validatePlacePayload` (shared) covers coordinates + numerics only;
+// without text field validation, a mistyped name/altNames/notes/attributes
+// would pass validation and die inside Prisma as a raw 500. On POST /sync/push
+// that is worse than an ugly status code: the per-op catch re-throws
+// non-AppErrors, so ONE bad op 500s every flush of that batch until someone
+// intervenes by hand.
 describe("validatePlaceTextFields", () => {
   it("accepts a well-formed payload", () => {
     expect(
@@ -101,12 +102,12 @@ describe("validatePlaceTextFields", () => {
 
 // ── the push allowlist, and what must never be in it ────────────────────────
 //
-// Plan §7.13. `foreignFields` records what the SENDER's definitions said about
+// `foreignFields` records what the SENDER's definitions said about
 // values this owner has no definition for. It is written ONLY by copy and by a
 // place-type change, and its absence from this allowlist is what enforces
 // that: an unknown key is a per-op 400, so a client cannot write it at all.
 //
-// Without this test that rule is a comment, which the root CLAUDE.md forbids.
+// Without this test that rule is a comment, which AGENTS.md forbids.
 describe("PLACE_FIELDS (the push allowlist)", () => {
   it("does not admit foreignFields", () => {
     expect(
@@ -138,7 +139,7 @@ describe("PLACE_FIELDS (the push allowlist)", () => {
 
   // The seven grade columns are gone from the wire entirely — a client still
   // sending `vGrade` gets a 400 rather than a silent drop, which is the
-  // protocol's stated behaviour for an unknown key (§10.4).
+  // protocol's stated behaviour for an unknown key.
   it("no longer admits the grade columns", () => {
     for (const legacy of [
       "vGrade",

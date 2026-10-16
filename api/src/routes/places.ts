@@ -42,10 +42,11 @@ import {
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
 // Bounds for the free-text place fields. `validatePlacePayload` (shared)
-// covers coordinates + numerics only, so a mistyped `name`/`altNames`/`notes`/
-// `attributes` used to sail past validation and die inside Prisma as a raw 500
-// — and on the sync push path, one such op poisoned every subsequent flush of
-// that batch (the per-op catch re-throws non-AppErrors). Bad input is a 400.
+// covers coordinates + numerics only; without text field bounds, a mistyped
+// `name`/`altNames`/`notes`/`attributes` would pass validation and die inside
+// Prisma as a raw 500 — and on the sync push path, one such op would poison
+// every subsequent flush of that batch (the per-op catch re-throws
+// non-AppErrors). Bad input is a 400.
 // Sibling values: TRIP_NAME_MAX_LENGTH / ROUTE_NAME_MAX_LENGTH = 200.
 export const PLACE_NAME_MAX_LENGTH = 200;
 export const PLACE_MAX_ALT_NAMES = 50;
@@ -57,7 +58,7 @@ export const PLACE_MAX_ALT_NAMES = 50;
  * separately requires name/latitude/longitude.
  *
  * Exported for the sync push path — REST and sync must reject identically
- * (§8.1 validation parity), which is the SEC-001 failure mode when they drift.
+ * (validation parity) to prevent drift between interfaces.
  */
 export function validatePlaceTextFields(payload: {
   name?: unknown;
@@ -157,7 +158,7 @@ const router = Router();
 // Hard cap on list responses. The body stays a bare array (consumers depend on
 // that shape); when the result hits the cap the true owner-filtered total is
 // surfaced via the X-Total-Count header so the UI can show "Showing N of TOTAL"
-// without a response-shape change (UX-001).
+// without a response-shape change.
 const LIST_TAKE = 500;
 
 // Which list a fetch is serving. This is an ACCESS decision, not a formatting
@@ -174,9 +175,8 @@ export type PlaceListScope = "owned" | "shared";
 // shared list.
 //
 // This must be enforced HERE rather than by the client declining to render it:
-// the counts previously rode both lists and were merely ignored by the panel,
-// which is not a boundary — it's a client that happens to look away. Anyone with
-// devtools, or any future client, saw them (the SEC-001 shape).
+// relying on clients to ignore fields is not a security boundary; any client or
+// devtools inspection would expose them.
 //
 // On the owned list the counts are the owner's own data: `shares` powers the
 // "shared by me" filter + card badge, `tripLogLinks` the completion filter +
@@ -294,7 +294,7 @@ router.get(
         // category of their own purely for want of this.
         //
         // Inside the existing share boundary: a PlaceShare recipient already
-        // sees place-level media (root CLAUDE.md, hybrid model), and these are
+        // sees place-level media (AGENTS.md, hybrid model), and these are
         // the same fields `GET /media/standalone` returns for one's own files.
         // Still no coordinates — `metadata.bbox` is the file's own extent, which
         // rides the same delta page as the place's position already does.
@@ -337,7 +337,7 @@ router.post(
     // would not think to look for it.
     const typeId = await resolvePlaceTypeId(user.id, placeTypeId);
 
-    // Validate coordinates and the type's field values (PLACE-1/PLACE-2). The
+    // Validate coordinates and the type's field values. The
     // bounds come from the DEFINITIONS in force for this type, so a user's own
     // bounded field is enforced exactly as a grade always was.
     const refusal =
@@ -347,7 +347,7 @@ router.post(
       }) ?? validatePlaceTextFields(req.body);
     if (refusal) throw refusal;
 
-    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // Optional client-minted id: own-id replay → 200 with the
     // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
     const clientId = parseClientSuppliedId(req.body.id);
     if (clientId) {
@@ -456,11 +456,11 @@ router.post(
       : { rows: [], totalBytes: 0n };
     if (mediaBytes > 0n) await assertHasStorageQuota(user.id, mediaBytes);
 
-    // WHICH TYPE, and it is the one decision a copy cannot take back silently
-    // (§2.6 rule 1): a system type resolves globally, a user type matches by
-    // NAME against the recipient's system types first and their own second, and
-    // only a genuine miss creates one. `placeTypeId` in the body is rule 2's
-    // explicit picker, which the copy sheet pre-fills with exactly this answer.
+    // WHICH TYPE, and it is the one decision a copy cannot take back silently:
+    // a system type resolves globally, a user type matches by NAME against the
+    // recipient's system types first and their own second, and only a genuine
+    // miss creates one. `placeTypeId` in the body is the explicit picker,
+    // which the copy sheet pre-fills with exactly this answer.
     const typeResolution = await resolveCopyPlaceType(
       user.id,
       place.placeTypeId,
@@ -673,16 +673,15 @@ router.patch(
       placeTypeId,
     } = req.body;
 
-    // A TYPE CHANGE IS A LEGAL EDIT, here as well as on the phone's push path
-    // (routes/sync.ts). This route silently dropped `placeTypeId`, so the one
-    // client that only speaks REST — Logjam Web — offered a type picker on an
-    // existing place, answered 200, and changed nothing.
+    // A TYPE CHANGE IS A LEGAL EDIT, here as well as on Logjam GPS's push path
+    // (routes/sync.ts), so that clients using REST (such as Logjam Web) can
+    // retype an existing place.
     const typeId =
       placeTypeId !== undefined
         ? await resolvePlaceTypeId(user.id, placeTypeId)
         : place.placeTypeId;
 
-    // Validate any supplied coordinate or field value (PLACE-1/PLACE-2).
+    // Validate any supplied coordinate or field value.
     // requireCoords:false — PATCH may omit fields; only validate what's present.
     // Against the definitions of the type it is BECOMING, or a retype that also
     // writes a value is judged by the questions it is leaving behind.
@@ -694,7 +693,7 @@ router.patch(
     if (refusal) throw refusal;
 
     // Values the NEW type has no definition for are PARKED in `foreignFields`
-    // rather than destroyed or left where nothing renders them (§2.6). The
+    // rather than destroyed or left where nothing renders them. The
     // same call the push path makes, over the values as they will be AFTER
     // this write, and a no-op on a same-type edit with nothing parked.
     const stranded = await strandValuesOnTypeChange({

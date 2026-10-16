@@ -12,16 +12,16 @@ import {
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// Revocation, from the side that loses access. Three findings live here:
+// Revocation, from the side that loses access:
 //
-//   APIR-007  unfriending must revoke EVERY share type in both directions
-//             (place, route, topo job, GeoPDF job) plus file sends
-//             the recipient has not taken yet — while leaving ACCEPTED sends
-//             alone, because those are copies the recipient already owns (D2).
-//   APIR-012  a place_shared notification must stop resolving the place NAME
-//             once the share is revoked. The place row outlives the share, so
-//             the old "does the place exist" fallback could never catch this.
-//   APIR-013  a foreign notification id answers 404, never 403.
+//   - Unfriending must revoke EVERY share type in both directions
+//     (place, route, topo job, GeoPDF job) plus file sends the recipient
+//     has not taken yet — while leaving accepted sends alone, because those
+//     are copies the recipient already owns.
+//   - A place_shared notification must stop resolving the place name once the
+//     share is revoked. The place row outlives the share, so an existence check
+//     on the place row is insufficient.
+//   - A foreign notification id answers 404, never 403.
 //
 // Requires `make dev`. Uses the BOB <-> CAROL friendship (seed.ts) rather than
 // alice<->bob, which other files treat as an invariant. The pair is
@@ -56,11 +56,8 @@ async function ensureFriends(
     .get("/friends/requests")
     .set(as(addresseeSub))
     .set(CLIENT);
-  // Fail LOUDLY. This used to `return` on any non-200, so a 429 from the
-  // per-IP global limiter turned the whole restore into a silent no-op — the
-  // suite still reported green while leaving the seeded bob<->carol friendship
-  // deleted for every later run. A restore hook that can quietly not restore is
-  // worse than no hook.
+  // Fail LOUDLY: a non-200 (such as a 429 from the per-IP limiter) must fail
+  // rather than quietly leaving the friendship deleted for subsequent runs.
   if (pending.status !== 200) {
     throw new Error(
       `ensureFriends: GET /friends/requests returned ${pending.status}, ` +

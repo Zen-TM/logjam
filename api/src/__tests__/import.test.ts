@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
 import { ALICE_ID, CANYON_TYPE_ID } from "./_actors";
 
-// Idempotent file-import endpoints (see plan §6b/§6c, §8).
+// Idempotent file-import endpoints.
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Place importKeys derive from name+coords, so each test uses a unique run
 // suffix to avoid colliding with rows left by earlier runs.
@@ -112,8 +112,7 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     expect(res.body.merged).toBe(1);
 
     const after = await prisma.place.findUnique({ where: { id: placeId } });
-    // Default policy keeps the existing value. It lives in `fieldValues`
-    // now rather than a column, which is the only thing that changed here.
+    // Default policy keeps the existing value in `fieldValues`.
     expect((after?.fieldValues as Record<string, unknown>).v_grade).toBe(2);
     expect(after?.notes).toBe("from import"); // null filled, no data lost
     // Merged-into pre-existing row must NOT be batch-stamped (so undo spares it).
@@ -127,8 +126,8 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
     const sourcePlaceName = `IMP trip src ${run}`;
     const date = "2024-03-15";
     const batchId = newBatch();
-    // The frontend sets displayName = sourcePlaceName for a place-less row
-    // (plan §7a); the backend stores what it's given, so mirror that here.
+    // The frontend sets displayName = sourcePlaceName for a place-less row;
+    // the backend stores what it's given, so mirror that here.
     const trips = [
       {
         placeId: null,

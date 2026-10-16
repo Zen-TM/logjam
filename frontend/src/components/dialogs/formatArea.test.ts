@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { formatAreaKm2 } from "./formatArea";
 
-describe("formatAreaKm2 (TOPO-4)", () => {
+describe("formatAreaKm2", () => {
   it("shows two decimals under 10 km² so small draws are visible", () => {
     expect(formatAreaKm2(0.3)).toBe("0.30 km²");
     expect(formatAreaKm2(0.49)).toBe("0.49 km²");

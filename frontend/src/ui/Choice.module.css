@@ -67,7 +67,7 @@
 
 /* A line on the panel, not a card: the label, then the colour. No background
    and no border — the row is a label and a swatch, and a card around them was
-   chrome drawn for two elements (operator, 2026-09-17). */
+   chrome drawn for two elements. */
 .swatchField {
   min-width: 0;
   display: flex;

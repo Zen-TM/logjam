@@ -187,7 +187,7 @@ function NotificationsPanel({
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Refetch on every open — notifications are otherwise only fetched at boot, so
-  // ones received mid-session (or resolved elsewhere, NOTIF-1) stay stale until
+  // ones received mid-session (or resolved elsewhere) stay stale until
   // a full reload.
   useEffect(() => {
     onRefetchNotifications();
@@ -505,7 +505,7 @@ function NotificationsPanel({
         if (isResolvedElsewhereError(err)) {
           // Answered somewhere else (Friends, Logjam GPS, another tab), or the
           // send is gone: the buttons are dead, not retryable, so clear the row
-          // as a success would rather than bring them back (NOTIF-1).
+          // as a success would rather than bring them back.
           hide([n.id]);
           // Best-effort: the server has usually purged it already, which is a 404.
           deleteNotification(n.id).catch((deleteErr) =>

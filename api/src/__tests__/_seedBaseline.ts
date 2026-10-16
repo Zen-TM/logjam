@@ -3,7 +3,7 @@
 //
 // WHY a sweep and not per-test tracking: a test that forgets to record what it
 // created leaks it, and a failed test never reaches its own cleanup, which is
-// how a mutation run poisoned the next run (#278). A sweep needs no
+// how a mutation run poisoned the next run. A sweep needs no
 // cooperation, covers every table the schema has today or gains later (the
 // table list and primary keys come from Postgres, not a list here), and
 // still runs when a test throws.

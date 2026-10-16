@@ -21,7 +21,8 @@ type Option =
  * come from the public geocoder, and ONLY when asked for — the last option is
  * "Search locations for …". A search box that geocoded every keystroke would
  * send the name of every canyon a user looks up to a third party, and the
- * places on this list are exactly the ones not to publicise (root CLAUDE.md).
+ * places on this list are exactly the ones not to publicise (root AGENTS.md
+ * §Privacy).
  *
  * A WAI-ARIA combobox: arrows move through the options, Enter chooses, Escape
  * clears and then leaves.

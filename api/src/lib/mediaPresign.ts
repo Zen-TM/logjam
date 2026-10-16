@@ -14,7 +14,7 @@ const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 // Presigned GET URLs are bearer tokens: a leaked link works until it expires.
 // Kept short-lived, only ever handed to authenticated owner/share-checked
-// callers, and never logged or persisted. See root CLAUDE.md privacy rules.
+// callers, and never logged or persisted. See root AGENTS.md privacy rules.
 export const MEDIA_PRESIGN_TTL_SECONDS = 3600; // 1 hour
 
 // Subset of the Prisma Media row needed to build a client DTO.

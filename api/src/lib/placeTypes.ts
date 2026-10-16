@@ -72,7 +72,7 @@ export async function resolvePlaceTypeId(
  *
  * The flag is why this is a union rather than a join: scoping "all" as join
  * rows for the types that exist today would silently fail to apply to a type
- * created tomorrow, which is the parallel-list drift the root CLAUDE.md rule
+ * created tomorrow, which is the parallel-list drift the root AGENTS.md rule
  * targets. A newly created type inherits every `All` definition for free,
  * because there is nothing to add it to.
  *
@@ -313,7 +313,8 @@ export type DeletePlaceTypeResult =
  *
  * BLOCKED while any place still uses it — the caller offers a reassign rather
  * than this cascading places away. A type is a category, and deleting a
- * category must never delete what is in it.
+ * category must never delete what is in it. Guard:
+ * api/src/__tests__/placeTypes.test.ts.
  *
  * An empty type takes with it the definitions scoped ONLY to it: a def left
  * behind would apply to nothing, be invisible in every form, and still occupy
@@ -322,8 +323,8 @@ export type DeletePlaceTypeResult =
  * types as well, and `appliesToAllTypes` ones, lose only the scoping row.
  *
  * Done SERVER-SIDE, in one transaction, for the reason the sync protocol
- * comment already gives for customFieldDef deletes: a phone can only reach the
- * rows in its own mirror, so anything stripped client-side resurfaces.
+ * comment already gives for customFieldDef deletes: Logjam GPS can only reach
+ * the rows in its own mirror, so anything stripped client-side resurfaces.
  */
 export async function deletePlaceType(
   userId: string,

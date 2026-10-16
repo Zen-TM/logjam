@@ -28,11 +28,11 @@ export default function MediaGallery({
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // FEUI-007: one-tap Trash2 permanently deletes the S3 object with no
+  // One-tap Trash2 permanently deletes the S3 object with no
   // recovery. Route through the same ConfirmDialog every other destructive
   // surface uses (e.g. the track-card delete in PlaceDetailPanel).
   const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null);
-  // Thumbnails that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked
+  // Thumbnails that failed to load (e.g. a 404'd S3 object). Tracked
   // by id so a broken thumb shows a labelled fallback instead of the browser's
   // broken-image glyph.
   const [failedThumbIds, setFailedThumbIds] = useState<Set<string>>(new Set());

@@ -2,10 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { RootErrorBoundary } from "./RootErrorBoundary";
 
-// THE BOUNDARY HAD NEVER BEEN TRIGGERED — not in a live run, not in a test — so
-// "the app shows a way out of a render crash" was an assumption about code that
-// had only ever been read. A render throw is not something a suite can wait for;
-// it is something a suite CAUSES, which is what this file is.
+// A render throw is not something a live run waits for; the suite causes it to
+// verify that the boundary replaces a thrown render with a recovery surface.
 //
 // The fallback is the last screen anyone sees during a crash loop, so what it
 // owes the reader is checked here rather than left to the next incident: it

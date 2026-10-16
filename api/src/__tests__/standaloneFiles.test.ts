@@ -1,7 +1,7 @@
 // Standalone files: the account's own imports and recordings, which belong to
 // no place — and what happens when one is LINKED as a place's way.
 //
-// This is the boundary test the root CLAUDE.md requires for any new endpoint on
+// This is the boundary test the root AGENTS.md requires for any new endpoint on
 // shared places. The interesting cases are all about the second party: a
 // standalone file is owner-private, linking it to a shared place GRANTS a
 // sharee sight of it, and unlinking has to take that sight away again while the
@@ -212,8 +212,8 @@ describe("linking a standalone file as a place's way", () => {
       expect(
         revoked.body.media.some((m: { id: string }) => m.id === mediaId),
       ).toBe(false);
-      // ...and still the owner's. THIS is the change: displacing a place's way
-      // used to delete the file, because the place held a copy of it.
+      // ...and still the owner's: displacing a place's way unlinks rather
+      // than deleting the file.
       const mine = await request(API_URL)
         .get("/media/standalone")
         .set(as(ALICE_SUB));
@@ -331,12 +331,9 @@ describe("the delta pull carries standalone files", () => {
    * Drain the delta the way a client does — one page after another until
    * `hasMore` is false — and hand back the last cursor with the rows.
    *
-   * A single unpaged request is not the same thing: the budget is spent in the
-   * fixed entity order (§4.4), so media lands on page two the moment the
-   * account holds enough places, links and trips to fill page one. Asserting
-   * against ONE page passed only while the seed happened to be small, and it
-   * failed the day the seed grew — which is a fact about the fixture, not about
-   * the endpoint.
+   * A single unpaged request is not the same thing: the budget is spent in
+   * fixed entity order, so media lands on later pages if the account holds
+   * enough places, links and trips to fill earlier pages.
    */
   async function drainMedia(sub: string): Promise<{
     media: Record<string, unknown>[];
@@ -373,8 +370,8 @@ describe("the delta pull carries standalone files", () => {
       expect(row.metadata).toEqual(IMPORT_METADATA);
 
       // A cursor from AFTER the upload, then a link: the row must come back.
-      // It would not on a createdAt keyset, which is what this column change
-      // was for — the other device would show a stale parent forever.
+      // Keyset paging on updatedAt ensures the other device does not keep
+      // a stale parent forever.
       const cursor = first.cursor;
       await request(API_URL)
         .patch(`/media/${mediaId}/link`)

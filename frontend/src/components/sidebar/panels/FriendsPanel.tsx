@@ -1,10 +1,10 @@
 // Friends — "who can I share a place with, and who is waiting on me?"
 //
 // The page answers with a count and owns the one acquisition action: Add, which
-// opens the username search in a dialog rather than sitting above the list. The
-// old panel led with that search box, so the first thing on the page was a way
-// to look for people who are not on it (shared/DESIGN.md §2, and Logjam GPS's
-// FriendsScreen, which settled this shape).
+// opens the username search in a dialog rather than sitting above the list: the
+// first thing on the page would otherwise be a way to look for people who are
+// not on it (shared/DESIGN.md §2, and Logjam GPS's FriendsScreen, which settled
+// this shape).
 //
 // One pinned rail partitions All / Friends / Requests — a true partition,
 // because a pending request is not a friendship yet — over one flat list.
@@ -14,13 +14,12 @@
 // the menu. A request has nowhere to open to, so it carries Accept and Decline
 // on the card's own footer line.
 //
-// FILES SENT TO YOU used to have a section here as well. They are the Inbox's,
-// and always were — every send writes the recipient a notification and both
-// verbs resolve it (api/src/routes/fileSends.ts) — so this page held a second,
-// separately-fetched copy of a list the Inbox draws better.
+// Files sent to you belong in the Inbox (api/src/routes/fileSends.ts): every
+// send writes the recipient a notification and both verbs resolve it,
+// avoiding a second, separately-fetched copy of a list the Inbox draws better.
 //
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
-// `/friends/search` never return an email (root CLAUDE.md), and nothing here
+// `/friends/search` never return an email (api/src/__tests__/friends.test.ts), and nothing here
 // would have somewhere to put one.
 import {
   Fragment,
@@ -113,7 +112,7 @@ function FriendsPanel({
   const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
 
   // Refetch on every panel open — friends and requests are otherwise fetched
-  // once at app boot (FRIEND-3), so a request that arrives mid-session stays
+  // once at app boot, so a request that arrives mid-session stays
   // invisible until a full reload.
   useEffect(() => {
     onRefetchFriends();
@@ -493,7 +492,7 @@ export function AddFriendDialog({
   useEffect(() => {
     if (!searches) return;
     if (timerRef.current) clearTimeout(timerRef.current);
-    // FEUI-008: guards a stale response landing after a newer query's already
+    // Guards a stale response landing after a newer query's already
     // replaced it (type "abel" then "abelin" — if "abel"'s GET resolves last,
     // its results must not overwrite "abelin"'s). `searchUsers`/`apiFetch` take
     // no signal, so this is the cancelled-flag form of the same guard.

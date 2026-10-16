@@ -66,7 +66,7 @@ export function ThemePreferencesProvider({
     } catch (err) {
       // Best-effort: keep the local default theme rather than surface a
       // toast for a background hydration failure — but still log it, or a
-      // systematic failure (e.g. a 500 on /users/me) is invisible (FECO-011).
+      // systematic failure (e.g. a 500 on /users/me) is invisible.
       console.error(err);
     } finally {
       setIsHydrating(false);

@@ -35,9 +35,8 @@ resource "aws_iam_role" "topo_worker" {
 # embedded as a literal, as before.
 #
 # Three roles, split by what may assume them. The OIDC `sub` claim names where a
-# workflow run came from, and it used to be matched with `repo:Zen-TM/logjam:*`
-# — any workflow on ANY branch could assume the deploy role, so anyone able to
-# push a branch could deploy to prod or run the migrate task without a PR.
+# workflow run came from; scoping it by environment and ref prevents arbitrary
+# branches from deploying to prod or running the migrate task without a PR.
 #   - deploy (this role, name kept so nothing else moves): only jobs running in
 #     the `prod` GitHub Environment, which only `main` may deploy to.
 #   - plan (below): read-only, for terraform plan on PRs the maintainer
@@ -169,11 +168,11 @@ resource "aws_iam_role_policy_attachment" "topo_worker_custom" {
   policy_arn = aws_iam_policy.topo_worker.arn
 }
 
-# INF-006: AmazonEC2ContainerRegistryFullAccess REMOVED (least-privilege) —
-# deploy-api.yml and deploy-topo-worker.yml only ever docker-login then push
-# to these two repos. Scoped to AWS's own documented push action set
-# (ecr:GetAuthorizationToken has no resource-level permissions, hence
-# Resource "*" for that statement only) on just logjam-api / logjam-topo-worker.
+# Scoped ECR push permissions (least-privilege): deploy-api.yml and
+# deploy-topo-worker.yml only ever docker-login then push to these two repos.
+# Scoped to AWS's own documented push action set (ecr:GetAuthorizationToken has
+# no resource-level permissions, hence Resource "*" for that statement only)
+# on just logjam-api / logjam-topo-worker.
 # VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role ecr:*
 # call outside these two repos or this action set; if found, widen this
 # grant, never re-add the managed full-access policy.
@@ -227,30 +226,23 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
 # outside these two buckets; if found, widen the scoped grant, never re-add
 # the managed full-access policy.
 
-# INF-006 (EB half): ATTEMPTED, REVERTED 2026-08-29 — the managed policy stays.
-#
-# The narrowing was applied and the very next deploy failed at UpdateEnvironment.
-# beanstalk-deploy's own six API calls were right; what they miss is everything
-# ELASTIC BEANSTALK ITSELF does under the caller's identity while updating an
-# environment. Observed, from that failure plus CloudTrail of the preceding
-# successful deploy:
+# The managed policy stays attached because Elastic Beanstalk performs actions
+# under the caller's identity while updating an environment. In addition to
+# beanstalk-deploy's direct API calls, Elastic Beanstalk itself invokes actions
+# such as:
 #   s3:PutObjectAcl, s3:DeleteObject  on the elasticbeanstalk-* bucket, under
 #                                     resources/environments/.../_runtime/...
 #   sns:CreateTopic, sns:Unsubscribe  on ElasticBeanstalkNotifications-Environment-*
 #   autoscaling:SuspendProcesses / ResumeProcesses
 #   cloudformation:Describe*, ListStackResources, ec2:DescribeLaunchTemplate*
-# ...and that is only what THIS update happened to need; a create, rebuild or
-# scale path would surface more.
+# ...and additional actions required during create, rebuild, or scale paths.
 #
-# EB was never at risk — it stayed Green on the previous version throughout —
-# but the deploy pipeline was blocked, and every further guess costs another
-# failed prod deploy. An over-broad grant that is documented beats a broken
-# deploy role.
+# An over-broad grant that is documented beats a broken deploy role.
 #
-# TO RETRY PROPERLY: enumerate a full successful deploy from CloudTrail under
-# this role, build the policy from that observed set, and verify it against a
-# throwaway EB environment rather than prod. Do NOT re-derive it from the
-# action's source alone — that is exactly what failed here.
+# TO NARROW: enumerate a full successful deploy from CloudTrail under this
+# role, build the policy from that observed set, and verify it against a
+# throwaway EB environment rather than prod. Do not derive it from the
+# action's source alone.
 resource "aws_iam_role_policy_attachment" "gha_eb" {
   role       = aws_iam_role.github_actions.name
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk"
@@ -314,6 +306,7 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
 # Privacy carve-out from ReadOnlyAccess (which grants s3:GetObject on every
 # bucket and log events in every log group): CI must never be able to read
 # user canyon data (media photos, LiDAR/tile outputs), logs, or secret values.
+# Guard: tests/guards.tftest.hcl.
 # Explicit Deny beats the managed Allow. Objects and log events are denied by
 # default, so a bucket or log group added later is closed without an edit
 # here; the buckets CI does read are the named exceptions. Bucket-level
@@ -417,7 +410,7 @@ locals {
   })
 }
 
-# ── EB instance role (logjam-eb-role) least-privilege replacements (CP-001) ────
+# ── EB instance role (logjam-eb-role) least-privilege replacements ─────────────
 # The EB API instance role is EB-managed (created with the environment), so —
 # like the other eb-role grants (db_app_role.tf, origin_verify.tf) — it is
 # referenced by literal name, not managed as a resource. Live, it carries three
@@ -429,10 +422,10 @@ locals {
 #   AmazonCognitoPowerUser -> aws_iam_role_policy.eb_cognito_admin_getuser (below)
 #   AmazonSESFullAccess    -> DEAD grant (SES replaced by Resend); no replacement.
 # Terraform cannot detach a policy attached OUTSIDE its state, so the three
-# `aws iam detach-role-policy` calls are operator-gated (see the cloud-posture
-# fix report). Apply THIS block BEFORE the operator detaches the broad managed
-# policies so the instance never loses the S3/Cognito access it legitimately
-# needs (presigned media/topo URLs; Cognito AdminGetUser).
+# `aws iam detach-role-policy` calls are operator-gated. Apply THIS block BEFORE
+# the operator detaches the broad managed policies so the instance never loses
+# the S3/Cognito access it legitimately needs (presigned media/topo URLs;
+# Cognito AdminGetUser).
 # VERIFY BEFORE DETACH: scan CloudTrail for any logjam-eb-role S3 call outside
 # logjam-media / logjam-topo-jobs; if found, widen this scoped grant, never
 # re-add AmazonS3FullAccess.
@@ -533,13 +526,13 @@ resource "aws_iam_role_policy" "gha_eb_appversions" {
   })
 }
 
-# ARCH-001 half B: let the deploy workflow launch the pre-deploy migrate
-# one-shot (aws_ecs_task_definition.api_migrate) and poll its result before the
-# EB version swap. Scoped to that task def + the one cluster; PassRole limited
+# Let the deploy workflow launch the pre-deploy migrate one-shot
+# (aws_ecs_task_definition.api_migrate) and poll its result before the EB
+# version swap. Scoped to that task def + the one cluster; PassRole limited
 # to the exact execution role the task uses (no task role is passed), gated to
 # ECS tasks so the deploy identity can't repurpose it elsewhere.
-# INF-009: let the deploy workflows register a task-definition revision pinned
-# to the image sha they just pushed (infra/scripts/pin-ecs-task-image.sh), so a
+# Also let the deploy workflows register a task-definition revision pinned to
+# the image sha they just pushed (infra/scripts/pin-ecs-task-image.sh), so a
 # RunTask launches a known commit instead of resolving the moving `:latest` tag.
 #
 # RegisterTaskDefinition supports no resource-level permission — there is no

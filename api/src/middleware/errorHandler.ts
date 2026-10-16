@@ -42,7 +42,8 @@ export function errorHandler(
       },
       "request_failed",
     );
-    // Echo only whitelisted detail keys — never blind-spread err.details.
+    // Echo only whitelisted detail keys — never blind-spread err.details. Guard:
+    // errorHandler.unit.test.ts.
     const body: Record<string, unknown> = {
       error: err.message,
       requestId: reqId,

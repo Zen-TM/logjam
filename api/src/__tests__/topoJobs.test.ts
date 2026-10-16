@@ -7,7 +7,7 @@ import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 // No auth header = alice. These tests deliberately exercise only launch-free
 // surfaces (auth, list, validation, ownership, the uploading-state lifecycle) —
 // they never drive POST /:id/start to a real launch, which would spawn a
-// MiniStack worker container (CH-004).
+// MiniStack worker container.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 // Note: no unauthenticated-401 case — the integration suite runs only under
@@ -51,7 +51,7 @@ describe("topo-jobs route (fake auth)", () => {
     const createRes = await request(API_URL)
       .post("/topo-jobs")
       .set(AUTH)
-      .send({ jobName: "ch004-integration-test" });
+      .send({ jobName: "topo-integration-test" });
     expect(createRes.status).toBe(201);
     const jobId: string = createRes.body.jobId;
     expect(typeof jobId).toBe("string");
@@ -65,15 +65,13 @@ describe("topo-jobs route (fake auth)", () => {
       expect(ownRes.status).toBe(200);
       expect(ownRes.body.status).toBe("uploading");
 
-      // A stranger gets 404, NOT 403. This assertion used to expect 403 and
-      // its comment called the oracle intended behaviour — it was the same
-      // existence oracle the place routes closed (root CLAUDE.md): a 403
-      // confirms the job id is real to someone with no right to know it, while
-      // a 404 is indistinguishable from a job that never existed. Direct
-      // sharing routed this endpoint through lib/shareAccess, which bakes the
-      // rule in. A SHAREE attempting an owner-only action still gets 403 —
-      // they can legitimately see the job, so its existence is not a secret
-      // from them (see directShare.test.ts).
+      // A stranger gets 404, NOT 403 (the anti-oracle rule in root AGENTS.md):
+      // a 403 confirms the job id is real to someone with no right to know
+      // it, while a 404 is indistinguishable from a job that never existed.
+      // Direct sharing routes this endpoint through lib/shareAccess, which
+      // enforces the rule. A SHAREE attempting an owner-only action still gets
+      // 403 — they can legitimately see the job, so its existence is not a
+      // secret from them (see directShare.test.ts).
       const bobRes = await request(API_URL)
         .get(`/topo-jobs/${jobId}`)
         .set(as(BOB_SUB));
@@ -117,15 +115,15 @@ describe("topo-jobs route (fake auth)", () => {
         .get(`/topo-jobs/${jobId}`)
         .set(as(BOB_SUB));
       expect(bobRes.status).toBe(200);
-      // Finding 9: the list endpoints strip userId/s3OutputKeys for a sharee;
-      // the detail endpoint leaked both (the owner's internal id and raw S3
-      // keys). A sharee must see status fields only.
+      // The list and detail endpoints strip userId/s3OutputKeys for a
+      // sharee (the owner's internal id and raw S3 keys). A sharee must see
+      // status fields only.
       expect(bobRes.body.userId).toBeUndefined();
       expect(bobRes.body.s3OutputKeys).toBeUndefined();
       expect(bobRes.body.status).toBe("uploading");
-      // All three job surfaces now answer through serializeTopoJobFor, so the
-      // detail response carries the read-only role a client used to have to
-      // infer from a prior list call.
+      // All three job surfaces answer through serializeTopoJobFor, so the
+      // detail response carries the read-only role rather than requiring a
+      // client to infer it from a prior list call.
       expect(bobRes.body.syncRole).toBe("shared");
 
       // The owner's own detail response: keys yes, internal id still never.

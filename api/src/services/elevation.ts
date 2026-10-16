@@ -7,8 +7,8 @@
 // DEM tile requests — which trace out where the user is drawing — off the
 // user's own connection while they have ours to use.
 //
-// It is no longer the only reader. A phone with a downloaded region samples the
-// same tiles locally, out of the MBTiles the region download wrote
+// In Logjam GPS, a device with a downloaded region samples the same tiles
+// locally, out of the MBTiles the region download wrote
 // (mobile/src/offline/demLookup.ts); that path fetches the tiles direct from S3
 // at download time, exactly as the raster basemap download already does. The
 // choice of source, the pixel maths, the zoom and the no-data rule are shared

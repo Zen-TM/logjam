@@ -46,7 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
   && rm -rf /var/lib/apt/lists/*
 
-# go-pmtiles for the Stage 4a region-clip endpoint (POST /basemap/region-clip
+# go-pmtiles for the region-clip endpoint (POST /basemap/region-clip
 # runs `pmtiles extract` against PROTOMAPS_ARCHIVE_URI). Pinned release +
 # sha256 (no upstream checksums file — hash recorded from the fetched
 # artifact at pin time).

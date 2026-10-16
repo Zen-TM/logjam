@@ -1,10 +1,9 @@
 // Place ↔ place links: symmetric, stored once, owner-private.
 //
-// A link is NAVIGATIONAL ONLY. It grants no visibility to anyone — that is the
-// rule that let lib/waypointLink.ts (219 lines of visibility diffing across a
-// many-to-many) be deleted in the phase 1c fold. Sharing is always explicit,
-// per place, through PlaceShare. A route is the exception that proves it: a
-// route reaches a sharee through `Route.placeId`, a FOREIGN KEY, not a link.
+// A link is NAVIGATIONAL ONLY. It grants no visibility to anyone. Guard:
+// api/src/__tests__/placeLinks.test.ts. Sharing is always explicit, per place,
+// through PlaceShare. A route is the exception that proves it: a route reaches
+// a sharee through `Route.placeId`, a FOREIGN KEY, not a link.
 //
 // TWO WRITE PATHS, deliberately different shapes:
 //
@@ -13,22 +12,22 @@
 //     linking the same pair collide on the unique index instead of clobbering
 //     each other's whole list.
 //   - The REST routes take a WHOLE LIST (`linkedPlaceIds` on POST/PATCH
-//     /places), because that is the shape the web has always used for this and
-//     the web is online-only: there is no offline window in which a stale list
-//     could arrive and wipe an edit made elsewhere. This file is where the list
-//     becomes rows, so both paths agree on ownership, canonical ordering and
-//     tombstones.
+//     /places), because that is the shape Logjam Web has always used for this
+//     and Logjam Web is online-only: there is no offline window in which a
+//     stale list could arrive and wipe an edit made elsewhere. This file is
+//     where the list becomes rows, so both paths agree on ownership, canonical
+//     ordering and tombstones.
 //
-//     ponytail: online-only removes the OFFLINE window, not the concurrency
-//     one — two tabs, or web and phone at once, can still read → edit → save
+//     Online-only removes the OFFLINE window, not the concurrency one — two
+//     tabs, or Logjam Web and Logjam GPS at once, can still read → edit → save
 //     with a stale list in hand and drop the loser's link silently. That is the
 //     lost update fieldDefsStore.ts describes when it explains why definitions
 //     left a whole-list PATCH. Two things keep it small and neither is
 //     optional: the write below is a SET DIFFERENCE (add what is new, remove
 //     what is absent) so an unrelated edit never churns link ids or their
-//     tombstones, and both write paths land in this file. Upgrade path if the
-//     web ever goes offline-capable: per-link add/remove REST endpoints, which
-//     is what the sync ops already are.
+//     tombstones, and both write paths land in this file. Upgrade path if
+//     Logjam Web ever goes offline-capable: per-link add/remove REST endpoints,
+//     which is what the sync ops already are.
 //
 // Removing a link needs a tombstone (the owner's OTHER devices hold the row and
 // nothing else would tell them); adding one does not, because the new row rides

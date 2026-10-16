@@ -1,5 +1,5 @@
 // Generates the committed Protomaps basemap layer JSONs consumed by
-// mobile/src/map/basemap/ (stage4a-basemaps.md §8.1, decision B6).
+// mobile/src/map/basemap/.
 //
 // Output is URL-free and MLRN-ready: each layer's `paint` + `layout` are
 // merged into a single camelCase `style` object (the format

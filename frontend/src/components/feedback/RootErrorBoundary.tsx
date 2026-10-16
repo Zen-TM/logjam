@@ -14,9 +14,8 @@ interface State {
 }
 
 // Top-level safety net. React unmounts the entire component tree on an uncaught
-// render/lifecycle error (a blank white screen — what the toast render loop
-// produced); this renders a recoverable fallback instead. It catches only
-// render and lifecycle throws, NOT event handlers or async rejections, which
+// render/lifecycle error (a blank white screen); this renders a recoverable
+// fallback instead. It catches only render and lifecycle throws, NOT event handlers or async rejections, which
 // still need local try/catch. It is a backstop, not a fix — the underlying
 // cause should still be addressed. It sits above the theme/auth providers, so
 // the fallback styles itself from the static design tokens in index.css rather

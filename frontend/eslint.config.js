@@ -16,11 +16,8 @@ const MUI_PATTERNS = [
 export default tseslint.config(
   { ignores: ["dist"] },
   {
-    // MUI is gone from Logjam Web (Phase C, 2026-09-19) and the packages are
-    // uninstalled, so this rule now guards a decision rather than a migration:
-    // it turns "we removed that" into an error at the import rather than a
-    // module-not-found three minutes later, and it names what to reach for
-    // instead. There is no exception list any more.
+    // Logjam Web builds on its own kit: this rule prevents importing MUI
+    // packages and names what to reach for instead (frontend/DESIGN.md).
     files: ["src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

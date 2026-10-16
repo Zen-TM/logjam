@@ -12,14 +12,13 @@ import {
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// Multi-user / share-boundary coverage (gap 1, SEC-001 regression).
+// Multi-user / share-boundary coverage.
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
-// Exercises the hybrid-share boundary from the RECIPIENT and STRANGER sides —
-// the perspectives the old single-user fake auth could not reach. Seed baseline:
-// alice owns SHARED_PLACE_ID and shares it with bob; carol is shared nothing.
-// Tests that mutate state create + tear down their own rows so the baseline seed
-// is left intact. The rich seed (2026-06-21) ships an accepted bob↔carol
+// Exercises the hybrid-share boundary from the RECIPIENT and STRANGER sides.
+// Seed baseline: alice owns SHARED_PLACE_ID and shares it with bob; carol is
+// shared nothing. Tests that mutate state create + tear down their own rows so
+// the baseline seed is left intact. The seed ships an accepted bob↔carol
 // friendship; the lifecycle tests below need that pair EMPTY, so they clear it
 // first via clearBobCarolFriendship() (they already restored it to empty on
 // exit, so reruns are unaffected).
@@ -62,12 +61,10 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(res.body.tripLogs).toBeUndefined();
   });
 
-  // The trip-list assertion above has a sibling the count slipped past: the
-  // LIST endpoint used to attach `_count: { tripLogLinks, shares }` to every
-  // row on BOTH /places and /places/shared. Withholding the trip list while
-  // shipping its cardinality is not a boundary — bob learned how many trips
-  // alice had logged on her place, and how many other people she'd shared it
-  // with. The frontend ignored the number; the API still sent it.
+  // Withholding the trip list while shipping its cardinality is not a
+  // boundary: the shared list must not attach `_count: { tripLogLinks, shares }`,
+  // which would reveal how many trips the owner logged or how many people they
+  // shared with.
   it("recipient's shared list carries NO owner-private counts (trip tally, share fan-out)", async () => {
     const res = await request(API_URL).get("/places/shared").set(as(BOB_SUB));
     expect(res.status).toBe(200);
@@ -102,8 +99,7 @@ describe("share boundary — recipient view (hybrid model)", () => {
   });
 
   it("recipient cannot read an individual trip log via the global GET /trips/:id — 404, not 403 (SEC-001: no ID oracle)", async () => {
-    // The nested single-trip GET was removed with the m2m cutover — single
-    // trip fetch now lives entirely on GET /trips/:id (owner-only). Resolve a
+    // Single trip fetch lives on GET /trips/:id (owner-only). Resolve a
     // real trip ID from the owner's side first.
     const ownerTrips = await request(API_URL)
       .get(`/places/${SHARED_PLACE_ID}/trips`)
@@ -205,8 +201,7 @@ describe("share boundary — stranger view", () => {
       .set(as(ALICE_SUB));
     const tripId = ownerTrips.body[0].id as string;
 
-    // Single-trip fetch now lives on the global /trips/:id (owner-only) —
-    // the nested single-GET route was removed with the m2m cutover.
+    // Single-trip fetch lives on the global /trips/:id (owner-only).
     const single = await request(API_URL)
       .get(`/trips/${tripId}`)
       .set(as(CAROL_SUB));

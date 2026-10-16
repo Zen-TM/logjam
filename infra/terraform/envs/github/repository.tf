@@ -17,7 +17,7 @@ resource "github_repository" "logjam" {
   # the PR title and the PR's commit messages, not the PR description: the
   # commit messages carry each contributor's DCO Signed-off-by
   # (docs/decisions/0021-agpl-and-dco.md), and with PR_BODY main would lose
-  # every sign-off without any check failing.
+  # every sign-off without any check failing. Guard: tests/guards.tftest.hcl.
   allow_squash_merge          = true
   allow_merge_commit          = false
   allow_rebase_merge          = false

@@ -273,9 +273,8 @@ describe("delete cascade", () => {
 
 // A route can be visible to a recipient for TWO reasons — a direct Share row,
 // or a link to a place shared with them. Revoking the direct arm must not
-// tombstone a recipient who keeps the place arm (finding 2), and must still
-// re-deliver the row to the OWNER so their other devices refresh sharedCount
-// (finding 6).
+// tombstone a recipient who keeps the place arm, and must still re-deliver the
+// row to the OWNER so their other devices refresh sharedCount.
 describe("revoke with a surviving place arm", () => {
   async function createPlace(sub: string, name: string): Promise<string> {
     const res = await request(API_URL).post("/places").set(as(sub)).send({

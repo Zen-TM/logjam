@@ -5,7 +5,7 @@
   /* ONE height on every page and every view of a page, so swapping Logs | Stats
      moves neither the rail under it nor the list under that. A hero carrying
      actions is as tall as a --control-md button; a title-only one is its text,
-     which is shorter — measured 57 vs 55 (operator, 2026-09-16). Stated on the
+     which is shorter (57px vs 55px). Stated on the
      border box: the two addends are this rule's own padding and its border. */
   min-height: calc(var(--control-md) + 2 * var(--space-1-5) + 1px);
   box-sizing: border-box;

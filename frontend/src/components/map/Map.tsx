@@ -53,7 +53,7 @@ maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 
 // Decide whether a MapLibre source error means the PMTiles archive is
 // DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
-// blip we should let MapLibre retry (LAYERS-1). MapLibre fires "error" for ANY
+// blip we should let MapLibre retry. MapLibre fires "error" for ANY
 // per-tile/source load failure — including one-off network drops — so treating
 // the first error as terminal would kill a healthy overlay for the session.
 //
@@ -131,7 +131,7 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 
 /**
  * Zoom below which saved routes stop drawing. 7 is where the route line-width
- * ramp starts and is the app's initial zoom, so a first load still shows them
+ * ramp starts and is Logjam Web's initial zoom, so a first load still shows them
  * while a state- or continent-wide view isn't hazed over with lines.
  */
 // Saved routes vanish below this. z7 is most of NSW — a threshold you had to
@@ -200,8 +200,8 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
   }
 }
 
-// Protomaps glyph + sprite assets. Mobile vendors these into the app bundle
-// because offline regions must render labels with zero network; the web map
+// Protomaps glyph + sprite assets. Logjam GPS vendors these into its bundle
+// because offline regions must render labels with zero network; Logjam Web
 // has no offline requirement, so it reads them from the upstream host (CSP
 // allowlisted). No user data rides these requests — they are keyed by font
 // stack and codepoint range only.
@@ -250,7 +250,7 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * merged into one camelCase object). Same package, same pinned version — see
  * scripts/basemap/package.json; bump both together or neither.
  *
- * Light flavor only: the web app has no dark theme (index.css carries a single
+ * Light flavor only: Logjam Web has no dark theme (index.css carries a single
  * prefers-color-scheme rule that inverts icons, nothing more).
  */
 /**
@@ -368,7 +368,7 @@ function iconSizeInterp(sizeZ18: number): maplibregl.ExpressionSpecification {
 
 // Place map labels: ellipsize a name past this length so a pathological
 // long name (e.g. a 250-char single token that can't line-wrap) can't render
-// as one full-map-width label (PLACE-7). The detail-panel header truncates
+// as one full-map-width label. The detail-panel header truncates
 // separately via CSS.
 const MAX_LABEL_CHARS = 40;
 const PLACE_LABEL_FIELD: maplibregl.ExpressionSpecification = [
@@ -741,7 +741,7 @@ function Map({
    * The visible bounds, on load and after every pan/zoom. Separate from
    * `onMapViewChange` because its consumer keeps the answer in a ref: "filter
    * to the current view" needs the bounds only at the moment the button is
-   * pressed, and routing them through state would re-render the app on every
+   * pressed, and routing them through state would re-render Logjam Web on every
    * frame of a pan for a value nothing renders.
    */
   onMapBoundsChange?: (bounds: TBbox) => void;
@@ -788,7 +788,7 @@ function Map({
   notices?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
-  // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
+  // removed so MapLibre stops retrying; App surfaces the failure.
   onTopoSourceUnavailable?: (entryId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -808,7 +808,7 @@ function Map({
   const [is3D, setIs3D] = useState(false);
   const toast = useToast();
   // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
-  // copy in the map-pick banners (MOBILE-12a). Pointer capability, not
+  // copy in the map-pick banners. Pointer capability, not
   // viewport width: a touch laptop at desktop width still gets "Tap".
   const isTouchInput = useMediaQuery("(pointer: coarse)");
   const pickVerb = isTouchInput ? "Tap" : "Click";
@@ -984,7 +984,7 @@ function Map({
   // Topo overlay entries whose PMTiles source already failed this session.
   // Read by the once-on-load error handler (dedupe) and by the structural topo
   // effect (never re-add a known-missing source — stops the per-load retry
-  // spam of LAYERS-1).
+  // spam).
   const failedTopoSourcesRef = useRef<Set<string>>(new Set());
   // Topo entries whose transient (non-terminal) load error was already logged
   // this session — one console line per source, not one per flaky tile.
@@ -1079,7 +1079,7 @@ function Map({
     );
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
-    // tile request, silently renders nothing, and retries each load (LAYERS-1).
+    // tile request, silently renders nothing, and retries each load.
     // Source errors propagated through MapLibre's Style carry the sourceId. Only
     // a DEFINITIVELY-missing archive (404/403) is terminal — tear its
     // layers/source down (stops the retries) and notify App so the Layers panel
@@ -1154,7 +1154,6 @@ function Map({
         });
       });
 
-      // 3D Terrain - Soruce DEM for 3d Terrain
       map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
         // The worldwide source in shared/src/demSources.ts. The NSW one is
@@ -1164,7 +1163,6 @@ function Map({
         attribution: TERRARIUM.creditHtml,
       });
 
-      // Owned place GeoJSON source (starts empty)
       map.addSource("places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1300,14 +1298,13 @@ function Map({
       // would have to be recomputed on every pan. Spaced generously so a
       // screenful of routes doesn't turn into a hedge.
       //
-      // An SDF IMAGE, not a glyph. This drew `›` until 2026-09-17, and that
-      // glyph's ink sits low in its own advance box: MapLibre centres a
-      // line-placed symbol on the BOX, so the arrow rode below the line, and
-      // with keep-upright off the error swapped sides wherever a route doubled
-      // back — which reads as arrows wobbling rather than as an offset
-      // (operator). Logjam GPS hit this first and fixed it the same way; the
-      // arrowhead and its centring test now live in @logjam/shared so one
-      // client cannot quietly keep the broken one.
+      // An SDF image, not a glyph. A font glyph's ink sits low in its advance
+      // box: MapLibre centres a line-placed symbol on the box, so the arrow
+      // would ride below the line, and with keep-upright off the error swaps
+      // sides wherever a route doubles back — which reads as arrows wobbling
+      // rather than as an offset. Logjam GPS and Logjam Web share the
+      // arrowhead and its centring test in @logjam/shared
+      // (shared/src/routeArrow.test.ts).
       map.addLayer({
         id: "routes-direction",
         type: "symbol",
@@ -1402,7 +1399,6 @@ function Map({
         },
       });
 
-      // Shared place GeoJSON source (starts empty)
       map.addSource("shared-places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1436,7 +1432,6 @@ function Map({
         });
       }
 
-      // Owned place circle markers
       map.addLayer({
         id: "place-circles",
         type: "circle",
@@ -1473,7 +1468,6 @@ function Map({
         },
       });
 
-      // Shared place circle markers
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
@@ -1486,7 +1480,6 @@ function Map({
         },
       });
 
-      // Owned place name labels visible at zoom 9+
       map.addLayer({
         id: "place-labels",
         type: "symbol",
@@ -1506,7 +1499,6 @@ function Map({
         },
       });
 
-      // Shared place name labels visible at zoom 9+
       map.addLayer({
         id: "shared-place-labels",
         type: "symbol",
@@ -1528,7 +1520,6 @@ function Map({
 
       applyPlaceThemePaint(map);
 
-      // Click to select place
       map.on("click", "place-circles", (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
@@ -1699,7 +1690,7 @@ function Map({
   // Keyed by mediaId. Plain object (not a JS Map) — `Map` is this component's name.
   // The cache holds PROMISES, not resolved values, so overlapping effect runs
   // (StrictMode double-invoke, rapid toggles) share one in-flight request
-  // instead of each firing its own fetch (LAYERS-2 duplicate fetch). Failures
+  // instead of each firing its own fetch (preventing duplicate fetches). Failures
   // resolve to null and stay cached, so a missing track file is fetched once
   // per session instead of retried on every load/toggle.
   //
@@ -1716,7 +1707,7 @@ function Map({
     >
   >({});
   // Media ids whose load failure was already surfaced — one toast per track
-  // per session, not one per re-render (LAYERS-2 silent-404 fix).
+  // per session, not one per re-render.
   const failedTrackToastedRef = useRef<Set<string>>(new Set());
 
   // Fetch + parse a set of track files into features for one of the track
@@ -1742,7 +1733,7 @@ function Map({
           const cacheKey = trackGeoCacheKey(entry);
           let cached = cache[cacheKey];
           // Discard a cached entry whose presigned URL has rotated so the fresh
-          // URL retries; same-URL failures stay cached (LAYERS-2).
+          // URL retries; same-URL failures stay cached.
           if (!cached || cached.url !== entry.displayUrl) {
             const promise = fetchTrackGeoJSON(
               entry.mediaId,
@@ -1971,12 +1962,9 @@ function Map({
       vis(showPlaces),
     );
     // "Ways" draws EVERY line, wherever it came from: routes drawn here, files
-    // imported or recorded, and the tracks on places friends shared. Those
-    // files used to have no toggle at all — the list of them WAS their
-    // visibility, set one at a time by a switch on each file's own detail page,
-    // which is a control you had to open a page to find (operator,
-    // 2026-09-17). One toggle for all of them, because they are one kind of
-    // thing; whose each one is shows on the line, not in the legend.
+    // imported or recorded, and the tracks on places friends shared. One
+    // toggle for all of them, because they are one kind of thing; whose each
+    // one is shows on the line, not in the legend.
     //
     // The route being drawn stays visible even with the layer off — hiding your
     // own in-progress work would read as the tool being broken.
@@ -2123,7 +2111,7 @@ function Map({
   // Draggable vertex handles. MapLibre markers do the drag maths natively, so
   // this only has to keep one marker per vertex alive and report the drop.
   const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
-  // FEUI-001: `snapBetweenRef` requests are fire-and-forget network reads. If
+  // `snapBetweenRef` requests are fire-and-forget network reads. If
   // one lands while the user is mid-drag of a handle, drawPoints/drawAnchorIndices
   // change and this effect's deps fire — tearing every marker down (including
   // the one under the user's finger) kills the native drag before `dragend`
@@ -2484,9 +2472,9 @@ function Map({
           // Decode to raw RGBA here rather than handing MapLibre the element.
           // An SDF carries its distance field in the ALPHA channel and the
           // shader thresholds it; passing an HTMLImageElement leaves that
-          // decode to the browser's image pipeline, and the arrows rendered as
-          // plain white triangles with the route line showing through their
-          // soft edge — i.e. the tint was never applied (seen 2026-09-17).
+          // decode to the browser's image pipeline, so the arrows would render
+          // as plain white triangles with the route line showing through their
+          // soft edge without applying the tint.
           const canvas = document.createElement("canvas");
           canvas.width = arrow.naturalWidth;
           canvas.height = arrow.naturalHeight;
@@ -2554,8 +2542,7 @@ function Map({
     // Recoverable blacklist: when a failed entry's toggle turns off it leaves
     // `layers`, so drop it from the failed/transient sets. Re-enabling it should
     // RETRY the source (a genuinely-missing archive will just fail terminally
-    // again) rather than stay permanently blacklisted from a past error
-    // (LAYERS-1).
+    // again) rather than stay permanently blacklisted from a past error.
     for (const failedId of [...failedTopoSourcesRef.current]) {
       if (!activeIds.has(failedId))
         failedTopoSourcesRef.current.delete(failedId);
@@ -2614,7 +2601,7 @@ function Map({
     // Add sources + layers for new entries
     layers.forEach(({ id, pmtilesUrl, format, attribution }) => {
       // Known-missing source (PMTiles load already failed this session) — do
-      // not re-add it on layer toggles, or the 404 retry spam returns (LAYERS-1).
+      // not re-add it on layer toggles, or the 404 retry spam returns.
       if (failedTopoSourcesRef.current.has(id)) return;
       const srcId = `topo-src-${id}`;
       const fmt = format ?? "raster";
@@ -2827,7 +2814,7 @@ function Map({
                   "text-font": ["Noto Sans Medium"],
                   "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                   "symbol-placement": "line",
-                  // Looser bend tolerance (was 30) so curvy creeks/tracks still
+                  // Looser bend tolerance so curvy creeks/tracks still
                   // get a label instead of only their straight stretches.
                   "text-max-angle": 60,
                 },
@@ -3035,13 +3022,14 @@ function Map({
 
   useEffect(() => {
     if (!flyToPlace || !mapLoaded || !mapRef.current) return;
-    // Defensive guard (PLACE-1): an out-of-range record must not crash the app.
+    // Defensive guard: an out-of-range record must not crash Logjam Web.
     // MapLibre's flyTo throws "Invalid LngLat" for lat outside [-90,90] (or
-    // lng outside [-180,180]), which previously escaped to the RootErrorBoundary
-    // and made the record unmanageable — you couldn't even open it to fix or
+    // lng outside [-180,180]), which would escape to the RootErrorBoundary
+    // and make the record unmanageable — you couldn't even open it to fix or
     // delete it. Skip the fly-to (still selecting the place) so the detail
-    // panel opens and the record can be edited/deleted. Validation now blocks
-    // such records at creation; this covers any that already exist.
+    // panel opens and the record can be edited/deleted. Validation blocks
+    // such records at creation (@logjam/shared placeValidation.test.ts); this
+    // covers any that already exist.
     if (isValidLatitude(flyToPlace.lat) && isValidLongitude(flyToPlace.lng)) {
       mapRef.current.flyTo({
         center: [flyToPlace.lng, flyToPlace.lat],

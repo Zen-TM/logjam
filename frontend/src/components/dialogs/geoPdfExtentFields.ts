@@ -1,11 +1,10 @@
-// Pure helpers for the GeoPdfDialog extent inputs (GEOPDF-1).
+// Pure helpers for the GeoPdfDialog extent inputs.
 //
 // The four extent fields are free-text numeric inputs whose displayed value
 // depends on the coord mode: WGS84 degrees in "latlon", MGA2020 metres in
-// "enNorthing". Previously a typed value was parseFloat'd and fed straight to
-// the degree-based apply*Change helpers (garbage in E/N mode), and an
-// inverted or non-numeric value was silently discarded on blur while the
-// input kept showing it. These helpers give the dialog:
+// "enNorthing". A typed value must be parsed in the active coord mode (rather
+// than fed straight to degree-based helpers), and inverted or non-numeric
+// values are surfaced inline with validation errors:
 //   - parseExtentField: raw string → WGS84 degrees honouring the coord mode
 //     (inverse MGA projection, paired with the same corner the display uses);
 //   - extentFieldErrors: per-field inline messages (number required, lat/lng
