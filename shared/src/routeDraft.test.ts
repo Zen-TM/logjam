@@ -11,7 +11,9 @@ import {
   moveAnchor,
   nearestSegment,
   reverseDraft,
+  ROUTE_UNDO_DEPTH,
   setFiller,
+  withUndoStep,
   type RouteDraft,
 } from "./routeDraft.js";
 import {
@@ -233,5 +235,26 @@ describe("reverseDraft", () => {
 
   it("has nothing to do to an empty draft", () => {
     expect(reverseDraft(emptyDraft)).toEqual(emptyDraft);
+  });
+});
+
+describe("withUndoStep", () => {
+  const one = appendAnchor(emptyDraft, [150.3, -33.7]);
+
+  // Mutation: push `before` even when the edit returned it unchanged.
+  it("spends no undo step on an edit that changed nothing", () => {
+    expect(withUndoStep([], one, one)).toBeNull();
+  });
+
+  it("keeps the draft from before the edit, newest last", () => {
+    const two = appendAnchor(one, [150.31, -33.71]);
+    expect(withUndoStep([emptyDraft], one, two)).toEqual([emptyDraft, one]);
+  });
+
+  it("drops the oldest step past ROUTE_UNDO_DEPTH", () => {
+    const full = Array.from({ length: ROUTE_UNDO_DEPTH }, () => emptyDraft);
+    const next = withUndoStep(full, one, emptyDraft)!;
+    expect(next).toHaveLength(ROUTE_UNDO_DEPTH);
+    expect(next.at(-1)).toBe(one);
   });
 });

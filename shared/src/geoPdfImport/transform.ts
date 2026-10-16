@@ -47,8 +47,9 @@ const WEB_MERCATOR =
 
 /** Residual fraction beyond which a 4-point fit upgrades to a homography. */
 const HOMOGRAPHY_THRESHOLD = 0.001;
-/** Residual fraction beyond which a fit is poor enough to warn the user about.
- *  Nothing reads it yet: no surface shows that warning. */
+/** Residual fraction beyond which a fit is poor enough to warn the user about:
+ *  Logjam GPS's map says so while that GeoPDF is on screen
+ *  (mobile/src/geopdf/geoPdfMisalignment.ts). */
 export const RESIDUAL_WARN_FRACTION = 0.005;
 
 /** Row-major n×n Gaussian elimination with partial pivoting. */

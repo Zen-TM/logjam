@@ -356,23 +356,39 @@ function resolveImport(
  */
 export function basemapsCoveringViewport(
   artifacts: readonly MapArtifact[],
-  viewport: { west: number; south: number; east: number; north: number },
+  viewport: Viewport,
   candidates: readonly BasemapId[],
 ): BasemapId[] {
   return candidates.filter((candidate) =>
-    artifacts.some((artifact) => {
-      if (artifact.kind !== "basemap-region") return false;
-      if (artifact.logicalKey !== candidate) return false;
-      const bbox = artifact.bbox;
-      if (bbox == null) return false;
-      const [west, south, east, north] = bbox;
-      return (
-        west <= viewport.east &&
-        east >= viewport.west &&
-        south <= viewport.north &&
-        north >= viewport.south
-      );
-    }),
+    artifacts.some(
+      (artifact) =>
+        artifact.kind === "basemap-region" &&
+        artifact.logicalKey === candidate &&
+        bboxOnScreen(artifact.bbox, viewport),
+    ),
+  );
+}
+
+/** What the map is showing, as its settle event reports it. */
+export type Viewport = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
+
+/** Whether any part of `[west, south, east, north]` is on screen. */
+export function bboxOnScreen(
+  bbox: readonly [number, number, number, number] | null | undefined,
+  viewport: Viewport,
+): boolean {
+  if (bbox == null) return false;
+  const [west, south, east, north] = bbox;
+  return (
+    west <= viewport.east &&
+    east >= viewport.west &&
+    south <= viewport.north &&
+    north >= viewport.south
   );
 }
 

@@ -284,3 +284,22 @@ export function reverseDraft(draft: RouteDraft): RouteDraft {
     filler: draft.filler.map((run) => [...run].reverse()).reverse(),
   };
 }
+
+/** Deepest undo history a draft keeps. Far past what anyone reaches for, and
+ *  bounded so a long drawing session can't grow without limit. */
+export const ROUTE_UNDO_DEPTH = 100;
+
+/**
+ * The undo history after an edit took the draft from `before` to `after`, or
+ * null when the edit changed nothing: a no-op that took an undo step would
+ * make Undo appear to do nothing (routeDraft.test.ts). Both clients' draw
+ * tools keep their history through this.
+ */
+export function withUndoStep(
+  history: readonly RouteDraft[],
+  before: RouteDraft,
+  after: RouteDraft,
+): RouteDraft[] | null {
+  if (after === before) return null;
+  return [...history, before].slice(-ROUTE_UNDO_DEPTH);
+}

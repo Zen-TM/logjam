@@ -1,13 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { geocode, type GeocodeResult } from "@logjam/shared";
+import {
+  geocode,
+  GEOCODE_MIN_QUERY_LENGTH,
+  searchLocationsLabel,
+  type GeocodeResult,
+} from "@logjam/shared";
 import type { TPlace } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MapSearchBox.module.css";
 import { Icon } from "../../ui";
 
 const PLACE_RESULTS = 5;
-/** The geocoder wants a few characters to say anything useful. */
-const LOCATION_MIN_CHARS = 3;
 
 type Option =
   | { kind: "place"; id: string; place: TPlace; shared: boolean }
@@ -101,7 +104,7 @@ export default function MapSearchBox({
         shared: true,
       })),
     ].slice(0, PLACE_RESULTS);
-    if (trimmed.length < LOCATION_MIN_CHARS) return placeOptions;
+    if (trimmed.length < GEOCODE_MIN_QUERY_LENGTH) return placeOptions;
     if (locationQuery === trimmed) {
       return [
         ...placeOptions,
@@ -214,7 +217,7 @@ export default function MapSearchBox({
                   ? option.place.name
                   : option.kind === "location"
                     ? option.result.displayName
-                    : `Search locations for “${trimmed}”`;
+                    : searchLocationsLabel(trimmed);
               return (
                 <li
                   key={option.id}
