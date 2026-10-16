@@ -74,8 +74,8 @@ async function acceptFriendRequest(
       where: { id },
       data: { status: "accepted" },
     });
-    // Purge this user's own friend_request notification, mirroring decline
-    // (PRIV-003) — otherwise a stale actionable notification survives the
+    // Purge this user's own friend_request notification, mirroring decline:
+    // otherwise a stale actionable notification survives the
     // accept and later 400s from the Notifications panel.
     await tx.notification.deleteMany({
       where: {
@@ -85,7 +85,7 @@ async function acceptFriendRequest(
       },
     });
     if (notifyRequester) {
-      // Reference IDs only — username is resolved at read time (PRIV-005).
+      // Reference IDs only — username is resolved at read time.
       await tx.notification.create({
         data: {
           userId: requesterId,
@@ -155,7 +155,7 @@ async function requestOrAccept(userId: string, addresseeId: string) {
       },
     });
     if (notifyAddressee) {
-      // Reference IDs only — username is resolved at read time (PRIV-005).
+      // Reference IDs only — username is resolved at read time.
       await tx.notification.create({
         data: {
           userId: addresseeId,
@@ -337,7 +337,7 @@ router.patch(
       );
 
     // Delete the friendship and purge this user's own friend_request
-    // notification that referenced it (PRIV-003 — clean the row, don't rely on
+    // notification that referenced it (clean the row, don't rely on
     // the read-time filter alone). Both parties' mirrors must forget the edge
     // (sync tombstones, same transaction).
     await prisma.$transaction([
@@ -389,7 +389,7 @@ router.delete(
 
     // Collect the shares being revoked BEFORE deleting them, so we can also
     // purge each recipient's place_shared notification for the now-unshared
-    // place (PRIV-001). Unfriend revokes shares in both directions, so the
+    // place. Unfriend revokes shares in both directions, so the
     // notification purge targets both users' recipient rows.
     const revokedShares = await prisma.placeShare.findMany({
       where: {
@@ -492,7 +492,7 @@ router.delete(
   },
 );
 
-// ── Sharing audit (fix 24) ────────────────────────────────────
+// ── Sharing audit ─────────────────────────────────────────────
 //
 // "What does Bob see, and how do I take it all back?" Sharing is authored
 // per-place, so the per-person view had no surface; these two routes are it.
@@ -832,7 +832,7 @@ router.get(
 // Ids in the body authorize NOTHING. Both arms intersect the request with a set
 // derived from the caller's own ownership, so an id belonging to a stranger's
 // place is simply absent from that set — the response is a count, so it cannot
-// report back whether the id existed (SEC-001's anti-oracle rule).
+// report back whether the id existed (the anti-oracle rule).
 router.delete(
   "/:id/shares",
   requireAuth,
@@ -845,7 +845,7 @@ router.delete(
 
     const body = req.body ?? {};
     // Reuses the bulk-share parser: same vocabulary, same 200-item cap, same
-    // 413 (api/CLAUDE.md's bulk rule), and one place that decides what an item
+    // 413 (api/AGENTS.md's bulk rule), and one place that decides what an item
     // reference looks like on the wire.
     const requested =
       body.items === undefined || body.items === null
@@ -853,7 +853,7 @@ router.delete(
         : parseBulkShareItems(body.items);
 
     // Collect before deleting so each revoked place's residual place_shared
-    // notification can be purged too (PRIV-001), exactly as DELETE /friends/:id
+    // notification can be purged too, exactly as DELETE /friends/:id
     // does.
     const allPlaceShares = await prisma.placeShare.findMany({
       where: ownedSharesToFriendWhere(user.id, friendId),
@@ -937,7 +937,7 @@ router.delete(
     }));
     const itemsRevokedCount = await revokeDirectShares(directRevocations);
 
-    // Counts only — never the names/coords of what was revoked (PRIV-005).
+    // Counts only — never the names/coords of what was revoked.
     logger.info(
       {
         userId: user.id,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { CURRENT_CONSENT_VERSION, needsReconsent } from "./consent.js";
 
-// Consent is a privacy/legal boundary (root CLAUDE.md): privacy.html and
+// Consent is a privacy/legal boundary (root AGENTS.md): privacy.html and
 // tos.html promise "you will be asked to re-consent on next sign-in" after a
 // material change. needsReconsent is the predicate that makes a
 // CURRENT_CONSENT_VERSION bump actually reach existing users.

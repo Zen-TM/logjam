@@ -1,10 +1,8 @@
 // What you can DO with a way, in one place.
 //
-// Logjam GPS learned this the hard way (`mobile/src/saved/assetActions.ts`): a
-// verb list written per surface drifts, and a verb wired into only one of them
-// ships invisible. Ways had three surfaces disagreeing — a row's ⋯, a detail
-// page's ⋯, and controls inline in the detail body — with no rule saying which
-// belonged where (operator, 2026-09-17). The rule now:
+// Logjam GPS and Logjam Web share this design: a verb list written per
+// surface drifts, and a verb wired into only one of them ships invisible.
+// The rules governing way surfaces:
 //
 //   * A PROPERTY you change in place is inline in the detail body: the colour,
 //     which place it belongs to. Not a verb, never in a menu.
@@ -22,18 +20,14 @@
 // one of them is a delete: Remove drops the caller's own share and the owner
 // keeps their row; "Save to my Ways and remove" is the same thing with a copy
 // kept first, offered as ONE verb because it is one decision — as two steps it
-// asks the user to guess whether the copy survives the removal. Remove arrived
-// here on 2026-09-17 from a button in the detail body, which is the one place a
-// verb may not be, and where it read as a leftover from another app.
+// asks the user to guess whether the copy survives the removal.
 //
-// Two things left this list the same day, both because a menu was the wrong
-// home for them:
+// Actions kept out of this menu:
 //   * REVERSE is a button in the draw tool while a route is open for editing.
 //     It changes the geometry you are looking at, so it belongs beside the
 //     other edits to that geometry rather than behind a menu that closes.
-//   * VISIBILITY was a per-file switch on a detail page, which is a control the
-//     user had to open a page to find. The Layers overlays draw these files
-//     now, so the switch has nowhere left to be and nothing left to do.
+//   * VISIBILITY is handled by the Layers overlays for these files, so a
+//     per-file switch on a detail page is unnecessary.
 import { WAY_SHARE_VERB, WAY_VERBS, wayVerbLabel } from "@logjam/shared";
 import type { WayItem, WayKind } from "./waysModel";
 
@@ -120,11 +114,9 @@ export function wayVerbs(
   if (owned && way.kind === "track") verbs.push(verb("logTrip"));
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
-  // Taking your own copy of someone else's route. `POST /routes/:id/copy` has
-  // existed since sharing shipped and nothing on the web ever offered it
-  // (operator, 2026-09-17), so a sharee's only way to keep a route was to
-  // export it and import it back. Routes only: a file on a shared place is
-  // media, and no copy endpoint takes one.
+  // Taking your own copy of someone else's route (`POST /routes/:id/copy`)
+  // lets a sharee keep a route without export-and-reimport. Routes only: a
+  // file on a shared place is media, and no copy endpoint takes one.
   if (direct && way.kind === "route") verbs.push(verb("copy"));
   // Which of the two, per kind, is WAY_SHARE_VERB's and Logjam GPS's alike: a
   // route is a row `POST /shares` can grant, a file is not and is handed over
@@ -137,10 +129,9 @@ export function wayVerbs(
     verbs.push(verb("exportGpx"), verb("exportKml"));
   }
   // A file's bytes are in S3, so getting them back is a download rather than an
-  // export — and it was offered nowhere at all, so a GPX brought in here could
-  // never be taken out again (operator, 2026-09-17). Owner only: the presigned
-  // URL is minted by `POST /media/download-urls`, which is where the egress
-  // gate lives, and a file on someone else's place is not the caller's to pull.
+  // export. Owner only: the presigned URL is minted by
+  // `POST /media/download-urls`, which is where the egress gate lives, and a
+  // file on someone else's place is not the caller's to pull.
   if (owned && way.kind !== "route") verbs.push(verb("download"));
   // A route is renamed by the form that named it; a file is renamed in place.
   if (owned && way.kind !== "route") verbs.push(verb("rename"));

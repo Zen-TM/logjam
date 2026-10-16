@@ -19,7 +19,7 @@ describe("isValidLatitude", () => {
     expect(isValidLatitude(90)).toBe(true);
     expect(isValidLatitude(-33.71)).toBe(true);
   });
-  it("rejects out-of-range values (the PLACE-1 case)", () => {
+  it("rejects out-of-range values", () => {
     expect(isValidLatitude(95)).toBe(false);
     expect(isValidLatitude(-90.0001)).toBe(false);
   });
@@ -38,16 +38,14 @@ describe("isValidLongitude", () => {
     expect(isValidLongitude(180)).toBe(true);
     expect(isValidLongitude(150.3)).toBe(true);
   });
-  it("rejects out-of-range (the PLACE-1 case)", () => {
+  it("rejects out-of-range", () => {
     expect(isValidLongitude(200)).toBe(false);
     expect(isValidLongitude(-181)).toBe(false);
   });
 });
 
-// The bounds under test are the SYSTEM DEFINITIONS' own, so this suite fails
-// if a system field's bounds ever change — which is the point. The hardcoded
-// PLACE_NUMERIC_CONSTRAINTS table these cases used to read is gone; there is
-// one declaration now (shared/src/placeTypes.ts) and this reads it.
+// The bounds under test are the SYSTEM DEFINITIONS' own (shared/src/placeTypes.ts),
+// so this suite fails if a system field's bounds ever change.
 const defOf = (key: string) => {
   const def = SYSTEM_FIELD_DEFS.find((d) => d.key === key);
   if (!def) throw new Error(`no system def keyed ${key}`);
@@ -94,7 +92,7 @@ describe("numericConstraintError", () => {
     expect(numericConstraintError(0, CONSTRAINT.numAbseils)).toBeNull();
     expect(numericConstraintError(4, CONSTRAINT.vGrade)).toBeNull();
   });
-  it("rejects negatives on count/length/duration fields (PLACE-2)", () => {
+  it("rejects negatives on count/length/duration fields", () => {
     expect(numericConstraintError(-3, CONSTRAINT.numAbseils)).toBe(
       "Pitches cannot be negative",
     );
@@ -135,7 +133,7 @@ describe("validatePlacePayload", () => {
       ),
     ).toBeNull();
   });
-  it("rejects out-of-range latitude on create (PLACE-1)", () => {
+  it("rejects out-of-range latitude on create", () => {
     expect(
       validatePlacePayload(
         { latitude: 95, longitude: 200 },
@@ -172,7 +170,7 @@ describe("validatePlacePayload", () => {
       validatePlacePayload({ latitude: 95 }, { requireCoords: false }),
     ).toBe("Latitude must be a number between -90 and 90");
   });
-  it("rejects a negative numeric field (PLACE-2)", () => {
+  it("rejects a negative numeric field", () => {
     expect(
       validatePlacePayload(
         { latitude: -33, longitude: 150, fieldValues: { num_abseils: -3 } },

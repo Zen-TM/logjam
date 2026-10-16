@@ -1,9 +1,8 @@
-// FECO-001: the shared data hooks in placeUtils.ts fire a request on every
+// The shared data hooks in placeUtils.ts fire a request on every
 // `fetchCount` bump but must not let an earlier in-flight response overwrite
 // state set by a later one (load → write → refetch, with the load's response
 // landing after the refetch's). Covers one representative hook (`usePlaces`)
-// per the finding's suggested test — the same `cancelled` guard is applied
-// identically to all eight hooks.
+// — the same `cancelled` guard is applied identically to all eight hooks.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { usePlaces } from "./placeUtils";
@@ -27,7 +26,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("usePlaces stale-response race (FECO-001)", () => {
+describe("usePlaces stale-response race", () => {
   it("keeps the newer response when the older request resolves last", async () => {
     let resolveFirst!: (value: unknown) => void;
     let resolveSecond!: (value: unknown) => void;
@@ -48,7 +47,7 @@ describe("usePlaces stale-response race (FECO-001)", () => {
 
     // Bump refetch (simulates a write completing) before the first request's
     // response has arrived — this is the load(A) -> write -> refetch(B)
-    // sequence from the finding.
+    // sequence.
     act(() => {
       result.current.refetch();
     });

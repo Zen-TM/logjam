@@ -2,7 +2,7 @@
  * WORKER_SPECS vs the Terraform task definitions — the second half of a
  * hand-kept parallel list.
  *
- * Repo convention (CLAUDE.md): "Two lists that must agree = one declaration
+ * Repo convention (AGENTS.md): "Two lists that must agree = one declaration
  * plus a test." The billing model here is only correct while its vCPU numbers
  * match what Fargate is actually asked to provision. Resizing a worker in
  * ecs.tf without touching WORKER_SPECS would silently mis-bill every user —

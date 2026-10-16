@@ -2,10 +2,9 @@ import { RunTaskCommand } from "@aws-sdk/client-ecs";
 import { ecs } from "../services/awsClients";
 import { getEnv } from "./env";
 
-// Single Fargate launch helper (Design L3). Both the topo-job and topo-export
-// routes launch workers this way; the placement-failure check below existed
-// only on the topo-job path before, which is how the export pipeline ended up
-// stranding rows in `queued` on placement failure (ARCH-002).
+// Single Fargate launch helper. Both the topo-job and topo-export
+// routes launch workers this way, sharing the placement-failure check below
+// so placement failure cannot strand rows in `queued`.
 
 export interface LaunchFargateTaskOptions {
   taskDefinition: string;

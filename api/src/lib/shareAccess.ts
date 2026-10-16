@@ -9,11 +9,9 @@
 //      rule: routes/waypoints inherit place-level visibility), or
 //   2. it is shared with them DIRECTLY (a Share row).
 //
-// Any endpoint that answers half of that question answers it wrong. SEC-001
-// was one inline re-derivation of a share check drifting from the real one;
-// two legitimate sources of visibility is a strictly better setup for the same
-// bug. So: nothing outside this file decides whether a user may see a
-// waypoint, route, topo job or GeoPDF job.
+// Any endpoint that answers half of that question answers it wrong.
+// Nothing outside this file decides whether a user may see a route, topo
+// job or GeoPDF job. Guard: api/src/lib/shareAccess.unit.test.ts.
 //
 // PRIVACY: denial is 404, never 403, for a user with no access — the status
 // must not confirm that an id exists to someone who cannot see it. A recipient
@@ -93,20 +91,9 @@ export async function getRouteRole(
  * must not tombstone a user who keeps the place arm. This is the single source
  * of that arm, so the role helper above and the revoke path cannot disagree.
  *
- * THE WAYPOINT ARM IS GONE, and the distinction is worth stating because
- * getting it backwards silently strips routes from every shared place:
- *
- *   - A waypoint used to inherit visibility through the canyons it was LINKED
- *     to, reachable through two of them at once, which is what made revocation
- *     a 219-line problem (lib/waypointLink.ts, now deleted). A waypoint is a
- *     place now and a PlaceLink grants NO visibility, so there is nothing to
- *     inherit and nothing to revoke.
- *   - A route reaches a sharee through `Route.placeId`, a FOREIGN KEY, not a
- *     link. That is deliberate: the route is part of the shared record
- *     (routes/places.ts states it), and it survives this rework unchanged.
- *
- * "A link grants no visibility" is a rule about LINKS. It is not a rule about
- * foreign keys.
+ * Place links grant no visibility, but a route reaches a sharee through
+ * `Route.placeId` (a foreign key), not a link: the route is part of the
+ * shared place record.
  */
 export async function hasPlaceInheritedAccess(
   userId: string,
@@ -268,13 +255,13 @@ export async function deleteSharesFor(
 
 /**
  * Revoke every non-place share between two users, in BOTH directions, inside
- * the caller's transaction. The unfriend leg of the share lifecycle (APIR-007):
+ * the caller's transaction. The unfriend leg of the share lifecycle:
  * shares can only be CREATED between friends, so removing the friendship must
  * take them all back — place shares are revoked by the caller, this is the
  * rest.
  *
  * Two different promises, so two different rules:
- *   - `Share` (waypoint / route / topo job / GeoPDF job) is a LIVE view of a
+ *   - `Share` (route / topo job / GeoPDF job) is a LIVE view of a
  *     record the owner still holds, so all of it goes.
  *   - `FileSend` handed the recipient a COPY. Only rows they have not taken yet
  *     (`status = "pending"`) are still live access and are revoked; an accepted
@@ -321,7 +308,7 @@ export async function revokeAllSharesBetween(
     );
     // Drop each recipient's residual item_shared row, as the single revoke
     // does — the read-time filter already hides it, but a revoked share should
-    // not leave a notification at rest (PRIV-001).
+    // not leave a notification at rest.
     for (const share of shares) {
       await tx.notification.deleteMany({
         where: {
@@ -416,7 +403,7 @@ export function parseSharableEntityType(value: unknown): SharableEntityType {
  * `GET /shares/...` would make listing N items cost N requests.
  *
  * CALLERS MUST PASS OWNED IDS ONLY. A share fan-out is owner-private derived
- * cardinality (root CLAUDE.md): telling a recipient how many OTHER people can
+ * cardinality (root AGENTS.md): telling a recipient how many OTHER people can
  * see the thing they were given leaks the owner's sharing behaviour, and a
  * test that only asserts the recipient list is withheld would pass while this
  * count leaked. The filter belongs at the call site, where ownership is
@@ -443,8 +430,8 @@ export async function shareCountsFor(
  *
  * Here rather than in the caller for the reason the whole file exists: which
  * column holds the owner (`Route.ownerId` vs `TopoJob.userId`) is answered
- * once, and a bulk path that re-derived it would be the second source SEC-001
- * was about.
+ * once, and a bulk path that re-derived it would invite the drift this file
+ * exists to prevent.
  *
  * Only the OWNER arm is batched. A sharee may not re-share, so bulk never needs
  * the "shared" role, and a missing id is indistinguishable in the result from a

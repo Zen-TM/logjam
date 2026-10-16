@@ -7,7 +7,8 @@
 # The grant is the CI plan role's: ReadOnlyAccess plus the same privacy Deny
 # (local.ci_readonly_privacy_deny, iam.tf), so the contributor reads no user
 # data, secret values, logs or user directory either. Why read-only, why a
-# Deny over a managed policy, and why MFA: docs/decisions/0032.
+# Deny over a managed policy, and why MFA:
+# docs/decisions/0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md.
 locals {
   contributor_user  = "collaborator-oliver"
   contributor_group = "logjam-developers"
@@ -111,9 +112,8 @@ resource "aws_iam_group_policy" "contributor" {
   policy = local.contributor_policy
 }
 
-# Exclusive, so a policy attached by hand, including the one that was on this
-# group before it was imported, is detached by the next apply rather than
-# left to widen the grant.
+# Exclusive, so a policy attached outside Terraform is detached by the next
+# apply rather than left to widen the grant.
 resource "aws_iam_group_policy_attachments_exclusive" "contributor" {
   group_name  = aws_iam_group.contributor.name
   policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]

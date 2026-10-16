@@ -1,4 +1,4 @@
-// Offline-region tile math (stage4a-basemaps.md §3) — single source for the
+// Offline-region tile math — single source for the
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
@@ -27,9 +27,8 @@ export function lonLatToTile(
 }
 
 /**
- * XYZ→TMS row flip for MBTiles writes. The single shared flip helper
- * (deviation DV5): Stage 4a writes through it in JS; Stage 6's native module
- * documents the same convention.
+ * XYZ→TMS row flip for MBTiles writes: JS and native tile writers share the
+ * same convention.
  */
 export function xyzToTmsRow(z: number, y: number): number {
   return (1 << z) - 1 - y;
@@ -83,11 +82,11 @@ export function planRegionTiles(
   return { perZoom, totalTiles };
 }
 
-// ── Caps (client-enforced; stage4a §3.3) ─────────────────────────────────────
+// ── Caps (client-enforced) ──────────────────────────────────────────────────
 
 /**
  * Hard cap on the tiles ONE download job may fetch — download disabled above
- * it. ~22 min at the politeness pace (§5.4), which is the real reason for the
+ * it. ~22 min at the politeness pace, which is the real reason for the
  * number: it bounds how long the user is asked to hold the app open.
  *
  * Applied to the TOTAL across every selected source, because that total is what
@@ -170,15 +169,15 @@ export type DownloadableTileSourceId = OfflineBasemapId | typeof DEM_SOURCE_ID;
 
 /**
  * The pyramid always starts here: z8–z9 context costs ~10 tiles in total and is
- * what stops a zoomed-out offline map being a blank screen (deviation DV2 — the
- * user picks only the detail end).
+ * what stops a zoomed-out offline map being a blank screen (the user picks only
+ * the detail end).
  */
 export const REGION_MIN_ZOOM = 8;
 
 /**
  * MEASURED bytes per tile, per source, per zoom.
  *
- * Provenance: `shared/scripts/calibrate-basemap-tile-sizes.mjs`, run 2026-07-30
+ * Provenance: `shared/scripts/calibrate-basemap-tile-sizes.mjs`
  * against the live SIXMaps caches — 14 random tiles per zoom, half from Blue
  * Mountains bush (dense contours, no streets) and half from the Katoomba–
  * Blackheath strip. Re-run that script and update these together.
@@ -189,15 +188,14 @@ export const REGION_MIN_ZOOM = 8;
  * of photo everywhere). A flat mean would over-estimate a deep download by an
  * order of magnitude and under-estimate a shallow one.
  *
- * BOTH terrain types, because the first pass sampled only bush and the estimate
- * came out 40 % under for a real download centred on Katoomba: a topo tile over a
- * town carries streets, labels and building fill and measures ~1.5× a bush tile
- * at the same zoom. People save the area around a trailhead, and a trailhead is
- * usually near a town, so bush-only sampling is a systematically optimistic lie.
+ * BOTH terrain types: a topo tile over a town carries streets, labels and
+ * building fill and measures ~1.5× a bush tile at the same zoom. People save
+ * the area around a trailhead, and a trailhead is usually near a town, so
+ * bush-only sampling would systematically under-estimate downloads.
  *
- * Also measured: `six-imagery` returns 404 for some z18 tiles, which is the
- * "advertised LOD ≠ cached tile" case the plan flagged. Those are gaps, not
- * errors — the downloader records them and the UI counts them separately.
+ * Also measured: `six-imagery` returns 404 for some z18 tiles, where advertised
+ * LOD differs from cached tiles. Those are gaps, not errors — the downloader
+ * records them and the UI counts them separately.
  */
 const TILE_BYTES: Record<
   DownloadableTileSourceId,
@@ -220,9 +218,9 @@ const TILE_BYTES: Record<
     18: { meanBytes: 5_720, p90Bytes: 8_066 },
   },
   // ONE zoom, because a source's `sampleZoom` is the only level anything
-  // reads (shared/src/demSources.ts). Measured 2026-08-16, same script, 14 tiles over
-  // the same two bboxes: terrarium PNGs are noise-like height fields, so town
-  // and bush cost the same and the spread is narrow.
+  // reads (shared/src/demSources.ts). Measured with the same script, 14 tiles
+  // over the same two bboxes: terrarium PNGs are noise-like height fields, so
+  // town and bush cost the same and the spread is narrow.
   terrarium: {
     13: { meanBytes: 34_495, p90Bytes: 38_109 },
   },
@@ -290,7 +288,7 @@ export function estimateRegionSize(
 }
 
 /**
- * Sustained tiles/second of the politeness envelope (stage4a §5.4: token bucket
+ * Sustained tiles/second of the politeness envelope (token bucket
  * refilling 3/s). The honest number for "how long will this take" — the burst
  * capacity only helps the first two seconds.
  */

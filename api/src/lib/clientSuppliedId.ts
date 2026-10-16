@@ -1,7 +1,7 @@
-// Optional client-minted entity ids on create (Stage 8 §3.5 — the outbox
-// idempotency backbone). Accepting the id at create time removes ALL
-// id-remapping from the mobile outbox: references between queued ops
-// (linkedId, placeIds) are final at enqueue time.
+// Optional client-minted entity ids on create (the outbox idempotency
+// backbone). Accepting the id at create time removes ALL id-remapping from
+// the mobile outbox: references between queued ops (linkedId, placeIds) are
+// final at enqueue time.
 //
 // Uniform rules, every accepting route:
 // - absent → server mints as before;
@@ -9,7 +9,7 @@
 // - present and a row with that id exists: owned by the caller → the route
 //   returns the existing row with 200 (idempotent replay, the pattern
 //   media-confirm already implements); owned by anyone else → 404 — NOT
-//   403/409, which would be an existence oracle for foreign ids (SEC-001).
+//   403/409, which would be an existence oracle for foreign ids.
 //   A genuine cross-user v4 collision is cryptographically negligible;
 //   treat it as an attack.
 import { isUuidV4, type UserSentence } from "@logjam/shared";

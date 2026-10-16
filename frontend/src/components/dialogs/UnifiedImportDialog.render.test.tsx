@@ -97,9 +97,8 @@ async function loadCsv() {
   await screen.findByRole("heading", { name: /^Place columns/ });
 }
 
-// The importer used to start over whenever the signed-in user object changed
-// (a refetch, a consent, the first load landing late), throwing away the file,
-// the column map and the review. Only opening it starts over.
+// A refetch, consent, or late first load keeps the loaded file, column map,
+// and review intact while open; only reopening starts over.
 describe("UnifiedImportDialog, while open", () => {
   it("keeps the loaded file and its column map when the user is refetched", async () => {
     const { rerender } = render(dialog(user()));

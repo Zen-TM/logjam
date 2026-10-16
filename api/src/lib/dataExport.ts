@@ -4,9 +4,7 @@
 // Each section names the schema models it covers, so the guard
 // (dataExport.unit.test.ts) can hold every model in schema.prisma to a section
 // here, to the `user` object, or to a reason in NOT_EXPORTED_MODELS. A new table
-// of user data then fails the build until someone decides which it is; before
-// this, routes, links, direct shares, friendships, file sends, GeoPDF jobs and
-// device registrations had all been added without reaching the export.
+// of user data then fails the build until someone decides which it is.
 //
 // Another user appears only as id and username, never email (api/AGENTS.md).
 import prisma from "../services/prisma";

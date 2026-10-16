@@ -18,11 +18,11 @@ export interface MarkerExtent {
 }
 
 /**
- * Pure builder for the place-name markers baked into a GeoPDF export
- * (PRIV-006). The privacy boundary lives here: places shared by friends are
+ * Pure builder for the place-name markers baked into a GeoPDF export.
+ * The privacy boundary lives here: places shared by friends are
  * only ever included when the user explicitly opted in via includeShared —
  * a GeoPDF is a printable, hand-to-a-mate artifact, exactly the NPWS
- * publicising vector the root CLAUDE.md export-default rule guards.
+ * publicising vector the root AGENTS.md privacy rule guards.
  * Extent bounds are inclusive on both edges.
  */
 export function buildPlaceMarkers(

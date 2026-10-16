@@ -38,7 +38,7 @@
   --shadow-sheet: 0 -4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* The reset. Every width in this app is written as though padding and border
+/* The reset. Every width in Logjam Web is written as though padding and border
    are inside it, so `border-box` is not a preference — it is the unit the
    layout is measured in. It is set on `html` and inherited rather than forced
    on `*`, so a third-party subtree (MapLibre's canvas furniture) can opt back
@@ -61,7 +61,7 @@ body {
   padding: 0;
   background-color: var(--color-page);
   color: var(--color-text);
-  /* The reader's own OS font, which is what Logjam GPS shows too: neither app
+  /* The reader's own OS font, which is what Logjam GPS shows too: neither client
      ships a typeface, so both look like the system they are running on. */
   font-family:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
@@ -100,7 +100,7 @@ body {
   }
 }
 
-/* A dialog fills the phone's viewport rather than floating in it (MOBILE-12),
+/* A dialog fills the phone's viewport rather than floating in it,
    and the rule that decides this lives with the dialog itself — `Dialog.module.css`
    keys it off the same 768px breakpoint as the rest of this file. Nothing
    overrides a dialog from here. */

@@ -1,9 +1,9 @@
 // Pure tile-grid / Mercator math for the GeoPDF render path.
 //
-// Extracted from generateGeoPdf.ts so the projection math (the part most prone
-// to silent edge-case errors at high zoom / extreme latitude) is unit-testable
-// without pulling in canvas, PDFKit, PMTiles, AWS, or Prisma. generateGeoPdf
-// imports these; rendering stays there.
+// Kept pure so the projection math (the part most prone to silent edge-case
+// errors at high zoom / extreme latitude) is unit-testable without pulling in
+// canvas, PDFKit, PMTiles, AWS, or Prisma. generateGeoPdf imports these;
+// rendering stays there.
 
 const DEG_TO_RAD = Math.PI / 180;
 

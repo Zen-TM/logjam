@@ -16,9 +16,8 @@ describe("placeStatus", () => {
   });
 });
 
-/** A summary fixture. The seven grades are field VALUES now, so the helper
- *  takes the same names the tests used and writes them under the reserved
- *  keys — which is exactly what the form does. */
+/** A summary fixture. The seven grades are field values, so the helper
+ *  writes them under the reserved keys matching the form. */
 function summaryOf(fields: {
   vGrade?: number;
   aGrade?: number;

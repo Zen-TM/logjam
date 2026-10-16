@@ -27,7 +27,7 @@ import classes from "./AttributeFilter.module.css";
  *
  * It lives in the kit because a PLACE and a TRIP are filtered by the same
  * definitions in the same five shapes — the two sheets differ only in which
- * definitions they show and where the filter is stored (operator, 2026-09-17).
+ * definitions they show and where the filter is stored.
  * Nothing here knows which entity it is filtering, and nothing here may key off
  * a field's NAME: a canyon's grades are ordinary attributes, so the control is
  * chosen by shape or a type gets bespoke UI again (DESIGN.md).

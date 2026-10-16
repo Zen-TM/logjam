@@ -7,17 +7,12 @@ import type { TopoLayerName } from "./topoSettings.js";
 // tiles are actually fetched — so layers set `requiresExtractionDate` and the
 // renderer appends the dated line at draw time.
 // Terms: https://www.spatial.nsw.gov.au/products_and_services/web_services/terms_and_conditions
-// Licensing research + per-layer sources: private/offline-basemap-licensing.md
 export const SIX_EXTRACTION_CREDIT_PREFIX = "© Department of Customer Service";
 
 // ── Basemap catalog ───────────────────────────────────────────────────────────
 // Canonical catalog of raster basemap providers, shared by the web map
 // (frontend BASE_LAYERS derives from it), the GeoPDF renderer (via
-// GEOPDF_BASE_LAYER_CONFIG below), and the mobile map. Consolidated from the
-// previously-drifting web/shared copies (map-sources.md deviation D2): the two
-// disagreed on six-imagery max zoom and six-base existed only on web — while
-// VALID_GEOPDF_BASE_LAYERS accepted "six-base", so a six-base GeoPDF silently
-// fell back to defaults. One list, no third copy.
+// GEOPDF_BASE_LAYER_CONFIG below), and the mobile map. One list, no third copy.
 
 const SIX_ATTRIBUTION =
   "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.";
@@ -53,7 +48,7 @@ export type BasemapCatalogEntry = {
   /** HTML attribution (web AttributionControl). */
   attributionHtml: string;
   /**
-   * Whether Stage 4 offline region downloads may target this provider.
+   * Whether offline region downloads may target this provider.
    * OSM-family tile servers are online-only by policy (their usage policies
    * prohibit bulk scraping); SIX rasters and the self-hosted Protomaps
    * basemap are download-eligible.
@@ -69,8 +64,8 @@ export type BasemapCatalogEntry = {
 // Order is the pickers' order: the OSM family, then the SIX sheets.
 export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
-    // Self-hosted Protomaps vector basemap (mobile Stage 2+; the Stage 4
-    // offline-region source). urlTemplate is the CDN-relative archive path —
+    // Self-hosted Protomaps vector basemap (the mobile offline-region source).
+    // urlTemplate is the CDN-relative archive path —
     // the mobile resolver builds pmtiles://<cdnBaseUrl>/<urlTemplate>.
     // ODbL requires the OSM credit; Protomaps credits the sponsor-funded
     // planet builds the extract comes from.
@@ -238,7 +233,7 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
 // and the SVTM vegetation source.
 // Keyed by the canonical TopoLayerName (topoSettings.ts TOPO_LAYERS): the
 // values are per-layer data and stay hand-maintained, but a missing or extra
-// key is now a compile error (ARCH-010).
+// key is a compile error.
 export const TOPO_OVERLAY_SOURCE: Record<TopoLayerName, OverlaySource[]> = {
   hillshade: ["elevation"],
   slope: ["elevation"],

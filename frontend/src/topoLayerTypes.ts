@@ -1,6 +1,6 @@
 /**
  * Topo layer constants — thin re-export. The canonical TOPO_LAYERS list lives
- * in shared/src/topoSettings.ts (ARCH-010); the only remaining mirror is
+ * in shared/src/topoSettings.ts; the only remaining mirror is
  * topo/worker.py → ALL_LAYERS (Python). The view types below are
  * frontend-local.
  */

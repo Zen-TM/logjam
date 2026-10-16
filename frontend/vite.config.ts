@@ -96,7 +96,6 @@ export function maplibreWorkerPlugin(
   };
 }
 
-// https://vite.dev/config/
 export default defineConfig({
   // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
   // (e.g. an orphaned server from a prior session) instead of silently

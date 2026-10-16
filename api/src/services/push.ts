@@ -3,13 +3,13 @@
 // in-app Notification row stays the source of truth. No SDK — the Expo push
 // API is one HTTPS POST.
 //
-// PRIVACY (hard rule, root CLAUDE.md + mobile plan Stage 3): push payloads
+// PRIVACY (hard rule, root AGENTS.md; Guard: push.unit.test.ts): push payloads
 // transit Apple/Google/Expo servers in plaintext. NEVER put place names,
 // coordinates, usernames, or any free text in a push. The payload is a
-// generic per-type title, the notification type, and opaque IDs only — the
-// app fetches details over the authed API on tap. buildPushMessages is the
-// single choke-point and takes NO free-text parameters by construction;
-// its unit tests assert the title map is static and the data keys are
+// generic per-type title, the notification type, and opaque IDs only —
+// Logjam GPS fetches details over the authed API on tap. buildPushMessages is
+// the single choke-point and takes NO free-text parameters by construction;
+// push.unit.test.ts asserts the title map is static and the data keys are
 // whitelisted.
 import prisma from "./prisma";
 import { logger } from "../lib/logger";

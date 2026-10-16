@@ -4,9 +4,7 @@
 // Shared, because both clients draw the same friend picker: Logjam GPS's share
 // sheet and Logjam Web's ShareDialog filter the same list, and an avatar has to
 // be the SAME colour and the same two letters on both, or a person changes
-// identity when you pick up the other device. It lived in `mobile/src/sharing/`
-// until Logjam Web's friends work (2026-09-18); it was already free of React
-// Native imports, which is what made it testable there and movable here.
+// identity when you pick up the other device.
 
 /** Case-insensitive substring match. An empty query matches everything. */
 export function friendMatches(username: string, query: string): boolean {

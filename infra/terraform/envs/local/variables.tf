@@ -1,7 +1,7 @@
 # Cognito identifiers used only when running local dev against real Cognito
 # (`make dev-snapshot`). These are PUBLIC client identifiers shipped in the SPA
 # bundle, not secrets. Defaults are the live Logjam pool/client.
-# TODO (M6): source these from the prod root via terraform_remote_state instead
+# TODO: source these from the prod root via terraform_remote_state instead
 # of duplicating the literals, to keep a single source of truth.
 variable "cognito_user_pool_id" {
   type    = string
@@ -39,8 +39,7 @@ variable "email_from" {
 # regions from (POST /basemap/region-clip runs `pmtiles extract` against it).
 #
 # EMPTY BY DEFAULT, and the endpoint answers 503 "Region clips are not
-# available" when it is — which is correct and was for a long time mistaken for
-# a bug in the mobile download. The archive is ~740 MB and machine-local, so it
+# available" when it is. The archive is ~740 MB and machine-local, so it
 # is not something a checkout can carry: set this per machine in a gitignored
 # `*.auto.tfvars` beside this file, e.g.
 #

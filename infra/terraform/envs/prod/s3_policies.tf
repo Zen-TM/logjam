@@ -1,7 +1,6 @@
 # S3 bucket policies granting the web CloudFront distribution (OAC) read access:
 # frontend bucket (whole SPA) and topo-jobs master/* tiles. These reference the
-# distribution by ARN, so they're managed here now that the distribution is a
-# Terraform resource.
+# distribution by ARN, so they are managed alongside the CloudFront distribution.
 
 # Every bucket refuses plain-HTTP requests. A bucket policy is one document per
 # bucket, so each policy below (and audit's, in audit.tf) appends this statement.

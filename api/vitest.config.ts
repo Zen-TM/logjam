@@ -3,8 +3,8 @@ import dotenv from "dotenv";
 import { defineConfig } from "vitest/config";
 
 // Integration tests import services/prisma directly for setup/teardown
-// (e.g. creating fixture rows), which now requires DB_HOST/DB_NAME/DB_USER/
-// DB_PASSWORD at construction time (Prisma 7 driver adapter, composed via
+// (e.g. creating fixture rows), which requires DB_HOST/DB_NAME/DB_USER/
+// DB_PASSWORD at construction time (Prisma driver adapter, composed via
 // lib/databaseUrl.ts). Load the same file the local API server reads — the
 // Terraform-generated root .env.local (src/index.ts) — so the suite targets
 // the DB the server does. dotenv never overrides a set var, so CI's job-level

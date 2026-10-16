@@ -6,7 +6,7 @@ import { currentDbPassword } from "../lib/dbPassword";
 
 const databaseUrl = databaseUrlFromEnv();
 
-// node-postgres (unlike the pre-7 Prisma engine) does NOT negotiate TLS by
+// node-postgres does NOT negotiate TLS by
 // default, and RDS rejects unencrypted connections ("no pg_hba.conf entry ...
 // no encryption"). The Docker image bundles the RDS CA at /app/rds-ca.pem, so
 // in prod we get verified TLS; on the dev host the file is absent and the local
@@ -39,7 +39,6 @@ const adapter = new PrismaPg({
   ssl,
 });
 
-// Single shared Prisma instance across the app
 const prisma = new PrismaClient({
   adapter,
   log: process.env.NODE_ENV === "development" ? ["query", "error"] : ["error"],

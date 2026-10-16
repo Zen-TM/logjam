@@ -86,11 +86,11 @@ export function slopeDegrees(
  * The slope at a position, or null where it cannot be told honestly.
  *
  * Read from ONE source and never down the usual list: all nine heights must
- * come from the same surface, and the worldwide 30 m tiles were measured too
- * coarse for a point slope (within 5° of a 5 m survey at 57 % of points, a
- * median of 34° on ground of 60° or steeper), where the NSW 5 m source is
- * within 5° at 98 %. So outside NSW, or where a saved area lacks a tile, the
- * answer is null and no slope is shown. `demSlope.test.ts` holds this.
+ * come from the same surface, and the worldwide 30 m tiles are too coarse for a
+ * point slope (within 5° of a 5 m survey at 57 % of points, a median of 34° on
+ * ground of 60° or steeper), where the NSW 5 m source is within 5° at 98 %. So
+ * outside NSW, or where a saved area lacks a tile, the answer is null and no
+ * slope is shown. `demSlope.test.ts` holds this.
  *
  * At zoom 15 the window is about 12 m across: a drop or slot narrower than
  * that is averaged away.

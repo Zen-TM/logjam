@@ -1,4 +1,4 @@
-// GeoPDF georeferencing parser (Stage 6 Part A).
+// GeoPDF georeferencing parser.
 //
 // Walks the ISO 32000-2 §12.9 viewport chain — page /VP → /Measure (Subtype
 // /GEO) → /GCS — and returns every georeferenced viewport with its control

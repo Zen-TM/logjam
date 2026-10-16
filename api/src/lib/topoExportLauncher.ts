@@ -37,10 +37,10 @@ export interface CreateAndLaunchExportInput {
  * manual route and the reaper's auto-export pass behave identically.
  *
  * - The cap check + create run in one user-row-locked transaction so concurrent
- *   submissions can't both pass the cap (ARCH-009). Throws AppError(429) when at
+ *   submissions can't both pass the cap. Throws AppError(429) when at
  *   the cap.
  * - launchFargateTask throws on placement failure as well as SDK errors, so a
- *   launch problem can never strand the export in `queued` (ARCH-002). On
+ *   launch problem can never strand the export in `queued`. On
  *   failure the row is force-failed and AppError(500) is thrown.
  * - Launch runs whenever ECS_SUBNETS is set — including local dev, where
  *   MiniStack's RunTask spawns the worker container (dummy subnets in
@@ -68,7 +68,7 @@ export async function createAndLaunchTopoExport(
   const exportJob = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
     // Monthly allowance, inside the same user-row lock as the concurrency cap
-    // so concurrent submissions serialise against one another (ARCH-009).
+    // so concurrent submissions serialise against one another.
     await assertHasCredits(
       { id: input.userId, monthlyComputeCredits: input.monthlyComputeCredits },
       "topoExport",
@@ -106,7 +106,7 @@ export async function createAndLaunchTopoExport(
         containerName: "topo-export-worker",
         environment: [{ name: "EXPORT_JOB_ID", value: exportJob.id }],
       });
-      // Persist the ARN (Design L2) so the reaper can StopTask it.
+      // Persist the ARN so the reaper can StopTask it.
       await prisma.topoExportJob.update({
         where: { id: exportJob.id },
         data: { ecsTaskArn: taskArn },

@@ -33,8 +33,6 @@
   color: var(--color-text);
   font-family: inherit;
   line-height: inherit;
-  /* Map chrome's own step (MapControl.module.css), between the panel's base
-     and the old 16px. */
 }
 
 .input::placeholder {

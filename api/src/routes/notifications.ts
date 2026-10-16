@@ -9,11 +9,11 @@ import { say, NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
 const router = Router();
 
 // The list cap is shared: the true total (see X-Total-Count below) lets a
-// client show a truncation caption when the cap bites (UX-002), and
+// client show a truncation caption when the cap bites, and
 // `notificationsTruncated` is how both clients decide that it did.
 
 // Notification payloads store ONLY reference IDs — no denormalised plaintext
-// place names or usernames (PRIV-005). Display strings are resolved from the
+// place names or usernames. Display strings are resolved from the
 // live rows at read time below:
 //   friend_request / friend_request_accepted: payload.friendshipId (+ counterpart username)
 //   place_shared:                            payload.placeId, payload.sharedById (+ placeName, sharedByUsername)
@@ -28,7 +28,7 @@ const router = Router();
 // When the referenced place/share/friendship is gone (share revoked, place
 // deleted, friendship removed, or the other user's account deleted), there is
 // nothing to resolve, so the notification is dropped at read time and never
-// leaks a stale name (PRIV-001/003). Opportunistic row deletion on revoke/
+// leaks a stale name. Opportunistic row deletion on revoke/
 // delete (sharing.ts, friends.ts, places.ts, users.ts) is the primary
 // cleanup; this read-time drop is the fallback.
 function payloadString(payload: unknown, key: string): string | null {
@@ -92,9 +92,9 @@ router.get(
     }
 
     // Resolve display strings (place names, usernames) from the LIVE rows at
-    // read time. Nothing is persisted in the payload (PRIV-005), so a revoked
+    // read time. Nothing is persisted in the payload, so a revoked
     // share, deleted place, or removed friendship simply has no row to resolve
-    // and the notification is dropped below (PRIV-001/003).
+    // and the notification is dropped below.
     const [existingFriendships, existingPlaces, sharerUsers] =
       await Promise.all([
         friendshipIds.size > 0
@@ -137,7 +137,7 @@ router.get(
 
     // Which item_shared notifications still have a live Share row for this
     // recipient. A revoked share resolves to nothing and the notification is
-    // dropped below (PRIV-001/003), mirroring the place_shared rule.
+    // dropped below, mirroring the place_shared rule.
     const liveShares =
       sharedItems.length > 0
         ? await prisma.share.findMany({
@@ -153,7 +153,7 @@ router.get(
     // stays alive under its owner), so "the place still exists" is not the
     // same question as "this recipient may still see its name" — checking only
     // existence made the documented read-time fallback unable to catch a
-    // revoked place share (APIR-012/PRIV-103).
+    // revoked place share.
     const livePlaceShares =
       placeIds.size > 0
         ? await prisma.placeShare.findMany({
@@ -190,7 +190,7 @@ router.get(
               fileSendId: { in: [...fileSendIds] },
             },
             // The filename is resolved from the live row like every other
-            // display string here (PRIV-005 — nothing denormalised into the
+            // display string here (nothing denormalised into the
             // stored payload). The recipient is entitled to know WHAT they are
             // being offered before they accept it, and it is the one piece of
             // user text on a send: rendered, never logged.
@@ -333,7 +333,7 @@ router.get(
       return [n];
     });
 
-    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    // True total (pre-cap) so the client can flag a truncated view.
     res.set("X-Total-Count", String(total));
     res.json(visible);
   },
@@ -358,7 +358,7 @@ router.get(
 // ── PATCH /notifications/:id/read ─────────────────────────────
 // Mark a single notification read, or unread again with `{ "read": false }` —
 // the REST twin of the sync push's markRead / markUnread ops, for Logjam Web.
-// Anything but a boolean `read` (including no body) marks it read, as before.
+// Anything but a boolean `read` (including no body) marks it read.
 router.patch(
   "/:id/read",
   requireAuth,
@@ -368,7 +368,7 @@ router.patch(
     const id = getParam(req.params.id);
     // Owner-scoped lookup: a foreign id gets the SAME 404 a non-existent one
     // gets, so the status cannot confirm that a notification id exists to
-    // anyone but its owner (house anti-oracle rule, PRIV-105).
+    // anyone but its owner (the anti-oracle rule).
     const notification = await prisma.notification.findFirst({
       where: { id, userId: user.id },
     });
@@ -411,7 +411,7 @@ router.delete(
     const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
-    // Owner-scoped, same reason as PATCH /:id/read above (PRIV-105).
+    // Owner-scoped, same reason as PATCH /:id/read above.
     const notification = await prisma.notification.findFirst({
       where: { id, userId: user.id },
     });

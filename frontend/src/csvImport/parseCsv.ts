@@ -6,8 +6,8 @@ export type ParsedCsv = {
   // Non-fatal problems found while parsing (PapaParse row errors — unbalanced
   // quotes, too-many-fields rows — plus a note for any header PapaParse had to
   // rename because it collided with an earlier one). Parsing still returns
-  // whatever it could read; the caller decides how to warn the user
-  // (FECO-002). Empty when the file parsed cleanly.
+  // whatever it could read; the caller decides how to warn the user.
+  // Empty when the file parsed cleanly.
   parseErrors: string[];
 };
 
@@ -46,9 +46,8 @@ export function parseCsv(file: File): Promise<ParsedCsv> {
           }
           return trimmed;
         });
-        // PapaParse row errors (unbalanced quotes, wrong field count, …) used
-        // to be silently dropped here — a malformed row misaligns every field
-        // after it with no signal to the user (FECO-002).
+        // A malformed row misaligns every field after it with no signal to
+        // the user.
         const parseErrors = [
           ...result.errors.map((e) =>
             e.row != null ? `Row ${e.row + 2}: ${e.message}` : e.message,

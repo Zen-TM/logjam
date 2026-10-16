@@ -1,7 +1,7 @@
 // Single source of truth for Route geometry: caps, validation, derived stats,
 // simplification, and the GPX/KML/GeoJSON → routes import plan. Shared by the
 // API (routes/routes.ts, routes/sync.ts) and both clients (draw tools, import
-// flows, outbox validation before enqueue). Mirrors waypointValidation.ts's
+// flows, outbox validation before enqueue). Mirrors placeValidation.ts's
 // payload-validator shape.
 //
 // A Route is an INTENTION — authored, edited, small. It is not a recording.
@@ -314,7 +314,7 @@ function perpendicularDistanceM(
  * ponytail: O(n·log n) on real tracks but O(n²) worst case, when almost every
  * vertex deviates past the tolerance (a tight zigzag against a small
  * tolerance). Callers that accept unbounded input must decimate first — see
- * SIMPLIFY_INPUT_CEILING in simplifyToFit. Upgrade to a segment-indexed
+ * SIMPLIFY_INPUT_CEILING_FACTOR in simplifyToFit. Upgrade to a segment-indexed
  * variant only if a real track ever hits the quadratic path.
  */
 export function simplifyRoute(

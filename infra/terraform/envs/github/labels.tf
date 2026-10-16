@@ -14,8 +14,8 @@ locals {
   }
 }
 
-# The labels that existed when this root took the settings over; later ones
-# are created.
+# Pre-existing labels imported into Terraform management; others are
+# created.
 import {
   for_each = toset(["bug", "proposal", "triage", "accepted"])
   to       = github_issue_label.this[each.key]

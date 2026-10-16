@@ -51,14 +51,11 @@ function registerAliases(role: PlaceFieldRole, aliases: string[]) {
 }
 
 // Exported so detectFileKind.ts (kind detection, run before column-role
-// assignment) shares this exact normalization instead of keeping its own
-// hand-copied version — the two drifted once already when camelCase splitting
-// was added here for IMPORT-4 and detectFileKind's copy never got it
-// (FECO-004): a `latDD`/`lonDD` file failed kind detection with no override.
+// assignment) shares this exact normalization.
 export function normalize(s: string): string {
-  // Split camelCase / letter-digit runs before lowercasing so the app's own
+  // Split camelCase / letter-digit runs before lowercasing so Logjam Web's own
   // template headers (altNames, numAbseils, longestAbseil, vGrade…) collapse to
-  // the same spaced tokens as the human-readable aliases below (IMPORT-4).
+  // the same spaced tokens as the human-readable aliases below.
   return s
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()

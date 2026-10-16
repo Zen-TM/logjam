@@ -12,7 +12,8 @@ export type Quoted = { readonly quoted: string };
 
 /**
  * Put the user's own words in a sentence. They are set in “ ”, which is how
- * `withoutQuoted` finds them again: a log line never carries a label or a name.
+ * `withoutQuoted` finds them again: a log line never carries a label or a name
+ * (api/src/middleware/errorHandler.unit.test.ts).
  */
 export function quote(text: string): Quoted {
   return { quoted: text };

@@ -1,8 +1,7 @@
-// Single deterministic place name + location matcher. Shared by CSV place
-// import, trip-place matching, and RopeWiki dedup. Replaced the two divergent
-// matchers (the retired token-Jaccard nameMatchScore, and the frontend
-// exact->stripped->fuzzy chain). Rules are deterministic edit-distance
-// + normalization; no machine learning.
+// Single deterministic place name + location matcher, shared by CSV place
+// import, trip-place matching, and RopeWiki dedup so matching decisions
+// do not diverge. Rules are deterministic edit-distance + normalization;
+// no machine learning.
 //
 // The 19 real-world failure examples the owner collected all reduce to a small
 // set of normalization rules (despace, type-word/noise-word stripping,
@@ -12,8 +11,7 @@
 import { norm, WATERWAY_SUFFIXES } from "./placeNameMatch.js";
 import { haversineMeters, withinBbox } from "./placeGeo.js";
 
-// Distance thresholds (moved here from api/src/services/ropewikiDedupe.ts so
-// every matching surface shares one source of truth; re-exported there).
+// Distance thresholds shared across matching surfaces.
 export const AUTO_LINK_DIST_M = 250; // typo-tier auto-link radius (coords must corroborate a weak name signal)
 // Exact-name auto-link radius. An exact normalized name is a strong signal on
 // its own; the coordinate check only exists to rule out a far same-name twin.
@@ -110,7 +108,7 @@ function canonicalQualifier(token: string): string | null {
   return QUALIFIER_CANONICAL[token] ?? null;
 }
 
-// 8-step normalization pipeline (see plan §5a).
+// 8-step normalization pipeline.
 export function normalizePlaceName(raw: string): NormalizedName {
   // 1. lowercase, trim, remove apostrophes, normalize "&" -> "and".
   let working = norm(raw).replace(/&/g, " and ");
@@ -315,7 +313,7 @@ function bestNameTier(
 }
 
 // Match an incoming place/trip name (optionally with coords) against a list of
-// existing places. See plan §5a for the decision procedure.
+// existing places.
 export function matchPlace(
   input: MatchInput,
   candidates: MatchCandidate[],

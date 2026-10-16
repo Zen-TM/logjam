@@ -38,13 +38,9 @@ export type NumericConstraint = {
 /**
  * A field definition's bounds, as a constraint — or null when it has none.
  *
- * This REPLACES the hardcoded PLACE_NUMERIC_CONSTRAINTS table. The seven grade
- * columns became field values, and their bounds became the `min`/`max` of the
- * system definitions that describe them, so a second table restating those
- * numbers would be two lists that must agree with no test to say when they
- * stop agreeing. The bounds are now enforced from exactly where they are
- * declared, for user fields and system fields alike, which is also what makes a
- * user-defined bounded field validate at all — it never did before.
+ * Bounds are enforced from where they are declared (in the system or user field
+ * definitions), for user fields and system fields alike, avoiding duplicate
+ * constraint tables.
  */
 export function constraintFromDef(def: {
   label: string;
@@ -96,8 +92,8 @@ export function numericConstraintError(
  *
  * Values whose key has no definition are LEFT ALONE, not rejected: a def can be
  * deleted or rescoped while values are already stored, and the trip-log union
- * rule (§2.7) keeps showing a value whose def no longer applies rather than
- * destroying it. Rejecting here would make that impossible to save.
+ * rule keeps showing a value whose def no longer applies rather than destroying
+ * it. Rejecting here would make that impossible to save.
  */
 export function validateFieldValues(
   values: Record<string, unknown>,
@@ -172,8 +168,7 @@ export type PlaceFieldPayload = {
  *   and in range.
  * - `requireCoords: false` (patch) validates coordinates only when supplied.
  *
- * `elevation` came from the waypoint payload in the phase 1c fold and keeps its
- * old rule verbatim: an explicit null clears it.
+ * `elevation` is optional: an explicit null clears it.
  *
  * `fieldValues` is validated only when `opts.defs` is given. The definitions
  * cannot be reached from here — they are rows — so a caller that has them
@@ -284,8 +279,7 @@ export function invalidPlaceFields(
   return invalid;
 }
 
-/** How many other places one place may be linked to. The old
- *  MAX_PLACES_PER_WAYPOINT, now symmetric. */
+/** How many other places one place may be linked to. */
 export const MAX_LINKS_PER_PLACE = 20;
 
 /**

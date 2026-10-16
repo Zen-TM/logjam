@@ -1,11 +1,9 @@
 // Async GeoPDF generation pipeline (mirrors topoExports.ts).
 //
 // GeoPDF generation fetches many map tiles over HTTP and renders onto a
-// server-side canvas — up to ~120 s of CPU + network fan-out. That used to run
-// SYNCHRONOUSLY in this request handler, bounded only by an in-process
-// concurrency cap (MAX_CONCURRENT_GEO_PDF). This now follows the same
-// async-job/ECS-worker pattern as the on-demand topo export pipeline: the
-// server snapshots the live vector style, persists a GeoPdfJob row, and
+// server-side canvas — up to ~120 s of CPU + network fan-out. It follows
+// the same async-job/ECS-worker pattern as the on-demand topo export pipeline:
+// the server snapshots the live vector style, persists a GeoPdfJob row, and
 // launches an ECS task (logjam-geo-pdf-worker /
 // api/src/worker/geoPdfWorker.ts) that renders the PDF, uploads it to S3, and
 // notifies the user when ready.
@@ -69,7 +67,7 @@ const MAX_IN_FLIGHT_PER_USER = 2;
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
 // Server-side cap on the GeoPDF list. X-Total-Count carries the true total so
-// the client can show a truncation caption when this cap bites (UX-002).
+// the client can show a truncation caption when this cap bites.
 const GEO_PDF_LIST_CAP = 50;
 
 // Derive a human download filename from the job's title, falling back to a
@@ -151,7 +149,7 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
 
-    // Entry gate (ARCH-012): every byte-producing flow checks storage quota at
+    // Entry gate: every byte-producing flow checks storage quota at
     // submission. The worker charges result_bytes unconditionally on
     // completion, so without this an over-quota user could keep accruing.
     await assertHasStorageQuota(user.id);
@@ -161,7 +159,7 @@ router.post(
     if (configError) {
       throw malformed(configError);
     }
-    // GEOPDF-1: the shared validator enforces numbers + N>S/E>W but not
+    // The shared validator enforces numbers + N>S/E>W but not
     // coordinate ranges — reject out-of-range extents here so a worker task
     // can never be burned rendering a nonsense region.
     const { north, south, east, west } = config.extent;
@@ -201,7 +199,7 @@ router.post(
 
     // Count + create in one transaction so concurrent submissions can't both
     // pass the per-user cap. The user-row lock closes the read-committed
-    // double-read window the same way topo-exports does (ARCH-009).
+    // double-read window the same way topo-exports does.
     const job = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
       // Monthly allowance, inside the same lock as the concurrency cap.
@@ -226,9 +224,9 @@ router.post(
       });
     });
 
-    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
+    // launchFargateTask throws on placement failure (`failures[]`
     // populated / no task) as well as on SDK errors, so a launch problem can
-    // never strand the job in `queued` (ARCH-002).
+    // never strand the job in `queued`.
     if (ECS_SUBNETS.length) {
       try {
         const taskArn = await launchFargateTask({
@@ -236,7 +234,7 @@ router.post(
           containerName: "geo-pdf-worker",
           environment: [{ name: "GEO_PDF_JOB_ID", value: job.id }],
         });
-        // Persist the ARN (Design L2) so the reaper can StopTask it.
+        // Persist the ARN so the reaper can StopTask it.
         await prisma.geoPdfJob.update({
           where: { id: job.id },
           data: { ecsTaskArn: taskArn },
@@ -315,7 +313,7 @@ router.get(
         ),
       ),
     );
-    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    // True total (pre-cap) so the client can flag a truncated view.
     res.set("X-Total-Count", String(total));
     res.json({ jobs: views });
   },

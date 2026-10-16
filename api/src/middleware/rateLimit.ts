@@ -2,7 +2,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 import type { AuthenticatedRequest } from "./auth";
 
-// SINGLE-INSTANCE ASSUMPTION (ARCH-007).
+// SINGLE-INSTANCE ASSUMPTION.
 //
 // Every limiter below uses express-rate-limit's default in-process MemoryStore
 // (no `store` configured). The counters live in this process's memory, so the
@@ -65,9 +65,9 @@ const USER_PATCH_MAX_DEFAULT = 30;
 
 // The same CI headroom for userPatchLimiter, which is per USER, so every
 // integration file acting as alice shares one 30-write window: a write-heavy
-// file (customFields, placeTypes) left it empty and the NEXT file's first
-// PATCH /users/me 429'd, failing as an assertion about users. The per-file
-// retry wrappers only protect the file that has them. Same fail-closed rule.
+// file (customFields, placeTypes) would otherwise exhaust the window and cause
+// subsequent PATCH /users/me calls to 429. The per-file retry wrappers only
+// protect the file that has them. Same fail-closed rule.
 export function userPatchLimitMax(
   env: NodeJS.ProcessEnv = process.env,
 ): number {

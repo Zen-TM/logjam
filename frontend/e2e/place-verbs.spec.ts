@@ -3,7 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 // A place offers the same verbs from its row as from its page
 // (`PLACE_VERBS` in `@logjam/shared`). The row runs what it can; a verb that
 // needs a form or a confirm opens the place's page and runs there. Red when
-// the row's menu withholds a verb again, or the hand-off stops arriving.
+// the row's menu withholds a verb, or the hand-off stops arriving.
 
 async function openPlaces(page: Page) {
   await page.goto("/");

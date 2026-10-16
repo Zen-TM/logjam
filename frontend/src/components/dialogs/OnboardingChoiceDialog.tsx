@@ -1,4 +1,4 @@
-// First-login choice screen for an empty account (plan §7e). Non-forced: the
+// First-login choice screen for an empty account. Non-forced: the
 // user picks how to get data in, or starts empty. Nothing auto-runs.
 //
 // The RopeWiki load runs inline here (no separate dialog) and leaves the user in

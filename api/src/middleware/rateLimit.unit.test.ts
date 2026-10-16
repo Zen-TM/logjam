@@ -115,8 +115,8 @@ describe("bulkImportLimiter", () => {
 });
 
 // Every signed-in region save in Logjam GPS asks for one clip
-// (docs/decisions/0029), so the limit has to sit above an honest session and
-// still be a limit. Mutation: set REGION_CLIPS_PER_HOUR back to 10 and the
+// (docs/decisions/0029-vector-map-with-every-signed-in-region.md), so the limit
+// has to sit above an honest session and still be a limit. Mutation: set REGION_CLIPS_PER_HOUR back to 10 and the
 // first test goes red (a user planning a trip is refused at the eleventh
 // area); drop `regionClipLimiter` from the route chain here and the second
 // goes red.

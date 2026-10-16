@@ -90,7 +90,7 @@ describe("normalizeUserUiPreferences", () => {
 
   // The direction of the default is the whole point: an account that predates
   // the field, or one whose stored value is junk, COPIES media. Not copying is
-  // the silent loss — the sharee's photos go, and on the phone so do the cached
+  // the silent loss — the sharee's photos go, and on Logjam GPS so do the cached
   // blobs — while copying fails loudly at the quota with a 507 they can read.
   it("defaults copyPlaceMedia to true, including for junk and absent values", () => {
     expect(normalizeUserUiPreferences(null).copyPlaceMedia).toBe(true);
@@ -181,19 +181,16 @@ describe("normalizeImportMergePolicy", () => {
   });
 
   // A key the normalizer does not know has to survive the round trip: the
-  // policy is keyed by the user's own definition keys, and an earlier
-  // normalizer silently dropped anything it could not find in a field list it
-  // rebuilt from — losing the user's per-field "use file" choice.
+  // policy is keyed by the user's own definition keys; dropping unknown keys
+  // would lose the user's per-field "use file" choice.
   it("preserves an entry keyed by a definition it does not know", () => {
     expect(normalizeImportMergePolicy(POLICY)?.water_temp).toBe("useIncoming");
   });
 
-  // BEHAVIOUR CHANGE, deliberate. The policy used to be a fixed seven-entry
-  // union of grade columns, so demanding every entry was meaningful. Its keys
-  // are field KEYS now — an open set that differs per user and per place type —
-  // and rejecting a partial policy would silently revert every merge choice the
-  // user had made the moment they added or deleted a field. A missing entry
-  // already means keepExisting, which is the safe direction.
+  // The policy's keys are field keys — an open set that differs per user and
+  // per place type — so rejecting a partial policy would silently revert merge
+  // choices when a user adds or deletes a field. A missing entry defaults to
+  // keepExisting, which is the safe direction.
   it("accepts a partial policy instead of rejecting it", () => {
     expect(normalizeImportMergePolicy({ notes: "useIncoming" })).toEqual({
       notes: "useIncoming",

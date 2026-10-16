@@ -24,7 +24,7 @@
 # This is defense-in-depth on the origin, not a user-auth credential.
 #
 # ROLLOUT (no lockout — full sequence in api/.ebextensions/origin-verify.config):
-#   1. Apply this + the cloudfront.tf custom_header. App stays PERMISSIVE
+#   1. Apply this + the cloudfront.tf custom_header. The API stays PERMISSIVE
 #      (ORIGIN_VERIFY_ENFORCE=false) — it only logs `origin_verify_mismatch`.
 #   2. Redeploy the API so it resolves ORIGIN_VERIFY_SECRET_ID and starts
 #      comparing. Watch the mismatch log fall to ~zero (all live traffic now

@@ -7,8 +7,7 @@ import { AppError } from "../middleware/errorHandler";
  * is verified) to the internal User row, throwing 404 if no row exists yet.
  *
  * This is the single canonical implementation of the cognitoId→user lookup that
- * every authenticated route needs (ARCH-008). Routes that previously declared
- * their own identical `getUser`/`loadUser` helper import this instead.
+ * every authenticated route needs.
  *
  * Note: GET /users/me deliberately does NOT use this — it has bespoke
  * first-request create / Cognito-rebind logic and must not 404 on a missing row.

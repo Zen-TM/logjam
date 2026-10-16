@@ -102,9 +102,8 @@ export type PlaceSource = {
   url: string;
   /** The site it points at, for the row's second line. */
   host: string | undefined;
-  /** Only http(s) becomes a link: any other scheme (from data saved before the
-   *  save-time check existed) is a row that says what it says and goes
-   *  nowhere. */
+  /** Only http(s) becomes a link: any other scheme is a row that says what it
+   *  says and goes nowhere. */
   linkable: boolean;
 };
 

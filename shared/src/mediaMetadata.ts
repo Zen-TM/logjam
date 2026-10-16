@@ -1,6 +1,6 @@
 // The stats a standalone media file carries on its ROW, so a second device can
 // list it — name, size, extent, how far you walked — without downloading the
-// blob (stage8-sync.md §7.3: delta rows are metadata only).
+// blob (delta rows are metadata only).
 //
 // Lives in a `Json` column rather than a dozen nullable ones, the same shape
 // `Place.attributes` and `TripLog.customFields` already take. The cost of a
@@ -217,9 +217,9 @@ export function parseMediaMetadata(
 }
 
 /**
- * Read metadata off a row for DISPLAY. Never throws: a row that predates a
- * field, or one written by a client with a bug, must still render as a file
- * with a name and a size rather than taking the list down.
+ * Read metadata off a row for DISPLAY. Never throws (mediaMetadata.test.ts): a
+ * row that predates a field, or one written by a client with a bug, must still
+ * render as a file with a name and a size rather than taking the list down.
  */
 export function readMediaMetadata(
   origin: string | null,

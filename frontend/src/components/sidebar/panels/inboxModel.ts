@@ -4,8 +4,7 @@ import type { MapsView, PanelId } from "../panels";
 /**
  * Where a notification's SUBJECT lives on Logjam Web, for its ⋯ menu: the web
  * counterpart of Logjam GPS's `notificationDestination` ("View in Saved").
- * A notification is a report about something that now exists somewhere else,
- * and only a place share used to say where.
+ * A notification reports something that exists elsewhere in Logjam Web.
  *
  * Null when there is nowhere to go: a failed job produced nothing to look at,
  * a file send is answered in the row itself, and a kind this build has never

@@ -51,10 +51,10 @@ function toMatchCandidate(c: Place): MatchCandidate {
 }
 
 // Existing places within the spatial review radius of an incoming RopeWiki
-// row, regardless of name. This preserves the long-standing behaviour where a
-// place sitting on top of an incoming one is surfaced for human review even
-// when the names don't match at all — the shared name matcher deliberately
-// discards non-name candidates, so the spatial signal is recovered here.
+// row, regardless of name. A place sitting on top of an incoming one is
+// surfaced for human review even when the names don't match at all — the
+// shared name matcher discards non-name candidates, so the spatial signal is
+// recovered here.
 function spatialReviewCandidates(
   rw: RopeWikiCanyon,
   existing: Place[],
@@ -205,11 +205,10 @@ function mergeSources(
 // Returns the merged FIELD VALUES and the list of fields RopeWiki contributed
 // (i.e. fields that were empty on the existing place).
 //
-// The seven scalars are `fieldValues` keys now rather than columns, so "is it
-// null" became "is the key absent" — and those are the same question, because
-// setFieldValues stores no nulls (a stored null would render as an empty field
-// and count as a value here, letting RopeWiki think a field was user-owned when
-// the user had never touched it).
+// "Is it null" is "is the key absent", because setFieldValues stores no nulls
+// (a stored null would render as an empty field and count as a value here,
+// letting RopeWiki think a field was user-owned when the user had never touched
+// it).
 export function mergeFillNulls(
   existing: Place,
   fresh: RopeWikiCanyon,

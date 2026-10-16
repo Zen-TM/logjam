@@ -61,7 +61,7 @@ function draw(
   return props;
 }
 
-// The web measure tool is drawn from `MAP_MEASURE`, so it says what Logjam
+// Logjam Web's measure tool is drawn from `MAP_MEASURE`, so it says what Logjam
 // GPS's says. Mutations that turn these red: write a title, a label or a verb
 // in the panel instead of reading the contract; give it a Save or a Cancel.
 describe("the measure tool's page", () => {
