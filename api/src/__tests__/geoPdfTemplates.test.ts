@@ -5,7 +5,7 @@ import { API_URL, as, BOB_SUB } from "./_actors";
 
 // Requires `make dev`. No auth header = alice. Launch-free CRUD covering the
 // ownership boundary (a stranger must not reach another user's template —
-// mandatory per CLAUDE.md), validation, and not-found.
+// mandatory per AGENTS.md), validation, and not-found.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 // A fully valid GeoPDF template config (mirrors shared/src/geoPdfConfig.test.ts

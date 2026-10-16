@@ -7,16 +7,15 @@
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
 // places, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
-// "6" marker places and the links between places (the old waypoint space —
-// phase 1c preserved waypoint ids as place ids), "7" routes, "8" direct (per-item) shares, "9" user-created
-// place types, "c" trip logs, "d" friendships, "e" place shares.
+// "6" marker places and the links between places (the waypoint space —
+// waypoint ids are preserved as place ids), "7" routes, "8" direct (per-item)
+// shares, "9" user-created place types, "c" trip logs, "d" friendships, "e"
+// place shares.
 //
 // "a" and "b" are NOT here and MUST NOT BE: they are the SYSTEM field
 // definitions' and SYSTEM place types' prefixes, pinned in
 // shared/src/placeTypes.ts because the forward migration mints them too.
-// System types were briefly on "9" alongside this seed's user-created types,
-// and `seedId("9", 1)` came out byte-identical to the Canyon type. Guard:
-// src/lib/seedIds.unit.test.ts asserts the two id spaces cannot overlap.
+// Guard: src/lib/seedIds.unit.test.ts asserts the two id spaces cannot overlap.
 // SEED_ID_PREFIXES below is the declaration; src/lib/seedIds.unit.test.ts
 // iterates it, so a prefix used here without joining the list fails the guard.
 export const seedId = (prefix: string, n: number) =>

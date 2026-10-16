@@ -1,18 +1,16 @@
-// Plan §5.5 / §7.12 — the prod-snapshot privacy scrub cannot silently stop
-// matching.
+// The prod-snapshot privacy scrub cannot silently stop matching.
 //
-// `scripts/snapshot.sh` used to inline its scrub in a psql heredoc with no
-// ON_ERROR_STOP. psql exits 0 after a statement error there and `set -e` does
-// not catch it, so when `canyons` became `places` the scrub printed
-// `relation "canyons" does not exist` and then exported a snapshot with every
-// note intact — a mandatory privacy boundary failing OPEN, quietly.
+// psql exits 0 after a statement error in a heredoc unless ON_ERROR_STOP is
+// set; without it, `set -e` does not catch failures and an unmapped table or
+// column name would export a snapshot with user notes intact — a mandatory
+// privacy boundary failing open, quietly.
 //
 // Two things are checked, because ON_ERROR_STOP only catches the first:
 //  1. every table/column the scrub names still exists in the schema (a rename
 //     breaks the build, not the next snapshot);
 //  2. every user-authored column on the owner-data models is either scrubbed
 //     or exempted BY NAME here (a new column cannot join the schema and miss
-//     the scrub — root CLAUDE.md's "two lists that must agree" rule).
+//     the scrub — root AGENTS.md's "two lists that must agree" rule).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -78,10 +76,8 @@ function textColumns(model: string): string[] {
  * The DB column for a field with no `@map`.
  *
  * Prisma does NOT snake_case automatically — an unmapped `altNames` is a column
- * literally called "altNames". This helper used to snake_case it, which made
- * the guard agree with a scrub that named a column that does not exist: both
- * sides shared one wrong assumption, so the test passed and the scrub would
- * have aborted on the next snapshot. Verbatim is the rule.
+ * literally called "altNames". Verbatim is the rule: snake_casing here would
+ * hide mismatches with a scrub that named a nonexistent column.
  */
 const columnName = (field: string) => field;
 
@@ -158,7 +154,7 @@ describe("snapshot-scrub.sql", () => {
     ).toEqual([]);
   });
 
-  // The app's suggested trip types survive the scrub — they are not user text,
+  // Logjam's suggested trip types survive the scrub — they are not user text,
   // and dev analytics key on `canyoning`. The SQL spells that list itself, so it
   // has to agree with the one declaration or a new suggestion gets pseudonymised.
   it("keeps exactly TRIP_TYPE_SUGGESTIONS when scrubbing trip types", () => {

@@ -1,10 +1,10 @@
 // The one cascade for deleting places and trips. Every route that deletes
 // either goes through here: DELETE /places/:id and /trips/:id, the two bulk
 // POST /delete routes, the sync push delete ops, and import undo (DELETE
-// /imports/:batchId). A second copy drifts: the single place delete once kept
-// its own and missed the trip touch below (src/__tests__/places.test.ts).
+// /imports/:batchId). A single implementation prevents drift (such as
+// missing the trip touch below; see src/__tests__/places.test.ts).
 //
-// Ordering invariant (ARCH-004): S3 blobs are deleted BEFORE database rows so
+// Ordering invariant: S3 blobs are deleted BEFORE database rows so
 // an S3 failure leaves rows (and their keys) intact for a retried delete. Row
 // deletes and quota decrement share one transaction.
 
@@ -92,7 +92,7 @@ export async function deletePlacesCascade(
   const { deleted: media, unlinked: unlinkedMedia } =
     partitionPlaceMedia(placeMediaRows);
 
-  // S3-first (ARCH-004): blobs before rows.
+  // S3-first: blobs before rows.
   const s3Keys = media.flatMap((m) =>
     [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
   );
@@ -138,7 +138,7 @@ export async function deletePlacesCascade(
             // routes/tripLogsGlobal). An uncapped derived join — 20 places
             // with long names — persists a label PATCH /trips/:id would then
             // reject, stranding the trip at a title the edit dialog cannot
-            // save (STP-005).
+            // save.
             displayName: truncateDisplayName(
               formatTripPlaceNames(trip.places.map((link) => link.place.name)),
             ),
@@ -191,7 +191,7 @@ export async function deletePlacesCascade(
     ]);
     await tx.placeShare.deleteMany({ where: { placeId: { in: ownedIds } } });
     // Purge place_shared notifications held by OTHER users (the share
-    // recipients) that reference the deleted places (PRIV-003).
+    // recipients) that reference the deleted places.
     await tx.notification.deleteMany({
       where: {
         type: "place_shared",
@@ -245,7 +245,7 @@ export async function deleteTripsCascade(
     },
   });
 
-  // S3-first (ARCH-004): blobs before rows.
+  // S3-first: blobs before rows.
   const s3Keys = media.flatMap((m) =>
     [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
   );

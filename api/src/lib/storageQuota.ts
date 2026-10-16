@@ -5,7 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 
 // All helpers accept an optional Prisma client so callers inside an
 // interactive `prisma.$transaction(async (tx) => …)` can pass `tx` and make
-// the quota mutation atomic with the row write it accounts for (Design Q).
+// the quota mutation atomic with the row write it accounts for.
 // The default keeps standalone call sites unchanged.
 export type DbClient = PrismaClient | Prisma.TransactionClient;
 

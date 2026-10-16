@@ -245,7 +245,7 @@ const server = app.listen(env.PORT, () => {
 });
 
 // Periodic sweep that force-fails topo jobs stuck in pending/processing past a
-// timeout (ARCH-002). No-op when TOPO_REAPER_INTERVAL_MS=0.
+// timeout. No-op when TOPO_REAPER_INTERVAL_MS=0.
 const stopTopoJobReaper = startTopoJobReaper();
 
 const SHUTDOWN_TIMEOUT_MS = 25_000;

@@ -1,9 +1,9 @@
-// Protomaps offline region clips (stage4a §7, deviation DV1): synchronous
+// Protomaps offline region clips: synchronous
 // `pmtiles extract --bbox` against our own archive, streamed back through a
 // short-lived opaque token — no S3 write, no presigned URL, no bbox in any
 // URL or log line.
 //
-// PRIVACY BOUNDARY (root CLAUDE.md): the request bbox is place-area
+// PRIVACY BOUNDARY (root AGENTS.md): the request bbox is place-area
 // knowledge. It lives in the POST *body* only (redacted via redactPaths in
 // lib/logger.ts), is never interpolated into error messages, filenames, or
 // the GET URL, and the clipped file is deleted on send or after a 120 s TTL.

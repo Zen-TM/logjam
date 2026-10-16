@@ -1,12 +1,9 @@
 // Where a media object lives in S3, and the ONLY place that decides.
 //
-// It used to be a module-private helper in routes/media.ts, which was fine
-// while one route minted keys. The place copy mints them too (a copied photo is
-// a new object under the COPIER's prefix), and a second implementation would
-// break a statement other code already depends on: mediaOrphanSweeper.ts reads
-// `media/<ownerId>/<mediaId>/<basename>` back out of the bucket and deletes
-// what it cannot match to a row. A key minted to a different shape there is
-// either swept while live or never swept at all.
+// Both routes/media.ts and place copy mint keys (a copied photo is a new
+// object under the COPIER's prefix). A single implementation guarantees
+// mediaOrphanSweeper.ts matches keys when reading back out of the bucket:
+// a key minted to a different shape is either swept while live or never swept.
 //
 // Derived entirely from SERVER-SIDE values (ownerId + mediaId + MIME), so no
 // caller can point an operation at someone else's object.

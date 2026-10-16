@@ -30,7 +30,8 @@ if (process.env.AUTH_MODE === "fake") {
 
 // Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate)
 // MUST run cognito auth. This catches a misconfigured prod task even if the
-// AUTH_MODE=fake heuristics above were somehow all defeated.
+// AUTH_MODE=fake heuristics above were somehow all defeated. Guard:
+// src/middleware/auth.unit.test.ts.
 if (
   process.env.ECS_CONTAINER_METADATA_URI_V4 &&
   process.env.AUTH_MODE !== "cognito"
@@ -69,12 +70,11 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // Dev-only fake actors, keyed by Cognito sub. Lets integration tests switch the
-// acting user per request via the `x-fake-sub` header WITHOUT restarting the API
-// (the old single-user limitation that made sharee/stranger perspectives
-// untestable — see SEC-001). Subs/usernames mirror api/prisma/seed.ts. This is
-// safe: the whole fake branch is unreachable outside AUTH_MODE=fake, which the
-// module-load guard above refuses in any non-dev runtime; the header is never
-// read in cognito mode.
+// acting user per request via the `x-fake-sub` header so sharee and stranger
+// perspectives are testable without restarting the API. Subs/usernames mirror
+// api/prisma/seed.ts. This is safe: the whole fake branch is unreachable outside
+// AUTH_MODE=fake, which the module-load guard above refuses in any non-dev
+// runtime; the header is never read in cognito mode.
 const FAKE_ACTORS: Record<string, { email: string; username: string }> = {
   "fake-alice-sub": { email: "alice@local", username: "alice" },
   "fake-bob-sub": { email: "bob@local", username: "bob" },
@@ -104,7 +104,7 @@ export function requireAuth(
       (typeof headerSub === "string" && headerSub) ||
       process.env.FAKE_USER_SUB ||
       "fake-alice-sub";
-    // Known seed subs get a coherent identity; an unknown sub keeps the historical
+    // Known seed subs get a coherent identity; an unknown sub falls back to
     // alice defaults so behaviour is unchanged when no override is present.
     const actor = FAKE_ACTORS[sub] ?? {
       email: "alice@local",
