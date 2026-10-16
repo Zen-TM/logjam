@@ -271,3 +271,28 @@ run "place_registry_role_writes_only_master_places" {
     error_message = "The place registry role may only list, read and write objects under master/places/ in the topo bucket."
   }
 }
+
+run "api_search_has_its_own_rate_limit" {
+  command = plan
+  plan_options {
+    target = [aws_wafv2_web_acl.api]
+  }
+
+  # Mutation: widening the prefix (to "/places"), adding a second exclusion
+  # to rule 0, or dropping the search rule's scope-down turns this red: the
+  # first lets other API paths escape the API-wide limit, the last makes the
+  # search rule count every API call.
+  assert {
+    condition = (
+      [for r in aws_wafv2_web_acl.api.rule : r.statement[0].rate_based_statement[0].scope_down_statement[0].not_statement[0].statement[0].byte_match_statement if r.priority == 0] ==
+      [for r in aws_wafv2_web_acl.api.rule : r.statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement if r.name == "places-search-rate-IP-1500"] &&
+      [for r in aws_wafv2_web_acl.api.rule : [r.statement[0].rate_based_statement[0].limit, r.action[0].block != []] if r.priority == 0] == [[300, true]] &&
+      [for r in aws_wafv2_web_acl.api.rule : [r.statement[0].rate_based_statement[0].limit, r.action[0].block != []] if r.name == "places-search-rate-IP-1500"] == [[1500, true]] &&
+      [for r in aws_wafv2_web_acl.api.rule : [
+        for m in r.statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement :
+        [m.positional_constraint, m.search_string, length(m.field_to_match[0].uri_path)]
+      ] if r.name == "places-search-rate-IP-1500"] == [[["STARTS_WITH", "/places/search", 1]]]
+    )
+    error_message = "Rule 0 must rate-limit every API path except /places/search, and a separate rule must rate-limit exactly that path."
+  }
+}
