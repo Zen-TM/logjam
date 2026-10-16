@@ -207,17 +207,20 @@ class TestMerge(unittest.TestCase):
 
 
 class FakeS3:
-    class exceptions:
-        class NoSuchKey(Exception):
-            pass
+    """Answers a read of a missing key as S3 does for a caller that may not
+    list the whole bucket: AccessDenied, not NoSuchKey."""
 
     def __init__(self, current=None):
         self.current = current
         self.uploads = []
 
+    def list_objects_v2(self, Bucket, Prefix, MaxKeys):
+        return {"KeyCount": 0 if self.current is None else 1}
+
     def get_object(self, Bucket, Key):
         if self.current is None:
-            raise self.exceptions.NoSuchKey()
+            # Mutation: read the pointer without listing it first → red.
+            raise PermissionError("AccessDenied")
         body = json.dumps(self.current).encode()
         return {"Body": type("B", (), {"read": lambda _self: body})()}
 

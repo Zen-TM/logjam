@@ -415,16 +415,15 @@ def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
     """The data file first, then the pointer, so no client reads a pointer to
     a file that is not there yet. Guard: tests/test_place_registry.py.
 
-    Reading the current pointer needs s3:GetObject on it and s3:ListBucket on
-    the prefix: without ListBucket a missing pointer is AccessDenied, not
-    NoSuchKey, and that stays an error rather than skip the size check."""
+    The current pointer is listed before it is read: S3 answers a GetObject
+    for a missing key with AccessDenied unless the caller may list the whole
+    bucket, and the task role may list only master/places/."""
     size = data_path.stat().st_size
-    try:
-        current = json.loads(
-            s3.get_object(Bucket=bucket, Key=S3_PREFIX + "latest.json")["Body"].read()
-        )
-    except s3.exceptions.NoSuchKey:
-        current = None
+    key = S3_PREFIX + "latest.json"
+    listed = s3.list_objects_v2(Bucket=bucket, Prefix=key, MaxKeys=1)
+    current = None
+    if listed.get("KeyCount", 0) > 0:
+        current = json.loads(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
     if current is not None:
         if not isinstance(current, dict) or not isinstance(current.get("bytes"), int):
             raise SystemExit("the current pointer is unreadable: fix it by hand")
