@@ -122,11 +122,9 @@ COPY icons/ /app/icons/
 # ------------------------------------------------------------
 # 5. Entrypoint
 # ------------------------------------------------------------
-# Single image, three ECS task definitions:
+# Single image, two ECS task definitions:
 #   - logjam-topo-worker         → command override ["python3", "/app/worker.py"]
 #   - logjam-topo-export-worker  → command override ["python3", "/app/export_worker.py"]
-#   - logjam-place-registry      → ["python3", "/app/build_place_registry.py", "publish"],
-#     monthly on a schedule; needs only S3_BUCKET_TOPO
 # Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected

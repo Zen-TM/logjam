@@ -22,9 +22,11 @@ database the ODbL asks for.
 
 import argparse
 import gzip
+import hashlib
 import json
 import math
 import os
+import socket
 import sys
 import tempfile
 import urllib.request
@@ -40,7 +42,8 @@ EXTRACT_URL = (
 )
 ATTRIBUTION = "© OpenStreetMap contributors"
 LICENCE = "ODbL-1.0"
-# PLACE_REGISTRY_PREFIX in shared/src/placeRegistry.ts.
+# PLACE_REGISTRY_PREFIX in shared/src/placeRegistry.ts. Guard:
+# tests/test_place_registry.py.
 S3_PREFIX = f"master/places/v{FORMAT}/"
 
 # The tag that says what a feature is, in the order a feature with several is
@@ -66,15 +69,24 @@ KIND_KEYS = (
 )
 
 # Whole classes left out, each because it adds rows and no search a canyoner
-# makes. Guard: tests/test_place_registry.py.
+# makes: `(key, value)`, or `(key, None)` for any value. A feature is kept
+# only with a `name` and one of KIND_KEYS, and not matched here. Guard:
+# tests/test_place_registry.py.
 EXCLUDED = {
+    # A route's name is the line's ("Route 123: Penrith => Katoomba").
+    ("type", "route"),
     # A council area spells a town's name again ("Blue Mountains City").
     ("boundary", "administrative"),
     # A stop or platform name repeats its street's.
+    ("public_transport", None),
     ("highway", "bus_stop"),
     ("highway", "platform"),
     ("railway", "platform"),
 }
+
+# Keys whose features are lines even when the way closes: a loop track or a
+# ring road reads as a line, and merges with its open segments.
+LINEAR_KEYS = {"highway", "waterway", "railway"}
 
 # Settlements a result is placed "near", for telling two Main Streets apart.
 SETTLEMENTS = {"city", "town", "village", "suburb", "hamlet", "locality"}
@@ -87,18 +99,21 @@ COORD_DP = 5  # about 1 m
 
 def kind_of(tags: Dict[str, str]) -> Optional[str]:
     """The feature's kind as `key=value`, or None to leave it out."""
-    # A route's name is the line's ("Route 123: Penrith => Katoomba"), and
-    # public transport is stops and platforms, as in EXCLUDED.
-    if tags.get("type") == "route" or "public_transport" in tags:
-        return None
+    for key, value in EXCLUDED:
+        if key in tags and (value is None or tags[key] == value):
+            return None
     for key in KIND_KEYS:
         value = tags.get(key)
-        if value is None or value == "no":
-            continue
-        if (key, value) in EXCLUDED:
-            return None
-        return f"{key}={value}"
+        if value is not None and value != "no":
+            return f"{key}={value}"
     return None
+
+
+def is_line(tags: Dict[str, str], kind: str) -> bool:
+    """Whether a closed way is read as a line, not an area."""
+    return tags.get("area") == "no" or (
+        kind.split("=")[0] in LINEAR_KEYS and tags.get("area") != "yes"
+    )
 
 
 def alternates_of(tags: Dict[str, str], name: str) -> List[str]:
@@ -153,12 +168,15 @@ def read_extract(pbf: str) -> Iterable[Raw]:
                 loc = obj.location
                 yield Raw(name, kind, loc.lon, loc.lat, alternates)
         elif obj.is_way():
-            # A closed way comes back as an area too; read it there.
-            if not obj.is_closed():
+            # A closed way comes back as an area too, and is read there,
+            # unless it is a line.
+            if not obj.is_closed() or is_line(tags, kind):
                 located = [n.location for n in obj.nodes if n.location.valid()]
                 if located:
                     yield line_raw(name, kind, alternates, located)
         elif obj.is_area():
+            if obj.from_way() and is_line(tags, kind):
+                continue  # read as a line above
             ring = [
                 n.location
                 for outer in obj.outer_rings()
@@ -203,8 +221,11 @@ class Grid:
     def _key(self, lon, lat):
         return (math.floor(lon / self.CELL), math.floor(lat / self.CELL))
 
-    def nearest(self, lon: float, lat: float, max_rings: int = 5) -> Optional[int]:
-        """The closest point within `max_rings` cells, or None."""
+    def nearest(
+        self, lon: float, lat: float, exclude: int = -1, max_rings: int = 5
+    ) -> Optional[int]:
+        """The closest point other than `exclude` within `max_rings` cells,
+        or None."""
         cx, cy = self._key(lon, lat)
         shrink = math.cos(math.radians(lat))  # a degree of lon is shorter
         best, best_d = None, math.inf
@@ -215,7 +236,7 @@ class Grid:
                         continue
                     for plon, plat, idx in self.cells.get((cx + dx, cy + dy), ()):
                         d = math.hypot((plon - lon) * shrink, plat - lat)
-                        if d < best_d:
+                        if d < best_d and idx != exclude:
                             best, best_d = idx, d
             # Anything in a further ring is at least this far away.
             if best is not None and best_d <= ring * self.CELL * shrink:
@@ -300,9 +321,8 @@ def registry(raws: Iterable[Raw], version: str) -> dict:
         if r.kind not in kind_index:
             kind_index[r.kind] = len(kinds)
             kinds.append(r.kind)
-        near = grid.nearest(r.lon, r.lat)
-        if near == i:
-            near = None
+        # A settlement is placed near another: two Alpines need telling apart.
+        near = grid.nearest(r.lon, r.lat, exclude=i)
         row = [
             r.name,
             kind_index[r.kind],
@@ -349,7 +369,10 @@ def build_files(doc: dict, out: Path) -> Tuple[Path, Path]:
     """The data file and its pointer, `latest.json`, in `out`."""
     body = encode(doc)
     out.mkdir(parents=True, exist_ok=True)
-    data_path = out / f"places-{doc['version']}.json.gz"
+    # The hash keeps a rebuild of the same extract from overwriting a file
+    # the CDN and phones cache as immutable.
+    digest = hashlib.sha256(body).hexdigest()[:8]
+    data_path = out / f"places-{doc['version']}-{digest}.json.gz"
     data_path.write_bytes(body)
     pointer_path = out / "latest.json"
     pointer_path.write_text(
@@ -390,7 +413,11 @@ MIN_SIZE_RATIO = 0.8
 
 def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
     """The data file first, then the pointer, so no client reads a pointer to
-    a file that is not there yet. Guard: tests/test_place_registry.py."""
+    a file that is not there yet. Guard: tests/test_place_registry.py.
+
+    Reading the current pointer needs s3:GetObject on it and s3:ListBucket on
+    the prefix: without ListBucket a missing pointer is AccessDenied, not
+    NoSuchKey, and that stays an error rather than skip the size check."""
     size = data_path.stat().st_size
     try:
         current = json.loads(
@@ -398,11 +425,14 @@ def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
         )
     except s3.exceptions.NoSuchKey:
         current = None
-    if current and size < current["bytes"] * MIN_SIZE_RATIO:
-        raise SystemExit(
-            f"refusing to publish {size} bytes over {current['bytes']}: "
-            "check the extract"
-        )
+    if current is not None:
+        if not isinstance(current, dict) or not isinstance(current.get("bytes"), int):
+            raise SystemExit("the current pointer is unreadable: fix it by hand")
+        if size < current["bytes"] * MIN_SIZE_RATIO:
+            raise SystemExit(
+                f"refusing to publish {size} bytes over {current['bytes']}: "
+                "check the extract"
+            )
     # A versioned file never changes once written; the pointer always can.
     s3.upload_file(
         str(data_path),
@@ -428,6 +458,9 @@ def publish(bucket: str) -> None:
     """Download the extract, build, and upload."""
     import boto3
 
+    # A stalled download would otherwise hang the task with no failure to
+    # alarm on.
+    socket.setdefaulttimeout(300)
     with tempfile.TemporaryDirectory() as tmp:
         pbf = os.path.join(tmp, "nsw.osm.pbf")
         urllib.request.urlretrieve(EXTRACT_URL, pbf)

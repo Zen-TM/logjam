@@ -273,7 +273,8 @@ place registry Logjam's location search reads: every named feature, one row
 each, in one gzipped JSON file. Why, and what it leaves out:
 [ADR 0034](../docs/decisions/0034-location-search-reads-a-public-osm-place-registry.md).
 A scheduled ECS task runs `publish` monthly; these commands are for trying a
-change by hand. They need Python 3 and `pip install osmium`.
+change by hand. They need Python 3 and `pip install osmium boto3` (boto3 and AWS
+credentials only for `publish`). Run them from `topo/`.
 
 ```bash
 curl -fLO https://download.geofabrik.de/australia-oceania/australia/new-south-wales-latest.osm.pbf
@@ -281,7 +282,7 @@ python3 build_place_registry.py build new-south-wales-latest.osm.pbf places/
 python3 build_place_registry.py measure new-south-wales-latest.osm.pbf
 ```
 
-`build` writes `places-<extract date>.json.gz` and its pointer `latest.json`:
+`build` writes `places-<extract date>-<hash>.json.gz` and its pointer `latest.json`:
 about 5 MB, in under two minutes at a 1.3 GB peak. `measure` prints how much
 each class of feature (roads, shops, creeks…) adds to the file, which is how
 to judge a change to `EXCLUDED`.
@@ -296,11 +297,11 @@ curl -s https://logjamnsw.com/master/places/v1/latest.json
 ```
 
 After changing the file's shape, regenerate the fixture both sides test
-against and bump `FORMAT` here and `PLACE_REGISTRY_FORMAT` in
-`shared/src/placeRegistry.ts`:
+against and bump `FORMAT` in `build_place_registry.py` and
+`PLACE_REGISTRY_FORMAT` in `shared/src/placeRegistry.ts`:
 
 ```bash
-REGENERATE_FIXTURE=1 python -m unittest tests.test_place_registry
+REGENERATE_FIXTURE=1 python3 -m unittest tests.test_place_registry
 (cd .. && npm run format)
 ```
 
