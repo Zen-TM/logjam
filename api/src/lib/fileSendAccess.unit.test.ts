@@ -58,7 +58,7 @@ describe("sanitizeSendFilename", () => {
 });
 
 // A place's name is exactly what a user ends up typing into the filename box,
-// and this is the one user-supplied string on a send (PRIV-005, root AGENTS.md:
+// and this is the one user-supplied string on a send (root AGENTS.md:
 // logs never carry a place's name). Mutations: put `value` into the refusal's
 // detail (the detail IS logged, errorHandler.ts), or pass `filename` into a log
 // call on the send surface.

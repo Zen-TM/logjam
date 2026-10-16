@@ -445,7 +445,7 @@ class TestPipelineMirrorSync(unittest.TestCase):
 
     def test_svtm_not_classified_comes_first_here(self):
         # pipeline.py indexes its copy POSITIONALLY into a 256-entry lookup
-        # (build_formation_mu_lookup), so its order is load-bearing: raster
+        # (_build_svtm_mu_lookup), so its order is load-bearing: raster
         # value 0 is "Not classified". The builder's copy is a name→μ map and
         # re-pins index 0 itself, which is why only this one is asserted.
         # Mutation: sort the dict, or move "Not classified" down.

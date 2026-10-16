@@ -87,14 +87,6 @@ export type TripLogCustomFieldDef = {
  * and the user who ticked "All" would never find out. For a trip field it
  * means every trip, tagged or not.
  */
-/**
- * The most place types one definition may be scoped to. An input bound, not a
- * UX figure: without it a definition arrives holding a list nobody could have
- * ticked by hand, and one row per entry is written for it
- * (`api/AGENTS.md`'s both-ends rule for a body array).
- */
-export const MAX_SCOPED_PLACE_TYPES = 100;
-
 export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
   placeTypeIds: string[];
   /**
@@ -123,6 +115,14 @@ export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
    */
   ownerId?: string | null;
 };
+
+/**
+ * The most place types one definition may be scoped to. An input bound, not a
+ * UX figure: without it a definition arrives holding a list nobody could have
+ * ticked by hand, and one row per entry is written for it
+ * (`api/AGENTS.md`'s both-ends rule for a body array).
+ */
+export const MAX_SCOPED_PLACE_TYPES = 100;
 
 /**
  * A built-in: not renameable, not deletable.

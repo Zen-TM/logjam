@@ -22,13 +22,10 @@ import {
 } from "./routeArrowStyle";
 import { stopSourcePress } from "./sourcePress";
 
-// Re-exported so a caller keeps importing the floor from the layer it draws.
-export { SAVED_ROUTE_MIN_ZOOM };
-
 // The zoom floor for saved routes is SAVED_ROUTE_MIN_ZOOM in `@logjam/shared`
-// (`routeArrow.ts`, re-exported below): Logjam Web draws the same routes at the
-// same floor, so the two clients cannot show one at different scales. Why that
-// zoom, and why the route being drawn is exempt, is documented there.
+// (`routeArrow.ts`): Logjam Web draws the same routes at the same floor, so the
+// two clients cannot show one at different scales. Why that zoom, and why the
+// route being drawn is exempt, is documented there.
 
 export const RoutesLayer = memo(function RoutesLayer({
   routes,

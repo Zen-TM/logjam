@@ -108,13 +108,28 @@ describe("processGeoPdfJob", () => {
     expect(generateGeoPdf).not.toHaveBeenCalled();
   });
 
-  // Mutation: charge storage through the outer prisma, or after the
-  // transaction, instead of through its tx.
+  // Mutations: charge storage through the outer prisma instead of through its
+  // tx (the `tx` argument below); charge after the transaction has returned
+  // (the charge-inside flag); charge before the status flip (the call order).
   it("charges storage inside the transaction that marks the job completed", async () => {
     const tx = { geoPdfJob: { updateMany: vi.fn() } };
     db.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });
     tx.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });
-    db.$transaction.mockImplementationOnce((fn) => fn(tx));
+    // A flag rather than a call-order check alone: being handed `tx` after the
+    // transaction has closed would still be a separate commit.
+    let insideTransaction = false;
+    let chargeSawOpenTransaction: boolean | null = null;
+    incrementStorageUsed.mockImplementationOnce(async () => {
+      chargeSawOpenTransaction = insideTransaction;
+    });
+    db.$transaction.mockImplementationOnce(async (fn) => {
+      insideTransaction = true;
+      try {
+        return await fn(tx);
+      } finally {
+        insideTransaction = false;
+      }
+    });
 
     expect(await processGeoPdfJob("j1")).toBe(0);
     expect(tx.geoPdfJob.updateMany).toHaveBeenCalledWith(
@@ -127,6 +142,10 @@ describe("processGeoPdfJob", () => {
       "u1",
       BigInt(pdf.length),
       tx,
+    );
+    expect(chargeSawOpenTransaction).toBe(true);
+    expect(incrementStorageUsed.mock.invocationCallOrder[0]).toBeGreaterThan(
+      tx.geoPdfJob.updateMany.mock.invocationCallOrder[0],
     );
   });
 

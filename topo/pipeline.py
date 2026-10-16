@@ -399,7 +399,7 @@ else:
 # multiplies — same names, same multiplier (tests/test_layer_sync.py).
 #
 # The ORDER here is load-bearing in a way the builder's copy is not:
-# build_formation_mu_lookup indexes this dict POSITIONALLY, so raster value 0
+# _build_svtm_mu_lookup indexes this dict POSITIONALLY, so raster value 0
 # must be "Not classified" (μ=1.0) — the nodata default. The builder builds its
 # index by pinning "Not classified" itself rather than by its dict's order.
 SVTM_FORMATION_MU: Dict[str, float] = {

@@ -2,14 +2,15 @@
 
 ## Routes and access
 
-- **Every route but `/health`, `/meta` and `/elevation`** runs `requireAuth`,
-  then `resolveUser(req.user!.sub)` (`lib/resolveUser.ts`) for the internal
-  user; never look a user up by `cognitoId` inline. `/meta` is unauthenticated
-  on purpose — a build too old to authenticate must still be told it is stale,
-  and the body carries server constants only (`meta.ts`); `/elevation` needs
-  auth but no user row, because nothing it touches is stored (`elevation.ts`).
-  Both stay behind the global rate limiter; a third exception needs the same
-  kind of reason.
+- **Every route but `/health`, `/ready`, `/meta` and `/elevation`** runs
+  `requireAuth`, then `resolveUser(req.user!.sub)` (`lib/resolveUser.ts`) for
+  the internal user; never look a user up by `cognitoId` inline. `/ready`, like
+  `/health`, is the platform's own probe: no user data, no auth. `/meta` is
+  unauthenticated on purpose — a build too old to authenticate must still be
+  told it is stale, and the body carries server constants only (`meta.ts`);
+  `/elevation` needs auth but no user row, because nothing it touches is stored
+  (`elevation.ts`). All of them stay behind the global rate limiter; a further
+  exception needs the same kind of reason.
 - **Every read or write of a user-owned row checks ownership** (`ownerId: user.id`
   or a join through `shares`); never trust an id from the body alone.
 - **A place reaches anyone but its owner only through `lib/placeAccess.ts`**

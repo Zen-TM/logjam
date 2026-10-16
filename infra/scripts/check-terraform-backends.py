@@ -40,7 +40,7 @@ def backends_in(text):
 
 
 def roots(repo):
-    """{root name: its first backend type, or None} for every root under envs/."""
+    """{root name: the set of backend types its .tf files declare} under envs/."""
     base = os.path.join(repo, ENVS)
     found = {}
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
