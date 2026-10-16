@@ -220,9 +220,7 @@ installed="$(adb -s "$SERIAL" shell pm list packages "$PACKAGE" | tr -d '\r')"
 if [ "$DO_BUILD" = true ]; then
   say "Rebuilding the debug dev client (this takes a few minutes)…"
   [ -d android ] || npx expo prebuild -p android
-  # RTK_DISABLED=1: see the note in mobile/AGENTS.md, Builds and verify — the RTK hook breaks the
-  # gradle wrapper's stdout handling on some Linux hosts.
-  (cd android && RTK_DISABLED=1 ./gradlew :app:assembleDebug)
+  (cd android && ./gradlew :app:assembleDebug)
   installed=""
 fi
 
