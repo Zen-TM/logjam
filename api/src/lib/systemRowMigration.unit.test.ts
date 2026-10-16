@@ -7,18 +7,13 @@ import {
   isPlaceTypeIconKey,
 } from "@logjam/shared";
 
-// THE MIGRATION AND THE DECLARATION ARE TWO LISTS THAT MUST AGREE.
+// The migration and the declaration are two lists that must agree.
 //
-// `20260906010000` inserts the system place types and field definitions as SQL
-// literals; `shared/src/placeTypes.ts` declares the same rows for the seed and
-// for every client. They drifted immediately and silently: the migration wrote
-// `waves` and `tent` as icon keys — lucide-only names that are not in the
-// curated cross-platform list at all — so a database built by migration drew a
-// fallback pin for Canyon and Campsite while a seeded one drew the right icon.
-// Nothing failed, because both clients fall back rather than crash.
-//
-// The migration's own comment claimed a test enforced this. There wasn't one.
-// This is it, and it reads the SQL as ground truth rather than restating it.
+// System place types and field definitions inserted as SQL literals across
+// migrations must match what `shared/src/placeTypes.ts` declares for the seed
+// and for every client. Otherwise, a database built by migration can drift from
+// a seeded database (e.g. invalid icon keys causing both clients to fall back
+// to pins). This test reads the SQL as ground truth rather than restating it.
 const MIGRATIONS = join(__dirname, "../../prisma/migrations");
 
 /** Every migration's SQL, concatenated in the order Prisma applies them — so a
@@ -38,10 +33,9 @@ function migrationSql(): string {
     .join("\n");
 }
 
-/** The value each system row ENDS UP with: the INSERT literal, unless a later
- *  migration updates that column for that id. Both the icon and the colour were
- *  wrong on the way in, and both are corrected by a later migration rather than
- *  by editing one that has already been applied. */
+/** The value each system row ends up with: the INSERT literal, unless a later
+ *  migration updates that column for that id. Later corrective migrations
+ *  update columns rather than editing already-applied migrations. */
 function finalValue(
   sql: string,
   column: "icon_key" | "color",
@@ -49,9 +43,8 @@ function finalValue(
   inserted: string,
 ): string {
   let value = inserted;
-  // Statement by statement: a regex spanning `;` happily matches one UPDATE's
-  // SET against the NEXT one's WHERE, which is how this helper first reported
-  // Campsite as a droplet.
+  // Statement by statement: evaluate each statement individually so a regex
+  // does not match across statements.
   for (const statement of sql.split(";")) {
     if (!statement.includes('UPDATE "place_types"')) continue;
     if (!statement.includes(`"id" = '${id}'`)) continue;

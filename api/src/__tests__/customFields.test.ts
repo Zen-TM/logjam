@@ -28,10 +28,9 @@ async function write<
 // Requires `make dev`. No auth header = alice, who is seeded with three trip
 // fields (water_level, rope_length_m, wetsuit) and no place fields.
 //
-// Definitions are ROWS in `custom_field_defs` now, not an array inside
-// User.uiPreferences — so these tests cover the round trip that move created:
-// the row-grain REST surface, the whole-list PATCH the web still uses, and the
-// projection of both onto /users/me that keeps the web's response shape.
+// Definitions are ROWS in `custom_field_defs`: these tests cover the row-grain
+// REST surface, the whole-list PATCH Logjam Web uses, and the projection of
+// both onto /users/me that keeps Logjam Web's response shape.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 /** Alice's current definitions for one entity, read back off /users/me. */
@@ -144,11 +143,7 @@ describe("custom-fields route (fake auth)", () => {
         key: "permit_no",
         label: "Permit number",
         type: "string",
-        // Created with no scoping, so it applies to ALL types. This used to
-        // assert the opposite — "applies to no type, visible and fixable" —
-        // which was neither: a definition on no form is invisible everywhere
-        // except the settings list, and the same default made every trip-log
-        // field disappear (see the unscoped-definition test above).
+        // Created with no scoping, so it applies to ALL types.
         placeTypeIds: [],
         appliesToAllTypes: true,
       }),
@@ -196,19 +191,10 @@ describe("custom-fields route (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  // THE WHOLE-LIST WRITE PATH IS GONE, and its removal is the assertion now.
-  //
-  // `PATCH /users/me { placeCustomFields: [...] }` reconciled a whole list of
-  // `{key,label,type,min,max}`. That shape cannot express what a definition is
-  // any more: it carries no `placeTypeIds` and no `appliesToAllTypes`, so every
-  // save from a dialog that round-tripped the list would have wiped the scoping
-  // off every definition — silently, because the payload simply did not mention
-  // it. And it matched `existing` scoped to the caller, so the SYSTEM
-  // definitions fell through to the create branch and the user acquired a
-  // private duplicate of every built-in field, colliding under the same key.
-  //
-  // A client still sending it gets a 400 naming the replacement rather than a
-  // silent no-op, which is the difference between a migration and a trap.
+  // `PATCH /users/me { placeCustomFields: [...] }` with a whole list of
+  // `{key,label,type,min,max}` cannot express definition scoping: it carries no
+  // `placeTypeIds` and no `appliesToAllTypes`, so a client sending it gets a
+  // 400 naming the replacement rather than a silent wipe of scoping.
   it("refuses the legacy whole-list write and says what to use instead", async () => {
     for (const key of ["placeCustomFields", "tripLogCustomFields"]) {
       const res = await write(() =>
@@ -229,11 +215,9 @@ describe("custom-fields route (fake auth)", () => {
   // rendering seven canyon grades. `CustomFieldDefPlaceType` is not a sync
   // entity of its own, so the scoping rides ON the definition: flattened onto
   // the REST list, and onto the delta row.
-  // THE INVISIBLE DEFINITION. A row with the flag off and no place types
-  // scoped to it is on no form at all — both readers ask "all types, or one of
-  // these?" — so it lists in Settings and appears nowhere else, which reads as
-  // the save having failed. Every trip-log definition was in that state until
-  // 20260911140000, alice's three seeded ones included.
+  // A row with the flag off and no place types scoped to it is on no form at
+  // all — both readers ask "all types, or one of these?" — so it lists in
+  // Settings and appears nowhere else.
   it("puts a definition that names no place types on every form", async () => {
     const key = `unscoped_${Date.now()}`.slice(0, 20);
     const created = await write(() =>
@@ -254,8 +238,8 @@ describe("custom-fields route (fake auth)", () => {
     expect(def!.appliesToAllTypes).toBe(true);
     expect(def!.placeTypeIds).toEqual([]);
 
-    // And the seeded three, which is where this was found. Each is on SOME
-    // form: two on every trip, `rope_length_m` on canyoning trips.
+    // The seeded three: each is on SOME form (two on every trip,
+    // `rope_length_m` on canyoning trips).
     const seededScoping: Record<
       string,
       { appliesToAllTypes: boolean; tripTypes: string[] }
@@ -281,8 +265,8 @@ describe("custom-fields route (fake auth)", () => {
   });
 
   // A TRIP attribute is scoped by the trip's own types (tags), and that scoping
-  // has to survive both write paths' readers — the REST list the web reads and
-  // the delta the phone mirrors — or the phone shows it on every trip or none.
+  // has to survive both write paths' readers — the REST list Logjam Web reads
+  // and the delta Logjam GPS mirrors.
   it("scopes a trip attribute by trip type, on the REST list and the delta", async () => {
     const key = `flow_${Date.now()}`.slice(0, 20);
     const created = await write(() =>

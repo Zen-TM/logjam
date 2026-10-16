@@ -1,4 +1,4 @@
-// The database half of copying someone else's place (plan §2.6).
+// The database half of copying someone else's place.
 //
 // The decisions themselves are pure and live in `shared/src/placeCopy.ts`, so
 // both clients can predict them and a test needs no Postgres. What is here is
@@ -8,7 +8,7 @@
 // One function, called from one place (POST /places/:id/copy) — but written as
 // a lib rather than inline because the phone will need the same answer when the
 // copy flow gets its type picker, and a second implementation of "which type
-// does this land in" is exactly the drift §2.6 rule 1 exists to prevent.
+// does this land in" is exactly the drift the shared implementation exists to prevent.
 
 import { say } from "@logjam/shared";
 import type { ForeignFieldValue, TripLogCustomFieldDef } from "@logjam/shared";
@@ -37,7 +37,7 @@ export type CopyTypeResolution = {
 /**
  * The type a copy of `sourceTypeId` lands in for `recipientId`.
  *
- * §2.6 rule 1, in order:
+ * Resolution rules, in order:
  *  1. A SYSTEM type resolves globally — one row shared by every account — so a
  *     copied canyon needs no reconciliation at all.
  *  2. Otherwise match the sender's type NAME case-insensitively against the
@@ -105,7 +105,7 @@ export async function resolveCopyPlaceType(
  * `placeTypeId`.
  *
  * The SOURCE's `foreignFields` are deliberately NOT read here: a copy clears
- * them rather than concatenating (§2.6). A copy-of-a-copy reconciles the
+ * them rather than concatenating. A copy-of-a-copy reconciles the
  * sender's `fieldValues` against the recipient's definitions and nothing else —
  * otherwise residue accumulates down a share chain with no owner and no way to
  * clear it.
@@ -134,13 +134,14 @@ export async function reconcileCopiedPlace(args: {
 
 /**
  * A place's values after its TYPE changes — the second writer of
- * `foreignFields` and the last (§2.6 scope discipline).
+ * `foreignFields` and the last.
  *
  * Miscategorising is inevitable and a type change is a legal edit, so it must
- * not destroy what the user typed under the old type. A value the new type has
- * no definition for is parked rather than deleted or left in `fieldValues`
- * where nothing renders it: parked, it is visible, labelled, and adoptable into
- * the new type with one tap.
+ * not destroy what the user typed under the old type. Guard:
+ * api/src/lib/placeCopy.unit.test.ts. A value the new type has no definition
+ * for is parked rather than deleted or left in `fieldValues` where nothing
+ * renders it: parked, it is visible, labelled, and adoptable into the new type
+ * with one tap.
  *
  * APPENDS rather than clears, unlike a copy: the row keeps its owner, so an
  * earlier stranding is still theirs. Same key twice keeps the newest.
@@ -176,11 +177,8 @@ export async function strandValuesOnTypeChange(args: {
   // side, which is a key another client is entitled to have written.
   //
   // The park is still re-matched, in the one direction that can only help: a
-  // value the CURRENT type defines comes home. That is what heals a row
-  // stranded BEFORE the round trip above existed — there is no migration for
-  // those, and the alternative was telling the user to retype the place twice
-  // to get their own grades back. Skipped entirely when nothing is parked,
-  // which is almost every write.
+  // value the CURRENT type defines comes home. Skipped entirely when nothing is
+  // parked, which is almost every write.
   if (args.fromTypeId === args.toTypeId) {
     if (parked.length === 0) {
       return {

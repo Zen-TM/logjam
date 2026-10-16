@@ -157,8 +157,6 @@ describe("place tracks (fake auth)", () => {
     const placeId = await createPlace(as(ALICE_SUB));
     let tripId: string | undefined;
     try {
-      // Trip creation moved to the global POST /trips — the nested POST was
-      // removed with the trip↔place m2m cutover.
       const tripRes = await request(API_URL)
         .post("/trips")
         .set(as(ALICE_SUB))

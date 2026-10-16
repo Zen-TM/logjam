@@ -1,17 +1,17 @@
 // Taking back a `Share` row — the ONE implementation, for one row or for
 // eighty.
 //
-// This used to live inline in DELETE /shares/:entityType/:entityId/:userId, and
-// then DELETE /friends/:id/shares needed the same four steps over a list. Four
-// steps is three too many to write twice:
+// Both single and list share revocations (DELETE
+// /shares/:entityType/:entityId/:userId and DELETE /friends/:id/shares)
+// execute four steps:
 //
 //   1. delete the share row(s);
-//   2. purge each recipient's residual `item_shared` notification (PRIV-001 —
-//      the read-time filter already hides it, but a revoked share must not
+//   2. purge each recipient's residual `item_shared` notification (the
+//      read-time filter already hides it, but a revoked share must not
 //      leave a row at rest);
 //   3. bump the entity's `updatedAt` so the OWNER's other devices re-pull it
 //      and refresh their now-stale `sharedCount` (a grant does the same — see
-//      `touchSharedForDelta` below, which both halves now share);
+//      `touchSharedForDelta` below, which both halves share);
 //   4. tombstone the recipient — but ONLY where no other path to the row
 //      survives.
 //

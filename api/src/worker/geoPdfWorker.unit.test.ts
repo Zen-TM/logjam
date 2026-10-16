@@ -14,8 +14,8 @@ vi.mock("../services/awsClients", () => ({
   s3: { send: vi.fn() },
 }));
 
-// generateGeoPdf pulls in canvas/pdfkit/font registration — far too heavy
-// (and irrelevant) for these claim/guard unit tests.
+// generateGeoPdf pulls in canvas/pdfkit/font registration — far too heavy for
+// unit tests.
 vi.mock("../services/generateGeoPdf", () => ({
   generateGeoPdf: vi.fn(),
 }));

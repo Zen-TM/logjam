@@ -7,7 +7,7 @@ import { API_URL } from "./_actors";
 // No auth header = alice. Launch-free surfaces only (auth, list + truncation
 // header, config validation, not-found). A valid config POST would create a
 // job and launch a MiniStack GeoPDF worker, so only rejected configs (which
-// 400 before the create/launch) are exercised (CH-004).
+// 400 before the create/launch) are exercised.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 // Note: no unauthenticated-401 case — the integration suite runs only under

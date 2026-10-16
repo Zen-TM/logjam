@@ -20,7 +20,7 @@ import type { DbClient } from "./storageQuota";
  * The AWS Fargate On-Demand vCPU service quota (30 in ap-southeast-2) is the
  * real backstop, but it is the WRONG tool to tune: exceeding it makes RunTask
  * return a placement failure, which this codebase correctly treats as a job
- * failure (ARCH-002) — so the account quota converts excess load into failed
+ * failure — so the account quota converts excess load into failed
  * user jobs. Lowering it also needs an AWS support request. This cap sits
  * below it and converts excess load into a retryable 429 instead.
  */

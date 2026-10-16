@@ -23,9 +23,9 @@ vi.mock("./topoExportLauncher", () => ({
 
 vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
 // sendPushToUser POSTs to https://exp.host/--/api/v2/push/send. Unmocked, with
-// a device token staged below, these tests made a REAL request to Expo on every
-// run — ~400ms, and slow enough under parallel load to blow vitest's 5s timeout
-// intermittently. api/CLAUDE.md: never hit a real service in a unit test.
+// a device token staged below, tests would make a real request to Expo on every
+// run — slow enough under parallel load to blow vitest's 5s timeout.
+// api/AGENTS.md: never hit a real service in a unit test.
 vi.mock("../services/push", () => ({ sendPushToUser: vi.fn() }));
 
 import prisma from "../services/prisma";
@@ -85,7 +85,7 @@ const emailSend = sendEmail as unknown as Mock;
  * reapStuckTopoJobs reads the overdue rows first (an updateMany reports a
  * count, not rows, so there would otherwise be nobody to notify), then claims
  * each row with its own status-guarded updateMany — `count === 1` means THIS
- * pass won the flip and owes the owner a notification (APIC-005). Stage rows by
+ * pass won the flip and owes the owner a notification. Stage rows by
  * the status each read asks for instead of by call order.
  */
 function stageByStatus(mock: Mock, rowsByStatus: Record<string, unknown[]>) {
@@ -139,7 +139,7 @@ beforeEach(() => {
     );
 });
 
-// ── stall + ceiling deadlines (pure, ARCH-001) ──────────────────────────────
+// ── stall + ceiling deadlines (pure) ────────────────────────────────────────
 
 describe("progressStallDeadline", () => {
   const stallMs = env.TOPO_REAPER_PROGRESS_STALL_MS;
@@ -485,7 +485,7 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
   });
 });
 
-// ── Legacy prod row shapes (gap 6) ──────────────────────────────────────────
+// ── Legacy prod row shapes ──────────────────────────────────────────────────
 // Rows created before the ecsTaskArn / startedAt columns existed carry NULLs
 // there (migration 20260610135419 backfills nothing). The reaper unit tests
 // above use fresh fixtures; these assert the NULL-bearing legacy shapes are
@@ -569,12 +569,11 @@ describe("reapStuckTopoJobs — legacy prod row shapes (gap 6)", () => {
   });
 });
 
-// ── Reaped jobs are user-visible (APIC-005) ────────────────────────────────
+// ── Reaped jobs are user-visible ────────────────────────────────────────────
 //
 // The workers' own except paths write a Notification + push on failure; the
-// reaper used to write status="failed" and nothing else, so a user whose task
-// was never placed or was SIGKILLed learned about it only by polling the list.
-// Same terminal state, two behaviours.
+// reaper does the same so a user whose task was never placed or was SIGKILLed
+// does not have to poll the list. Same terminal state, consistent behaviour.
 
 describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
   it("writes a topo_failed notification + push for a reaped topo job", async () => {
@@ -598,7 +597,7 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
     expect(rows[0].payload).toMatchObject({ jobId: "p1" });
   });
 
-  // The dedup rule (root CLAUDE.md): the status-guarded claim is per row, and
+  // The dedup rule (root AGENTS.md): the status-guarded claim is per row, and
   // only `count === 1` means THIS pass won it. Prod runs the API on Elastic
   // Beanstalk, so two instances can sweep the same overdue ids at once — the
   // loser's updateMany reports 0 and it must stay silent, or the user gets two
@@ -679,7 +678,7 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
   });
 });
 
-// ── failure email for reaped rows (APIC-005) ────────────────────────────────
+// ── failure email for reaped rows ──────────────────────────────────────────
 
 // A reaped job is a failed job, so the three EXISTING toggles now mean
 // "finishes or fails" and the reaper mails on them. Same claim gate as the
@@ -817,7 +816,7 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
   });
 });
 
-// ── expireCompletedExports (ARCH-006 export-expiry sweep) ───────────────────
+// ── expireCompletedExports ──────────────────────────────────────────────────
 
 describe("expireCompletedExports", () => {
   const expiredRow = {
@@ -848,7 +847,7 @@ describe("expireCompletedExports", () => {
       Key: "exports/exp-1/result.zip",
     });
     // Decrement (raw UPDATE through the tx client) and row delete both went
-    // through the transaction client — one commit (Design Q).
+    // through the transaction client — one commit.
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(txExecuteRaw).toHaveBeenCalledTimes(1);
     expect(txExportDelete).toHaveBeenCalledWith({ where: { id: "exp-1" } });
@@ -996,8 +995,8 @@ describe("expireCompletedGeoPdfJobs", () => {
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(txExecuteRaw).toHaveBeenCalledTimes(1);
     expect(txGeoPdfDelete).toHaveBeenCalledWith({ where: { id: "geo-1" } });
-    // Share rows are purged in the same transaction as the row delete (finding
-    // 3): Share.entityId is polymorphic, so nothing cascades.
+    // Share rows are purged in the same transaction as the row delete:
+    // Share.entityId is polymorphic, so nothing cascades.
     expect(txShareDeleteMany).toHaveBeenCalledWith({
       where: { entityType: "geoPdfJob", entityId: { in: ["geo-1"] } },
     });

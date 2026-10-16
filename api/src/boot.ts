@@ -11,11 +11,11 @@
 // Database migrations are NOT run here. They run in a gated one-shot Fargate
 // task (aws_ecs_task_definition.api_migrate) BEFORE the EB version swap, driven
 // by .github/workflows/deploy-api.yml, so a failing migration aborts the deploy
-// instead of crash-looping this container at boot (ARCH-001 half B). Instance
+// instead of crash-looping this container at boot. Instance
 // replacement reuses an already-migrated image, so no pending migrations exist
 // at plain container start. New schema is applied before the new image serves;
 // migrations MUST stay backward-compatible with the currently-running image for
-// the swap window (expand/contract — see api/CLAUDE.md).
+// the swap window (expand/contract — see api/AGENTS.md and ADR 0003).
 //
 // Fails loud (exit 1) on any error. Never logs secret values.
 

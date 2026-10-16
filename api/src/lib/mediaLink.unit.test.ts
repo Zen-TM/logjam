@@ -19,8 +19,8 @@ describe("partitionPlaceMedia", () => {
   });
 
   it("spells standalone as a null parent, not an empty string", () => {
-    // A "" linkedId would satisfy the old NOT NULL column and quietly match
-    // `linkedId: { in: [...] }` lookups for a place that has yet to exist.
+    // A "" linkedId would quietly match `linkedId: { in: [...] }` lookups for
+    // a place that has yet to exist.
     expect(STANDALONE_LINK).toEqual({ linkedType: "none", linkedId: null });
   });
 });

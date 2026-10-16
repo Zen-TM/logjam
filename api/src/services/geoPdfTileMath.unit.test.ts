@@ -10,9 +10,8 @@ import {
   latToMercY,
 } from "./geoPdfTileMath";
 
-// Edge-case coverage for the GeoPDF projection math extracted from
-// generateGeoPdf.ts. These are the calculations most prone to silent errors at
-// high zoom / extreme latitude — previously untested.
+// Edge-case coverage for the GeoPDF projection math. These are the
+// calculations most prone to silent errors at high zoom / extreme latitude.
 
 describe("tile index round-trips", () => {
   it.each([8, 12, 16, 20])(

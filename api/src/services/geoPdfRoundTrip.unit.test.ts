@@ -10,7 +10,7 @@ import {
 import { buildGeoTransform } from "@logjam/shared/dist/geoPdfImport/transform.js";
 import { buildPdf } from "./generateGeoPdf";
 
-// THE drift guard (Stage 6 §7.2): any future change to the generator's georef
+// Drift guard: any future change to the generator's georef
 // block must remain readable by the mobile GeoPDF import parser. The
 // byte-level test (generateGeoPdf.unit.test.ts) pins the serialized shape;
 // this one proves the full semantic round trip — writer → parser → transform

@@ -255,11 +255,11 @@ router.post(
     // Shape-checked here as well as at confirm so a bad stats object costs a
     // 400 rather than a wasted upload of the blob it describes.
     parseMediaMetadataOr400(origin, body.metadata);
-    // Declared sizes bound the presigned PUTs (SEC-003): they are signed into
+    // Declared sizes bound the presigned PUTs: they are signed into
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    // Optional client-minted mediaId (Stage 8 §3.5). A client id whose row
+    // Optional client-minted mediaId. A client id whose row
     // already exists means the whole three-phase flow already completed —
     // return the existing item (200), never fresh upload URLs. Foreign id →
     // 404 (anti-oracle; see lib/clientSuppliedId.ts).
@@ -343,13 +343,13 @@ router.post(
     );
     await assertOwnsTarget(user.id, linkedType, linkedId);
 
-    // Idempotent confirm (ARCH-005): if the row already exists, this confirm
+    // Idempotent confirm: if the row already exists, this confirm
     // already succeeded — return it (handled below) before the track-slot guard
     // so a retried confirm of the same row is a no-op, not a spurious 409,
     // and without re-charging quota (client retries / double-clicks are benign).
     // A foreign-owned row is 404, not 403: with client-minted presign ids
-    // (Stage 8 §3.5) a probed foreign mediaId is reachable here, and 403 would
-    // confirm it exists (SEC-001 anti-oracle).
+    // a probed foreign mediaId is reachable here, and 403 would
+    // confirm it exists (the anti-oracle rule).
     const existing = await prisma.media.findUnique({ where: { id: mediaId } });
     if (existing) {
       if (existing.ownerId !== user.id)
@@ -403,7 +403,7 @@ router.post(
 
     const totalBytes = BigInt(displayBytes + thumbnailBytes);
 
-    // One interactive transaction (ARCH-005 / Design Q): the quota charge,
+    // One interactive transaction: the quota charge,
     // the over-quota check and the row creation commit — or roll back —
     // together. No crash window can leave the quota charged without a row,
     // and an over-quota throw undoes the charge without a manual decrement.
@@ -492,7 +492,7 @@ router.post(
 );
 
 // POST /media/download-urls — batch presigned GET URLs for the mobile blob
-// cache (Stage 8 §7.3; delta media rows carry metadata only). Authorization
+// cache (delta media rows carry metadata only). Authorization
 // per id: owner, or sharee of the place a place-linked row is attached to.
 // Rows the caller can't see are OMITTED, never erred — the response must not
 // confirm foreign ids (anti-oracle; deliberately supersedes the attach-403
@@ -579,7 +579,7 @@ router.post(
 // deletes on place/trip/account live in their respective routes.
 // GET /media/standalone — the caller's own imports and recorded tracks.
 //
-// For the web app, which is not delta-synced and so has no other way to see a
+// For Logjam Web, which is not delta-synced and so has no other way to see a
 // file that hangs off no place. Metadata only: presigning every row would put
 // the whole list through the egress meter on page load, whether or not anything
 // was opened. Content comes from POST /media/download-urls, which is gated.
@@ -621,8 +621,8 @@ router.get(
 // PATCH /media/:id — rename or recolour a standalone file, or replace a
 // recorded track's climb.
 //
-// The label and the colour have to sync or they diverge per device, which is
-// the inconsistency this whole change exists to remove. Only `displayName`,
+// The label and the colour have to sync or they diverge per device.
+// Only `displayName`,
 // `color` and a track's climb are editable: the filename is what the download
 // is called and what pins the track format, and nothing about the bytes can
 // change once they are confirmed. `color` is limited to the shared palette
@@ -688,10 +688,9 @@ router.patch(
 
 // PATCH /media/:id/link — move a standalone file between "nobody" and a place.
 //
-// This is what makes a place's way a LINK rather than a copy. Attaching an
-// import used to upload a second copy of it, so the user held two files, only
-// one of which was in their Saved list, and replacing the way DELETED the copy.
-// Now the same row changes parent, and detaching leaves the file standing.
+// This is what makes a place's way a LINK rather than a copy: the same row
+// changes parent, and detaching leaves the file standing instead of
+// duplicating the upload.
 //
 // Only a standalone file (one with an `origin`) may be moved: a photo has no
 // existence apart from what it is attached to, and moving one is not a thing
@@ -778,14 +777,14 @@ router.delete(
     const id = getParam(req.params.id);
     // Owner-scoped: a foreign media id gets the SAME 404 a non-existent one
     // gets. A sharee sees place-level media ids in a shared place payload,
-    // so a 403 here would confirm which of them are real (APIR-013/PRIV-106) —
+    // so a 403 here would confirm which of them are real —
     // the presign path in this same file already argues exactly that.
     const media = await prisma.media.findFirst({
       where: { id, ownerId: user.id },
     });
     if (!media) throw new AppError(404, say`Couldn't find that file.`);
 
-    // S3-first (ARCH-004): blobs go before the row, so an S3 failure leaves
+    // S3-first: blobs go before the row, so an S3 failure leaves
     // the row (and therefore the keys) intact for a retried DELETE. The row
     // delete and the quota decrement then share one transaction so a crash
     // between them can't leave the quota over-counted.

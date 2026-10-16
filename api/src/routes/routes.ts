@@ -10,7 +10,7 @@
 //   - directly shared route    → visible to each Share recipient.
 // Either way a non-owner is read-only (view + export, never edit).
 // Non-owned ids are 404, never 403, so a status can't confirm a route exists
-// to someone who can't see it (SEC-001 anti-oracle). A SHAREE attempting a
+// to someone who can't see it (the anti-oracle rule). A SHAREE attempting a
 // mutation gets 403 — they legitimately see the route, they just can't change
 // it — matching requirePlaceOwnerAccess's split.
 import { Router, Response } from "express";
@@ -53,7 +53,7 @@ import {
 
 const router = Router();
 
-// Hard cap on the list; true total rides X-Total-Count (UX-001 — matches
+// Hard cap on the list; true total rides X-Total-Count (matches
 // /places, /trips and /waypoints).
 const LIST_TAKE = 500;
 
@@ -133,7 +133,7 @@ router.post(
 
     const placeId = (await resolveRoutePlaceId(user.id, body.placeId)) ?? null;
 
-    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // Optional client-minted id: own-id replay → 200 with the
     // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
     const clientId = parseClientSuppliedId(body.id);
     if (clientId) {
@@ -171,7 +171,7 @@ router.post(
             placeId: null,
             name: (body.name as string).trim(),
             // The client may choose from the shared palette; when it doesn't,
-            // the server picks avoiding collisions. Mobile picks at draw time so the line
+            // the server picks avoiding collisions. Logjam GPS picks at draw time so the line
             // is its final colour from the first frame rather than changing under
             // the user when the create op comes back.
             color: assignedColor,

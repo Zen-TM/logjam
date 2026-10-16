@@ -83,7 +83,7 @@ describe("account-delete purge covers every model related to User", () => {
 
 // A notification row is held by the recipient, so the cascade from the sender
 // never reaches it. The types come from a list of creation sites rather than
-// a scan for one spelling, which missed `type,` from a variable.
+// a scan for one spelling, which can miss `type,` from a variable.
 //
 // Mutations that turn this red: creating a notification in a file not listed
 // here, listing a type its file does not create, or a listed type sent to
