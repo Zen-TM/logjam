@@ -42,6 +42,9 @@ export type StatsPlace = {
   name: string;
   placeTypeId: string;
   fieldValues: unknown;
+  /** False for a place shared with the user. Required, so a caller has to
+   *  answer it: see `computeLogbookStats`. */
+  owned: boolean;
 };
 
 export type StatsPlaceType = {
@@ -339,7 +342,11 @@ function summarizeField(
 }
 
 export function computeLogbookStats(input: StatsInput): LogbookStats {
-  const { trips, places, tripDefs, placeDefs, placeTypes } = input;
+  const { trips, tripDefs, placeDefs, placeTypes } = input;
+  // Own places only: a place shared with the user is someone else's ground,
+  // and counting it would inflate the completion meter and the place field
+  // stats with rows the user never chose to keep (logbookStats.test.ts).
+  const places = input.places.filter((place) => place.owned);
   const activity = input.activity ?? null;
   const placeById = new Map(places.map((place) => [place.id, place]));
 

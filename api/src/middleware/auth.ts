@@ -3,8 +3,12 @@ import jwksClient from "jwks-rsa";
 import jwt from "jsonwebtoken";
 import { say } from "@logjam/shared";
 import { AppError } from "../lib/appError";
+import { getEnv } from "../lib/env";
 
 // Fail fast at module load if AUTH_MODE=fake would bypass Cognito in a non-dev runtime.
+// These two guards read process.env, not getEnv(), on purpose: they are a
+// second lock beside validateEnv's own fake-in-production check, independent
+// of it, so a bug in either still fails closed.
 // Three independent signals — any one is sufficient to refuse:
 //   1. NODE_ENV is not "development" or "test"
 //   2. AWS runtime env vars present (ECS/EB inject these)
@@ -46,7 +50,7 @@ let client: jwksClient.JwksClient | null = null;
 function getClient() {
   if (!client) {
     client = jwksClient({
-      jwksUri: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
+      jwksUri: `https://cognito-idp.${getEnv().COGNITO_REGION}.amazonaws.com/${getEnv().COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
     });
   }
   return client;
@@ -96,13 +100,14 @@ export function requireAuth(
   res: Response,
   next: NextFunction,
 ) {
-  if (process.env.AUTH_MODE === "fake") {
+  const env = getEnv();
+  if (env.AUTH_MODE === "fake") {
     // Module-load guard above already refuses this in non-dev runtimes.
     // This per-request branch is defence-in-depth only.
     const headerSub = req.headers["x-fake-sub"];
     const sub =
       (typeof headerSub === "string" && headerSub) ||
-      process.env.FAKE_USER_SUB ||
+      env.FAKE_USER_SUB ||
       "fake-alice-sub";
     // Known seed subs get a coherent identity; an unknown sub falls back to
     // alice defaults so behaviour is unchanged when no override is present.
@@ -133,10 +138,10 @@ export function requireAuth(
     token,
     getKey,
     {
-      issuer: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`,
+      issuer: `https://cognito-idp.${env.COGNITO_REGION}.amazonaws.com/${env.COGNITO_USER_POOL_ID}`,
       // Cognito ID tokens carry aud=<app client id>. Asserting audience rejects
       // tokens minted for a different app client in the same user pool.
-      audience: process.env.COGNITO_CLIENT_ID,
+      audience: env.COGNITO_CLIENT_ID,
       algorithms: ["RS256"],
     },
     (err, decoded) => {

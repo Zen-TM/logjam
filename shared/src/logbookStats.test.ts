@@ -120,7 +120,13 @@ describe("computeLogbookStats", () => {
 
     it("counts a place as NEW only when its first EVER visit is in range", () => {
       const places = [
-        { id: "p1", name: "Claustral", placeTypeId: CANYON, fieldValues: {} },
+        {
+          id: "p1",
+          name: "Claustral",
+          placeTypeId: CANYON,
+          fieldValues: {},
+          owned: true,
+        },
       ];
       const visited = [
         trip("2025-06-01", { places: [{ id: "p1", name: "Claustral" }] }),
@@ -183,12 +189,14 @@ describe("computeLogbookStats", () => {
         id: "p1",
         name: "Claustral",
         placeTypeId: CANYON,
+        owned: true,
         fieldValues: { v_grade: 6, num_abseils: 10, quality: 4 },
       },
       {
         id: "p2",
         name: "Empress",
         placeTypeId: CANYON,
+        owned: true,
         fieldValues: { v_grade: 4, num_abseils: 3, quality: 5 },
       },
     ];
@@ -262,6 +270,7 @@ describe("computeLogbookStats", () => {
           id: "p3",
           name: "Blue Gum",
           placeTypeId: CAMPSITE,
+          owned: true,
           fieldValues: { quality: 3 },
         },
       ];
@@ -308,6 +317,7 @@ describe("computeLogbookStats", () => {
           id: "p3",
           name: "Blue Gum",
           placeTypeId: CAMPSITE,
+          owned: true,
           fieldValues: { quality: 3 },
         },
       ];
@@ -393,6 +403,7 @@ describe("computeLogbookStats", () => {
           id: "p1",
           name: "Claustral",
           placeTypeId: CANYON,
+          owned: true,
           fieldValues: { permit: "NPWS-2026-114" },
         },
       ];
@@ -419,6 +430,7 @@ describe("computeLogbookStats", () => {
           id: "p1",
           name: "Claustral",
           placeTypeId: CANYON,
+          owned: true,
           fieldValues: {
             access: "Park at the locked gate, walk the fire trail 20 min.",
           },
@@ -552,9 +564,27 @@ describe("computeLogbookStats", () => {
 
   describe("places", () => {
     const places = [
-      { id: "p1", name: "Claustral", placeTypeId: CANYON, fieldValues: {} },
-      { id: "p2", name: "Empress", placeTypeId: CANYON, fieldValues: {} },
-      { id: "p3", name: "Blue Gum", placeTypeId: CAMPSITE, fieldValues: {} },
+      {
+        id: "p1",
+        name: "Claustral",
+        placeTypeId: CANYON,
+        fieldValues: {},
+        owned: true,
+      },
+      {
+        id: "p2",
+        name: "Empress",
+        placeTypeId: CANYON,
+        fieldValues: {},
+        owned: true,
+      },
+      {
+        id: "p3",
+        name: "Blue Gum",
+        placeTypeId: CAMPSITE,
+        fieldValues: {},
+        owned: true,
+      },
     ];
     const placeTypes = [
       { id: CANYON, name: "Canyon", color: "#E4C5AA" },
@@ -582,6 +612,30 @@ describe("computeLogbookStats", () => {
           logged: 0,
         },
       ]);
+    });
+
+    // Mutation: drop the `owned` filter at the top of computeLogbookStats.
+    it("never counts a place shared with the user", () => {
+      const shared = {
+        id: "p9",
+        name: "Their canyon",
+        placeTypeId: CANYON,
+        fieldValues: { num_abseils: 7 },
+        owned: false,
+      };
+      const placeDefs = [def({ key: "num_abseils", type: "integer" })];
+      const visited = [
+        ...trips,
+        trip("2026-01-03", { places: [{ id: "p9", name: "Their canyon" }] }),
+      ];
+      const stats = run({
+        trips: visited,
+        places: [...places, shared],
+        placeTypes,
+        placeDefs,
+      });
+      expect(stats.completion[0]).toMatchObject({ typeId: CANYON, total: 2 });
+      expect(allPlaceStats(stats)).toEqual([]);
     });
 
     it("omits a type the user has no places of", () => {

@@ -463,7 +463,7 @@ model TopoJob {
   // status guard means a job can never re-enter /start; kept for forensics
   // and a possible future bounded re-launch).
   attemptCount        Int       @default(0) @map("attempt_count")
-  // ARN of the Fargate task launched for this job (Design L2). Lets the
+  // ARN of the Fargate task launched for this job. Lets the
   // reaper and DELETE handler issue a best-effort ECS StopTask instead of
   // letting an orphaned task run to completion. Null until RunTask succeeds.
   ecsTaskArn          String?   @map("ecs_task_arn")
@@ -509,7 +509,7 @@ model TopoExportJob {
   // Set when the export worker transitions the row to "running" — anchors the
   // reaper's running-timeout (mirrors topo_jobs.started_at).
   startedAt           DateTime? @map("started_at")
-  // ARN of the Fargate task launched for this export (Design L2) — see
+  // ARN of the Fargate task launched for this export — see
   // TopoJob.ecsTaskArn.
   ecsTaskArn          String?   @map("ecs_task_arn")
   createdAt           DateTime  @default(now()) @map("created_at")
@@ -541,7 +541,7 @@ model GeoPdfJob {
   // Set when the worker transitions the row to "running" — anchors the
   // reaper's running-timeout (mirrors topo_export_jobs.started_at).
   startedAt           DateTime? @map("started_at")
-  // ARN of the Fargate task launched for this job (Design L2) — see
+  // ARN of the Fargate task launched for this job — see
   // TopoExportJob.ecsTaskArn.
   ecsTaskArn          String?   @map("ecs_task_arn")
   createdAt           DateTime  @default(now()) @map("created_at")

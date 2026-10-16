@@ -10,6 +10,9 @@ import {
 import type { Response, NextFunction } from "express";
 
 vi.mock("jsonwebtoken", () => ({ default: { verify: vi.fn() } }));
+// getEnv() parses once and caches; these tests switch AUTH_MODE between cases,
+// so they read the live process.env instead.
+vi.mock("../lib/env", () => ({ getEnv: () => process.env }));
 
 import jwt from "jsonwebtoken";
 import { requireAuth, type AuthenticatedRequest } from "./auth";

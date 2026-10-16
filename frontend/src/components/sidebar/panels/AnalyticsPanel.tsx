@@ -92,8 +92,7 @@ function AnalyticsPanel({
   tripLogs: TTripLog[];
   tripLogsTotal: number | null;
   loaded: boolean;
-  /** The user's OWN places. A shared place is someone else's ground; counting
-   *  it would inflate "places visited" with rows the user never kept. */
+  /** The user's own places: `GET /places`, never the shared list. */
   places: TPlace[];
   customFieldDefs: ScopedCustomFieldDef[];
   placeCustomFieldDefs: ScopedCustomFieldDef[];
@@ -130,6 +129,7 @@ function AnalyticsPanel({
           name: place.name,
           placeTypeId: place.placeTypeId,
           fieldValues: place.fieldValues,
+          owned: true,
         })),
         tripDefs: customFieldDefs,
         placeDefs: placeCustomFieldDefs,
