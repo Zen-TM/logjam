@@ -39,11 +39,14 @@ feature in NSW, never a geocoding service.**
   ranking. The API runs it for Logjam Web and for a phone without the file;
   Logjam GPS runs it on its own copy. A query ranks the same online and
   offline. Guard: `shared/src/placeRegistry.test.ts`, against the fixtures the
-  builder writes (`topo/tests/test_place_registry.py`). The API and Logjam GPS
-  name their own guards here when they start calling it.
+  builder writes (`topo/tests/test_place_registry.py`). The API's:
+  `api/src/routes/placeSearch.unit.test.ts` answers exactly what
+  `searchPlaces` does over that fixture. Logjam GPS names its own here when it
+  starts calling it.
 - **What the user types is never logged.** The search endpoint takes the query
-  in a `POST` body, never the URL, and no log line carries it. No guard yet:
-  the endpoint's own test names it here when the endpoint lands.
+  in a `POST` body, never the URL, and no log line carries it. Guard:
+  `api/src/routes/placeSearch.unit.test.ts` ("never logs the query") and
+  `api/src/lib/logger.unit.test.ts`.
 - **The file is public.** The builder publishes it under
   `PLACE_REGISTRY_PREFIX` (`master/places/v1/`) in the topo bucket, which the
   web distribution serves without authentication, like the DEM
