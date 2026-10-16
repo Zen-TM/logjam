@@ -122,3 +122,10 @@
   padding: 8px 10px;
   color: var(--color-text-muted);
 }
+
+.credit {
+  composes: meta from "../../textRoles.generated.module.css";
+  margin: 0;
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+}
