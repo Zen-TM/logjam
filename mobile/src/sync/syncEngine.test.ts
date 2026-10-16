@@ -3,14 +3,13 @@ import { ApiError, SYNC_GIVE_UP_AFTER_MS } from "@logjam/shared";
 
 import { markNoResponse } from "../api/noResponse";
 
-// Two lifecycle bugs, both of which only appear when a cycle FAILS:
+// Two lifecycle failure cases:
 //
-//  - a cycle already in flight when the shell unmounts lands in the catch,
-//    schedules a backoff retry AFTER the cleanup ran, fails again (no session)
-//    and schedules again — authenticated requests forever, with no owner and no
-//    way to stop it short of a process restart;
-//  - a page the app cannot APPLY was reported as an unreachable account with a
-//    promise to keep retrying, which is two lies and a retry storm.
+//  - a cycle already in flight when the shell unmounts must not schedule a
+//    backoff retry after cleanup runs (which would cause endless authenticated
+//    requests with no owner);
+//  - a page Logjam GPS cannot apply must not be reported as an unreachable
+//    account with retries (which would trigger a retry storm).
 
 class ApplyError extends Error {
   constructor() {
@@ -24,8 +23,8 @@ let pulls = 0;
 const stateWrites: Record<string, string> = {};
 
 // `currentState` is load-bearing: the backoff ladder only re-arms in the
-// foreground (a backgrounded phone with no signal was retrying every few
-// minutes all day, waking the radio to fail).
+// foreground (otherwise a backgrounded phone with no signal would retry every
+// few minutes, waking the radio to fail).
 const appState = { currentState: "active" as string };
 vi.mock("react-native", () => ({
   AppState: {
@@ -183,9 +182,8 @@ describe("failure classification", () => {
   });
 
   it("stops retrying when the server has no sync endpoints", async () => {
-    // The field case: the deployed API predated /sync, so every cycle drew a
-    // 404 and the ladder kept climbing — 166 of one day's 284 requests were
-    // this, each a radio wakeup, under a status line promising a retry.
+    // If the API lacks /sync endpoints, a 404 must not keep climbing the retry
+    // ladder and waking the radio repeatedly.
     const stop = registerSyncTriggers();
     pullError = new ApiError(404, "/sync/delta", "GET");
     await settle();
@@ -344,9 +342,9 @@ describe("stopping", () => {
   });
 });
 
-// The persisted user id shapes every share row's direction and counterpart. It
-// was resolved once and trusted forever, so a stale one (found on a fake-auth
-// Pixel holding bob's id while signed in as alice) inverted every share.
+// The persisted user id shapes every share row's direction and counterpart. If
+// a stale id is trusted (for example after an account switch), share directions
+// invert.
 describe("persisted user id", () => {
   it("rebuilds the mirror when the account no longer matches it", async () => {
     serverUserId = "user-2";

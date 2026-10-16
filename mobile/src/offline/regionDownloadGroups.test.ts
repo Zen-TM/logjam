@@ -81,7 +81,7 @@ describe("groupRegionJobs", () => {
     ]);
     expect(group.settled).toBe(true);
     expect(group.done).toBe(false);
-    // A park the app clears by itself is NOT settled — the run is still live.
+    // A park Logjam GPS clears by itself is NOT settled — the run is still live.
     const [live] = groupRegionJobs([
       job("a", "run-1", { kind: "paused", reason: "background" }),
     ]);
@@ -157,10 +157,10 @@ describe("regionGroupToastText", () => {
 });
 
 // The battery guard for a download behind another app
-// (docs/decisions/0013). Mutations: drop `backgroundResumesLeft > 0` from
-// either function and the "no restarts left" lines go red; the service then
-// holds the process up, or the radio keeps being woken, for as long as the
-// signal flaps.
+// ([0013](../../../docs/decisions/0013-background-work-battery-rules.md)).
+// Mutations: drop `backgroundResumesLeft > 0` from either function and the
+// "no restarts left" lines go red; the service then holds the process up, or
+// the radio keeps being woken, for as long as the signal flaps.
 describe("downloadNotice", () => {
   it("is up, with the run's progress, while there is work in hand", () => {
     expect(

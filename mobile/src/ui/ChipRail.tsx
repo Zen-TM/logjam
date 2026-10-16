@@ -12,7 +12,7 @@ import { spacing, withAlpha, useTheme } from "../theme";
 import { Chip, CHIP_HEIGHT, type ChipOption } from "./Chip";
 
 // A single-line (`scroll`) control is exactly one chip tall — re-exported so
-// a bar replacing it in the same slot (Saved's multi-select bar, item A) can
+// a bar replacing it in the same slot (Saved's multi-select bar) can
 // match without a second hand-kept number.
 export const CHIP_RAIL_HEIGHT = CHIP_HEIGHT;
 
@@ -72,8 +72,8 @@ export function ChipRail<T extends string>({
 // at all when it already is. Selection can change from outside the rail (an
 // import lands, a rename jumps to that category), and an active chip out of
 // sight makes the list below look unfiltered; a tapped chip half under an edge
-// fade reads as cut off. Pinning every selected chip to the left edge scrolled
-// away the neighbour the user was about to tap next, so the nudge is minimal.
+// fade reads as cut off. Pinning every selected chip to the left edge scrolls
+// away the neighbour the user is about to tap next, so the nudge is minimal.
 function Rail<T extends string>({
   value,
   children,

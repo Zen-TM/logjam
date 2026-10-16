@@ -30,11 +30,12 @@ export const config = {
   topoCdnBaseUrl:
     process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjamnsw.com",
   // Where Logjam Web lives: a friend invite link made here opens there.
-  // Required, with no default, so a dev build cannot hand out a link to prod.
+  // Required, with no default, so a dev build cannot hand out a link to prod
+  // (Guard: config.test.ts).
   webUrl: required("EXPO_PUBLIC_WEB_URL", process.env.EXPO_PUBLIC_WEB_URL),
 } as const;
 
-// Client-version discipline (Stage 0): every API request carries this header so
+// Client-version discipline: every API request carries this header so
 // the server can enforce a min-supported-version / forced-upgrade lever before
 // any stale build ships. package.json is the one declaration of the app version;
 // app.config.ts reads the same field (guard: versionAgreement.test.ts).

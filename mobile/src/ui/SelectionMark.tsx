@@ -9,8 +9,7 @@ import { Icon } from "./Icon";
  * It occupies EXACTLY an `IconButton`'s 40pt box, because it is what replaces
  * the row's ⋯ for the duration of the mode: a mark that sized itself would
  * change the row's height as the mode started, and the whole list jumps under
- * the finger that started it. Three screens had hand-rolled the same 40pt box
- * around the same 22pt glyph before this existed.
+ * the finger that started it.
  *
  * `selectable: false` draws the empty box and no circle — a row a group verb
  * cannot act on is not pickable, and an unticked checkbox that refuses every

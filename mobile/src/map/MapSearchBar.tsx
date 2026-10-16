@@ -3,22 +3,22 @@
 // It is ONE pill the whole time. Collapsed it is a circle exactly as tall as
 // the expanded bar, with the search glyph at its centre; tapping it grows the
 // circle rightwards into the full bar and the glyph never moves — the button
-// becomes the field rather than being replaced by one. (The previous version
-// swapped a 72pt round button for a full-width rounded rectangle, so the icon
-// jumped left and up and the two shapes had nothing in common.)
+// becomes the field rather than being replaced by one. Swapping a round button
+// for a full-width rounded rectangle would make the icon jump left and up,
+// disconnecting the two shapes.
 //
 // Locations come from Nominatim via `geocode`: 3-char minimum, 350 ms
 // debounce, tap a result to recentre. Logjam Web's MapSearchBox differs here:
 // it asks the geocoder only when the user picks "Search locations for …".
 //
 // IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
-// A box that could find Katoomba but not the place you saved last week was
-// answering the question nobody has standing in the bush; saved matches are
+// A box that can find Katoomba but not the place you saved last week answers
+// the question nobody has standing in the bush; saved matches are
 // ranked on the device (`localSearch.ts`), appear from the second keystroke
 // with no debounce and no request, and are listed ABOVE the places with their
 // kind's glyph and hue so the two are never confused for each other.
 //
-// PRIVACY: only the typed string leaves the app (shared/src/geocode.test.ts).
+// PRIVACY: only the typed string leaves Logjam GPS (shared/src/geocode.test.ts).
 // No saved place's name or coordinates is sent — the saved matches are the
 // reason they do not have to be — and results are not persisted.
 import { useEffect, useMemo, useRef, useState } from "react";

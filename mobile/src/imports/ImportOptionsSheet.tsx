@@ -5,11 +5,10 @@
 // ONE component for both, on the model of TrackOptionsSheet and for the same
 // reason: the actions have a single definition in saved/assetActions.ts, and an
 // import reached from the map must not be a lesser object than one reached from
-// Saved (DESIGN.md). Until this existed the map offered NOTHING at all — an
-// imported line was the one drawn thing on the map that could not be tapped.
+// Saved (DESIGN.md).
 //
 // Rename, Send a copy and the stats are sub-modes of THIS sheet rather than
-// second sheets (§6: never open a second sheet — swap the content), so no
+// second sheets (DESIGN.md: never open a second sheet — swap the content), so no
 // caller can be the surface that forgot one.
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
@@ -75,9 +74,9 @@ export function ImportOptionsSheet({
 
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // shipped twice: the route sheet opened straight into its share panel, and
-  // the options list became unreachable.
+  // set means the NEXT open lands inside it instead of on the verb list.
+  // Resetting ensures the next open lands on the verb list rather than inside
+  // an orphaned sub-mode.
   if (!visible && (renaming || sending || showingStats || attaching)) {
     setRenaming(false);
     setSending(false);

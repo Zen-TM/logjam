@@ -36,11 +36,9 @@ export type RegionDownloadProgress = {
  */
 export async function downloadProtomapsRegion(
   /**
-   * The QUEUE's job, id and label included. This used to mint its own id and
-   * take no label at all: the Saved list then showed the clip as "Offline map
-   * region" instead of the name the download screen had composed, and cancelling
-   * a still-QUEUED clip job asked `deleteAbandonedRegion(spec.id)` to delete a
-   * `<spec.id>.mbtiles` that could never exist under that id. One id, both ends.
+   * The QUEUE's job, id and label included, so the Saved list shows the
+   * name the download screen composed and cancelling a still-queued clip
+   * deletes under the matching id. One id, both ends.
    */
   spec: {
     id: string;

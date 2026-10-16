@@ -21,8 +21,8 @@ const resolve = (env: Record<string, string | undefined>) => {
 
 afterEach(() => vi.unstubAllEnvs());
 
-// LOGJAM_APP_VARIANT=dev builds an app that installs beside the real one, on a
-// phone that holds the user's real places. Anything it shares with the real app
+// LOGJAM_APP_VARIANT=dev builds an app that installs beside Logjam GPS, on a
+// phone that holds the user's real places. Anything it shares with Logjam GPS
 // (the application id, a URL scheme) lets one replace or answer for the other.
 describe("app variant", () => {
   // Mutation: make any dev-only field unconditional in app.config.ts.
@@ -79,7 +79,7 @@ describe("app variant", () => {
     ).not.toHaveProperty("googleServicesFile");
   });
 
-  // A typo that fell back to the real id would install over the real app.
+  // A typo that fell back to the real id would install over Logjam GPS.
   it("refuses a variant it does not know", () => {
     expect(() => resolve({ LOGJAM_APP_VARIANT: "development" })).toThrow(
       /LOGJAM_APP_VARIANT/,

@@ -1,11 +1,11 @@
 // What a given install can actually do right now — the single source of the
 // guest-mode gating matrix.
 //
-// The app runs in one of two account states. A **guest** has no Logjam account:
+// Logjam GPS runs in one of two account states. A **guest** has no Logjam account:
 // places, trips, waypoints, tracks and photos live only in the on-device
 // SQLite stores, the sync engine is never started, and everything that needs a
 // server is visibly disabled. A **linked** install has a Cognito account and
-// behaves as the app always has.
+// behaves as Logjam GPS always has.
 //
 // Two axes gate a feature, and they are not the same thing:
 //  - `needs-account`: no amount of signal will help; the user has to create or
@@ -49,7 +49,7 @@ export type Capability =
   | "inbox"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
   | "lidarOverlays"
-  /** GeoPDFs generated on the user's web account. A LOCAL pdf import is not this. */
+  /** GeoPDFs generated on the user's Logjam Web account. A LOCAL pdf import is not this. */
   | "accountGeoPdf"
   /** The Protomaps vector clip (POST /basemap/region-clip). Raster regions are NOT this. */
   | "vectorRegionDownload"
@@ -239,12 +239,6 @@ export function shareCapabilityStatus(
  * and deleting a field works with no account and with no signal. There is
  * therefore nothing left for this function to return, and it is kept only so
  * the decision has a place to be stated and a test to pin it.
- *
- * It used to return "Needs a connection" for a linked user, because the
- * definitions then lived on the user record and were shared with the web — a
- * list two surfaces could edit at once, with no per-field grain to merge on.
- * Moving them to rows is what removed that constraint.
- *
  * Undefined means "go ahead", to match `capabilityRowProps`' subtitle contract.
  */
 export function fieldDefsBlockedReason(

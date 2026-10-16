@@ -3,8 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-// Below 13.3.0 the Vulkan backend loses its device on resume and aborts the
-// app. The pin lives in app.json, which cannot carry a
+// Below 13.3.0 the Vulkan backend loses its device on resume and aborts
+// Logjam GPS. The pin lives in mobile/app.json, which cannot carry a
 // comment, so the floor is held here.
 describe("MapLibre native SDK floor", () => {
   const appJson = JSON.parse(
@@ -29,7 +29,7 @@ describe("MapLibre native SDK floor", () => {
     ).toBe("vulkan");
     expect(
       major > 13 || (major === 13 && minor >= 3),
-      "@maplibre/maplibre-react-native android.nativeVersion in app.json must stay at 13.3.0 or later: below it Vulkan loses its device on resume and the app aborts",
+      "@maplibre/maplibre-react-native android.nativeVersion in mobile/app.json must stay at 13.3.0 or later: below it Vulkan loses its device on resume and Logjam GPS aborts",
     ).toBe(true);
   });
 });

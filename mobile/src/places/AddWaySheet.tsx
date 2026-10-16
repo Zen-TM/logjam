@@ -1,17 +1,10 @@
 // "Add a way" — every way of filling ONE place's single route slot, in one
 // panel.
 //
-// It used to be the `kind === "track"` branch of MediaStrip's source sheet,
-// titled "Add a route", reachable only while the slot was EMPTY, and offering
-// three of the five things that can go in it. The place screen's own ⋯ then
-// offered a fourth path ("Replace with another route") that could only be
-// filled by a drawn route. So which sources existed depended on how you got
-// there, and replacing was narrower than adding.
-//
-// Now: one panel, rendered from the empty slot AND from the replace path, with
-// all five sources. "Way" is this codebase's umbrella word for route-or-track
-// in prose and labels — the `Route` and `Track` TYPES stay distinct
-// (mobile/CLAUDE.md).
+// One panel, rendered from the empty slot AND from the replace path, with all
+// five sources. "Way" is this codebase's umbrella word for route-or-track in
+// prose and labels — the `Route` and `Track` TYPES stay distinct
+// (mobile/AGENTS.md).
 //
 //   a route you drew   → the Route row is linked (Route.placeId)
 //   an import          → a COPY of its stored original is uploaded as media
@@ -223,8 +216,7 @@ export function AddWaySheet({
     // A picked file becomes an IMPORT and is then linked, rather than being
     // uploaded straight onto the place. One kind of file, one row, one place
     // it lives — it appears in Saved like every other import, survives being
-    // replaced here, and can be put on another place later. The old path
-    // uploaded place-only media that existed nowhere the user could see.
+    // replaced here, and can be put on another place later.
     fill("file", async () => {
       const record = await importVectorSource(asset.uri, asset.name);
       await linkStandaloneMediaLocal(record.id, placeId);
@@ -443,8 +435,8 @@ export function AddWaySheet({
                       const { name, pointCount } =
                         await trackActions(track).createRouteFrom!(placeId);
                       // RDP always throws points away; saying how many survived
-                      // is what stops the user concluding the app lost their
-                      // recording.
+                      // is what stops the user concluding Logjam GPS lost
+                      // their recording.
                       return `Saved “${name}” — ${pointCount} points — as this place's route.`;
                     })
                   }

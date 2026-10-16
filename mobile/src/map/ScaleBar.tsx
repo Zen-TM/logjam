@@ -26,7 +26,7 @@ export type ScaleBarHandle = {
  * layout — it is a native view outside this tree — so the only way it can sit
  * clear of the instruments is to be told how tall they are. That number has to
  * shrink when the user turns this off (MapScreen), or the compass floats above
- * a gap where the bar used to be.
+ * an empty gap when the bar is hidden.
  */
 export const SCALE_BAR_HEIGHT = Math.round(
   fontSize.xs * 1.35 + spacing(0.25) + 6 + spacing(0.25) + spacing(0.5),

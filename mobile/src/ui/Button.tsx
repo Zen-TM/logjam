@@ -41,8 +41,8 @@ type ButtonProps = {
   grow?: boolean;
 };
 
-// Mirrors the web button system (filled accent / outline accent / ghost —
-// MOBILE_DESIGN_BRIEF §7); other variants added as screens need them.
+// Mirrors Logjam Web's button system (filled accent / outline accent / ghost);
+// other variants added as screens need them.
 // Buttons are pill-shaped: the one rounded family shared with chips and pills.
 export function Button({
   label,
@@ -119,6 +119,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderWidth: 1,
     borderColor: theme.line,
     // A pill is never narrower than it is tall: a glyph-only button is a circle.
+    // Guard: pill.test.ts.
     minWidth: controlSize.lg,
   },
   compact: {

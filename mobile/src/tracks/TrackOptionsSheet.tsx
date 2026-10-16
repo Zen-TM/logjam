@@ -177,7 +177,7 @@ export function TrackOptionsSheet({
       if (!actions?.createRouteFrom)
         throw new Error("This track can't become a route.");
       // RDP always throws points away; saying how many survived is what stops
-      // the user concluding the app lost their recording.
+      // the user concluding Logjam GPS lost their recording.
       const { name, pointCount } = await actions.createRouteFrom(placeId);
       onInfo(
         `Saved “${name}” — ${pointCount} points — as ${placeName}'s route.`,
@@ -320,8 +320,8 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          {/* The same verb, word and glyph as the web's, first among the verbs
-              after the one that goes to the line. */}
+          {/* The same verb, word and glyph as Logjam Web's, first among the
+              verbs after the one that goes to the line. */}
           {actions.logTrip ? (
             <Row
               title={wayVerbLabel("logTrip", "gps")}
@@ -378,7 +378,7 @@ export function TrackOptionsSheet({
                 close();
                 actions.createRouteFrom?.().then(
                   // RDP always throws points away; saying how many survived is
-                  // what stops the user concluding the app lost their track.
+                  // what stops the user concluding Logjam GPS lost their track.
                   ({ name, pointCount }) =>
                     onInfo(`Saved “${name}” — ${pointCount} points.`),
                   (err: unknown) => {

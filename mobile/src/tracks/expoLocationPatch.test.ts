@@ -29,8 +29,7 @@ describe("expo-location patch", () => {
 
   // The patch is to KOTLIN SOURCE, and expo-location also ships a precompiled
   // AAR (`local-maven-repo/`) that Gradle links by default. Without this entry
-  // the build ignores the patched file completely — which is exactly how the
-  // first patched dev client on the Pixel still refused the unboost.
+  // the build ignores the patched file completely and links the unpatched AAR.
   it("is built from source, not from the precompiled AAR", () => {
     const packageJson = JSON.parse(
       readFileSync(join(__dirname, "../../package.json"), "utf8"),

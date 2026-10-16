@@ -12,10 +12,10 @@
 // saved routes, recorded tracks, nav line, place pins. The route being drawn
 // is deliberately unanchored and stays on top.
 
-/** Lowest place-pin layer, always mounted: everything but the pins goes below it. */
+/** Lowest place-pin layer, always mounted: everything but the pins goes below it. Guard: mobile/src/map/layerOrder.test.ts. */
 export const PIN_FLOOR = "shared-place-halos";
 
-/** Lowest saved-route layer, always mounted (RoutesLayer never unmounts). */
+/** Lowest saved-route layer, always mounted (RoutesLayer never unmounts). Guard: mobile/src/map/layerOrder.test.ts. */
 export const ROUTES_FLOOR = "saved-routes-casing";
 
 /**

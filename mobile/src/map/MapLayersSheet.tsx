@@ -1,10 +1,8 @@
 // "Map layers" — everything that decides what the map draws, in one sheet with
 // three tabs.
 //
-// The old version was one scroll through six stacked sections (basemap, offline,
-// topo overlays, imports, GeoPDFs, tracks) of hand-rolled rows. It answered
-// three unrelated questions in one column, so every one of them was a scroll
-// away from the others. The tabs are those three questions:
+// The three tabs answer three distinct questions without scrolling through a
+// stack of unrelated sections:
 //
 //   Basemap  — what is the map made of?
 //   Layers   — what is drawn on top of it?
@@ -14,8 +12,8 @@
 // in place. The rail is pinned, so switching tabs never scrolls the list you are
 // working in out of reach (DESIGN.md).
 //
-// The Layers tab is one row PER KIND, not per file: a phone with thirty tracks
-// and a dozen GeoPDFs made that tab a scroll of near-identical switches with no
+// The Layers tab is one row PER KIND, not per file: listing every track and
+// GeoPDF individually would produce a scroll of near-identical switches with no
 // way to turn a whole kind off.
 //
 // EVERY KIND IS ALWAYS LISTED, including the ones with nothing in them, and the
@@ -26,10 +24,10 @@
 // used), which is why it is rendered rather than hidden.
 //
 // NO PER-ITEM SWITCHES, and no disclosure — with one exception. Item visibility
-// answered a question nobody asks on the map ("this GeoPDF but not that one"),
-// and it cost every kind a chevron plus a stack of near-identical rows. The
-// per-item verbs it carried (rename, delete, show on map) all live in Saved,
-// which is where an inventory belongs. The exception is TOPO OVERLAYS: its
+// answers a question nobody asks on the map ("this GeoPDF but not that one"),
+// and would cost every kind a chevron plus a stack of near-identical rows.
+// Per-item verbs (rename, delete, show on map) live in Saved, which is where an
+// inventory belongs. The exception is TOPO OVERLAYS: its
 // "items" are five different LAYER TYPES (hillshade, vegetation, slope,
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
@@ -98,7 +96,7 @@ export type LayerToggleEntry = {
   /**
    * Live state worth a second line, and ONLY that: "2 not downloaded yet" on a
    * layer that is drawing less than its count. Never a description of what the
-   * layer is (DESIGN.md) — those are what this tab just lost.
+   * layer is (DESIGN.md).
    */
   note?: string;
   value: boolean;
@@ -270,7 +268,8 @@ function BasemapTab({
   return (
     <View style={styles.body}>
       {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
-          basemapMeta.ts (the catalog also carries the web-only "osm" raster). */}
+          basemapMeta.ts (the catalog also carries the Logjam Web-only "osm"
+          raster). */}
       {MOBILE_BASEMAPS.map((id) => {
         const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === id);
         // Fail loudly: an id the catalog doesn't know is a programming error.
@@ -285,18 +284,17 @@ function BasemapTab({
             <Row
               leading={<BasemapThumb basemapId={id} />}
               title={entry.name}
-              // Name + sample tile only. The blurbs were a sentence each on six
-              // rows the user scrolls past every time, and the thumbnail already
-              // says what the map looks like far better than the words did. The
-              // subtitle now carries STATE and nothing else — which is why the
-              // one that survives is the offline reason (DESIGN.md).
+              // Name + sample tile only. The thumbnail already shows what the
+              // map looks like without long text blurbs. The subtitle carries
+              // STATE and nothing else — the offline reason when unavailable
+              // (DESIGN.md).
               subtitle={unavailable ? "Needs a connection" : undefined}
               disabled={unavailable}
               onPress={() => onBasemapChange(id)}
               // No "Showing" pill: the selection is a state of the row, not a
               // label on it. A filled check on an accent-lit card says it at a
-              // glance, and a downloaded-region pill used to say "Offline" for a
-              // basemap of which one small area is on the phone.
+              // glance, avoiding an ambiguous "Offline" pill for a basemap of
+              // which only one small area is on the phone.
               right={
                 active ? (
                   <Icon idea="success" size={22} color={theme.accent} />
@@ -326,8 +324,8 @@ function BasemapTab({
 
 /**
  * One kind of layer: its glyph, how many exist, and a switch. No subtitle — the
- * count IS the state, and the sentence that used to sit there explained a thing
- * the user can see on the map behind the sheet (DESIGN.md).
+ * count IS the state, avoiding explaining things the user can see on the map
+ * behind the sheet (DESIGN.md).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
   const theme = useTheme();

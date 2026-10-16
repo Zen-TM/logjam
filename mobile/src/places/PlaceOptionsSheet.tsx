@@ -108,7 +108,7 @@ export function PlaceOptionsSheet({
   // THE sharing panel, the same one the place's detail screen renders — and
   // withheld on a place shared WITH this user, because re-sharing is the
   // owner's to do and the API refuses it. Memoised on the id: an object literal
-  // reloads the hook forever (mobile/CLAUDE.md, SharePanel).
+  // reloads the hook forever.
   const shareTarget = useMemo(
     () =>
       place && isOwner ? ({ kind: "place", placeId: place.id } as const) : null,
@@ -136,8 +136,7 @@ export function PlaceOptionsSheet({
 
   // The sub-modes reset when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // has shipped twice on the sibling sheets.
+  // set means the NEXT open lands inside it instead of on the verb list.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -160,7 +159,7 @@ export function PlaceOptionsSheet({
     targets: copyTargets,
     mode: copyMode ?? "copy",
     // No username reaches a mirrored row, so the confirms spell their own
-    // fallback — in both sentence positions. Passing "the owner" here is what
+    // fallback — in both sentence positions. Passing "the owner" here would
     // put a lowercase word at the start of a sentence on the device.
     friendName: null,
     busy: copyBusy,

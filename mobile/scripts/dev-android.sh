@@ -2,14 +2,14 @@
 #
 # One command to get the Logjam dev client running on a connected Android
 # device (or emulator). Idempotent — safe to re-run whenever the phone is
-# replugged, the app is force-stopped, or a reverse tunnel has died.
+# replugged, Logjam GPS is force-stopped, or a reverse tunnel has died.
 #
 #   ./scripts/dev-android.sh              # set up + launch, leave Metro to you
 #   ./scripts/dev-android.sh --emulator   # boot the AVD first (no phone needed)
 #   ./scripts/dev-android.sh --emulator --headless   # ...with no window
 #   ./scripts/dev-android.sh --metro      # ...and run Metro in the foreground
 #   ./scripts/dev-android.sh --build      # rebuild + reinstall the dev client
-#   ./scripts/dev-android.sh --logs       # tail the app's logcat instead
+#   ./scripts/dev-android.sh --logs       # tail Logjam GPS's logcat instead
 #
 # With a phone plugged in, prefer the phone: it is the only place GPS, real
 # cameras and the biometric prompt behave like they will in a place. --emulator
@@ -20,8 +20,8 @@
 #   1. Finds exactly one usable device, and explains the fix when it can't.
 #      An "unauthorized" device and a phone in MTP-only mode look identical
 #      from `npm start` — you just get a dev client that never connects.
-#   2. Reverses every port the app dials on localhost. .env points the app at
-#      127.0.0.1, which on the phone means THE PHONE, so without these the
+#   2. Reverses every port Logjam GPS dials on localhost. .env points Logjam GPS
+#      at 127.0.0.1, which on the phone means THE PHONE, so without these the
 #      API and the S3 emulator are silently unreachable — the symptom is an
 #      outbox that never drains, not an error.
 #   3. Installs the debug dev client if it is missing (or --build to rebuild).
@@ -189,7 +189,7 @@ say "Device: ${MODEL:-unknown} (Android ${RELEASE:-?}, $SERIAL)"
 # connection and returns nothing, yet `reverse --list` still shows it) would
 # survive a rerun: clear them first. A port with NOTHING listening on the host
 # is worth calling out, because the failure it produces in-app looks like a
-# bug in the app.
+# bug in Logjam GPS.
 adb -s "$SERIAL" reverse --remove-all >/dev/null
 for entry in "${PORTS[@]}"; do
   port="${entry%%:*}"
@@ -220,8 +220,8 @@ installed="$(adb -s "$SERIAL" shell pm list packages "$PACKAGE" | tr -d '\r')"
 if [ "$DO_BUILD" = true ]; then
   say "Rebuilding the debug dev client (this takes a few minutes)…"
   [ -d android ] || npx expo prebuild -p android
-  # RTK_DISABLED=1: see the note in mobile/CLAUDE.md — the RTK hook breaks the
-  # gradle wrapper's stdout handling on this host.
+  # RTK_DISABLED=1: see the note in mobile/AGENTS.md, Builds and verify — the RTK hook breaks the
+  # gradle wrapper's stdout handling on some Linux hosts.
   (cd android && RTK_DISABLED=1 ./gradlew :app:assembleDebug)
   installed=""
 fi

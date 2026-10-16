@@ -119,9 +119,7 @@ describe("routeSlotDisplaceConfirm", () => {
   });
 
   it("promises a displaced file is KEPT — it is unlinked, not deleted", () => {
-    // The whole point of linking rather than copying. This sentence used to
-    // say the file would be deleted and that can't be undone, because it was
-    // true: the place held a COPY and displacing it destroyed it.
+    // Displacing a file unlinks it; the underlying file in Saved is preserved.
     const confirm = routeSlotDisplaceConfirm("Claustral", {
       kind: "file",
       media: media("m1", "c1", GPX, "old.gpx"),

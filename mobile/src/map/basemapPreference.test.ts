@@ -21,8 +21,8 @@ describe("readBasemapPreference", () => {
     expect(readBasemapPreference()).toBe(DEFAULT_BASEMAP);
   });
 
-  it("falls back for an id mobile no longer offers", () => {
-    // "osm" was dropped from the mobile picker; an older build's pick must not
+  it("falls back for an id Logjam GPS does not offer", () => {
+    // "osm" is not in the Logjam GPS picker; an older build's pick must not
     // reach the resolver, which throws on an unknown basemap id.
     storedValue = "osm";
     expect(readBasemapPreference()).toBe(DEFAULT_BASEMAP);

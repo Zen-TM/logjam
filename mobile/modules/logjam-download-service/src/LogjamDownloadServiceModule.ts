@@ -5,8 +5,8 @@ import { AppRegistry } from "react-native";
 // the user started is running. What it is for and what it costs:
 // android/src/main/java/expo/modules/logjamdownloadservice/DownloadService.kt.
 //
-// Android only. Optional, so a build without it (iOS, a test) downloads exactly
-// as before: in the foreground, for as long as the process runs.
+// Android only. Optional, so a build without it (iOS, a test) downloads in
+// the foreground, for as long as the process runs.
 
 declare class LogjamDownloadServiceModule extends NativeModule<{
   /** Cancel was pressed on the notification. */

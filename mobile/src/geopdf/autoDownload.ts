@@ -111,13 +111,12 @@ export async function runGeoPdfAutoDownload(): Promise<void> {
         // The listed URL may have expired while this ran; re-presign.
         const fresh = await getGeoPdfJob(job.id);
         if (!fresh.downloadUrl) continue;
-        // A busy runner is NOT an attempt. `markHandled` used to run before
-        // `runGeoPdfImport`, which returns immediately when another import is
-        // in flight — so one unlucky overlap with a manual import put the job
-        // on the permanent skip list without ever having downloaded it, and no
-        // later foreground would try again for the life of the install.
-        // Checked immediately before the call, with no await in between: the
-        // runner claims its slot synchronously, so nothing can slip through.
+        // A busy runner is NOT an attempt. Running `markHandled` before
+        // `runGeoPdfImport` (which returns immediately when another import is
+        // in flight) would put the job on the permanent skip list without ever
+        // downloading it. Checked immediately before the call, with no await
+        // in between: the runner claims its slot synchronously, so nothing can
+        // slip through.
         if (isGeoPdfImportRunning()) return;
         // Marked BEFORE the attempt ITSELF, so a job whose import keeps failing
         // is tried once rather than on every foreground. The Saved tab can

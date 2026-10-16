@@ -84,10 +84,9 @@ describe("scrubStructure", () => {
     });
   });
 
-  // The rework moved every type-specific value into `fieldValues` — the seven
-  // grades included — and added `foreignFields`, which holds ANOTHER user's
-  // labels and values. A crash report carrying either would leak more than the
-  // notes key this list was written for.
+  // `fieldValues` holds type-specific values (grades included) and
+  // `foreignFields` holds another user's labels and values on copy. A crash
+  // report carrying either would leak private field data.
   it("censors a place's own field values and what arrived on a copy", () => {
     const input = {
       place: {

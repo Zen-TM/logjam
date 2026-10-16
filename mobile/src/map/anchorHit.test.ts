@@ -21,8 +21,8 @@ const ANCHORS: [number, number][] = [
 
 describe("pressIsOnAnchor", () => {
   it("catches the press that starts a drag", () => {
-    // The device repro: press-and-hold lands on an anchor, MLRN 11 forwards it
-    // to the map's onLongPress, and without this the map inserts a point there.
+    // Press-and-hold lands on an anchor: MLRN 11 forwards it to the map's
+    // onLongPress, and without this the map inserts a point there.
     expect(
       pressIsOnAnchor(ANCHORS, [150.4033, -33.5603], DEGREES_PER_PIXEL),
     ).toBe(true);
@@ -101,8 +101,8 @@ describe("dragIsTap", () => {
   const anchor = ANCHORS[0];
 
   it("reads a finger that wobbled a couple of DP as a TAP", () => {
-    // The operator's report: "they tap and accidentally drag a miniscule
-    // amount, so the delete option is never actually triggered."
+    // A minor wobble on tap must be treated as a tap rather than a drag, so
+    // the delete option is not suppressed.
     const wobble: [number, number] = [
       anchor[0] + DEGREES_PER_PIXEL * 2,
       anchor[1] - DEGREES_PER_PIXEL,

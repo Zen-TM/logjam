@@ -101,7 +101,7 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * `protomaps`, our own vector basemap, is not a choice here: it comes with
  * every area a signed-in user saves (`vectorClipFor`). It is a few megabytes
  * against tens for one raster, and the route and measure tools snap to it, so
- * leaving it optional meant a tool that quietly stopped working in the field.
+ * leaving it optional would mean a tool that quietly stops working in the field.
  */
 type SelectableId = OfflineBasemapId;
 const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
@@ -163,11 +163,9 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
 
 /**
  * The controls panel's height, fixed so the MAP never resizes under a frame the
- * user is mid-drag. Nothing inside it changes size any more: the "use mobile
- * data" toggle that used to appear and disappear with the connection is now a
- * dialog at the Save tap, and the warning moved onto the map. What is left —
- * the map-layer chips, the detail rail, the Save button — is always the same
- * shape, so the panel does not scroll.
+ * user is mid-drag. Its contents (the map-layer chips, detail rail, and Save
+ * button) have a fixed shape, the connection confirmation is a dialog at the
+ * Save tap, and warnings overlay the map, so the panel does not scroll.
  *
  * That includes the one line under the chips saying whether the detailed map
  * comes with the area: it is always one line, whatever it says.
@@ -291,9 +289,9 @@ export function RegionDownloadScreen({
       resolveMapSource(
         { kind: "basemap", basemapId: previewBasemap },
         // `artifacts: []` on purpose: the preview is the ONLINE map, not
-        // whatever this phone already holds. `cdnBaseUrl` is what the vector
-        // source's pmtiles:// URL is built from — empty, it resolved to an
-        // unfetchable archive path, which is why the vector map never drew.
+        // whatever this phone already holds. `cdnBaseUrl` builds the vector
+        // source's pmtiles:// URL — without it, it would resolve to an
+        // unfetchable archive path.
         {
           connectivity: "online",
           artifacts: [],
@@ -341,11 +339,11 @@ export function RegionDownloadScreen({
    *
    * MLRN 11's native getBounds is `mapLibreMap!!.projection.visibleRegion` — a
    * non-null assertion on a field that is null until the map is created. Asking
-   * on mount therefore raced the map: winning it gave a viewport, losing it
-   * threw a Kotlin NPE that React Native promotes to a HOST exception, which
+   * on mount therefore races the map: winning it gives a viewport, losing it
+   * throws a Kotlin NPE that React Native promotes to a HOST exception, which
    * tears down the whole React instance. That is not a JS error, so the root
-   * error boundary never sees it — the screen just goes blank and the app has
-   * to be killed and reopened. Observed as "save maps offline sometimes works".
+   * error boundary never sees it — the screen just goes blank and Logjam GPS has
+   * to be killed and reopened.
    *
    * Gated on `onDidFinishLoadingMap` below, which cannot fire before the map
    * exists. Every later reading comes off the region event instead (see
@@ -487,9 +485,9 @@ export function RegionDownloadScreen({
         // Asked HERE, at the tap, rather than from a subscription's last
         // value: the answer decides whether tens of megabytes go on someone's
         // plan, and the connection can change between the last event and the
-        // tap. It is also why there is no "use mobile data" toggle any more —
-        // a switch set before the walk out of Wi-Fi range answers a question
-        // about a connection the phone is no longer on.
+        // tap. It is also why there is no "use mobile data" toggle: a switch
+        // set before the walk out of Wi-Fi range answers a question about a
+        // connection the phone is no longer on.
         const connection = await NetInfo.fetch();
         if (connection.isConnected === false) {
           Alert.alert(
@@ -519,11 +517,9 @@ export function RegionDownloadScreen({
           });
           if (!allowCellular) return;
         }
-        // The screen computes and shows a size estimate and then never compared
-        // it to the space available. On a full phone the SQLite insert fails
-        // mid-batch and the job reports "That didn't finish. Try again." — no
-        // hint that the phone is full, and nothing reclaimed. Check before
-        // starting; the p90 is what actually lands, so that is what has to fit.
+        // Check space before starting: on a full phone the SQLite insert would
+        // fail mid-batch and report a generic failure with nothing reclaimed.
+        // The p90 estimate is what actually lands, so that is what has to fit.
         //
         // This covers the RASTER pyramids only — `p90Bytes` has no entry for
         // the vector clip, whose size the server reports at request time. That
@@ -584,12 +580,11 @@ export function RegionDownloadScreen({
           eyebrow="Offline maps"
           title="Save maps offline"
           // TWO stats, equal weight, one line — the two things the decision is
-          // actually made on. The tile count and the p90 spread were the third
-          // and fourth, they overflowed the line, and neither changes what the
-          // user does next. The hero carries no warning slot at all now (the
-          // only one left is the chip over the map), which is what keeps its
-          // height fixed: a band that appeared and cleared resized the map
-          // under a frame the user was already dragging.
+          // actually made on. Showing additional stats would overflow the
+          // line without changing what the user does next. The hero carries no
+          // warning slot (warnings overlay the map), keeping its height fixed
+          // so the map does not resize under a frame the user is actively
+          // dragging.
           value={
             job && job.totalTiles > 0 ? `≈ ${formatBytes(job.meanBytes)}` : "—"
           }
@@ -656,8 +651,8 @@ export function RegionDownloadScreen({
           />
         ) : null}
         {/* The screen's ONLY warning, over the map rather than in the hero:
-            the hero's band was vertical space the map wanted, and the three
-            cap reasons it carried were one message wearing three hats. */}
+            a hero band would take vertical space the map needs, and the three
+            cap reasons represent one message wearing three hats. */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
             <Notice icon="warning" tone="warning">
@@ -773,8 +768,6 @@ export function RegionDownloadScreen({
             returnKeyType="done"
             onSubmitEditing={closeNaming}
           />
-          {/* The honesty the progress screen's back-press warning used to
-              carry, in the one place every download now passes through. */}
           <Text style={styles.namingNote}>
             Downloads keep going after you leave Logjam GPS. Watch them in
             Saved.
@@ -800,10 +793,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   // The one warning, at the TOP of the map — same overlay treatment as the
   // hint along the bottom, in the warning colour. Over the map rather than in
   // the hero so that it costs no layout: the hero and the panel are what the
-  // map is measured against, and a band appearing or clearing there resized
-  // the map mid-gesture and moved the frame the user was dragging.
+  // map is measured against, and a band appearing or clearing there would resize
+  // the map mid-gesture and move the frame the user is dragging.
   // Clear of the hero, which overlaps the map's top strip: at two lines the
-  // pill used to slide up behind it and lose its first line. `HERO_OVERLAP`
+  // pill would slide up behind it and lose its first line. `HERO_OVERLAP`
   // is that strip; the rest is air.
   mapWarning: {
     position: "absolute",
@@ -829,8 +822,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(1),
     gap: spacing(1),
   },
-  // Horizontally scrolling, like the detail rail: four chips wrapped onto a
-  // second line and took the height straight out of the map.
+  // Horizontally scrolling, like the detail rail: wrapping chips onto a
+  // second line would take the height straight out of the map.
   // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },

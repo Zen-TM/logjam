@@ -11,17 +11,16 @@
 // so it survives offline, patching the cache first for an immediate read state.
 //
 // A notification that REFERS to something is a way in to that thing: tapping a
-// place share opens the place. Previously every tap did nothing but mark the
-// row read, which made the inbox a dead end you had to navigate out of by hand.
+// place share opens the place, rather than leaving the inbox a dead end you have
+// to navigate out of by hand.
 //
 // A notification that ASKS something is answered HERE, in the row (§5's inline
 // action slot): a friend request and a file a friend sent both carry accept /
 // decline under the row. Which pair a notification carries, and every word of
 // the copy, is `notifications/notificationActions.ts` — the screen renders what
-// that returns and knows nothing about friendships or sends. This is what
-// replaced the standalone "Received files" screen (deleted 2026-08-30): an
-// accepted file becomes an ordinary Saved import through the same pipeline any
-// picked file goes through, so it never needed a page of its own.
+// that returns and knows nothing about friendships or sends. An accepted file
+// becomes an ordinary Saved import through the same pipeline any picked file
+// goes through, so it does not need a page of its own.
 //
 // PRIVACY: rows show the server-resolved label (which may include a place NAME —
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
@@ -142,8 +141,9 @@ type NotificationsState = {
 // cache surfaces the error.
 //
 // `blocked` is the guest gate: a guest has no inbox to fetch, and neither the
-// cache read nor the fetch may fire (mobile/CLAUDE.md — a guaranteed 401 per
-// screen open). It is a parameter rather than a hook read so this stays one
+// cache read nor the fetch may fire (mobile/AGENTS.md, guard:
+// mobile/src/auth/capabilities.test.ts — a guaranteed 401 per screen open).
+// It is a parameter rather than a hook read so this stays one
 // decision made by the screen.
 function useNotifications(blocked: boolean): NotificationsState {
   const [notifications, setNotifications] = useState<TNotification[] | null>(
@@ -260,8 +260,7 @@ export function NotificationsScreen({
   const refetch = query.refetch;
   // ONE toast channel for every action outcome (DESIGN.md): an inline banner
   // reflows the list under the user's thumb and then lingers with no owner, and
-  // on a scrolled list it lands off screen entirely — which is how accepting a
-  // file came to look like it did nothing.
+  // on a scrolled list it lands off screen entirely.
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
     (text: string, tone: ToastMessage["tone"] = "info") => {
@@ -523,10 +522,10 @@ export function NotificationsScreen({
   // --- The two group verbs, over the current selection ----------------------
 
   // The selection SURVIVES this one. Marking is not destructive and the rows
-  // are all still there, so dropping the picks made the button feel like it had
-  // done something more than it had — and left the obvious follow-up (mark
-  // these, now delete them) needing the whole selection built again. Delete
-  // still clears, because those rows are gone.
+  // are all still there, so dropping the picks would make the button feel like
+  // it had done something more than it had — leaving the obvious follow-up
+  // (mark these, now delete them) needing the whole selection built again.
+  // Delete clears because those rows are gone.
   const applyReadAction = useCallback(() => {
     if (!readAction) return;
     void (async () => {
@@ -641,9 +640,9 @@ export function NotificationsScreen({
         if (survives) {
           // Answering a notification IS reading it. Both patches go to the
           // CACHE and there is deliberately no refetch: `GET /notifications` is
-          // the authority on `read`, so re-fetching here raced the outbox push
-          // and wrote `read: false` straight back over the mark-read. The row
-          // now settles in place — same position, "Saved", no longer New.
+          // the authority on `read`, so re-fetching here would race the outbox
+          // push and write `read: false` straight back over the mark-read. The
+          // row settles in place — same position, "Saved", no longer New.
           await patchCachedPayload(n.id, { fileSendStatus: "accepted" });
           await markRead(n);
         } else {
@@ -937,10 +936,10 @@ export function NotificationsScreen({
       <Hero
         eyebrow={INBOX.title}
         // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (shared/DESIGN.md §2). "Something new" was that answer rounded to a boolean —
-        // it said the same words for one notification and for forty, and read as
-        // a marketing line rather than a count. The tally below it stays the
-        // whole inbox, so the two lines never restate each other.
+        // that did (shared/DESIGN.md §2), rather than a boolean marketing line
+        // that says the same words for one notification and for forty. The
+        // tally below it stays the whole inbox, so the two lines never restate
+        // each other.
         title={inboxHeroTitle(unreadCount, notifications.length)}
         onBack={onBack}
         value={String(tally.total)}
@@ -1109,7 +1108,7 @@ function keyExtractor(item: TNotification): string {
 }
 
 // Memoised, with a callback that takes the item rather than closing over it —
-// §9, the whole reason the Logs list stopped re-rendering every mounted cell.
+// so the list does not re-render every mounted cell on change (§9).
 const NotificationRow = memo(function NotificationRow({
   item,
   batch,
@@ -1230,17 +1229,15 @@ const NotificationRow = memo(function NotificationRow({
       // are not. A selected row lights the edge too, so it never looks like the
       // selection has un-marked it.
       // A member of an expanded batch is INDENTED, so the header above it reads
-      // as what the indented rows belong to. Under unread-first sorting the
-      // members were pulled out of wherever they had drifted to and re-inserted
-      // beneath the header (`collapseBatches`), and without the indent there is
-      // nothing on screen saying that is what happened.
+      // as what the indented rows belong to. Members are grouped beneath the
+      // header (`collapseBatches`), and the indent makes clear on screen that
+      // they belong together.
       style={[
         !item.read || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle,
         ...(member ? [styles.batchMember] : []),
       ]}
-      // INSIDE the card. Sitting below it, the pair read as a caption for the
-      // next notification down — which is how a "Download again" got pressed
-      // for a file the user had just turned down.
+      // INSIDE the card. Sitting below it, the pair would read as a caption for
+      // the next notification down.
       footer={
         target ? (
           <>
@@ -1378,7 +1375,7 @@ const BatchRow = memo(function BatchRow({
             <View style={styles.actions}>
               {/* THE COUNT IS THE PROGRESS INDICATOR, so neither of these
                   passes `loading`: `Button` swaps the whole label out for a
-                  spinner, which threw away the one thing worth showing — a
+                  spinner, which would discard the one thing worth showing — a
                   batch accept is a download queue, and "Saving 2 of 3" is the
                   difference between waiting and wondering whether it hung.
                   `actionsDisabled` covers the run, so the pair still dims and
@@ -1496,11 +1493,11 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(2),
   },
   // Unread is an accent EDGE, not an accent border all round — that border is
-  // `Row`'s `selected` treatment, and while a multi-select is running the two
-  // states were drawn the same way on the same card. A left edge reads as a
-  // property of the row (and survives a row that is BOTH unread and picked,
-  // which is most of them), the way an unread marker does in any inbox. Both
-  // states declare the same WIDTH — see the note at the call site.
+  // `Row`'s `selected` treatment; otherwise, while a multi-select is running
+  // the two states would be drawn the same way on the same card. A left edge
+  // reads as a property of the row (and survives a row that is BOTH unread and
+  // picked, which is most of them), the way an unread marker does in any
+  // inbox. Both states declare the same WIDTH — see the note at the call site.
   rowEdgeAccent: { borderLeftWidth: 3, borderLeftColor: theme.accent },
   rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: theme.line },
   // One step in, so an expanded batch's rows read as belonging to the header
@@ -1513,7 +1510,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
-  // what it replaced.
+  // that box.
   actions: { flexDirection: "row", gap: spacing(1) },
   actionHint: {
     ...muted(theme, textRole.meta),

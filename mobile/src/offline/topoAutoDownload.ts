@@ -1,5 +1,5 @@
 // "Auto-download finished LiDAR topos" — the same feature as the GeoPDF one
-// (geopdf/autoDownload.ts), over the overlays a topo job renders.
+// (src/geopdf/autoDownload.ts), over the overlays a topo job renders.
 //
 // WHEN IT CHECKS: on app start, on return to the foreground, and when a
 // connection is regained — the three moments the sync engine uses, and never a

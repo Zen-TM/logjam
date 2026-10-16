@@ -9,11 +9,10 @@ import {
   regionRejectedLine,
 } from "./regionJobStatus";
 
-// Two regressions, one file. (1) `Done` was gated on ready|failed, so a job
-// parked by a provider 403/429 — which nothing auto-resumes, by design — left
-// the button disabled forever on a screen whose only other exits were hardware
-// back or Stop (which deletes the tiles). (2) Pause was offered on the vector
-// clip, where it does nothing at all.
+// (1) A job parked by a provider 403/429 — which nothing auto-resumes, by
+// design — must not leave Done disabled on a screen whose only other exits are
+// hardware back or Stop (which deletes tiles). (2) Pause is not offered on the
+// vector clip, where it does nothing.
 
 const job = (state: RegionJob["state"], taskKind = "tile-pyramid"): RegionJob =>
   ({
@@ -64,8 +63,7 @@ describe("pause", () => {
 });
 
 // The server says which of its two refusals this is, in a sentence for the
-// user; the phone used to look for "too large" inside it. Mutation: return
-// "Pick an area inside NSW." whatever `detail` holds.
+// user. Mutation: return "Pick an area inside NSW." whatever `detail` holds.
 describe("regionRejectedLine", () => {
   it("shows the server's sentence as it is", () => {
     expect(

@@ -1,12 +1,12 @@
-// Cognito auth hook — port of the web frontend/src/useAuth.ts with the mobile
-// offline-session semantics from MOBILE_APP_PLAN Stage 1:
+// Cognito auth hook — port of the web frontend/src/useAuth.ts with mobile
+// offline-session semantics:
 //
 //  - Auth gates the API, not local data. After first successful login the
 //    local identity (sub/username) persists; the app cold-starts into that
 //    account with zero network.
 //  - NEVER auto-sign-out on token expiry or unreachability. Re-auth is forced
 //    only when Cognito actively rejects the refresh while online
-//    (setSessionRejectedHandler ← classifySessionError).
+//    (setSessionRejectedHandler ← classifySessionError, Guard: sessionErrors.test.ts).
 //  - Tokens refresh proactively on app-foreground-while-online so a trip
 //    starts with a fresh runway.
 //  - Local data is wiped on explicit sign-out or when a DIFFERENT user signs
@@ -99,9 +99,9 @@ export function useAuth() {
   // first render's state rather than a "loading" frame an effect replaces.
   const [state, setState] = useState<AuthState>(() => {
     // Fake auth has no session to restore, but a recorded guest choice is
-    // still this device's answer. Ignoring it made guest mode UNREACHABLE in
-    // local dev — the one environment it can be exercised in — and would have
-    // thrown a guest into an account on their next cold start. Nothing
+    // still this device's answer. Ignoring it would make guest mode
+    // unreachable in local dev — the one environment it can be exercised in —
+    // and would throw a guest into an account on their next cold start. Nothing
     // recorded still means "straight in", so the dev entry flow is unchanged
     // for everyone who never asked for guest mode.
     if (config.authMode === "fake") {
@@ -215,7 +215,7 @@ export function useAuth() {
         if (!sub) {
           // No sub, no way to tell whose data is on this phone — and no
           // identity to persist, so the next sign-in would skip this check as
-          // well. This used to fall through and sign in blind.
+          // well; falling through would sign in blind.
           await amplifySignOut().catch(console.error);
           setError(
             "Sign-in didn't return an account identity, so it was cancelled. Please try again.",
@@ -232,11 +232,10 @@ export function useAuth() {
           // guest — see `signInNeedsWipe`.
           //
           // The push binding goes first, while the DEPARTING user's session
-          // is still what apiFetch will send: without this the device stayed
-          // bound to their account, and re-binding depended entirely on the
+          // is still what apiFetch will send: without this the device stays
+          // bound to their account, and re-binding depends entirely on the
           // arriving user granting notifications — decline the prompt, and
-          // user A's notifications keep landing on this phone. (Sign-out has
-          // always unregistered; this branch never did.)
+          // user A's notifications keep landing on this phone.
           await unregisterPushNotifications();
           const wiped = await wipeAllLocalData();
           if (wiped.failed.length > 0) {
@@ -437,9 +436,9 @@ export function useAuth() {
    *
    * Keyed on the recorded entry choice, NOT on the auth state, because the
    * landing screen renders for both `chooser` and `signIn` and the two are the
-   * same screen: keying on the state offered "Back" to anyone who reached
-   * sign-in from the sign-up form, and Back went to `chooser`, which IS that
-   * screen — a button whose only visible effect was to relabel itself.
+   * same screen: keying on the state would offer "Back" to anyone who reached
+   * sign-in from the sign-up form, and Back goes to `chooser`, which IS that
+   * screen — a button whose only visible effect would be to relabel itself.
    *
    * A guest linking an account is the one case where Back means something: it
    * returns them to their app, with their data. Everyone else has somewhere to

@@ -185,9 +185,8 @@ describe("capabilityRowProps", () => {
 
 // Custom fields are deliberately NOT in the union above, on EITHER axis:
 // definitions are rows in the local mirror written through the outbox, so
-// nothing about them needs an account or a connection. This test is what stops
-// a gate quietly coming back — it used to block a linked user offline, when an
-// account's list lived on the user record and was shared with the web.
+// nothing about them needs an account or a connection. This test stops a
+// gate quietly coming back.
 describe("fieldDefsBlockedReason", () => {
   it("never blocks anyone, in any combination", () => {
     for (const accountState of ["guest", "linked"] as const) {

@@ -1,11 +1,11 @@
 // "Delete account" ends the account in both places it lives: our database and
 // Cognito, which holds the sign-in (email and password).
 //
-// Logjam GPS used to stop after the first, so the sign-in outlived an account
-// the screen said was gone. The order matches Logjam Web
+// Both must be deleted or the sign-in outlives an account the screen reported
+// gone. The order matches Logjam Web
 // (frontend/src/components/dialogs/DeleteAccountDialog.tsx): our own record
 // first, because a Cognito user with no account row can still sign in and be
-// repaired, where the reverse cannot.
+// repaired, where the reverse cannot (Guard: deleteAccount.test.ts).
 import { deleteUser } from "aws-amplify/auth";
 
 import { apiFetch } from "../api/apiFetch";

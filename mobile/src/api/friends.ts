@@ -1,5 +1,5 @@
 // Friends + per-place sharing — typed ports of the authed API (api/src/routes/
-// friends.ts, api/src/routes/sharing.ts). Online-only by design (Stage 8): the
+// friends.ts, api/src/routes/sharing.ts). Online-only by design: the
 // mirror already syncs the RESULTING friendships/shares/tombstones offline, but
 // the management actions themselves are not field use cases, so they hit REST
 // directly rather than routing through the outbox.
@@ -116,7 +116,7 @@ export function getFriendShares(friendshipId: string): Promise<FriendShares> {
  * how a multi-select of 3 out of 11 revokes 3.
  *
  * OMITTING IT MEANS EVERYTHING, which is the endpoint's older contract and is
- * NOT what any screen here wants: this app always knows which rows it is
+ * NOT what any screen here wants: Logjam GPS always knows which rows it is
  * acting on, and "all" is just the case where the user selected them all. The
  * parameter is therefore required.
  */

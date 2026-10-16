@@ -2,14 +2,14 @@
 //
 // MapLibre's zoom gestures are off for the whole of follow mode
 // (`zoomEnabled={followMode === "off"}` in MapScreen) because this screen
-// drives the pinch itself — and that took double-tap-to-zoom with it, since it
+// drives the pinch itself — which disables double-tap-to-zoom as well, since it
 // is one of MapLibre's zoom gestures rather than a separate press handler.
-// Handing zoom back is not an option (two drivers on the same two fingers is
-// what made follow mode let go mid-pinch — see useMapPinchGesture), so the
+// Handing zoom back is not an option (two drivers on the same two fingers causes
+// follow mode to release mid-pinch — see useMapPinchGesture), so the
 // gesture is recognised here instead.
 //
-// Pure and separate so the rule is testable without a device, same as
-// useMapPinchGesture's maths and heading.ts.
+// Pure and separate so the rule is testable without a device (doubleTap.test.ts),
+// same as useMapPinchGesture's maths and heading.ts.
 
 /**
  * Longest gap between the two taps. Android's own `ViewConfiguration`
@@ -48,16 +48,16 @@ export function isDoubleTap(
 /**
  * The double-tap zoom ramp, in course-up.
  *
- * A single 200 ms `setCameraStop` (one zoom, one centre) was the original
- * shape, and it visibly translated the map: MapLibre interpolates centre
- * LINEARLY between the two stops while zoom moves EXPONENTIALLY (metres per
- * pixel halves per level), and course-up's centre is offset from the fix by
- * an amount that itself depends on zoom (`povCameraCenter`), so the two
- * endpoints' centres differ by a few hundred metres and the marker slid
- * across the screen and back. Stepping the zoom in short ticks — recomputing
- * the offset centre at each intermediate zoom, same as `tickHeading` steps
- * the compass — confines that mismatch to one tick's travel instead of the
- * whole gesture, which is what holds the marker still.
+ * A single 200 ms `setCameraStop` (one zoom, one centre) would visibly
+ * translate the map: MapLibre interpolates centre LINEARLY between the two
+ * stops while zoom moves EXPONENTIALLY (metres per pixel halves per level),
+ * and course-up's centre is offset from the fix by an amount that itself
+ * depends on zoom (`povCameraCenter`), so the two endpoints' centres differ
+ * by a few hundred metres and the marker would slide across the screen and
+ * back. Stepping the zoom in short ticks — recomputing the offset centre at
+ * each intermediate zoom, same as `tickHeading` steps the compass — confines
+ * that mismatch to one tick's travel instead of the whole gesture, holding
+ * the marker still.
  *
  * The ramp is also the ONLY camera writer while it runs: the heading ticker
  * stands down for its duration and the ramp's own stops carry the bearing. Two
@@ -65,14 +65,11 @@ export function isDoubleTap(
  * bearing-only stream interleaved with a zoom-only one is two mechanisms
  * fighting over the same camera.
  *
- * That was necessary and not sufficient: making the ramp the only writer still
- * left it ANIMATING each step, and an animated stop per tick cancels the ease
- * in flight and restarts a new one from wherever it had reached — a restart
- * every tick, which on a real device still read as jitter. The ramp now jumps
- * the camera per FRAME with `duration: 0`, which is how the pinch has always
- * driven the same two properties smoothly (`useMapPinchGesture`): with no
- * animation there is nothing to cancel. There is no tick constant any more —
- * the display's frame clock is the cadence.
+ * The ramp jumps the camera per frame with `duration: 0` (matching
+ * `useMapPinchGesture`): an animated stop per tick would cancel the ease
+ * in flight and restart a new one from wherever it had reached, reading as
+ * jitter on device. With `duration: 0` there is no animation to cancel,
+ * and the display's frame clock provides the cadence.
  */
 export const ZOOM_RAMP_MS = 200;
 

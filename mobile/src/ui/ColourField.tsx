@@ -23,6 +23,7 @@ const CELL = 48;
  * from that disc and closed by a choice, the ×, or a press outside it: never
  * an inline row of swatches pushing the form around it. The one kit component
  * for it; a screen that needs a colour from a palette uses this.
+ * Guard: colourField.test.ts.
  *
  * The colour's NAME is the disc's accessible name ("Colour: Teal"): the disc
  * shows the colour, so words beside it would say the same thing twice.

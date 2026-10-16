@@ -1,8 +1,7 @@
-// The crash-report question, asked ONCE, once the user is actually in the app —
+// The crash-report question, asked ONCE, once the user is in Logjam GPS —
 // for a guest and for a signed-in user alike (App.tsx mounts it beside
-// AppShell). It used to be a toggle on the entry screen, where it competed with
-// the one decision that screen exists for and was answered by people who had
-// not yet seen the app they were consenting on behalf of.
+// AppShell), so users decide after seeing the application rather than during
+// initial entry.
 //
 // The guarantee it inherits is unchanged (see crashReportPreference.ts):
 // `initSentry()` no-ops until the question is answered, the default is OFF, and
@@ -11,7 +10,7 @@
 // Settings → Privacy and security is where it changes afterwards. No install is
 // exempt: one that already has a stored identity is asked too.
 //
-// A sheet rather than an `Alert`: DESIGN.md keeps `Alert` for destructive
+// A sheet rather than an `Alert`: shared/DESIGN.md keeps `Alert` for destructive
 // confirms, and this is a two-option question with copy that is the point.
 // Dismissing it (backdrop, handle, back gesture) is "no consent" and stores the
 // off, because a consent request that is walked away from has been declined.

@@ -1,8 +1,8 @@
 // Half-written region files with no job in the queue, as ONE row per area.
 //
-// A run writes a file per basemap (plus the DEM), all sharing a `groupId`. The
-// Saved screen listed each file, so one interrupted area showed as three rows
-// under the same name. The user asked for an area; the files are its parts.
+// A run writes a file per basemap (plus the DEM), all sharing a `groupId`.
+// Grouping presents the area as one row rather than one row per component file.
+// The user asked for an area; the files are its parts.
 import type { UnfinishedRegion } from "./regionMbtiles";
 
 export type UnfinishedRegionGroup = {

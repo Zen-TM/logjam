@@ -152,7 +152,7 @@ describe("vectorImportActions exports", () => {
   });
 
   it("offers GeoJSON only when no original was kept", () => {
-    // A row from before originals were stored. It must still export something
+    // When no original was retained, it must still export GeoJSON
     // rather than showing a button that reads back a file that isn't there.
     const titles = vectorImportActions(imported(null)).exports?.map(
       (option) => option.title,
@@ -280,8 +280,8 @@ describe("the share / send-a-copy verb matrix", () => {
     for (const sourcePath of [
       "/imports/i1-source.gpx",
       "/imports/i1-source.kml",
-      // GeoJSON joined TRACK_MIME_TYPES when standalone imports became media —
-      // a place's way may be any format an import may be.
+      // GeoJSON is an accepted track format: a place's way may be any format
+      // an import may be.
       "/imports/i1-source.geojson",
       // No bytes on this phone at all: a file that synced from another device
       // and has not been downloaded here. Linking is a row change, so there is

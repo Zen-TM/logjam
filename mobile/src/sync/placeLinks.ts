@@ -6,8 +6,8 @@
 // rewrite, in two places (the server tombstone and the local delete) that must
 // not diverge.
 //
-// Place↔place links are NOT here: they became rows of their own
-// (`place_links`) in the phase 1c fold, so the cascade deletes them outright.
+// Place↔place links are NOT here: they are rows of their own
+// (`place_links`), so the cascade deletes them outright.
 //
 // Pure and mobile-local: this is the shape of the MIRROR's columns, not
 // business logic the web client shares.
@@ -22,7 +22,8 @@ function parseArray(raw: string | null): unknown[] | null {
     return Array.isArray(parsed) ? parsed : null;
   } catch {
     // Unparseable link column: leave it alone rather than replacing the
-    // user's row with a guess. Never log it — it names places.
+    // user's row with a guess. Never log it — it names places
+    // (mobile/src/sentry/scrubEvent.test.ts).
     return null;
   }
 }

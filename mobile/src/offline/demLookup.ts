@@ -16,7 +16,7 @@
 // indices are a coarse location (a z13 tile is ~4.9 km across). Nothing here
 // logs either — an unreadable region or a failed fetch is reported as "no
 // height", by returning nulls, and a fetch failure is deliberately NOT logged
-// because the URL carries the tile indices.
+// because the URL carries the tile indices. Guard: mobile/src/sentry/scrubEvent.test.ts.
 //
 // The network path asks the source's public tile host directly, which is the
 // same host a region download already fetches from, and it needs no account. It is the LAST resort, not the first: `useElevationProfile`
@@ -27,7 +27,7 @@
 // for a deployed API too old to have the route.
 //
 // What it reveals when it does run: WHEN you looked, and a ~4.9 km cell.
-// Accepted deliberately (operator decision, 2026-08-18) in exchange for
+// Accepted deliberately (operator decision) in exchange for
 // elevation outside saved regions; the local hit is tried first and tiles are
 // cached, so a session in one area is one request. The map's offline-only mode
 // suppresses it entirely.
@@ -125,7 +125,7 @@ const TILE_FETCH_TIMEOUT_MS = 10_000;
  * Over the cap the uncovered part simply has no height from this source,
  * which is a state the profile already renders.
  *
- * ponytail: fixed cap, no queue. Raise it if real routes turn out to straddle
+ * Fixed cap, no queue. Raise it if real routes turn out to straddle
  * more than this.
  */
 const MAX_TILES_PER_FETCH_Z13 = 6;

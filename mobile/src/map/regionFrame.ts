@@ -195,6 +195,6 @@ export function defaultFrameInsets(size: {
  * this screen plans against slippy-tile zooms (256-based), the opposite
  * convention from a MapLibre `camera.zoom` — see that file's header for why
  * a second copy of this formula is how the convention split stops being
- * discoverable (MMO-001/MMO-003).
+ * discoverable.
  */
 export { tileMetersPerPixel as metresPerPixel } from "./scaleBar";

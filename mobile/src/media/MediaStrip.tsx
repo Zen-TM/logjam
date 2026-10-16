@@ -45,26 +45,26 @@ import { MediaViewer } from "./MediaViewer";
  * Not in `src/ui`: it owns picker permissions, file copying and outbox writes,
  * so it is a feature component that happens to be shared, not a kit primitive.
  *
- * Offline-first (§7.1/§7.3): a pendingUpload row renders immediately from its
+ * Offline-first: a pendingUpload row renders immediately from its
  * local copy and carries an "Uploading…" badge; synced thumbs come from the
  * eager offline cache. Tapping opens it, long-press deletes after a confirm.
  * Adding queues through the outbox, so every source works with no signal.
  *
  * Sources live in a sheet rather than an Alert: there are five, they need
  * glyphs, one needs a sub-step (which recorded track), and Android's Alert caps
- * at three buttons — which is why "Take photo" used to be unreachable.
+ * at three buttons (a sheet avoids the button count ceiling).
  *
  * PRIVACY: a photo is location evidence and a recorded track IS precise
  * location history. Nothing here leaves the device except through the outbox's
  * authed upload; the error paths carry no filenames, place names or
- * coordinates.
+ * coordinates. Guard: mobile/src/sentry/scrubEvent.test.ts.
  */
 
 /**
  * Copy a just-captured file into the phone's gallery, if the user asked for
  * that (`galleryPreference.ts`).
  *
- * WRITE-ONLY permission: nothing in this app reads the gallery — the library
+ * WRITE-ONLY permission: nothing in Logjam GPS reads the gallery — the library
  * picker is expo-image-picker's own, with its own grant — so this asks for the
  * smallest scope that can do the job.
  *
@@ -75,8 +75,8 @@ import { MediaViewer } from "./MediaViewer";
  * expo remembers `canAskAgain`, and the switch in Settings is where someone who
  * wants this goes back to.
  *
- * PRIVACY: the file leaves app-private storage here and lands somewhere this
- * app no longer controls. That is the whole content of the preference, and why
+ * PRIVACY: the file leaves app-private storage here and lands somewhere Logjam
+ * GPS no longer controls. That is the whole content of the preference, and why
  * this function is never called without checking it.
  */
 async function saveToGalleryIfWanted(uri: string): Promise<void> {
@@ -250,9 +250,9 @@ export function MediaStrip({
               });
       } catch (err) {
         // launchCameraAsync REJECTS when CAMERA is denied (its own native
-        // ensureCameraPermissionsAreGranted), so a denial used to close the
-        // sheet and do nothing at all, forever. READ the status here — don't
-        // ask for it, per the comment above.
+        // ensureCameraPermissionsAreGranted), so reading the status here
+        // prevents closing the sheet without feedback. READ the status here —
+        // don't ask for it, per the comment above.
         if (source === "camera") {
           const permission = await ImagePicker.getCameraPermissionsAsync();
           if (!permission.granted) {
@@ -434,8 +434,8 @@ export function MediaStrip({
           if (!job) return;
           setPending(null);
           // The job is a picker flow that can reject (a denied camera, a
-          // document picker that failed): unhandled here, it was an unhandled
-          // promise rejection and the button looked dead.
+          // document picker that failed): unhandled, a rejection would leave
+          // the button unresponsive.
           void Promise.resolve(job()).catch((err: unknown) => {
             console.error(err);
             fail("That action didn't work. Please try again.");

@@ -2,7 +2,7 @@
 // that picks reading a local file over reading the CDN.
 //
 // Its own module (rather than sitting in snapLines.ts) purely so it is
-// testable: snapLines pulls in expo-file-system and the app config, neither of
+// testable: snapLines pulls in expo-file-system and `../config`, neither of
 // which a unit test should have to stand up.
 import { SNAP_TILE_ZOOM } from "@logjam/shared";
 
@@ -14,7 +14,7 @@ import type { MapArtifact } from "./sourceResolver";
  * Both ends, not either: a region that holds one end has none of the ways
  * around the other, so the graph would be missing exactly the half that
  * matters and A* would refuse. Falling back to the network there is the honest
- * answer.
+ * answer. Guard: mobile/src/map/snapRegion.test.ts.
  */
 export function regionCovering(
   artifacts: readonly MapArtifact[],

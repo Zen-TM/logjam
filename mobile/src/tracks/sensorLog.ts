@@ -1,8 +1,7 @@
 // Developer-only raw sensor logging, tied to the life of a recording.
 //
-// WHAT IT IS FOR: the track-accuracy work (private/todo/track-accuracy.md)
-// cannot decide between creek-snapping, dead reckoning and a cleverer filter
-// without knowing how long GPS outages actually last in a place, how often a
+// WHAT IT IS FOR: track-accuracy work cannot decide between creek-snapping,
+// dead reckoning and a cleverer filter without knowing how long GPS outages actually last in a place, how often a
 // party genuinely stops, and whether the barometer survives a dry bag. None of
 // those are answerable from a laptop, and all of them are answerable from one
 // trip's log.
@@ -50,11 +49,9 @@ const IMU_HZ = 100;
 const BATCH_SECONDS = 30;
 
 /**
- * MEASURED 2026-08-25 on a Pixel 9: 8.4 kB/s at `IMU_HZ`, i.e. ~30 MB an hour,
- * after the native side was taught to write four decimals instead of nine and
- * to decimate the barometer the platform over-delivers. The first version wrote
- * 42.5 MB/hour, and an intermediate estimate of 20 was optimistic — this figure
- * is from a real log, not from arithmetic.
+ * Measured on a Pixel 9: 8.4 kB/s at `IMU_HZ`, i.e. ~30 MB an hour,
+ * with four decimals and decimated barometer readings. This figure is from a
+ * real log, not from arithmetic.
  *
  * It is exported because the settings row states it: a research toggle whose
  * disk cost is a surprise is a toggle that fills someone's phone in a place.
@@ -64,9 +61,9 @@ export const SENSOR_LOG_MB_PER_HOUR = 30;
 /**
  * Refuse to start without room for a long day. A place trip is the one
  * recording that cannot be repeated, and a logger that fills the phone takes
- * the TRACK down with it — the offline DB and the log share a filesystem. The
- * app's rule is that nothing large is written without asking whether it fits
- * (`offline/freeSpace.ts`, mobile/CLAUDE.md); this is that check.
+ * the TRACK down with it — the offline DB and the log share a filesystem.
+ * Logjam GPS's rule is that nothing large is written without asking whether it
+ * fits (`offline/freeSpace.ts`, mobile/AGENTS.md); this is that check.
  */
 const REQUIRED_FREE_BYTES = 14 * SENSOR_LOG_MB_PER_HOUR * 1_000_000;
 
@@ -91,8 +88,7 @@ export function writeSensorLoggingEnabled(enabled: boolean): boolean {
  *
  * Never throws, and a refusal is not fatal: every other channel still logs, the
  * step column is simply absent. Without this the counter is silently empty and
- * looks exactly like a phone that never moved — which is how it shipped for the
- * first day, and how it read on a stationary desk test.
+ * looks exactly like a phone that never moved.
  */
 export async function ensureStepPermission(): Promise<boolean> {
   try {

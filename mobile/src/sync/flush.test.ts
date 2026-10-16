@@ -4,15 +4,12 @@ import { SYNC_GIVE_UP_AFTER_MS } from "@logjam/shared";
 
 import { markNoResponse, markTransferCut } from "../api/noResponse";
 
-// Two head-of-line failures the flush engine used to have, both invisible to
-// the rest of the suite because they only appear when an op FAILS:
+// Head-of-line failures that only appear when an op fails:
 //
-//  - one unreadable photo aborted the whole media pass, every pass, so every
-//    other upload on the device was blocked forever by an op that never parked
-//    and so never appeared in Sync Issues either;
-//  - one structurally-bad op made the server refuse the ENVELOPE (400), which
-//    parked all fifty ops in the batch as fifty separate sync issues, telling
-//    the user the server rejected forty-nine edits it never saw.
+//  - one unreadable photo must not abort the whole media pass, blocking
+//    every other upload on the device;
+//  - one structurally-bad op where the server refuses the ENVELOPE (400)
+//    must not park all fifty ops in the batch as separate sync issues.
 //
 // The database is a recording stand-in (expo-sqlite has no native runtime
 // here); what matters is which rows end in which state.
@@ -37,7 +34,7 @@ let rows: Row[] = [];
 let poison = new Set<string>();
 let pushCalls: string[][] = [];
 /** Miscount the fake server applies to its results array (+1 = one extra
- * result, -1 = one missing). MSD-005. */
+ * result, -1 = one missing). */
 let resultCountDelta = 0;
 /** Media ops whose runner throws (a file the OS reclaimed). */
 let deadMedia = new Set<number>();
@@ -265,9 +262,9 @@ const NO_ANSWER: [string, () => unknown][] = [
 const GATEWAY_STATUSES = [502, 503, 504];
 
 describe("who owns a rejection", () => {
-  // The user's question, answered in the engine rather than on the screen: if
-  // pressing Try again might work, why didn't the app press it? It does now.
-  // Only a refusal a retry cannot fix reaches Sync issues.
+  // The user's question, answered in the engine rather than on the screen:
+  // if retrying might work, the app retries automatically. Only a refusal
+  // a retry cannot fix reaches Sync issues.
   it("retries a rejection the server may answer differently, without telling the user", async () => {
     rows = [pushRow(1)];
     rejections.set("op-1", { code: 503, message: "upstream unavailable" });
@@ -308,8 +305,8 @@ describe("who owns a rejection", () => {
 
   it("does not count requests that never got an answer against the op", async () => {
     // Four sends that timed out, then one the server refused for now. Counting
-    // sends parked this op on the first refusal after a bad stretch of signal.
-    // Mutation: park a refused op once its `attempts` reach
+    // sends would park this op on the first refusal after a bad stretch of
+    // signal. Mutation: park a refused op once its `attempts` reach
     // SYNC_GIVE_UP_FAILURES.
     rows = [{ ...pushRow(1), attempts: 4 }];
     rejections.set("op-1", { code: 503, message: "upstream unavailable" });
@@ -533,9 +530,9 @@ describe("a write the server applied whose reply was lost", () => {
 
 describe("push result correlation", () => {
   // Positional results, one per op. A count mismatch is not a per-op verdict
-  // either way: an EXTRA result used to index past the batch and crash with an
-  // opaque TypeError ("Couldn't sync"), and a SHORT one left the trailing ops
-  // inflight with attempts already bumped, recovered only by the next cycle's
+  // either way: an EXTRA result would index past the batch and crash with an
+  // opaque TypeError ("Couldn't sync"), and a SHORT one would leave trailing ops
+  // inflight with attempts already bumped, recoverable only by the next cycle's
   // blanket reset.
   it("refuses a reply with more results than ops", async () => {
     rows = [pushRow(1), pushRow(2)];
@@ -567,10 +564,10 @@ describe("media pass", () => {
   it.each(NO_ANSWER)(
     "stops the pass when the API gives no answer: %s",
     async (_, make) => {
-      // On a dead link every queued upload used to spend its own 15 s timeout
-      // before the cycle reached the delta pull. The first unanswered API call
-      // says the link is down for all of them. Mutation: `continue` instead
-      // of `break` after the requeue in flushMediaOps.
+      // On a dead link, letting every queued upload spend its own 15 s timeout
+      // would delay the cycle before reaching delta pull. The first unanswered
+      // API call says the link is down for all of them. Mutation: `continue`
+      // instead of `break` after the requeue in flushMediaOps.
       rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
       mediaErrors.set(1, make());
 
@@ -613,10 +610,10 @@ describe("media pass", () => {
   );
 
   it.each(NO_ANSWER)("never parks an upload over %s", async (_, make) => {
-    // What the field trip hit: the retry ladder starts at one second, so a
-    // minute of bad signal was five failed cycles, and five failures parked
-    // every queued photo and track as a sync issue. Mutation: tally a
-    // no-response failure in flushMediaOps and these park on pass five.
+    // The retry ladder starts at one second, so a minute of bad signal can
+    // mean five failed cycles; no-response failures must not park queued
+    // photos and tracks as sync issues. Mutation: tally a no-response
+    // failure in flushMediaOps and these park on pass five.
     rows = [mediaRow(1), mediaRow(2)];
     mediaErrors.set(1, make());
     mediaErrors.set(2, make());

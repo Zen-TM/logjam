@@ -12,11 +12,7 @@
 //               is a GLYPH, not a pill: same reasoning as the backed-up cloud
 //               beside it — it sits on rows the user is not asking about most
 //               of the time, and a repeated word down a list stops being read
-//               while eating the width the title needs (DESIGN.md, and the
-//               "a pill that costs the TITLE" note in §11).
-//
-// The old pair was `Shared` and `Shared with 3` — one word apart, same tone,
-// same slot, opposite meanings.
+//               while eating the width the title needs (shared/DESIGN.md §11).
 
 export type ShareMark = {
   /** Trailing pill for a row shared WITH the viewer. Absent on owned rows. */
@@ -61,7 +57,7 @@ export function shareMark(input: {
   return input.sharedCount ? { sharedWithCount: input.sharedCount } : {};
 }
 
-/** Screen-reader text for the fan-out glyph — the count the pill used to say. */
+/** Screen-reader text for the fan-out glyph. */
 export function sharedWithLabel(count: number): string {
   return `Shared with ${count} ${count === 1 ? "person" : "people"}`;
 }

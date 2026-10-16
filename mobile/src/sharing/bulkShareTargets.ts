@@ -39,8 +39,8 @@ export type BulkShareCandidate = {
    * Someone else owns it. Checked BEFORE the two verbs rather than inferred
    * from their absence: a LiDAR topo shared with you is a file on this handset
    * and keeps its `sendCopy`, so absence alone would have offered to pass on
-   * someone else's map — the same asymmetry `AssetActions.sharedWithYou` was
-   * made explicit for.
+   * someone else's map — the same asymmetry `AssetActions.sharedWithYou`
+   * guards.
    */
   sharedWithYou?: true;
   /** A live, revocable grant — see `AssetActions.share`. */
@@ -75,7 +75,7 @@ export type BulkSharePlan<C extends BulkShareCandidate = BulkShareCandidate> = {
  *
  * A row carrying BOTH verbs takes the SHARE. It is the recoverable one: a
  * mis-share is revoked from the item's own sheet, a mis-sent copy is a file in
- * someone else's hands forever. Nothing in the app currently offers both, but
+ * someone else's hands forever. Nothing in Logjam GPS currently offers both, but
  * the tie has to break somewhere and this is the direction that can be undone.
  */
 export function planBulkShareSelection<C extends BulkShareCandidate>(
@@ -315,7 +315,7 @@ export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
   return { text: done, tone: "info" };
 }
 
-/** "a", "a and b", "a, b and c" — a third reason made a bare join unreadable. */
+/** "a", "a and b", "a, b and c" — joins reasons grammatically when multiple are present. */
 function joinReasons(parts: string[]): string {
   if (parts.length < 2) return parts.join("");
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;

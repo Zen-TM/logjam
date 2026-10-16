@@ -98,7 +98,7 @@ describe("notificationPlaceId", () => {
 
 // NOT the share hue: a sent file is a copy that becomes the recipient's own,
 // and wearing the share colour is the one confusion the two verbs exist to
-// prevent (mobile/CLAUDE.md, "Sharing and sending").
+// prevent (ADR 0016).
 it("gives a received file its own kind, distinct from a share", () => {
   const file = notificationMeta({
     id: "n1",

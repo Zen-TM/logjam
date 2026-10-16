@@ -7,7 +7,7 @@
 // (mobile/AGENTS.md, Privacy and battery). Copying it to the shared gallery hands it to
 // every other app on the handset with media access, to the phone's own photo
 // backup, and to whoever is handed the phone to look at something else — none
-// of which this app can undo. So it is opt-in, per handset, and the switch says
+// of which Logjam GPS can undo. So it is opt-in, per handset, and the switch says
 // what it costs.
 //
 // It is a COPY, not a move: the attachment and its upload are unaffected either

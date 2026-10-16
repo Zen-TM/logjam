@@ -27,11 +27,10 @@ import { readPref, writePref } from "../prefsDb";
 
 const ACCURACY_KEY = "recordingAccuracyLimit";
 /**
- * V2 because the names moved under the rates (2026-08-17): what used to be
- * called `battery` is 30 s and is now the middle of the range, called
- * `balanced` — and `balanced` used to mean 10 s. Reading the old key through
- * the new names would silently make a user's recording four times finer than
- * the one they chose, so the new scheme gets its own key and the old one is
+ * V2 because the legacy names overlap the modern rates: the legacy `battery`
+ * setting is 30 s (now `balanced`), whereas legacy `balanced` was 10 s. Reading
+ * the old key through the new names would silently change the user's chosen
+ * fix rate, so the modern scheme has its own key and the legacy key is
  * translated on read.
  */
 const FIX_RATE_KEY = "recordingFixRateV2";
@@ -73,13 +72,10 @@ export type FixRate = "finest" | "detailed" | "balanced" | "batterySaver";
  * or below twice `timeInterval` for that reason, not to save power.
  *
  * `distanceInterval` is a DELIVERY filter too (FLP's minimum update distance),
- * and it is **0 in every preset now**. It never saved any power — it is ANDed
- * with the interval, so it only ever threw away fixes the GNSS engine had
- * already been woken to produce — and the fixes it threw away turned out to be
- * the most useful ones in the batch. A fix refused for being too close to the
- * last is the recorder watching someone stand still, and dropping it natively
- * meant the JS side could not tell a two-minute rest from two minutes of very
- * slow walking (see `RecordedTrackPoint.stationaryMs`). The same gate still
+ * and is **0 in every preset**. Setting a non-zero distance threshold saves no
+ * power — it is ANDed with the interval, so the GNSS engine is already woken —
+ * and dropping fixes natively prevents the JS side distinguishing a rest from
+ * very slow walking (see `RecordedTrackPoint.stationaryMs`). The same gate still
  * runs in `rejectTrackFix`, adaptively and against the fix's own accuracy, so
  * nothing extra is STORED — the refusals are counted instead of vanishing.
  */
@@ -140,10 +136,9 @@ export function writeAccuracyLimitM(limit: AccuracyLimitM): boolean {
 
 /**
  * Defaults to `balanced` (a fix every 30 s), not the finest rate. A recording is
- * the one thing in the app that runs for the whole trip, and the original
- * finest-by-default spent a phone's day drawing detail nobody asked for; a user
- * who wants the fine line can say so, and can't recharge a flat phone in a
- * place.
+ * the one thing in Logjam GPS that runs for the whole trip, and a finest-rate
+ * default drains the phone drawing detail nobody asked for; a user who wants
+ * the fine line can choose it, and cannot recharge a flat phone in a place.
  */
 export function readFixRate(): FixRate {
   const stored = readPref(FIX_RATE_KEY);
@@ -160,10 +155,9 @@ export function writeFixRate(rate: FixRate): boolean {
 
 // --- The one-time "your recordings are backed up" notice ---
 //
-// A recording is precise location history, and until this change it never left
-// the phone. Finished tracks now serialise to a GPX standalone file that syncs
-// with the account, which is a deliberate decision the user is told about ONCE
-// rather than having it switched on silently behind them.
+// A recording is precise location history. Finished tracks serialise to a GPX
+// standalone file that syncs with the account, which is a deliberate decision
+// the user is told about ONCE rather than having it switched on silently.
 //
 // Device-scoped like the two knobs above, and for the same reason: it records
 // that this handset has said it, not something about the account.

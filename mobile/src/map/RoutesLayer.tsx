@@ -91,7 +91,7 @@ export const RoutesLayer = memo(function RoutesLayer({
       // A 3px line is far thinner than a fingertip; the hitbox is what makes
       // tapping one a reasonable thing to ask. MLRN's default is 44pt — the
       // platform minimum touch target, and the right number here for the same
-      // reason — so this no longer sets one.
+      // reason — so this does not set one.
       onPress={
         onPressRoute &&
         ((event) => {

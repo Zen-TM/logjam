@@ -1,8 +1,8 @@
-// The timing half of the "show on map" pulse — pure, so the component that
-// draws it (FocusPulse.tsx) is only wiring.
+// The timing half of the "show on map" pulse — pure (focusPulse.test.ts), so the
+// component that draws it (FocusPulse.tsx) is only wiring.
 //
 // PRIVACY: no coordinates here, and none anywhere in the pulse: the focused
-// bbox stays in component state and is never logged.
+// bbox stays in component state and is never logged (mobile/src/sentry/scrubEvent.test.ts).
 
 /** Three pulses over 2.5 s, then gone. Long enough to catch the eye after the
  *  camera has finished flying, short enough not to become map furniture. */

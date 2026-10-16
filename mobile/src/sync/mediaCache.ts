@@ -1,4 +1,4 @@
-// Offline media cache (stage8-sync.md §7.3): delta media rows are metadata
+// Offline media cache: delta media rows are metadata
 // only — blobs come via POST /media/download-urls (presigned, short-lived,
 // never persisted). Policy: thumbnails for everything visible are cached
 // eagerly after each pull (small); full-res display files lazily on view.
@@ -38,10 +38,11 @@ async function fetchDownloadUrls(ids: string[]): Promise<DownloadUrlItem[]> {
 
 /**
  * Media the server answered WITHOUT a thumbnail URL. Their row keeps
- * `local_thumb_path IS NULL` forever, so the eager pass re-selected them and
- * re-POSTed /media/download-urls after every successful pull — one avoidable
- * round trip per bad row per sync cycle, indefinitely, on the radio the
- * battery rules exist to protect. The lazy view fetch still covers them.
+ * `local_thumb_path IS NULL` forever, so without tracking them the eager pass
+ * would re-select them and re-POST /media/download-urls after every successful
+ * pull — one avoidable round trip per bad row per sync cycle, indefinitely, on
+ * the radio the battery rules exist to protect. The lazy view fetch still
+ * covers them.
  *
  * ponytail: in-memory, so the first pass of each launch still asks once.
  * Persisting it means a mirror column and a MIRROR_SCHEMA_VERSION bump (which
@@ -106,7 +107,7 @@ export async function syncThumbnailCache(): Promise<void> {
 }
 
 /**
- * Lazy full-res fetch on view (§7.3). Returns the local file URI, or null
+ * Lazy full-res fetch on view. Returns the local file URI, or null
  * when the blob isn't cached and can't be fetched (offline) — the caller
  * renders the thumbnail with an "available online" hint.
  */
@@ -125,7 +126,7 @@ export async function ensureDisplayCached(
   try {
     const items = await fetchDownloadUrls([mediaId]);
     const item = items[0];
-    if (!item) return null; // invisible/deleted server-side (omitted, §7.3)
+    if (!item) return null; // invisible/deleted server-side (omitted)
     await ensureCacheDir();
     const path = `${CACHE_DIR}${mediaId}.display`;
     const result = await downloadFromPresignedUrl(item.displayUrl, path);

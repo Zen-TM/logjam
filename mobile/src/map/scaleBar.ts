@@ -13,8 +13,8 @@
 // across, not `256 · 2^zoom` (the slippy-tile convention). A raster source
 // declaring `tileSize: 256` is served its z+1 tiles to compensate, but the
 // number `onRegionDidChange` reports is still the 512-based one — so the bar
-// must divide by 512, and the 256-based 156543.034 constant this used made
-// every distance read exactly double.
+// must divide by 512; using the 256-based 156543.034 constant would make
+// every distance read double. Guard: mobile/src/map/scaleBar.test.ts.
 export const MAP_WORLD_DP_Z0 = 512;
 
 const EQUATOR_METERS_PER_PIXEL_Z0 = 40075016.686 / MAP_WORLD_DP_Z0;
@@ -54,9 +54,9 @@ const EQUATOR_METERS_PER_PIXEL_TILE_Z0 = 156543.03392;
  * Ground metres per pixel at a slippy-tile zoom (256-based XYZ tile
  * coordinates), NOT a MapLibre camera zoom — use `metersPerPixel` above for
  * that. Sole caller: `regionFrame.ts`'s region-download size/detail estimate,
- * which plans against standard tile zooms. Mixing the two conventions is
- * exactly the MMO-001 bug (see scaleBar's file header) — don't inline this
- * formula a third time.
+ * which plans against standard tile zooms. Mixing the two conventions
+ * doubles or halves the ground resolution — do not inline this formula
+ * a third time.
  */
 export function tileMetersPerPixel(latitudeDeg: number, zoom: number): number {
   return (
@@ -72,10 +72,8 @@ export function tileMetersPerPixel(latitudeDeg: number, zoom: number): number {
  *
  * DP, not physical pixels: MapLibre Native is handed the view size divided by
  * the display density, so its own screen space is density-independent and its
- * zoom is the 512-based one above. The anchor hit test used to divide by
- * `PixelRatio.get()` AND use 256, which on a 2.625x screen left a 20 dp reach
- * of about 15 dp — smaller than the 17 dp handle it was meant to extend, so it
- * could never fire at all.
+ * zoom is the 512-based one above. Dividing by `PixelRatio.get()` or using 256
+ * would shrink the reach below the handle it is meant to extend.
  *
  * Longitude is not corrected for latitude: over tens of DP the foreshortening
  * at NSW latitudes is far below the precision these decisions need, and the

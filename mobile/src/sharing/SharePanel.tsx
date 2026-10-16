@@ -208,9 +208,9 @@ export function useSharePanel({
 
   // WHAT the target is, as primitives. Every caller builds `target` as an
   // object literal in its render, so its identity changes on every pass —
-  // depending on the object itself made the reset effect below fire on each
-  // render and clear the user's ticks as fast as they made them (a tap on a
-  // friend appeared to do nothing at all). Deps are keyed on these instead.
+  // depending on the object itself would make the reset effect below fire on
+  // each render and clear the user's ticks as fast as they are made. Deps are
+  // keyed on these primitives instead.
   const placeId = target?.kind === "place" ? target.placeId : null;
   const entityType = target?.kind === "entity" ? target.entityType : null;
   const entityId = target?.kind === "entity" ? target.entityId : null;
@@ -646,17 +646,17 @@ function useFriendList({
   const [list, setList] = useState<Friend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A failed load leaves `list` null and changes none of the other deps, so
-  // without this the effect never runs again: the panel showed "Couldn't load
-  // friends." until the whole sheet was closed and reopened. Bumping the
-  // attempt is the retry.
+  // without this the effect never runs again: the panel would stay stuck on
+  // "Couldn't load friends." until the whole sheet was closed and reopened.
+  // Bumping the attempt is the retry.
   const [attempt, setAttempt] = useState(0);
   const { accountState } = useAccountState();
   const status = capabilityStatus("sharing", accountState, online);
   const available = status.status === "available";
   // Which load — if any — should be running right now. Pure and exhaustively
-  // tested in ./friendListLoad, because a hook is a place nothing can run: the
-  // bug was that a failed load changed none of the effect's inputs, so the key
-  // is what the retry moves.
+  // tested in ./friendListLoad.test.ts, because a hook is a place nothing can run:
+  // a failed load changes none of the effect's inputs, so the key is what the
+  // retry moves.
   const loadKey = friendListLoadKey({
     active,
     available,

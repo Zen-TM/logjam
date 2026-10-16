@@ -101,7 +101,7 @@ describe("bulkShareTriageLine", () => {
     ).toBeNull();
   });
 
-  // The bug this axis exists for, in bulk: a route drawn in the field has no
+  // Why this axis exists, in bulk: a route drawn in the field has no
   // server row, so sending it to the grant endpoint answers 404 and reports a
   // predictable exclusion as a failure.
   it("skips a row the account does not hold yet, and keeps the copies", () => {
@@ -144,8 +144,8 @@ describe("bulkShareTriageLine", () => {
     const line = bulkShareTriageLine(
       planBulkShareSelection([region, region], ALL_SYNCED),
     );
-    // Two identical candidates are two rows here — the screen deduped by key
-    // long before this, and the plan counts what it is given.
+    // Two identical candidates are two rows here — the screen dedupes by key
+    // before this, and the plan counts what it is given.
     expect(line).toBe("None of these 2 can be shared — 2 can't be shared.");
   });
 });

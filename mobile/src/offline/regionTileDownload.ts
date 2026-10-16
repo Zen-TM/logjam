@@ -4,7 +4,7 @@
 // Client-direct: tiles come straight from the provider to the phone, and NO
 // part of this path talks to the Logjam API. That is a privacy property, not an
 // accident — the area a user is about to walk into never reaches our server
-// (mobile/AGENTS.md, Privacy and battery).
+// (mobile/AGENTS.md: region-of-interest bboxes stay off the server).
 //
 // POLITENESS ENVELOPE — the contract that makes bulk-ish fetching
 // acceptable. Load shape, not disguise:
@@ -66,11 +66,6 @@ import {
 /**
  * Why a job stopped without failing. `user` and `provider-backoff` are the two
  * nobody else may overturn — see `resumeJobsPausedBy` in the queue.
- *
- * (It used to live in `downloadMachine.ts`, a state machine from the original
- * plan that nothing ever installed: the queue shipped with its own state union
- * and the SIXMaps engine landed with a third. The machine and its 97-line test
- * suite are deleted; this type was the only part of the file with a consumer.)
  */
 export type PausedReason =
   | "user"
@@ -98,7 +93,7 @@ export type RegionJobSpec = {
    */
   zMin?: number;
   zMax: number;
-  /** Per-job opt-in; Wi-Fi-only otherwise (§5.6). */
+  /** Per-job opt-in; Wi-Fi-only otherwise. */
   allowCellular: boolean;
 };
 
@@ -192,7 +187,7 @@ class TokenBucket {
  * Region downloads answer to the same metered rule as every other job
  * (`networkPolicy.ts`), not to `type === "wifi"`: a tethered hotspot is Wi-Fi by
  * type and mobile data by cost, and this is the largest data cost in the app.
- * The per-job opt-in (§5.6) takes the place of the stored preference.
+ * The per-job opt-in takes the place of the stored preference.
  */
 export async function connectionAllows(
   allowCellular: boolean,
@@ -543,12 +538,10 @@ export async function runRegionDownload(
     // The file stays: it is a valid resume point, and a failed job is offered
     // as resumable rather than silently discarded.
     //
-    // The message travels WITH the failure. `unknown` is the catch-all, and it
-    // used to be the whole story the user and the developer got: the row said
-    // "That didn't finish. Try again." and the cause went to `console.error`,
-    // which in a release build is a logcat line nobody is attached to. The
-    // first real one to show up this way was SQLITE_BUSY on a region file
-    // ("database is locked"), and it cost a device repro to name.
+    // The message travels WITH the failure. `unknown` is the catch-all, and
+    // detail holds the cause (such as SQLITE_BUSY) rather than relying on
+    // `console.error` alone, which in a release build is a logcat line nobody
+    // is attached to.
     console.error(err);
     return { status: "failed", code: "unknown", detail: failureDetail(err) };
   }

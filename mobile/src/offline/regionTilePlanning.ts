@@ -9,7 +9,7 @@ import { type RegionBbox, type RegionTilePlan } from "@logjam/shared";
 
 import { hashKey } from "../map/sourceResolver";
 
-/** Plan order: zoom ascending, then row-major within a level (stage4a §4.4). */
+/** Plan order: zoom ascending, then row-major within a level. */
 export function regionTileSequence(
   plan: RegionTilePlan,
 ): [number, number, number][] {

@@ -11,7 +11,7 @@ import { tableSchema } from "./mirrorSchema";
 // getSyncDb reaches for expo-sqlite, which throws outside a native runtime, so
 // the DB is a recording stand-in — this asserts the SQL and the op shape, which
 // is what actually breaks. Column/placeholder mismatches and a forgotten
-// appendOp are exactly the silent failures device testing kept masking behind
+// appendOp are exactly the silent failures device testing can mask behind
 // input-timing flakiness.
 
 type Call = { sql: string; args: unknown[] };
@@ -195,11 +195,11 @@ describe("deleteRouteLocal", () => {
 });
 
 describe("UPDATE_TARGETS", () => {
-  // `route` was missing, so discarding a rejected route edit reverted nothing:
-  // the geometry the server refused stayed on the map, and — the durable half —
-  // its fields stayed in dirty_fields_json, so every later pull replayed them
-  // over the server row and the mirror never converged again. The map is now
-  // total over the push entities, so a new entity can't repeat it silently.
+  // Discarding a rejected route edit must revert its changes: otherwise the
+  // geometry the server refuses stays on the map, and — the durable half —
+  // its fields stay in dirty_fields_json, so every later pull replays them
+  // over the server row and the mirror never converges again. The map is
+  // total over the push entities, so a new entity cannot be omitted silently.
   it("answers for every push entity", () => {
     for (const entity of Object.keys(SYNC_PUSH_OPS_BY_ENTITY)) {
       expect(entity in UPDATE_TARGETS).toBe(true);
@@ -222,10 +222,9 @@ describe("UPDATE_TARGETS", () => {
 describe("UPDATE_TARGETS column maps vs the schema declaration", () => {
   // mirrorSchema.test.ts scans hand-written SQL literals and deliberately
   // EXCLUDES anything containing `${` — but `enqueueUpdate` builds its whole
-  // UPDATE by interpolating the column out of these maps, so none of the four
-  // was ever checked against mirrorSchema.ts. A rename or a typo surfaced only
-  // at runtime, on the first edit of that one field, on a device. Same
-  // parallel-list pair, same medicine.
+  // UPDATE by interpolating the column out of these maps. Without this check,
+  // a rename or a typo surfaces only at runtime, on the first edit of that one
+  // field, on a device.
   it("names only columns the target table declares", () => {
     const offences: string[] = [];
     for (const [entity, target] of Object.entries(UPDATE_TARGETS)) {

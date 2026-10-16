@@ -1,10 +1,10 @@
-// GeoPDF imports registry (Stage 6): rows for user-imported GeoPDF maps,
+// GeoPDF imports registry: rows for user-imported GeoPDF maps,
 // tiled on-device into MBTiles. Same app-private SQLite DB as the offline
 // registry (one store, one backup-exclusion posture, one app-lock trigger).
 //
 // PRIVACY: a Logjam-exported GeoPDF carries place overlays; the source PDF,
-// tiles and this row are app-private, backup-excluded, and arm the Stage 4
-// app lock. Labels/paths/bounds never reach logs, telemetry or crash
+// tiles and this row are app-private, backup-excluded, and arm the app
+// lock. Labels/paths/bounds never reach logs, telemetry or crash
 // reports — pipeline logging is state transitions and error CODES only.
 import { getOfflineDb } from "../offline/registryDb";
 

@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// MOT-005/D6: attachMediaLocal now deletes the picker/camera source once it
-// has fully copied (and, for images/video, read) it — closing the leak where
-// expo-image-picker's and expo-document-picker's own cache copies survived
-// outside every declared store and outside the account-transition wipe.
+// attachMediaLocal deletes the picker/camera source once it has fully copied
+// (and, for images/video, read) it — preventing expo-image-picker's and
+// expo-document-picker's own cache copies from surviving outside every declared
+// store and outside the account-transition wipe.
 //
 // The guard this test exists to pin: a source under one of THIS APP's own
 // declared stores must survive, because its lifecycle is governed elsewhere.
 // The live case is saved/assetActions.ts's "attach to place" for a vector
 // import, which reuses `vector_import.sourcePath` — the app's only kept
-// original of a lossy GPX/KML derivation (mobile/CLAUDE.md, "Imports keep
+// original of a lossy GPX/KML derivation (mobile/AGENTS.md, "Imports keep
 // their ORIGINAL BYTES"). A naive "always delete file.uri" would destroy it.
 
 const calls: { sql: string; args: unknown[] }[] = [];
@@ -72,8 +72,8 @@ vi.mock("expo-file-system/legacy", () => ({
   copyAsync: () => Promise.resolve(),
   makeDirectoryAsync: () => Promise.resolve(),
   getInfoAsync: () => Promise.resolve({ exists: true, size: 1 }),
-  // The media PUT goes through uploadToPresignedUrl now, which uses the TASK
-  // api so it can cancel a transfer that never starts (MAPP-006). The task
+  // The media PUT goes through uploadToPresignedUrl, which uses the TASK
+  // api so it can cancel a transfer that never starts. The task
   // reports progress immediately here, so the first-byte deadline never fires.
   createUploadTask: (
     _url: string,
@@ -164,7 +164,7 @@ describe("runMediaCreateOp", () => {
     attempts: 2,
   };
 
-  it("MOT-006: defers the PUT without spending an attempt when metered policy says no", async () => {
+  it("defers the PUT without spending an attempt when metered policy says no", async () => {
     canRunNow.mockResolvedValue(false);
     const outcome = await runMediaCreateOp(row);
     expect(outcome).toBe("blocked");

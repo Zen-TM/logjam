@@ -6,8 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // local value stands, and the next pull corrects it. The pull path cannot. Its
 // upserts and its cursor write share one transaction, so a throw rolls back the
 // cursor with the page — and the client then re-fetches that same page forever.
-// That is exactly MSYNC-001 (a place tombstone hitting a dropped column killed
-// delta pull permanently on every fresh install), reachable a second way: by
+// An unhandled error on pull freezes delta pull permanently, reachable by
 // anything the server sends that this client version cannot read.
 //
 // So: drop the row, name it (fields only — these rows carry place names and
@@ -164,18 +163,17 @@ describe("a malformed delta row", () => {
       }),
     ];
 
-    // The whole point: this resolves. Before validation existed a bad row threw
-    // out of the transaction, and before *skipping* existed it would have
-    // rejected here with the cursor unwritten.
+    // Without validation and skipping, a bad row would throw out of the
+    // transaction and reject with the cursor unwritten.
     await expect(runDeltaPull("user-1")).resolves.toMatchObject({ pages: 1 });
     expect(stateWrites.applyFailedAt).toBeTruthy();
   });
 
   // An unknown entity type is a NEWER SERVER, not a malformed row: it reaches
-  // the applier, which ignores it (see mirrorStore's own tombstone test — the
-  // applier is mocked here). Treating it as corruption instead is what made a
-  // 0.1.0 build warn "dropped 12 unreadable row(s)" the moment the server
-  // learned an eighth entity, so this asserts NO issue is recorded.
+  // the applier, which ignores it (see tombstone.test.ts — the applier is
+  // mocked here). Treating it as corruption would incorrectly report unreadable
+  // rows when the server introduces a new entity type, so this asserts NO
+  // issue is recorded.
   it("passes an unknown tombstone type through without calling it corrupt", async () => {
     pages = [
       page({
@@ -231,12 +229,13 @@ describe("a malformed delta row", () => {
 });
 
 describe("a change key this app version does not consume", () => {
-  // The client applies a hand-listed set of `changes` keys. An eighth protocol
-  // entity used to be fetched, never read, and acknowledged anyway by the
-  // advancing cursor — permanently absent from every phone, with none of the
-  // skipped-row marking an unreadable ROW gets. (The other direction, this
-  // build's own list drifting from DELTA_ENTITY_ORDER, is a compile error:
-  // `satisfies Record<DeltaEntityKey, unknown[]>` in deltaPull.ts.)
+  // The client applies a hand-listed set of `changes` keys. A new protocol
+  // entity must not be fetched, left unread, and acknowledged anyway by the
+  // advancing cursor without skipped-row marking — which would leave it
+  // permanently absent from the phone with no issue recorded. (The other
+  // direction, this build's own list drifting from DELTA_ENTITY_ORDER, is a
+  // compile error: `satisfies Record<DeltaEntityKey, unknown[]>` in
+  // deltaPull.ts.)
   it("is counted as a sync issue instead of dropped in silence", async () => {
     pages = [
       page({

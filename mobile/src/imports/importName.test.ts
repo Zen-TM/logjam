@@ -13,10 +13,10 @@ describe("fileNameWithoutExtension", () => {
 });
 
 describe("importDisplayName", () => {
-  // THE RULE THIS FILE EXISTS FOR: the inbox promised a name, so Saved shows
-  // that name. Without this a file accepted as "Ridge approach.gpx" appeared as
-  // whatever the GPX called itself, and the recipient had no way to tell it was
-  // the same object.
+  // THE RULE THIS FILE EXISTS FOR: the inbox promises a name, so Saved shows
+  // that name. Otherwise, a file accepted as "Ridge approach.gpx" would appear as
+  // whatever the GPX internally called itself, giving the recipient no way to tell
+  // it is the same object.
   it("names a received copy for the file, not for what the file calls itself", () => {
     expect(
       importDisplayName({

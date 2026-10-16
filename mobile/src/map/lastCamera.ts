@@ -3,8 +3,8 @@
 //
 // A module store rather than navigation params: the download screen is reached
 // from the map (which has a camera to hand) AND from the Saved tab (which does
-// not), and the Saved route used to drop the user on the app's default view of
-// the whole Blue Mountains, to pan back to where they already were.
+// not); without this, the Saved route drops the user on Logjam GPS's default
+// view of the whole Blue Mountains, requiring them to pan back.
 //
 // PRIVACY: a centre and a zoom in memory for the life of the process. Never
 // persisted, never logged — same rule as MapScreen's own camera state.

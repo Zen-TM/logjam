@@ -168,9 +168,9 @@ export function MapToolGroup({
 const useStyles = makeStyles((theme) => ({
   // The group occupies exactly one button's width in the column. Every
   // child (each tool, the +) is its own ABSOLUTE sibling so opening the
-  // group can't widen the row: laid out in flow, growth pushed the whole
-  // action column leftward and every other button visibly jumped when the
-  // tools opened. No overflow:hidden either — a closed tool's translateX
+  // group can't widen the row: laid out in flow, growth would push the whole
+  // action column leftward, causing every other button to visibly jump when the
+  // tools open. No overflow:hidden either — a closed tool's translateX
   // target lands it exactly on the + button's own box, and it's zIndex
   // (below), not a clip, that decides which one of the three shows.
   row: {
@@ -180,9 +180,9 @@ const useStyles = makeStyles((theme) => ({
     justifyContent: "center",
   },
   // Each tool's RESTING inset (left/right, set at the call site from
-  // restSlot) replaces what used to be flex-packing inside a shared tray —
-  // needed once the + had to become a plain sibling (see plusButton) rather
-  // than a parent tray's stacking context swallowing the tool's own zIndex.
+  // restSlot) avoids flex-packing inside a shared tray, allowing the + button
+  // to remain a plain sibling (see plusButton) without a parent tray's
+  // stacking context swallowing the tool's own zIndex.
   toolSlot: {
     position: "absolute",
     top: 0,
@@ -207,7 +207,7 @@ const useStyles = makeStyles((theme) => ({
   // (armedToolSlot) so the running tool's icon is what's left showing once
   // it settles, not the +. All three need the SAME positioning scheme
   // (absolute, explicit zIndex/elevation) for Android to honour the order —
-  // one of them left as a plain flow sibling still painted on top
+  // leaving one as a plain flow sibling would paint it on top
   // regardless of zIndex.
   plusButton: {
     position: "absolute",

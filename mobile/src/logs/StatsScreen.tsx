@@ -170,7 +170,7 @@ export function StatsScreen({
   // `data == null` rather than `loading`: that flag is false once the FIRST
   // sync of the process has happened, so a screen pushed later renders with no
   // rows for a frame — long enough to flash "nothing logged in here yet" over a
-  // logbook with 123 trips in it, which is what the drill-down did.
+  // logbook with existing trips in it.
   const reading = tripsQuery.data == null || placesQuery.data == null;
 
   const title = activity
@@ -353,7 +353,7 @@ function Activities({
 
 /**
  * How much of the library the trips in range actually reached — "Places" alone
- * left the reader guessing whether the bar was places stored or places been to.
+ * leaves the reader guessing whether the bar is places stored or places been to.
  * The row reads "29 of 31", so the header only has to name the verb.
  */
 function PlacesVisited({ stats }: { stats: LogbookStats }) {
@@ -521,11 +521,10 @@ function AttributeSections({
 /**
  * EVERY attribute is a `Row`, distribution or not.
  *
- * The rating cards used `Card` and the rest used `Row`, which differ by four
- * points of corner radius and by whether the parent supplies a gap — so a list
- * of attributes rendered as two visibly different kinds of card, unevenly
- * spaced. `Row`'s `footer` slot exists for exactly this: full-width content
- * pinned under the row's own line, inside the same card.
+ * `Card` and `Row` differ by four points of corner radius and by whether the
+ * parent supplies a gap, which would leave a mixed list unevenly spaced.
+ * `Row`'s `footer` slot exists for exactly this: full-width content pinned
+ * under the row's own line, inside the same card.
  */
 function AttributeStat({ stat }: { stat: FieldStat }) {
   // What a stat of each shape says — and why a quantity has no total — is
@@ -559,8 +558,8 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
   );
 }
 
-/** A number with a dimmed unit beside it. The bare figure on the right edge
- *  read as disconnected from the words explaining it — this puts the word that
+/** A number with a dimmed unit beside it. A bare figure on the right edge
+ *  reads as disconnected from the words explaining it — this puts the word that
  *  names it in the same breath, and lets the subtitle be about something else. */
 function RowMetric({ value, suffix }: { value: string; suffix: string }) {
   const styles = useStyles();

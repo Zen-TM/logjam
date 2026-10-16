@@ -76,9 +76,9 @@ import {
 // stopping on the tab bar's colour.
 //
 // The modal covers the whole SCREEN, bars included, so that is the height the
-// spacer starts at. It started at the window's, which is shorter by the bars
-// where the system keeps them out of the window, and the correction arrived
-// in the middle of the slide in.
+// spacer starts at. Window height is shorter by the bars where the system keeps
+// them out of the window, so using it would delay the correction to the middle
+// of the slide in.
 const SHEET_TRAVEL = Dimensions.get("screen").height;
 // How long the sheet must lie still, untouched, before it springs back or
 // closes. A fling keeps reporting scroll, so it is never cut short.
@@ -111,10 +111,10 @@ export const SheetErrorReveal = createContext<((target: View) => void) | null>(
 /**
  * The sheet as it was last drawn open. An owner empties its sheet in the
  * render that closes it (no title, no rows) and the keyboard starts down, so
- * a sheet that drew what it was handed slid out as an empty shell of another
- * height. A sheet that shrinks also shortens the scroll it is dragged by: the
- * offset the drag left is then past the new end, Android clamps it, and the
- * shell jumped back up in the middle of the slide out.
+ * a sheet drawing what it was handed would slide out as an empty shell of
+ * another height. A sheet that shrinks also shortens the scroll it is dragged
+ * by: the offset the drag left is then past the new end, Android clamps it, and
+ * the shell jumps back up in the middle of the slide out.
  */
 const Held = memo(
   function Held({ children }: { visible: boolean; children: React.ReactNode }) {
@@ -339,7 +339,7 @@ export function BottomSheet({
   };
   // The jump to the end does nothing until the sheet's size has reached the
   // native view, a frame or more after it is reported here, so it is repeated
-  // until it lands. Left to the settle, the sheet was scrolled into place
+  // until it lands. Left to the settle, the sheet would scroll into place
   // with an animation nobody could see before it slid in.
   const chase = (frames: number) => {
     requestAnimationFrame(() => {
@@ -367,7 +367,7 @@ export function BottomSheet({
   // What the native driver is doing with the two offsets, for the settle.
   // Listened to afresh each time the sheet mounts: the native side of a value
   // is rebuilt with the scroll view it is driven by, and a listener from the
-  // last opening then hears nothing, which left the release rule reading the
+  // last opening then hears nothing, which leaves the release rule reading the
   // offsets of the previous drag.
   useEffect(() => {
     if (!mounted) {
@@ -403,8 +403,8 @@ export function BottomSheet({
       outerRef.current?.scrollToEnd({ animated: false });
       // A sheet that has just mounted is a screen below its place until its
       // size reaches the native scroll view and the jump to the end lands
-      // (`moved`). Sliding in before that slid nothing: the sheet appeared
-      // all at once when the jump landed.
+      // (`moved`). Sliding in before that would slide nothing: the sheet
+      // would appear all at once when the jump landed.
       if (pull.current.seated) slideIn();
       return;
     }
@@ -457,8 +457,8 @@ export function BottomSheet({
     // sheet still open (a sub-mode going back to its form, a form going back
     // to its list): put it back, or it sits where the finger left it, off the
     // screen, with its backdrop still taking every touch. Not on a timer: a
-    // slow phone took longer than any sensible wait to close, and the spring
-    // back then fought the slide out.
+    // slow phone can take longer than any sensible wait to close, and the
+    // spring back would fight the slide out.
     if (pull.current.closing && visible) {
       pull.current.closing = false;
       settleSoon();
@@ -523,15 +523,15 @@ export function BottomSheet({
         onLayout={(event) => {
           const { height } = event.nativeEvent.layout;
           pull.current.viewport = height;
-          // The layout comes back in single precision: an exact compare
-          // re-rendered every sheet once for a millionth of a point.
+          // The layout comes back in single precision: an exact comparison
+          // would re-render every sheet once for a millionth of a point.
           if (Math.abs(height - viewportHeight) >= 1) setViewportHeight(height);
           settleSoon();
         }}
         // The rest position is the END of the scroll, and that moves whenever
         // the sheet changes height (the keyboard, a sub-mode). The jump here
-        // can land before the new size has reached the native view, which left
-        // the sheet short of open; the settle that follows measures and
+        // can land before the new size has reached the native view, which
+        // leaves the sheet short of open; the settle that follows measures and
         // finishes the job.
         onContentSizeChange={(_width, height) => {
           pull.current.content = height;
@@ -584,10 +584,10 @@ export function BottomSheet({
               },
             ]}
           >
-            {/* Hidden from assistive tech rather than labelled: it used to
-              announce "Drag down to close", which is an instruction a screen
-              reader cannot carry out — the one-finger drag never reaches the
-              sheet. Announcing an action that cannot be performed is worse than
+            {/* Hidden from assistive tech rather than labelled: announcing
+              "Drag down to close" is an instruction a screen reader cannot
+              carry out — the one-finger drag never reaches the sheet.
+              Announcing an action that cannot be performed is worse than
               announcing nothing; the backdrop above carries the real one. */}
             <View
               style={styles.handleHit}
@@ -600,8 +600,8 @@ export function BottomSheet({
               backdrop and the system back are gestures, and a gesture is not a
               way out. Back, when there is one, sits on the same line at the
               left: a sub-mode's title IS what you are going back from, and a
-              header slot may be empty, which left the arrow floating on its own
-              row looking like a stray control. */}
+              header slot may be empty, which leaves the arrow floating on its
+              own row looking like a stray control. */}
             <View style={styles.titleRow}>
               {onBack ? (
                 <IconButton
@@ -652,7 +652,7 @@ export function BottomSheet({
                   showsVerticalScrollIndicator={false}
                   // Without this the FIRST tap on any control while the keyboard is
                   // up is swallowed dismissing it, and the button only fires on the
-                  // second press — which read as "Save didn't save".
+                  // second press — which reads as "Save didn't save".
                   keyboardShouldPersistTaps="handled"
                   // What this cannot scroll goes to the sheet's drag (see the top
                   // of the file).
@@ -739,7 +739,7 @@ const useStyles = makeStyles((theme, textRole) => ({
  * What an owner returns while it has nothing to show, in place of null. It
  * must be the root of what the owner returns when open too: React then keeps
  * the one sheet, which slides out still drawing what it last held. Null
- * unmounts the sheet, and it vanished with no animation.
+ * unmounts the sheet, and it vanishes with no animation.
  * Guard: `sheetPull.test.ts`.
  */
 export const closedSheet = (

@@ -1,7 +1,7 @@
-// The single place that branches on url-vs-tiles / vector-vs-raster
-// (map-sources.md §4.3). Consumers hand it a ResolvedTileSource (status "ok")
-// plus the Layer components; layer ids must be suffixed with resolved.key so
-// two generations can coexist during a swap.
+// The single place that branches on url-vs-tiles / vector-vs-raster.
+// Consumers hand it a ResolvedTileSource (status "ok") plus the Layer
+// components; layer ids must be suffixed with resolved.key so two
+// generations can coexist during a swap.
 import type { ReactNode } from "react";
 import { RasterSource, VectorSource } from "@maplibre/maplibre-react-native";
 

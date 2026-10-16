@@ -1,6 +1,6 @@
 // Mirror row mapping: delta wire rows ⇄ SQLite mirror tables (DESIGN.md). Known
 // fields land in typed columns; anything else the server sent is preserved
-// verbatim in extra_json (additive protocol §10.3, display-only). Reads
+// verbatim in extra_json (additive protocol, display-only). Reads
 // reassemble the client-facing shapes the screens already consume (TPlace /
 // TTripLog compatible).
 import type { SQLiteDatabase } from "expo-sqlite";
@@ -110,10 +110,9 @@ const ROUTE_KNOWN = [
 ] as const;
 
 // `ownerId` has a column of its own: NULL means a SYSTEM definition, which the
-// user may not rename or delete. Storing it was skipped once on the premise
-// that every definition is the caller's own — the delta has always sent the
-// global ones too, and without the column the phone offered Delete on a
-// built-in field.
+// user may not rename or delete. Delta sync includes global system definitions;
+// without storing ownerId, the phone cannot tell them apart from user definitions
+// and would offer Delete on a built-in field.
 const CUSTOM_FIELD_DEF_KNOWN = [
   "id",
   "ownerId",
@@ -148,7 +147,7 @@ const MEDIA_KNOWN = [
 
 // ── upserts (called inside the delta-apply transaction) ─────────────────────
 //
-// Rebase-on-pull (§8.5) happens in deltaPull: it merges pending dirty fields
+// Rebase-on-pull happens in deltaPull: it merges pending dirty fields
 // over the server row BEFORE handing it here, and passes the surviving dirty
 // field names for the dirty_fields_json column. No pending ops → dirtyFields
 // is empty and columns hold pure server state.
@@ -472,17 +471,12 @@ export async function upsertFriendship(
 /**
  * Take a dead place out of the mirror's JSON link columns.
  *
- * Only TRIPS carry one now: place↔place links became rows of their own in the
- * phase 1c fold (`place_links`, deleted by the cascade above), while a trip
- * still carries its places with their names because the derived title is built
- * offline.
+ * Only trips carry one: place↔place links are stored in `place_links` (deleted
+ * by the cascade above), while a trip still carries its places with their
+ * names because the derived title is built offline.
  *
- * The history is worth keeping, because it is what this function is FOR: the
- * cascade once nulled a `waypoints.place_id` column that no longer existed on
- * any fresh install, which threw inside the delta transaction, took the cursor
- * write down with the rollback, and froze the whole pull loop on the first
- * place delete the account ever saw. Both the server tombstone and the local
- * delete route through here so the two cannot differ again.
+ * Both the server tombstone and the local delete route through here so the two
+ * cannot differ.
  */
 export async function scrubPlaceLinks(
   db: SQLiteDatabase,
@@ -508,7 +502,7 @@ export async function scrubPlaceLinks(
   }
 }
 
-// ── tombstone apply (§9 local cascade) ───────────────────────────────────────
+// ── tombstone apply (local cascade) ──────────────────────────────────────────
 //
 // Returns local file paths of cached media blobs the caller must delete
 // AFTER the transaction commits (filesystem I/O doesn't belong inside it).
@@ -537,10 +531,9 @@ async function collectMediaPaths(
 /**
  * The place delete cascade, declared once. Both paths that remove a place
  * from the mirror — the server tombstone and the local owner delete
- * (`deletePlaceLocal`) — call this, because they diverged before: the local
- * path left the place's media rows and their cached blobs on disk (forever
- * for a guest, who is never registered for delta pulls) and left
- * `routes.place_id` dangling.
+ * (`deletePlaceLocal`) — call this so local deletes and remote tombstones
+ * stay identical: clean up media rows, cached blobs on disk, and dangling
+ * `routes.place_id` references.
  *
  * Returns cached blob paths to unlink AFTER the transaction commits.
  */
@@ -673,10 +666,9 @@ export async function applyTombstone(
   // deadRemote so the parked-ops UI can offer "recreate from local copy".
   //
   // A pending local DELETE is the exception — it wanted exactly what just
-  // happened. Parking it raised a permanent "needs your attention" issue for
-  // work already done (delete the place on the phone offline, delete it on
-  // the web too, and the phone demanded a decision about it forever), whose
-  // only resolution was Discard. Drop it instead: goal state reached.
+  // happened. Parking it would raise a false "needs your attention" issue for
+  // work already done (e.g. deleted on phone offline and also deleted on web),
+  // whose only resolution would be Discard. Drop it instead: goal state reached.
   await db.runAsync(
     "DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'",
     tombstone.id,
@@ -895,8 +887,8 @@ export async function listMirrorPlaceTypes(): Promise<MirrorPlaceType[]> {
   // and a type picker without them would make a canyon impossible to add for
   // exactly the user who has no way to fix it. The system types are compiled
   // in (they are global rows with pinned ids), so they are the honest answer
-  // here. Asked of the built-ins, not of the whole table: a guest's first own
-  // type used to be the row that took the three away
+  // here. Asked of the built-ins, not of the whole table: a guest's own types
+  // must not displace the compiled-in system types before the first sync
   // (`placeTypeCreate.test.ts`).
   const builtInOrCompiled =
     builtIn.length > 0
@@ -1000,7 +992,7 @@ export type MirrorMedia = {
   syncState: string;
   localThumbPath: string | null;
   /** Null means the blob is not on THIS phone yet, not that it is missing:
-   *  rows sync eagerly and bytes are fetched on demand (§7.3). */
+   *  rows sync eagerly and bytes are fetched on demand. */
   localDisplayPath: string | null;
 };
 
@@ -1061,10 +1053,8 @@ export async function incomingShareOwnerByPlace(): Promise<
 
 // ── media rows ──────────────────────────────────────────────────────────────
 //
-// One column list and one mapper for every media read. Three call sites spelled
-// the same SELECT and the same row→object map by hand, so adding a column meant
-// finding all three — and a reader that missed one returned a MirrorMedia with
-// the new field silently undefined.
+// One column list and one mapper for every media read, keeping them in sync
+// so readers do not return MirrorMedia with fields undefined.
 
 /** Every media column the app reads, in one place. */
 const MEDIA_SELECT = `id, linked_type, linked_id, media_type, filename,

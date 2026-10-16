@@ -1,10 +1,10 @@
 // Design tokens — sourced from the shared theme schemes (single source of
-// truth for both clients; MOBILE_DESIGN_BRIEF §4).
+// truth for both clients).
 //
 // The user's scheme (`uiPreferences.themeSchemeId`) is STATE: resolved here at
 // module evaluation from a synchronous on-device preference, so the first frame
 // is already in the right colours, and changed by `setThemeSchemeId`, which
-// repaints the running app. Nothing scheme-dependent is a module constant: a
+// repaints the running Logjam GPS. Nothing scheme-dependent is a module constant: a
 // component reads colours with `useTheme()` and styles with a `makeStyles`
 // hook (DESIGN.md §1). Guard: `liveTheme.test.ts`.
 import {
@@ -42,7 +42,7 @@ const TEXT_SCALE_PREF_KEY = "textScale";
 
 function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
-  // An unrecognised id (downgraded app, hand-edited row) falls back rather than
+  // An unrecognised id (downgraded Logjam GPS, hand-edited row) falls back rather than
   // crashing the whole style layer on a bad string.
   return normalizeThemeSchemeId(stored) ?? DEFAULT_THEME_SCHEME_ID;
 }
@@ -55,13 +55,13 @@ const subscribeToScheme = (listener: () => void) => {
 };
 
 /**
- * Repaint the running app in `id`, and record it for the next launch. Returns
+ * Repaint the running Logjam GPS in `id`, and record it for the next launch. Returns
  * false when the device refused to store it (the repaint still happened), so
  * the caller can say the choice will not survive a restart.
  *
  * The account-level copy (`PATCH /users/me`) is the caller's job — that one is
  * what makes the choice follow the user to the web and to another phone; this
- * one is what makes the app open in the right colours with no network.
+ * one is what makes Logjam GPS open in the right colours with no network.
  */
 export function setThemeSchemeId(id: ThemeSchemeId): boolean {
   if (id !== currentThemeSchemeId) {
@@ -73,7 +73,7 @@ export function setThemeSchemeId(id: ThemeSchemeId): boolean {
 
 const ThemeSchemeContext = createContext<ThemeSchemeId>(currentThemeSchemeId);
 
-/** Wraps the whole app (`index.ts`), above the error boundary: everything
+/** Wraps Logjam GPS (`index.ts`), above the error boundary: everything
  *  under it repaints when the scheme changes, and nothing remounts. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const id = useSyncExternalStore(
@@ -83,7 +83,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return createElement(ThemeSchemeContext.Provider, { value: id }, children);
 }
 
-/** The scheme the app is painted in right now. */
+/** The scheme Logjam GPS is painted in right now. */
 export const useThemeSchemeId = (): ThemeSchemeId =>
   useContext(ThemeSchemeContext);
 
@@ -140,7 +140,7 @@ export const makeStyles = <T extends NamedStyles<T> | NamedStyles<unknown>>(
  * is on by default), so this preference exists only for the gap that leaves:
  * someone who wants Logjam's type bigger without enlarging every other app.
  * Which means the two knobs MULTIPLY, and a user on OS 1.3 who picks 1.4 here
- * would be asking for 1.8× — enough to break the row layouts this app is built
+ * would be asking for 1.8× — enough to break the row layouts Logjam GPS is built
  * out of. `resolveTextScale` therefore clamps the COMBINED figure to
  * `MAX_COMBINED_TEXT_SCALE` and returns what is left for us to apply.
  *
@@ -372,11 +372,11 @@ const placeHues = (theme: ThemeTokens) =>
 
 /**
  * Inbox identity — BORROWED, not invented (shared/DESIGN.md §8). A notification is
- * always about something that lives somewhere else in the app, so it wears that
+ * always about something that lives somewhere else in Logjam GPS, so it wears that
  * thing's hue: a topo notification is the same eucalypt as a topo overlay in
  * Saved, a place-share is the same heath as a shared place on the Places
  * screen. Recognising a thing again where it lives is what makes the inbox part
- * of the app rather than a log of unrelated events.
+ * of Logjam GPS rather than a log of unrelated events.
  *
  * Adding a kind means pointing at an existing hue. If the thing it refers to has
  * no hue yet, that is the gap to fill first.

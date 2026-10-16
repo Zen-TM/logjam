@@ -1,6 +1,6 @@
 // MBTiles writer for downloaded raster basemap regions.
 //
-// Same on-disk shape as a Stage 6 GeoPDF import — one raster MBTiles per region,
+// Same on-disk shape as a GeoPDF import — one raster MBTiles per region,
 // TMS row order, `logjam:*` namespaced metadata — but written from JS rather
 // than the native rasteriser, because there is no pixel work in this path: the
 // bytes arrive off the network already encoded.
@@ -376,7 +376,7 @@ export async function listUnfinishedRegions(
 ): Promise<UnfinishedRegion[]> {
   const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
-  // MOT-002: the single-file Protomaps clip (regionDownloads.ts) writes a
+  // The single-file Protomaps clip (regionDownloads.ts) writes a
   // `.pmtiles` here with no checkpoint of its own — an app kill mid-transfer
   // leaves it with nothing to resume into, unlike the MBTiles below. This is
   // the one place that already walks this directory on every Saved-tab open.

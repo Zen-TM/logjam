@@ -1,7 +1,7 @@
-// "Open in Logjam" (Android ACTION_VIEW / share-sheet) — Stage 5/6 intent
-// handling. The OS hands the app a content:// (or file://) URI with no
-// reliable filename or MIME, so the file KIND is classified by sniffing the
-// leading bytes, never by extension.
+// "Open in Logjam" (Android ACTION_VIEW / share-sheet) intent handling.
+// The OS hands Logjam GPS a content:// (or file://) URI with no reliable
+// filename or MIME, so the file KIND is classified by sniffing the leading
+// bytes, never by extension (Guard: incomingIntent.test.ts).
 //
 // PRIVACY: the flow is identical to the picker imports — entirely
 // device-local, no coordinates leave the device, errors are static strings.

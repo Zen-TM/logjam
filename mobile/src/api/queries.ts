@@ -1,4 +1,4 @@
-// Typed API calls + data hooks for the Stage 1 read-only screens. Follows the
+// Typed API calls + data hooks for read-only screens. Follows the
 // web hook pattern (frontend/src/placeUtils.ts): useState + useEffect +
 // fetchCount + refetch, returning { data, loading, error, refetch } with
 // user-friendly error strings via messageFromError.
@@ -23,8 +23,7 @@ export function updateConsent(consentVersion: string): Promise<TUser> {
   });
 }
 
-// Place/trip list + detail reads moved to the Stage 8 offline mirror
-// (src/sync/useSyncQueries.ts) — REST fetchers for them died with the swap.
+// Place and trip reads live in the offline mirror (src/sync/useSyncQueries.ts).
 
 export function getNotifications(): Promise<{
   data: TNotification[];
@@ -63,7 +62,7 @@ export function getVectorStyle(): Promise<VectorStyleSettings> {
 // that carried one, which only the server can do transactionally.
 //
 // Online-only, deliberately: this edits an account-level preference that every
-// device and the web share, so an offline queue would need conflict rules for a
+// device and Logjam Web share, so an offline queue would need conflict rules for a
 // list the user could also be reordering in a browser. The forms degrade to the
 // fields they already know about.
 //

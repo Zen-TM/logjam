@@ -29,11 +29,11 @@ async function writeCache(
     new Date().toISOString(),
     JSON.stringify({ notifications, total }),
   );
-  // EVERY write announces itself, the fetch included. The patches used to
-  // notify individually and the fetch did not, so a refresh that brought back a
-  // different read state updated the list and left the tab badge on the old
-  // number — AppShell recomputes the badge from this cache, and only on this
-  // signal. One notify beside the one write is what keeps the two agreeing.
+  // EVERY write announces itself, the fetch included. AppShell recomputes the
+  // badge from this cache, and only on this signal — without notifying on
+  // fetch, a refresh bringing back a different read state would update the list
+  // and leave the tab badge on the old number. One notify beside the one write
+  // is what keeps the two agreeing.
   notifyMirrorChanged();
 }
 
@@ -144,12 +144,12 @@ export async function getCachedUnreadCount(): Promise<number | null> {
  * Optimistically merge fields into ONE cached notification's payload, so a row
  * the user just acted on restyles itself without a refetch.
  *
- * This exists because the refetch was the bug: `GET /notifications` is the
- * authority on `read`, so re-fetching immediately after a mark-read raced the
- * outbox push and wrote `read: false` back over it — the row the user had just
- * answered went on saying "New". Patching the one field we already know the
- * server will agree with (an accepted send is accepted) keeps the row in place,
- * keeps it read, and costs no request.
+ * This avoids a race with the outbox push: `GET /notifications` is the
+ * authority on `read`, so re-fetching immediately after a mark-read can
+ * race the outbox push and write `read: false` back over it — the row the user
+ * just answered would go on saying "New". Patching the one field we already
+ * know the server will agree with (an accepted send is accepted) keeps the row
+ * in place, keeps it read, and costs no request.
  */
 export async function patchCachedPayload(
   id: string,

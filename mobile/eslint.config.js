@@ -88,10 +88,10 @@ const COLOUR_LITERALS = [
 ];
 
 // The scheme is state, so nothing may hold a colour from before it changed
-// (mobile/DESIGN.md §1). theme.ts once exported these as module constants,
-// painted in the scheme the app started in; this keeps them from coming back.
-// A colour is reachable only through a hook, which `rules-of-hooks` already
-// keeps out of module scope. Guard: src/liveTheme.test.ts.
+// (mobile/DESIGN.md §1). Module constants would freeze colours in the scheme
+// the app started in. A colour is reachable only through a hook, which
+// `rules-of-hooks` already keeps out of module scope.
+// Guard: src/liveTheme.test.ts.
 const LAUNCH_THEME_IMPORTS = [
   "error",
   {

@@ -5,7 +5,7 @@
 // added after a release needs an ALTER in `ADDED_COLUMNS` too, and a column
 // that joins one list and not the other is invisible until a real device
 // installs one way round and not the other. `schema.test.ts` is the check —
-// root CLAUDE.md records the last time this pair drifted (ADDED_COLUMNS vs
+// root AGENTS.md records the last time this pair drifted (ADDED_COLUMNS vs
 // CREATE TABLE, which killed delta sync on every fresh install).
 //
 // PRIVACY: DDL only. No rows, no coordinates.
@@ -24,26 +24,17 @@ export const SCHEMA_SQL = `
           minzoom INTEGER, maxzoom INTEGER,
           sizeBytes    INTEGER NOT NULL,
           downloadedAt TEXT NOT NULL,
-          -- (verifiedAt was here. It was bound to the wall clock of its own
-          -- INSERT — identical in meaning to downloadedAt — and had no other
-          -- writer and no reader anywhere: schema asserting a verification
-          -- step that was never built. Dropped from the DDL and from
-          -- insertArtifact. Devices installed before this keep the column as a
-          -- harmless nullable leftover, which SQLite has no cheap way to drop
-          -- and which nothing reads.)
+          -- (verifiedAt is omitted from fresh DDL; earlier installs retain the
+          -- unused nullable column.)
           label        TEXT,
           groupId      TEXT,
           groupLabel   TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
-        -- An import USED to be a device-only record: this table held its name,
-        -- colour, bbox and counts, and nothing left the phone. An import is now
-        -- a standalone media row (linked_type "none"), so all of that is
-        -- server-authoritative and lives in the sync mirror instead. Dropped
-        -- rather than migrated: its rows describe files that were never
-        -- uploaded, and the app is not released, so there is nothing in the
-        -- field to carry across. The statement is a no-op after the first open.
+        -- DROP TABLE IF EXISTS cleans up legacy vector_import: imports are
+        -- standalone media rows in the sync mirror rather than device-only
+        -- records. The statement is a no-op after the first open.
         DROP TABLE IF EXISTS vector_import;
         -- What is true about an import ON THIS PHONE, and only here: whether it
         -- is currently drawn, and where its bytes are.
@@ -132,10 +123,9 @@ export const SCHEMA_SQL = `
         -- Its seq is its own counter, unrelated to track_point.seq. Order
         -- against accepted points by timestampMs.
         --
-        -- Why keep them at all: every diagnosis of a bad fix so far needed the
-        -- fix AFTER it, and a rejected fix used to be unrecoverable, so no
-        -- candidate filter could ever be tested against the fixes it would have
-        -- to judge (private/todo/track-accuracy.md).
+        -- Why keep them at all: diagnosing bad fixes requires the subsequent
+        -- fixes; storing rejected fixes allows testing candidate filters
+        -- against the raw fixes they judge.
         CREATE TABLE IF NOT EXISTS track_point_rejected (
           trackId     TEXT NOT NULL,
           seq         INTEGER NOT NULL,
@@ -164,17 +154,14 @@ export const SCHEMA_SQL = `
           editingRouteId TEXT,
           savedAt        TEXT NOT NULL
         );
-        -- (There was a region_download progress table here, from the original
-        -- plan. Nothing ever wrote to it: the file IS the checkpoint, and
-        -- unfinished downloads are discovered by reading the region directory.
-        -- Dropped rather than left as schema nobody can explain.)
+        -- DROP TABLE IF EXISTS cleans up legacy region_download: unfinished
+        -- downloads are discovered by reading the region directory directly,
+        -- so the file is the checkpoint.
         DROP TABLE IF EXISTS region_download;
-        -- (Stage 7's local-only waypoint table was here. Stage 8 made
-        -- waypoints a synced entity; migrateLegacyWaypoints drains any
-        -- surviving rows into the mirror and drops the table itself. It is NOT
-        -- dropped here: this SQL runs on every open, ahead of the promotion,
-        -- so dropping it here would delete an upgrading user's waypoints
-        -- before they were promoted.)
+        -- Legacy waypoint table cleanup is handled by migrateLegacyWaypoints,
+        -- which drains surviving rows into the sync mirror and drops the table
+        -- itself. Do not DROP TABLE here: this SQL runs on every open ahead of
+        -- migration, so dropping it here would delete unmigrated waypoints.
       `;
 
 // Columns added to a table that already exists on installed devices. The
@@ -189,17 +176,15 @@ export const ADDED_COLUMNS: {
   // User-facing rename of a downloaded region/overlay (Saved tab). Display
   // only — resolution still keys off `logicalKey`.
   { table: "map_artifact", column: "label", definition: "TEXT" },
-  // One "Save maps offline" run picks several basemaps for ONE area and used
-  // to land as one unrelated card per basemap. The group is that run: every
-  // artifact from it shares a groupId, and `groupLabel` is the name the user
-  // gave the area (Saved shows one card per group). Legacy rows have neither
-  // and group by their own id, which is exactly the old one-card-each shape.
+  // A "Save maps offline" run picks several basemaps for one area. Every
+  // artifact from the run shares a groupId, and `groupLabel` is the name the
+  // user gave the area (Saved shows one card per group). Legacy rows lack
+  // groupId/groupLabel and group by their own id (one card each).
   { table: "map_artifact", column: "groupId", definition: "TEXT" },
   { table: "map_artifact", column: "groupLabel", definition: "TEXT" },
-  // Wall-clock recording time. The elapsed clock used to be derived from the
-  // stored fix series, which stops at the last accepted fix — so the time
-  // between the last fix and the Finish tap vanished from the saved track.
-  // Pauses are now accumulated explicitly at the pause/resume taps.
+  // Wall-clock recording time. Deriving elapsed time from the fix series alone
+  // would omit time between the last accepted fix and the Finish tap. Pauses
+  // are accumulated explicitly at pause/resume taps.
   {
     table: "track",
     column: "pausedMs",

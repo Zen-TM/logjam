@@ -1,11 +1,12 @@
-// Pure builder for vector topo overlay layer definitions — the mobile port of
-// web Map.tsx's structural layer creation + applyVectorPaint, collapsed into
-// one declarative pass (React re-renders on VectorStyleSettings change, so the
-// web's structural/paint split isn't needed here).
+// Pure builder for vector topo overlay layer definitions — the Logjam GPS port of
+// Logjam Web's structural layer creation + applyVectorPaint
+// (`frontend/src/components/map/Map.tsx`), collapsed into one declarative pass
+// (React re-renders on VectorStyleSettings change, so the Logjam Web
+// structural/paint split isn't needed here).
 //
-// Expressions mirror the web layer set verbatim; only the font differs
-// ("Noto Sans Medium" — the mobile glyph host's stack; web uses Open Sans).
-// Width/colour/size math comes from @logjam/shared so live map, web, and baked
+// Expressions mirror the Logjam Web layer set verbatim; only the font differs
+// ("Noto Sans Medium" — the mobile glyph host's stack; Logjam Web uses Open Sans).
+// Width/colour/size math comes from @logjam/shared so live map, Logjam Web, and baked
 // exports stay in lockstep.
 import {
   OSM_POINT_FEATURE_KEYS,
@@ -102,7 +103,8 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         ...labelText,
         symbolPlacement: "line",
         // LAZ-derived contours are very knobbly — 150° lets labels place
-        // along wiggly runs at low zoom (web parity, see Map.tsx).
+        // along wiggly runs at low zoom (Logjam Web parity, see
+        // frontend/src/components/map/Map.tsx).
         textMaxAngle: 150,
         textColor: rgbaCssFromHex(vs.contours.majorColour),
         textHaloColor: contourLabelHalo(vs.contours.majorColour),
@@ -144,7 +146,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       sourceLayer: "features",
       filter: ["==", ["get", "_category"], "power"],
       style: {
-        // Raw pixel width (no zoom interpolation) — web parity.
+        // Raw pixel width (no zoom interpolation) — Logjam Web parity.
         lineColor: rgbaCssFromHex(feat("power").colour),
         lineWidth: feat("power").widthZ18,
         lineDasharray: [3, 4],
@@ -208,8 +210,8 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
     });
   }
 
-  // Point features → fixed PNG icons (registered app-side via <Images>),
-  // then name labels (peaks also show elevation).
+  // Point features → fixed PNG icons (registered via <Images> in
+  // TopoVectorOverlay.tsx), then name labels (peaks also show elevation).
   for (const key of OSM_POINT_FEATURE_KEYS) {
     if (!feat(key).enabled) continue;
     defs.push({
@@ -271,7 +273,7 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
 /**
  * Layer definitions for one vector topo overlay. `kind` is derived from the
  * layer name ("contours" ⇒ contour styling, anything else ⇒ OSM features —
- * matches the web's `id.includes("contours")` test).
+ * matches Logjam Web's `id.includes("contours")` test).
  */
 export function buildTopoVectorLayerDefs(
   kind: "contours" | "features",

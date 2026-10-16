@@ -16,7 +16,8 @@
  *
  * Takes every label in play — the registry's rows AND the runs still
  * downloading — because the artifact for a run enqueued a minute ago may not
- * exist yet, and two taps in a row must not both produce "Region 1".
+ * exist yet, and two taps in a row must not both produce "Region 1". Guard:
+ * mobile/src/map/regionName.test.ts.
  */
 export function nextRegionName(
   existingLabels: Iterable<string | null | undefined>,

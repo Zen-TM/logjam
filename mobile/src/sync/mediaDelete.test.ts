@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Deleting an attachment whose upload never left the phone. Media ops bypass
-// the shared coalescing planner, so its delete-cancellation never applied
-// here: the flush ran the queued CREATE first (presign → PUT → confirm, the
-// whole file, possibly on metered data) and the delete op then removed it
-// server-side again. Correct end state, wasted radio — the exact resource the
-// outbox exists to conserve.
+// the shared coalescing planner, so its delete-cancellation does not apply
+// automatically here: without explicit cancellation, the flush would run the
+// queued CREATE first (presign → PUT → confirm, the whole file, possibly on
+// metered data) and the delete op would then remove it server-side again.
+// Correct end state, wasted radio — the exact resource the outbox exists to conserve.
 
 type Call = { sql: string; args: unknown[] };
 const calls: Call[] = [];
@@ -39,9 +39,9 @@ vi.mock("../offline/localStores", () => ({
   MEDIA_CACHE_DIR: "file:///cache/",
 }));
 vi.mock("../api/apiFetch", () => ({ apiFetch: () => Promise.resolve() }));
-// MOT-006: mediaUpload.ts now imports networkPolicy.ts (NetInfo + prefsDb,
-// both native) for the metered-upload gate; deleteMediaLocal never reaches
-// it, so a bare stand-in is enough.
+// mediaUpload.ts imports networkPolicy.ts (NetInfo + prefsDb, both native)
+// for the metered-upload gate; deleteMediaLocal never reaches it, so a bare
+// stand-in is enough.
 vi.mock("../offline/networkPolicy", () => ({
   canRunNow: () => Promise.resolve(true),
 }));

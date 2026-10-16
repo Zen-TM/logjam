@@ -21,7 +21,7 @@ import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton, Icon } from "../ui";
 
 // A photo is judged against black (`scrim.photo`), so the viewer's chrome
-// always wears a DARK scheme's colours, whatever the app is painted in: a
+// always wears a DARK scheme's colours, whatever Logjam GPS is painted in: a
 // light scheme's ink would vanish into the backdrop.
 const photoChrome = THEME_SCHEMES.sandstone.tokens;
 

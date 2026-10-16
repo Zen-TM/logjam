@@ -1,5 +1,5 @@
 // Compose the /topo-jobs/completed-overlays response into ordered
-// LogicalLayerRefs — the mobile counterpart of the web's combinedTopoLayers
+// LogicalLayerRefs — the Logjam GPS counterpart of Logjam Web's combinedTopoLayers
 // (frontend/src/components/App.tsx): z-order is layer-order outer loop
 // (TOPO_LAYERS order), newest-job-first inner loop. Pure; vitest-tested.
 import {
@@ -25,10 +25,10 @@ export type CompletedOverlaysResponse = {
      * means exactly that rather than guessing.
      *
      * So surfaces test for the NEGATIVE — `=== "shared"` withholds an
-     * owner-only verb, unknown does not. Gating on `=== "owner"` instead made
-     * Share disappear from every saved topo the moment the signal went, which
-     * is the vanishing-feature DESIGN.md forbids; the row is shown dimmed
-     * with its reason instead, and the verb needs the network anyway.
+     * owner-only verb, unknown does not. Gating on `=== "owner"` would make
+     * Share disappear from saved topos when offline, violating mobile/DESIGN.md;
+     * the row is shown dimmed with its reason instead, and the verb needs the
+     * network anyway.
      */
     syncRole?: "owner" | "shared";
     /** The ground the job covers, as the server sends it (absent on a synthetic job). */

@@ -33,7 +33,6 @@ describe("linkablePlaces", () => {
     expect(linkablePlaces(many(VISIBLE_PLACES), "").hiddenCount).toBe(0);
   });
 
-  // The bug: the list stopped at the cap and said nothing.
   it("caps the list and counts what it left out", () => {
     const result = linkablePlaces(many(VISIBLE_PLACES + 7), "");
     expect(result.visible).toHaveLength(VISIBLE_PLACES);

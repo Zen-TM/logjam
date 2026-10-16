@@ -260,12 +260,8 @@ const CATEGORY_META: Record<
   // Routes you drew, as opposed to files you brought in. Kept a separate
   // category rather than folded into "import": a route is editable in place and
   // an import is an opaque file, and a list that mixes them would need to
-  // explain which rows can be edited. (Both sync now — that used to be the
-  // other half of the distinction, and is not any more.)
+  // explain which rows can be edited.
   route: { label: "Route", plural: "Routes", icon: "route" },
-  // Marked points. Like routes they are records rather than files, and they are
-  // the one kind here that can be SEARCHED and filtered by tag — see the
-  // waypoint filter rail below.
   // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
   // here is a whole FILE the user brought in from another app, and it may hold
   // points and polygons as readily as lines. "Files" alone was rejected as too
@@ -453,7 +449,6 @@ export function SavedScreen({
    *  belongs to no place until the user says otherwise. */
   onDrawRoute: () => void;
   /**
-  /**
    * Open a place's detail screen. Used by the route sheet for
    * ONE case: a row that is on this phone because it is linked to a place
    * shared with the user has no share of its own to hand back, so the sheet
@@ -521,7 +516,7 @@ export function SavedScreen({
   const [filter, setFilter] = useState<Category | "all">(
     initialFilter?.category ?? "all",
   );
-  // One search field for every tab (item 8).
+  // One search field for every tab.
   const [searchQuery, setSearchQuery] = useState("");
   // A later arrival re-selects, even for the same category — this tab stays
   // mounted, so the pointer has to work every time it is followed.
@@ -642,9 +637,9 @@ export function SavedScreen({
   // import / one overlay download at a time), so one row above the list
   // carries label and progress for whichever is running.
   //
-  // GeoPDF imports are NOT one of them any more — they take the whole screen
-  // (see geoPdfOp below), because their opening phases block the JS thread and
-  // a progress row on a frozen list is a worse lie than no row.
+  // GeoPDF imports are not included here — they take the whole screen (see
+  // geoPdfOp below), because their opening phases block the JS thread and a
+  // progress row on a frozen list is a worse lie than no row.
   const [activeOp, setActiveOp] = useState<{
     label: string;
     category: Category;
@@ -677,10 +672,8 @@ export function SavedScreen({
   // killed during. The queue is memory only, so after a relaunch the file on
   // disk is the sole evidence it ever started (regionMbtiles.ts).
   //
-  // This used to live in the map's layers sheet, which was a strange place to
-  // look for it and, worse, opened every region file to do the scan — racing
-  // the queue for the same SQLite lock and failing the very download it was
-  // offering to resume. Recovery belongs beside the runs it recovers.
+  // Recovery lives beside the runs it recovers rather than in the map's layers
+  // sheet, avoiding lock contention with the active queue.
   const [orphans, setOrphans] = useState<UnfinishedRegion[]>([]);
   const queuedIds = regionJobs.map((job) => job.spec.id).join(",");
   const refreshOrphans = useCallback(() => {
@@ -797,7 +790,7 @@ export function SavedScreen({
     }))
     .filter((job) => job.missing.length > 0);
 
-  // Wi-Fi-only download default (stage4a §5.6 policy) — same confirm as the
+  // Wi-Fi-only download default — same confirm as the
   // map's "download current area", recreated here since overlay saves are
   // viewport-independent asset management, not a map-viewport action.
   const confirmCellularOk = useCallback(async (): Promise<boolean> => {
@@ -1009,8 +1002,8 @@ export function SavedScreen({
     const rows: SavedItem[] = [];
 
     // ONE card per saved AREA, not per basemap: a "Save maps offline" run
-    // downloads a file per selected map and used to land as that many unrelated
-    // rows, so deleting "the region" meant finding all of them. Legacy rows
+    // downloads a file per selected map; grouping by area prevents separate
+    // unrelated rows so the whole region can be deleted together. Legacy rows
     // (no groupId) group under their own id and stand alone, unchanged.
     for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
       const first = group.members[0];
@@ -1269,7 +1262,7 @@ export function SavedScreen({
       });
     }
 
-    // Every row is searchable by name (item 8). A row that set a richer
+    // Every row is searchable by name. A row that set a richer
     // haystack of its own keeps it; this fills the rest.
     for (const row of rows) {
       if (!row.search) row.search = { haystack: row.title.toLowerCase() };
@@ -1278,11 +1271,9 @@ export function SavedScreen({
     // The sync boundary, marked on the row — as a small cloud on what IS in the
     // account, never as a label on what is not.
     //
-    // It ran the other way round first ("This device" on every region, topo and
-    // GeoPDF) and that was the wrong statement in two ways: it spent a whole
-    // pill saying something reassuring in the language of a warning, on the
-    // rows that are least at risk, and it left the rows a user actually worries
-    // about — their own imports and recordings — saying nothing at all.
+    // Marking only what is in the account avoids spending a warning-styled
+    // pill on low-risk local maps while leaving user imports and recordings
+    // unmarked.
     //
     // The mark is per ITEM, not per category, because the category only says
     // what SHOULD be in the account. `pendingCreates` says what is.
@@ -1377,7 +1368,7 @@ export function SavedScreen({
       ? [...items].sort((a, b) => b.sizeBytes - a.sizeBytes)
       : items.filter((item) => item.category === filter);
 
-  // Every row now carries a `search.haystack` (item 8), so the name search
+  // Every row carries a `search.haystack`, so the name search
   // applies inside every tab, "All" included.
   const needle = searchQuery.trim().toLowerCase();
   const visibleItems = inCategory.filter(
@@ -1414,11 +1405,8 @@ export function SavedScreen({
     setPulsingKey(highlightKey);
     scrolledForNonce.current = null;
     pulse.setValue(0);
-    // ONE WASH THAT DECAYS, not a blink and not three of them. The first
-    // version flashed the row's whole opacity down and back three times, and it
-    // read as an alarm rather than as a pointer — worst on a filter holding a
-    // single row, where the scroll has nothing to do and the flashing is the
-    // only thing that happens. This lands the tint fast (the eye needs to catch
+    // ONE WASH THAT DECAYS, not a blink: fading opacity reads as an alarm
+    // rather than as a pointer. This lands the tint fast (the eye needs to catch
     // it), holds it long enough to be seen as a state, then takes a second to
     // let go: "this one", said once.
     Animated.sequence([
@@ -1743,14 +1731,11 @@ export function SavedScreen({
         <SyncStatusPills online={online} pendingCount={pendingCount} />
       </Hero>
 
-      {/* While picking, the contextual bar TAKES ONLY THE SEGMENTED CONTROL'S
-          slot (item 15) — it used to replace the whole rail, search field and
-          tag chips included, and their absence is what made the list jump:
-          the two states had different heights, so every row below slid up the
-          moment a selection started. The narrowing controls now stay mounted
-          in the SAME place in both states, so the rail's height cannot
-          differ. They go inert rather than unmounting — see the note on
-          `disabled` below. */}
+      {/* While picking, the contextual bar takes only the segmented control's
+          slot rather than replacing the whole rail: keeping narrowing controls
+          mounted in both states prevents list jumps caused by height differences.
+          They go inert rather than unmounting — see the note on `disabled`
+          below. */}
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
@@ -1780,10 +1765,10 @@ export function SavedScreen({
             scroll
           />
         )}
-        {/* A name search on every tab (item 8) — every category now carries a
+        {/* A name search on every tab — every category carries a
             `search.haystack`. Nothing to search: the field is hidden with
-            nothing on the phone, same rule the waypoint tag rail already
-            follows, and the empty panel gets the whole screen body. */}
+            nothing on the phone, and the empty panel gets the whole screen
+            body. */}
         {activeCategoryCount > 0 ? (
           // The field carries its own right pad because the rail has none —
           // the category chips are meant to scroll off the edge, an input
@@ -1842,8 +1827,7 @@ export function SavedScreen({
                 ? `${Math.round(importRun.fraction * 100)}%`
                 : null,
               // What the run is going to cost, as soon as planning knows —
-              // a GeoPDF import is minutes of rendering and used to quote no
-              // number at all before starting them.
+              // a GeoPDF import is minutes of rendering.
               importRun.estimate
                 ? `${importRun.estimate.tiles.toLocaleString()} tiles · ${formatMinutes(importRun.estimate.seconds)}`
                 : null,
@@ -1982,13 +1966,10 @@ export function SavedScreen({
                   selecting ? () => selectItem(item) : () => openItem(item)
                 }
                 /* ONE trailing slot for both modes, and every child of it keeps its
-               place when the mode changes. Selecting used to render a slot of
-               its own holding only the size and a 22px circle: the pill and the
-               two buttons went away, the title column got their width back, and
-               a two-line title un-wrapped — so entering the mode SHRANK rows
-               and the whole list jumped up under the user's finger. The circle
-               therefore takes the ⋯ button's 40pt box rather than replacing it,
-               and the pill stays put; only the buttons stop responding. */
+                place when the mode changes. The circle takes the ⋯ button's 40pt box
+                rather than replacing it, and the pill stays put while buttons stop
+                responding; keeping slot width prevents row resizing and list jumps
+                when entering selection mode. */
                 right={
                   <View style={styles.rowActions}>
                     {item.sizeBytes > 0 ? (
@@ -2425,9 +2406,7 @@ export function SavedScreen({
                   onPress={() => setMenuMode("sendCopy")}
                 />
               ) : null}
-              {/* Absent on a shared route or waypoint: the rename used to be
-                  offered, take the user's typing and drop it (the descriptor's
-                  stub resolved without writing anything). */}
+              {/* Absent on a shared route: shared items are read-only and cannot be renamed. */}
               {menuItem.rename ? (
                 <Row
                   title="Rename"
@@ -2612,8 +2591,8 @@ function EmptyPanel({
   online: boolean;
   /** The one thing that fills this tab, or null where the tab is already it. */
   action: SavedAction | null;
-  /** The tab has rows, but a search/tag narrowed all of them out — a
-   *  different message from the tab genuinely holding nothing (item 8), same
+  /** The tab has rows, but a search narrowed all of them out — a
+   *  different message from the tab genuinely holding nothing, same
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
   searching: boolean;
 }) {

@@ -1,4 +1,4 @@
-// Outbox flush engine (stage8-sync.md §8.3): take the next ≤50 ready ops
+// Outbox flush engine: take the next ≤50 ready ops
 // (shared dependency-closure selection), POST /sync/push, apply per-op
 // results. Batch is not atomic server-side; every op class is idempotent, so
 // a network drop mid-batch is safe to replay whole.
@@ -68,12 +68,12 @@ export type FlushSummary = {
 /** Flush to drain (or until only parked/deferred ops remain). Serialized by
  * the sync engine — never call concurrently. Push ops (place/trip/link/
  * notification) go through POST /sync/push in dependency-closure batches;
- * media ops run their own three-phase / REST flow (§7.1, §8.3 interleave). */
+ * media ops run their own three-phase / REST flow. */
 export async function flushOutbox(): Promise<FlushSummary> {
   const db = await getSyncDb();
 
   // Crash recovery: ops stranded inflight by a killed process are replay-
-  // safe (§8.1 idempotency) — requeue them.
+  // safe (idempotent) — requeue them.
   //
   // `retrying` is requeued in the same statement, and this is the ONLY place it
   // happens: one attempt per flush pass. Requeuing inside the loop below would
@@ -85,7 +85,7 @@ export async function flushOutbox(): Promise<FlushSummary> {
   for (;;) {
     const rows = await loadOutboxRows();
     const byOpId = new Map(rows.map((row) => [row.op_id, row]));
-    // Media ops are NOT push ops (push refuses media, §8.1) — exclude them
+    // Media ops are NOT push ops (push refuses media) — exclude them
     // from the push batch and run them separately below.
     const pushEntries = rows
       .filter((row) => row.entity !== "media")
@@ -109,7 +109,7 @@ export async function flushOutbox(): Promise<FlushSummary> {
  *
  * An envelope-level 400/413 is the whole REQUEST refused, which the server
  * does for a single structurally-bad op (`parsePushOp` throws before the
- * per-op loop even begins). Parking the batch turned one malformed op into up
+ * per-op loop even begins). Parking the batch would turn one malformed op into up
  * to fifty separate Sync Issues, forty-nine of them telling the user the
  * server rejected an edit it never saw. Bisect instead: halve until the batch
  * is one op, and park exactly that op. Costs O(log n) extra requests on a
@@ -223,9 +223,8 @@ async function applyOpResult(
           : {};
         // `shelved_json` is what the USER wrote and `server_json` is what won
         // — the Sync Issues screen renders them as "Discarded" and "Kept".
-        // Both columns used to be filled from serverValue, so the user was
-        // shown the other device's value labelled as their own, and their own
-        // was never recorded anywhere.
+        // Filling both columns from serverValue would show the other
+        // device's value labelled as their own and lose their own edits.
         const ownFields = row.fields_json
           ? (JSON.parse(row.fields_json) as Record<string, unknown>)
           : {};
@@ -282,21 +281,20 @@ async function applyOpResult(
       return true;
     }
     case "rejected": {
-      // `sentence`, not the wire's `message`: a row parked by a build from
-      // before the server wrote for the user holds a developer's `message`,
-      // and the Sync Issues screen must not show that one (syncIssues.ts).
+      // `sentence`, not the wire's `message`: older parked rows may hold
+      // a developer's `message`, and the Sync Issues screen must not show
+      // that one (syncIssues.ts).
       const error = {
         code: result.error?.code ?? 400,
         sentence: result.error?.message,
       };
       const isGone = error.code === 404 && entry.op.op !== "create";
       // A rejection the server may answer differently next time is OURS to
-      // retry, not the user's. Parking every rejection put "Try again" in
+      // retry, not the user's. Parking every rejection would put "Try again" in
       // front of someone for a 503 — asking them to press a button the app
-      // could have pressed itself, and teaching them that the screen is full
-      // of things that fix themselves. What reaches the user is what a retry
-      // cannot fix: a refusal about the request (400/409/…), a row deleted
-      // under the edit, or an op the server has kept refusing for a day
+      // can retry itself. What reaches the user is what a retry cannot fix:
+      // a refusal about the request (400/409/…), a row deleted under the edit,
+      // or an op the server has kept refusing for a day
       // (`shouldGiveUpOnSyncOp`), however temporary each refusal claimed to be.
       const now = new Date();
       const tally =
@@ -307,7 +305,7 @@ async function applyOpResult(
         tally !== null && !shouldGiveUpOnSyncOp(tally, true, now);
       await db.runAsync(
         "UPDATE outbox SET state = ?, error_json = ? WHERE seq = ?",
-        // Edit-on-deleted (§6 delete-wins): park as deadRemote so the UI
+        // Edit-on-deleted (delete-wins): park as deadRemote so the UI
         // offers "recreate"; other terminal rejections park blocked.
         isGone ? "deadRemote" : retryable ? "retrying" : "blocked",
         JSON.stringify(retryable ? { ...error, ...tally } : error),
@@ -332,7 +330,7 @@ async function applyConfirmedRow(
   serverRow: unknown,
 ): Promise<void> {
   // Only this row's ops matter to the rebase, and this runs once per applied
-  // op — reading the whole outbox here was fifty full-table scans per batch.
+  // op — reading the whole outbox here would cause fifty full-table scans per batch.
   const remaining = (await loadOutboxRowsFor(entry.op.entity, entry.op.id)).map(
     rowToEntry,
   );
@@ -374,13 +372,13 @@ async function applyConfirmedRow(
   }
 }
 
-// ── media ops (§7.1, §7.2) ───────────────────────────────────────────────────
+// ── media ops ─────────────────────────────────────────────────────────────────
 //
 // Media creates run the three-phase presign→PUT→confirm flow; deletes hit
 // REST DELETE. Sequential (the spec allows concurrency 2 — a modest field
 // photo count doesn't need it, and sequential keeps ordering trivial). A
-// media create waits until its linked entity has no pending outbox op (§7.2
-// dependency): a still-queued or blocked place/trip create for the same
+// media create waits until its linked entity has no pending outbox op: a
+// still-queued or blocked place/trip create for the same
 // linkedId would send the upload into a guaranteed 404.
 
 async function countRetrying(
@@ -420,10 +418,10 @@ async function flushMediaOps(): Promise<boolean> {
       }
       // 'blocked' already set its own state inside the op runner.
     } catch (err) {
-      // Per-op, NOT per-pass. Aborting the loop here let one unreadable photo
+      // Per-op, NOT per-pass. Aborting the loop here would let one unreadable photo
       // head-of-line-block every other upload on the device permanently: the
-      // next pass hit the same op first and threw again, and because the op
-      // never parked it never appeared in Sync Issues either.
+      // next pass would hit the same op first and throw again, and because the op
+      // never parked it would never appear in Sync Issues either.
       firstError ??= err;
       // No answer at all (a timeout, a reset connection) is the link's
       // failure, not this op's: it goes back in the queue uncounted, however
@@ -483,7 +481,7 @@ async function flushMediaOps(): Promise<boolean> {
 }
 
 /**
- * Dispatch one media op. Media is not a push entity (§8.1) — creation is the
+ * Dispatch one media op. Media is not a push entity — creation is the
  * three-phase presign flow — but a standalone file can also be renamed and
  * re-parented, and those are plain REST calls on the same row.
  */
@@ -507,7 +505,7 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
 /** A media create must wait for its linked entity's create to fully flush:
  * an outbox row still targeting linkedId means the row may not exist
  * server-side yet. PARKED ops don't count — a parked link is never going to
- * flush on its own, and counting it left the photos of a blocked place
+ * flush on its own, and counting it would leave the photos of a blocked place
  * create sitting queued forever: never uploaded, never parked, and so never
  * shown in Sync Issues either. */
 async function isLinkPending(

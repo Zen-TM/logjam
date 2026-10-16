@@ -69,8 +69,8 @@ export function splitIntoByteChunks(value: string, maxBytes: number): string[] {
 // characters (an email-shaped username carries '@'); encode anything outside
 // the safe set as _xHH_ (hex of the char code), and escape a literal "_x"
 // sequence so the mapping stays injective — two distinct Amplify keys must
-// never collide in the store. (Lives here, not in the SecureStore binding,
-// so it stays pure and vitest-testable.)
+// never collide in the store (Guard: chunkedKeyValueStorage.test.ts). Lives
+// here, not in the SecureStore binding, so it stays pure and vitest-testable.
 export function toSecureStoreKey(key: string): string {
   return key.replace(/[^A-Za-z0-9._-]|_x/g, (match) =>
     match === "_x"

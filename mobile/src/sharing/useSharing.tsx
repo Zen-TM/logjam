@@ -107,11 +107,9 @@ export function useSharing({
         setLoadFailed(true);
       });
     // Depends on `calls`, which is memoised on the item's ids — so switching
-    // items reloads and nothing else does. It used to capture the FIRST
-    // render's calls and never look again, which was invisible while every
-    // caller mounted this hook alongside its item and broke the moment one
-    // mounted it above the item (the panel then loaded from the placeholder
-    // and reported "no share target" on open).
+    // items reloads and nothing else does. Capturing only the first render's
+    // calls would break when callers mount this hook above the item (the panel
+    // would load from the placeholder and report "no share target" on open).
   }, [calls]);
 
   useEffect(() => {

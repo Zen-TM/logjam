@@ -3,8 +3,8 @@
 // far the scale bar may extend, and the search bar has to clear the status bar,
 // so the geometry lives here instead of being duplicated per component.
 
-// Circular floating buttons. 72 = the original 48 at 1.5x; the icon scales with
-// it so the glyph keeps its proportion inside the circle.
+// Circular floating buttons. The icon scales with the button so the glyph keeps
+// its proportion inside the circle.
 export const FAB_SIZE = 72;
 export const FAB_ICON = 32;
 
@@ -29,16 +29,15 @@ export const CHROME_GAP = 16;
  * Bottom of the floating chrome, clearing the scale bar and the native compass
  * that sit along the bottom edge.
  *
- * It is a CONSTANT. It used to grow by the recording HUD's measured height so
- * the columns could lift out of its way — but `onLayout` never fires on the way
- * out, so the lift stuck after a recording ended and every button stayed shoved
- * up the screen until the app restarted. The HUD now lives in the top notice
- * stack, where it competes with nothing and this number can't move.
+ * It is a constant: dynamic lifting on recording HUD height relies on
+ * `onLayout` which does not fire when unmounting, leaving chrome displaced.
+ * The HUD lives in the top notice stack instead, where it competes with
+ * nothing and this number cannot move.
  */
 export const CHROME_BOTTOM = CHROME_GAP + 32;
 
 /**
- * Opening view: the Blue Mountains, the app's home turf. Shared with the offline
+ * Opening view: the Blue Mountains, Logjam GPS's home turf. Shared with the offline
  * download screen, which needs somewhere to start when it is opened from Saved
  * rather than from the map.
  */

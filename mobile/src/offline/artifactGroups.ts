@@ -1,9 +1,8 @@
 // One CARD per thing the user saved, not one per file we wrote.
 //
 // A "Save maps offline" run downloads a basemap per selected source and a
-// generated LiDAR topo job lands as one artifact per layer — five of them. Both
-// used to arrive in Saved as unrelated rows, so deleting "the region" meant
-// finding and deleting three cards and hoping you had them all.
+// generated LiDAR topo job lands as one artifact per layer — five of them.
+// Grouping keeps related rows together so an area or job is managed as one card.
 //
 // The grouping key differs per kind (a region's `groupId`, an overlay's jobId
 // inside its `logicalKey`) but the aggregation — total size, union extent,
@@ -11,7 +10,7 @@
 // test beside them.
 //
 // PRIVACY: `unionBbox` computes an extent used only to move the camera. It is
-// never rendered and never logged (shared/DESIGN.md §13).
+// never rendered and never logged. Guard: mobile/src/sentry/scrubEvent.test.ts.
 import type { MapArtifact } from "../map/sourceResolver";
 
 export type Bbox = [west: number, south: number, east: number, north: number];

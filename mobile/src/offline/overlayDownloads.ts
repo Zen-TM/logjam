@@ -1,4 +1,4 @@
-// Per-job topo overlay offline download (Stage 4b): stream the presigned
+// Per-job topo overlay offline download: stream the presigned
 // pmtiles the overlay already renders from into app-private storage, verify,
 // register a kind "topo-overlay" artifact. The resolver is local-first ALWAYS
 // for full-coverage artifacts, so a downloaded overlay serves tiles even
@@ -25,10 +25,10 @@ import { OVERLAY_DIR } from "./localStores";
 
 const PMTILES_MAGIC = "PMTiles";
 
-// MOT-002: ids this process is mid-download on, so the orphan sweep below
-// never deletes a sibling download's file out from under it — a registry row
-// only lands on success, so without this a second concurrent
-// `downloadTopoOverlay` call would see the first's file as unowned.
+// IDs this process is mid-download on, so the orphan sweep below never deletes
+// a sibling download's file out from under it — a registry row only lands on
+// success, so without this a second concurrent `downloadTopoOverlay` call would
+// see the first's file as unowned.
 const inFlightIds = new Set<string>();
 
 export type OverlayDownloadProgress = {
@@ -53,14 +53,11 @@ export async function downloadTopoOverlay(
 ): Promise<MapArtifact> {
   const dir = OVERLAY_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  // MOT-002: a killed app leaves a stray `.pmtiles` with no registry row and
-  // no resumable state — sweep those before minting this run's own file, so
-  // orphans from a past kill don't accumulate indefinitely (nothing else
-  // walks this directory).
+  // A killed process leaves a stray `.pmtiles` with no registry row and no
+  // resumable state — sweep those before minting this run's own file, so
+  // orphans from a past kill don't accumulate indefinitely (nothing else walks
+  // this directory).
   await sweepOrphanFiles(dir, ".pmtiles", inFlightIds).catch(() => {});
-  // MOT-010: this was a second hand-rolled UUIDv4 minter beside
-  // imports/vectorImports.ts's — expo-crypto is already an installed
-  // dependency, and mediaUpload.ts already mints ids the same way.
   const id = Crypto.randomUUID();
   const fileUri = `${dir}${id}.pmtiles`;
   inFlightIds.add(id);
@@ -69,8 +66,7 @@ export async function downloadTopoOverlay(
   // An overlay bundle's size is only knowable from the transfer itself (the
   // presigned URL is signed for GET, so a HEAD would fail the signature). So
   // the check rides the first progress tick and cancels the download rather
-  // than filling the phone: this writer, and both auto-downloaders behind it,
-  // had no space check at all and simply wrote until SQLite failed.
+  // than filling the phone.
   let spaceChecked = false;
   let outOfSpace = false;
   try {
@@ -105,8 +101,7 @@ export async function downloadTopoOverlay(
       throw new Error("Overlay download failed");
     }
 
-    // Verify: content-length match when known + PMTiles magic bytes
-    // (stage4a §9 http-file verify).
+    // Verify: content-length match when known + PMTiles magic bytes.
     const info = await FileSystem.getInfoAsync(fileUri);
     if (
       !info.exists ||

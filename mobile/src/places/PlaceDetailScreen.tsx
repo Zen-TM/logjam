@@ -237,7 +237,7 @@ export function PlaceDetailScreen({
     .filter((row) => linkedPlaceIds.has(row.id))
     .sort((a, b) => a.name.localeCompare(b.name));
   /** Values that arrived on a COPY, keyed by definitions this account does not
-   *  have (§2.6). Owner-private — the server never sends them on a shared row,
+   *  have. Owner-private — the server never sends them on a shared row,
    *  so a sharee's place has none and this section does not render. */
   const foreignFields = place.foreignFields ?? [];
   const foreignItem =
@@ -265,18 +265,8 @@ export function PlaceDetailScreen({
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = attributeRows(labellingDefs, storedFields);
 
-  // POSITION IS WHAT EVERY PLACE HAS, and that is only its position.
-  //
-  // It used to promote four canyon scalars — Rating, Abseils, Longest drop,
-  // Hours — into stat tiles by reading their reserved keys directly. Three
-  // things were wrong with that. They are not universal (a campsite has no
-  // longest drop, so the section's content depended on which type you were
-  // looking at while its heading did not); they were ALREADY listed below in
-  // the type's own attribute table, so a canyon printed each of them twice; and
-  // "Rating" was a bespoke relabelling of a definition whose label is
-  // "Quality", so the same field had two names on one screen. Everything a type
-  // records now renders in one place, under the type's own heading, by the one
-  // rule.
+  // Position is what every place has. Type-specific attributes render in the
+  // type's own attribute table below rather than in bespoke stat tiles.
   const position = `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
   const copyPosition = () => {
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no
@@ -405,7 +395,7 @@ export function PlaceDetailScreen({
     ),
 
     // Named for the TYPE, like the form and the filter sheet: on a campsite
-    // these are Capacity and Is-a-cave, which are the app's, not the user's.
+    // these are Capacity and Is-a-cave, which are system definitions, not custom ones.
     attributes: () =>
       customFields.length > 0 ? (
         <>
@@ -824,12 +814,9 @@ export function PlaceDetailScreen({
       <BottomSheet
         visible={foreignItem !== null}
         onClose={() => (resolvingForeign ? undefined : setForeignKey(null))}
-        // The value's own LABEL used to be the title, with the bare value as
-        // the only body — a panel headed "A grade" over a lone "4" reads as a
-        // formatting accident rather than a question. The title says what the
-        // panel is for, and the label/value pair is shown as the same two-column
-        // row it has in the table it was tapped in, so the thing being decided
-        // about is recognisably the thing that was tapped.
+        // The title says what the panel is for, and the label/value pair is
+        // shown as the same two-column row it has in the table it was tapped
+        // in, so the thing being decided about is recognisably the item tapped.
         title="What should this become?"
       >
         <View style={styles.sheetBody}>
@@ -873,7 +860,7 @@ export function PlaceDetailScreen({
             subtitle={online ? undefined : "Needs a connection"}
             disabled={!online || resolvingForeign}
             // The only one of the three that LOSES something, one tap inside a
-            // sheet one tap from a row. Everything else destructive in this app
+            // sheet one tap from a row. Everything else destructive in Logjam GPS
             // asks first.
             onPress={() => {
               const item = foreignItem;
@@ -901,9 +888,8 @@ export function PlaceDetailScreen({
         title={linkedRoute?.name ?? "Route"}
       >
         <View style={styles.sheetBody}>
-          {/* The SAME panel the empty slot opens: replacing was narrower than
-              adding until this batch, and a slot that only accepts a drawn
-              route on the way in is a slot with two different rules. */}
+          {/* The same panel the empty slot opens: replacing and adding offer
+              the same sources. */}
           <Row
             title="Replace with another way"
             icon="replace"
@@ -1064,12 +1050,9 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   spinner: { alignSelf: "flex-start" },
   sheetBody: { gap: spacing(1) },
-  // A TABLE, NOT A CARD. The filled card read as a control — it had the
-  // surface, border and radius every tappable thing on this screen has — so a
-  // list of facts invited a tap that does nothing. And with the rows only
-  // spaced apart, a long label and a right-aligned value had nothing but white
-  // space between them, which is hard to track across on a phone. Hairline
-  // rules per row give the eye the line to follow and cost no colour.
+  // A table, not a card: a filled card reads as a tappable control, which
+  // would invite taps on plain facts. Hairline rules per row give the eye
+  // the line to follow without confusing affordances.
   fieldRow: {
     flexDirection: "row",
     justifyContent: "space-between",

@@ -88,6 +88,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     gap: spacing(0.5),
     alignSelf: "flex-start",
+    // A pill is never narrower than it is tall (UX §4). Guard: pill.test.ts.
     minHeight: PILL_HEIGHT,
     minWidth: PILL_HEIGHT,
     justifyContent: "center",

@@ -65,8 +65,8 @@ describe("sheetPulled", () => {
 
 // The sheet rests at the END of its scroll, so it is put back there whenever
 // its height changes. Not while it is closing: an owner empties its sheet as
-// it closes, and re-seating the shrunken sheet threw away the pull the finger
-// had left, so an empty shell jumped back up in the middle of the slide out.
+// it closes, and re-seating the shrunken sheet throws away the pull the finger
+// has left, so an empty shell jumps back up in the middle of the slide out.
 describe("sheetReseats", () => {
   it("re-seats an open sheet nobody is dragging", () => {
     expect(sheetReseats({ visible: true, touching: false })).toBe(true);
@@ -85,7 +85,7 @@ describe("sheetReseats", () => {
 // The hand-off from scrolling a sheet's content to dragging the sheet is
 // Android nested scrolling, and it is one prop. Red when `nestedScrollEnabled`
 // is deleted from BottomSheet.tsx: a scrollable sheet then drags only by its
-// header, which is the bug this replaced.
+// header.
 it("the sheet's content hands its overscroll to the sheet", () => {
   const sheet = readFileSync(
     new URL("./BottomSheet.tsx", import.meta.url),
@@ -95,8 +95,8 @@ it("the sheet's content hands its overscroll to the sheet", () => {
 });
 
 // An owner empties its sheet in the render that closes it (no title, no rows,
-// the keyboard on its way down), so a sheet that drew what it was handed slid
-// out as an empty shell of another height.
+// the keyboard on its way down), so a sheet that draws what it was handed
+// slides out as an empty shell of another height.
 describe("sheetHolds", () => {
   it("draws what its owner hands it while open", () => {
     expect(sheetHolds({ visible: true })).toBe(false);
@@ -126,9 +126,9 @@ it("no sheet owner unmounts its sheet when its subject is cleared", () => {
 });
 
 // The sheet is put at its open position by a scroll, and the scroll cannot
-// land until the sheet's size has reached the native view. The slide in used
-// to start regardless: it ran with the sheet a screen below its place, and
-// the sheet then appeared all at once, or jumped as its size was corrected.
+// land until the sheet's size has reached the native view: starting the slide
+// in earlier runs with the sheet a screen below its place, and the sheet then
+// appears all at once or jumps as its size is corrected.
 describe("sheetSeated", () => {
   const open = { content: 1500, viewport: 900, y: 600 };
 
@@ -142,7 +142,7 @@ describe("sheetSeated", () => {
   });
 
   // Red when the `isFinite` condition is dropped: the offset is unknown
-  // until the first scroll event, and unknown read as seated.
+  // until the first scroll event, and unknown reads as seated.
   it("is not seated before anything has been reported", () => {
     expect(sheetSeated({ ...open, y: Number.POSITIVE_INFINITY })).toBe(false);
     expect(sheetSeated({ content: 0, viewport: 0, y: 0 })).toBe(false);
