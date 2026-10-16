@@ -23,7 +23,7 @@ Measured on Geofabrik's NSW extract of 2026-10-15 (269 MB) with
 
 | | |
 |---|---|
-| Named objects kept | 610,000, merged to 350,000 rows |
+| Named objects kept | 610,000, merged to 321,000 rows |
 | File | 5.3 MB gzipped, 17 MB raw |
 | Build | 80 s, 1.3 GB peak memory |
 | Node, loaded and indexed | 87 MB heap, 0.6 s |
@@ -38,30 +38,39 @@ feature in NSW, never a geocoding service.**
 - **One ranking.** `searchPlaces` in `shared/src/placeRegistry.ts` is the only
   ranking. The API runs it for Logjam Web and for a phone without the file;
   Logjam GPS runs it on its own copy. A query ranks the same online and
-  offline. Guard: `shared/src/placeRegistry.test.ts`, against the fixture the
-  builder writes (`topo/tests/test_place_registry.py`).
+  offline. Guard: `shared/src/placeRegistry.test.ts`, against the fixtures the
+  builder writes (`topo/tests/test_place_registry.py`). The API and Logjam GPS
+  name their own guards here when they start calling it.
 - **The file is public.** The builder publishes it under
   `PLACE_REGISTRY_PREFIX` (`master/places/v1/`) in the topo bucket, which the
   web distribution serves without authentication, like the DEM
   ([0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md)). It holds
   only OpenStreetMap data. A guest fetches it with no call to our API, so
   [0007](0007-guest-mode-is-dont-sync-yet.md) holds without a guest-only path,
-  and the public copy is the ODbL's offer of the derived database.
+  and the public copy is the ODbL's offer of the derived database. No guard:
+  the CloudFront `/master/*` behaviour in `infra/terraform/envs/prod/cloudfront.tf`
+  is what serves it.
 - **Each format has its own prefix.** A change to the file's shape bumps
   `PLACE_REGISTRY_FORMAT`, and with it the prefix, so a build that only knows
   the old format keeps reading the old one. Guard: `isPlaceRegistryPointer`
   refuses another format (`placeRegistry.test.ts`).
 - **Everything named goes in,** unless measuring shows a class adds size and no
-  search a canyoner makes. `EXCLUDED` in the builder lists the classes left
-  out. House addresses are left out: they would add two thirds to the file,
-  OpenStreetMap holds only some of NSW's, and Nominatim answers them.
+  search a canyoner makes. A feature is kept when it has a `name` and one of
+  `KIND_KEYS`, and is not in `EXCLUDED`; relations other than multipolygons
+  are read through their member ways. Guard: `topo/tests/test_place_registry.py`.
+  House addresses carry no name, so they are out: counted separately on the
+  same extract (409,000 objects with `addr:housenumber` and no `name`), they
+  would add two thirds to the file, OpenStreetMap holds only some of NSW's,
+  and Nominatim answers them.
 - **A build replaces the last only when it is not much smaller.** `upload`
   writes the data file, then the pointer, and refuses a build under 80 % of
   the current one's size. Guard: `topo/tests/test_place_registry.py`.
 - **The build runs monthly as an ECS task on a schedule,** in the topo worker
-  image. Only its task role may write `master/places/*`.
+  image, with a task role that may write only `master/places/*`. No guard: the
+  role's IAM policy is what limits it. Roles that write the whole topo bucket
+  (the topo worker's, the API's) could still write there.
 - **Nominatim stays** behind the explicit press, for street addresses the
-  registry leaves out.
+  registry leaves out. No guard.
 
 ## Consequences
 
@@ -102,7 +111,7 @@ feature in NSW, never a geocoding service.**
   freshness tied to releases, a bigger app for everyone, and a guest-only path.
 - **Refreshes by OTA update:** ties data to signed releases every month
   ([0009](0009-signed-ota-updates.md)) and ignores the Wi-Fi rule.
-- **Postgres trigram search:** it would rank differently from the phone. Not
-  needed: the in-memory index costs 87 MB.
+- **Postgres trigram search:** it would rank differently from the phone, and
+  the in-memory index measured above costs 87 MB.
 - **Diffs between versions:** a diff format, apply logic and a fallback to save
   a few MB a month. Revisit if transfer numbers say it matters.
