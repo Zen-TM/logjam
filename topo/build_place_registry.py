@@ -94,7 +94,9 @@ ALTERNATE_KEYS = ("alt_name", "loc_name", "old_name", "official_name", "short_na
 # Segments of one creek or street more than this far from each other are two
 # features, even with the same name.
 MERGE_GAP_DEG = 0.05  # about 5 km
-COORD_DP = 5  # about 1 m
+# Coordinates are written as integers in units of 1/COORD_SCALE degrees:
+# about 1 m.
+COORD_SCALE = 100_000
 
 
 def kind_of(tags: Dict[str, str]) -> Optional[str]:
@@ -316,30 +318,33 @@ def registry(raws: Iterable[Raw], version: str) -> dict:
     grid = Grid(settlements)
     kinds: List[str] = []
     kind_index: Dict[str, int] = {}
-    rows_out = []
+    # Columns, not a list of rows: a reader parses a handful of flat arrays
+    # instead of 300,000 small ones, which is most of its load time and peak
+    # memory, on a phone above all.
+    cols = {"names": [], "kind": [], "lon": [], "lat": [], "near": []}
+    alternates = []
     for i, r in enumerate(rows):
         if r.kind not in kind_index:
             kind_index[r.kind] = len(kinds)
             kinds.append(r.kind)
         # A settlement is placed near another: two Alpines need telling apart.
         near = grid.nearest(r.lon, r.lat, exclude=i)
-        row = [
-            r.name,
-            kind_index[r.kind],
-            round(r.lon, COORD_DP),
-            round(r.lat, COORD_DP),
-            -1 if near is None else near,
-        ]
+        cols["names"].append(r.name)
+        cols["kind"].append(kind_index[r.kind])
+        cols["lon"].append(round(r.lon * COORD_SCALE))
+        cols["lat"].append(round(r.lat * COORD_SCALE))
+        cols["near"].append(-1 if near is None else near)
         if r.alternates:
-            row.append(r.alternates)
-        rows_out.append(row)
+            alternates.append([i, r.alternates])
     return {
         "format": FORMAT,
         "version": version,
         "attribution": ATTRIBUTION,
         "licence": LICENCE,
+        "coordScale": COORD_SCALE,
         "kinds": kinds,
-        "rows": rows_out,
+        **cols,
+        "alternates": alternates,
     }
 
 

@@ -3,6 +3,7 @@
   "version": "2026-10-01",
   "attribution": "© OpenStreetMap contributors",
   "licence": "ODbL-1.0",
+  "coordScale": 100000,
   "kinds": [
     "place=town",
     "highway=primary",
@@ -14,20 +15,31 @@
     "natural=peak",
     "highway=residential"
   ],
-  "rows": [
-    ["Blackheath", 0, 150.285, -33.633, 1],
-    ["Katoomba", 0, 150.312, -33.714, 0],
-    ["Castlereagh Highway", 1, 150.15, -33.48, 0],
-    ["Devil's Hole", 2, 150.3, -33.715, 1],
-    ["Echo Point Lookout", 3, 150.312, -33.732, 1],
-    ["Govetts Leap", 3, 150.31, -33.628, 0, ["Govett's Leap Lookout"]],
-    ["Katoomba Falls", 4, 150.307, -33.73, 1],
-    ["Katoomba Falls Inn", 5, 150.306, -33.729, 1],
-    ["Katoomba Falls Road", 6, 150.305, -33.725, 1],
-    ["Mount Solitary", 7, 150.32, -33.76, 1],
-    ["Newcastle Street", 8, 150.313, -33.716, 1],
-    ["Ruined Castle", 7, 150.29, -33.74, 1],
-    ["Station Street", 8, 150.287, -33.632, 0],
-    ["Station Street", 8, 150.311, -33.712, 1]
-  ]
+  "names": [
+    "Blackheath",
+    "Katoomba",
+    "Castlereagh Highway",
+    "Devil's Hole",
+    "Echo Point Lookout",
+    "Govetts Leap",
+    "Katoomba Falls",
+    "Katoomba Falls Inn",
+    "Katoomba Falls Road",
+    "Mount Solitary",
+    "Newcastle Street",
+    "Ruined Castle",
+    "Station Street",
+    "Station Street"
+  ],
+  "kind": [0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 8, 7, 8, 8],
+  "lon": [
+    15028500, 15031200, 15015000, 15030000, 15031200, 15031000, 15030700,
+    15030600, 15030500, 15032000, 15031300, 15029000, 15028700, 15031100
+  ],
+  "lat": [
+    -3363300, -3371400, -3348000, -3371500, -3373200, -3362800, -3373000,
+    -3372900, -3372500, -3376000, -3371600, -3374000, -3363200, -3371200
+  ],
+  "near": [1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+  "alternates": [[5, ["Govett's Leap Lookout"]]]
 }

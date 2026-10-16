@@ -24,9 +24,9 @@ Measured on Geofabrik's NSW extract of 2026-10-15 (269 MB) with
 | | |
 |---|---|
 | Named objects kept | 610,000, merged to 321,000 rows |
-| File | 5.3 MB gzipped, 17 MB raw |
+| File | 4.4 MB gzipped, one column per field |
 | Build | 80 s, 1.3 GB peak memory |
-| Node, loaded and indexed | 87 MB heap, 0.6 s |
+| Node, loaded and indexed | 25 MB heap and 8 MB of typed arrays, 0.6 s; resident memory grows about 175 MB, the load's peak, which V8 keeps |
 | A search | 2–5 ms; 36 ms for the worst two-letter query |
 | House addresses, if added | 409,000 objects, about 3.5 MB gzipped more |
 
@@ -41,6 +41,9 @@ feature in NSW, never a geocoding service.**
   offline. Guard: `shared/src/placeRegistry.test.ts`, against the fixtures the
   builder writes (`topo/tests/test_place_registry.py`). The API and Logjam GPS
   name their own guards here when they start calling it.
+- **What the user types is never logged.** The search endpoint takes the query
+  in a `POST` body, never the URL, and no log line carries it. No guard yet:
+  the endpoint's own test names it here when the endpoint lands.
 - **The file is public.** The builder publishes it under
   `PLACE_REGISTRY_PREFIX` (`master/places/v1/`) in the topo bucket, which the
   web distribution serves without authentication, like the DEM
@@ -77,8 +80,9 @@ feature in NSW, never a geocoding service.**
 - **Positive:** search as you type on both clients, offline on the phone, with
   nothing typed leaving a phone that has the file, and the unofficial names
   OpenStreetMap holds.
-- **Negative:** every phone downloads about 5 MB a month, and the API holds
-  about 90 MB more in memory. Results are up to a month stale. The ODbL binds
+- **Negative:** every phone downloads about 4.4 MB a month, and the API holds
+  about 35 MB more in memory once loaded, with a peak near 175 MB while it
+  loads. Results are up to a month stale. The ODbL binds
   us: the "© OpenStreetMap contributors" credit wherever results show, and the
   public copy must stay. A format bump must keep a build of the old format
   publishing for as long as a supported build reads it
@@ -112,6 +116,6 @@ feature in NSW, never a geocoding service.**
 - **Refreshes by OTA update:** ties data to signed releases every month
   ([0009](0009-signed-ota-updates.md)) and ignores the Wi-Fi rule.
 - **Postgres trigram search:** it would rank differently from the phone, and
-  the in-memory index measured above costs 87 MB.
+  the in-memory index measured above costs about 35 MB.
 - **Diffs between versions:** a diff format, apply logic and a fallback to save
   a few MB a month. Revisit if transfer numbers say it matters.

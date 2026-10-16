@@ -13,7 +13,6 @@ import {
   placeKindRank,
   placeRegistryUrl,
   type PlaceRegistryFile,
-  type PlaceRegistryRow,
   searchPlaces,
 } from "./placeRegistry.js";
 
@@ -108,11 +107,17 @@ describe("searchPlaces", () => {
     // Mutation: drop the clamp → the NaN case returns every match.
     expect(names("ka", Number.NaN)).toEqual([]);
     expect(names("ka", 0)).toEqual([]);
-    const rows: PlaceRegistryRow[] = Array.from(
-      { length: PLACE_SEARCH_MAX_RESULTS + 5 },
-      (_, i) => [`Ka ${i}`, 0, 150, -33, -1],
-    );
-    const many = indexPlaceRegistry({ ...fixture, rows });
+    const n = PLACE_SEARCH_MAX_RESULTS + 5;
+    const column = (value: number) => Array.from({ length: n }, () => value);
+    const many = indexPlaceRegistry({
+      ...fixture,
+      names: Array.from({ length: n }, (_, i) => `Ka ${i}`),
+      kind: column(0),
+      lon: column(15_000_000),
+      lat: column(-3_300_000),
+      near: column(-1),
+      alternates: [],
+    });
     expect(searchPlaces(many, "ka", 1_000_000)).toHaveLength(
       PLACE_SEARCH_MAX_RESULTS,
     );

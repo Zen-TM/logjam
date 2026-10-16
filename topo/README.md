@@ -283,7 +283,7 @@ python3 build_place_registry.py measure new-south-wales-latest.osm.pbf
 ```
 
 `build` writes `places-<extract date>-<hash>.json.gz` and its pointer `latest.json`:
-about 5 MB, in under two minutes at a 1.3 GB peak. `measure` prints how much
+about 4.5 MB, in under two minutes at a 1.3 GB peak. `measure` prints how much
 each class of feature (roads, shops, creeks…) adds to the file, which is how
 to judge a change to `EXCLUDED`.
 

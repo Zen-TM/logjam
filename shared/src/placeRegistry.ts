@@ -35,20 +35,26 @@ export interface PlaceRegistryPointer {
   bytes: number;
 }
 
-/** [name, kind index, lon, lat, nearest settlement's row or -1, alternates] */
-export type PlaceRegistryRow =
-  | [string, number, number, number, number]
-  | [string, number, number, number, number, string[]];
-
-/** The data file, once gunzipped and parsed. */
+/** The data file, once gunzipped and parsed. One column per field, one
+ *  entry per row, all the same length. */
 export interface PlaceRegistryFile {
   format: number;
   version: string;
   attribution: string;
   licence: string;
+  /** `lon` and `lat` are integers in units of 1/coordScale degrees. */
+  coordScale: number;
   /** OSM `key=value`, such as `natural=peak`. */
   kinds: string[];
-  rows: PlaceRegistryRow[];
+  names: string[];
+  /** An index into `kinds`. */
+  kind: number[];
+  lon: number[];
+  lat: number[];
+  /** The nearest settlement's row, or -1. */
+  near: number[];
+  /** [row, its alternate names], for the rows that have any. */
+  alternates: [number, string[]][];
 }
 
 export interface PlaceResult {
@@ -191,29 +197,44 @@ export function normalizeSearchText(text: string): string {
     .trim();
 }
 
-/** The registry, prepared for repeated searching. Build it once per file. */
+/** The registry, prepared for repeated searching. Build it once per file,
+ *  then drop the parsed file: the packed columns here are a fraction of it. */
 export interface PlaceIndex {
-  file: PlaceRegistryFile;
-  names: Haystack;
-  /** Every alternate name, each pointing back at its row. */
-  alternates: Haystack & { rows: number[] };
-  ranks: number[];
+  names: string[];
+  kinds: string[];
+  kind: Uint16Array;
+  /** The nearest settlement's row, or -1. */
+  near: Int32Array;
+  lon: Float64Array;
+  lat: Float64Array;
+  rank: Uint8Array;
+  /** Normalized names. */
+  hay: Haystack;
+  /** Normalized alternate names, and the row each belongs to. */
+  altHay: Haystack;
+  altRow: Int32Array;
 }
 
 // Normalized strings joined by "\n", which normalizing never leaves in one,
-// with where each starts. One native indexOf over the whole registry finds
-// the few rows holding the query's first word; a loop over 320,000 strings
-// cost ten times as long, which a phone feels on every keystroke.
-type Haystack = { text: string; starts: number[]; strings: string[] };
+// and where each starts (one more entry than strings, for the end). One
+// native indexOf over the whole registry finds the few rows holding the
+// query's first word; a loop over 320,000 strings cost ten times as long,
+// which a phone feels on every keystroke.
+type Haystack = { text: string; starts: Int32Array };
 
 function haystack(strings: string[]): Haystack {
-  const starts: number[] = [];
+  const starts = new Int32Array(strings.length + 1);
   let at = 0;
-  for (const s of strings) {
-    starts.push(at);
+  strings.forEach((s, i) => {
+    starts[i] = at;
     at += s.length + 1;
-  }
-  return { text: strings.join("\n"), starts, strings };
+  });
+  starts[strings.length] = at;
+  return { text: strings.join("\n"), starts };
+}
+
+function entry(hay: Haystack, at: number): string {
+  return hay.text.slice(hay.starts[at], hay.starts[at + 1] - 1);
 }
 
 /** Each entry of `hay` holding `word`, once, in order. */
@@ -224,14 +245,14 @@ function* entriesWith(hay: Haystack, word: string): Generator<number> {
     if (found < 0) return;
     // The last entry starting at or before `found`.
     let lo = 0;
-    let hi = hay.starts.length - 1;
+    let hi = hay.starts.length - 2;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
       if (hay.starts[mid] <= found) lo = mid;
       else hi = mid - 1;
     }
     yield lo;
-    from = hay.starts[lo] + hay.strings[lo].length + 1;
+    from = hay.starts[lo + 1];
   }
 }
 
@@ -240,19 +261,27 @@ export function indexPlaceRegistry(file: PlaceRegistryFile): PlaceIndex {
     throw new Error(`Unknown place registry format ${String(file.format)}`);
   }
   const kindRanks = file.kinds.map(placeKindRank);
-  const altStrings: string[] = [];
+  const alts: string[] = [];
   const altRows: number[] = [];
-  file.rows.forEach((row, at) => {
-    for (const alt of row[5] ?? []) {
-      altStrings.push(normalizeSearchText(alt));
-      altRows.push(at);
+  for (const [row, names] of file.alternates) {
+    for (const alt of names) {
+      alts.push(normalizeSearchText(alt));
+      altRows.push(row);
     }
-  });
+  }
+  const unscale = (values: number[]) =>
+    Float64Array.from(values, (v) => v / file.coordScale);
   return {
-    file,
-    names: haystack(file.rows.map((row) => normalizeSearchText(row[0]))),
-    alternates: { ...haystack(altStrings), rows: altRows },
-    ranks: file.rows.map((row) => kindRanks[row[1]]),
+    names: file.names,
+    kinds: file.kinds,
+    kind: Uint16Array.from(file.kind),
+    near: Int32Array.from(file.near),
+    lon: unscale(file.lon),
+    lat: unscale(file.lat),
+    rank: Uint8Array.from(file.kind, (k) => kindRanks[k]),
+    hay: haystack(file.names.map(normalizeSearchText)),
+    altHay: haystack(alts),
+    altRow: Int32Array.from(altRows),
   };
 }
 
@@ -296,12 +325,14 @@ export function searchPlaces(
   if (needle.length < PLACE_SEARCH_MIN_QUERY_LENGTH || !(most >= 1)) return [];
   const words = needle.split(" ");
   const spaced = words.map((w) => ` ${w}`);
-  const { names, alternates, ranks } = index;
+  const { hay, altHay, altRow, rank } = index;
+  // An entry's length, from where it and the next start.
+  const length = (row: number) => hay.starts[row + 1] - hay.starts[row];
 
   const better = (a: Hit, b: Hit) =>
     a.tier - b.tier ||
-    ranks[a.row] - ranks[b.row] ||
-    names.strings[a.row].length - names.strings[b.row].length ||
+    rank[a.row] - rank[b.row] ||
+    length(a.row) - length(b.row) ||
     a.row - b.row;
 
   // The best `most` so far, kept sorted: a two-letter query matches tens of
@@ -317,18 +348,18 @@ export function searchPlaces(
 
   // Every tier needs the first word somewhere in the name.
   const byName = new Set<number>();
-  for (const row of entriesWith(names, words[0])) {
-    const tier = nameTier(names.strings[row], needle, words, spaced);
+  for (const row of entriesWith(hay, words[0])) {
+    const tier = nameTier(entry(hay, row), needle, words, spaced);
     if (tier < 0) continue;
     byName.add(row);
     offer({ row, tier });
   }
   // An alternate counts only for a row its own name did not match, and once.
   const byAlternate = new Map<number, number>();
-  for (const at of entriesWith(alternates, words[0])) {
-    const row = alternates.rows[at];
+  for (const at of entriesWith(altHay, words[0])) {
+    const row = altRow[at];
     if (byName.has(row)) continue;
-    const tier = nameTier(alternates.strings[at], needle, words, spaced);
+    const tier = nameTier(entry(altHay, at), needle, words, spaced);
     if (tier < 0) continue;
     const seen = byAlternate.get(row);
     if (seen === undefined || tier < seen) byAlternate.set(row, tier);
@@ -338,12 +369,12 @@ export function searchPlaces(
 }
 
 function placeResult(index: PlaceIndex, row: number): PlaceResult {
-  const [name, kind, lon, lat, near] = index.file.rows[row];
+  const near = index.near[row];
   return {
-    name,
-    kind: placeKindLabel(index.file.kinds[kind]),
-    near: near >= 0 ? index.file.rows[near][0] : null,
-    lon,
-    lat,
+    name: index.names[row],
+    kind: placeKindLabel(index.kinds[index.kind[row]]),
+    near: near >= 0 ? index.names[near] : null,
+    lon: index.lon[row],
+    lat: index.lat[row],
   };
 }

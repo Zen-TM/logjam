@@ -72,7 +72,7 @@ def check_fixture(test, path, built):
 
 class TestFixture(unittest.TestCase):
     def test_builder_writes_the_shared_fixture(self):
-        # Mutation: rename `rows` or reorder a row's fields → red here, and
+        # Mutation: rename or reorder a column → red here, and
         # placeRegistry.test.ts would read a file the builder no longer writes.
         check_fixture(self, _FIXTURE, fixture_registry())
 
@@ -139,7 +139,16 @@ class TestKindOf(unittest.TestCase):
 class TestRegistry(unittest.TestCase):
     def setUp(self):
         self.doc = fixture_registry()
-        self.rows = self.doc["rows"]
+        d = self.doc
+        alternates = dict(d["alternates"])
+        scale = d["coordScale"]
+        # [name, kind, lon, lat, near, alternates] per row, for reading.
+        self.rows = [
+            [n, k, x / scale, y / scale, near, alternates.get(i)]
+            for i, (n, k, x, y, near) in enumerate(
+                zip(d["names"], d["kind"], d["lon"], d["lat"], d["near"])
+            )
+        ]
 
     def named(self, name):
         return [r for r in self.rows if r[0] == name]
@@ -273,7 +282,7 @@ class TestUpload(unittest.TestCase):
         from pathlib import Path
 
         other = fixture_registry()
-        other["rows"] = other["rows"][:-1]
+        other["names"] = other["names"][:-1] + ["Somewhere Else"]
         data, _ = reg.build_files(other, Path(self.tmp.name) / "again")
         self.assertNotEqual(data.name, self.data.name)
 
