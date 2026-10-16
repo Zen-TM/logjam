@@ -37,6 +37,10 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
     "scripts/github-settings.sh",
     "github/terraform.tfstate",
   ],
+  // An S3 prefix in the topo bucket.
+  "0034-location-search-reads-a-public-osm-place-registry.md": [
+    "master/places/v1/",
+  ],
 };
 
 // A backticked token with a slash that ends in an extension or a slash. Globs
