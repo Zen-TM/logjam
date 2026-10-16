@@ -71,6 +71,9 @@ export interface PlaceResult {
  *  and not the URL that access logs keep. */
 export const PLACE_SEARCH_API_PATH = "/places/search";
 
+/** How long a client waits after the last keystroke before asking the API. */
+export const PLACE_SEARCH_DEBOUNCE_MS = 200;
+
 /** Most results a search returns, and the API's default. */
 export const PLACE_SEARCH_MAX_RESULTS = 20;
 
