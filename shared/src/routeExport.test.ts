@@ -16,8 +16,8 @@ describe("routeToGpx", () => {
     const gpx = routeToGpx("Approach", LINE);
     expect(gpx).toContain("<rte>");
     expect(gpx).not.toContain("<trk>");
-    // The old export stamped every point 1970-01-01, which reads as a real
-    // recording in every other GPX tool.
+    // Points have no timestamps: dummy timestamps would read as a real
+    // recording in other GPX tools.
     expect(gpx).not.toContain("<time>");
   });
 

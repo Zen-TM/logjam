@@ -1,14 +1,12 @@
 // The direction arrowhead drawn along a route, and how a line is cut up so the
 // arrows land where they should.
 //
-// Both clients draw this, so both read it from here. Logjam GPS worked it out
-// first (2026-08-30) and Logjam Web was still drawing a `›` text glyph until
-// 2026-09-17, with exactly the fault the glyph caused there: MapLibre centres a
+// Both clients draw this, so both read it from here. MapLibre centres a
 // line-placed symbol on the box the font declares rather than on the ink, so a
 // glyph drawn off-centre in its own advance box rides off-centre on the line —
 // and with keep-upright off it rotates with the line, so the error swaps sides
 // wherever a route doubles back. That reads as arrows wobbling rather than as a
-// constant offset, which is what an operator reports as "not centred".
+// constant offset.
 //
 // THE ARROWHEAD IS AN IMAGE BECAUSE THE FONT HAS NO ARROWHEAD. The bundled Noto
 // Sans pack ships no filled triangle: one glyph in the geometric block (U+25CC)

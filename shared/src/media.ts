@@ -14,7 +14,8 @@ import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
 // A standalone file becomes a place's way by having its PARENT set, never by
 // being copied (api/src/routes/media.ts, PATCH /:id/link). Linking and
 // unlinking are therefore visibility changes on one file, and unlinking a
-// shared place's way must tombstone it for that place's sharees.
+// shared place's way must tombstone it for that place's sharees
+// (api/src/lib/syncTombstones.unit.test.ts).
 
 export type MediaLinkedType = "place" | "tripLog" | "none";
 export type MediaCategory = "image" | "video" | "track";
@@ -79,15 +80,11 @@ export type TrackColor = (typeof TRACK_COLORS)[number];
 /**
  * What to CALL a palette colour.
  *
- * Both clients used the hex itself as the accessible name of a swatch
- * ("#e6194b"), which is a name but not a helpful one: it is unreadable aloud,
- * and a screen-reader user picking a route colour was offered ten of them. The
- * names live HERE, beside the palette they name, so the phone's picker and the
- * browser's cannot disagree about which one is "Teal" — the same rule the
- * status labels and filter words already follow.
- *
- * The comments on TRACK_COLORS above were already these words; this promotes
- * them from a comment to something the UI can read.
+ * Using the raw hex as the accessible name of a swatch ("#e6194b") is
+ * unreadable aloud for a screen-reader user picking a route colour. The
+ * names live HERE, beside the palette they name, so Logjam GPS and Logjam Web
+ * cannot disagree about which one is "Teal" — the same rule the status labels
+ * and filter words already follow.
  */
 export const TRACK_COLOR_NAMES: Record<TrackColor, string> = {
   "#e6194b": "Red",
@@ -106,8 +103,8 @@ export const TRACK_COLOR_NAMES: Record<TrackColor, string> = {
  * The spoken name of a colour, for a label or an accessible name.
  *
  * A colour outside the palette comes back AS ITS HEX rather than as "Custom":
- * routes drawn before the palette existed carry arbitrary values, and a made-up
- * word would hide which colour it actually is. Unhelpful is better than wrong.
+ * a route can carry an arbitrary off-palette value, and a made-up word would
+ * hide which colour it actually is. Unhelpful is better than wrong.
  */
 export function trackColorName(color: string | null | undefined): string {
   if (!color) return "No colour";
@@ -226,8 +223,8 @@ export function mediaDisplayName(media: {
 export const MEDIA_DISPLAY_NAME_MAX = 200;
 
 /**
- * A standalone file as listed for a client that is NOT delta-synced (the web
- * app). Metadata only — no presigned URLs.
+ * A standalone file as listed for a client that is NOT delta-synced
+ * (Logjam Web). Metadata only — no presigned URLs.
  *
  * Deliberately without them: minting a URL per row would put the whole list
  * through the egress meter every time the page loaded, whether or not anything

@@ -1,8 +1,7 @@
 /**
- * Range selection by tapping numbered pills — the phone-sized replacement for
- * the web's double-ended slider (a 7-stop slider inside a scrolling sheet is a
- * gesture fight with the sheet's own drag, and its thumbs are smaller than a
- * fingertip).
+ * Range selection by tapping numbered pills (a 7-stop slider inside a scrolling
+ * sheet is a gesture fight with the sheet's own drag, and its thumbs are smaller
+ * than a fingertip).
  *
  * One rule, applied from wherever the tap lands:
  *

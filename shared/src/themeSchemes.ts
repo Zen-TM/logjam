@@ -100,7 +100,7 @@ export type UserUiPreferences = {
    * lives in its operation's own dialog rather than behind a first-run modal.
    *
    * TRUE by default, and the direction matters. Not copying is the silent
-   * failure: the sharee loses photos they could see, and on the phone the
+   * failure: the sharee loses photos they could see, and on Logjam GPS the
    * cached blobs go with them (`cascadePlaceDelete`). Copying is the LOUD one —
    * the server refuses with 507 when the quota will not take it, which the user
    * can read and act on.
@@ -162,11 +162,10 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
-// The three dark schemes keep the values they had under the old rank names:
-// `field` is the old web `color-mix(in srgb, black 12%, page)` worked out to a
-// hex, `lineStrong` the muted text colour. `cardPressed` is the card a step
-// darker in Sandstone and Ironbark, where the old `bonus2` it replaced was
-// lighter than the card and muted text failed on it.
+// In the dark schemes, `field` provides input background contrast against
+// `page` (calculated as `color-mix(in srgb, black 12%, page)` resolved to hex),
+// `lineStrong` matches muted text, and `cardPressed` steps darker than `card` so
+// muted text remains legible during press states.
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   sandstone: {
     id: "sandstone",
@@ -333,16 +332,13 @@ const VALID_MERGE_VALUES = new Set(["keepExisting", "useIncoming"]);
  * Validate and normalize an importMergePolicy value. Returns the entries that
  * are well-formed, or undefined when the value is absent or not an object.
  *
- * PARTIAL IS NOW VALID, and that is a behaviour change with a reason. The
- * policy used to be a fixed seven-entry union of grade columns, so "all known
- * fields present" was a meaningful check. Its keys are field KEYS now — an
- * open set that differs per user and per place type — so demanding every one
- * of them would reject a perfectly good policy the moment the user added a
- * field, or deleted one, silently reverting all of their merge choices to the
- * default. A missing entry already means `keepExisting` (`mergePolicyFor` in
- * mergePlace.ts), which is the safe direction.
+ * Partial policy objects are valid: keys are field keys — an open set that
+ * differs per user and per place type — so demanding every field would reject
+ * an otherwise valid policy whenever the user adds or deletes a field,
+ * reverting merge choices to default. A missing entry defaults to `keepExisting`
+ * (`mergePolicyFor` in `mergePlace.ts`), which is the safe direction.
  *
- * Malformed ENTRIES are still dropped rather than tolerated, so a garbage
+ * Malformed entries are still dropped rather than tolerated, so an invalid
  * value cannot reach the merge as if it were a decision.
  */
 export function normalizeImportMergePolicy(

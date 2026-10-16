@@ -1,10 +1,10 @@
 /**
  * GPX 1.1 and KML 2.2 serialisation for a RECORDED track.
  *
- * The counterpart to `vectorImport`'s GPX parsing: a track recorded in the app
+ * The counterpart to `vectorImport`'s GPX parsing: a track recorded in Logjam GPS
  * is attached to a place or trip as a `application/gpx+xml` media item, which
  * is the shape both clients already understand (`TRACK_MIME_TYPES`) and which
- * the web renders on the map. Writing GPX rather than inventing a wire format
+ * Logjam Web renders on the map. Writing GPX rather than inventing a wire format
  * also means the file the user syncs is one they can open anywhere.
  *
  * Kept apart from routeExport.ts, which writes an AUTHORED route, because the
@@ -12,9 +12,10 @@
  * pause gaps to preserve (`<trkseg>`, `<gx:Track>`), a drawn route has neither
  * and writing it as a track would stamp times that never happened.
  *
- * PRIVACY: the output IS precise location history — the most sensitive data the
- * app holds. It travels only through the authed media upload or into a file the
- * user picked a folder for, and callers must never log it.
+ * PRIVACY: the output IS precise location history — the most sensitive data
+ * Logjam holds. It travels only through the authed media upload or into a file the
+ * user picked a folder for, and callers must never log it (guards:
+ * api/src/lib/logger.unit.test.ts, mobile/src/sentry/scrubEvent.test.ts).
  */
 import type { RecordedTrackPoint } from "./trackStats.js";
 
@@ -65,7 +66,8 @@ export function trackPointsToGpx(
       const trkpts = segment
         .map((point) => {
           // A fix without altitude omits <ele> rather than writing 0 — GPX has
-          // no "unknown elevation" value, and 0 would read as sea level.
+          // no "unknown elevation" value, and 0 would read as sea level
+          // (test: shared/src/trackExport.test.ts).
           const elements = [
             ...(point.altitudeM == null
               ? []
@@ -105,7 +107,8 @@ export function trackPointsToGpx(
  * the only way KML carries per-vertex time.
  *
  * Two or more segments become a `gx:MultiTrack` with `<gx:interpolate>0</…>`,
- * which is precisely "these are one track, do NOT join them across the gap".
+ * which is precisely "these are one track, do NOT join them across the gap"
+ * (test: shared/src/trackExport.test.ts).
  * A single segment is emitted bare, since a MultiTrack of one is noise readers
  * handle inconsistently.
  *
@@ -131,7 +134,8 @@ export function trackPointsToKml(
       // gx:coord is SPACE-separated (unlike every other KML coordinate list,
       // which is comma-separated) and takes lon lat alt. A fix without altitude
       // emits two components rather than a zero, for the same reason <ele> is
-      // omitted above: 0 would read as sea level.
+      // omitted above: 0 would read as sea level
+      // (test: shared/src/trackExport.test.ts).
       const coords = segment
         .map((point) => {
           const parts = [coord(point.lon), coord(point.lat)];

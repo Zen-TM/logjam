@@ -13,25 +13,19 @@
 // `isUuidV4` and rejects the whole request on a mismatch, so a hand-minted id
 // with a version nibble of 0 would make every place of a system type
 // permanently unsyncable from the phone — invisibly, because the local mirror
-// still updates and only the outbox row holds the 400. That is the seedIds.ts
-// incident (root CLAUDE.md); this file is where it would recur.
+// still updates and only the outbox row holds the 400.
 //
 // The migration that creates these rows carries the same literals, because SQL
-// cannot import TypeScript. `placeTypes.unit.test.ts` reads the migration and
-// fails if the two ever disagree.
+// cannot import TypeScript. `api/src/lib/systemRowMigration.unit.test.ts` reads
+// the migration and fails if the two ever disagree.
 
 import { isUuidV4 } from "./sync.js";
 import { quote, say, type UserSentence } from "./userSentence.js";
 import type { TripLogCustomFieldType } from "./tripLogFields.js";
 
-// PREFIX "b" for system TYPES, "a" for system DEFINITIONS — and neither is a
-// prefix the dev seed mints under.
-//
-// They were both "9" for about an hour, and the seed's first user-created place
-// type (`seedId("9", 1)`) came out byte-identical to the Canyon type, which is
-// a unique-constraint violation on a good day and a user-owned row shadowing a
-// system one on a bad one. `seedIds.unit.test.ts` now asserts the two spaces
-// cannot overlap, so this cannot come back quietly.
+// PREFIX "b" for system TYPES, "a" for system DEFINITIONS — neither is a
+// prefix the dev seed mints under, avoiding ID collisions between seeded
+// user-created types and system types (`seedIds.unit.test.ts`).
 export const SYSTEM_PLACE_TYPE_IDS = {
   canyon: "b0000000-0000-4000-8000-000000000001",
   campsite: "b0000000-0000-4000-8000-000000000002",
@@ -152,8 +146,8 @@ export type SystemPlaceType = {
  * tab that costs every user attention forever. They belong in the empty-state
  * copy of the create-a-type screen, as examples.
  *
- * `Marker` is not a nicety — it is where every existing Waypoint lands in the
- * phase 1c migration, and without it a waypoint that was never about anything
+ * `Marker` is not a nicety — it is where existing waypoints land in the
+ * migration, and without it a waypoint that was never about anything
  * has nowhere to go.
  */
 export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
@@ -248,19 +242,15 @@ export function isPlaceTypeIconKey(value: unknown): value is PlaceTypeIconKey {
  */
 export const PLACE_TYPE_COLORS = [
   // MID-LIGHT AND MUTED, drawn from the NSW canyon palette the theme already
-  // speaks in (DESIGN.md: "Never a saturated web primary"). The first cut of
-  // this list was a Tailwind-500 ramp — orange-500, green-500, blue-400 — which
-  // read as a component from another app the moment it sat on a sheet, and had
-  // a harder problem underneath: a chip FILLS itself with its type's colour and
-  // writes a label on top, and a mid-tone hue carries no legible text in either
-  // direction. Every one of those twelve failed WCAG AA on the label (worst
-  // 3.17:1 against the sandstone scheme). Light hues carry dark ink; that is
-  // what makes the fill usable, and it is why the palette is light rather than
-  // merely tasteful. `scripts/wcag-contrast.mjs` asserts both pairs — the chip
-  // label at 4.5 and the map marker at 3 — under every scheme.
+  // speaks in (DESIGN.md: "Never a saturated web primary"). A chip FILLS itself
+  // with its type's colour and writes a label on top; mid-tone hues fail WCAG AA
+  // on the label. Light hues carry dark ink; that is what makes the fill usable,
+  // and it is why the palette is light rather than merely tasteful.
+  // `scripts/wcag-contrast.mjs` asserts both pairs — the chip label at 4.5 and
+  // the map marker at 3 — under every scheme.
   //
   // The heath violet is deliberately ABSENT: it is reserved for "shared", which
-  // is a different axis (fill = type, ring = shared, §2.8) and must not collide
+  // is a different axis (fill = type, ring = shared) and must not collide
   // with any type. `placeTypes.test.ts` pins that.
   "#E4C5AA", // banksia orange — Canyon's, the closest to the ink it always had
   "#E3D0AB", // ochre
@@ -278,8 +268,7 @@ export const PLACE_TYPE_COLORS = [
 
 /**
  * The ring on a pin someone shared with you, and the tint on every "shared"
- * chip and row. ONE hue for one idea: it was the map's blue and the Places
- * rail's heath at the same time, for the same word.
+ * chip and row. ONE hue for one idea across map pins, chips, and rows.
  *
  * Reserved — never a type colour, or a shared Marker would be a blue dot with a
  * blue ring and the two axes would collapse into one.
@@ -292,11 +281,9 @@ export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
  * What each palette colour is CALLED — the accessible name of a swatch, and its
  * tooltip.
  *
- * The names were written the day the palette was (they are the comments beside
- * it), and then lived only in those comments, so both clients offered twelve
- * swatches named "#E4C5AA" — a name, but not a helpful one, and twelve of them
- * in a row is what a screen-reader user had to choose from. `placeTypes.test.ts`
- * pins one name per colour, so a colour cannot join the palette unnamed.
+ * Accessible swatch names and tooltips for screen-reader users and UI display.
+ * `placeTypes.test.ts` pins one name per colour, so a colour cannot join the
+ * palette unnamed.
  */
 export const PLACE_TYPE_COLOR_NAMES: Record<PlaceTypeColor, string> = {
   "#E4C5AA": "Banksia orange",
@@ -341,11 +328,9 @@ export type SystemFieldDef = {
    * What the label cannot say: the scale a number is on, what it is measured
    * between. Shown under the input on a form and nowhere else.
    *
-   * It lives HERE because a form draws these fields from their definitions
-   * now: the sentences used to be tooltips hand-written beside seven bespoke
-   * canyon controls in `PlaceDialog`, which is the only reason a user field
-   * shaped exactly like `v_grade` never got one. A user's own definition has
-   * no hint and does not need one — they wrote the label.
+   * A form draws these fields from their definitions, displaying hints for
+   * built-in fields. A user's own definition has no hint and does not need one
+   * — they wrote the label.
    */
   hint?: string;
   /**
@@ -356,14 +341,11 @@ export type SystemFieldDef = {
 };
 
 /**
- * The system field definitions. These are the seven grade/quality columns the
- * Canyon table used to carry, plus the three that make Campsite worth having.
+ * The system field definitions: seven grade/quality fields for Canyon, and
+ * three campsite fields.
  *
- * Bounds are lifted verbatim from what `PLACE_NUMERIC_CONSTRAINTS` enforced
- * before the columns became field values, so nothing a user could store before
- * becomes invalid now. Note `hours`, `num_abseils` and `longest_abseil` are
- * min-only — which is why one-sided bounds had to become legal
- * (`isTripLogCustomFieldDef`); they were "both or neither" before.
+ * Bounds match numeric constraints for place field values. Note `hours`,
+ * `num_abseils` and `longest_abseil` are min-only (`isTripLogCustomFieldDef`).
  *
  * `quality` is ONE def shared by Canyon and Campsite, scoped to both through
  * the join table rather than duplicated. That is the per-owner-key rule applied
@@ -483,7 +465,7 @@ export function systemFieldDef(key: string): SystemFieldDef | undefined {
  * Keys a user may not take, DERIVED from the system defs rather than restated.
  *
  * A hardcoded copy is exactly the "two lists that must agree" failure the root
- * CLAUDE.md rule names: a tenth system def would join one list and not the
+ * AGENTS.md rule names: a tenth system def would join one list and not the
  * other, and the collision would show up as a RopeWiki import writing a value
  * nothing can render.
  *
@@ -514,14 +496,12 @@ export function reservedFieldKeyError(
 
 /**
  * The key under which structured data that is NOT a custom field is parked:
- * `_sources` for the source links a place carries. (`_attributes`, the bucket
- * the 1b migration first parked the rest of the old `attributes` blob in, is
- * gone — nothing rendered it, so the migration drops those keys instead.)
+ * `_sources` for the source links a place carries.
  *
  * The leading underscore is a STRUCTURAL reservation, not a convention someone
  * has to remember: `makeCustomFieldKey` collapses every non-alphanumeric run to
  * `_` and then strips a leading and trailing one, so a user-authored key can
- * never begin with `_`. `placeTypes.unit.test.ts` pins that property, because
+ * never begin with `_`. `placeTypes.test.ts` pins that property, because
  * the whole guarantee rests on it.
  */
 export const INTERNAL_FIELD_VALUE_PREFIX = "_";

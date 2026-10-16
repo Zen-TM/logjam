@@ -1,12 +1,9 @@
 /**
  * The one cost model for every Fargate worker Logjam runs.
  *
- * Three workers with wildly different sizes (8 / 4 / 1 vCPU) were previously
- * limited by three unrelated rules — a monthly TILE quota on topo generation
- * and nothing but a concurrency cap on the other two. Tiles are not a cost
- * unit: they only exist for one of the three workers, and they say nothing
- * about how long a task actually ran. This module replaces all of that with a
- * single unit that every worker can be measured in.
+ * Workers have different sizes (8 / 4 / 1 vCPU). Rather than arbitrary per-task
+ * limits, this module provides a single unit that every worker can be measured
+ * in.
  *
  * CREDIT = one vCPU-minute of worker time.
  *

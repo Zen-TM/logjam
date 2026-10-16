@@ -72,7 +72,7 @@ describe("computeLogbookStats", () => {
 
   it("reads trip dates in UTC regardless of the host timezone", () => {
     // A UTC-midnight date read in local fields east of Greenwich is the day
-    // before (CH-001). The first/last keys must be the stored day.
+    // before. The first/last keys must be the stored day.
     const stats = run({ trips: [trip("2026-01-01"), trip("2026-12-31")] });
     expect(stats.firstDate).toBe("2026-01-01");
     expect(stats.lastDate).toBe("2026-12-31");

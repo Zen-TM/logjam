@@ -11,11 +11,10 @@
 
 // TWO areas, sampled together.
 //
-// The first pass used only bush, and the resulting estimate was 40 % under for a
-// download centred on Katoomba: a topo tile over a town carries streets, labels
-// and building fill, and measures ~1.5x a tile of bush at the same zoom. Users
-// save the area around a trailhead, which is usually a town, so a bush-only
-// calibration is a systematically optimistic estimate.
+// A topo tile over a town carries streets, labels and building fill, and
+// measures ~1.5x a tile of bush at the same zoom. Users save the area around a
+// trailhead, which is usually a town, so a bush-only calibration is a
+// systematically optimistic estimate.
 const BBOXES = [
   // Canyon country: dense contours, bush, no streets.
   { name: "bush", west: 150.15, south: -33.85, east: 150.35, north: -33.55 },

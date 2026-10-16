@@ -237,9 +237,9 @@ describe("the tile budget", () => {
 });
 
 describe("resumableFrom — the checkpoint guard", () => {
-  // The bug: `zMax` was the whole validity test, and zMax is the LAST thing a
-  // planner change moves. A resume then skipped the first nextTileIndex entries
-  // of a different tile list and registered the holed map as ready.
+  // Validating zMax alone is insufficient: a planner change moves the tile list
+  // before zMax changes, which would cause resume to skip entries of a
+  // different tile list and register a holed map as ready.
   const planOf = (tiles: number, zMax = 14) =>
     ({
       zMin: 10,

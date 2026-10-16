@@ -16,10 +16,9 @@ import { SHARED_PLACE_COLOR } from "./placeTypes.js";
 /**
  * The label and glyph colour for anything drawn ON a colour fill — an active
  * chip, a filled button, a hue tile. Every scheme's `onFill` is this ink, not
- * its page colour: the old dark page clears 4.5:1 on the accent and the light
- * place-type palette, which is why it looked like the rule, but on the shared
- * heath it is 3.7:1 (Sandstone) and on the GeoPDF hue 2.7:1. One dark ink
- * clears every fill, in the light scheme too.
+ * its page colour: a scheme's dark page clears 4.5:1 on the accent and the light
+ * place-type palette, but on the shared heath it is 3.7:1 (Sandstone) and on
+ * the GeoPDF hue 2.7:1. One dark ink clears every fill, in the light scheme too.
  */
 export const INK = "#1E1B18";
 
@@ -109,9 +108,8 @@ export const ASSET_HUES = {
   /** Topo overlays (contours, slope, vegetation) — eucalypt leaf. */
   overlay: "#9DBE8B",
   /** GeoPDF maps — fired clay, a lifted cousin of the sandstone rust. Lifted
-   *  from #C97B4A (2026-09-13): 2.72:1 as a glyph on Sandstone; and again from
-   *  #CE885C (2026-09-14): 2.54:1 as a chip glyph on a Sandstone card, where
-   *  the bikepacking trip type borrows it. */
+   *  for contrast as a glyph on Sandstone and as a chip glyph on a Sandstone
+   *  card, where the bikepacking trip type borrows it. */
   geoPdf: "#D99B72",
   /** Routes you drew — she-oak green, distinct from the imported-file blue
    *  because a route is authored rather than brought in. */
@@ -121,8 +119,8 @@ export const ASSET_HUES = {
   /** Recorded tracks — heath flower. */
   track: "#B79EC0",
   /** Marked points — waratah, the most forward colour in the muted range: a
-   *  waypoint is a thing you are trying to FIND again. Lifted from #D4715E
-   *  (2026-09-13): 2.68:1 as a glyph on Sandstone. */
+   *  waypoint is a thing you are trying to FIND again. Lifted for contrast as
+   *  a glyph on Sandstone. */
   waypoint: "#D98170",
 } as const;
 

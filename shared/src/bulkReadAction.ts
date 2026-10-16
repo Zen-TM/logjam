@@ -66,9 +66,8 @@ export function bulkReadAction(
  */
 export function selectionCountLabel(selected: { read: boolean }[]): string {
   const unread = selected.filter((notification) => !notification.read).length;
-  // "N selected" in both forms — the tally is an ADDITION to the count, not a
-  // replacement for it, and dropping the word "selected" in one of the two made
-  // the bar read as a different sentence depending on what was picked.
+  // "N selected" in both forms — the tally is an addition to the count, not a
+  // replacement for it; keeping "selected" ensures consistent phrasing.
   const base = `${selected.length} selected`;
   return unread === 0 ? base : `${base} · ${unread} unread`;
 }
