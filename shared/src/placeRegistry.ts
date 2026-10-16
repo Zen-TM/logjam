@@ -189,8 +189,21 @@ export function placeKindRank(kind: string): number {
   return KIND_RANKS[kind] ?? KIND_RANKS[kind.split("=")[0]] ?? OTHER_KIND_RANK;
 }
 
+// Outside printable ASCII; control characters take the general path too.
+const NON_ASCII = /[^ -~]/;
+
 /** Lowercase, accents and apostrophes dropped, punctuation as spaces. */
 export function normalizeSearchText(text: string): string {
+  // Nearly every name is plain ASCII, and indexing normalizes 320,000 of
+  // them: on Android, Hermes hands each normalize() to the platform, which
+  // made building the index take seconds. ASCII has no accents to drop.
+  if (!NON_ASCII.test(text)) {
+    return text
+      .toLowerCase()
+      .replace(/['`]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
   return text
     .normalize("NFD")
     .replace(/\p{M}/gu, "")

@@ -76,6 +76,22 @@ describe("searchPlaces", () => {
     expect(normalizeSearchText("Mont Blanc—Côte")).toBe("mont blanc cote");
   });
 
+  it("normalizes plain ASCII as the general path does", () => {
+    // Appending " é" sends the same text down the general path. Mutation:
+    // change one path's punctuation rule and not the other's → red.
+    for (const text of [
+      "Devil's Hole",
+      "Mount-Solitary (Upper)",
+      "A&B  St.",
+      "`Echo` Point #2",
+      "  O'Hara's_Gap  ",
+    ]) {
+      expect(normalizeSearchText(text)).toBe(
+        normalizeSearchText(`${text} é`).replace(/ e$/, ""),
+      );
+    }
+  });
+
   it("tells namesakes apart by the nearest settlement", () => {
     const results = searchPlaces(index, "station street", 10);
     expect(results.map((r) => [r.kind, r.near])).toEqual([
