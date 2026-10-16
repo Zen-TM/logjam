@@ -249,16 +249,25 @@ run "place_registry_role_writes_only_master_places" {
     target = [aws_iam_role_policy.place_registry]
   }
 
-  # Mutation: widening the Resource to the bucket (`/*`, `/master/*`), or
-  # adding an action or a statement, lets the monthly build write or delete
-  # more than the public place registry.
+  # Mutation: widening a Resource (`/*`, `/master/*`) or the list prefix,
+  # dropping the prefix condition, or adding an action or a statement lets the
+  # monthly build see, write or delete more than the public place registry.
   assert {
-    condition = (
-      length(jsondecode(aws_iam_role_policy.place_registry.policy).Statement) == 1 &&
-      jsondecode(aws_iam_role_policy.place_registry.policy).Statement[0].Effect == "Allow" &&
-      toset(jsondecode(aws_iam_role_policy.place_registry.policy).Statement[0].Action) == toset(["s3:GetObject", "s3:PutObject"]) &&
-      jsondecode(aws_iam_role_policy.place_registry.policy).Statement[0].Resource == "arn:aws:s3:::logjam-topo-jobs/master/places/*"
-    )
-    error_message = "The place registry role may only read and write objects under master/places/ in the topo bucket."
+    condition = jsondecode(aws_iam_role_policy.place_registry.policy).Statement == [
+      {
+        Sid      = "PublishPlaceRegistry"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/places/*"
+      },
+      {
+        Sid       = "ListPlaceRegistry"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/places/*" } }
+      },
+    ]
+    error_message = "The place registry role may only list, read and write objects under master/places/ in the topo bucket."
   }
 }

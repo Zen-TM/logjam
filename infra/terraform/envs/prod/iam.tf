@@ -31,8 +31,8 @@ resource "aws_iam_role" "topo_worker" {
   })
 }
 
-# Task role for the monthly place registry build (ecs.tf): it may read and
-# replace what is under master/places/ in the topo bucket, and nothing else.
+# Task role for the monthly place registry build (ecs.tf): it may list, read
+# and replace what is under master/places/ in the topo bucket, and nothing else.
 resource "aws_iam_role" "place_registry" {
   name = "logjam-place-registry-role"
   assume_role_policy = jsonencode({
@@ -50,12 +50,25 @@ resource "aws_iam_role_policy" "place_registry" {
   role = aws_iam_role.place_registry.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid      = "PublishPlaceRegistry"
-      Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:PutObject"]
-      Resource = "arn:aws:s3:::logjam-topo-jobs/master/places/*"
-    }]
+    Statement = [
+      {
+        Sid      = "PublishPlaceRegistry"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/places/*"
+      },
+      {
+        # upload() in topo/build_place_registry.py lists with
+        # Prefix=master/places/v1/latest.json to learn whether a build is
+        # already published, before it reads one; the condition keeps the
+        # list to that prefix.
+        Sid       = "ListPlaceRegistry"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/places/*" } }
+      },
+    ]
   })
 }
 
