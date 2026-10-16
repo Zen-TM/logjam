@@ -1,3 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  indexPlaceRegistry,
+  searchPlaces,
+  type PlaceRegistryFile,
+} from "@logjam/shared";
 import { gzipSync, strToU8 } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -295,4 +302,35 @@ describe("the index in memory", () => {
     await registry.refreshPlaceRegistry();
     expect(registry.placeIndex()).toBeNull();
   });
+});
+
+describe("one ranking, on the phone and on the API", () => {
+  // The builder's fixture and pointer, as the API's own tests read them.
+  const FIXTURES = join(__dirname, "../../../shared/src/__fixtures__");
+  const fixture = JSON.parse(
+    readFileSync(join(FIXTURES, "place-registry.json"), "utf8"),
+  ) as PlaceRegistryFile;
+  const pointer = JSON.parse(
+    readFileSync(join(FIXTURES, "place-registry-pointer.json"), "utf8"),
+  ) as { path: string };
+
+  // Mutation: re-rank or filter what `loadPlaceIndex` hands the search box,
+  // or read the file into anything but `indexPlaceRegistry`.
+  it.each(["castle", "katoomba falls", "lookout"])(
+    "answers %s exactly as searchPlaces does over the same file",
+    async (query) => {
+      served.set(POINTER_URL, pointer);
+      served.set(
+        `${CDN}/master/places/v1/${pointer.path}`,
+        gzipSync(strToU8(JSON.stringify(fixture))),
+      );
+      const registry = await load();
+      expect(await registry.requestPlaceRegistry()).toBe("updated");
+      const index = await registry.loadPlaceIndex();
+      if (!index) throw new Error("the fixture did not load");
+      const expected = searchPlaces(indexPlaceRegistry(fixture), query, 8);
+      expect(expected.length).toBeGreaterThan(0);
+      expect(searchPlaces(index, query, 8)).toEqual(expected);
+    },
+  );
 });
