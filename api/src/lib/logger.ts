@@ -91,6 +91,9 @@ export const redactPaths = [
   "req.body.south",
   "req.body.east",
   "req.body.north",
+  // Location search (POST /places/search): the typed text, often the name of
+  // a place the user would rather not publish. Body-shaped only, as above.
+  "req.body.q",
   // Authorization headers (never log credentials)
   "req.headers.authorization",
   'req.headers["x-fake-sub"]',

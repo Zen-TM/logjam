@@ -1,4 +1,4 @@
-import { say } from "@logjam/shared";
+import { PLACE_SEARCH_API_PATH, say } from "@logjam/shared";
 import dotenv from "dotenv";
 import path from "path";
 // Local dev (run from api/ via `npm run dev`) loads the Terraform-generated root
@@ -22,6 +22,7 @@ import prisma from "./services/prisma";
 import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
+import { startPlaceRegistry } from "./services/placeRegistry";
 import usersRouter from "./routes/users";
 import placesRouter from "./routes/places";
 import placeTypesRouter from "./routes/placeTypes";
@@ -53,6 +54,7 @@ import devicesRouter from "./routes/devices";
 import basemapRouter from "./routes/basemap";
 import routesRouter from "./routes/routes";
 import elevationRouter from "./routes/elevation";
+import placeSearchRouter from "./routes/placeSearch";
 import syncRouter from "./routes/sync";
 
 const env = getEnv();
@@ -201,6 +203,7 @@ app.use(globalLimiter);
 app.use("/meta", metaRouter);
 app.use("/users", usersRouter);
 app.use("/place-types", placeTypesRouter);
+app.use(PLACE_SEARCH_API_PATH, placeSearchRouter);
 app.use("/places", placesRouter);
 app.use("/places/:placeId/trips", tripLogsRouter);
 app.use("/trips/bulk", tripLogsBulkRouter);
@@ -248,6 +251,9 @@ const server = app.listen(env.PORT, () => {
 // timeout. No-op when TOPO_REAPER_INTERVAL_MS=0.
 const stopTopoJobReaper = startTopoJobReaper();
 
+// In the background: search answers 503 until the registry has loaded.
+const stopPlaceRegistry = startPlaceRegistry();
+
 const SHUTDOWN_TIMEOUT_MS = 25_000;
 
 function shutdown(signal: string) {
@@ -256,6 +262,7 @@ function shutdown(signal: string) {
   logger.info({ signal }, "shutdown_initiated");
 
   stopTopoJobReaper();
+  stopPlaceRegistry();
 
   const force = setTimeout(() => {
     logger.error("shutdown_timeout_force_exit");

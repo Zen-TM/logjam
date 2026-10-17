@@ -62,6 +62,10 @@
           servers and storage, including your IP address and, for web-server
           logs, your browser or device type and the address requested. See
           &ldquo;Retention&rdquo; for how long each is kept.</li>
+      <li><strong>Search text:</strong> as you type in the map&rsquo;s search
+          in Logjam Web, the text is sent to our servers, which answer from a
+          list of named places built from OpenStreetMap data. It is used only
+          to answer, and is neither stored nor logged.</li>
     </ul>
 
     <h2>Logjam GPS on your phone</h2>
@@ -275,11 +279,12 @@
           GitHub Pages (<code>protomaps.github.io</code>, United States), and
           Logjam GPS does so on first launch until it has its own copy. These
           requests carry your IP address but no location.</li>
-      <li><strong>Place search:</strong> when you search the map for a place
-          name in Logjam Web or Logjam GPS, the text you type is sent to the OpenStreetMap Foundation&rsquo;s
-          Nominatim service (<code>nominatim.openstreetmap.org</code>) along
-          with your IP address. Nothing else about you or your places is
-          sent.</li>
+      <li><strong>Place search:</strong> when you press &ldquo;Search
+          locations for &hellip;&rdquo; in the map&rsquo;s search, in Logjam
+          Web or Logjam GPS, the text you typed is sent to the OpenStreetMap
+          Foundation&rsquo;s Nominatim service
+          (<code>nominatim.openstreetmap.org</code>) along with your IP
+          address. Nothing else about you or your places is sent.</li>
       <li><strong>Server-side GeoPDF rendering:</strong> when you generate a
           GeoPDF, our servers fetch the same providers&rsquo; tiles for the
           export area. The providers see our server&rsquo;s requests &mdash;

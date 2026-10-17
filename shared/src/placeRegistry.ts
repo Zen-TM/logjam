@@ -79,7 +79,9 @@ export function placeResultDetail(result: PlaceResult): string {
  *  and not the URL that access logs keep. */
 export const PLACE_SEARCH_API_PATH = "/places/search";
 
-/** How long a client waits after the last keystroke before asking the API. */
+/** How long a client waits after the last keystroke before asking the API.
+ *  The API's per-user limit is sized for it. Guard:
+ *  `api/src/middleware/rateLimit.unit.test.ts` ("placeSearchLimiter"). */
 export const PLACE_SEARCH_DEBOUNCE_MS = 200;
 
 /** Most results a search returns, and the API's default. */
