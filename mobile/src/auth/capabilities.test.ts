@@ -18,6 +18,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "lidarOverlays",
   "accountGeoPdf",
   "vectorRegionDownload",
+  "placeSearch",
   "serverPrefs",
   "pushNotifications",
   "syncNow",

@@ -31,6 +31,100 @@ resource "aws_iam_role" "topo_worker" {
   })
 }
 
+# Task role for the monthly place registry build (ecs.tf): it may list, read
+# and replace what is under master/places/ in the topo bucket, and nothing else.
+resource "aws_iam_role" "place_registry" {
+  name = "logjam-place-registry-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "place_registry" {
+  name = "logjam-place-registry-publish"
+  role = aws_iam_role.place_registry.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "PublishPlaceRegistry"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/places/*"
+      },
+      {
+        # upload() in topo/build_place_registry.py lists with
+        # Prefix=master/places/v1/latest.json to learn whether a build is
+        # already published, before it reads one; the condition keeps the
+        # list to that prefix.
+        Sid       = "ListPlaceRegistry"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/places/*" } }
+      },
+    ]
+  })
+}
+
+# What EventBridge Scheduler assumes to launch the monthly build: RunTask on
+# that one family, in the one cluster, passing only its two roles.
+resource "aws_iam_role" "place_registry_scheduler" {
+  name = "logjam-place-registry-scheduler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = "620853681701" }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "place_registry_scheduler" {
+  name = "logjam-place-registry-runtask"
+  role = aws_iam_role.place_registry_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunPlaceRegistryTask"
+        Effect = "Allow"
+        Action = "ecs:RunTask"
+        # The schedule names the family without a revision; RunTask resolves
+        # it, so both forms are listed.
+        Resource = [
+          aws_ecs_task_definition.place_registry.arn_without_revision,
+          "${aws_ecs_task_definition.place_registry.arn_without_revision}:*",
+        ]
+        Condition = {
+          ArnEquals = { "ecs:cluster" = aws_ecs_cluster.main.arn }
+        }
+      },
+      {
+        Sid    = "PassPlaceRegistryRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.place_registry.arn,
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}
+
 # GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
 # embedded as a literal, as before.
 #
@@ -539,9 +633,11 @@ resource "aws_iam_role_policy" "gha_eb_appversions" {
 # task-def ARN to scope to before the revision exists — so it is `*`. What that
 # does NOT grant is the ability to run anything: ecs:RunTask stays scoped to
 # logjam-api-migrate in the policy above, and the API's own runtime role is what
-# launches the workers. The teeth are in PassRole, which is limited to the two
-# roles these four task defs already use and gated to ECS tasks, so a registered
-# definition cannot attach a more privileged role than the one it replaces.
+# launches the workers. The teeth are in PassRole, which is limited to the
+# roles these task defs already use and gated to ECS tasks, so a registered
+# definition cannot attach a role none of them has. A place registry revision
+# given the broader topo worker role would still not launch: the scheduler may
+# pass only the place registry's own (place_registry_scheduler above).
 resource "aws_iam_role_policy" "gha_pin_task_defs" {
   name = "logjam-gha-pin-task-defs"
   role = aws_iam_role.github_actions.id
@@ -564,6 +660,7 @@ resource "aws_iam_role_policy" "gha_pin_task_defs" {
         Resource = [
           aws_iam_role.ecs_task_execution.arn,
           aws_iam_role.topo_worker.arn,
+          aws_iam_role.place_registry.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }

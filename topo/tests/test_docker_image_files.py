@@ -6,7 +6,7 @@ ModuleNotFoundError at runtime after the status flip has committed.
 
 Two hand-kept lists that must agree — the modules the entrypoints import and
 the Dockerfile COPY list — get a deriving test rather than a comment.
-This walks the import graph from the two ENTRYPOINT targets and fails if
+This walks the import graph from the ECS task commands and fails if
 anything reachable is missing from the image.
 
 Pure AST + text parsing: no imports of the modules themselves, so it runs on
@@ -21,8 +21,8 @@ import unittest
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _DOCKERFILE = os.path.join(_ROOT, "Dockerfile")
 
-# The two commands the ECS task defs run (see the Dockerfile entrypoint note).
-_ENTRYPOINTS = ("worker.py", "export_worker.py")
+# The commands the ECS task defs run (see the Dockerfile entrypoint note).
+_ENTRYPOINTS = ("worker.py", "export_worker.py", "build_place_registry.py")
 
 
 def _local_module_path(name):

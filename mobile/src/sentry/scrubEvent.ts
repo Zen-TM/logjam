@@ -82,6 +82,10 @@ const SENSITIVE_KEYS = new Set([
   // over-censoring is the safe direction for a crash report.
   "types",
   "triptypes",
+  // What the user typed into search: often the name of a place they would
+  // rather not publish (ADR 0034). `q` is the body of POST /places/search.
+  "q",
+  "query",
   "authorization",
   "cookie",
 ]);

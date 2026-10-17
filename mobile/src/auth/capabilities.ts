@@ -53,6 +53,9 @@ export type Capability =
   | "accountGeoPdf"
   /** The Protomaps vector clip (POST /basemap/region-clip). Raster regions are NOT this. */
   | "vectorRegionDownload"
+  /** Location search through our API (POST /places/search), for a phone
+   *  without the place registry. Searching the phone's own copy is not this. */
+  | "placeSearch"
   /** Preferences stored on the user record (PATCH /users/me). */
   | "serverPrefs"
   /** Push-token registration (POST /devices). */
@@ -92,6 +95,7 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   lidarOverlays: true,
   accountGeoPdf: true,
   vectorRegionDownload: true,
+  placeSearch: true,
   serverPrefs: true,
   pushNotifications: true,
   syncNow: true,
@@ -139,6 +143,7 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   lidarOverlays: "LiDAR overlays",
   accountGeoPdf: "Account GeoPDFs",
   vectorRegionDownload: "The vector map download",
+  placeSearch: "Location search",
   serverPrefs: "This preference",
   pushNotifications: "Push notifications",
   syncNow: "Syncing",

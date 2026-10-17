@@ -115,7 +115,7 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      # Point both topo-worker task definitions at the image just
+      # Point every task definition on this image at the image just
       # pushed, by sha, so a RunTask launches this commit rather than whatever
       # the moving `:latest` tag resolves to. Nothing here waits on it — these
       # are on-demand workers with no service to roll — so the pin is the whole

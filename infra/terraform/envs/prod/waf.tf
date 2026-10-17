@@ -91,6 +91,10 @@ resource "aws_wafv2_web_acl" "api" {
     # Block: 300 req / 5 min / client IP. WAF sees the true viewer IP
     # at the edge. API traffic is XHR-only (topo tiles serve off the web
     # distribution under /master/*, not here), so 300/5min is generous.
+    # Location search as you type (/places/search) counts here too: this
+    # distribution's CloudFront pricing plan refuses a rule scoped by URI
+    # path, so search can't have a limit of its own. Guard: run
+    # "api_rate_limit_is_one_plain_ip_rule" in tests/guards.tftest.hcl.
     action {
       block {}
     }

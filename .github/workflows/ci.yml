@@ -217,14 +217,8 @@ jobs:
       - name: Migrate
         working-directory: api
         run: npx prisma migrate deploy
-      # Creates alice/bob/carol with the friendships and shares every
-      # multi-actor test asserts against.
-      - name: Seed
-        working-directory: api
-        run: npx prisma db seed
-      - name: Build API
-        working-directory: api
-        run: npm run build
+      # Before the seed, which uploads its track files and the place registry
+      # fixture into these buckets (best effort, so a missing bucket is silent).
       - name: Wait for MiniStack and create buckets
         run: |
           for i in $(seq 1 60); do
@@ -236,6 +230,14 @@ jobs:
           done
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      # Creates alice/bob/carol with the friendships and shares every
+      # multi-actor test asserts against.
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build API
+        working-directory: api
+        run: npm run build
       # dist/index.js, not dist/boot.js: boot resolves DB creds from Secrets
       # Manager, which this job doesn't run.
       - name: Start API

@@ -246,6 +246,19 @@ describe("scrubBreadcrumb", () => {
   });
 });
 
+describe("the typed search query", () => {
+  // Mutation that turns it red: drop "q" or "query" from SENSITIVE_KEYS.
+  it("never reaches a breadcrumb or an event", () => {
+    const crumb = scrubBreadcrumb({
+      category: "console",
+      data: { arguments: [{ q: "Secret Canyon", limit: 8 }] },
+    });
+    expect(JSON.stringify(crumb)).not.toContain("Secret Canyon");
+    const event = scrubEvent({ extra: { search: { query: "Secret Canyon" } } });
+    expect(JSON.stringify(event)).not.toContain("Secret Canyon");
+  });
+});
+
 describe("scrubMessage", () => {
   it("applies both args-block and URL/tile redaction", () => {
     const msg = "failed https://x.test/a/1/2/3\n{ latitude: -33 }";

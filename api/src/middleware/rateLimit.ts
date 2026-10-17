@@ -158,6 +158,24 @@ export const elevationLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// Location search as you type (routes/placeSearch.ts), per user. A client
+// asks once the user stops typing for PLACE_SEARCH_DEBOUNCE_MS, so a fast
+// typist sends a request per pause, not per key: a minute of hard searching
+// is well under 60. The registry is public, so this guards no data, only the
+// CPU a scraper would burn: at 120 a minute and 36 ms for the worst query,
+// one account costs at most 7 % of a core. The global limiter applies too,
+// and so does the edge WAF's 300 requests per 5 min per IP, which counts
+// searches with every other API call (infra/terraform/envs/prod/waf.tf).
+// Guard: `rateLimit.unit.test.ts` ("placeSearchLimiter").
+export const PLACE_SEARCHES_PER_MINUTE = 120;
+export const placeSearchLimiter = rateLimit({
+  windowMs: 60_000,
+  max: PLACE_SEARCHES_PER_MINUTE,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const userPatchLimiter = rateLimit({
   windowMs: 60_000,
   max: userPatchLimitMax(),

@@ -1,6 +1,7 @@
-# ECS task definitions for the three on-demand Fargate workers, plus the
-# pre-deploy migrate one-shot. Launched via RunTask
-# (api/src/lib/ecsRunTask.ts), no long-running services. container_definitions
+# ECS task definitions for the three on-demand Fargate workers, the
+# pre-deploy migrate one-shot and the monthly place registry build. Workers are
+# launched via RunTask (api/src/lib/ecsRunTask.ts), the place registry by its
+# schedule below; no long-running services. container_definitions
 # is pinned to the exact live JSON (generated via
 # `terraform plan -generate-config-out`) so the plan stays clean — editing it
 # registers a new task-def revision.
@@ -320,5 +321,84 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
+  }
+}
+
+# The OpenStreetMap place registry: once a month, download Geofabrik's NSW
+# extract, build the registry and publish it under master/places/ in the topo
+# bucket, where CloudFront serves it publicly beside the DEM. Why a scheduled
+# ECS task with its own write role, and not a CI cron:
+# docs/decisions/0034-location-search-reads-a-public-osm-place-registry.md.
+# Same image as the topo workers, so pin-release.sh repins it on each topo
+# deploy; no database and no secrets.
+resource "aws_ecs_task_definition" "place_registry" {
+  container_definitions = jsonencode([{
+    entryPoint = ["python3", "/app/build_place_registry.py", "publish"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "S3_BUCKET_TOPO"
+      value = module.topo_jobs.bucket_id
+    }]
+    essential = true
+    # Floor only — CI re-registers this def pinned to a sha (see header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        # Pre-created in logging.tf; see api_migrate for why the
+        # create-group option is absent.
+        awslogs-group         = aws_cloudwatch_log_group.place_registry.name
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    name = "place-registry"
+  }])
+  # About 1.3 GB peak and 80 s of build on the October 2026 extract.
+  cpu                      = "1024"
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  family                   = "logjam-place-registry"
+  memory                   = "3072"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  task_role_arn            = aws_iam_role.place_registry.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+}
+
+# 04:00 Sydney on the 5th of each month. The task definition is named by
+# family, without a revision, so RunTask launches the latest ACTIVE revision:
+# the one CI pinned to the current topo image, not Terraform's `:latest` floor.
+# Failures and launches that never happen alarm in monitoring.tf.
+resource "aws_scheduler_schedule" "place_registry" {
+  name                         = "logjam-place-registry"
+  schedule_expression          = "cron(0 4 5 * ? *)"
+  schedule_expression_timezone = "Australia/Sydney"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.main.arn
+    role_arn = aws_iam_role.place_registry_scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.place_registry.arn_without_revision
+      launch_type         = "FARGATE"
+
+      # As api/src/lib/ecsRunTask.ts launches the workers: a public IP is
+      # the task's only way out to Geofabrik and S3.
+      network_configuration {
+        subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
+        security_groups  = [aws_security_group.worker.id]
+        assign_public_ip = true
+      }
+    }
   }
 }

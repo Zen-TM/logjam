@@ -46,6 +46,7 @@ import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
+import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { notificationTapTarget } from "./notifications/tapTarget";
@@ -845,6 +846,10 @@ export function AppShell({
     if (isGuest) return;
     return registerTopoAutoDownload();
   }, [isGuest]);
+
+  // The place names for search, on the same three moments. A guest too: the
+  // file is public and fetched from the CDN, not our API (ADR 0034).
+  useEffect(() => registerPlaceRegistryRefresh(), []);
 
   // Take the account's theme choice, so a scheme picked in the browser (or on
   // another phone) is the one Logjam GPS is painted in. Keyed on the ACCOUNT's
