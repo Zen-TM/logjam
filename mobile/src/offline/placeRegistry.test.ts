@@ -23,6 +23,7 @@ const served = new Map<string, unknown>();
 const prefs = new Map<string, string>();
 /** Every file read whole into memory, as "text" or "bytes", and its URI. */
 const reads: string[] = [];
+const artifacts = { kinds: [] as string[] };
 const network = { expensive: false, connected: true };
 const offlineOnly = { on: false };
 
@@ -117,6 +118,9 @@ vi.mock("./localStores", () => ({ PLACE_REGISTRY_DIR: DIR }));
 vi.mock("./offlineOnlyMode", () => ({ isOfflineOnly: () => offlineOnly.on }));
 vi.mock("../config", () => ({ config: { topoCdnBaseUrl: CDN } }));
 vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
+vi.mock("./registryDb", () => ({
+  listArtifacts: async () => artifacts.kinds.map((kind) => ({ kind })),
+}));
 
 const fetchMock = vi.fn(async (url: string) => {
   const body = served.get(url);
@@ -184,6 +188,7 @@ beforeEach(() => {
   served.clear();
   prefs.clear();
   reads.length = 0;
+  artifacts.kinds = [];
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
@@ -229,6 +234,33 @@ describe("the first download", () => {
     expect(await registry.refreshPlaceRegistry()).toBe("skipped");
     expect(registry.hasPlaceRegistry()).toBe(false);
     expect([...files.keys()]).toEqual([]);
+  });
+});
+
+describe("a phone that held a region before Logjam GPS had the file", () => {
+  // Mutation: drop `adoptForSavedRegions` from the start-up check.
+  it("counts as having asked, and fetches it at app start", async () => {
+    artifacts.kinds = ["basemap-region", "dem-region"];
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    expect(prefs.get("placeRegistryWanted")).toBe("on");
+  });
+
+  // Mutation: adopt whenever the pref is not "on", not only when never set.
+  it.each([
+    ["a user who removed it", "off", ["basemap-region"]],
+    ["a phone with no saved region", undefined, ["topo-overlay"]],
+  ])("fetches nothing for %s", async (_case, wanted, kinds) => {
+    if (wanted) prefs.set("placeRegistryWanted", wanted);
+    artifacts.kinds = kinds;
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prefs.get("placeRegistryWanted")).toBe(wanted);
   });
 });
 

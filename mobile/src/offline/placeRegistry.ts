@@ -45,12 +45,14 @@ import { readPref, writePref } from "../prefsDb";
 import { PLACE_REGISTRY_DIR } from "./localStores";
 import { canRunNow } from "./networkPolicy";
 import { isOfflineOnly } from "./offlineOnlyMode";
+import { listArtifacts } from "./registryDb";
 
 const POINTER_URI = `${PLACE_REGISTRY_DIR}pointer.json`;
 const DOWNLOAD_URI = `${PLACE_REGISTRY_DIR}download.tmp`;
 
 /** "on" once the user started a region download or asked in Settings; "off"
- *  once they removed it, which a later region download does not undo. */
+ *  once they removed it, which a later region download does not undo. Unset
+ *  (null) on a phone that has done neither. */
 const WANTED_PREF_KEY = "placeRegistryWanted";
 
 /** The pointer is a few bytes; a CDN that sits on it is down. */
@@ -319,13 +321,28 @@ function requestCheck(): void {
   void refreshPlaceRegistry();
 }
 
+/**
+ * A phone that held a region before Logjam GPS had the registry counts as
+ * having asked: its user downloaded for the field before the file existed.
+ * Never once they removed it.
+ */
+async function adoptForSavedRegions(): Promise<void> {
+  if (readPref(WANTED_PREF_KEY) !== null) return;
+  const artifacts = await listArtifacts();
+  if (artifacts.some((artifact) => artifact.kind === "basemap-region")) {
+    writePref(WANTED_PREF_KEY, "on");
+  }
+}
+
 /** Wire the refresh to the three moments. Returns the cleanup. */
 export function registerPlaceRegistryRefresh(): () => void {
   const appStateSub = AppState.addEventListener("change", (state) => {
     if (state === "active") requestCheck();
   });
   const netInfoUnsub = subscribeReconnect(requestCheck);
-  requestCheck();
+  void adoptForSavedRegions()
+    .catch((err: unknown) => console.error(err))
+    .then(requestCheck);
   return () => {
     appStateSub.remove();
     netInfoUnsub();
