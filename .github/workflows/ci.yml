@@ -28,6 +28,7 @@ jobs:
       api_integration: ${{ steps.scope.outputs.api_integration }}
       mobile: ${{ steps.scope.outputs.mobile }}
       migrations: ${{ steps.scope.outputs.migrations }}
+      topo_e2e: ${{ steps.scope.outputs.topo_e2e }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -527,10 +528,12 @@ jobs:
   # MiniStack, so a read the job forgot to stub fails instead of reaching out.
   #
   # Its own job, not a step of api-integration: it is scoped to what the worker
-  # image is built from rather than to the API, and its 15-odd minutes run
-  # beside that suite instead of after it. The setup it repeats is about two
-  # minutes.
+  # image is built from rather than to the API, and its six minutes (ten with
+  # a cold image cache) run beside that suite instead of after it. The setup it
+  # repeats is about a minute.
   topo-e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.topo_e2e != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     services:

@@ -21,11 +21,12 @@
 #
 # Mutations that turn the self-test red: dropping shared/ from mobile fails
 # "mobile: shared source"; dropping frontend/ from api_integration fails
-# "api_integration: Logjam Web (Playwright smoke)"; removing the ci.yml rule
+# "api_integration: Logjam Web (Playwright smoke)"; dropping the worker image's
+# paths from topo_e2e fails "topo_e2e: worker source"; removing the ci.yml rule
 # fails "any area: ci.yml".
 set -uo pipefail
 
-AREAS="api_integration mobile migrations"
+AREAS="api_integration mobile migrations topo_e2e"
 
 # A change to the gate itself runs the whole gate.
 ALWAYS='^(\.github/workflows/ci\.yml|infra/scripts/ci-scope\.sh)$'
@@ -39,6 +40,10 @@ paths_for() {
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
     # upgraded to this commit (the head's seed never runs there).
     migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/migration-upgrade-test\.sh)' ;;
+    # The worker image (image-build-scope.sh holds what it is built from), the
+    # job's stubs and checks, its sample input, and the task definition whose
+    # env worker.env mirrors.
+    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$)" ;;
     *) return 1 ;;
   esac
 }
@@ -97,6 +102,13 @@ self_test() {
   check "migrations: the Prisma version"                  migrations true  0 'api/package.json'
   check "migrations: the upgrade script"                  migrations true  0 'scripts/migration-upgrade-test.sh'
   check "migrations: api route"                           migrations false 0 'api/src/routes/a.ts'
+  check "topo_e2e: worker source"                        topo_e2e true  0 'topo/pipeline.py'
+  check "topo_e2e: worker image Dockerfile"               topo_e2e true  0 'topo/Dockerfile'
+  check "topo_e2e: its stub and checks"                   topo_e2e true  0 'topo/tests/e2e/check.py'
+  check "topo_e2e: the sample manifest"                   topo_e2e true  0 'scripts/sample-data.sha256'
+  check "topo_e2e: the task definition"                   topo_e2e true  0 'infra/terraform/envs/prod/ecs.tf'
+  check "topo_e2e: a topo unit test"                      topo_e2e false 0 'topo/tests/test_labels.py'
+  check "topo_e2e: api only"                              topo_e2e false 0 'api/src/routes/topoJobs.ts'
   check "any area: ci.yml"                                mobile true  0 $'docs/a.md\n.github/workflows/ci.yml'
   check "any area: this script"                           migrations true  0 'infra/scripts/ci-scope.sh'
   check "other workflow is not the gate"                  mobile false 0 '.github/workflows/smoke.yml'
@@ -106,7 +118,7 @@ self_test() {
   # Every area ci.yml reads is declared here, and the reverse, so an area
   # added on one side only fails here rather than running or skipping wrong.
   local yml declared
-  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z_]+' "$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
+  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z0-9_]+' "$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
   declared=$(tr ' ' '\n' <<<"$AREAS" | sort -u | tr '\n' ' ')
   if [ "$yml" = "$declared" ]; then echo "ok   — ci.yml reads exactly the declared areas"; else echo "FAIL — ci.yml reads [$yml], declared [$declared]"; fails=1; fi
 
