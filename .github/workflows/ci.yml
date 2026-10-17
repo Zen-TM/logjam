@@ -317,6 +317,15 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/smoke.spec.ts
+      # Same job, not its own: it needs this seeded stack, and this job's
+      # area (api/, shared/, frontend/) is exactly what the spec can break.
+      # Serial, because a parallel run on a cold checkout times out on
+      # page.goto. Playwright starts the second server on 5199 itself.
+      - name: Playwright accessibility
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/a11y.spec.ts --workers=1
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
