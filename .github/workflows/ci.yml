@@ -1,17 +1,50 @@
 name: CI
 
-# Test/lint/typecheck gate. Runs on every PR and on pushes to main. This is
-# the workflow branch protection should require (jobs: shared, api,
+# Test/lint/typecheck gate. Runs on every PR, on pushes to main and nightly.
+# This is the workflow branch protection should require (jobs: shared, api,
 # api-integration, frontend, mobile, topo). The api-integration job stands up
 # the live API + Postgres + MiniStack the integration suite needs, so
 # api/src/__tests__ gates PRs too; see api/AGENTS.md "Testing".
+#
+# On a pull request the heavy jobs run only when the diff touches what they
+# depend on (the `changes` job; infra/scripts/ci-scope.sh holds the paths).
+# A skipped job passes as a required check. Pushes to main, the nightly run
+# and a hand run (`gh workflow run CI --ref <branch>`, which reports on that
+# branch's head commit) run everything, so a deploy is always gated on the
+# full suite.
 
 on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 16 * * *"
+  workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api_integration: ${{ steps.scope.outputs.api_integration }}
+      mobile: ${{ steps.scope.outputs.mobile }}
+      migrations: ${{ steps.scope.outputs.migrations }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Which heavy jobs does this change need?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
+          else
+            infra/scripts/ci-scope.sh all
+          fi
+
   gitleaks:
     # Scan for committed secrets (.gitleaks.toml allowlists public Cognito ids etc.).
     # Pin the CLI to an exact release rather than a mutable Action tag.
@@ -128,6 +161,8 @@ jobs:
     # the suite is not idempotent against a reused database (sync_tombstones
     # accumulate until syncBoundary's paged-pull assertions stop finding the
     # tombstone they just wrote). Never cache the Postgres volume here.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
     services:
       # Mirrors the `migrations` job's config exactly.
@@ -323,6 +358,8 @@ jobs:
         run: npm test
 
   mobile:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.mobile != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -369,6 +406,8 @@ jobs:
     # `migration-upgrade` below covers existing rows. NOTE: runs as the Postgres superuser, so it does NOT
     # catch failures specific to the least-priv `logjam_app` role (a missing
     # grant) — that half remains a prod-boot risk.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -414,6 +453,8 @@ jobs:
     # plus edge-case fixtures, up to this commit. Then asserts the data came
     # across (api/prisma/upgrade-check/) and that the upgraded DB matches
     # schema.prisma exactly, catching drift the empty-DB job cannot.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -504,6 +545,8 @@ jobs:
         run: infra/scripts/image-build-scope.sh --self-test
       - name: Frontend prune keep-list
         run: infra/scripts/frontend-prune.sh --self-test
+      - name: CI scope
+        run: infra/scripts/ci-scope.sh --self-test
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
