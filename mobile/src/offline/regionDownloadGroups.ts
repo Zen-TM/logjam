@@ -150,7 +150,7 @@ export function downloadNotice(
  * Always in the foreground; behind another app only while restarts are left.
  */
 export function mayResumeOnReconnect(
-  appState: string,
+  appState: string | null | undefined,
   backgroundResumesLeft: number,
 ): boolean {
   return appState === "active" || backgroundResumesLeft > 0;
