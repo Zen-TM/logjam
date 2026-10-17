@@ -121,6 +121,8 @@ renumber.
   looks different.
 - **A pressable thing answers the press at once** (pressed or hover state),
   and nothing else answers a pointer: a chart or a read-only row stays still.
+  Decoration nobody could take for a control is the exception: the rain on
+  Logjam Web's sign-in terrain.
 - **A control a hover reveals is always visible on a coarse pointer.**
 - **A press with a non-obvious effect says so on the thing**: a copyable
   value carries a copy glyph; a file's row says "Click to download".

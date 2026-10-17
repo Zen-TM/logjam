@@ -1,7 +1,7 @@
 // A canyon area behind the sign-in form, a different one each visit, made
 // from the NSW 5 m DEM, whose licence asks for its credit wherever a height
-// from it is shown (ADR 0031). Each area's files come from the generator in
-// frontend/scripts/sign_in_terrain.py; only the one shown is downloaded.
+// from it is shown (ADR 0031): SignIn shows it in its card, on the page
+// colour, where its contrast is measured. useSignInArea picks and loads it.
 //
 // It is shaded by the sun where it stands over the area now, so it never
 // moves while you look at it. A pointer passing over it is rain: each drop
@@ -9,76 +9,18 @@
 // as they do, and fades behind itself. Flat ground is the page colour
 // exactly, so only the slopes show.
 import { useEffect, useRef, useState } from "react";
-import { NSW_5M } from "@logjam/shared";
+import { useIsMobile } from "../useIsMobile";
 import {
+  cover,
   drainage,
+  dropPath,
+  type Flow,
   OUTLET,
-  pickArea,
   traceDownhill,
   valleyLight,
 } from "./signInTerrain";
 import classes from "./SignInTerrain.module.css";
-
-type Terrain = {
-  name: string;
-  lat: number;
-  lon: number;
-  w: number;
-  h: number;
-  /** The 100 m contours. */
-  levels: { m: number; d: string }[];
-};
-
-type Area = { terrain: Terrain; normalsUrl: string; flowUrl: string };
-
-const DIR = "../assets/signIn/";
-const CONTOURS = import.meta.glob<Terrain>("../assets/signIn/*.json", {
-  import: "default",
-});
-const NORMALS = import.meta.glob<string>("../assets/signIn/*Normals.webp", {
-  query: "?url",
-  import: "default",
-});
-const FLOWS = import.meta.glob<string>("../assets/signIn/*Flow.webp", {
-  query: "?url",
-  import: "default",
-});
-const LAST_AREA_KEY = "logjam.signInArea";
-
-let chosen: string | undefined;
-
-/** This visit's area, remembered so the next visit shows another. Chosen
- *  once per page load, however often the component mounts. */
-function chooseArea() {
-  chosen ??= pickAndRemember();
-  return chosen;
-}
-
-function pickAndRemember() {
-  const keys = Object.keys(CONTOURS).map((path) =>
-    path.slice(DIR.length, -".json".length),
-  );
-  // Logjam Web in development takes `?area=<key>`, to look at each one.
-  const asked = import.meta.env.DEV
-    ? new URLSearchParams(window.location.search).get("area")
-    : null;
-  if (asked && keys.includes(asked)) return asked;
-  let last: string | null = null;
-  try {
-    last = localStorage.getItem(LAST_AREA_KEY);
-  } catch {
-    // No storage: a repeat now and then is all it costs.
-  }
-  const key = pickArea(keys, last, Math.random());
-  try {
-    localStorage.setItem(LAST_AREA_KEY, key);
-  } catch {
-    // As above.
-  }
-  return key;
-}
-
-type Flow = { dir: Uint8Array; area: Float32Array; w: number; h: number };
+import type { Area, Terrain } from "./useSignInArea";
 
 type Drop = {
   points: Float32Array;
@@ -105,12 +47,6 @@ const LIFE = 2.4;
 const SOAK = 0.8;
 /** Segments stroked as one, so a frame is a few hundred strokes. */
 const RUN = 6;
-
-/** Scale and offset that make a w×h source cover a W×H box, centred. */
-function cover(W: number, H: number, w: number, h: number) {
-  const s = Math.max(W / w, H / h);
-  return { s, ox: (W - w * s) / 2, oy: (H - h * s) / 2 };
-}
 
 function cssColour(name: string): [number, number, number] {
   const hex = getComputedStyle(document.documentElement)
@@ -197,8 +133,9 @@ function createRelief(canvas: HTMLCanvasElement, image: HTMLImageElement) {
     new Float32Array([-1, -1, 3, -1, -1, 3]),
     gl.STATIC_DRAW,
   );
-  gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  const p = gl.getAttribLocation(program, "p");
+  gl.enableVertexAttribArray(p);
+  gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -207,7 +144,7 @@ function createRelief(canvas: HTMLCanvasElement, image: HTMLImageElement) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
   const at = (name: string) => gl.getUniformLocation(program, name);
 
-  return (light: [number, number, number], gain: number) => {
+  return (light: [number, number, number], gain: number, narrow: boolean) => {
     const { clientWidth: W, clientHeight: H } = canvas;
     const dpr = sizeCanvas(canvas, W, H);
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -215,7 +152,7 @@ function createRelief(canvas: HTMLCanvasElement, image: HTMLImageElement) {
     const { s, ox, oy } = cover(W, H, image.width, image.height);
     gl.uniform1f(at("dpr"), dpr);
     // Narrow, the card is above the band, not beside it: no calm side.
-    gl.uniform1f(at("width"), W > 768 ? W : 1);
+    gl.uniform1f(at("width"), narrow ? 1 : W);
     gl.uniform2f(at("origin"), ox, H - oy);
     gl.uniform2f(at("extent"), image.width * s, -image.height * s);
     const page = cssColour("--color-page");
@@ -263,71 +200,13 @@ async function loadFlow(flowUrl: string): Promise<Flow | null> {
   return { dir, area: drainage(dir, w, h), w, h };
 }
 
-/** A drop's path on screen, from where it landed to where it leaves the map. */
-function dropPath(
-  flow: Flow,
-  cells: number[],
-  s: number,
-  ox: number,
-  oy: number,
-) {
-  const n = cells.length;
-  const raw = cells.flatMap((i) => [
-    ((i % flow.w) + 0.5) * s + ox,
-    (Math.floor(i / flow.w) + 0.5) * s + oy,
-  ]);
-  // A run of grid steps is a staircase: each point is averaged with two
-  // neighbours either side.
-  const points = new Float32Array(n * 2);
-  for (let i = 0; i < n; i++) {
-    const a = Math.max(0, i - 2);
-    const b = Math.min(n - 1, i + 2);
-    for (let j = a; j <= b; j++) {
-      points[i * 2] += raw[j * 2] / (b - a + 1);
-      points[i * 2 + 1] += raw[j * 2 + 1] / (b - a + 1);
-    }
-  }
-  const along = new Float32Array(n);
-  const width = new Float32Array(n);
-  const alpha = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    if (i > 0)
-      along[i] =
-        along[i - 1] +
-        Math.hypot(
-          points[i * 2] - points[i * 2 - 2],
-          points[i * 2 + 1] - points[i * 2 - 1],
-        );
-    const size = Math.log2(flow.area[cells[i]]);
-    width[i] = 0.5 + 0.11 * size;
-    alpha[i] = Math.min(0.55, 0.25 + 0.025 * size);
-  }
-  return { points, along, width, alpha };
-}
-
-function SignInTerrain() {
-  const [area, setArea] = useState<Area | null>(null);
+function SignInTerrain({ area }: { area: Area | null }) {
   const [drawn, setDrawn] = useState(false);
   const [now] = useState(() => new Date());
+  const narrow = useIsMobile();
   const reliefRef = useRef<HTMLCanvasElement>(null);
   const contourRef = useRef<HTMLCanvasElement>(null);
   const rainRef = useRef<HTMLCanvasElement>(null);
-
-  // Loaded after the form has drawn: nothing on the way in waits for it.
-  useEffect(() => {
-    let live = true;
-    const key = chooseArea();
-    Promise.all([
-      CONTOURS[`${DIR}${key}.json`](),
-      NORMALS[`${DIR}${key}Normals.webp`](),
-      FLOWS[`${DIR}${key}Flow.webp`](),
-    ]).then(([terrain, normalsUrl, flowUrl]) => {
-      if (live) setArea({ terrain, normalsUrl, flowUrl });
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
 
   useEffect(() => {
     const contours = contourRef.current;
@@ -346,7 +225,9 @@ function SignInTerrain() {
 
     function paint() {
       drawContours(contours!, terrain, paths);
-      relief?.(light, gain);
+      relief?.(light, gain, narrow);
+      // A drop's path is in the old size's pixels.
+      drops.length = 0;
       sizeCanvas(rain!, rain!.clientWidth, rain!.clientHeight);
       ink = getComputedStyle(document.documentElement).getPropertyValue(
         "--color-text",
@@ -404,7 +285,8 @@ function SignInTerrain() {
         let i = 0;
         while (i < last && along[i + 1] < head - reach) i++;
         for (; i < last && along[i] < head; i += RUN) {
-          const behind = (head - along[i]) / reach;
+          // A run starting just short of the trail's end is past it.
+          const behind = Math.min(1, (head - along[i]) / reach);
           // Fades in over its first few px, out over the trail.
           ctx.globalAlpha =
             alpha[i] * (1 - behind) * Math.min(1, behind * 12) * soak;
@@ -421,7 +303,7 @@ function SignInTerrain() {
     }
 
     // Rain falls only where the terrain is what the pointer is over: the card
-    // and the credit stand above it, and the rain canvas is its top layer.
+    // stands above it, and the rain canvas is its top layer.
     let previous: { x: number; y: number } | null = null;
     let travelled = 0;
     function onMove(e: PointerEvent) {
@@ -442,16 +324,25 @@ function SignInTerrain() {
 
     const image = new Image();
     image.src = normalsUrl;
-    image.decode().then(() => {
-      if (cancelled || !reliefRef.current) return;
-      relief = createRelief(reliefRef.current, image);
-      paint();
-    });
+    image
+      .decode()
+      .then(() => {
+        if (cancelled || !reliefRef.current) return;
+        relief = createRelief(reliefRef.current, image);
+        paint();
+      })
+      .catch(() => {
+        // No relief: the contours are still drawn.
+      });
     // The still version is the relief alone.
     if (!still)
-      loadFlow(flowUrl).then((loaded) => {
-        if (!cancelled) flow = loaded;
-      });
+      loadFlow(flowUrl)
+        .then((loaded) => {
+          if (!cancelled) flow = loaded;
+        })
+        .catch(() => {
+          // No drainage: no rain.
+        });
     paint();
 
     const observer = new ResizeObserver(paint);
@@ -467,24 +358,17 @@ function SignInTerrain() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
     };
-  }, [area, now]);
+  }, [area, now, narrow]);
 
   return (
-    <>
-      <div
-        className={`${classes.terrain} ${drawn ? classes.drawn : ""}`}
-        aria-hidden="true"
-      >
-        <canvas ref={reliefRef} className={classes.layer} />
-        <canvas ref={contourRef} className={classes.layer} />
-        <canvas ref={rainRef} className={classes.layer} />
-      </div>
-      {area && (
-        <p className={classes.credit}>
-          {area.terrain.name}. {NSW_5M.credit}
-        </p>
-      )}
-    </>
+    <div
+      className={`${classes.terrain} ${drawn ? classes.drawn : ""}`}
+      aria-hidden="true"
+    >
+      <canvas ref={reliefRef} className={classes.layer} />
+      <canvas ref={contourRef} className={classes.layer} />
+      <canvas ref={rainRef} className={classes.layer} />
+    </div>
   );
 }
 

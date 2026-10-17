@@ -31,6 +31,19 @@
   border-top: var(--hairline);
 }
 
+.credit {
+  composes: meta from "../textRoles.generated.module.css";
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-1-5);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.creditPlace {
+  display: block;
+  min-height: 1lh;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -134,5 +147,9 @@
 
   .footer {
     margin: var(--space-2) calc(-1 * var(--space-2)) 0;
+  }
+
+  .credit {
+    padding: 0 var(--space-2) var(--space-1-5);
   }
 }

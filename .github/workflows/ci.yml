@@ -471,8 +471,8 @@ jobs:
         # mise.toml holds the one ruff pin; an empty match fails pip loudly.
         run: |
           pip install "ruff==$(sed -n 's/^ruff *= *"\(.*\)"/\1/p' mise.toml)"
-          ruff check topo
-          ruff format --check topo
+          ruff check topo frontend/scripts
+          ruff format --check topo frontend/scripts
       - name: Unit tests
         working-directory: topo
         run: python -m unittest discover -s tests

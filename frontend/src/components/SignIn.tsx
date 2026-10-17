@@ -18,7 +18,8 @@ import type { AuthState } from "../useAuth";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
 import SignInTerrain from "./SignInTerrain";
-import { FRIENDS } from "@logjam/shared";
+import useSignInArea from "./useSignInArea";
+import { FRIENDS, NSW_5M } from "@logjam/shared";
 import { pendingFriendInvite } from "../pendingFriendInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
@@ -41,13 +42,22 @@ function Brand() {
 }
 
 function Frame({ children }: { children: ReactNode }) {
+  const area = useSignInArea();
   return (
     <div className={classes.container}>
-      <SignInTerrain />
+      <SignInTerrain area={area} />
       <main className={classes.panel}>
         {children}
         <div className={classes.footer}>
           <Footer />
+          {/* The terrain's licence credit (ADR 0031), on the card rather than
+              over the relief, whose shading no text colour clears. Its line
+              for the area's name is kept from the start, so the card does not
+              move when the name arrives. */}
+          <p className={classes.credit}>
+            <span className={classes.creditPlace}>{area?.terrain.name}</span>
+            {NSW_5M.credit}
+          </p>
         </div>
       </main>
     </div>

@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """
 The terrain behind Logjam Web's sign-in screen, one area at a time, from the
-NSW 5 m DEM sheets. Download the zips an area needs into SHEETS_DIR from
+NSW 5 m DEM sheets. Download the zips an area needs into a SHEETS_DIR outside
+the repo (each is about 300 MB) from
 https://portal.spatial.nsw.gov.au/download/dem/56/<Sheet>-DEM-AHD_56_5m.zip
-(Katoomba, Wallerawang and Burragorang cover every area here). Needs numpy,
-pillow, rasterio and scikit-image.
+(Katoomba, Wallerawang and Burragorang cover every area here), and install
+what it needs:
+
+    pip install numpy pillow rasterio scikit-image
 
 For each area it writes three files to OUT_DIR:
-  <key>.json         its name and centre, and its 100 m contours as SVG path
-                     data on a grid 1600 units wide
+  <key>.json         its name, centre and the month its sheets were
+                     downloaded (which the licence credit names), and its
+                     100 m contours as SVG path data on a grid 1600 units wide
   <key>Normals.webp  surface normals, which the relief shader lights
   <key>Flow.webp     where water on each cell runs next (D8, lossless)
 
-    sign_in_terrain.py SHEETS_DIR src/assets/signIn [key ...]   # no key = every area
+    sign_in_terrain.py SHEETS_DIR src/assets/signIn "October 2026" [key ...]
+
+No key makes every area. A month other than the one in NSW_5M.credit
+(shared/src/demSources.ts) fails signInTerrain.test.ts until the two agree.
 """
 
 import glob
@@ -97,7 +104,7 @@ def heights(sheets, bbox, z):
     return out.astype(np.float64), px
 
 
-def contours(h, name, lat, lon):
+def contours(h, name, extracted, lat, lon):
     k = W / h.shape[1]
     levels = []
     for m in range(
@@ -125,6 +132,7 @@ def contours(h, name, lat, lon):
         levels.append({"m": m, "d": "".join(segs)})
     return {
         "name": name,
+        "extracted": extracted,
         "lat": lat,
         "lon": lon,
         "w": W,
@@ -144,8 +152,10 @@ def normals(h, px_m):
     return out.getvalue()
 
 
-# N NE E SE S SW W NW, as signInTerrain.ts reads them.
+# (dy, dx), N NE E SE S SW W NW, and the byte for "leaves the map": the same
+# table as signInTerrain.ts, which signInTerrain.test.ts holds to this one.
 D8 = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
+OUTLET = 255
 
 
 def flow(h):
@@ -168,7 +178,7 @@ def flow(h):
                 # A small rise, so a filled hollow still drains one way.
                 filled[ny, nx] = max(h[ny, nx], z + 1e-3)
                 heapq.heappush(queue, (filled[ny, nx], ny, nx))
-    direction = np.full(h.shape, 255, np.uint8)
+    direction = np.full(h.shape, OUTLET, np.uint8)
     best = np.zeros(h.shape)
     pad = np.pad(filled, 1, constant_values=np.inf)
     for i, (dy, dx) in enumerate(D8):
@@ -184,7 +194,7 @@ def flow(h):
 
 
 def main():
-    sheets_dir, out_dir, *keys = sys.argv[1:]
+    sheets_dir, out_dir, extracted, *keys = sys.argv[1:]
     sheets = []
     for z in sorted(glob.glob(os.path.join(sheets_dir, "*.zip"))):
         asc = next(n for n in zipfile.ZipFile(z).namelist() if n.endswith(".asc"))
@@ -201,6 +211,7 @@ def main():
                 contours(
                     gaussian(fine, sigma=1.2, preserve_range=True),
                     name,
+                    extracted,
                     round(lat, 3),
                     round(lon, 3),
                 ),

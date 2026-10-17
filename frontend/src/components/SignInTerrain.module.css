@@ -17,31 +17,8 @@
   height: 100%;
 }
 
-.credit {
-  composes: meta from "../textRoles.generated.module.css";
-  position: fixed;
-  right: var(--space-2);
-  bottom: var(--space-1);
-  max-width: 36rem;
-  margin: 0;
-  text-align: right;
-  color: var(--color-text-muted);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .terrain {
     transition: none;
-  }
-}
-
-/* Narrow, the card covers most of the screen: the credit follows it. */
-@media (max-width: 768px) {
-  .credit {
-    position: relative;
-    right: auto;
-    bottom: auto;
-    order: 1;
-    padding: var(--space-2) 0;
-    text-align: left;
   }
 }

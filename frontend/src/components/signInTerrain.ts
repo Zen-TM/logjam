@@ -4,6 +4,25 @@
 const RAD = Math.PI / 180;
 
 /**
+ * The areas that have all three of their files (`<key>.json`,
+ * `<key>Normals.webp`, `<key>Flow.webp`), from the paths each kind was found
+ * at: one missing file leaves its area out rather than breaking the screen.
+ */
+export function areaKeys(
+  contours: string[],
+  normals: string[],
+  flows: string[],
+) {
+  const key = (path: string, suffix: string) =>
+    path.slice(path.lastIndexOf("/") + 1, -suffix.length);
+  const withNormals = new Set(normals.map((p) => key(p, "Normals.webp")));
+  const withFlow = new Set(flows.map((p) => key(p, "Flow.webp")));
+  return contours
+    .map((p) => key(p, ".json"))
+    .filter((k) => withNormals.has(k) && withFlow.has(k));
+}
+
+/**
  * The area to show this visit: any but the last one shown, so a returning
  * user sees somewhere new. `random` is in [0, 1).
  */
@@ -73,9 +92,23 @@ export function valleyLight(date: Date, lat: number, lon: number) {
   };
 }
 
-// D8, in the order the drainage file was written: N NE E SE S SW W NW.
-const DX = [0, 1, 1, 1, 0, -1, -1, -1];
-const DY = [-1, -1, 0, 1, 1, 1, 0, -1];
+/**
+ * D8 as [dy, dx], in the order the drainage file's bytes count them: N NE E
+ * SE S SW W NW. The generator declares the same table and the same OUTLET;
+ * signInTerrain.test.ts holds the two together.
+ */
+export const D8: readonly (readonly [number, number])[] = [
+  [-1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1],
+  [1, 0],
+  [1, -1],
+  [0, -1],
+  [-1, -1],
+];
+const DX = D8.map(([, dx]) => dx);
+const DY = D8.map(([dy]) => dy);
 /** A cell whose water leaves the map. */
 export const OUTLET = 255;
 
@@ -123,4 +156,60 @@ export function traceDownhill(
     y += DY[dir[i]];
   }
   return cells;
+}
+
+/** Scale and offset that make a w×h source cover a W×H box, centred. */
+export function cover(W: number, H: number, w: number, h: number) {
+  const s = Math.max(W / w, H / h);
+  return { s, ox: (W - w * s) / 2, oy: (H - h * s) / 2 };
+}
+
+/** Where water runs next from each cell, and how much ground drains through it. */
+export type Flow = {
+  dir: Uint8Array;
+  area: Float32Array;
+  w: number;
+  h: number;
+};
+
+/** A drop's path on screen, from where it landed to where it leaves the map. */
+export function dropPath(
+  flow: Flow,
+  cells: number[],
+  s: number,
+  ox: number,
+  oy: number,
+) {
+  const n = cells.length;
+  const raw = cells.flatMap((i) => [
+    ((i % flow.w) + 0.5) * s + ox,
+    (Math.floor(i / flow.w) + 0.5) * s + oy,
+  ]);
+  // A run of grid steps is a staircase: each point is averaged with two
+  // neighbours either side.
+  const points = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 2);
+    const b = Math.min(n - 1, i + 2);
+    for (let j = a; j <= b; j++) {
+      points[i * 2] += raw[j * 2] / (b - a + 1);
+      points[i * 2 + 1] += raw[j * 2 + 1] / (b - a + 1);
+    }
+  }
+  const along = new Float32Array(n);
+  const width = new Float32Array(n);
+  const alpha = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    if (i > 0)
+      along[i] =
+        along[i - 1] +
+        Math.hypot(
+          points[i * 2] - points[i * 2 - 2],
+          points[i * 2 + 1] - points[i * 2 - 1],
+        );
+    const size = Math.log2(flow.area[cells[i]]);
+    width[i] = 0.5 + 0.11 * size;
+    alpha[i] = Math.min(0.55, 0.25 + 0.025 * size);
+  }
+  return { points, along, width, alpha };
 }
