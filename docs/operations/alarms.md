@@ -17,8 +17,10 @@ that goes wrong between deploys.
 |---|---|---|
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
 | `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
-| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, GeoPDF, pre-deploy migrate) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
+| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, GeoPDF, pre-deploy migrate, place registry) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
 | `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
+| `logjam-place-registry-failed` | The monthly place registry build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-place-registry` |
+| `logjam-place-registry-not-launched` | EventBridge Scheduler's call to start the monthly build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
@@ -99,6 +101,45 @@ back to back for six hours.
 2. Check the reaper logged a sweep of that job in the API log.
 3. Stop the task by hand if it is still running:
    `aws ecs stop-task --cluster logjam-cluster --task <task arn> --reason "stuck"`.
+
+## Place registry
+
+The place registry ([0034](../decisions/0034-location-search-reads-a-public-osm-place-registry.md))
+is rebuilt by the ECS task `logjam-place-registry`, which EventBridge
+Scheduler starts at 04:00 Sydney time on the 5th of each month. A failed
+build publishes nothing: the registry under `master/places/` stays as it
+was, a month older. Run it again by hand once the cause is fixed: ECS →
+`logjam-cluster` → Run new task, family `logjam-place-registry`, Fargate,
+the `logjam-worker-sg` security group, a public IP. Neither alarm notices a
+schedule that is deleted or disabled; Terraform owns it, so a plan shows that
+as drift.
+
+### `logjam-place-registry-failed`
+
+A metric filter on `/aws/events/logjam-worker-failures` (see
+[`logjam-worker-failures`](#logjam-worker-failures)) counts this family's
+failed stops as `PlaceRegistryFailures` in namespace `Logjam/Workers`. It runs
+once a month, so one failure fires.
+
+1. Read `/aws/events/logjam-worker-failures`: `detail.containers[0].exitCode`
+   (137 is an out-of-memory kill) and `detail.stoppedReason`.
+2. Read `/ecs/logjam-place-registry`. "refusing to publish" means the new
+   build was much smaller than the live one, usually a truncated download of
+   Geofabrik's extract: run it again. Anything else is a bug in
+   `topo/build_place_registry.py` or the topo worker image; if a worker
+   deploy just ran, roll the worker back ([rollback.md](rollback.md)).
+
+### `logjam-place-registry-not-launched`
+
+EventBridge Scheduler's `TargetErrorCount` for the `default` schedule group,
+which holds only this schedule. Any error fires, including one a retry then
+got past, since the next scheduled run is a month away.
+
+1. Look in ECS for a `logjam-place-registry` task started after the alarm;
+   if one ran, this was a passing error.
+2. If none ran, find the `RunTask` call by the role
+   `logjam-place-registry-scheduler` in CloudTrail and read its error: a role,
+   subnet or task definition problem, fixed in Terraform.
 
 ## Testing an alarm
 

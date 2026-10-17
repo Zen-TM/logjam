@@ -26,6 +26,11 @@ resource "aws_cloudwatch_log_group" "topo_export_worker" {
   retention_in_days = local.operational_log_retention_days
 }
 
+resource "aws_cloudwatch_log_group" "place_registry" {
+  name              = "/ecs/logjam-place-registry"
+  retention_in_days = local.operational_log_retention_days
+}
+
 resource "aws_cloudwatch_log_group" "geo_pdf_worker" {
   name              = "/ecs/logjam-geo-pdf-worker"
   retention_in_days = local.operational_log_retention_days
