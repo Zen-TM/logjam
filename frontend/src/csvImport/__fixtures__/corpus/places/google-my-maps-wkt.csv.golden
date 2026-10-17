@@ -1,0 +1,11 @@
+{
+  "headers": [
+    "WKT",
+    "name",
+    "description"
+  ],
+  "dataRows": 3,
+  "parseErrors": [],
+  "kind": "unknown",
+  "blocked": "not a place list or logbook"
+}
