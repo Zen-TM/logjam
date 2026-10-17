@@ -17,6 +17,9 @@ const CORPUS = join(
   "../../../frontend/src/csvImport/__fixtures__/corpus",
 );
 const TAG = `corpus-${Date.now()}`;
+// One prefix per file: two files carry the same canyon at the same spot, and a
+// repeated name at one spot folds into the first row instead of being created.
+const prefix = (file: string) => `${TAG} ${file.split("/").pop()}`;
 
 type Golden = {
   rows: {
@@ -40,7 +43,7 @@ describe("import corpus → POST /places/bulk (fake auth = alice)", () => {
   ]) {
     it(`accepts every prepared row of ${file}, with its field values`, async () => {
       const rows = golden(file).rows;
-      // Tagged so nothing merges into the seed's own Claustral Canyon etc.
+      // Prefixed so nothing merges into the seed's own Claustral Canyon etc.
       const res = await request(API_URL)
         .post("/places/bulk")
         .set(AUTH)
@@ -50,7 +53,7 @@ describe("import corpus → POST /places/bulk (fake auth = alice)", () => {
           rows: rows.map((row) => ({
             data: {
               ...row.input,
-              name: `${TAG} ${row.sourceName}`,
+              name: `${prefix(file)} ${row.sourceName}`,
             },
             resolution: { kind: "create" },
           })),
@@ -63,7 +66,7 @@ describe("import corpus → POST /places/bulk (fake auth = alice)", () => {
       for (const row of rows) {
         const stored = (
           list.body as { name: string; notes: string | null }[]
-        ).find((p) => p.name === `${TAG} ${row.sourceName}`);
+        ).find((p) => p.name === `${prefix(file)} ${row.sourceName}`);
         expect(stored, row.sourceName).toBeDefined();
         expect(stored?.notes ?? null).toBe(row.input?.notes ?? null);
       }
@@ -75,7 +78,11 @@ describe("import corpus → POST /places/bulk (fake auth = alice)", () => {
     const list = await request(API_URL).get("/places").set(AUTH);
     const stored = (
       list.body as { name: string; fieldValues: Record<string, unknown> }[]
-    ).find((p) => p.name === `${TAG} ${claustral.sourceName}`);
+    ).find(
+      (p) =>
+        p.name ===
+        `${prefix("places/maintainer-shape.csv")} ${claustral.sourceName}`,
+    );
     expect(stored?.fieldValues).toMatchObject({
       v_grade: 3,
       a_grade: 3,
