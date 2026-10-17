@@ -217,9 +217,10 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
-      # Non-empty so the topo-job routes take the same branch they do locally.
-      # No test reaches an actual RunTask (see the comment atop topoJobs.test.ts).
-      ECS_SUBNETS: subnet-local
+      # No ECS_SUBNETS: an empty list makes POST /geo-pdf and /topo-jobs/:id/start
+      # leave the job queued instead of calling RunTask, which MiniStack here
+      # (S3 only, no Docker socket) cannot serve. geoPdfRender.test.ts runs the
+      # worker itself, as topo-e2e does.
       ECS_SECURITY_GROUPS: sg-local
       # The global limiter is 300 req/60s keyed by IP for pre-auth requests, so
       # the whole suite shares ONE bucket and a full run brushes the cap. Raise
