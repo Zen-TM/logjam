@@ -1,0 +1,157 @@
+{
+  "places": [
+    {
+      "ropeWikiId": 90001,
+      "name": "Corpus Plain Canyon",
+      "latitude": -33.5592,
+      "longitude": 150.4033,
+      "numAbseils": 6,
+      "longestAbseil": 30,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 3,
+      "quality": 4.5,
+      "hours": 5,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90001"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 90002,
+      "name": "Corpus Nested Html Canyon",
+      "latitude": -33.666666666666664,
+      "longitude": 150.33333333333334,
+      "numAbseils": 4,
+      "longestAbseil": 15,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 3,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90002"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 90003,
+      "name": "Corpus Bare Grade Canyon",
+      "latitude": -33.68333333333333,
+      "longitude": 150.35,
+      "numAbseils": 3,
+      "longestAbseil": null,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90003"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 90006,
+      "name": "Corpus East First Canyon",
+      "latitude": -33.7,
+      "longitude": 150.375,
+      "numAbseils": 5,
+      "longestAbseil": 15.5,
+      "vGrade": 4,
+      "aGrade": 3,
+      "commitment": 4,
+      "quality": 3,
+      "hours": 2,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90006"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 90007,
+      "name": "Corpus Clock Time Canyon",
+      "latitude": -33.71666666666667,
+      "longitude": 150.38333333333333,
+      "numAbseils": 0,
+      "longestAbseil": 6.1,
+      "vGrade": 1,
+      "aGrade": 1,
+      "commitment": 1,
+      "quality": null,
+      "hours": 4,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90007"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 90008,
+      "name": "Corpus, Comma \"Quoted\" Canyon",
+      "latitude": -33.733333333333334,
+      "longitude": 150.4,
+      "numAbseils": null,
+      "longestAbseil": 70,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": null,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90008"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 90001,
+      "name": "Corpus Duplicate Id Canyon",
+      "latitude": -33.78333333333333,
+      "longitude": 150.45,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": 2,
+      "aGrade": 2,
+      "commitment": 2,
+      "quality": null,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=90001"
+          ]
+        ]
+      }
+    }
+  ],
+  "errors": [
+    "Row 4 (Corpus Missing Coords Canyon): could not parse coordinates \"\"",
+    "Row 5 (Corpus Decimal Coords Canyon): could not parse coordinates \"-33.6, 150.3\"",
+    "Row 9: missing name",
+    "Row 10: invalid PAGEID \"abc\""
+  ]
+}
