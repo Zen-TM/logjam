@@ -8,12 +8,17 @@
 // by default, and never in offline-only mode or on a timer (ADR 0013).
 //
 // A BAD DOWNLOAD NEVER REPLACES A GOOD FILE: the new file lands at a temporary
-// path, is gunzipped, parsed and indexed, and only then takes the old one's
+// path, is parsed and its version checked, and only then takes the old one's
 // place. The pointer is written last, so a phone killed mid-swap reads the
 // previous build. Guard: placeRegistry.test.ts.
 //
-// MEMORY: the parsed and indexed file is about 90 MB of JS heap, so it is
-// loaded only when the search box first opens, and kept for the session.
+// THE FILE IS SAVED AS PLAIN JSON: the CDN serves it with Content-Encoding:
+// gzip, so the platform's HTTP stack decompresses it (ADR 0034). gunzipping it
+// in JavaScript held a Pixel's JS thread for 1.4 s, so fflate is only the
+// fallback for a stack that saved the gzip as it came.
+//
+// MEMORY: the index is tens of MB, so it is built only when the search box
+// first opens, and kept for the session.
 //
 // PRIVACY: the requests carry no headers and no query, only the public file's
 // path, and every phone fetches the same file.
@@ -96,6 +101,10 @@ function readStoredPointer(): PlaceRegistryPointer | null {
   }
 }
 
+function dataUri(pointer: PlaceRegistryPointer): string {
+  return `${PLACE_REGISTRY_DIR}${pointer.path}`;
+}
+
 /** The index, if it is loaded. Synchronous, for a search on every keystroke. */
 export function placeIndex(): PlaceIndex | null {
   return index;
@@ -114,14 +123,16 @@ export function loadPlaceIndex(): Promise<PlaceIndex | null> {
   if (index) return Promise.resolve(index);
   const stored = status.stored;
   if (!stored) return Promise.resolve(null);
-  loading ??= readIndex(`${PLACE_REGISTRY_DIR}${stored.path}`, stored)
+  loading ??= readFile(dataUri(stored), stored)
+    .then(indexPlaceRegistry)
     .then((loaded) => {
-      // A download that finished meanwhile set a newer index; keep that one.
-      index ??= loaded;
-      return index;
+      // A build swapped in meanwhile is loaded on the next open instead.
+      if (status.stored === stored) index = loaded;
+      return loaded;
     })
     .catch(async (err: unknown) => {
       console.error(err);
+      if (status.stored !== stored) return null;
       // Forgotten, so the next check downloads it again.
       await FileSystem.deleteAsync(POINTER_URI, { idempotent: true }).catch(
         () => {},
@@ -135,19 +146,38 @@ export function loadPlaceIndex(): Promise<PlaceIndex | null> {
   return loading;
 }
 
-/** Gunzip, parse and index one data file, refusing one the pointer did not
- *  describe. Throws on anything that would not search. Only the index
- *  outlives it: the text and the parsed file are garbage once it returns. */
-async function readIndex(
+/** The base64 of a gzip file's first two bytes, 1f 8b. */
+const GZIP_MAGIC_BASE64 = "H4s=";
+
+/** Parse one data file, refusing one the pointer did not describe. Throws on
+ *  anything that would not search. */
+async function readFile(
   uri: string,
   pointer: PlaceRegistryPointer,
-): Promise<PlaceIndex> {
-  const bytes = await new File(uri).bytes();
-  const file = JSON.parse(strFromU8(gunzipSync(bytes))) as PlaceRegistryFile;
+): Promise<PlaceRegistryFile> {
+  const head = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+    position: 0,
+    length: 2,
+  });
+  let text: string;
+  if (head === GZIP_MAGIC_BASE64) {
+    // Checked before gunzipping: fflate sizes its output from the file's last
+    // four bytes, so a cut-off file had it allocate gigabytes on the Pixel.
+    // The pointer's `bytes` is the gzipped size, so only this path can check.
+    const info = await FileSystem.getInfoAsync(uri);
+    if (!info.exists || info.size !== pointer.bytes) {
+      throw new Error("Place registry file is not the size of its pointer");
+    }
+    text = strFromU8(gunzipSync(await new File(uri).bytes()));
+  } else {
+    text = await new File(uri).text();
+  }
+  const file = JSON.parse(text) as PlaceRegistryFile;
   if (file.version !== pointer.version || !Array.isArray(file.names)) {
     throw new Error("Place registry file does not match its pointer");
   }
-  return indexPlaceRegistry(file);
+  return file;
 }
 
 export type FetchOutcome = "current" | "updated" | "skipped" | "failed";
@@ -218,21 +248,16 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   if (result.status !== 200) {
     throw new Error(`Place registry download answered ${result.status}`);
   }
-  // Checked before gunzipping: fflate sizes its output from the file's last
-  // four bytes, so a cut-off file had it allocate gigabytes on the Pixel.
-  const info = await FileSystem.getInfoAsync(DOWNLOAD_URI);
-  if (!info.exists || info.size !== pointer.bytes) {
-    throw new Error("Place registry download is not the size of its pointer");
-  }
-  // Parsed and indexed before it replaces anything, off the first frames.
+  // Parsed before it replaces anything, off the first frames. Not indexed:
+  // the index is built only for a search.
   await new Promise<void>((resolve) =>
     InteractionManager.runAfterInteractions(() => resolve()),
   );
-  const fresh = await readIndex(DOWNLOAD_URI, pointer);
+  await readFile(DOWNLOAD_URI, pointer);
 
-  const dataUri = `${PLACE_REGISTRY_DIR}${pointer.path}`;
-  await FileSystem.deleteAsync(dataUri, { idempotent: true });
-  await FileSystem.moveAsync({ from: DOWNLOAD_URI, to: dataUri });
+  const target = dataUri(pointer);
+  await FileSystem.deleteAsync(target, { idempotent: true });
+  await FileSystem.moveAsync({ from: DOWNLOAD_URI, to: target });
   await FileSystem.writeAsStringAsync(POINTER_URI, JSON.stringify(pointer));
   // Only the new build is kept: the old file, and anything a crash left.
   for (const name of await FileSystem.readDirectoryAsync(PLACE_REGISTRY_DIR)) {
@@ -242,9 +267,8 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
       });
     }
   }
-  // Held only by a session that already loaded one: a refresh at app start
-  // must not leave 90 MB in memory for someone who never searches.
-  if (index) index = fresh;
+  // The next search builds the new one.
+  index = null;
   publish({ stored: pointer });
 }
 

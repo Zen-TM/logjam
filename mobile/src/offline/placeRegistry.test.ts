@@ -5,7 +5,7 @@ import {
   searchPlaces,
   type PlaceRegistryFile,
 } from "@logjam/shared";
-import { gzipSync, strToU8 } from "fflate";
+import { gzipSync, strFromU8, strToU8 } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // When the place registry is fetched, on what connection, and that a bad
@@ -17,10 +17,11 @@ const CDN = "https://cdn.test";
 const POINTER_URL = `${CDN}/master/places/v1/latest.json`;
 
 const files = new Map<string, Uint8Array | string>();
-/** What the CDN serves, by URL. */
+/** What lands on the phone for a URL: the pointer as JSON, a data file as
+ *  the platform saved it (plain JSON, after its Content-Encoding: gzip). */
 const served = new Map<string, unknown>();
 const prefs = new Map<string, string>();
-/** Every file read into memory, by URI. */
+/** Every file read whole into memory, as "text" or "bytes", and its URI. */
 const reads: string[] = [];
 const network = { expensive: false, connected: true };
 const offlineOnly = { on: false };
@@ -51,6 +52,16 @@ vi.mock("expo-file-system/legacy", () => ({
       ? { exists: true, size: body.length }
       : { exists: false };
   },
+  EncodingType: { Base64: "base64" },
+  readAsStringAsync: async (
+    uri: string,
+    options: { position: number; length: number },
+  ) => {
+    const body = files.get(uri) as Uint8Array;
+    return Buffer.from(
+      body.slice(options.position, options.position + options.length),
+    ).toString("base64");
+  },
   readDirectoryAsync: async (dir: string) =>
     [...files.keys()]
       .filter((key) => key.startsWith(dir))
@@ -62,11 +73,21 @@ vi.mock("expo-file-system", () => ({
     get exists() {
       return files.has(this.uri);
     }
+    get size() {
+      return (files.get(this.uri) as Uint8Array).length;
+    }
     textSync() {
       return files.get(this.uri) as string;
     }
+    async text() {
+      reads.push(`text ${this.uri}`);
+      return strFromU8(await this.read());
+    }
     async bytes() {
-      reads.push(this.uri);
+      reads.push(`bytes ${this.uri}`);
+      return this.read();
+    }
+    private async read() {
       const body = files.get(this.uri);
       if (!(body instanceof Uint8Array)) throw new Error("no such file");
       return body;
@@ -104,41 +125,48 @@ const fetchMock = vi.fn(async (url: string) => {
 vi.stubGlobal("fetch", fetchMock);
 
 function build(version: string, names = ["Mount Solitary"]) {
-  const path = `places-${version}.json.gz`;
-  const data = gzipSync(
-    strToU8(
-      JSON.stringify({
-        format: 1,
-        version,
-        attribution: "© OpenStreetMap contributors",
-        licence: "ODbL-1.0",
-        coordScale: 1e5,
-        kinds: ["natural=peak"],
-        names,
-        kind: names.map(() => 0),
-        lon: names.map(() => 15_030_000),
-        lat: names.map(() => -3_370_000),
-        near: names.map(() => -1),
-        alternates: [],
-      }),
-    ),
+  const path = `places-${version}.json`;
+  const plain = strToU8(
+    JSON.stringify({
+      format: 1,
+      version,
+      attribution: "© OpenStreetMap contributors",
+      licence: "ODbL-1.0",
+      coordScale: 1e5,
+      kinds: ["natural=peak"],
+      names,
+      kind: names.map(() => 0),
+      lon: names.map(() => 15_030_000),
+      lat: names.map(() => -3_370_000),
+      near: names.map(() => -1),
+      alternates: [],
+    }),
   );
-  return { pointer: { format: 1, version, path, bytes: data.length }, data };
+  const gzipped = gzipSync(plain);
+  // `bytes` is what the CDN sends: the gzipped size.
+  return {
+    pointer: { format: 1, version, path, bytes: gzipped.length },
+    plain,
+    gzipped,
+  };
 }
 
 /** Put a build on the CDN as the current one. */
 function publish(
   built: ReturnType<typeof build>,
-  data: Uint8Array = built.data,
+  data: Uint8Array = built.plain,
 ) {
   served.set(POINTER_URL, built.pointer);
   served.set(`${CDN}/master/places/v1/${built.pointer.path}`, data);
 }
 
 /** Put a build on the phone, as an earlier session left it. */
-function holdOnPhone(built: ReturnType<typeof build>) {
+function holdOnPhone(
+  built: ReturnType<typeof build>,
+  data: Uint8Array = built.plain,
+) {
   files.set(`${DIR}pointer.json`, JSON.stringify(built.pointer));
-  files.set(`${DIR}${built.pointer.path}`, built.data);
+  files.set(`${DIR}${built.pointer.path}`, data);
 }
 
 function half(data: Uint8Array): Uint8Array {
@@ -204,6 +232,29 @@ describe("the first download", () => {
   });
 });
 
+describe("the saved file", () => {
+  // Mutation: gunzip every file, or read it as bytes.
+  it("is read as the plain JSON the platform saved", async () => {
+    publish(build("2026-10-15"));
+    const registry = await load();
+    await registry.requestPlaceRegistry();
+    await registry.loadPlaceIndex();
+    expect(reads).toEqual([
+      `text ${DIR}download.tmp`,
+      `text ${DIR}places-2026-10-15.json`,
+    ]);
+  });
+
+  // Mutation: drop the gzip fallback.
+  it("is gunzipped when a stack saved it as it came", async () => {
+    const built = build("2026-10-15", ["Wollangambe"]);
+    publish(built, built.gzipped);
+    const registry = await load();
+    expect(await registry.requestPlaceRegistry()).toBe("updated");
+    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+  });
+});
+
 describe("the refresh", () => {
   it("fetches nothing for a phone that never asked for the file", async () => {
     publish(build("2026-10-15"));
@@ -224,8 +275,8 @@ describe("the refresh", () => {
 
     network.expensive = false;
     expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect(files.has(`${DIR}places-2026-10-15.json.gz`)).toBe(true);
-    expect(files.has(`${DIR}places-2026-09-15.json.gz`)).toBe(false);
+    expect(files.has(`${DIR}places-2026-10-15.json`)).toBe(true);
+    expect(files.has(`${DIR}places-2026-09-15.json`)).toBe(false);
   });
 
   it("takes mobile data once the user allows it", async () => {
@@ -259,11 +310,12 @@ describe("the refresh", () => {
 });
 
 describe("a bad download never replaces a good file", () => {
-  // Mutation: move the download into place before `readIndex` checks it.
+  // Mutation: move the download into place before `readFile` checks it.
   it.each([
-    ["is not gzip", strToU8("<html>503</html>")],
-    ["is cut short", half(build("2026-10-15").data)],
-    ["is another build than its pointer says", build("2026-11-15").data],
+    ["is not JSON", strToU8("<html>503</html>")],
+    ["is cut short", half(build("2026-10-15").plain)],
+    ["is a gzip cut short", half(build("2026-10-15").gzipped)],
+    ["is another build than its pointer says", build("2026-11-15").plain],
   ])("keeps the old build when the new one %s", async (_case, data) => {
     const good = build("2026-09-15", ["Mount Solitary", "Narrow Neck"]);
     holdOnPhone(good);
@@ -272,20 +324,20 @@ describe("a bad download never replaces a good file", () => {
     const registry = await load();
     expect(await registry.refreshPlaceRegistry()).toBe("failed");
     expect([...files.keys()].sort()).toEqual(
-      [`${DIR}places-2026-09-15.json.gz`, `${DIR}pointer.json`].sort(),
+      [`${DIR}places-2026-09-15.json`, `${DIR}pointer.json`].sort(),
     );
     const index = await registry.loadPlaceIndex();
     expect(index?.names).toEqual(["Mount Solitary", "Narrow Neck"]);
   });
 
-  // Mutation: drop the size check before `readIndex`.
-  it("never reads a download that is not the size its pointer says", async () => {
+  // Mutation: drop the size check before gunzipping.
+  it("never gunzips a gzip download that is not the size its pointer says", async () => {
     holdOnPhone(build("2026-09-15"));
     prefs.set("placeRegistryWanted", "on");
-    publish(build("2026-10-15"), half(build("2026-10-15").data));
+    publish(build("2026-10-15"), half(build("2026-10-15").gzipped));
     const registry = await load();
     expect(await registry.refreshPlaceRegistry()).toBe("failed");
-    expect(reads).not.toContain(`${DIR}download.tmp`);
+    expect(reads).not.toContain(`bytes ${DIR}download.tmp`);
   });
 
   it("keeps the old build when the pointer is not one this build reads", async () => {
@@ -304,7 +356,7 @@ describe("a bad download never replaces a good file", () => {
 });
 
 describe("the index in memory", () => {
-  it("is swapped for the new build only when one was loaded", async () => {
+  it("is dropped by a refresh, and the next search builds the new one", async () => {
     holdOnPhone(build("2026-09-15"));
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15", ["Wollangambe"]));
@@ -312,7 +364,8 @@ describe("the index in memory", () => {
     expect(registry.placeIndex()).toBeNull();
     await registry.loadPlaceIndex();
     await registry.refreshPlaceRegistry();
-    expect(registry.placeIndex()?.names).toEqual(["Wollangambe"]);
+    expect(registry.placeIndex()).toBeNull();
+    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
   });
 
   it("is not built by a refresh nobody searched after", async () => {
@@ -339,10 +392,11 @@ describe("one ranking, on the phone and on the API", () => {
   it.each(["castle", "katoomba falls", "lookout"])(
     "answers %s exactly as searchPlaces does over the same file",
     async (query) => {
-      const data = gzipSync(strToU8(JSON.stringify(fixture)));
-      // The builder's pointer, sized for this gzip of its fixture.
-      served.set(POINTER_URL, { ...pointer, bytes: data.length });
-      served.set(`${CDN}/master/places/v1/${pointer.path}`, data);
+      served.set(POINTER_URL, pointer);
+      served.set(
+        `${CDN}/master/places/v1/${pointer.path}`,
+        strToU8(JSON.stringify(fixture)),
+      );
       const registry = await load();
       expect(await registry.requestPlaceRegistry()).toBe("updated");
       const index = await registry.loadPlaceIndex();
