@@ -99,7 +99,9 @@ let loading: {
   build: PlaceRegistryPointer;
   promise: Promise<PlaceIndex | null>;
 } | null = null;
-let fetching: Promise<FetchOutcome> | null = null;
+/** The fetch in flight, and whether it may use mobile data. */
+let fetching: { promise: Promise<FetchOutcome>; allowMetered: boolean } | null =
+  null;
 let lastCheckAt = 0;
 
 function publish(next: Partial<PlaceRegistryStatus>): void {
@@ -276,14 +278,23 @@ export type FetchOutcome =
  * started rejects with NotEnoughSpaceError when the file would not fit; a
  * refresh skips.
  */
-export function fetchPlaceRegistry(options: {
+export async function fetchPlaceRegistry(options: {
   allowMetered?: boolean;
 }): Promise<FetchOutcome> {
-  fetching ??= runFetch(options.allowMetered).finally(() => {
+  const running = fetching;
+  if (running) {
+    const outcome = await running.promise;
+    // The run in flight may have waited for Wi-Fi when this caller need not.
+    if (outcome !== "skipped" || running.allowMetered || !options.allowMetered)
+      return outcome;
+    return fetchPlaceRegistry(options);
+  }
+  const promise = runFetch(options.allowMetered).finally(() => {
     fetching = null;
     publish({ downloading: false });
   });
-  return fetching;
+  fetching = { promise, allowMetered: options.allowMetered === true };
+  return promise;
 }
 
 async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
@@ -405,7 +416,7 @@ export const DOWNLOAD_PROBLEM: Record<FetchOutcome, string | null> = {
 /** Delete the file and stop refreshing it, until the user asks again. */
 export async function removePlaceRegistry(): Promise<void> {
   writePref(WANTED_PREF_KEY, "off");
-  await fetching?.catch(() => {});
+  await fetching?.promise.catch(() => {});
   try {
     await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
   } catch (err) {

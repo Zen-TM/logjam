@@ -427,6 +427,20 @@ describe("free space", () => {
   });
 });
 
+describe("one fetch at a time", () => {
+  // Mutation: hand every caller the run in flight's outcome.
+  it("runs again for a caller allowed on mobile data when the run in flight was not", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    network.expensive = true;
+    const registry = await load();
+    const refresh = registry.refreshPlaceRegistry();
+    const asked = registry.requestPlaceRegistry();
+    expect(await refresh).toBe("skipped");
+    expect(await asked).toBe("updated");
+  });
+});
+
 describe("what Download says", () => {
   // Mutation: toast from `fetchPlaceRegistry`, for every caller.
   it("toasts the user's own download, and nothing for a region's", async () => {
