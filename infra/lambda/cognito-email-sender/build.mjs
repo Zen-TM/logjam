@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 
-// Single-file CJS bundle for the Lambda. The Node 20 Lambda runtime ships the
+// Single-file CJS bundle for the Lambda. The Lambda runtime ships the
 // AWS SDK v3 clients (client-kms, used transitively by @aws-crypto/client-node,
 // and client-secrets-manager) — keep those external so we don't ship a second
 // copy. resend and @aws-crypto are bundled, and so are the DynamoDB packages

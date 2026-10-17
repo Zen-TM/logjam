@@ -1,8 +1,8 @@
 [tools]
-# 22, not 20: Logjam GPS's tests and lint need node:sqlite (Node 22.5+), and
-# `make verify` lints mobile from the repo root. CI's mobile and frontend
-# jobs run 22 (jsdom 30 needs 22.22+); the api jobs and api/Dockerfile stay on 20.
-node = "22"
+# 26: one Node for every toolchain, matching the @types/node pins and the api
+# image. The Lambda is still nodejs22.x: its nodejs26.x successor is in public
+# preview, so its @types/node hold stays until that runtime is GA (#229).
+node = "26"
 python = "3.12"
 terraform = "1.13"
 aws-cli = "2"
