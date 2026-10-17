@@ -28,6 +28,7 @@ import { formatBytes } from "../../format";
 import { useConnectivity } from "../../map/connectivity";
 import { isOfflineOnly } from "../../offline/offlineOnlyMode";
 import {
+  PLACE_REGISTRY_DOWNLOAD_ESTIMATE,
   removePlaceRegistry,
   requestPlaceRegistry,
   usePlaceRegistryStatus,
@@ -522,10 +523,6 @@ function sensorLoggingSubtitle(
   return `${what} Logging now — ${mb} MB.`;
 }
 
-/** The download's price before this phone has seen a pointer: a build is
- *  4.4 MB gzipped. */
-const PLACE_NAMES_ESTIMATE = "About 4 MB";
-
 /** The place registry the map's search box reads (offline/placeRegistry.ts).
  *  Download and Remove report at the app shell (BackgroundToast.tsx). */
 function PlaceNamesRow() {
@@ -557,7 +554,7 @@ function PlaceNamesRow() {
         : online
           ? latest
             ? `About ${formatBytes(latest.bytes)}`
-            : PLACE_NAMES_ESTIMATE
+            : PLACE_REGISTRY_DOWNLOAD_ESTIMATE
           : unavailableReasonText("needs-connection");
 
   return (

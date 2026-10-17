@@ -5,8 +5,8 @@
 //
 // - GEOPDF auto-download: tens of megabytes per file, Wi-Fi by default.
 // - TOPO overlay auto-download: same order or larger, Wi-Fi by default.
-// - PLACE NAMES refresh: about 5 MB a month (placeRegistry.ts), Wi-Fi by
-//   default.
+// - PLACE NAMES refresh: one build a month, PLACE_REGISTRY_DOWNLOAD_ESTIMATE
+//   in placeRegistry.ts, Wi-Fi by default.
 // - SYNC: a few kilobytes of JSON, ALLOWED on mobile data by default — a queued
 //   trip log that waits for Wi-Fi is a trip log that is only on one phone when
 //   it matters.

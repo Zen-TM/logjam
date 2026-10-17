@@ -63,6 +63,10 @@ const WANTED_PREF_KEY = "placeRegistryWanted";
  *  and stays the same for a fixed rebuild of the same extract. */
 const UNREADABLE_PREF_KEY = "placeRegistryUnreadable";
 
+/** A build's download, for its price before this phone has seen a pointer,
+ *  and the refresh's monthly cost: the 2026-10-15 build is 4.4 MB gzipped. */
+export const PLACE_REGISTRY_DOWNLOAD_ESTIMATE = "About 4 MB";
+
 /** Bytes on disk per byte downloaded: the file is saved decompressed. The
  *  2026-10-15 build is 14,657,625 bytes of JSON from 4,433,458 gzipped. */
 const DISK_PER_DOWNLOADED_BYTE = 3.31;

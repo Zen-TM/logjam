@@ -65,6 +65,7 @@ import {
 } from "../../ui";
 import { Hint, PreferenceRow } from "./settingsKit";
 import { spacing } from "../../theme";
+import { PLACE_REGISTRY_DOWNLOAD_ESTIMATE } from "../../offline/placeRegistry";
 
 /**
  * `needs` names the auto-download switch a row is meaningless without: a data
@@ -94,7 +95,7 @@ const METERED_ROWS: {
   {
     job: "placeNames",
     title: "Place names for search",
-    subtitle: "About 4 MB a month.",
+    subtitle: `${PLACE_REGISTRY_DOWNLOAD_ESTIMATE} a month.`,
   },
   {
     job: "sync",
