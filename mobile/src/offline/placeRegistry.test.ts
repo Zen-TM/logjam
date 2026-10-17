@@ -47,6 +47,7 @@ vi.mock("expo-file-system/legacy", () => ({
   },
   getFreeDiskStorageAsync: async () => disk.free,
   moveAsync: async ({ from, to }: { from: string; to: string }) => {
+    if (failing.delete("move")) throw new Error("move failed");
     files.set(to, files.get(from) as Uint8Array);
     files.delete(from);
   },
@@ -214,28 +215,32 @@ beforeEach(() => {
 });
 
 describe("the first download", () => {
+  // Mutation: return before the fetch in `placeRegistryWithRegion`, or add
+  // headers (a token, an account id) or another URL to either request.
   it("comes with the first region download, from the CDN with nothing else sent", async () => {
-    publish(build("2026-10-15"));
+    const built = build("2026-10-15");
+    publish(built);
     const registry = await load();
     registry.placeRegistryWithRegion(false);
-    await registry.fetchPlaceRegistry({});
-    expect(registry.hasPlaceRegistry()).toBe(true);
-    // Mutation: add headers (a token, an account id) to the pointer request.
-    expect(fetchMock.mock.calls[0]).toEqual([
-      POINTER_URL,
-      { signal: expect.any(AbortSignal) },
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    expect(fetchMock.mock.calls).toEqual([
+      [POINTER_URL, { signal: expect.any(AbortSignal) }],
+    ]);
+    expect(download.mock.calls).toEqual([
+      [`${CDN}/master/places/v1/${built.pointer.path}`, `${DIR}download.tmp`],
     ]);
   });
 
+  // Mutation: ignore `allowMetered` in `placeRegistryWithRegion`.
   it("goes on mobile data when the user allowed it for the maps", async () => {
     network.expensive = true;
     publish(build("2026-10-15"));
     const registry = await load();
     registry.placeRegistryWithRegion(true);
-    await registry.fetchPlaceRegistry({ allowMetered: true });
-    expect(registry.hasPlaceRegistry()).toBe(true);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
   });
 
+  // Mutation: drop the `wanted === "off"` return.
   it("is not fetched again by a region download after the user removed it", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
@@ -299,6 +304,7 @@ describe("the saved file", () => {
 });
 
 describe("the refresh", () => {
+  // Mutation: drop the `!== "on"` check in `refreshPlaceRegistry`.
   it("fetches nothing for a phone that never asked for the file", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
@@ -332,6 +338,7 @@ describe("the refresh", () => {
     expect(await registry.refreshPlaceRegistry()).toBe("updated");
   });
 
+  // Mutation: drop the `isOfflineOnly()` check.
   it("does nothing in offline-only mode", async () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"));
@@ -383,6 +390,7 @@ describe("a bad download never replaces a good file", () => {
     expect(reads).not.toContain(`bytes ${DIR}download.tmp`);
   });
 
+  // Mutation: accept a pointer of any format.
   it("keeps the old build when the pointer is not one this build reads", async () => {
     holdOnPhone(build("2026-09-15"));
     prefs.set("placeRegistryWanted", "on");
@@ -395,6 +403,20 @@ describe("a bad download never replaces a good file", () => {
     const registry = await load();
     expect(await registry.refreshPlaceRegistry()).toBe("failed");
     expect(registry.hasPlaceRegistry()).toBe(true);
+  });
+});
+
+describe("a failed swap", () => {
+  // Mutation: write the pointer before moving the data file into place.
+  it("leaves the old build for the next session", async () => {
+    holdOnPhone(build("2026-09-15", ["Narrow Neck"]));
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    failing.add("move");
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    const next = await load();
+    expect((await next.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
   });
 });
 
@@ -558,6 +580,7 @@ describe("the index in memory", () => {
     expect(registry.placeIndex()).toBeNull();
   });
 
+  // Mutation: keep an index built in the refresh's parse step.
   it("is not built by a refresh nobody searched after", async () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"));

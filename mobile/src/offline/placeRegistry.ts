@@ -9,8 +9,9 @@
 //
 // A BAD DOWNLOAD NEVER REPLACES A GOOD FILE: the new file lands at a temporary
 // path, is parsed and its version checked, and only then takes the old one's
-// place. The pointer is written last, so a phone killed mid-swap reads the
-// previous build. Guard: placeRegistry.test.ts.
+// place. The pointer is written once the file is in place, so a phone killed
+// mid-swap reads the previous build. Guard: placeRegistry.test.ts ("a bad
+// download never replaces a good file").
 //
 // THE FILE IS SAVED AS PLAIN JSON: the CDN serves it with Content-Encoding:
 // gzip, so the platform's HTTP stack decompresses it (ADR 0034). gunzipping it
@@ -22,7 +23,8 @@
 // session.
 //
 // PRIVACY: the requests carry no headers and no query, only the public file's
-// path, and every phone fetches the same file.
+// path, and every phone fetches the same file. Guard: placeRegistry.test.ts
+// ("from the CDN with nothing else sent").
 import { useSyncExternalStore } from "react";
 import { AppState, InteractionManager } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
