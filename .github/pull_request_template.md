@@ -3,6 +3,7 @@
 <!-- The change, and the reason for it. -->
 
 Closes #
+<!-- Or a line `No issue: <why>` when there is none. `Part of #` leaves the issue open. -->
 
 ## Testing
 

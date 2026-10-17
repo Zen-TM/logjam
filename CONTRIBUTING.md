@@ -29,7 +29,7 @@ infrastructure change, or a change to a convention in an `AGENTS.md`. Use the
 [feature proposal form](https://github.com/Zen-TM/logjam/issues/new?template=proposal.yml).
 Wait for the maintainer to agree the approach in the issue, marked by the
 `accepted` label, before writing code: a pull request for a feature nobody
-agreed to may be closed unreviewed. Your pull request then links the issue.
+agreed to may be closed unreviewed. Your pull request then closes the issue.
 
 **Open a pull request directly** for a typo, a docs fix, a lint or tooling
 fix, or a small bug fix that starts with a failing test.

@@ -1,0 +1,34 @@
+name: PR closes
+
+# A pull request closes the issue it implements, or says why there is none.
+# The check, and why it asks GitHub rather than reading keywords, is
+# scripts/pr-closes-check.sh, which the first step self-tests. `edited` reruns
+# it when the body is fixed, without a push.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  pr-closes:
+    name: pr-closes
+    # A dependency bump has no issue to close.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Self-test the check
+        run: scripts/pr-closes-check.sh --self-test
+      - name: Check the PR closes an issue or says why not
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          CLOSING=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json closingIssuesReferences --jq '.closingIssuesReferences | length') \
+            scripts/pr-closes-check.sh

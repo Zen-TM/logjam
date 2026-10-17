@@ -30,4 +30,6 @@ body:
       label: Waiting on
       description: >
         Anything outside this repo it waits on (an upstream release, another
-        project), and what would unblock it. Leave empty if nothing.
+        project), and what would unblock it. If you fill this in, add the
+        `blocked` label. A wait on another issue here is a "blocked by" link
+        on the issue, not text here. Leave empty if nothing.
