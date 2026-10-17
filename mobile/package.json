@@ -81,7 +81,7 @@
     "eslint-config-expo": "~58.0.4",
     "patch-package": "^8.0.1",
     "typescript": "~6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "brace-expansion@<1.1.18": "^1.1.18",
