@@ -30,31 +30,42 @@ RUN_DB_IT=1 \
 worker image psycopg2 is already present, so only `RUN_DB_IT=1` + the DB env are
 needed.
 
-## 2. Full worker end-to-end (real GDAL/PDAL kill + relaunch)
+## 2. Full worker end-to-end — CI's `topo-e2e` job
 
-Exercises `worker.py` against a real LiDAR input through the real GDAL/PDAL
-pipeline, then verifies the reaper/worker interplay under a mid-render kill.
-This requires the worker Docker image and a small LiDAR fixture, so it is an
-**operator runbook**, not an automated host test (no LiDAR fixture is committed —
-real LAZ tiles are large, and the image build pulls UbuntuGIS + builds tippecanoe
-from source).
+Runs the worker image on a real LiDAR input through the real GDAL/PDAL
+pipeline. **CI runs it** (`topo-e2e` in `.github/workflows/ci.yml`) on one ELVIS
+LAZ tile as ELVIS ships it, fetched by `scripts/sample-data.sh
+elvis-katoomba-2506258-laz.zip`:
 
-Steps:
+1. Builds the image (layer-cached) and brings up Postgres, MiniStack S3 and the
+   seeded API.
+2. Creates two jobs as Logjam Web does: `POST /topo-jobs`, a PUT to the
+   presigned URL, `POST /topo-jobs/:id/start`. With no `ECS_SUBNETS` the API
+   leaves them `pending` instead of calling RunTask.
+3. Runs the container as the ECS task would, with the task definition's env
+   (`e2e/worker.env`), on a Docker network with no internet: Overpass is a stub
+   serving `e2e/overpass-katoomba-2506258.json`, and the SVTM and fire-history
+   rasters are made-up ones in MiniStack, read through `/vsis3/`.
+4. **Happy path** (`e2e/check.py complete`): the row is `complete` with its
+   outputs, footprint, metrics and storage charge; the objects are in the
+   bucket and the input ZIP is gone; every layer's tile on Mount Solitary
+   decodes and is not blank.
+5. **Resurrection check** (`e2e/check.py reaped`): the second job's worker is
+   killed mid-render and the row force-failed as the reaper would; a worker
+   relaunched for the same `JOB_ID` leaves it `failed`, with no outputs and no
+   notification.
+
+What stays manual: a multi-tile or multi-survey ZIP, a real SVTM or fire
+raster, live Overpass, and a run on Fargate itself. Run one by hand (below)
+before committing a worker change that touches those.
+
+### By hand, against the dev stack
 
 1. Build the image: `docker compose build` (in `topo/`).
-2. Bring up the dev stack (`make dev`) so Postgres + MiniStack S3 are reachable
-   from the container, and put a small ELVIS ZIP at `topo/input/elvis.zip`
-   (smallest available tile — see `README.md` perf table).
-3. Seed a `topo_jobs` row in `status='processing'` for the seeded alice user with
-   `s3_input_key` pointing at the uploaded ZIP, and run the worker container with
-   `JOB_ID=<that id>` and the DB/S3 env pointing at the dev stack.
-4. **Happy path:** let it finish; assert the row reaches `complete`, output keys
-   are populated, and tiles land in the `S3_BUCKET_TOPO` bucket.
-5. **Resurrection check:** start a fresh job, `docker kill` the
-   container mid-render, then force-fail the row (`UPDATE topo_jobs SET
-   status='failed'`) as the reaper would. Re-launch a worker for the **same**
-   `JOB_ID`; confirm its guarded terminal write leaves the row `failed` (the
-   `test_status_guard_db.py` invariant, now end-to-end through real processing).
+2. `make dev`, so Postgres and MiniStack S3 are reachable from the container.
+3. Create and start a job through Logjam Web (or the API as in step 2 above),
+   then run the worker container with `JOB_ID=<that id>` and the DB/S3 env
+   pointing at the dev stack. The worker claims only a `pending` job.
 
-The automated DB test (#1) covers the guard semantics; this runbook covers the
+The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.
