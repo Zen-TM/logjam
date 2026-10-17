@@ -10,8 +10,9 @@
 // A BAD DOWNLOAD NEVER REPLACES A GOOD FILE: the new file lands at a temporary
 // path, is parsed and its version checked, and only then takes the old one's
 // place. The pointer is written once the file is in place, so a phone killed
-// mid-swap reads the previous build. Guard: placeRegistry.test.ts ("a bad
-// download never replaces a good file").
+// mid-swap reads the previous build. Guards: placeRegistry.test.ts ("a bad
+// download never replaces a good file", and "a failed swap leaves the old
+// build for the next session").
 //
 // THE FILE IS SAVED AS PLAIN JSON: the CDN serves it with Content-Encoding:
 // gzip, so the platform's HTTP stack decompresses it (ADR 0034). gunzipping it
@@ -89,6 +90,9 @@ export type PlaceRegistryStatus = {
    *  a download not yet made. */
   latest: PlaceRegistryPointer | null;
   downloading: boolean;
+  /** The last load of the stored build failed and kept the file: the search
+   *  box offers Try again. Cleared by the next load, install or Remove. */
+  loadFailed: boolean;
 };
 
 const initial = readStoredPointer();
@@ -97,6 +101,7 @@ let status: PlaceRegistryStatus = {
   storedBytes: initial ? diskBytes(initial) : 0,
   latest: initial,
   downloading: false,
+  loadFailed: false,
 };
 const listeners = new Set<() => void>();
 let index: PlaceIndex | null = null;
@@ -115,14 +120,15 @@ function publish(next: Partial<PlaceRegistryStatus>): void {
   for (const listener of listeners) listener();
 }
 
+export function placeRegistryStatus(): PlaceRegistryStatus {
+  return status;
+}
+
 export function usePlaceRegistryStatus(): PlaceRegistryStatus {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => status,
-  );
+  return useSyncExternalStore((listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, placeRegistryStatus);
 }
 
 function readStoredPointer(): PlaceRegistryPointer | null {
@@ -173,6 +179,7 @@ export function loadPlaceIndex(): Promise<PlaceIndex | null> {
     if (loading?.promise === promise) loading = null;
   });
   loading = { build: stored, promise };
+  if (status.loadFailed) publish({ loadFailed: false });
   return promise;
 }
 
@@ -201,15 +208,21 @@ async function buildIndex(
     // Forgotten, so the next check downloads it again; only when the file is
     // wrong and the pointer on disk still names it. A read that failed for
     // another reason keeps it for the next open.
+    if (status.stored !== stored) return null;
     if (
       err instanceof MismatchError &&
-      status.stored === stored &&
-      readStoredPointer()?.version === stored.version
+      readStoredPointer()?.path === stored.path
     ) {
       await FileSystem.deleteAsync(POINTER_URI, { idempotent: true }).catch(
         () => {},
       );
+      await FileSystem.deleteAsync(dataUri(stored), { idempotent: true }).catch(
+        () => {},
+      );
       publish({ stored: null, storedBytes: 0 });
+    } else {
+      // Kept, so nothing else changes: say so, or the box loads forever.
+      publish({ loadFailed: true });
     }
     return null;
   }
@@ -230,6 +243,8 @@ async function readFile(
   uri: string,
   pointer: PlaceRegistryPointer,
 ): Promise<PlaceRegistryFile> {
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists) throw new MismatchError("Place registry file is missing");
   const head = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
     position: 0,
@@ -240,8 +255,7 @@ async function readFile(
     // Checked before gunzipping: fflate sizes its output from the file's last
     // four bytes, so a cut-off file had it allocate gigabytes on the Pixel.
     // The pointer's `bytes` is the gzipped size, so only this path can check.
-    const info = await FileSystem.getInfoAsync(uri);
-    if (!info.exists || info.size !== pointer.bytes) {
+    if (info.size !== pointer.bytes) {
       throw new MismatchError("Place registry file is not its pointer's size");
     }
     const bytes = await new File(uri).bytes();
@@ -289,7 +303,18 @@ export async function fetchPlaceRegistry(options: {
 }): Promise<FetchOutcome> {
   const running = fetching;
   if (running) {
-    const outcome = await running.promise;
+    let outcome: FetchOutcome;
+    try {
+      outcome = await running.promise;
+    } catch (err) {
+      // A run the user started, refused for space: a refresh only skips.
+      if (
+        options.allowMetered === undefined &&
+        err instanceof NotEnoughSpaceError
+      )
+        return "skipped";
+      throw err;
+    }
     // The run in flight may have waited for Wi-Fi when this caller need not.
     if (outcome !== "skipped" || running.allowMetered || !options.allowMetered)
       return outcome;
@@ -377,14 +402,25 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   // now sees it was replaced and forgets nothing. The next search builds the
   // new one.
   index = null;
-  publish({ stored: pointer, storedBytes: diskBytes(pointer) });
+  publish({
+    stored: pointer,
+    storedBytes: diskBytes(pointer),
+    loadFailed: false,
+  });
   // Only the new build is kept: the old file, and anything a crash left.
-  for (const name of await FileSystem.readDirectoryAsync(PLACE_REGISTRY_DIR)) {
-    if (name !== pointer.path && name !== "pointer.json") {
-      await FileSystem.deleteAsync(`${PLACE_REGISTRY_DIR}${name}`, {
-        idempotent: true,
-      });
+  // Best effort: the install is done, and the next one sweeps again.
+  try {
+    for (const name of await FileSystem.readDirectoryAsync(
+      PLACE_REGISTRY_DIR,
+    )) {
+      if (name !== pointer.path && name !== "pointer.json") {
+        await FileSystem.deleteAsync(`${PLACE_REGISTRY_DIR}${name}`, {
+          idempotent: true,
+        });
+      }
     }
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -431,7 +467,7 @@ export async function removePlaceRegistry(): Promise<void> {
     return;
   }
   index = null;
-  publish({ stored: null, storedBytes: 0 });
+  publish({ stored: null, storedBytes: 0, loadFailed: false });
 }
 
 /** Settings → Map's Download: wanted from now on, on any connection. */

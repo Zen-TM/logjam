@@ -106,7 +106,10 @@ export function placesFromAnswer(
 }
 
 /** In place of the registry's results: still loading, or why there are none. */
-export type PlacesPending = "loading" | { error: string };
+export type PlacesPending =
+  | "loading"
+  /** `retry` when pressing Try again can help. */
+  | { error: string; retry?: () => void };
 
 export type SearchRow<Saved> =
   | { kind: "saved"; item: Saved }
@@ -114,7 +117,7 @@ export type SearchRow<Saved> =
   /** In place of the registry's results while they load. */
   | { kind: "loading" }
   /** In place of the registry's results: why there are none. */
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; retry?: () => void }
   /** The ODbL credit, under the registry's results. */
   | { kind: "credit" }
   /** "Search locations for …", which asks Nominatim. */
@@ -132,7 +135,11 @@ export function searchRows<Saved>(
       ...saved.map((item) => ({ kind: "saved" as const, item })),
       pending === "loading"
         ? { kind: "loading" as const }
-        : { kind: "error" as const, message: pending.error },
+        : {
+            kind: "error" as const,
+            message: pending.error,
+            retry: pending.retry,
+          },
       ...(offerAsk ? [{ kind: "ask" as const }] : []),
     ];
   }

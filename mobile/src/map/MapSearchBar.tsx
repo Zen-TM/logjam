@@ -178,10 +178,16 @@ export function MapSearchBar({
   // carries it. The build takes a few seconds, in slices; until it is ready
   // the user's own matches show and a loading row stands for the rest.
   useEffect(() => {
-    if (expanded && registry.stored !== null && index === null) {
+    // Not after a failed load: that waits for Try again.
+    if (
+      expanded &&
+      registry.stored !== null &&
+      index === null &&
+      !registry.loadFailed
+    ) {
       void loadPlaceIndex();
     }
-  }, [expanded, registry.stored, index]);
+  }, [expanded, registry.stored, index, registry.loadFailed]);
   const placeQuery =
     expanded && trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH;
   const devicePlaces = useMemo(
@@ -202,7 +208,12 @@ export function MapSearchBar({
     source === "device"
       ? index || !placeQuery
         ? devicePlaces
-        : "loading"
+        : registry.loadFailed
+          ? {
+              error: "Couldn't load place names.",
+              retry: () => void loadPlaceIndex(),
+            }
+          : "loading"
       : source === "api" && placeQuery
         ? placesFromAnswer(placeAnswer, trimmed)
         : [];
@@ -416,6 +427,15 @@ export function MapSearchBar({
                   return (
                     <View key="error" style={styles.statusBox}>
                       <FieldError message={row.message} />
+                      {row.retry ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          hitSlop={hitSlop}
+                          onPress={row.retry}
+                        >
+                          <Text style={styles.retry}>Try again</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   );
                 case "loading":
@@ -536,6 +556,14 @@ const useStyles = makeStyles((theme, textRole) => ({
   statusBox: {
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
+    gap: spacing(1),
+  },
+  // As ErrorBanner's action.
+  retry: {
+    ...textRole.control,
+    color: theme.text,
+    textDecorationLine: "underline",
+    alignSelf: "flex-start",
   },
   status: {
     ...muted(theme, textRole.detail),

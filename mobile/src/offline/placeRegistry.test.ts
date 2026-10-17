@@ -65,15 +65,19 @@ vi.mock("expo-file-system/legacy", () => ({
     uri: string,
     options: { position: number; length: number },
   ) => {
-    const body = files.get(uri) as Uint8Array;
+    const body = files.get(uri);
+    // As the real API does for a missing file.
+    if (!(body instanceof Uint8Array)) throw new Error(`no file ${uri}`);
     return Buffer.from(
       body.slice(options.position, options.position + options.length),
     ).toString("base64");
   },
-  readDirectoryAsync: async (dir: string) =>
-    [...files.keys()]
+  readDirectoryAsync: async (dir: string) => {
+    if (failing.delete("readdir")) throw new Error("readdir failed");
+    return [...files.keys()]
       .filter((key) => key.startsWith(dir))
-      .map((key) => key.slice(dir.length)),
+      .map((key) => key.slice(dir.length));
+  },
 }));
 vi.mock("expo-file-system", () => ({
   File: class {
@@ -420,6 +424,19 @@ describe("a failed swap", () => {
   });
 });
 
+describe("the sweep after a swap", () => {
+  // Mutation: let a failing sweep throw out of `installBuild`.
+  it("is best effort: the install still counts", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15", ["Wollangambe"]));
+    failing.add("readdir");
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+  });
+});
+
 describe("free space", () => {
   // The file is saved decompressed, so it needs more than the pointer's bytes.
   const needs = (built: ReturnType<typeof build>) => built.plain.length;
@@ -435,6 +452,18 @@ describe("free space", () => {
     expect(await registry.requestPlaceRegistry()).toBe("failed");
     expect(download).not.toHaveBeenCalled();
     expect(toasts).toEqual([expect.stringMatching(/^Needs about/)]);
+  });
+
+  // Mutation: let a joining refresh await the refused run's rejection.
+  it('gives a refresh that joins a refused download of the user\'s "skipped"', async () => {
+    const built = build("2026-10-15");
+    publish(built);
+    disk.free = needs(built);
+    const registry = await load();
+    const asked = registry.requestPlaceRegistry();
+    const refresh = registry.refreshPlaceRegistry();
+    expect(await refresh).toBe("skipped");
+    expect(await asked).toBe("failed");
   });
 
   // Mutation: drop the `hasSpaceFor` call.
@@ -486,6 +515,25 @@ describe("a load that fails", () => {
     const registry = await load();
     expect(await registry.loadPlaceIndex()).toBeNull();
     expect(registry.hasPlaceRegistry()).toBe(true);
+    // Mutation: publish nothing when the file is kept (the search box would
+    // show "Loading place names…" for good), or never clear it.
+    expect(registry.placeRegistryStatus().loadFailed).toBe(true);
+    const retried = registry.loadPlaceIndex();
+    expect(registry.placeRegistryStatus().loadFailed).toBe(false);
+    expect((await retried)?.names).toEqual(["Narrow Neck"]);
+  });
+
+  // Mutation: throw a plain Error for a missing file in `readFile`.
+  it("forgets a pointer whose data file is gone, and the next refresh fetches it", async () => {
+    const built = build("2026-10-15", ["Narrow Neck"]);
+    holdOnPhone(built);
+    files.delete(`${DIR}${built.pointer.path}`);
+    prefs.set("placeRegistryWanted", "on");
+    publish(built);
+    const registry = await load();
+    expect(await registry.loadPlaceIndex()).toBeNull();
+    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect(await registry.refreshPlaceRegistry()).toBe("updated");
     expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
   });
 
@@ -509,6 +557,8 @@ describe("a load that fails", () => {
     expect(await registry.refreshPlaceRegistry()).toBe("updated");
     expect(await registry.loadPlaceIndex()).toBeNull();
     expect(registry.hasPlaceRegistry()).toBe(false);
+    // Mutation: drop the data file's delete in `buildIndex`.
+    expect(files.has(`${DIR}${unindexable.pointer.path}`)).toBe(false);
     download.mockClear();
     expect(await registry.refreshPlaceRegistry()).toBe("unreadable");
     expect(download).not.toHaveBeenCalled();
