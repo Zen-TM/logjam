@@ -198,6 +198,38 @@ test("a real rule change beside the hidden bypass stays an update", () => {
   assert.doesNotMatch(h, /Counted as no change/);
 });
 
+test("a ruleset the PR updates has the same value fingerprint read by either App", () => {
+  // GitHub's ETag hashes the response, which differs by viewer, and only the
+  // apply App sees bypass_actors. Mutation: dropping github's `perViewer`, or
+  // hashing unreadable attributes, refuses every ruleset update (#453): red.
+  const rules = [{ creation: false }];
+  const pr = {
+    resource_changes: [
+      ruleset(
+        "github_repository_ruleset.tags",
+        { ...live, etag: "W/plan-app", bypass_actors: [] },
+        { ...live, etag: "W/plan-app", rules, bypass_actors: ADMIN },
+      ),
+    ],
+  };
+  const atMerge = {
+    resource_changes: [
+      ruleset(
+        "github_repository_ruleset.tags",
+        { ...live, etag: "W/apply-app", bypass_actors: ADMIN },
+        { ...live, etag: "W/apply-app", rules, bypass_actors: ADMIN },
+      ),
+    ],
+  };
+  assert.deepEqual(valueFingerprints(pr, "github", KEY), valueFingerprints(atMerge, "github", KEY));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: pr, sha: SHA, key: KEY }).body;
+  assert.equal(check("github", atMerge, read, SHA, { key: KEY, mode: "enforce" }).ok, true);
+  // A hand edit to a rule is still seen.
+  const handEdited = structuredClone(atMerge);
+  handEdited.resource_changes[0].change.before.rules = [{ creation: true, hand: true }];
+  assert.equal(check("github", handEdited, read, SHA, { key: KEY, mode: "enforce" }).ok, false);
+});
+
 test("envs/prod has no unreadable attributes", () => {
   // The same shape in envs/prod is a plain update, and prod fingerprints
   // keep the hash input they had before envs/github existed.

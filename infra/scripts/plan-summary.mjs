@@ -57,6 +57,11 @@ export const ROOTS = {
     // plans nothing. Without this, every apply touching such a ruleset would
     // refuse (docs/decisions/0025-github-settings-in-terraform.md).
     unreadable: { github_repository_ruleset: ["bypass_actors"] },
+    // GitHub's ETag hashes the response, and the response differs by viewer,
+    // so the plan App and the apply App never read the same etag on any
+    // resource. Left out of the value fingerprints, with the unreadable
+    // attributes; nothing configures either.
+    perViewer: ["etag"],
     changedOutside: "a GitHub setting changed outside Terraform",
     handChange: "If a GitHub setting was changed by hand",
     touch: "infra/terraform/envs/github",
@@ -172,16 +177,20 @@ function strip(after, sensitive, unknown) {
 // null without a key. Never the values, and never an unkeyed hash of them.
 export function valueFingerprints(plan, name, key) {
   if (!key) return null;
+  const r = root(name);
   const out = {};
   for (const c of changes(plan, name)) {
     if (!["create", "update", "replace"].includes(c.kind)) continue;
     const change = c.rc.change;
+    const unseen = [...(r.perViewer ?? []), ...(r.unreadable?.[c.rc.type] ?? [])];
+    const seen = (v) =>
+      v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([k]) => !unseen.includes(k))) : v;
     out[c.address] = createHmac("sha256", key)
       .update(
         canonical({
           address: c.address,
-          before: strip(change.before, change.before_sensitive, change.before_unknown),
-          after: strip(change.after, change.after_sensitive, change.after_unknown),
+          before: seen(strip(change.before, change.before_sensitive, change.before_unknown)),
+          after: seen(strip(change.after, change.after_sensitive, change.after_unknown)),
         }),
       )
       .digest("hex")

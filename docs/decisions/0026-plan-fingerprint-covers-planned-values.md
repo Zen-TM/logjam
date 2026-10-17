@@ -89,6 +89,17 @@ as below. In full:
   with `before_sensitive`/`before_unknown` stripped as well. A plan comment
   from before this update carries after-only hashes and cannot be compared;
   re-plan those PRs. Everything else above stands.
+- **Update 2026-10-17: envs/github hashes without what differs by viewer.**
+  The first ruleset apply after the `before` update (#453) was refused with
+  identical diffs and no hand change. GitHub's ETag hashes the response, which
+  differs by token, so the plan App's `etag` is never the apply App's, on any
+  resource; `before.bypass_actors` differs the same way. `plan-summary.mjs`
+  leaves the root's `perViewer` attributes (`etag`) and its `unreadable` ones
+  out of the HMAC; the fingerprint already hashes the configured
+  `bypass_actors`. A hand edit to `bypass_actors` was never visible to the
+  plan App, so nothing it could catch is lost. Guard: "a ruleset the PR
+  updates has the same value fingerprint read by either App"
+  (`infra/scripts/plan-summary.test.mjs`). Everything else above stands.
 - The rest of 0024 as it was. The plan comment leads with counts and every
   delete, replace and forget address; a truncated comment keeps that header
   and the end of the plan text, and one whose header alone won't fit carries
@@ -166,3 +177,6 @@ turns it red.
   how stable planned values are across a PR's plan and its apply.
 - **An Environment secret.** Rejected: the PR's plan job could not read it
   without an Environment, and `prod` is deployable from `main` only.
+- **Plan PRs as the apply App, so both read the same etag.** Rejected: it
+  gives a PR's plan a token that can edit the repository's settings
+  ([0025](0025-github-settings-in-terraform.md)).
