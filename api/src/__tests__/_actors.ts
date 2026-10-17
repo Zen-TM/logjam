@@ -34,6 +34,17 @@ export const BOB_MARKER_PLACE_ID = "60000000-0000-4000-8000-000000000005";
 /** Bob's route, DIRECTLY shared with alice — the incoming half of the seed's
  *  sharing, and the only thing in alice's received `Share` list. */
 export const BOB_SHARED_ROUTE_ID = "70000000-0000-4000-8000-000000000003";
+/** Bob's complete topo job and GeoPDF, DIRECTLY shared with alice too. */
+export const BOB_SHARED_TOPO_JOB_ID = "f0000000-0000-4000-8000-000000000004";
+export const BOB_SHARED_GEOPDF_JOB_ID = "f0000000-0000-4000-8000-000000000009";
+/** Everything bob shares with alice, in the seed: the exact set the friend
+ *  audit reports in each direction. */
+export const BOB_SHARES_WITH_ALICE = [
+  BOB_SHARED_PLACE_ID,
+  BOB_SHARED_ROUTE_ID,
+  BOB_SHARED_TOPO_JOB_ID,
+  BOB_SHARED_GEOPDF_JOB_ID,
+];
 
 // The system Canyon type. Every fixture that creates a place names a type,
 // because the API refuses one without — deliberately: a silent default would
