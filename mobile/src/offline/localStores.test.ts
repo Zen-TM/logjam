@@ -85,10 +85,11 @@ describe("the wipe covers every declared store", () => {
   }
 
   it("wipes every declared directory that is not explicitly spared", () => {
-    // BASEMAP_ASSETS_DIR is the one deliberate exception: generic Protomaps
-    // glyphs and sprites, identical for every user, re-extracted on demand.
+    // The deliberate exceptions, identical for every user: generic Protomaps
+    // glyphs and sprites, re-extracted on demand, and the public OpenStreetMap
+    // place registry, downloaded again on demand.
     // Anything else missing from WIPED_DIRS is a store that survives sign-out.
-    const spared = ["BASEMAP_ASSETS_DIR"];
+    const spared = ["BASEMAP_ASSETS_DIR", "PLACE_REGISTRY_DIR"];
     const missing = declaredDirs().filter(
       (name) => !wipedDirs().includes(name) && !spared.includes(name),
     );
@@ -105,9 +106,11 @@ describe("the wipe covers every declared store", () => {
     expect(wiped).toContain("OVERLAY_DIR");
   });
 
-  it("keeps the spared directory out of the wipe, on purpose", () => {
-    expect(declaredDirs()).toContain("BASEMAP_ASSETS_DIR");
-    expect(wipedDirs()).not.toContain("BASEMAP_ASSETS_DIR");
+  it("keeps the spared directories out of the wipe, on purpose", () => {
+    for (const spared of ["BASEMAP_ASSETS_DIR", "PLACE_REGISTRY_DIR"]) {
+      expect(declaredDirs()).toContain(spared);
+      expect(wipedDirs()).not.toContain(spared);
+    }
   });
 });
 

@@ -86,9 +86,16 @@ export async function getAuthedRequestHeaders(): Promise<
 // must fail fast so screens fall through to their offline paths.
 const REQUEST_TIMEOUT_MS = 15_000;
 
-function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  signal?: AbortSignal,
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // Aborted already, during the token read: an abort event would never come.
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener("abort", () => controller.abort(), { once: true });
   return fetch(url, { ...init, signal: controller.signal }).finally(() =>
     clearTimeout(timer),
   );
@@ -133,7 +140,7 @@ export function invalidateCurrentUser(): void {
 
 export async function apiFetch<T>(
   path: string,
-  options?: { method?: string; body?: unknown },
+  options?: { method?: string; body?: unknown; signal?: AbortSignal },
 ): Promise<T> {
   const method = options?.method ?? "GET";
   const cacheable = path === CURRENT_USER_PATH;
@@ -151,14 +158,18 @@ export async function apiFetch<T>(
   // op's (noResponse.ts).
   const res = await (async () => {
     const token = await getIdToken();
-    return fetchWithTimeout(`${config.apiUrl}${path}`, {
-      method,
-      headers: {
-        ...baseHeaders(token),
-        ...(options?.body != null && { "Content-Type": "application/json" }),
+    return fetchWithTimeout(
+      `${config.apiUrl}${path}`,
+      {
+        method,
+        headers: {
+          ...baseHeaders(token),
+          ...(options?.body != null && { "Content-Type": "application/json" }),
+        },
+        ...(options?.body != null && { body: JSON.stringify(options.body) }),
       },
-      ...(options?.body != null && { body: JSON.stringify(options.body) }),
-    });
+      options?.signal,
+    );
   })().catch((err: unknown) => {
     throw markNoResponse(err);
   });

@@ -70,6 +70,16 @@ export const CACHE_ROOT = FileSystem.cacheDirectory;
 export const BASEMAP_ASSETS_DIR = `${FileSystem.documentDirectory}basemap-assets/`;
 
 /**
+ * The place registry for location search (`offline/placeRegistry.ts`, ADR
+ * 0034): the OpenStreetMap file, saved as plain JSON, and the CDN pointer it
+ * came with. DELIBERATELY NOT WIPED, for BASEMAP_ASSETS_DIR's reasons: it is
+ * the same public file on every phone, holds nothing about the user, and a
+ * wipe would only cost the next user the download
+ * (PLACE_REGISTRY_DOWNLOAD_ESTIMATE in placeRegistry.ts).
+ */
+export const PLACE_REGISTRY_DIR = `${FileSystem.documentDirectory}place-registry/`;
+
+/**
  * Raw sensor logs from the developer-only research logger
  * (modules/logjam-sensors). WIPED: the samples
  * describe how one person moved through a place for a day, which is location

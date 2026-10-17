@@ -68,6 +68,7 @@ import {
   setRegionGroupLabel,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
+import { placeRegistryWithRegion } from "../offline/placeRegistry";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { savesVectorOnly, vectorClipFor } from "../offline/regionTilePlanning";
@@ -473,6 +474,8 @@ export function RegionDownloadScreen({
             ]
           : []),
       ]);
+      // The first region brings the place names for search (ADR 0034).
+      placeRegistryWithRegion(allowCellular);
     },
     [bbox, includesContours, includesVector, job],
   );

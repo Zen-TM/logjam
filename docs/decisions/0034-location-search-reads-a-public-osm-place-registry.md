@@ -41,12 +41,13 @@ feature in NSW, never a geocoding service.**
   offline. Guard: `shared/src/placeRegistry.test.ts`, against the fixtures the
   builder writes (`topo/tests/test_place_registry.py`). The API's:
   `api/src/routes/placeSearch.unit.test.ts` answers exactly what
-  `searchPlaces` does over that fixture. Logjam GPS names its own here when it
-  starts calling it.
+  `searchPlaces` does over that fixture. Logjam GPS's:
+  `mobile/src/offline/placeRegistry.test.ts` ("one ranking").
 - **What the user types is never logged.** The search endpoint takes the query
   in a `POST` body, never the URL, and no log line carries it. Guard:
   `api/src/routes/placeSearch.unit.test.ts` ("never logs the query") and
-  `api/src/lib/logger.unit.test.ts`.
+  `api/src/lib/logger.unit.test.ts`. Logjam GPS's crash reports drop it:
+  `mobile/src/sentry/scrubEvent.test.ts` ("the typed search query").
 - **The file is public.** The builder publishes it under
   `PLACE_REGISTRY_PREFIX` (`master/places/v1/`) in the topo bucket, which the
   web distribution serves without authentication, like the DEM
@@ -82,7 +83,10 @@ feature in NSW, never a geocoding service.**
   registry leaves out. No guard.
 - **Logjam GPS holds the whole file,** fetched with the first region download
   and refreshed on Wi-Fi by default, and a download replaces the stored file
-  only once it parses. Logjam GPS names its guards here when it lands.
+  only once it parses. Guards: `mobile/src/offline/placeRegistry.test.ts`,
+  and `mobile/src/map/placeSearch.test.ts` for the phone's copy answering
+  first and a guest making no API call. No guard for a guest getting the
+  file: `AppShell` registers the refresh with no account check.
 
 ## Consequences
 
