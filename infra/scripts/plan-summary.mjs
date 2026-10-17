@@ -166,16 +166,24 @@ function strip(after, sensitive, unknown) {
   return after;
 }
 
-// address -> 16 hex of an HMAC over what the plan sets that resource to.
+// address -> 16 hex of an HMAC over the resource's current and planned
+// values. `before` is what catches a hand edit the apply is about to revert:
+// the planned `after` is the config either way (ADR 0026's 2026-10-17 update).
 // null without a key. Never the values, and never an unkeyed hash of them.
 export function valueFingerprints(plan, name, key) {
   if (!key) return null;
   const out = {};
   for (const c of changes(plan, name)) {
     if (!["create", "update", "replace"].includes(c.kind)) continue;
-    const { after, after_sensitive, after_unknown } = c.rc.change;
+    const change = c.rc.change;
     out[c.address] = createHmac("sha256", key)
-      .update(canonical({ address: c.address, after: strip(after, after_sensitive, after_unknown) }))
+      .update(
+        canonical({
+          address: c.address,
+          before: strip(change.before, change.before_sensitive, change.before_unknown),
+          after: strip(change.after, change.after_sensitive, change.after_unknown),
+        }),
+      )
       .digest("hex")
       .slice(0, 16);
   }
