@@ -77,6 +77,9 @@ feature in NSW, never a geocoding service.**
   (the topo worker's, the API's) could still write there.
 - **Nominatim stays** behind the explicit press, for street addresses the
   registry leaves out. No guard.
+- **Logjam GPS holds the whole file,** fetched with the first region download
+  and refreshed on Wi-Fi by default, and a download replaces the stored file
+  only once it parses. Logjam GPS names its guards here when it lands.
 
 ## Consequences
 

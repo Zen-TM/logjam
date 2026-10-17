@@ -67,6 +67,14 @@ export interface PlaceResult {
   lat: number;
 }
 
+/** A result's second line, the same on both clients: "Peak near Katoomba".
+ *  A town is not near itself. */
+export function placeResultDetail(result: PlaceResult): string {
+  return result.near && result.near !== result.name
+    ? `${result.kind} near ${result.near}`
+    : result.kind;
+}
+
 /** `POST` with a PlaceSearchRequest body, so the query travels in the body
  *  and not the URL that access logs keep. */
 export const PLACE_SEARCH_API_PATH = "/places/search";

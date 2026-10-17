@@ -13,6 +13,7 @@ import {
   placeKindLabel,
   placeKindRank,
   placeRegistryUrl,
+  placeResultDetail,
   type PlaceRegistryFile,
   searchPlaces,
 } from "./placeRegistry.js";
@@ -165,6 +166,17 @@ describe("indexPlaceRegistry", () => {
   it("reads a file crediting OpenStreetMap as the results do", () => {
     // Mutation: change ATTRIBUTION in the builder → red.
     expect(fixture.attribution).toBe(PLACE_REGISTRY_ATTRIBUTION);
+  });
+});
+
+describe("placeResultDetail", () => {
+  it("names the kind and the nearest settlement, unless that is the place itself", () => {
+    const [ruined] = searchPlaces(index, "ruined", 1);
+    expect(placeResultDetail(ruined)).toBe("Peak near Katoomba");
+    expect(placeResultDetail({ ...ruined, near: null })).toBe("Peak");
+    expect(placeResultDetail({ ...ruined, near: "Ruined Castle" })).toBe(
+      "Peak",
+    );
   });
 });
 
