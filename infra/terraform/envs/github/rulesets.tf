@@ -15,12 +15,19 @@ locals {
   # (image-build.yml) build the Docker images on a PR that changes what they
   # are built from, and pass at once otherwise. gitleaks (ci.yml) catches
   # what push protection cannot: it knows only providers' key formats, while
-  # gitleaks also flags generic high-entropy secrets.
+  # gitleaks also flags generic high-entropy secrets. The heavy ci.yml jobs
+  # (api-integration, mobile, migrations, migration-upgrade) skip, and so
+  # pass, on a PR that touches nothing they test (infra/scripts/ci-scope.sh).
   required_checks = [
     "shared",
     "api",
+    "api-integration",
     "frontend",
+    "mobile",
     "topo",
+    "migrations",
+    "migration-upgrade",
+    "infra-scripts",
     "format",
     "actionlint",
     "plan-prod",
