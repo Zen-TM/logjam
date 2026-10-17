@@ -516,6 +516,13 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # One Node for every toolchain: the workflows, the api image and the
+      # @types/node pins must all equal mise.toml's. The Lambda's types are
+      # checked against its own runtime instead.
+      - name: Node pins agree with mise.toml
+        run: |
+          infra/scripts/check-node-version.py --self-test
+          infra/scripts/check-node-version.py
       # prod and github apply from the shared, locked S3 state; local's is
       # disposable and must never bind to it. Neither direction is visible in a
       # plan until it is too late, so it is checked here.
