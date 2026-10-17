@@ -6,6 +6,7 @@ import { createCanvas, loadImage, type Canvas } from "canvas";
 import {
   extentFromCentreAndSize,
   getMapDimensions,
+  getPaperDimensions,
   type ExtentState,
   type GeoPdfConfig,
 } from "@logjam/shared";
@@ -16,6 +17,8 @@ import {
   renderGeoPdf,
   stubTileServer,
 } from "./_geoPdfRun";
+// Subpath import: geoPdfImport is kept out of the shared barrel (pdf-lib).
+import { parseGeoPdfGeoref } from "@logjam/shared/dist/geoPdfImport/parseGeoref.js";
 import { seedId } from "../../prisma/seedIds";
 import {
   flatPng,
@@ -137,6 +140,7 @@ async function topoTileUnder(extent: Extent, scale: number) {
   };
 }
 
+const MM_TO_PT = 72 / 25.4;
 const BASE_LAYER = "osm";
 const CONFIG: GeoPdfConfig = {
   paperSize: PAPER.paperSize,
@@ -205,13 +209,19 @@ const isGreen = (c: number[]) =>
 
 describe("GeoPDF overlay render over a completed topo job (alice)", () => {
   it("paints the job's hillshade from S3 and credits its source", async () => {
-    stubTileServer(BASE_LAYER);
+    const tiles = stubTileServer(BASE_LAYER);
     const topo = await topoTileUnder(EXTENT, CONFIG.scale);
     try {
       const plain = await mapImage((await renderGeoPdf(CONFIG)).pdf);
       const shaded = await mapImage(
         (await renderGeoPdf({ ...CONFIG, overlays: ["hillshade"] })).pdf,
       );
+      // Only this process's worker answers from the stub; a launched container
+      // (ECS_SUBNETS set) would render real tiles and fail the pixels below.
+      expect(
+        tiles.length,
+        "a worker container rendered: unset ECS_SUBNETS",
+      ).toBeGreaterThan(0);
 
       // Painted: grey on the tile, the base layer elsewhere, and the base layer
       // at the same spot when the overlay is not asked for.
@@ -229,7 +239,7 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
   }, 150_000);
 
   it("renders a saved template over a completed topo job", async () => {
-    stubTileServer("six-topo");
+    const tiles = stubTileServer("six-topo");
     const templates = await request(API_URL)
       .get("/geo-pdf-templates")
       .set(AUTH);
@@ -244,9 +254,16 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
     const topo = await topoTileUnder(extent, template.config.scale);
     try {
       const { pdf } = await renderGeoPdf({ ...template.config, extent });
+      expect(
+        tiles.length,
+        "a worker container rendered: unset ECS_SUBNETS",
+      ).toBeGreaterThan(0);
       const image = await mapImage(pdf);
-      // A4 portrait is taller than wide; the template's hillshade is painted.
-      expect(image.height).toBeGreaterThan(image.width);
+      // The page is the template's A4 portrait, and its hillshade is painted.
+      const page = (await parseGeoPdfGeoref(pdf)).pages[0];
+      const a4 = getPaperDimensions({ ...PAPER, ...template.config });
+      expect(Math.abs(page.pageWidthPt - a4.w * MM_TO_PT)).toBeLessThan(1);
+      expect(Math.abs(page.pageHeightPt - a4.h * MM_TO_PT)).toBeLessThan(1);
       expect(isGrey(colourAt(image, topo.fx, topo.fy))).toBe(true);
     } finally {
       await topo.remove();

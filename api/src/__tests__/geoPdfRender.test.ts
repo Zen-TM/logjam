@@ -21,8 +21,9 @@ import { sendEmail } from "../services/email";
 import { sendPushToUser } from "../services/push";
 
 // Requires `make dev` or the api-integration job: Postgres, MiniStack S3, the
-// API on :8080 (AUTH_MODE=fake, no ECS_SUBNETS in CI so POST /geo-pdf leaves
-// the job queued) and the topo bucket. No auth header = alice.
+// API on :8080 (AUTH_MODE=fake; CI sets no ECS_SUBNETS so POST /geo-pdf leaves
+// the job queued, while `make dev` sets a dummy one and launches a container)
+// and the topo bucket. No auth header = alice.
 //
 // A real job end to end: POST /geo-pdf exactly as Logjam Web sends it, the
 // worker (api/src/worker/geoPdfWorker.ts, the entry the ECS task and `make
@@ -31,11 +32,13 @@ import { sendPushToUser } from "../services/push";
 // GPS uses.
 //
 // What is stubbed, and why: the base layer is fetched over HTTP from a public
-// tile server (the topo bucket holds overlay archives only), so tile requests
-// are answered here with a flat PNG and any other host is refused: the suite
-// needs no internet, and a request the worker should not make fails the test.
-// The email and push sends are mocked so a developer's real Resend key or a
-// seeded device token can never be reached from here.
+// tile server (the renderer fetches raster XYZ tiles only; the protomaps
+// archive in the topo bucket is vector, for region-clip and Logjam GPS), so
+// tile requests are answered here with a flat PNG and any other host is
+// refused: the suite needs no internet, and a request the worker should not
+// make fails the test. The email and push sends are mocked in THIS process;
+// a worker container that wins the claim under `make dev` sends for real, so
+// the send and tile assertions run only when this process rendered.
 vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
 vi.mock("../services/push", () => ({ sendPushToUser: vi.fn() }));
 
@@ -63,7 +66,7 @@ const EXTENT = extentFromCentreAndSize(
   (map.h / 1000) * PAPER.scale,
 );
 
-const BASE_LAYER = "osm";
+const BASE_LAYER = "six-topo";
 const CONFIG: GeoPdfConfig = {
   paperSize: PAPER.paperSize,
   orientation: PAPER.orientation,
@@ -87,29 +90,38 @@ describe("GeoPDF render, API request to PDF (fake auth = alice)", () => {
   it("renders a requested extent into a georeferenced PDF on the requested page", async () => {
     const tileRequests = stubTileServer(BASE_LAYER);
 
-    const { jobId, view, pdf } = await renderGeoPdf(CONFIG, async (r) => {
-      expect(r.view.errorMessage).toBeNull();
-      expect(r.pdf.length).toBe(r.view.resultBytes);
-      // The job's own notification, as Logjam Web and GPS list it.
-      const notifications = await request(API_URL)
-        .get("/notifications")
-        .set(AUTH);
-      expect(
-        notifications.body.some(
-          (n: { type: string; payload: { geoPdfJobId?: string } }) =>
-            n.type === "geo_pdf_complete" && n.payload.geoPdfJobId === r.jobId,
-        ),
-      ).toBe(true);
-      expect(sendPushToUser).toHaveBeenCalledWith(ALICE_ID, {
-        type: "geo_pdf_complete",
-        geoPdfJobId: r.jobId,
-      });
-      expect(sendEmail).toHaveBeenCalled();
-    });
+    const { jobId, view, pdf, launched } = await renderGeoPdf(
+      CONFIG,
+      async (r) => {
+        expect(r.view.errorMessage).toBeNull();
+        expect(r.pdf.length).toBe(r.view.resultBytes);
+        // The job's own notification, as Logjam Web and GPS list it.
+        const notifications = await request(API_URL)
+          .get("/notifications")
+          .set(AUTH);
+        expect(
+          notifications.body.some(
+            (n: { type: string; payload: { geoPdfJobId?: string } }) =>
+              n.type === "geo_pdf_complete" &&
+              n.payload.geoPdfJobId === r.jobId,
+          ),
+        ).toBe(true);
+        if (!r.launched) {
+          expect(sendPushToUser).toHaveBeenCalledWith(ALICE_ID, {
+            type: "geo_pdf_complete",
+            geoPdfJobId: r.jobId,
+          });
+          expect(sendEmail).toHaveBeenCalled();
+        }
+      },
+    );
     expect(view.resultBytes).toBeGreaterThan(0);
-    expect(tileRequests.length).toBeGreaterThan(0);
+    if (!launched) expect(tileRequests.length).toBeGreaterThan(0);
 
     // Parsed back by the import parser: the requested extent and page.
+    // Mutation that turns it red: stop the worker writing the extent (or
+    // point the tile stub at another host): the parsed page bounds then
+    // differ.
     const parsed = await parseGeoPdfGeoref(pdf);
     expect(parsed.producer).toBe("Logjam GeoPDF Generator");
     const page = parsed.pages[0];

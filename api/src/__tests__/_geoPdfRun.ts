@@ -1,11 +1,12 @@
 // Shared by the GeoPDF render tests: make a job through the API as alice, run
 // the worker on it in this process, hand back the PDF. The test file must
-// vi.mock("../services/email") and ("../services/push") itself (vi.mock is per
-// file), so a real Resend key or a seeded device token is never reached.
+// vi.mock("../services/email") and ("../services/push") itself: vi.mock is per
+// file, and it keeps a real Resend send or a device token out of reach.
 import request from "supertest";
 import { createCanvas } from "canvas";
 import { GEOPDF_BASE_LAYER_CONFIG, type GeoPdfConfig } from "@logjam/shared";
 import { API_URL } from "./_actors";
+import prisma from "../services/prisma";
 import { processGeoPdfJob } from "../worker/geoPdfWorker";
 
 export const AUTH = { Authorization: "Bearer fake-token" } as const;
@@ -54,6 +55,8 @@ export interface RenderedGeoPdf {
   jobId: string;
   view: Record<string, unknown> & { resultBytes: number };
   pdf: Uint8Array;
+  /** A worker container was launched, so it may have rendered, not this process. */
+  launched: boolean;
 }
 
 /**
@@ -73,10 +76,13 @@ export async function renderGeoPdf(
     throw new Error(`POST /geo-pdf answered ${created.status}`);
   }
   const jobId: string = created.body.id;
+  // Under `make dev` the POST launched a worker container, which may claim the
+  // job first; then this process renders nothing.
+  const launched = !!(
+    await prisma.geoPdfJob.findUnique({ where: { id: jobId } })
+  )?.ecsTaskArn;
   try {
-    // Locally MiniStack may already have launched the worker container; the
-    // claim is atomic, so whichever runs second exits 0 and this waits.
-    await processGeoPdfJob(jobId);
+    if (!launched) await processGeoPdfJob(jobId);
     let view = created.body;
     for (let i = 0; i < 120 && view.status !== "completed"; i++) {
       if (view.status === "failed") break;
@@ -88,7 +94,7 @@ export async function renderGeoPdf(
     }
     const download = await realFetch(view.downloadUrl);
     const pdf = new Uint8Array(await download.arrayBuffer());
-    const rendered = { jobId, view, pdf };
+    const rendered = { jobId, view, pdf, launched };
     await inspect?.(rendered);
     return rendered;
   } finally {
