@@ -1,0 +1,12 @@
+PAGEID,Location,Coords,Region,Quality,Rating,"Min Time","Max Time",Hike,Rappels,Longest,"Best Season",Shuttle,Vehicle
+90001,"Corpus Plain Canyon","33° 33' 33.12"" S, 150° 24' 11.88"" E","Blue Mountains",4.5,"3B III  (v3a2 III)","3 hr","5 hr","2 km",6r,"30 m","Oct-Apr","0 minutes",Passenger
+90002,"Corpus Nested Html Canyon","33° 40' 0.00"" S, 150° 20' 0.00"" E","Blue Mountains",3,"<i>3B</i> <i>III</i> (<i>v3a2</i> <i>III</i>)",,,,"4-6r","49.213 ft",,,
+90003,"Corpus Bare Grade Canyon","33° 41' 0.00"" S, 150° 21' 0.00"" E","Blue Mountains",2,"3B III",,,,3r,,,,
+90004,"Corpus Missing Coords Canyon",,"Blue Mountains",4,"<i>2A</i> (v2a1 II)",,,,2r,"10 m",,,
+90005,"Corpus Decimal Coords Canyon","-33.6, 150.3","Blue Mountains",4,"<i>2A</i> (v2a1 II)",,,,2r,"10 m",,,
+90006,"Corpus East First Canyon","150° 22' 30.00"" E, 33° 42' 0.00"" S","Blue Mountains",3,"(v4a3 IV)","1 day","2 days",,5r,"15.5 meters",,,
+90007,"Corpus Clock Time Canyon","33° 43' 0.00"" S, 150° 23' 0.00"" E","Blue Mountains",5.5,"(v1a1 I)","2 hr 30 min","4 hr 15 min",,0r,"20",,,
+90008,"Corpus, Comma ""Quoted"" Canyon","33° 44' 0.00"" S, 150° 24' 0.00"" E","Blue Mountains",,"<b>v5a4</b> VI",,,"9 mi",None,"229.659 ft",,,
+90009,,"33° 45' 0.00"" S, 150° 25' 0.00"" E","Blue Mountains",3,,,,,,,,,
+abc,"Corpus Bad Id Canyon","33° 46' 0.00"" S, 150° 26' 0.00"" E","Blue Mountains",3,,,,,,,,,
+90001,"Corpus Duplicate Id Canyon","33° 47' 0.00"" S, 150° 27' 0.00"" E","Blue Mountains",0.5,"(v2a2 II)",,,,,,,,
