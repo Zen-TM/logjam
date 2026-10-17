@@ -63,4 +63,10 @@ describe("searchRows", () => {
       "ask",
     ]);
   });
+  // Mutation: hold the user's own matches back until the index is built.
+  it("shows the user's own matches at once while the place names load", () => {
+    expect(
+      searchRows(["yours"], "loading", true).map((row) => row.kind),
+    ).toEqual(["saved", "loading", "ask"]);
+  });
 });

@@ -368,6 +368,20 @@ describe("the index in memory", () => {
     expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
   });
 
+  // Mutation: build it with `indexPlaceRegistry`, in one block.
+  it("is built a slice at a time, letting timers run between slices", async () => {
+    const names = Array.from({ length: 60_000 }, (_, at) => `Peak ${at}`);
+    holdOnPhone(build("2026-10-15", names));
+    const registry = await load();
+    const timer = vi.spyOn(globalThis, "setTimeout");
+    const index = await registry.loadPlaceIndex();
+    expect(index?.names).toHaveLength(60_000);
+    expect(
+      timer.mock.calls.filter(([, ms]) => ms === 0).length,
+    ).toBeGreaterThan(1);
+    timer.mockRestore();
+  });
+
   it("is not built by a refresh nobody searched after", async () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"));
@@ -388,7 +402,7 @@ describe("one ranking, on the phone and on the API", () => {
   ) as { path: string };
 
   // Mutation: re-rank or filter what `loadPlaceIndex` hands the search box,
-  // or read the file into anything but `indexPlaceRegistry`.
+  // or build its index any other way than `indexPlaceRegistryInSlices`.
   it.each(["castle", "katoomba falls", "lookout"])(
     "answers %s exactly as searchPlaces does over the same file",
     async (query) => {

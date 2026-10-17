@@ -54,6 +54,8 @@ export async function searchPlacesOnline(
 export type SearchRow<Saved> =
   | { kind: "saved"; item: Saved }
   | { kind: "place"; place: PlaceResult }
+  /** In place of the registry's results while the phone builds its index. */
+  | { kind: "loading" }
   /** The ODbL credit, under the registry's results. */
   | { kind: "credit" }
   /** "Search locations for …", which asks Nominatim. */
@@ -62,9 +64,16 @@ export type SearchRow<Saved> =
 /** The user's own things, then the registry's, its credit, then the ask. */
 export function searchRows<Saved>(
   saved: readonly Saved[],
-  places: readonly PlaceResult[],
+  places: readonly PlaceResult[] | "loading",
   offerAsk: boolean,
 ): SearchRow<Saved>[] {
+  if (places === "loading") {
+    return [
+      ...saved.map((item) => ({ kind: "saved" as const, item })),
+      { kind: "loading" },
+      ...(offerAsk ? [{ kind: "ask" as const }] : []),
+    ];
+  }
   return [
     ...saved.map((item) => ({ kind: "saved" as const, item })),
     ...places.map((place) => ({ kind: "place" as const, place })),

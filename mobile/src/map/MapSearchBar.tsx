@@ -171,8 +171,9 @@ export function MapSearchBar({
     online,
   );
   const [index, setIndex] = useState<PlaceIndex | null>(placeIndex);
-  // Loaded on the first open, not with the map: it is a few hundred
-  // milliseconds of parsing and about 90 MB, kept for the session after.
+  // Built on the first open, not with the map: nobody who never searches
+  // carries it. The build takes a few seconds, in slices; until it is ready
+  // the user's own matches show and a loading row stands for the rest.
   useEffect(() => {
     if (!expanded || registry.stored === null) return;
     let live = true;
@@ -214,7 +215,9 @@ export function MapSearchBar({
   }, [source, placeQuery, trimmed]);
   const places =
     source === "device"
-      ? devicePlaces
+      ? index || !placeQuery
+        ? devicePlaces
+        : "loading"
       : source === "api" && placeQuery
         ? apiPlaces
         : [];
@@ -424,6 +427,12 @@ export function MapSearchBar({
                     </Pressable>
                   );
                 }
+                case "loading":
+                  return (
+                    <Text key="loading" style={styles.status}>
+                      Loading place names…
+                    </Text>
+                  );
                 case "credit":
                   return (
                     <Text key="credit" style={styles.credit}>

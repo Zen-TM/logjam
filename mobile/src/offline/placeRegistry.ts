@@ -18,7 +18,8 @@
 // fallback for a stack that saved the gzip as it came.
 //
 // MEMORY: the index is tens of MB, so it is built only when the search box
-// first opens, and kept for the session.
+// first opens, a slice at a time so the map keeps answering, and kept for the
+// session.
 //
 // PRIVACY: the requests carry no headers and no query, only the public file's
 // path, and every phone fetches the same file.
@@ -28,7 +29,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { gunzipSync, strFromU8 } from "fflate";
 import {
-  indexPlaceRegistry,
+  indexPlaceRegistryInSlices,
   isPlaceRegistryPointer,
   placeRegistryUrl,
   PLACE_REGISTRY_POINTER_PATH,
@@ -124,7 +125,7 @@ export function loadPlaceIndex(): Promise<PlaceIndex | null> {
   const stored = status.stored;
   if (!stored) return Promise.resolve(null);
   loading ??= readFile(dataUri(stored), stored)
-    .then(indexPlaceRegistry)
+    .then((file) => indexPlaceRegistryInSlices(file, yieldToEventLoop))
     .then((loaded) => {
       // A build swapped in meanwhile is loaded on the next open instead.
       if (status.stored === stored) index = loaded;
@@ -144,6 +145,12 @@ export function loadPlaceIndex(): Promise<PlaceIndex | null> {
       loading = null;
     });
   return loading;
+}
+
+/** A timer, not a microtask: the map's touches and frames run between
+ *  slices. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 /** The base64 of a gzip file's first two bytes, 1f 8b. */
