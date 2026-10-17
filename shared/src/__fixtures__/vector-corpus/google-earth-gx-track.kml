@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>Corpus Recorded Track</name>
+    <Placemark>
+      <name>Corpus gx Track Only</name>
+      <gx:Track>
+        <when>2024-05-04T23:00:00Z</when>
+        <when>2024-05-04T23:05:00Z</when>
+        <when>2024-05-04T23:10:00Z</when>
+        <gx:coord>150.1100 -33.0900 410</gx:coord>
+        <gx:coord>150.1112 -33.0911 405</gx:coord>
+        <gx:coord>150.1125 -33.0925 399</gx:coord>
+      </gx:Track>
+    </Placemark>
+  </Document>
+</kml>

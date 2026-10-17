@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>Corpus Track And Pin</name>
+    <Placemark>
+      <name>Corpus Pin</name>
+      <Point><coordinates>150.1100,-33.0900,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Corpus gx Track Beside Pin</name>
+      <gx:Track>
+        <when>2024-05-04T23:00:00Z</when>
+        <when>2024-05-04T23:05:00Z</when>
+        <gx:coord>150.1100 -33.0900 410</gx:coord>
+        <gx:coord>150.1112 -33.0911 405</gx:coord>
+      </gx:Track>
+    </Placemark>
+  </Document>
+</kml>
