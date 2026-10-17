@@ -20,6 +20,8 @@ const files = new Map<string, Uint8Array | string>();
 /** What the CDN serves, by URL. */
 const served = new Map<string, unknown>();
 const prefs = new Map<string, string>();
+/** Every file read into memory, by URI. */
+const reads: string[] = [];
 const network = { expensive: false, connected: true };
 const offlineOnly = { on: false };
 
@@ -43,6 +45,12 @@ vi.mock("expo-file-system/legacy", () => ({
   writeAsStringAsync: async (uri: string, text: string) => {
     files.set(uri, text);
   },
+  getInfoAsync: async (uri: string) => {
+    const body = files.get(uri);
+    return body instanceof Uint8Array
+      ? { exists: true, size: body.length }
+      : { exists: false };
+  },
   readDirectoryAsync: async (dir: string) =>
     [...files.keys()]
       .filter((key) => key.startsWith(dir))
@@ -58,6 +66,7 @@ vi.mock("expo-file-system", () => ({
       return files.get(this.uri) as string;
     }
     async bytes() {
+      reads.push(this.uri);
       const body = files.get(this.uri);
       if (!(body instanceof Uint8Array)) throw new Error("no such file");
       return body;
@@ -146,6 +155,7 @@ beforeEach(() => {
   files.clear();
   served.clear();
   prefs.clear();
+  reads.length = 0;
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
@@ -268,6 +278,16 @@ describe("a bad download never replaces a good file", () => {
     expect(index?.names).toEqual(["Mount Solitary", "Narrow Neck"]);
   });
 
+  // Mutation: drop the size check before `readIndex`.
+  it("never reads a download that is not the size its pointer says", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"), half(build("2026-10-15").data));
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(reads).not.toContain(`${DIR}download.tmp`);
+  });
+
   it("keeps the old build when the pointer is not one this build reads", async () => {
     holdOnPhone(build("2026-09-15"));
     prefs.set("placeRegistryWanted", "on");
@@ -319,11 +339,10 @@ describe("one ranking, on the phone and on the API", () => {
   it.each(["castle", "katoomba falls", "lookout"])(
     "answers %s exactly as searchPlaces does over the same file",
     async (query) => {
-      served.set(POINTER_URL, pointer);
-      served.set(
-        `${CDN}/master/places/v1/${pointer.path}`,
-        gzipSync(strToU8(JSON.stringify(fixture))),
-      );
+      const data = gzipSync(strToU8(JSON.stringify(fixture)));
+      // The builder's pointer, sized for this gzip of its fixture.
+      served.set(POINTER_URL, { ...pointer, bytes: data.length });
+      served.set(`${CDN}/master/places/v1/${pointer.path}`, data);
       const registry = await load();
       expect(await registry.requestPlaceRegistry()).toBe("updated");
       const index = await registry.loadPlaceIndex();

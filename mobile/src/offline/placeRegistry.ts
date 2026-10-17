@@ -218,6 +218,12 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   if (result.status !== 200) {
     throw new Error(`Place registry download answered ${result.status}`);
   }
+  // Checked before gunzipping: fflate sizes its output from the file's last
+  // four bytes, so a cut-off file had it allocate gigabytes on the Pixel.
+  const info = await FileSystem.getInfoAsync(DOWNLOAD_URI);
+  if (!info.exists || info.size !== pointer.bytes) {
+    throw new Error("Place registry download is not the size of its pointer");
+  }
   // Parsed and indexed before it replaces anything, off the first frames.
   await new Promise<void>((resolve) =>
     InteractionManager.runAfterInteractions(() => resolve()),
