@@ -6,6 +6,10 @@ worker image with the worker's env (DB_*, S3_BUCKET_TOPO, AWS_*):
 
 <lon> <lat> is a point inside the survey: every layer's tile there must hold
 something.
+
+Mutations that turn it red: dropping the `expected_status="pending"` guard on
+worker.py's claim fails "status stays failed"; pointing FIRE_HISTORY_S3_PATH
+at a missing key fails "fire history read from S3".
 """
 
 import gzip

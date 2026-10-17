@@ -586,6 +586,7 @@ jobs:
       E2E: topo/tests/e2e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Mutation that turns it red: add a variable to topo_worker in ecs.tf.
       - name: worker.env names every variable the task definition sets
         run: |
           want=$(awk '/resource "aws_ecs_task_definition" "topo_worker"/,/^}/' infra/terraform/envs/prod/ecs.tf \

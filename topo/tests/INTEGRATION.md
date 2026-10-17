@@ -61,11 +61,12 @@ before committing a worker change that touches those.
 
 ### By hand, against the dev stack
 
-1. Build the image: `docker compose build` (in `topo/`).
-2. `make dev`, so Postgres and MiniStack S3 are reachable from the container.
-3. Create and start a job through Logjam Web (or the API as in step 2 above),
-   then run the worker container with `JOB_ID=<that id>` and the DB/S3 env
-   pointing at the dev stack. The worker claims only a `pending` job.
+`make dev` launches the worker itself: starting a LiDAR map in Logjam Web makes
+MiniStack's ECS run the image `logjam-topo-worker:latest`
+(`infra/terraform/envs/local/ecs.tf`), so build it under that tag first:
+`docker build -t logjam-topo-worker:latest topo`. To rerun a worker by hand,
+run the image with `JOB_ID=<id>` and the DB/S3 env pointing at the dev stack;
+it claims only a `pending` job.
 
 The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.
