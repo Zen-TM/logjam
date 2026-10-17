@@ -22,6 +22,9 @@ __pycache__/
 # Sanitised prod DB dumps written by `make snapshot`
 snapshots/*.sql
 
+# Sample inputs fetched by scripts/sample-data.sh
+.cache/
+
 # Map archives are large and regenerable — never committed
 *.pmtiles
 
