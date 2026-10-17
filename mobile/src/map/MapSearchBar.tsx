@@ -46,6 +46,7 @@ import {
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_DEBOUNCE_MS,
   PLACE_SEARCH_MIN_QUERY_LENGTH,
+  placeResultDetail,
   searchLocationsLabel,
   searchPlaces,
   type GeocodeResult,
@@ -405,7 +406,7 @@ export function MapSearchBar({
                 }
                 case "place": {
                   const { place } = row;
-                  const what = placeKindNear(place);
+                  const what = placeResultDetail(place);
                   return (
                     <Pressable
                       key={`${place.lat},${place.lon},${place.name}`}
@@ -574,10 +575,3 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   resultText: { ...textRole.detail, color: theme.text },
 }));
-
-/** "Peak near Katoomba": what it is, and the town that tells two apart. */
-function placeKindNear(place: PlaceResult): string {
-  return place.near && place.near !== place.name
-    ? `${place.kind} near ${place.near}`
-    : place.kind;
-}
