@@ -70,6 +70,16 @@ as below. In full:
   differently as the plan and apply identities). A spurious one is fixed by
   stripping that attribute for its resource type, and restarts the four
   weeks. Flipping the variable is a reviewed PR.
+- **Update 2026-10-17: `PLAN_VALUE_CHECK` is `enforce`.** The trial ran from
+  2026-10-02 over eleven apply runs (fourteen root jobs; two were refused by
+  the address fingerprint before the value check). The one value mismatch was
+  #281: its plan ran before `PLAN_FINGERPRINT_KEY` moved into the
+  `terraform-plan` and `prod` Environments, so the plan job read the old
+  repository secret and the apply read the new Environment secret, and every
+  changed resource's HMAC differed while the plans were identical and
+  CloudTrail shows no hand change. A key migration is not a planned value
+  that moved, so no attribute was stripped. The maintainer cut the four weeks
+  to 15 days. Everything else above stands.
 - The rest of 0024 as it was. The plan comment leads with counts and every
   delete, replace and forget address; a truncated comment keeps that header
   and the end of the plan text, and one whose header alone won't fit carries
