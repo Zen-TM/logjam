@@ -94,7 +94,7 @@ const METERED_ROWS: {
   {
     job: "placeNames",
     title: "Place names for search",
-    subtitle: "About 5 MB a month.",
+    subtitle: "About 4 MB a month.",
   },
   {
     job: "sync",

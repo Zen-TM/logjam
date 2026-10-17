@@ -64,11 +64,20 @@ const MIN_INTERVAL_MS = 10_000;
 export type PlaceRegistryStatus = {
   /** The build on this phone, or null when it has none. */
   stored: PlaceRegistryPointer | null;
+  /** What the stored build takes on disk: the pointer's `bytes` is the
+   *  download, gzipped. */
+  storedBytes: number;
+  /** The newest build this session has seen, stored or not, for the size of
+   *  a download not yet made. */
+  latest: PlaceRegistryPointer | null;
   downloading: boolean;
 };
 
+const initial = readStoredPointer();
 let status: PlaceRegistryStatus = {
-  stored: readStoredPointer(),
+  stored: initial,
+  storedBytes: initial ? diskBytes(initial) : 0,
+  latest: initial,
   downloading: false,
 };
 const listeners = new Set<() => void>();
@@ -108,6 +117,14 @@ function dataUri(pointer: PlaceRegistryPointer): string {
   return `${PLACE_REGISTRY_DIR}${pointer.path}`;
 }
 
+function diskBytes(pointer: PlaceRegistryPointer): number {
+  try {
+    return new File(dataUri(pointer)).size;
+  } catch {
+    return 0;
+  }
+}
+
 /** The index, if it is loaded. Synchronous, for a search on every keystroke. */
 export function placeIndex(): PlaceIndex | null {
   return index;
@@ -140,7 +157,7 @@ export function loadPlaceIndex(): Promise<PlaceIndex | null> {
       await FileSystem.deleteAsync(POINTER_URI, { idempotent: true }).catch(
         () => {},
       );
-      publish({ stored: null });
+      publish({ stored: null, storedBytes: 0 });
       return null;
     })
     .finally(() => {
@@ -214,6 +231,7 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
   try {
     const pointer = await fetchPointer();
     if (!pointer) return "failed";
+    publish({ latest: pointer });
     if (pointer.version === status.stored?.version) return "current";
     publish({ downloading: true });
     await installBuild(pointer);
@@ -278,7 +296,7 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   }
   // The next search builds the new one.
   index = null;
-  publish({ stored: pointer });
+  publish({ stored: pointer, storedBytes: diskBytes(pointer) });
 }
 
 /** Delete the file and stop refreshing it, until the user asks again. */
@@ -287,7 +305,7 @@ export async function removePlaceRegistry(): Promise<void> {
   await fetching;
   await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
   index = null;
-  publish({ stored: null });
+  publish({ stored: null, storedBytes: 0 });
 }
 
 /** Settings → Map's Download: wanted from now on, on any connection. */

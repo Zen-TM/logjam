@@ -522,8 +522,9 @@ function sensorLoggingSubtitle(
   return `${what} Logging now — ${mb} MB.`;
 }
 
-/** About what a build weighs, for the price before the first download. */
-const PLACE_NAMES_ESTIMATE = "About 5 MB";
+/** The download's price before this phone has seen a pointer: a build is
+ *  4.4 MB gzipped. */
+const PLACE_NAMES_ESTIMATE = "About 4 MB";
 
 const DOWNLOAD_OUTCOME: Record<FetchOutcome, string | null> = {
   updated: null,
@@ -538,7 +539,7 @@ function PlaceNamesRow({
 }: {
   notify: (text: string, tone?: ToastMessage["tone"]) => void;
 }) {
-  const { stored, downloading } = usePlaceRegistryStatus();
+  const { stored, storedBytes, latest, downloading } = usePlaceRegistryStatus();
   const online = useConnectivity() === "online";
 
   const download = () => {
@@ -571,9 +572,11 @@ function PlaceNamesRow({
   const subtitle = downloading
     ? "Downloading…"
     : stored
-      ? `${formatDateKey(`${stored.version}T00:00:00.000Z`)} · ${formatBytes(stored.bytes)}`
+      ? `${formatDateKey(`${stored.version}T00:00:00.000Z`)} · ${formatBytes(storedBytes)}`
       : online
-        ? PLACE_NAMES_ESTIMATE
+        ? latest
+          ? `About ${formatBytes(latest.bytes)}`
+          : PLACE_NAMES_ESTIMATE
         : unavailableReasonText("needs-connection");
 
   return (
