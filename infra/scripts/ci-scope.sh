@@ -106,7 +106,7 @@ self_test() {
   # Every area ci.yml reads is declared here, and the reverse, so an area
   # added on one side only fails here rather than running or skipping wrong.
   local yml declared
-  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z_]+' "$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
+  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z0-9_]+' "$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
   declared=$(tr ' ' '\n' <<<"$AREAS" | sort -u | tr '\n' ' ')
   if [ "$yml" = "$declared" ]; then echo "ok   — ci.yml reads exactly the declared areas"; else echo "FAIL — ci.yml reads [$yml], declared [$declared]"; fails=1; fi
 
