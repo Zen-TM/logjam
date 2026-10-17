@@ -12,12 +12,14 @@
 //    with them.
 //  - **The error goes directly above the button it belongs to** (shared/DESIGN.md §11), never at
 //    the top of the form, and a field's own complaint goes under the field.
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
-import { FRIENDS } from "@logjam/shared";
+import SignInTerrain from "./SignInTerrain";
+import useSignInArea from "./useSignInArea";
+import { FRIENDS, NSW_5M } from "@logjam/shared";
 import { pendingFriendInvite } from "../pendingFriendInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
@@ -36,6 +38,38 @@ function Brand() {
       <BrandMark className={classes.brandMark} />
       <BrandWordmark className={classes.brandWordmark} />
     </div>
+  );
+}
+
+function Frame({ children }: { children: ReactNode }) {
+  const area = useSignInArea();
+  return (
+    <div className={classes.container}>
+      <SignInTerrain area={area} />
+      <main className={classes.panel}>
+        {children}
+        <div className={classes.footer}>
+          <Footer />
+          {/* The terrain's licence credit (ADR 0031) on a phone, where the
+              card covers the corner the credit sits in when wide. Its line
+              for the area's name is kept from the start, so the card does not
+              move when the name arrives. */}
+          <p className={classes.credit}>
+            <span className={classes.creditPlace}>{area?.terrain.name}</span>
+            {NSW_5M.credit}
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Intro() {
+  return (
+    <p className={classes.intro}>
+      A private map and logbook for canyoning in New South Wales. Other people
+      see a place only when you share it with them.
+    </p>
   );
 }
 
@@ -209,7 +243,7 @@ function SignIn({
 
   if (authState === "confirmSignUp") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form className={classes.form} noValidate onSubmit={handleConfirm}>
           <Brand />
           <p className={classes.subtitle}>
@@ -250,16 +284,13 @@ function SignIn({
               : "Resend code"}
           </Button>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
   if (authState === "forgotPassword") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form
           className={classes.form}
           noValidate
@@ -297,16 +328,13 @@ function SignIn({
             </button>
           </p>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
   if (authState === "confirmForgotPassword") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form
           className={classes.form}
           noValidate
@@ -357,18 +385,16 @@ function SignIn({
             </button>
           </p>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
   if (authState === "signUp") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
+          <Intro />
           {pendingFriendInvite() && (
             <p className={classes.successBanner} role="status">
               {FRIENDS.copy.inviteSignIn}
@@ -459,18 +485,16 @@ function SignIn({
             </button>
           </p>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
   // Default: signIn
   return (
-    <div className={classes.container}>
+    <Frame>
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
+        <Intro />
         {pendingFriendInvite() && (
           <p className={classes.successBanner} role="status">
             {FRIENDS.copy.inviteSignIn}
@@ -528,10 +552,7 @@ function SignIn({
           </button>
         </p>
       </form>
-      <div className={classes.footerWrap}>
-        <Footer />
-      </div>
-    </div>
+    </Frame>
   );
 }
 

@@ -1,58 +1,81 @@
+/* The card floats left of centre over the terrain, as Logjam Web's panel
+   sits beside its map. Where it sits is two properties, because the terrain's
+   corner credit (SignInTerrain.module.css) keeps clear of it by the same two. */
 .container {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-page);
+  --card-inset: clamp(var(--space-3), 9vw, 9rem);
+  --card-width: 24rem;
   position: relative;
-  padding-bottom: 56px;
-}
-
-.footerWrap {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-}
-
-.form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 320px;
-  max-width: calc(100vw - 2 * var(--gutter));
-  padding: var(--gutter);
-  box-sizing: border-box;
-  background-color: var(--color-card);
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--space-4) var(--card-inset);
+}
+
+.panel {
+  position: relative;
+  width: 100%;
+  max-width: var(--card-width);
+  padding: var(--space-4) var(--space-4) 0;
+  background-color: var(--color-page);
   border: var(--hairline);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-modal);
 }
 
-.brand {
+.form {
   display: flex;
   flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.footer {
+  margin: var(--space-2) calc(-1 * var(--space-4)) 0;
+  border-top: var(--hairline);
+}
+
+/* Narrow only: wide, the credit is in the terrain's corner, clear of the card. */
+.credit {
+  composes: meta from "../textRoles.generated.module.css";
+  display: none;
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-1-5);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.creditPlace {
+  display: block;
+  min-height: 1lh;
+}
+
+.brand {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: var(--space-1-5);
+  margin-bottom: var(--space-1);
   color: var(--color-text);
 }
 
 .brandMark {
-  width: 48px;
-  height: 48px;
+  width: auto;
+  height: 2.75rem;
 }
 
 .brandWordmark {
-  width: 140px;
+  width: 8.75rem;
   height: auto;
 }
 
+.intro {
+  composes: paragraph from "../textRoles.generated.module.css";
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+}
+
 .subtitle {
-  composes: detail from "../textRoles.generated.module.css";
-  margin: 0;
-  text-align: center;
+  composes: paragraph from "../textRoles.generated.module.css";
+  margin: 0 0 var(--space-2);
   color: var(--color-text-muted);
 }
 
@@ -60,13 +83,13 @@
 .consent {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 /* Lined up with the checkbox text above it, not with its box. */
 .legal {
   composes: detail from "../textRoles.generated.module.css";
-  margin: 0 0 0 30px;
+  margin: 0 0 0 1.875rem;
   color: var(--color-text-muted);
 }
 
@@ -89,21 +112,19 @@
 .switchText {
   composes: detail from "../textRoles.generated.module.css";
   margin: 0;
-  text-align: center;
   color: var(--color-text-muted);
 }
 
 .successBanner {
   composes: body from "../textRoles.generated.module.css";
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--space-1) var(--space-1-5);
   border-radius: var(--radius-sm);
   background-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
   /* Accent as TEXT on its own 15% wash is 2.96–3.19:1 — a wash does not carry
    * the ratio the flat page colour does. `text` on the same wash is
    * 5.24–6.72:1, and the pair is in the contrast script under it. */
   color: var(--color-text);
-  text-align: center;
 }
 
 .link {
@@ -115,4 +136,26 @@
   font-family: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Narrow, the terrain is a band above a card that fills the width. */
+@media (max-width: 768px) {
+  .container {
+    justify-content: flex-start;
+    padding: 30dvh var(--space-2) 0;
+  }
+
+  .panel {
+    max-width: none;
+    padding: var(--space-3) var(--space-2) 0;
+  }
+
+  .footer {
+    margin: var(--space-2) calc(-1 * var(--space-2)) 0;
+  }
+
+  .credit {
+    display: block;
+    padding: 0 var(--space-2) var(--space-1-5);
+  }
 }
