@@ -1,0 +1,11 @@
+{
+  "headers": [
+    "Name",
+    "Coordinates",
+    "Rating"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "unknown",
+  "blocked": "not a place list or logbook"
+}

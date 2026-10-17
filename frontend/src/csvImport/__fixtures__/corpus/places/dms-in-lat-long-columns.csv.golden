@@ -1,0 +1,22 @@
+{
+  "headers": [
+    "Name",
+    "Latitude",
+    "Longitude"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "Name": "name",
+    "Latitude": "latitude",
+    "Longitude": "longitude"
+  },
+  "rows": [],
+  "warnings": [
+    "Row 2: latitude \"33°33'33.12\"S\" couldn't be read — skipped",
+    "Row 3: latitude \"33 18 0 S\" couldn't be read — skipped"
+  ],
+  "droppedRows": 2,
+  "matches": []
+}

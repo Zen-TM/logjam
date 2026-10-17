@@ -1,0 +1,18 @@
+{
+  "headers": [
+    "Canyon",
+    "Lat",
+    "Long",
+    "Grade"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "Canyon": "discard",
+    "Lat": "latitude",
+    "Long": "longitude",
+    "Grade": "discard"
+  },
+  "blocked": "no column for name"
+}
