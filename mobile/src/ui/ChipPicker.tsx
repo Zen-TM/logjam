@@ -1,10 +1,5 @@
 import { useRef, useState } from "react";
-import {
-  Text,
-  TextInput,
-  View,
-  type TextInputInstance,
-} from "react-native";
+import { Text, TextInput, View, type TextInputInstance } from "react-native";
 
 import {
   formRhythm,
