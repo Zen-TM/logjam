@@ -44,6 +44,7 @@ import { config } from "../config";
 import { subscribeReconnect } from "../map/connectivity";
 import { readPref, writePref } from "../prefsDb";
 import type { ToastMessage } from "../ui";
+import { assertSpaceFor, hasSpaceFor, NotEnoughSpaceError } from "./freeSpace";
 import { PLACE_REGISTRY_DIR } from "./localStores";
 import { canRunNow } from "./networkPolicy";
 import { isOfflineOnly } from "./offlineOnlyMode";
@@ -61,6 +62,10 @@ const WANTED_PREF_KEY = "placeRegistryWanted";
  *  by the content-hashed path, not the version, which is the extract's date
  *  and stays the same for a fixed rebuild of the same extract. */
 const UNREADABLE_PREF_KEY = "placeRegistryUnreadable";
+
+/** Bytes on disk per byte downloaded: the file is saved decompressed. The
+ *  2026-10-15 build is 14,657,625 bytes of JSON from 4,433,458 gzipped. */
+const DISK_PER_DOWNLOADED_BYTE = 3.31;
 
 /** The pointer is a few bytes; a CDN that sits on it is down. */
 const POINTER_TIMEOUT_MS = 15_000;
@@ -255,7 +260,7 @@ async function readFile(
 export type FetchOutcome =
   | "current"
   | "updated"
-  /** No connection, or mobile data not allowed. */
+  /** No connection, mobile data not allowed, or no space for a refresh. */
   | "skipped"
   | "offline-only"
   /** The CDN's build is one this phone could not index before. */
@@ -267,7 +272,9 @@ export type FetchOutcome =
  *
  * `allowMetered` is the user's answer for a fetch they started (a region
  * download's "use mobile data", or a press in Settings); a refresh leaves it
- * out and asks the `placeNames` connection policy instead.
+ * out and asks the `placeNames` connection policy instead. A fetch the user
+ * started rejects with NotEnoughSpaceError when the file would not fit; a
+ * refresh skips.
  */
 export function fetchPlaceRegistry(options: {
   allowMetered?: boolean;
@@ -288,10 +295,18 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
     publish({ latest: pointer });
     if (pointer.version === status.stored?.version) return "current";
     if (pointer.path === readPref(UNREADABLE_PREF_KEY)) return "unreadable";
+    // ADR 0005: nothing large is written without asking whether it fits.
+    const onDisk = Math.ceil(pointer.bytes * DISK_PER_DOWNLOADED_BYTE);
+    if (allowMetered === undefined) {
+      if (!(await hasSpaceFor(onDisk))) return "skipped";
+    } else {
+      await assertSpaceFor(onDisk);
+    }
     publish({ downloading: true });
     await installBuild(pointer);
     return "updated";
   } catch (err) {
+    if (err instanceof NotEnoughSpaceError) throw err;
     console.error(err);
     return "failed";
   } finally {
@@ -411,8 +426,11 @@ export async function requestPlaceRegistry(): Promise<FetchOutcome> {
     if (problem) toast(problem);
     return outcome;
   } catch (err) {
-    console.error(err);
-    toast(DOWNLOAD_PROBLEM.failed ?? "");
+    toast(
+      err instanceof NotEnoughSpaceError
+        ? err.message
+        : (DOWNLOAD_PROBLEM.failed ?? ""),
+    );
     return "failed";
   }
 }
@@ -427,7 +445,10 @@ export function placeRegistryWithRegion(allowMetered: boolean): void {
   if (wanted === "off") return;
   if (wanted !== "on") writePref(WANTED_PREF_KEY, "on");
   if (hasPlaceRegistry()) return;
-  void fetchPlaceRegistry({ allowMetered });
+  // Silent, the space refusal too: the maps' own download says if they fit.
+  fetchPlaceRegistry({ allowMetered }).catch((err: unknown) =>
+    console.error(err),
+  );
 }
 
 /** The automatic check: only for a phone that wants the file. */

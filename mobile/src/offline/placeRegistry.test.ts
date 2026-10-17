@@ -25,6 +25,7 @@ const prefs = new Map<string, string>();
 const reads: string[] = [];
 const artifacts = { kinds: [] as string[] };
 const network = { expensive: false, connected: true };
+const disk = { free: 1e12 };
 /** A filesystem call to fail once, by name. */
 const failing = new Set<string>();
 /** Reads held until their promise settles, by URI. */
@@ -44,6 +45,7 @@ vi.mock("expo-file-system/legacy", () => ({
       }
     }
   },
+  getFreeDiskStorageAsync: async () => disk.free,
   moveAsync: async ({ from, to }: { from: string; to: string }) => {
     files.set(to, files.get(from) as Uint8Array);
     files.delete(from);
@@ -198,6 +200,7 @@ beforeEach(() => {
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
+  disk.free = 1e12;
   failing.clear();
   held.clear();
   fetchMock.mockClear();
@@ -392,6 +395,35 @@ describe("a bad download never replaces a good file", () => {
     const registry = await load();
     expect(await registry.refreshPlaceRegistry()).toBe("failed");
     expect(registry.hasPlaceRegistry()).toBe(true);
+  });
+});
+
+describe("free space", () => {
+  // The file is saved decompressed, so it needs more than the pointer's bytes.
+  const needs = (built: ReturnType<typeof build>) => built.plain.length;
+
+  // Mutation: drop the `assertSpaceFor` call.
+  it("refuses a download the user asked for, saying so", async () => {
+    const built = build("2026-10-15");
+    publish(built);
+    disk.free = needs(built);
+    const registry = await load();
+    const toasts: string[] = [];
+    registry.onPlaceRegistryToast(({ text }) => toasts.push(text));
+    expect(await registry.requestPlaceRegistry()).toBe("failed");
+    expect(download).not.toHaveBeenCalled();
+    expect(toasts).toEqual([expect.stringMatching(/^Needs about/)]);
+  });
+
+  // Mutation: drop the `hasSpaceFor` call.
+  it("skips a refresh that would not fit", async () => {
+    const built = build("2026-10-15");
+    prefs.set("placeRegistryWanted", "on");
+    publish(built);
+    disk.free = needs(built);
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(download).not.toHaveBeenCalled();
   });
 });
 
