@@ -176,8 +176,8 @@ updates:
     # next one is a new native build (docs/decisions/0022, 0023). The SDK's
     # own set is held below; minor updates are held as well as major ones
     # because react-native (0.x) and react move their minor with the SDK.
-    # Tracked in #244, which stays open until the next SDK's tracking issue
-    # exists; it then points these at that issue.
+    # Tracked in #244, which stays open until the next SDK's tracking issue is
+    # open; it then points these at that issue.
     ignore:
       - dependency-name: "expo"
         update-types:
