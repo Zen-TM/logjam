@@ -115,6 +115,7 @@ COPY export_worker.py /app/export_worker.py
 COPY email_send.py /app/email_send.py
 COPY push_send.py /app/push_send.py
 COPY worker_common.py /app/worker_common.py
+COPY build_place_registry.py /app/build_place_registry.py
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
 
