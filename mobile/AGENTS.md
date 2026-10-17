@@ -13,7 +13,9 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
 - **Never hand-edit `/android` or `/ios`:** add native capability with a config
   plugin and `npx expo install`. After a native change,
   `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`.
-  A release APK for a device is only `./scripts/build-local-apk.sh`.
+  A release APK for a device is only `./scripts/build-local-apk.sh`, prod-pointed
+  ones too: it bakes in `.env` unless the shell overrides it (header has the
+  recipe).
 - A second identity: `EXPO_PUBLIC_FAKE_SUB=fake-bob-sub` (dev only, baked into
   the bundle).
 - **A phone that holds a real Logjam GPS gets the dev variant:**

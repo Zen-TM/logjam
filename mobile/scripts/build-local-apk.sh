@@ -30,6 +30,13 @@
 # that works on the emulator and a physical device alike, so it never needs
 # editing per target. Never 10.0.2.2: that is emulator-only and routes nowhere
 # on a phone.
+#
+# A prod-pointed field APK is the same script with the EXPO_PUBLIC_* values
+# overridden in the shell, which Expo prefers to `.env`:
+#   LOGJAM_SENSOR_LOG=1 EXPO_PUBLIC_AUTH_MODE=cognito \
+#   EXPO_PUBLIC_API_URL=https://api.logjamnsw.com \
+#   EXPO_PUBLIC_WEB_URL=https://logjamnsw.com ./scripts/build-local-apk.sh
+# The Cognito ids still come from `.env`.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -37,7 +44,7 @@ cd "$(dirname "$0")/.."
 # config.ts throws at launch when either is unset: fail before the build, not
 # on the device after it.
 for v in EXPO_PUBLIC_API_URL EXPO_PUBLIC_WEB_URL; do
-  grep -qE "^$v=.+" .env || { echo "$v is not set in .env" >&2; exit 1; }
+  [ -n "${!v:-}" ] || grep -qE "^$v=.+" .env || { echo "$v is not set in .env" >&2; exit 1; }
 done
 
 install_apk=1
@@ -69,10 +76,10 @@ echo "==> assembleRelease"
 # the first place.
 echo "==> verifying the APK"
 
-# Grep for the URL .env ASKS for, not for "some loopback URL" — the bundle also
+# Grep for the URL the build ASKS for, not for "some loopback URL" — the bundle also
 # contains Metro's own http://localhost:8081, which matches a loose pattern and
 # makes a stale API URL look fine.
-want=$(grep -E '^EXPO_PUBLIC_API_URL=' .env | cut -d= -f2- | tr -d '"'"'"'\r')
+want=${EXPO_PUBLIC_API_URL:-$(grep -E '^EXPO_PUBLIC_API_URL=' .env | cut -d= -f2- | tr -d '"'"'"'\r')}
 if [ -z "$want" ]; then
   echo "    EXPO_PUBLIC_API_URL is not set in .env" >&2
   exit 1
@@ -80,7 +87,7 @@ fi
 if grep -aqF "$want" "$bundle_dir/index.android.bundle"; then
   echo "    API URL:   $want (in the bundle)"
 else
-  echo "    API URL:   MISSING — .env says $want but the bundle does not contain it." >&2
+  echo "    API URL:   MISSING — the build asked for $want but the bundle does not contain it." >&2
   echo "               The JS bundle is stale; delete $bundle_dir and rebuild." >&2
   exit 1
 fi
