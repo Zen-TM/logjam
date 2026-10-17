@@ -49,7 +49,6 @@ import {
   searchLocationsLabel,
   searchPlaces,
   type GeocodeResult,
-  type PlaceIndex,
 } from "@logjam/shared";
 
 import {
@@ -171,20 +170,18 @@ export function MapSearchBar({
     accountState,
     online,
   );
-  const [index, setIndex] = useState<PlaceIndex | null>(placeIndex);
+  // Read from the store on every render, never copied into state: Remove and
+  // a refresh drop it there, and a copy here would keep it alive (and a
+  // refreshed build beside it).
+  const index = registry.stored ? placeIndex() : null;
   // Built on the first open, not with the map: nobody who never searches
   // carries it. The build takes a few seconds, in slices; until it is ready
   // the user's own matches show and a loading row stands for the rest.
   useEffect(() => {
-    if (!expanded || registry.stored === null) return;
-    let live = true;
-    void loadPlaceIndex().then((loaded) => {
-      if (live) setIndex(loaded);
-    });
-    return () => {
-      live = false;
-    };
-  }, [expanded, registry.stored]);
+    if (expanded && registry.stored !== null && index === null) {
+      void loadPlaceIndex();
+    }
+  }, [expanded, registry.stored, index]);
   const placeQuery =
     expanded && trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH;
   const devicePlaces = useMemo(

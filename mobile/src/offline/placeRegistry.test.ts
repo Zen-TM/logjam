@@ -25,6 +25,10 @@ const prefs = new Map<string, string>();
 const reads: string[] = [];
 const artifacts = { kinds: [] as string[] };
 const network = { expensive: false, connected: true };
+/** A filesystem call to fail once, by name. */
+const failing = new Set<string>();
+/** Reads held until their promise settles, by URI. */
+const held = new Map<string, Promise<void>>();
 const offlineOnly = { on: false };
 
 const download = vi.hoisted(() => vi.fn());
@@ -82,6 +86,8 @@ vi.mock("expo-file-system", () => ({
     }
     async text() {
       reads.push(`text ${this.uri}`);
+      if (failing.delete("read")) throw new Error("read failed");
+      await held.get(this.uri);
       return strFromU8(await this.read());
     }
     async bytes() {
@@ -128,11 +134,11 @@ const fetchMock = vi.fn(async (url: string) => {
 });
 vi.stubGlobal("fetch", fetchMock);
 
-function build(version: string, names = ["Mount Solitary"]) {
+function build(version: string, names = ["Mount Solitary"], format = 1) {
   const path = `places-${version}.json`;
   const plain = strToU8(
     JSON.stringify({
-      format: 1,
+      format,
       version,
       attribution: "© OpenStreetMap contributors",
       licence: "ODbL-1.0",
@@ -192,6 +198,8 @@ beforeEach(() => {
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
+  failing.clear();
+  held.clear();
   fetchMock.mockClear();
   download.mockReset().mockImplementation(async (url: string, to: string) => {
     const body = served.get(url);
@@ -387,7 +395,72 @@ describe("a bad download never replaces a good file", () => {
   });
 });
 
+describe("a load that fails", () => {
+  // Mutation: forget the file on any error.
+  it("keeps the file after a read that failed for another reason", async () => {
+    holdOnPhone(build("2026-09-15", ["Narrow Neck"]));
+    failing.add("read");
+    const registry = await load();
+    expect(await registry.loadPlaceIndex()).toBeNull();
+    expect(registry.hasPlaceRegistry()).toBe(true);
+    expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+  });
+
+  // Mutation: keep a file that does not match its pointer.
+  it("forgets a file that is not the build its pointer names", async () => {
+    const built = build("2026-09-15");
+    holdOnPhone(built, half(built.plain));
+    const registry = await load();
+    expect(await registry.loadPlaceIndex()).toBeNull();
+    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect(files.has(`${DIR}pointer.json`)).toBe(false);
+  });
+
+  // Mutation: drop the `UNREADABLE_PREF_KEY` check in `runFetch`, or key it
+  // by the version rather than the path.
+  it("never fetches again a build that would not index, but fetches its fixed rebuild", async () => {
+    const unindexable = build("2026-10-15", ["Narrow Neck"], 2);
+    prefs.set("placeRegistryWanted", "on");
+    publish(unindexable);
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect(await registry.loadPlaceIndex()).toBeNull();
+    expect(registry.hasPlaceRegistry()).toBe(false);
+    download.mockClear();
+    expect(await registry.refreshPlaceRegistry()).toBe("unreadable");
+    expect(download).not.toHaveBeenCalled();
+    // Rebuilt from the same extract: same version, a new content hash.
+    const fixed = build("2026-10-15", ["Narrow Neck"]);
+    fixed.pointer.path = "places-2026-10-15-fixed.json";
+    publish(fixed);
+    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+  });
+});
+
 describe("the index in memory", () => {
+  // Mutation: share one load across builds (`loading ??=`).
+  it("is never the replaced build's, when a refresh lands mid-load", async () => {
+    holdOnPhone(build("2026-09-15"));
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15", ["Wollangambe"]));
+    let release = () => {};
+    held.set(
+      `${DIR}places-2026-09-15.json`,
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const registry = await load();
+    const old = registry.loadPlaceIndex();
+    await registry.refreshPlaceRegistry();
+    const fresh = registry.loadPlaceIndex();
+    release();
+    expect(await old).toBeNull();
+    expect((await fresh)?.names).toEqual(["Wollangambe"]);
+    expect(registry.placeIndex()?.names).toEqual(["Wollangambe"]);
+  });
+
   it("is dropped by a refresh, and the next search builds the new one", async () => {
     holdOnPhone(build("2026-09-15"));
     prefs.set("placeRegistryWanted", "on");
@@ -412,6 +485,16 @@ describe("the index in memory", () => {
       timer.mock.calls.filter(([, ms]) => ms === 0).length,
     ).toBeGreaterThan(1);
     timer.mockRestore();
+  });
+
+  // Mutation: leave `index` set in `removePlaceRegistry`. The search box reads
+  // it from here on every render, never a copy (MapSearchBar.tsx).
+  it("is freed by Remove", async () => {
+    holdOnPhone(build("2026-09-15"));
+    const registry = await load();
+    await registry.loadPlaceIndex();
+    await registry.removePlaceRegistry();
+    expect(registry.placeIndex()).toBeNull();
   });
 
   it("is not built by a refresh nobody searched after", async () => {

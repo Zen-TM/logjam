@@ -530,6 +530,8 @@ const DOWNLOAD_OUTCOME: Record<FetchOutcome, string | null> = {
   updated: null,
   current: null,
   skipped: unavailableReasonText("needs-connection"),
+  unreadable:
+    "The latest place names can't be read, so Logjam GPS waits for the next build.",
   failed: "Download didn't finish.",
 };
 

@@ -55,6 +55,11 @@ const DOWNLOAD_URI = `${PLACE_REGISTRY_DIR}download.tmp`;
  *  (null) on a phone that has done neither. */
 const WANTED_PREF_KEY = "placeRegistryWanted";
 
+/** The path of a build whose index would not build. Not fetched again; keyed
+ *  by the content-hashed path, not the version, which is the extract's date
+ *  and stays the same for a fixed rebuild of the same extract. */
+const UNREADABLE_PREF_KEY = "placeRegistryUnreadable";
+
 /** The pointer is a few bytes; a CDN that sits on it is down. */
 const POINTER_TIMEOUT_MS = 15_000;
 
@@ -82,7 +87,11 @@ let status: PlaceRegistryStatus = {
 };
 const listeners = new Set<() => void>();
 let index: PlaceIndex | null = null;
-let loading: Promise<PlaceIndex | null> | null = null;
+/** The load in flight, and the build it is for. */
+let loading: {
+  build: PlaceRegistryPointer;
+  promise: Promise<PlaceIndex | null>;
+} | null = null;
 let fetching: Promise<FetchOutcome> | null = null;
 let lastCheckAt = 0;
 
@@ -136,34 +145,59 @@ export function hasPlaceRegistry(): boolean {
 }
 
 /**
- * Load the stored file into memory, once. Null when there is none or it
- * cannot be read; a later call tries again.
+ * Load the stored file into memory, once per build; subscribers hear when it
+ * is ready. Null when there is none, it cannot be read, or another build
+ * replaced it meanwhile; a later call tries again.
  */
 export function loadPlaceIndex(): Promise<PlaceIndex | null> {
   if (index) return Promise.resolve(index);
   const stored = status.stored;
   if (!stored) return Promise.resolve(null);
-  loading ??= readFile(dataUri(stored), stored)
-    .then((file) => indexPlaceRegistryInSlices(file, yieldToEventLoop))
-    .then((loaded) => {
-      // A build swapped in meanwhile is loaded on the next open instead.
-      if (status.stored === stored) index = loaded;
-      return loaded;
-    })
-    .catch(async (err: unknown) => {
-      console.error(err);
-      if (status.stored !== stored) return null;
-      // Forgotten, so the next check downloads it again.
+  if (loading?.build === stored) return loading.promise;
+  const promise: Promise<PlaceIndex | null> = buildIndex(stored).finally(() => {
+    if (loading?.promise === promise) loading = null;
+  });
+  loading = { build: stored, promise };
+  return promise;
+}
+
+/** The file is not the build its pointer names. */
+class MismatchError extends Error {}
+
+async function buildIndex(
+  stored: PlaceRegistryPointer,
+): Promise<PlaceIndex | null> {
+  try {
+    const file = await readFile(dataUri(stored), stored);
+    const built = await indexPlaceRegistryInSlices(
+      file,
+      yieldToEventLoop,
+    ).catch((err: unknown) => {
+      // Fetched again, it would be downloaded and fail at every search.
+      writePref(UNREADABLE_PREF_KEY, stored.path);
+      throw new MismatchError(String(err));
+    });
+    if (status.stored !== stored) return null;
+    index = built;
+    publish({});
+    return built;
+  } catch (err) {
+    console.error(err);
+    // Forgotten, so the next check downloads it again; only when the file is
+    // wrong and the pointer on disk still names it. A read that failed for
+    // another reason keeps it for the next open.
+    if (
+      err instanceof MismatchError &&
+      status.stored === stored &&
+      readStoredPointer()?.version === stored.version
+    ) {
       await FileSystem.deleteAsync(POINTER_URI, { idempotent: true }).catch(
         () => {},
       );
       publish({ stored: null, storedBytes: 0 });
-      return null;
-    })
-    .finally(() => {
-      loading = null;
-    });
-  return loading;
+    }
+    return null;
+  }
 }
 
 /** A timer, not a microtask: the map's touches and frames run between
@@ -193,27 +227,44 @@ async function readFile(
     // The pointer's `bytes` is the gzipped size, so only this path can check.
     const info = await FileSystem.getInfoAsync(uri);
     if (!info.exists || info.size !== pointer.bytes) {
-      throw new Error("Place registry file is not the size of its pointer");
+      throw new MismatchError("Place registry file is not its pointer's size");
     }
-    text = strFromU8(gunzipSync(await new File(uri).bytes()));
+    const bytes = await new File(uri).bytes();
+    try {
+      text = strFromU8(gunzipSync(bytes));
+    } catch {
+      throw new MismatchError("Place registry file is not gzip");
+    }
   } else {
     text = await new File(uri).text();
   }
-  const file = JSON.parse(text) as PlaceRegistryFile;
+  let file: PlaceRegistryFile;
+  try {
+    file = JSON.parse(text) as PlaceRegistryFile;
+  } catch {
+    throw new MismatchError("Place registry file is not JSON");
+  }
   if (file.version !== pointer.version || !Array.isArray(file.names)) {
-    throw new Error("Place registry file does not match its pointer");
+    throw new MismatchError("Place registry file does not match its pointer");
   }
   return file;
 }
 
-export type FetchOutcome = "current" | "updated" | "skipped" | "failed";
+export type FetchOutcome =
+  | "current"
+  | "updated"
+  /** No connection, or mobile data not allowed. */
+  | "skipped"
+  /** The CDN's build is one this phone could not index before. */
+  | "unreadable"
+  | "failed";
 
 /**
  * Bring this phone's file up to the CDN's current build.
  *
  * `allowMetered` is the user's answer for a fetch they started (a region
- * download's "use mobile data", or a press in Settings); a refresh asks the
- * `placeNames` connection policy instead.
+ * download's "use mobile data", or a press in Settings); a refresh leaves it
+ * out and asks the `placeNames` connection policy instead.
  */
 export function fetchPlaceRegistry(options: {
   allowMetered?: boolean;
@@ -233,6 +284,7 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
     if (!pointer) return "failed";
     publish({ latest: pointer });
     if (pointer.version === status.stored?.version) return "current";
+    if (pointer.path === readPref(UNREADABLE_PREF_KEY)) return "unreadable";
     publish({ downloading: true });
     await installBuild(pointer);
     return "updated";
@@ -286,6 +338,11 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   await FileSystem.deleteAsync(target, { idempotent: true });
   await FileSystem.moveAsync({ from: DOWNLOAD_URI, to: target });
   await FileSystem.writeAsStringAsync(POINTER_URI, JSON.stringify(pointer));
+  // Published before the old file goes, so a load of the old build that fails
+  // now sees it was replaced and forgets nothing. The next search builds the
+  // new one.
+  index = null;
+  publish({ stored: pointer, storedBytes: diskBytes(pointer) });
   // Only the new build is kept: the old file, and anything a crash left.
   for (const name of await FileSystem.readDirectoryAsync(PLACE_REGISTRY_DIR)) {
     if (name !== pointer.path && name !== "pointer.json") {
@@ -294,15 +351,12 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
       });
     }
   }
-  // The next search builds the new one.
-  index = null;
-  publish({ stored: pointer, storedBytes: diskBytes(pointer) });
 }
 
 /** Delete the file and stop refreshing it, until the user asks again. */
 export async function removePlaceRegistry(): Promise<void> {
   writePref(WANTED_PREF_KEY, "off");
-  await fetching;
+  await fetching?.catch(() => {});
   await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
   index = null;
   publish({ stored: null, storedBytes: 0 });
