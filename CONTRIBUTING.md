@@ -37,6 +37,12 @@ fix, or a small bug fix that starts with a failing test.
 Unsure which? Open the issue. A short issue costs less than a pull request
 that gets turned down.
 
+A proposal too big for one pull request keeps its design in the proposal and
+splits the work into sub-issues of it, one for each part that can merge on its
+own, opened with the task form. Order them with GitHub's "blocked by" links,
+not in the text. Each pull request closes its sub-issue. Reasoning that must
+outlast the work goes in an [ADR](docs/decisions/README.md), not the issue.
+
 To report a bug, use the
 [bug report form](https://github.com/Zen-TM/logjam/issues/new?template=bug.yml)
 and describe it with made-up data. Work with no change users see, such as an

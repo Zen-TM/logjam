@@ -8,7 +8,9 @@ body:
       value: >
         Issues are public: use made-up data in examples. A change users would
         see is a [feature proposal](https://github.com/Zen-TM/logjam/issues/new?template=proposal.yml)
-        instead.
+        instead. Part of an accepted proposal? Open this as its sub-issue
+        (`gh issue create --parent <n>`) and link the section of the proposal
+        it builds. The design stays in the proposal.
   - type: textarea
     id: what
     attributes:

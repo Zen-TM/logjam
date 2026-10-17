@@ -103,10 +103,12 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 Proves `terraform-apply.yml` refuses a plan other than the one the PR showed,
 for both kinds of hand change ([0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
 **When:** after a change to `infra/scripts/plan-summary.mjs`, `terraform-plan.yml`
-or `terraform-apply.yml`, and before flipping the repository variable
-`PLAN_VALUE_CHECK` from `report` to `enforce`. The key is the repository
-secret `PLAN_FINGERPRINT_KEY`. Use a harmless one-tag change in
-`infra/terraform/envs/prod` as the PR, and undo every hand edit afterwards.
+or `terraform-apply.yml`, and when flipping the repository variable
+`PLAN_VALUE_CHECK` from `report` to `enforce`: the report-mode half before
+the flip, the enforce-mode half after it. The key is `PLAN_FINGERPRINT_KEY`,
+a secret of the `terraform-plan` and `prod` Environments. Use a harmless
+one-tag change in `infra/terraform/envs/prod` as the PR, and undo every hand
+edit afterwards.
 
 - [ ] **Drift on a resource the PR does not touch** (refuses now, in either
       mode). After the PR's plan comment posts, add a tag by hand to a
@@ -134,6 +136,35 @@ Time: ____ Surprises: ____
 ## Records
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->
+
+### 2026-10-17: maintainer and Claude, the apply refusal under enforce
+
+**Change under test:** `PLAN_VALUE_CHECK` = `enforce`, and the value check
+hashing `before` as well as `after`
+([0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
+
+- **The first run failed, and found a gap.** #441 added `drill =
+  "apply-refusal"` to `aws_sns_topic.alerts`; a `hand = "drill"` tag was added
+  to the topic by hand after the plan posted, then the PR merged. The apply
+  **applied** and reverted the hand tag (76 s). The check hashed only the
+  planned `after`, which is the config's tags either way, so the hand tag
+  never appeared in it — the #268 case the check exists for. #443 made the
+  HMAC cover `before` too; its new test goes red when only `after` is hashed.
+- **Then it refused correctly.** #444 removed the drill's tag; a hand tag was
+  added after its plan posted, then it merged. The apply refused 61 s after
+  the merge: "different values on 1 resource(s) … `aws_sns_topic.alerts` …
+  The values are not shown. Nothing applied." The topic kept both tags.
+- **Undo and re-run:** the hand tag was removed and the refused run re-run;
+  it applied the PR's removal 105 s later. The topic has no tags now.
+- **Not re-run:** drift on a resource the PR does not touch (unchanged since
+  #270), and the no-key case (deleting the key destroys its value; the unit
+  test in `plan-summary.test.mjs` covers the refusal).
+- The plan comment carried a `plan-values` line of `address → 16 hex` and
+  nothing else about values.
+
+Time: 76 s / 61 s / 105 s. **Surprise:** the enforce drill showed the value
+check did not catch the hand edit ADR 0026 was written for; #443 fixed it
+before the second run.
 
 ### 2026-10-02: maintainer and Lead (Claude), first full drill
 
