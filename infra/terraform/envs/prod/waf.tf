@@ -1,14 +1,7 @@
 # CloudFront WAF web ACLs (us-east-1 / CLOUDFRONT scope) created by the
 # CloudFront console's default protection. web ACL attaches to the web
 # distribution, api ACL to the api distribution (web_acl_id refs in cloudfront.tf).
-# AWS managed rule groups + (api) two rate-based rules that block.
-
-locals {
-  # Logjam Web's location search posts here as the user types, so it gets its
-  # own WAF rate limit instead of counting toward the API-wide one.
-  # Guard: run "api_search_has_its_own_rate_limit" in tests/guards.tftest.hcl.
-  api_search_path_prefix = "/places/search"
-}
+# AWS managed rule groups + (api) a 300/5min rate-based rule that blocks.
 
 resource "aws_wafv2_web_acl" "web" {
   provider = aws.us_east_1
@@ -95,10 +88,13 @@ resource "aws_wafv2_web_acl" "api" {
   rule {
     name     = "AWS-RateBasedRule-IP-300-CreatedByCloudFront"
     priority = 0
-    # Block: 300 req / 5 min / client IP, over every API path except
-    # location search (the rule at priority 4). WAF sees the true viewer IP
-    # at the edge, so users behind one NAT share this budget, and a block
-    # cuts that IP off from the whole API, Logjam Web and Logjam GPS alike.
+    # Block: 300 req / 5 min / client IP. WAF sees the true viewer IP
+    # at the edge. API traffic is XHR-only (topo tiles serve off the web
+    # distribution under /master/*, not here), so 300/5min is generous.
+    # Location search as you type (/places/search) counts here too: this
+    # distribution's CloudFront pricing plan refuses a rule scoped by URI
+    # path, so search can't have a limit of its own. Guard: run
+    # "api_rate_limit_is_one_plain_ip_rule" in tests/guards.tftest.hcl.
     action {
       block {}
     }
@@ -107,23 +103,6 @@ resource "aws_wafv2_web_acl" "api" {
         aggregate_key_type    = "IP"
         evaluation_window_sec = 300
         limit                 = 300
-        scope_down_statement {
-          not_statement {
-            statement {
-              byte_match_statement {
-                positional_constraint = "STARTS_WITH"
-                search_string         = local.api_search_path_prefix
-                field_to_match {
-                  uri_path {}
-                }
-                text_transformation {
-                  priority = 0
-                  type     = "NONE"
-                }
-              }
-            }
-          }
-        }
       }
     }
     visibility_config {
@@ -192,43 +171,6 @@ resource "aws_wafv2_web_acl" "api" {
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "AWS-AWSManagedRulesKnownBadInputsRuleSet"
-      sampled_requests_enabled   = true
-    }
-  }
-
-  rule {
-    name     = "places-search-rate-IP-1500"
-    priority = 4
-    # Block: 1500 req / 5 min / client IP on location search only, which
-    # Logjam Web calls on each debounced keystroke: about 300 a minute,
-    # room for a few heavy searchers behind one NAT. The API also limits
-    # each signed-in user to 120 a minute.
-    action {
-      block {}
-    }
-    statement {
-      rate_based_statement {
-        aggregate_key_type    = "IP"
-        evaluation_window_sec = 300
-        limit                 = 1500
-        scope_down_statement {
-          byte_match_statement {
-            positional_constraint = "STARTS_WITH"
-            search_string         = local.api_search_path_prefix
-            field_to_match {
-              uri_path {}
-            }
-            text_transformation {
-              priority = 0
-              type     = "NONE"
-            }
-          }
-        }
-      }
-    }
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "places-search-rate-IP-1500"
       sampled_requests_enabled   = true
     }
   }
