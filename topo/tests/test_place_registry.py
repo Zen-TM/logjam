@@ -30,6 +30,8 @@ _SHARED_TS = os.path.join(_HERE, "..", "..", "shared", "src", "placeRegistry.ts"
 FIXTURE_RAWS = [
     ("Katoomba", "place=town", 150.312, -33.714, []),
     ("Blackheath", "place=town", 150.285, -33.633, []),
+    # A locality inside Katoomba: Katoomba reads near Blackheath, not it.
+    ("The Gully", "place=locality", 150.316, -33.708, []),
     ("Katoomba Falls", "waterway=waterfall", 150.307, -33.730, []),
     # Two segments of one road: they merge.
     ("Katoomba Falls Road", "highway=tertiary", 150.305, -33.725, []),
@@ -58,7 +60,7 @@ def fixture_registry():
 
 
 def fixture_pointer():
-    return reg.pointer("2026-10-01", "places-2026-10-01-0123abcd.json.gz", 4_000_000)
+    return reg.pointer("2026-10-01", "places-2026-10-01-0123abcd.json", 4_000_000)
 
 
 def check_fixture(test, path, built):
@@ -166,8 +168,9 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual(near[(150.311, -33.712)], "Katoomba")
         self.assertEqual(near[(150.287, -33.632)], "Blackheath")
 
-    def test_a_settlement_is_near_another(self):
-        # Mutation: let nearest() return the settlement itself → red.
+    def test_a_settlement_is_near_another_of_its_tier(self):
+        # Mutation: let nearest() return the settlement itself, or place a
+        # town near any settlement → red.
         (katoomba,) = self.named("Katoomba")
         self.assertEqual(self.rows[katoomba[4]][0], "Blackheath")
 
@@ -235,6 +238,7 @@ class FakeS3:
 
     def upload_file(self, path, bucket, key, ExtraArgs):
         self.uploads.append((key, ExtraArgs["CacheControl"]))
+        self.args = getattr(self, "args", []) + [ExtraArgs]
 
 
 class TestUpload(unittest.TestCase):
@@ -256,11 +260,17 @@ class TestUpload(unittest.TestCase):
         reg.upload(s3, "bucket", self.data, self.pointer)
         keys = [key for key, _ in s3.uploads]
         self.assertRegex(
-            keys[0], r"^master/places/v1/places-2026-10-01-[0-9a-f]{8}\.json\.gz$"
+            keys[0], r"^master/places/v1/places-2026-10-01-[0-9a-f]{8}\.json$"
         )
         self.assertEqual(keys[1], "master/places/v1/latest.json")
         self.assertIn("immutable", s3.uploads[0][1])
         self.assertNotIn("immutable", s3.uploads[1][1])
+        # Mutation: drop ContentEncoding → red; every client would get gzip
+        # bytes and gunzip them in JavaScript, or fail to parse them.
+        self.assertEqual(s3.args[0]["ContentEncoding"], "gzip")
+        self.assertEqual(s3.args[0]["ContentType"], "application/json")
+        with open(self.pointer, encoding="utf-8") as fh:
+            self.assertEqual("master/places/v1/" + json.load(fh)["path"], keys[0])
 
     def test_refuses_a_build_far_smaller_than_the_current_one(self):
         # Mutation: drop the size check → red.

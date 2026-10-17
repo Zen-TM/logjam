@@ -273,8 +273,42 @@ function* entriesWith(hay: Haystack, word: string): Generator<number> {
 }
 
 export function indexPlaceRegistry(file: PlaceRegistryFile): PlaceIndex {
+  const build = buildPlaceIndex(file, Infinity);
+  let step = build.next();
+  while (!step.done) step = build.next();
+  return step.value;
+}
+
+/**
+ * The same index, built a slice of rows at a time with `pause()` awaited
+ * between slices, so building it never holds a phone's JS thread for long.
+ * Building normalizes every name: 0.9 s in one go on a Pixel.
+ */
+export async function indexPlaceRegistryInSlices(
+  file: PlaceRegistryFile,
+  pause: () => Promise<void>,
+  sliceRows = 20_000,
+): Promise<PlaceIndex> {
+  const build = buildPlaceIndex(file, sliceRows);
+  let step = build.next();
+  while (!step.done) {
+    await pause();
+    step = build.next();
+  }
+  return step.value;
+}
+
+function* buildPlaceIndex(
+  file: PlaceRegistryFile,
+  sliceRows: number,
+): Generator<void, PlaceIndex> {
   if (file.format !== PLACE_REGISTRY_FORMAT) {
     throw new Error(`Unknown place registry format ${String(file.format)}`);
+  }
+  const normalized = new Array<string>(file.names.length);
+  for (let at = 0; at < file.names.length; at++) {
+    normalized[at] = normalizeSearchText(file.names[at]);
+    if ((at + 1) % sliceRows === 0) yield;
   }
   const kindRanks = file.kinds.map(placeKindRank);
   const alts: string[] = [];
@@ -295,7 +329,7 @@ export function indexPlaceRegistry(file: PlaceRegistryFile): PlaceIndex {
     lon: unscale(file.lon),
     lat: unscale(file.lat),
     rank: Uint8Array.from(file.kind, (k) => kindRanks[k]),
-    hay: haystack(file.names.map(normalizeSearchText)),
+    hay: haystack(normalized),
     altHay: haystack(alts),
     altRow: Int32Array.from(altRows),
   };

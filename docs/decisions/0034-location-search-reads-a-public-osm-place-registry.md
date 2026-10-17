@@ -50,7 +50,10 @@ feature in NSW, never a geocoding service.**
   ([0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md)). It holds
   only OpenStreetMap data. A guest fetches it with no call to our API, so
   [0007](0007-guest-mode-is-dont-sync-yet.md) holds without a guest-only path,
-  and the public copy is the ODbL's offer of the derived database. No guard:
+  and the public copy is the ODbL's offer of the derived database. It is
+  stored gzipped and served with `Content-Encoding: gzip`, so a client's HTTP
+  stack decompresses it natively: in JavaScript that took 1.4 s on a Pixel.
+  Guard: `topo/tests/test_place_registry.py`. No guard for the serving itself:
   the CloudFront `/master/*` behaviour in `infra/terraform/envs/prod/cloudfront.tf`
   is what serves it.
 - **Each format has its own prefix.** A change to the file's shape bumps

@@ -288,7 +288,9 @@ each class of feature (roads, shops, creeks…) adds to the file, which is how
 to judge a change to `EXCLUDED`.
 
 `publish` downloads the extract, builds, and uploads the file then the pointer
-to `master/places/v1/` in the topo bucket. It refuses a build much smaller than
+to `master/places/v1/` in the topo bucket. The file goes up as
+`places-<extract date>-<hash>.json`, still gzipped, with `Content-Encoding:
+gzip`, so clients' HTTP stacks decompress it. It refuses a build much smaller than
 the one it replaces. Publishing is a prod change and the maintainer's to make:
 
 ```bash

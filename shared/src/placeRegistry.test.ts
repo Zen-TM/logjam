@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   indexPlaceRegistry,
+  indexPlaceRegistryInSlices,
   isPlaceRegistryPointer,
   normalizeSearchText,
   PLACE_REGISTRY_ATTRIBUTION,
@@ -145,6 +146,20 @@ describe("indexPlaceRegistry", () => {
     expect(() => indexPlaceRegistry({ ...fixture, format: 2 })).toThrow(
       /format 2/,
     );
+  });
+
+  it("builds the same index a slice at a time, pausing between slices", async () => {
+    // Mutation: skip a slice, or stop pausing → red.
+    let pauses = 0;
+    const sliced = await indexPlaceRegistryInSlices(
+      fixture,
+      async () => {
+        pauses++;
+      },
+      4,
+    );
+    expect(sliced).toEqual(index);
+    expect(pauses).toBe(Math.floor(fixture.names.length / 4));
   });
 
   it("reads a file crediting OpenStreetMap as the results do", () => {

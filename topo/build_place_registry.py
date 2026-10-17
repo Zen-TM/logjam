@@ -9,7 +9,7 @@ Why a registry, and why it is public: ADR 0034.
     python3 build_place_registry.py build new-south-wales-latest.osm.pbf out/
     python3 build_place_registry.py measure new-south-wales-latest.osm.pbf
 
-`build` writes `places-<version>.json.gz` (the format is `PlaceRegistryFile`
+`build` writes `places-<version>-<hash>.json.gz` (the format is `PlaceRegistryFile`
 in shared/src/placeRegistry.ts) and `latest.json`, the pointer clients read.
 `publish` builds from a fresh download and uploads both to the topo bucket,
 pointer last; it is what the monthly ECS task runs. `measure` prints the size
@@ -89,7 +89,17 @@ EXCLUDED = {
 LINEAR_KEYS = {"highway", "waterway", "railway"}
 
 # Settlements a result is placed "near", for telling two Main Streets apart.
-SETTLEMENTS = {"city", "town", "village", "suburb", "hamlet", "locality"}
+# Its tier: a settlement is placed near one of its own tier or a bigger one,
+# so a town reads "near" the next town, not a locality inside it.
+SETTLEMENT_TIERS = {
+    "city": 0,
+    "town": 0,
+    "village": 1,
+    "suburb": 1,
+    "hamlet": 2,
+    "locality": 2,
+}
+SETTLEMENTS = set(SETTLEMENT_TIERS)
 ALTERNATE_KEYS = ("alt_name", "loc_name", "old_name", "official_name", "short_name")
 # Segments of one creek or street more than this far from each other are two
 # features, even with the same name.
@@ -312,10 +322,21 @@ def registry(raws: Iterable[Raw], version: str) -> dict:
     # Settlements first, so a row's `near` is a small index and a reader can
     # resolve it without a second pass.
     rows.sort(key=lambda r: (not is_settlement(r.kind), r.name, r.lon))
-    settlements = [
-        (r.lon, r.lat, i) for i, r in enumerate(rows) if is_settlement(r.kind)
+    tiers = [
+        SETTLEMENT_TIERS[r.kind[len("place=") :]] if is_settlement(r.kind) else None
+        for r in rows
     ]
-    grid = Grid(settlements)
+    # grids[t] holds the settlements of tier t or bigger.
+    grids = [
+        Grid(
+            [
+                (r.lon, r.lat, i)
+                for i, r in enumerate(rows)
+                if tiers[i] is not None and tiers[i] <= t
+            ]
+        )
+        for t in range(max(SETTLEMENT_TIERS.values()) + 1)
+    ]
     kinds: List[str] = []
     kind_index: Dict[str, int] = {}
     # Columns, not a list of rows: a reader parses a handful of flat arrays
@@ -327,8 +348,13 @@ def registry(raws: Iterable[Raw], version: str) -> dict:
         if r.kind not in kind_index:
             kind_index[r.kind] = len(kinds)
             kinds.append(r.kind)
-        # A settlement is placed near another: two Alpines need telling apart.
-        near = grid.nearest(r.lon, r.lat, exclude=i)
+        # A settlement is placed near another (two Alpines need telling
+        # apart), of its own tier or bigger if one is in reach.
+        near = None
+        if tiers[i] is not None:
+            near = grids[tiers[i]].nearest(r.lon, r.lat, exclude=i)
+        if near is None:
+            near = grids[-1].nearest(r.lon, r.lat, exclude=i)
         cols["names"].append(r.name)
         cols["kind"].append(kind_index[r.kind])
         cols["lon"].append(round(r.lon * COORD_SCALE))
@@ -380,10 +406,16 @@ def build_files(doc: dict, out: Path) -> Tuple[Path, Path]:
     data_path = out / f"places-{doc['version']}-{digest}.json.gz"
     data_path.write_bytes(body)
     pointer_path = out / "latest.json"
+    # Published without the .gz: the bytes go up gzipped, served with
+    # Content-Encoding: gzip, so a client's HTTP stack decompresses them.
     pointer_path.write_text(
-        json.dumps(pointer(doc["version"], data_path.name, len(body))) + "\n"
+        json.dumps(pointer(doc["version"], published_name(data_path), len(body))) + "\n"
     )
     return data_path, pointer_path
+
+
+def published_name(data_path: Path) -> str:
+    return data_path.name.removesuffix(".gz")
 
 
 def pointer(version: str, file_name: str, size: int) -> dict:
@@ -438,12 +470,15 @@ def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
                 "check the extract"
             )
     # A versioned file never changes once written; the pointer always can.
+    # Content-Encoding lets OkHttp, browsers and Node's fetch gunzip it
+    # natively: gunzipping in JavaScript took Logjam GPS 1.4 s on a Pixel.
     s3.upload_file(
         str(data_path),
         bucket,
-        S3_PREFIX + data_path.name,
+        S3_PREFIX + published_name(data_path),
         ExtraArgs={
-            "ContentType": "application/gzip",
+            "ContentType": "application/json",
+            "ContentEncoding": "gzip",
             "CacheControl": "public, max-age=31536000, immutable",
         },
     )
