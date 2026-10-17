@@ -231,12 +231,27 @@ test("a changed value on an updated resource changes its value fingerprint", () 
   assert.equal(a["aws_sns_topic.alerts"], valueFingerprints(topic(tags("prod")), "prod", KEY)["aws_sns_topic.alerts"]);
 });
 
+test("a hand change to a resource the PR updates changes its value fingerprint", () => {
+  // Mutation: hashing only `after` turns this red. The apply's plan reverts
+  // the hand tag, so both plans' `after` are equal and the revert goes
+  // unnoticed (docs/operations/drills.md, Apply refusal).
+  const pr = topic(tags("prod"));
+  const atMerge = topic(tags("prod"), { before: { ...tags("prod"), tags: { env: "prod", hand: "drill" } } });
+  assert.notEqual(
+    valueFingerprints(pr, "prod", KEY)["aws_sns_topic.alerts"],
+    valueFingerprints(atMerge, "prod", KEY)["aws_sns_topic.alerts"],
+  );
+});
+
 test("a sensitive value is neither in the comment nor in the fingerprint", () => {
-  // Mutation: not stripping after_sensitive puts the secret into the HMAC
-  // (the second assert goes red) and, if posted raw, into the comment.
+  // Mutation: not stripping after_sensitive or before_sensitive puts the
+  // secret into the HMAC and, if posted raw, into the comment.
   const one = topic({ ...tags("prod"), secret: "s3cr3t-one" }, { after_sensitive: SENSITIVE });
   const two = topic({ ...tags("prod"), secret: "s3cr3t-two" }, { after_sensitive: SENSITIVE });
   assert.deepEqual(valueFingerprints(one, "prod", KEY), valueFingerprints(two, "prod", KEY));
+  const beforeOne = topic(tags("prod"), { before: { ...tags("prod"), secret: "b-one" }, before_sensitive: SENSITIVE });
+  const beforeTwo = topic(tags("prod"), { before: { ...tags("prod"), secret: "b-two" }, before_sensitive: SENSITIVE });
+  assert.deepEqual(valueFingerprints(beforeOne, "prod", KEY), valueFingerprints(beforeTwo, "prod", KEY));
   const body = comment({ root: "prod", planText: "plan", status: "success", plan: one, sha: SHA, key: KEY }).body;
   assert.match(body, /plan-values: \{"aws_sns_topic\.alerts":"[0-9a-f]{16}"\}/);
   assert.doesNotMatch(body, /s3cr3t|hunter2/);
