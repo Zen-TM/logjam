@@ -110,8 +110,13 @@ vi.mock("expo-file-system", () => ({
 }));
 vi.mock("react-native", () => ({
   AppState: { addEventListener: () => ({ remove: () => {} }) },
-  InteractionManager: { runAfterInteractions: (run: () => void) => run() },
 }));
+// React Native 0.88 removed InteractionManager; the module waits on the
+// runtime's requestIdleCallback instead. jsdom has none, so run it inline.
+globalThis.requestIdleCallback = (run) => {
+  run({ didTimeout: false, timeRemaining: () => 0 });
+  return 0;
+};
 vi.mock("@react-native-community/netinfo", () => ({
   default: {
     refresh: async () => ({

@@ -13,7 +13,6 @@ import {
   Keyboard,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -251,7 +250,7 @@ export function BottomSheet({
   // The modal's own height: the spacer above the sheet is at least this
   // tall, so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
-  const outerRef = useRef<ScrollView>(null);
+  const outerRef = useRef<ScrollViewInstance>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
   // that is from its end. `touching`: a finger is dragging it. `dragged`: a
   // finger has, since it last settled. `closing`: the drag has asked to close

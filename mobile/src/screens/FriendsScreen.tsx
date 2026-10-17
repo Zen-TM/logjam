@@ -368,7 +368,7 @@ export function FriendsScreen({
                   onPress={() => setAddOpen(true)}
                 />
               </ListEnd>
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <EmptyPanel
