@@ -2082,9 +2082,23 @@ async function main() {
   const bobTopo = fid(4);
   const aliceTopoOutputs = topoOutputs(aliceTopo);
   const bobTopoOutputs = topoOutputs(bobTopo);
-  const topoStarted = (done: number) => ({
-    startedAt: ago(done + 12),
+  // What a finished run costs the owner's monthly credits is its elapsed time
+  // (lib/computeCredits.ts): the worker's own `wallSeconds` for a complete
+  // topo, `updatedAt - startedAt` for a failed one. Both are minutes here, as
+  // a run of one tile is, so seeding spends nothing worth noticing.
+  const topoRun = (endedMinutesAgo: number, wallSeconds: number) => ({
     attemptCount: 1,
+    startedAt: ago(endedMinutesAgo + wallSeconds / 60),
+    updatedAt: ago(endedMinutesAgo),
+  });
+  const pipelineMetrics = (wallSeconds: number) => ({
+    schemaVersion: 1,
+    wallSeconds,
+    phases: { pdal: wallSeconds / 2, render: wallSeconds / 2 },
+    inputTileCount: 1,
+    outputTileCount: 1,
+    zoomMin: TOPO_TILE.z,
+    zoomMax: TOPO_TILE.z,
   });
   await prisma.topoJob.createMany({
     data: [
@@ -2103,7 +2117,8 @@ async function main() {
         outputBytes: aliceTopoOutputs.bytes,
         vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         createdAt: ago(300),
-        ...topoStarted(290),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(285, 300),
       },
       {
         id: fid(2),
@@ -2115,7 +2130,7 @@ async function main() {
         errorMessage:
           "Couldn't read the LiDAR in that ZIP. Make it again to try again.",
         createdAt: ago(200),
-        ...topoStarted(190),
+        ...topoRun(188, 120),
       },
       // Processing with a fresh heartbeat. The reaper fails it after
       // TOPO_REAPER_PROGRESS_STALL_MS without progress, so it is `failed` once a
@@ -2131,7 +2146,8 @@ async function main() {
         renderTilesTotal: 40,
         lastProgressAt: ago(1),
         createdAt: ago(20),
-        ...topoStarted(15),
+        attemptCount: 1,
+        startedAt: ago(15),
       },
       // Bob's, shared with alice (below): read-only to her.
       {
@@ -2147,7 +2163,8 @@ async function main() {
         outputBytes: bobTopoOutputs.bytes,
         vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         createdAt: ago(400),
-        ...topoStarted(390),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(385, 300),
       },
     ],
   });
@@ -2197,7 +2214,7 @@ async function main() {
           "This export was stopped because it took too long. Start it again to try again.",
         startedAt: ago(70),
         createdAt: ago(75),
-        completedAt: ago(40),
+        completedAt: ago(67),
       },
     ],
   });
