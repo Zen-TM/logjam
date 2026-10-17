@@ -651,9 +651,13 @@ jobs:
         env:
           ZIP: ${{ steps.sample.outputs.zip }}
         run: |
+          # Logjam Web sends the default settings unless the user changes them.
+          settings=$(cd shared && node --input-type=module -e \
+            "import { RASTER_TEMPLATE_DEFAULTS as d } from './dist/topoSettings.js'; console.log(JSON.stringify(d))")
           for which in complete reaped; do
-            created=$(curl -sf -X POST http://localhost:8080/topo-jobs \
-              -H 'content-type: application/json' -d "{\"jobName\":\"e2e $which\",\"tileCount\":1}")
+            created=$(jq -n --arg name "e2e $which" --argjson settings "$settings" \
+                '{jobName: $name, tileCount: 1, settings: $settings}' \
+              | curl -sf -X POST http://localhost:8080/topo-jobs -H 'content-type: application/json' -d @-)
             id=$(jq -r .jobId <<<"$created")
             curl -sf -X PUT -H 'content-type: application/zip' --upload-file "$ZIP" "$(jq -r .uploadUrl <<<"$created")"
             curl -sf -X POST "http://localhost:8080/topo-jobs/$id/start" | jq -e '.status == "pending"'
