@@ -1,26 +1,24 @@
 {
-  "name": "Corpus Track And Pin",
+  "name": null,
   "features": [
     {
       "type": "Feature",
       "geometry": {
         "type": "Point",
         "coordinates": [
-          150.11,
-          -33.09,
+          -122.207881,
+          37.371915,
           0
         ]
       },
-      "properties": {
-        "name": "Corpus Pin"
-      }
+      "properties": {}
     }
   ],
   "bbox": [
-    150.11,
-    -33.09,
-    150.11,
-    -33.09
+    -122.207881,
+    37.371915,
+    -122.207881,
+    37.371915
   ],
   "stats": {
     "points": 1,

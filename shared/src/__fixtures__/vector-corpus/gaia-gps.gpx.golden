@@ -1,20 +1,6 @@
 {
-  "name": "Corpus Gaia Export",
+  "name": "Corpus Gaia Walk-in",
   "features": [
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          150.03,
-          -33.02,
-          540
-        ]
-      },
-      "properties": {
-        "name": "Corpus Junction"
-      }
-    },
     {
       "type": "Feature",
       "geometry": {
@@ -60,9 +46,9 @@
     -33.02
   ],
   "stats": {
-    "points": 1,
+    "points": 0,
     "lines": 1,
     "polygons": 0,
-    "positions": 5
+    "positions": 4
   }
 }
