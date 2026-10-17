@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:gaia="https://gaiagps.com/gpx/1/0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1" creator="Gaia GPS" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <name>Corpus Gaia Export</name>
+    <time>2022-09-10T00:30:00Z</time>
+  </metadata>
+  <wpt lat="-33.0200" lon="150.0300">
+    <ele>540</ele>
+    <time>2022-09-10T00:31:00Z</time>
+    <name>Corpus Junction</name>
+    <desc>Left fork &amp; keep the ridge on your right</desc>
+    <link href="https://www.gaiagps.com/datasummary/waypoint/00000000/">
+      <text>Gaia GPS</text>
+    </link>
+    <type>Trailhead</type>
+    <extensions>
+      <gaia:icon>trailhead</gaia:icon>
+    </extensions>
+  </wpt>
+  <trk>
+    <name>Corpus Gaia Walk-in</name>
+    <type>Hiking</type>
+    <extensions>
+      <gaia:color>#FF0000</gaia:color>
+    </extensions>
+    <trkseg>
+      <trkpt lat="-33.0200" lon="150.0300"><ele>540.0</ele><time>2022-09-10T00:31:00Z</time></trkpt>
+      <trkpt lat="-33.0210" lon="150.0315"><ele>532.5</ele><time>2022-09-10T00:36:12Z</time></trkpt>
+      <trkpt lat="-33.0224" lon="150.0333"><ele>520.1</ele><time>2022-09-10T00:44:45Z</time></trkpt>
+      <trkpt lat="-33.0230" lon="150.0350"><ele>509.9</ele><time>2022-09-10T00:52:03Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

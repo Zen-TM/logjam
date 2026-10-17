@@ -1,0 +1,68 @@
+{
+  "name": "Corpus Gaia Export",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          150.03,
+          -33.02,
+          540
+        ]
+      },
+      "properties": {
+        "name": "Corpus Junction"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.03,
+            -33.02,
+            540
+          ],
+          [
+            150.0315,
+            -33.021,
+            532.5
+          ],
+          [
+            150.0333,
+            -33.0224,
+            520.1
+          ],
+          [
+            150.035,
+            -33.023,
+            509.9
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus Gaia Walk-in",
+        "coordTimes": [
+          "2022-09-10T00:31:00.000Z",
+          "2022-09-10T00:36:12.000Z",
+          "2022-09-10T00:44:45.000Z",
+          "2022-09-10T00:52:03.000Z"
+        ]
+      }
+    }
+  ],
+  "bbox": [
+    150.03,
+    -33.023,
+    150.035,
+    -33.02
+  ],
+  "stats": {
+    "points": 1,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 5
+  }
+}

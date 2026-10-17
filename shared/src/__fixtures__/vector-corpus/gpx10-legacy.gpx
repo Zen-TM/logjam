@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<gpx version="1.0" creator="Corpus Legacy Logger" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.topografix.com/GPX/1/0" xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+  <name>Corpus Legacy Day</name>
+  <url>http://example.invalid/</url>
+  <urlname>Corpus Legacy Logger</urlname>
+  <time>2009-11-07T20:01:00Z</time>
+  <trk>
+    <name>ACTIVE LOG</name>
+    <number>1</number>
+    <trkseg>
+      <trkpt lat="-33.0500" lon="150.0600">
+        <ele>301.0</ele>
+        <time>2009-11-07T20:01:00Z</time>
+        <fix>3d</fix>
+        <sat>7</sat>
+      </trkpt>
+      <trkpt lat="-33.0505" lon="150.0610">
+        <ele>299.0</ele>
+        <time>2009-11-07T20:03:00Z</time>
+        <fix>3d</fix>
+        <sat>8</sat>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>
