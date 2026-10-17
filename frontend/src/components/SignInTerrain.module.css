@@ -17,8 +17,41 @@
   height: 100%;
 }
 
+/* Kept right of the card: --card-inset and --card-width come from
+   SignIn.module.css's container. */
+.credit {
+  composes: meta from "../textRoles.generated.module.css";
+  position: fixed;
+  right: var(--space-2);
+  bottom: var(--space-1);
+  max-width: min(
+    36rem,
+    100vw -
+    var(--card-inset) -
+    var(--card-width) -
+    var(--space-6)
+  );
+  margin: 0;
+  text-align: right;
+  color: var(--color-text-muted);
+  /* A halo in the page colour, as a printed map gives a label over relief:
+     each letter is ringed by the page, whatever the shading behind it. */
+  text-shadow:
+    0 0 0.1em var(--color-page),
+    0 0 0.2em var(--color-page),
+    0 0 0.4em var(--color-page),
+    0 0 0.6em var(--color-page);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .terrain {
     transition: none;
+  }
+}
+
+/* Narrow, the card covers the corner: SignIn shows the credit in its footer. */
+@media (max-width: 768px) {
+  .credit {
+    display: none;
   }
 }

@@ -1,7 +1,7 @@
 // A canyon area behind the sign-in form, a different one each visit, made
 // from the NSW 5 m DEM, whose licence asks for its credit wherever a height
-// from it is shown (ADR 0031): SignIn shows it in its card, on the page
-// colour, where its contrast is measured. useSignInArea picks and loads it.
+// from it is shown (ADR 0031). The credit sits in the bottom-right corner;
+// narrow, the card covers that corner and SignIn shows it in its footer. useSignInArea picks and loads the area.
 //
 // It is shaded by the sun where it stands over the area now, so it never
 // moves while you look at it. A pointer passing over it is rain: each drop
@@ -9,6 +9,7 @@
 // as they do, and fades behind itself. Flat ground is the page colour
 // exactly, so only the slopes show.
 import { useEffect, useRef, useState } from "react";
+import { NSW_5M } from "@logjam/shared";
 import { useIsMobile } from "../useIsMobile";
 import {
   cover,
@@ -361,14 +362,21 @@ function SignInTerrain({ area }: { area: Area | null }) {
   }, [area, now, narrow]);
 
   return (
-    <div
-      className={`${classes.terrain} ${drawn ? classes.drawn : ""}`}
-      aria-hidden="true"
-    >
-      <canvas ref={reliefRef} className={classes.layer} />
-      <canvas ref={contourRef} className={classes.layer} />
-      <canvas ref={rainRef} className={classes.layer} />
-    </div>
+    <>
+      <div
+        className={`${classes.terrain} ${drawn ? classes.drawn : ""}`}
+        aria-hidden="true"
+      >
+        <canvas ref={reliefRef} className={classes.layer} />
+        <canvas ref={contourRef} className={classes.layer} />
+        <canvas ref={rainRef} className={classes.layer} />
+      </div>
+      {area && (
+        <p className={classes.credit}>
+          {area.terrain.name}. {NSW_5M.credit}
+        </p>
+      )}
+    </>
   );
 }
 

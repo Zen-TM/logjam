@@ -1151,12 +1151,14 @@ test.describe("surfaces fake auth never shows", () => {
     await expect(signIn).toBeVisible({ timeout: 15_000 });
     // The terrain behind the card is drawn from the NSW DEM, whose licence
     // wants its credit shown with it, naming the area once that has loaded
-    // (ADR 0031). Mutation that turns it red: drop the credit from the card.
+    // (ADR 0031): in the corner when wide, in the card's footer (hidden here)
+    // when narrow. Mutation that turns it red: drop the corner credit.
     await expect(
-      page.getByText(/^Elevation: derived from the NSW 5 m/),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/^.+, (Blue Mountains|Kanangra-Boyd)$/),
+      page
+        .getByText(
+          /(Blue Mountains|Kanangra-Boyd)\. Elevation: derived from the NSW 5 m/,
+        )
+        .filter({ visible: true }),
     ).toBeVisible();
     await expectNoViolations(page);
 

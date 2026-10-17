@@ -50,8 +50,8 @@ function Frame({ children }: { children: ReactNode }) {
         {children}
         <div className={classes.footer}>
           <Footer />
-          {/* The terrain's licence credit (ADR 0031), on the card rather than
-              over the relief, whose shading no text colour clears. Its line
+          {/* The terrain's licence credit (ADR 0031) on a phone, where the
+              card covers the corner the credit sits in when wide. Its line
               for the area's name is kept from the start, so the card does not
               move when the name arrives. */}
           <p className={classes.credit}>
