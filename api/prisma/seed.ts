@@ -2395,20 +2395,6 @@ async function main() {
     },
   });
 
-  // A phone's push registration. Carol's, not alice's: alice is the fake-auth
-  // user who receives most notifications, and nothing gates push in dev, so her
-  // token would make the stack POST to Expo on every one. Expo refuses the fake
-  // token and the API prunes it (services/push.ts), so this row lasts until the
-  // first notification carol receives.
-  await prisma.deviceToken.create({
-    data: {
-      id: fid(19),
-      userId: CAROL_ID,
-      token: "ExponentPushToken[seed-carol-android]",
-      platform: "android",
-    },
-  });
-
   // Deletions a phone has yet to hear about. The ids name nothing: the rows are
   // gone, which is what a tombstone says.
   await prisma.syncTombstone.createMany({

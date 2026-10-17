@@ -36,6 +36,8 @@ const WRITTEN_NESTED: Record<string, string> = {
 
 /** Deliberately empty, with the reason. */
 const NOT_SEEDED: Record<string, string> = {
+  DeviceToken:
+    "nothing gates push in dev or CI, so a seeded token is sent to Expo's real push service, which refuses it, and the API prunes the row mid-suite; devices.test.ts registers its own",
   EgressLogCursor:
     "written by the egress sweeper as it reads S3 access logs, which MiniStack does not deliver; the seed only clears it",
 };
