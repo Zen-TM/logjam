@@ -39,9 +39,11 @@ import {
 } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
+import { unavailableReasonText } from "../auth/capabilities";
 import { config } from "../config";
 import { subscribeReconnect } from "../map/connectivity";
 import { readPref, writePref } from "../prefsDb";
+import type { ToastMessage } from "../ui";
 import { PLACE_REGISTRY_DIR } from "./localStores";
 import { canRunNow } from "./networkPolicy";
 import { isOfflineOnly } from "./offlineOnlyMode";
@@ -255,6 +257,7 @@ export type FetchOutcome =
   | "updated"
   /** No connection, or mobile data not allowed. */
   | "skipped"
+  | "offline-only"
   /** The CDN's build is one this phone could not index before. */
   | "unreadable"
   | "failed";
@@ -277,7 +280,7 @@ export function fetchPlaceRegistry(options: {
 }
 
 async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
-  if (isOfflineOnly()) return "skipped";
+  if (isOfflineOnly()) return "offline-only";
   if (!(await canRunNow("placeNames", allowMetered))) return "skipped";
   try {
     const pointer = await fetchPointer();
@@ -353,19 +356,65 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   }
 }
 
+// --- Toasts -----------------------------------------------------------------
+// Settings → Map's Download and Remove finish wherever the user has got to, so
+// they announce themselves at the app shell (BackgroundToast.tsx), as a region
+// download does. Region-started and automatic fetches stay silent.
+const toastListeners = new Set<
+  (message: Omit<ToastMessage, "nonce">) => void
+>();
+
+/** Subscribe to Download's and Remove's outcomes: BackgroundToast only. */
+export function onPlaceRegistryToast(
+  listener: (message: Omit<ToastMessage, "nonce">) => void,
+): () => void {
+  toastListeners.add(listener);
+  return () => toastListeners.delete(listener);
+}
+
+function toast(text: string): void {
+  for (const listener of toastListeners) listener({ text, tone: "error" });
+}
+
+/** What Download says when it did not bring the file; nothing when it did. */
+export const DOWNLOAD_PROBLEM: Record<FetchOutcome, string | null> = {
+  updated: null,
+  current: null,
+  skipped: unavailableReasonText("needs-connection"),
+  "offline-only": "Turn off Offline maps only to download place names.",
+  unreadable:
+    "The latest place names can't be read, so Logjam GPS waits for the next build.",
+  failed: "Download didn't finish.",
+};
+
 /** Delete the file and stop refreshing it, until the user asks again. */
 export async function removePlaceRegistry(): Promise<void> {
   writePref(WANTED_PREF_KEY, "off");
   await fetching?.catch(() => {});
-  await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
+  try {
+    await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't remove the place names.");
+    return;
+  }
   index = null;
   publish({ stored: null, storedBytes: 0 });
 }
 
 /** Settings → Map's Download: wanted from now on, on any connection. */
-export function requestPlaceRegistry(): Promise<FetchOutcome> {
+export async function requestPlaceRegistry(): Promise<FetchOutcome> {
   writePref(WANTED_PREF_KEY, "on");
-  return fetchPlaceRegistry({ allowMetered: true });
+  try {
+    const outcome = await fetchPlaceRegistry({ allowMetered: true });
+    const problem = DOWNLOAD_PROBLEM[outcome];
+    if (problem) toast(problem);
+    return outcome;
+  } catch (err) {
+    console.error(err);
+    toast(DOWNLOAD_PROBLEM.failed ?? "");
+    return "failed";
+  }
 }
 
 /**

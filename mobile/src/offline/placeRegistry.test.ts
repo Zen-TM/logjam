@@ -334,7 +334,7 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     offlineOnly.on = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry()).toBe("offline-only");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -392,6 +392,21 @@ describe("a bad download never replaces a good file", () => {
     const registry = await load();
     expect(await registry.refreshPlaceRegistry()).toBe("failed");
     expect(registry.hasPlaceRegistry()).toBe(true);
+  });
+});
+
+describe("what Download says", () => {
+  // Mutation: toast from `fetchPlaceRegistry`, for every caller.
+  it("toasts the user's own download, and nothing for a region's", async () => {
+    network.connected = false;
+    const registry = await load();
+    const toasts: string[] = [];
+    registry.onPlaceRegistryToast(({ text }) => toasts.push(text));
+    registry.placeRegistryWithRegion(false);
+    await registry.fetchPlaceRegistry({});
+    expect(toasts).toEqual([]);
+    await registry.requestPlaceRegistry();
+    expect(toasts).toEqual(["Needs a connection"]);
   });
 });
 

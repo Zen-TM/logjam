@@ -26,11 +26,11 @@ import { formatDateKey } from "@logjam/shared";
 import { unavailableReasonText } from "../../auth/capabilities";
 import { formatBytes } from "../../format";
 import { useConnectivity } from "../../map/connectivity";
+import { isOfflineOnly } from "../../offline/offlineOnlyMode";
 import {
   removePlaceRegistry,
   requestPlaceRegistry,
   usePlaceRegistryStatus,
-  type FetchOutcome,
 } from "../../offline/placeRegistry";
 
 import {
@@ -443,7 +443,7 @@ export function MapSettingsScreen() {
         />
 
         <SectionHeader title="Search" />
-        <PlaceNamesRow notify={notify} />
+        <PlaceNamesRow />
 
         {/* ── Research ──────────────────────────────────────────────────────
             Developer-only, default off, and worded as what it is rather than
@@ -526,32 +526,14 @@ function sensorLoggingSubtitle(
  *  4.4 MB gzipped. */
 const PLACE_NAMES_ESTIMATE = "About 4 MB";
 
-const DOWNLOAD_OUTCOME: Record<FetchOutcome, string | null> = {
-  updated: null,
-  current: null,
-  skipped: unavailableReasonText("needs-connection"),
-  unreadable:
-    "The latest place names can't be read, so Logjam GPS waits for the next build.",
-  failed: "Download didn't finish.",
-};
-
-/** The place registry the map's search box reads (offline/placeRegistry.ts). */
-function PlaceNamesRow({
-  notify,
-}: {
-  notify: (text: string, tone?: ToastMessage["tone"]) => void;
-}) {
+/** The place registry the map's search box reads (offline/placeRegistry.ts).
+ *  Download and Remove report at the app shell (BackgroundToast.tsx). */
+function PlaceNamesRow() {
   const { stored, storedBytes, latest, downloading } = usePlaceRegistryStatus();
-  const online = useConnectivity() === "online";
+  const offlineOnly = isOfflineOnly();
+  const online = useConnectivity(offlineOnly) === "online";
 
-  const download = () => {
-    requestPlaceRegistry()
-      .then((outcome) => {
-        const problem = DOWNLOAD_OUTCOME[outcome];
-        if (problem) notify(problem);
-      })
-      .catch(console.error);
-  };
+  const download = () => void requestPlaceRegistry();
   const remove = () =>
     Alert.alert(
       "Remove place names?",
@@ -561,12 +543,7 @@ function PlaceNamesRow({
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => {
-            removePlaceRegistry().catch((err: unknown) => {
-              console.error(err);
-              notify("Couldn't remove the place names.");
-            });
-          },
+          onPress: () => void removePlaceRegistry(),
         },
       ],
     );
@@ -575,11 +552,13 @@ function PlaceNamesRow({
     ? "Downloading…"
     : stored
       ? `${formatDateKey(`${stored.version}T00:00:00.000Z`)} · ${formatBytes(storedBytes)}`
-      : online
-        ? latest
-          ? `About ${formatBytes(latest.bytes)}`
-          : PLACE_NAMES_ESTIMATE
-        : unavailableReasonText("needs-connection");
+      : offlineOnly
+        ? "Offline maps only is on"
+        : online
+          ? latest
+            ? `About ${formatBytes(latest.bytes)}`
+            : PLACE_NAMES_ESTIMATE
+          : unavailableReasonText("needs-connection");
 
   return (
     <Row
