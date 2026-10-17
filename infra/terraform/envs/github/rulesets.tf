@@ -29,6 +29,7 @@ locals {
     "api-image",
     "topo-image",
     "gitleaks",
+    "pr-closes",
   ]
 }
 
