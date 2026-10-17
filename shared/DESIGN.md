@@ -297,8 +297,8 @@ renumber.
 - **A coordinate belongs on a thing's own page, never in a list**: lists end
   up in screenshots. An area is its size ("18 × 11 km"), never its corners.
   No "distance from me" column.
-- **Search matches places locally.** Asking a public geocoder is a separate,
-  explicit choice.
+- **Search matches your places locally**, then the place registry as you
+  type (ADR 0034). Asking a public geocoder is a separate, explicit choice.
 - **Failure copy never carries a place name, coordinate, tag or field.**
 - Root `AGENTS.md` → Privacy holds the rest.
 

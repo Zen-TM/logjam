@@ -7,11 +7,13 @@
 // for a full-width rounded rectangle would make the icon jump left and up,
 // disconnecting the two shapes.
 //
-// Locations come from Nominatim via `geocode`, and only when asked: the last
-// row is "Search locations for …" (or the keyboard's Search key), as on Logjam
-// Web. Nominatim's usage policy forbids search-as-you-type, and a box that
-// geocoded every keystroke would send every canyon name typed to a third
-// party. Tap a result to recentre.
+// Locations come as the user types from the OpenStreetMap place registry
+// (`placeSearch.ts`): the phone's own copy when it has one, or our API for a
+// signed-in phone without it. Nominatim answers only when asked: the last row
+// is "Search locations for …" (or the keyboard's Search key), as on Logjam
+// Web, for the street addresses the registry leaves out. Its usage policy
+// forbids search as you type, and a box that geocoded every keystroke would
+// send every canyon name typed to a third party. Tap a result to recentre.
 //
 // IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
 // A box that can find Katoomba but not the place you saved last week answers
@@ -20,8 +22,9 @@
 // with no debounce and no request, and are listed ABOVE the places with their
 // kind's glyph and hue so the two are never confused for each other.
 //
-// PRIVACY: only the typed string leaves Logjam GPS (shared/src/geocode.test.ts).
-// No saved place's name or coordinates is sent — the saved matches are the
+// PRIVACY: only the typed string leaves Logjam GPS, to our API when the phone
+// has no registry, to Nominatim when asked (shared/src/geocode.test.ts), and
+// nowhere when it has. No saved place's name or coordinates is sent — the saved matches are the
 // reason they do not have to be — and results are not persisted.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -40,7 +43,11 @@ import {
   geocode,
   GEOCODE_MIN_QUERY_LENGTH,
   messageFromError,
+  PLACE_REGISTRY_ATTRIBUTION,
+  PLACE_SEARCH_MIN_QUERY_LENGTH,
+  placeResultDetail,
   searchLocationsLabel,
+  searchPlaces,
   type GeocodeResult,
 } from "@logjam/shared";
 
@@ -52,7 +59,21 @@ import {
   useTheme,
   muted,
 } from "../theme";
+import { useAccountState } from "../auth/AccountStateContext";
+import {
+  loadPlaceIndex,
+  placeIndex,
+  usePlaceRegistryStatus,
+} from "../offline/placeRegistry";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
+import {
+  askPlacesOnline,
+  MAX_PLACE_RESULTS,
+  placesFromAnswer,
+  placeSearchSource,
+  searchRows,
+  type PlaceAnswer,
+} from "./placeSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { FieldError, Icon, type Glyph } from "../ui";
@@ -89,6 +110,7 @@ export function MapSearchBar({
   topInset,
   side = "left",
   reservedWidth = 0,
+  online,
   savedItems,
   onSelectPlace,
   onSelectSaved,
@@ -108,6 +130,8 @@ export function MapSearchBar({
    * has to stay reachable while a recording runs.
    */
   reservedWidth?: number;
+  /** False offline and in offline-only mode: no API search then. */
+  online: boolean;
   /** The user's own places, waypoints, tracks and route files. */
   savedItems: readonly SavedSearchItem[];
   onSelectPlace: (latitude: number, longitude: number) => void;
@@ -137,6 +161,62 @@ export function MapSearchBar({
   const error = answer?.error ?? null;
   const inputRef = useRef<TextInput>(null);
   const { width: windowWidth } = useWindowDimensions();
+
+  // ── The place registry, as the user types ───────────────────────────────
+  const { accountState } = useAccountState();
+  const registry = usePlaceRegistryStatus();
+  const source = placeSearchSource(
+    registry.stored !== null,
+    accountState,
+    online,
+  );
+  // Read from the store on every render, never copied into state: Remove and
+  // a refresh drop it there, and a copy here would keep it alive (and a
+  // refreshed build beside it).
+  const index = registry.stored ? placeIndex() : null;
+  // Built on the first open, not with the map: nobody who never searches
+  // carries it. The build takes a few seconds, in slices; until it is ready
+  // the user's own matches show and a loading row stands for the rest.
+  useEffect(() => {
+    // Not after a failed load: that waits for Try again.
+    if (
+      expanded &&
+      registry.stored !== null &&
+      index === null &&
+      !registry.loadFailed
+    ) {
+      void loadPlaceIndex();
+    }
+  }, [expanded, registry.stored, index, registry.loadFailed]);
+  const placeQuery =
+    expanded && trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH;
+  const devicePlaces = useMemo(
+    () =>
+      source === "device" && index && placeQuery
+        ? searchPlaces(index, trimmed, MAX_PLACE_RESULTS)
+        : [],
+    [source, index, placeQuery, trimmed],
+  );
+  // The last answer stays up while the query only grows, so the list does not
+  // blink on every keystroke.
+  const [placeAnswer, setPlaceAnswer] = useState<PlaceAnswer | null>(null);
+  useEffect(() => {
+    if (source !== "api" || !placeQuery) return;
+    return askPlacesOnline(trimmed, setPlaceAnswer);
+  }, [source, placeQuery, trimmed]);
+  const places =
+    source === "device"
+      ? index || !placeQuery
+        ? devicePlaces
+        : registry.loadFailed
+          ? {
+              error: "Couldn't load place names.",
+              retry: () => void loadPlaceIndex(),
+            }
+          : "loading"
+      : source === "api" && placeQuery
+        ? placesFromAnswer(placeAnswer, trimmed)
+        : [];
 
   // One driver for width and for the fade of everything that only exists in
   // the expanded state. Width can't run on the native driver, so neither does
@@ -191,6 +271,7 @@ export function MapSearchBar({
     setQuery("");
     setAsked(null);
     setSearch(null);
+    setPlaceAnswer(null);
   };
 
   // NOT debounced and not memoised on the query: it is a substring scan over
@@ -214,13 +295,13 @@ export function MapSearchBar({
     outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2 - reservedWidth],
   });
   const offerAsk = searchable && !askedHere;
+  // Yours first, and above the network's answer whatever state that is in: a
+  // saved match is already correct while the geocoder is still being waited
+  // on, and with no signal it is the only answer there will ever be.
+  const rows = searchRows(localMatches, places, offerAsk);
   const showPanel =
     expanded &&
-    (offerAsk ||
-      loading ||
-      error !== null ||
-      results.length > 0 ||
-      localMatches.length > 0);
+    (rows.length > 0 || loading || error !== null || results.length > 0);
 
   return (
     <View
@@ -289,51 +370,106 @@ export function MapSearchBar({
       {showPanel ? (
         <View style={styles.panel}>
           <ScrollView keyboardShouldPersistTaps="handled">
-            {/* Yours first, and above the network's answer whatever state that
-                is in — a saved match is already correct while the geocoder is
-                still being waited on, and with no signal it is the only answer
-                there will ever be. */}
-            {localMatches.map((item) => (
-              <Pressable
-                key={item.key}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.title}, ${item.kindLabel}`}
-                style={({ pressed }) => [
-                  styles.result,
-                  styles.savedResult,
-                  pressed && styles.resultPressed,
-                ]}
-                onPress={() => {
-                  onSelectSaved(item);
-                  collapse();
-                }}
-              >
-                <Icon idea={item.icon} size={16} color={item.hue} />
-                <View style={styles.savedText}>
-                  <Text style={styles.resultText} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.resultKind}>{item.kindLabel}</Text>
-                </View>
-              </Pressable>
-            ))}
-
-            {offerAsk ? (
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.result,
-                  styles.savedResult,
-                  pressed && styles.resultPressed,
-                ]}
-                onPress={ask}
-              >
-                <Icon idea="search" size={16} color={theme.textMuted} />
-                <Text style={[styles.resultText, styles.savedText]}>
-                  {searchLocationsLabel(trimmed)}
-                </Text>
-              </Pressable>
-            ) : null}
+            {rows.map((row) => {
+              switch (row.kind) {
+                case "saved": {
+                  const item = row.item;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${item.title}, ${item.kindLabel}`}
+                      style={({ pressed }) => [
+                        styles.result,
+                        styles.savedResult,
+                        pressed && styles.resultPressed,
+                      ]}
+                      onPress={() => {
+                        onSelectSaved(item);
+                        collapse();
+                      }}
+                    >
+                      <Icon idea={item.icon} size={16} color={item.hue} />
+                      <View style={styles.savedText}>
+                        <Text style={styles.resultText} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.resultKind}>{item.kindLabel}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                }
+                case "place": {
+                  const { place } = row;
+                  const what = placeResultDetail(place);
+                  return (
+                    <Pressable
+                      key={`${place.lat},${place.lon},${place.name}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${place.name}, ${what}`}
+                      style={({ pressed }) => [
+                        styles.result,
+                        pressed && styles.resultPressed,
+                      ]}
+                      onPress={() => {
+                        onSelectPlace(place.lat, place.lon);
+                        collapse();
+                      }}
+                    >
+                      <Text style={styles.resultText} numberOfLines={2}>
+                        {place.name}
+                      </Text>
+                      <Text style={styles.resultKind}>{what}</Text>
+                    </Pressable>
+                  );
+                }
+                case "error":
+                  return (
+                    <View key="error" style={styles.statusBox}>
+                      <FieldError message={row.message} />
+                      {row.retry ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          hitSlop={hitSlop}
+                          onPress={row.retry}
+                        >
+                          <Text style={styles.retry}>Try again</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  );
+                case "loading":
+                  return (
+                    <Text key="loading" style={styles.status}>
+                      Loading place names…
+                    </Text>
+                  );
+                case "credit":
+                  return (
+                    <Text key="credit" style={styles.credit}>
+                      {PLACE_REGISTRY_ATTRIBUTION}
+                    </Text>
+                  );
+                case "ask":
+                  return (
+                    <Pressable
+                      key="ask"
+                      accessibilityRole="button"
+                      style={({ pressed }) => [
+                        styles.result,
+                        styles.savedResult,
+                        pressed && styles.resultPressed,
+                      ]}
+                      onPress={ask}
+                    >
+                      <Icon idea="search" size={16} color={theme.textMuted} />
+                      <Text style={[styles.resultText, styles.savedText]}>
+                        {searchLocationsLabel(trimmed)}
+                      </Text>
+                    </Pressable>
+                  );
+              }
+            })}
             {loading ? <Text style={styles.status}>Searching…</Text> : null}
             {error !== null ? (
               <View style={styles.statusBox}>
@@ -420,6 +556,14 @@ const useStyles = makeStyles((theme, textRole) => ({
   statusBox: {
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
+    gap: spacing(1),
+  },
+  // As ErrorBanner's action.
+  retry: {
+    ...textRole.control,
+    color: theme.text,
+    textDecorationLine: "underline",
+    alignSelf: "flex-start",
   },
   status: {
     ...muted(theme, textRole.detail),
@@ -440,5 +584,12 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   savedText: { flex: 1 },
   resultKind: { ...muted(theme, textRole.meta) },
+  credit: {
+    ...muted(theme, textRole.meta),
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(1),
+    borderBottomWidth: 1,
+    borderBottomColor: theme.line,
+  },
   resultText: { ...textRole.detail, color: theme.text },
 }));

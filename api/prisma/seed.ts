@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
@@ -14,6 +18,8 @@ import {
   SYSTEM_FIELD_DEFS,
   PLACE_TYPE_COLORS,
   canonicalLinkPair,
+  PLACE_REGISTRY_POINTER_PATH,
+  PLACE_REGISTRY_PREFIX,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
@@ -22,6 +28,55 @@ import {
 import { s3 } from "../src/services/awsClients";
 import { seedId, cid } from "./seedIds";
 import { saveSeedSnapshot } from "../src/__tests__/_seedBaseline";
+
+// ── Place registry ──────────────────────────────────────────────────────────
+
+/**
+ * Publishes the shared fixture as the place registry, where the builder would
+ * (topo/build_place_registry.py), so a dev stack answers location search with
+ * no build of its own (services/placeRegistry.ts). Best effort, as the files
+ * below are.
+ */
+async function uploadPlaceRegistry(): Promise<void> {
+  const bucket = process.env.S3_BUCKET_TOPO;
+  if (!bucket) {
+    console.warn("S3_BUCKET_TOPO is unset — no place registry was uploaded.");
+    return;
+  }
+  const fixture = readFileSync(
+    join(__dirname, "../../shared/src/__fixtures__/place-registry.json"),
+  );
+  const { format, version } = JSON.parse(fixture.toString("utf8"));
+  const body = gzipSync(fixture);
+  // Named and served as the builder publishes a build: the version and a
+  // content hash, gzipped under a .json name with Content-Encoding.
+  const hash = createHash("sha256").update(body).digest("hex").slice(0, 8);
+  const path = `places-${version}-${hash}.json`;
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: `${PLACE_REGISTRY_PREFIX}${path}`,
+        Body: body,
+        ContentType: "application/json",
+        ContentEncoding: "gzip",
+      }),
+    );
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: PLACE_REGISTRY_POINTER_PATH,
+        Body: JSON.stringify({ format, version, path, bytes: body.length }),
+        ContentType: "application/json",
+      }),
+    );
+    console.log(`Uploaded the fixture place registry to s3://${bucket}/`);
+  } catch (err) {
+    console.warn(
+      `Could not upload the place registry (${(err as Error).message}). Location search will answer 503.`,
+    );
+  }
+}
 
 // ── Seeded vector files ─────────────────────────────────────────────────────
 //
@@ -1567,6 +1622,7 @@ async function main() {
     wollangambeFile,
     bellCreekFile,
   ]);
+  await uploadPlaceRegistry();
 
   // Media. Every VECTOR row has a real object behind it (above); the photo is
   // still metadata only, so its thumbnail will not load — generating a

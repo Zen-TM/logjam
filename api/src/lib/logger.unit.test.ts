@@ -90,6 +90,32 @@ describe("logger redaction", () => {
     });
   });
 
+  // Location search as you type sends what the user typed on every pause,
+  // often the name of a place they would rather not publish (ADR 0034).
+  // Mutation: delete "req.body.q" from `redactPaths` and the first test goes
+  // red; put `body` back into `serializeRequestForLog` and the second does.
+  // The route's own log lines: placeSearch.unit.test.ts.
+  describe("the place search query", () => {
+    const query = "Hidden Gorge";
+
+    it("is censored if a log line ever carries the request body", () => {
+      const line = JSON.stringify(captureLog({ req: { body: { q: query } } }));
+      expect(line).not.toContain(query);
+    });
+
+    it("is not in what the request logger keeps of the request", () => {
+      const kept = JSON.stringify(
+        serializeRequestForLog({
+          id: "r1",
+          method: "POST",
+          url: "/places/search",
+          body: { q: query },
+        } as Parameters<typeof serializeRequestForLog>[0]),
+      );
+      expect(kept).not.toContain(query);
+    });
+  });
+
   it("masks authorization and cookie headers", () => {
     const out = captureLog({
       req: {

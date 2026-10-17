@@ -133,6 +133,24 @@ describe("a malformed request", () => {
   });
 });
 
+// express.json's SyntaxError quotes the body it could not parse, and a body
+// carries place names. Mutation: drop the `entity.parse.failed` case from
+// errorHandler and this goes red (a 500 whose log line holds the name).
+describe("a body that is not JSON", () => {
+  it("is malformed, and neither the answer nor the log quotes it", () => {
+    const { req, res, status, json, log } = mockReqRes();
+    const err = Object.assign(
+      new SyntaxError(`Unexpected token 'R', "{"q":Ranon}" is not valid JSON`),
+      { type: "entity.parse.failed", status: 400 },
+    );
+    errorHandler(err, req, res, vi.fn() as NextFunction);
+    expect(status).toHaveBeenCalledWith(400);
+    const logged = JSON.stringify([log.warn.mock.calls, log.error.mock.calls]);
+    expect(logged).not.toContain("Ranon");
+    expect(JSON.stringify(json.mock.calls[0][0])).not.toContain("Ranon");
+  });
+});
+
 describe("a fault of ours", () => {
   it("logs the detail and sends none of it", () => {
     const { req, res, status, json, log } = mockReqRes();

@@ -319,3 +319,64 @@ resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# ── Place registry ─────────────────────────────────────────────────────────
+
+# The monthly build (ecs.tf) runs once, so one failure is the alarm, not
+# worker_failures' three an hour. Its failed stops already reach that log
+# group through the rule above; this counts them on their own.
+resource "aws_cloudwatch_log_metric_filter" "place_registry_failures" {
+  name           = "logjam-place-registry-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.place_registry.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "PlaceRegistryFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "place_registry_failed" {
+  alarm_name        = "logjam-place-registry-failed"
+  alarm_description = "The monthly place registry build stopped with a non-zero exit or failed to start; the published registry is unchanged. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.place_registry.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.place_registry_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.place_registry_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# A run that never starts leaves no ECS event: the scheduler's RunTask call
+# itself failed (a role, a subnet, the task definition). Any target error
+# alarms, including one a retry then got past, since the next chance is a
+# month away. The metric's only dimension is the schedule group, which holds
+# just this schedule.
+resource "aws_cloudwatch_metric_alarm" "place_registry_not_launched" {
+  alarm_name        = "logjam-place-registry-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the monthly place registry build (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.place_registry.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.place_registry_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.place_registry.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}

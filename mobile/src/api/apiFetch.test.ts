@@ -162,3 +162,21 @@ describe("a request that got no answer", () => {
     },
   );
 });
+
+describe("a caller's abort signal", () => {
+  // Mutation: listen for the abort event without checking `signal.aborted`.
+  it("aborts a request whose signal was aborted before it was sent", async () => {
+    fetchMock.mockImplementation(
+      async (_url: string, init: { signal: AbortSignal }) => {
+        if (init.signal.aborted)
+          throw new DOMException("aborted", "AbortError");
+        return jsonResponse({ ok: true });
+      },
+    );
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      apiFetch("/notifications", { signal: controller.signal }),
+    ).rejects.toThrow();
+  });
+});

@@ -121,6 +121,7 @@ describe("isMeteredAllowed", () => {
     expect(isMeteredAllowed("sync")).toBe(true);
     expect(isMeteredAllowed("geoPdfDownload")).toBe(false);
     expect(isMeteredAllowed("topoDownload")).toBe(false);
+    expect(isMeteredAllowed("placeNames")).toBe(false);
     expect(isMeteredAllowed("mediaUpload")).toBe(false);
   });
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Register a new revision of an ECS task definition pinned to one exact image.
 #
-# The four Fargate task defs in Terraform declare `:latest` as a baseline, but
+# The Fargate task defs in Terraform declare `:latest` as a baseline, but
 # `latest` is a moving tag: a partial CI push, a re-run, or a hand `docker push`
 # silently changes what the next RunTask launches, with nothing in the task def
 # recording which build actually ran.

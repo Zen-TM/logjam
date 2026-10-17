@@ -1,10 +1,12 @@
 // What this phone is allowed to do over mobile data.
 //
-// Three separate answers, because the three jobs cost wildly different amounts
+// One answer per job, because the jobs cost wildly different amounts
 // and the honest default differs per job:
 //
 // - GEOPDF auto-download: tens of megabytes per file, Wi-Fi by default.
 // - TOPO overlay auto-download: same order or larger, Wi-Fi by default.
+// - PLACE NAMES refresh: one build a month, PLACE_REGISTRY_DOWNLOAD_ESTIMATE
+//   in placeRegistry.ts, Wi-Fi by default.
 // - SYNC: a few kilobytes of JSON, ALLOWED on mobile data by default — a queued
 //   trip log that waits for Wi-Fi is a trip log that is only on one phone when
 //   it matters.
@@ -15,7 +17,7 @@
 //
 // DEVICE-scoped: a data plan belongs to a handset.
 //
-// PRIVACY: three booleans about this phone's connection.
+// PRIVACY: booleans about this phone's connection.
 import NetInfo from "@react-native-community/netinfo";
 
 import { readPref, writePref } from "../prefsDb";
@@ -24,12 +26,14 @@ import { readPref, writePref } from "../prefsDb";
 export type MeteredJob =
   | "geoPdfDownload"
   | "topoDownload"
+  | "placeNames"
   | "sync"
   | "mediaUpload";
 
 const KEYS: Record<MeteredJob, string> = {
   geoPdfDownload: "meteredGeoPdfDownload",
   topoDownload: "meteredTopoDownload",
+  placeNames: "meteredPlaceNames",
   sync: "meteredSync",
   // Media PUTs ride this op, not `sync` — up to 30 MB an image, 500 MB a video,
   // nothing like the "a few kilobytes of JSON" `sync` was sized for.
@@ -40,6 +44,7 @@ const KEYS: Record<MeteredJob, string> = {
 const DEFAULTS: Record<MeteredJob, boolean> = {
   geoPdfDownload: false,
   topoDownload: false,
+  placeNames: false,
   sync: true,
   mediaUpload: false,
 };
@@ -142,12 +147,13 @@ export function connectionWorthResuming(
  * ([0013](../../../docs/decisions/0013-background-work-battery-rules.md)).
  * Guard: `networkPolicy.test.ts` ("canRunNow").
  */
-export async function canRunNow(job: MeteredJob): Promise<boolean> {
+export async function canRunNow(
+  job: MeteredJob,
+  /** The user's own answer for work they started, over the job's setting. */
+  allowMetered = isMeteredAllowed(job),
+): Promise<boolean> {
   try {
-    return connectionAllowsMetered(
-      await NetInfo.refresh(),
-      isMeteredAllowed(job),
-    );
+    return connectionAllowsMetered(await NetInfo.refresh(), allowMetered);
   } catch (err) {
     console.error(err);
     return false;

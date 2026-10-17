@@ -17,7 +17,10 @@ import type {
 } from "@logjam/shared";
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
+  PLACE_SEARCH_API_PATH,
   tallyNotifications,
+  type PlaceSearchRequest,
+  type PlaceSearchResponse,
 } from "@logjam/shared";
 import {
   settleReadOverrides,
@@ -111,11 +114,12 @@ async function getIdToken(): Promise<string> {
 // need a token parameter — just a boolean to control whether to fetch.
 export async function apiFetch<T>(
   path: string,
-  options?: { method?: string; body?: unknown },
+  options?: { method?: string; body?: unknown; signal?: AbortSignal },
 ): Promise<T> {
   const token = await getIdToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: options?.method ?? "GET",
+    signal: options?.signal,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(options?.body != null && { "Content-Type": "application/json" }),
@@ -1501,6 +1505,18 @@ export function useStandaloneTracks(
   }, [files, shownIds]);
 
   return { tracks, error };
+}
+
+// ── Location search ───────────────────────────────────────────
+
+/** The place registry, through the API. The query goes in the body. */
+export function searchPlaceRegistry(
+  q: string,
+  limit: number,
+  signal: AbortSignal,
+): Promise<PlaceSearchResponse> {
+  const body: PlaceSearchRequest = { q, limit };
+  return apiFetch(PLACE_SEARCH_API_PATH, { method: "POST", body, signal });
 }
 
 // ── Friends ───────────────────────────────────────────────────

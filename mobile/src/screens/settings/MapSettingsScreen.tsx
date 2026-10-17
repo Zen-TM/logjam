@@ -14,8 +14,25 @@
 // does, so it belongs in that tool's HUD where it already lives (DESIGN.md —
 // tool behaviour goes with the tool, not in a settings page).
 //
+// THE ONE ROW THAT IS NOT A PREFERENCE is the place names for search: a file,
+// downloaded and removed here because a guest can reach this page and not
+// Offline and storage, and because what it serves is the map's search box.
+//
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
+import { Alert } from "react-native";
+import { formatDateKey } from "@logjam/shared";
+
+import { unavailableReasonText } from "../../auth/capabilities";
+import { formatBytes } from "../../format";
+import { useConnectivity } from "../../map/connectivity";
+import { isOfflineOnly } from "../../offline/offlineOnlyMode";
+import {
+  PLACE_REGISTRY_DOWNLOAD_ESTIMATE,
+  removePlaceRegistry,
+  requestPlaceRegistry,
+  usePlaceRegistryStatus,
+} from "../../offline/placeRegistry";
 
 import {
   isCompassEnabled,
@@ -72,6 +89,8 @@ import {
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import {
+  IconButton,
+  Row,
   ScreenScroll,
   SectionHeader,
   ColourField,
@@ -424,6 +443,9 @@ export function MapSettingsScreen() {
           }}
         />
 
+        <SectionHeader title="Search" />
+        <PlaceNamesRow />
+
         {/* ── Research ──────────────────────────────────────────────────────
             Developer-only, default off, and worded as what it is rather than
             as a feature: it costs battery, it produces a file only a laptop
@@ -499,4 +521,64 @@ function sensorLoggingSubtitle(
     return `${what} On from the next recording.`;
   const mb = (status.bytes / 1_000_000).toFixed(1);
   return `${what} Logging now — ${mb} MB.`;
+}
+
+/** The place registry the map's search box reads (offline/placeRegistry.ts).
+ *  Download and Remove report at the app shell (BackgroundToast.tsx). */
+function PlaceNamesRow() {
+  const { stored, storedBytes, latest, downloading } = usePlaceRegistryStatus();
+  const offlineOnly = isOfflineOnly();
+  const online = useConnectivity(offlineOnly) === "online";
+
+  const download = () => void requestPlaceRegistry();
+  const remove = () =>
+    Alert.alert(
+      "Remove place names?",
+      "Search finds only your own places until you download them again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => void removePlaceRegistry(),
+        },
+      ],
+    );
+
+  const subtitle = downloading
+    ? "Downloading…"
+    : stored
+      ? `${formatDateKey(`${stored.version}T00:00:00.000Z`)} · ${formatBytes(storedBytes)}`
+      : offlineOnly
+        ? "Offline maps only is on"
+        : online
+          ? latest
+            ? `About ${formatBytes(latest.bytes)}`
+            : PLACE_REGISTRY_DOWNLOAD_ESTIMATE
+          : unavailableReasonText("needs-connection");
+
+  return (
+    <Row
+      icon="search"
+      title="Place names for search"
+      subtitle={subtitle}
+      right={
+        stored ? (
+          <IconButton
+            icon="delete"
+            accessibilityLabel="Remove place names"
+            disabled={downloading}
+            onPress={remove}
+          />
+        ) : (
+          <IconButton
+            icon="saveOffline"
+            accessibilityLabel="Download place names"
+            disabled={downloading || !online}
+            onPress={download}
+          />
+        )
+      }
+    />
+  );
 }

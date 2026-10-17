@@ -4857,6 +4857,7 @@ export function MapScreen({
           // the user's handedness together, or they end up in the same corner.
           side={controlsOnLeft ? "right" : "left"}
           reservedWidth={SEARCH_SIZE + CHROME_GAP}
+          online={connectivity === "online"}
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSelectSaved={(item) => {
