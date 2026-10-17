@@ -22,5 +22,6 @@ covers flags, output format and troubleshooting.
   real native library skips when stubbed. GDAL/PDAL subprocess orchestration
   is not unit-tested: extract the pure part and test that.
 - `tests/test_status_guard_db.py` needs `RUN_DB_IT=1` and real `psycopg2`.
-- Runbook §2 in `tests/INTEGRATION.md` (worker image end to end) is manual:
-  run it before committing a worker change it covers.
+- CI's `topo-e2e` job runs the worker image end to end on one real ELVIS tile
+  (`tests/INTEGRATION.md` §2). Its network has no internet, so a network or
+  S3 read added to the worker needs a stub in `tests/e2e/` too.
