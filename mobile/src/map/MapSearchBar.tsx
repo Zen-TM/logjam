@@ -44,14 +44,12 @@ import {
   GEOCODE_MIN_QUERY_LENGTH,
   messageFromError,
   PLACE_REGISTRY_ATTRIBUTION,
-  PLACE_SEARCH_DEBOUNCE_MS,
   PLACE_SEARCH_MIN_QUERY_LENGTH,
   placeResultDetail,
   searchLocationsLabel,
   searchPlaces,
   type GeocodeResult,
   type PlaceIndex,
-  type PlaceResult,
 } from "@logjam/shared";
 
 import {
@@ -70,10 +68,12 @@ import {
 } from "../offline/placeRegistry";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import {
+  askPlacesOnline,
   MAX_PLACE_RESULTS,
+  placesFromAnswer,
   placeSearchSource,
-  searchPlacesOnline,
   searchRows,
+  type PlaceAnswer,
 } from "./placeSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -194,25 +194,12 @@ export function MapSearchBar({
         : [],
     [source, index, placeQuery, trimmed],
   );
-  // The last answer stays up while the next is on its way, so the list does
-  // not blink empty on every keystroke.
-  const [apiPlaces, setApiPlaces] = useState<PlaceResult[]>([]);
+  // The last answer stays up while the query only grows, so the list does not
+  // blink on every keystroke.
+  const [placeAnswer, setPlaceAnswer] = useState<PlaceAnswer | null>(null);
   useEffect(() => {
     if (source !== "api" || !placeQuery) return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      searchPlacesOnline(trimmed, controller.signal)
-        .then(setApiPlaces)
-        .catch((err: unknown) => {
-          // Silent: the ask row under it is still there. The error carries
-          // the path, never the body.
-          if (!controller.signal.aborted) console.error(err);
-        });
-    }, PLACE_SEARCH_DEBOUNCE_MS);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
+    return askPlacesOnline(trimmed, setPlaceAnswer);
   }, [source, placeQuery, trimmed]);
   const places =
     source === "device"
@@ -220,7 +207,7 @@ export function MapSearchBar({
         ? devicePlaces
         : "loading"
       : source === "api" && placeQuery
-        ? apiPlaces
+        ? placesFromAnswer(placeAnswer, trimmed)
         : [];
 
   // One driver for width and for the fade of everything that only exists in
@@ -276,7 +263,7 @@ export function MapSearchBar({
     setQuery("");
     setAsked(null);
     setSearch(null);
-    setApiPlaces([]);
+    setPlaceAnswer(null);
   };
 
   // NOT debounced and not memoised on the query: it is a substring scan over
@@ -428,6 +415,12 @@ export function MapSearchBar({
                     </Pressable>
                   );
                 }
+                case "error":
+                  return (
+                    <View key="error" style={styles.statusBox}>
+                      <FieldError message={row.message} />
+                    </View>
+                  );
                 case "loading":
                   return (
                     <Text key="loading" style={styles.status}>

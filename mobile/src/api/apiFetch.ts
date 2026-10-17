@@ -93,7 +93,9 @@ function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  signal?.addEventListener("abort", () => controller.abort());
+  // Aborted already, during the token read: an abort event would never come.
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener("abort", () => controller.abort(), { once: true });
   return fetch(url, { ...init, signal: controller.signal }).finally(() =>
     clearTimeout(timer),
   );
