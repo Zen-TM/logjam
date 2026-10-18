@@ -1,0 +1,281 @@
+// Answering a form: who sees the answers comes first, before any field
+// (design §5.3), and the answer echoes the form as it was shown (its
+// visibility and its updatedAt). A 409 means the form moved meanwhile: the
+// dialog keeps what was typed, the plan is fetched again, and the person
+// sends it against the form as it now is.
+import { useId, useState } from "react";
+import {
+  parseTripPlanAnswers,
+  TRIP_PLAN_FORMS,
+  tripPlanVisibilityLine,
+  type TripPlanAnswers,
+  type TripPlanFormView,
+  type TripPlanQuestion,
+} from "@logjam/shared";
+import {
+  Button,
+  Checkbox,
+  ChipRail,
+  Dialog,
+  ErrorBanner,
+  TextArea,
+  TextField,
+} from "../../ui";
+import ConfirmDialog from "../dialogs/ConfirmDialog";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import { messageFromError } from "../../errors/messageFromError";
+import { ApiError } from "../../errors/ApiError";
+import {
+  answersFromDraft,
+  draftFromAnswers,
+  type AnswerDraft,
+} from "./plansModel";
+import classes from "./plans.module.css";
+
+const copy = TRIP_PLAN_FORMS.copy;
+
+/** One question's control, by kind. A required one is starred. */
+function QuestionField({
+  question,
+  value,
+  onChange,
+}: {
+  question: TripPlanQuestion;
+  value: AnswerDraft[string];
+  onChange: (next: AnswerDraft[string]) => void;
+}) {
+  const label = question.required ? `${question.label} *` : question.label;
+  const help = question.help || undefined;
+  switch (question.kind) {
+    case "text":
+    case "phone":
+      return (
+        <TextField
+          label={label}
+          hint={help}
+          required={question.required}
+          type={question.kind === "phone" ? "tel" : "text"}
+          autoComplete={question.kind === "phone" ? "tel" : "off"}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      );
+    case "longText":
+      return (
+        <TextArea
+          label={label}
+          hint={help}
+          required={question.required}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      );
+    case "number":
+      return (
+        <TextField
+          label={label}
+          hint={help}
+          required={question.required}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          step={1}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      );
+    case "choice":
+    case "yesNo": {
+      const options =
+        question.kind === "yesNo"
+          ? [
+              { value: "true", label: copy.yes },
+              { value: "false", label: copy.no },
+            ]
+          : (question.options ?? []).map((option) => ({
+              value: option.id,
+              label: option.label,
+            }));
+      return (
+        <div className={classes.question}>
+          <span className={classes.questionLabel} aria-hidden>
+            {label}
+          </span>
+          {help && <p className={classes.note}>{help}</p>}
+          <ChipRail
+            label={question.label}
+            options={options}
+            value={typeof value === "string" ? value : ""}
+            onChange={onChange}
+          />
+        </div>
+      );
+    }
+    case "multiChoice": {
+      const ticked = Array.isArray(value) ? value : [];
+      return (
+        <fieldset className={classes.question}>
+          <legend className={classes.questionLabel}>{label}</legend>
+          {help && <p className={classes.note}>{help}</p>}
+          {(question.options ?? []).map((option) => (
+            <Checkbox
+              key={option.id}
+              label={option.label}
+              checked={ticked.includes(option.id)}
+              onChange={(next) =>
+                onChange(
+                  next
+                    ? [...ticked, option.id]
+                    : ticked.filter((id) => id !== option.id),
+                )
+              }
+            />
+          ))}
+        </fieldset>
+      );
+    }
+    case "agree":
+      return (
+        <Checkbox
+          label={label}
+          description={help}
+          checked={value === true}
+          onChange={onChange}
+        />
+      );
+  }
+}
+
+/** A form's questions, as a joiner and a member both fill them in. */
+export function PlanFormFields({
+  form,
+  draft,
+  onChange,
+}: {
+  form: Pick<TripPlanFormView, "title" | "questions" | "visibleTo">;
+  draft: AnswerDraft;
+  onChange: (next: AnswerDraft) => void;
+}) {
+  return (
+    <>
+      <p className={classes.note}>{tripPlanVisibilityLine(form.visibleTo)}</p>
+      {form.questions.map((question) => (
+        <QuestionField
+          key={question.id}
+          question={question}
+          value={draft[question.id]}
+          onChange={(next) => onChange({ ...draft, [question.id]: next })}
+        />
+      ))}
+    </>
+  );
+}
+
+export default function PlanAnswerDialog(props: {
+  open: boolean;
+  form: TripPlanFormView;
+  onSubmit: (answers: TripPlanAnswers) => Promise<void>;
+  /** A 409 came back: fetch the plan again so `form` is the current one. */
+  onStale: () => void;
+  onClose: () => void;
+}) {
+  return props.open ? <AnswerForm {...props} /> : null;
+}
+
+function AnswerForm({
+  form,
+  onSubmit,
+  onStale,
+  onClose,
+}: {
+  form: TripPlanFormView;
+  onSubmit: (answers: TripPlanAnswers) => Promise<void>;
+  onStale: () => void;
+  onClose: () => void;
+}) {
+  const formId = useId();
+  const [draft, setDraft] = useState<AnswerDraft>(() =>
+    draftFromAnswers(form.questions, form.myAnswer?.answers ?? {}),
+  );
+  const [opened] = useState(draft);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const guard = useUnsavedChangesGuard(
+    JSON.stringify(draft) !== JSON.stringify(opened),
+    onClose,
+  );
+
+  async function submit() {
+    const parsed = parseTripPlanAnswers(
+      form.questions,
+      answersFromDraft(form.questions, draft),
+    );
+    if (!("value" in parsed)) {
+      setError("sentence" in parsed ? parsed.sentence : copy.saveFailed);
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSubmit(parsed.value);
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, copy.saveFailed));
+      if (err instanceof ApiError && err.status === 409) onStale();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Dialog
+        open
+        size="large"
+        title={form.title}
+        onClose={guard.requestClose}
+        dismissible={!busy}
+        footer={
+          <>
+            <Button
+              onClick={guard.requestClose}
+              disabled={busy}
+              disabledReason="Sending…"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" form={formId} variant="filled" busy={busy}>
+              {copy.save}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id={formId}
+          className={classes.form}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!busy) void submit();
+          }}
+        >
+          <PlanFormFields
+            form={form}
+            draft={draft}
+            onChange={(next) => {
+              setDraft(next);
+              setError(null);
+            }}
+          />
+          {error && <ErrorBanner message={error} />}
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        open={guard.guardOpen}
+        title="Discard unsaved changes?"
+        message="Your answers will be lost."
+        confirmLabel="Discard"
+        onConfirm={guard.confirmDiscard}
+        onClose={guard.cancelDiscard}
+      />
+    </>
+  );
+}

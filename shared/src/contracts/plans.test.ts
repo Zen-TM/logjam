@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TripPlanSummary } from "../tripPlans.js";
+import type { TripPlanQuestion, TripPlanSummary } from "../tripPlans.js";
 import {
   planCountsLabel,
   planDeleteConfirm,
@@ -28,6 +28,8 @@ import {
   tripPlansEmpty,
   tripPlansHeroTitle,
   tripPlanTripLogPrefill,
+  tripPlanAnswerText,
+  tripPlanSeesAnswers,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -459,5 +461,43 @@ describe("a trip log from a plan", () => {
         sections: [],
       }).date,
     ).toBe("2026-10-10");
+  });
+});
+
+describe("a form's answers", () => {
+  const question = (over: Partial<TripPlanQuestion>): TripPlanQuestion => ({
+    id: "q",
+    kind: "text",
+    label: "Q",
+    required: false,
+    ...over,
+  });
+  const options = [
+    { id: "a", label: "Harness" },
+    { id: "b", label: "Helmet" },
+  ];
+
+  it("says each kind's answer in words, and nothing for no answer", () => {
+    expect(tripPlanAnswerText(question({ kind: "choice", options }), "b")).toBe(
+      "Helmet",
+    );
+    expect(
+      tripPlanAnswerText(question({ kind: "multiChoice", options }), [
+        "a",
+        "b",
+      ]),
+    ).toBe("Harness, Helmet");
+    expect(tripPlanAnswerText(question({ kind: "yesNo" }), false)).toBe("No");
+    expect(tripPlanAnswerText(question({ kind: "agree" }), true)).toBe(
+      "Agreed",
+    );
+    expect(tripPlanAnswerText(question({ kind: "number" }), 3)).toBe("3");
+    expect(tripPlanAnswerText(question({}), undefined)).toBe("");
+  });
+
+  it("shows others' answers to leaders always, and to the rest when the form says so", () => {
+    expect(tripPlanSeesAnswers("leader", "leaders")).toBe(true);
+    expect(tripPlanSeesAnswers("editor", "leaders")).toBe(false);
+    expect(tripPlanSeesAnswers("member", "members")).toBe(true);
   });
 });

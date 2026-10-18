@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { TripPlanQuestion } from "@logjam/shared";
 import {
   adoptTheirs,
+  answersFromDraft,
+  draftFromAnswers,
   PLAN_FIELD_GROUPS,
   planPatch,
   sectionPatch,
@@ -101,5 +104,34 @@ describe("a form refetched under the user", () => {
     // Untouched by the user, the field took theirs: nothing to show.
     const untouched = adoptTheirs(opened, opened, theirs).values;
     expect(theirsChanged(opened, theirs, untouched, ["name"])).toBe(false);
+  });
+});
+
+describe("a form being filled in", () => {
+  const questions: TripPlanQuestion[] = [
+    { id: "seats", kind: "number", label: "Seats", required: false },
+    { id: "swim", kind: "yesNo", label: "Swim", required: true },
+    { id: "rules", kind: "agree", label: "Rules", required: false },
+    { id: "notes", kind: "text", label: "Notes", required: false },
+  ];
+
+  it("round-trips an answer through the controls", () => {
+    const answers = { seats: 3, swim: false, rules: true, notes: "Late" };
+    const draft = draftFromAnswers(questions, answers);
+    expect(draft).toEqual({
+      seats: "3",
+      swim: "false",
+      rules: true,
+      notes: "Late",
+    });
+    expect(answersFromDraft(questions, draft)).toEqual(answers);
+  });
+
+  // Mutation: send `false` for an unticked agree box, and a required one
+  // passes the parser unticked.
+  it("sends nothing for an empty control", () => {
+    expect(
+      answersFromDraft(questions, { seats: "", rules: false, notes: "" }),
+    ).toEqual({});
   });
 });

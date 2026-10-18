@@ -16,6 +16,7 @@ import { PLACES_FILTER_SHEET } from "./placesFilterSheet.js";
 import { PLACES_ADD, PLACES_LIST } from "./placesList.js";
 import {
   TRIP_PLANS_LIST,
+  TRIP_PLAN_FORMS,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
@@ -72,4 +73,5 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   TRIP_PLAN_PAGE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_FORMS,
 ];

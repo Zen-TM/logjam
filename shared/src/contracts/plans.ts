@@ -7,6 +7,9 @@ import {
   TRIP_PLAN_INVITE_TTL_DAYS,
   TRIP_PLAN_ROLES,
   type DateOnly,
+  type TripPlanAnswerValue,
+  type TripPlanQuestion,
+  type TripPlanQuestionKind,
   type TripPlanFormView,
   type TripPlanFormVisibility,
   type TripPlanMemberStatus,
@@ -601,4 +604,127 @@ export function tripPlanTripLogPrefill(plan: {
       .map((section) => `${section.title}\n\n${section.body}`)
       .join("\n\n"),
   };
+}
+
+// ── Forms ───────────────────────────────────────────────────────────
+
+export const TRIP_PLAN_FORMS = {
+  id: "plans.form",
+  question: "What does this form ask, and what did people answer?",
+  sections: [
+    // The title, back to the plan, the form's ⋯.
+    { key: "hero" },
+    // `tripPlanVisibilityLine`, always before any answer.
+    { key: "visibility" },
+    { key: "mine" },
+    // Everyone's answers, when the caller may see them: a row per member.
+    {
+      key: "table",
+      on: "web",
+      reason:
+        "A table a column per question needs a desk's width; Logjam GPS lists each person's answers under their name.",
+    },
+    {
+      key: "list",
+      on: "gps",
+      reason:
+        "A phone has no room for a column per question, so each person's answers stack under their name.",
+    },
+  ],
+  copy: {
+    back: "Back to the plan",
+    actions: "Form actions",
+    mine: "Your answer",
+    answers: "Answers",
+    answer: "Answer",
+    change: "Change my answer",
+    noAnswer: "You haven't answered yet.",
+    noAnswerYet: "No answer yet",
+    member: "Member",
+    save: "Send",
+    saveFailed: "Couldn't send your answer.",
+    saved: "Answer sent.",
+    deleteFailed: "Couldn't delete the form.",
+    deleted: "Form deleted.",
+
+    // The builder: Logjam Web only (`PLAN_FORM_VERBS`).
+    newTitle: "New form",
+    editTitle: "Edit form",
+    startFrom: "Start from",
+    blank: "A blank form",
+    title: "Title",
+    visibleTo: "Who sees the answers",
+    visibleToLeaders: "Leaders",
+    visibleToMembers: "Everyone in the plan",
+    requiredToJoin: "Required to join",
+    requiredToJoinHint:
+      "People answer this before they can join. Existing members are asked next time they open the plan.",
+    questions: "Questions",
+    questionLabel: "Question",
+    questionKind: "Kind",
+    questionHelp: "Hint",
+    questionRequired: "Required",
+    options: "Options",
+    optionLabel: "Option",
+    addOption: "Add an option",
+    removeOption: "Remove option",
+    addQuestion: "Add a question",
+    removeQuestion: "Remove question",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    add: "Add form",
+    saveForm: "Save",
+    formSaveFailed: "Couldn't save the form.",
+    yes: "Yes",
+    no: "No",
+    agreed: "Agreed",
+  },
+} as const satisfies ScreenContract;
+
+/** Each question kind's name in the builder. */
+export const TRIP_PLAN_QUESTION_KIND_LABELS: Record<
+  TripPlanQuestionKind,
+  string
+> = {
+  text: "Short answer",
+  longText: "Paragraph",
+  phone: "Phone number",
+  number: "Number",
+  choice: "One from a list",
+  multiChoice: "Tick list",
+  yesNo: "Yes or no",
+  agree: "A box to tick",
+};
+
+/** An answer as words, for a table, a list or the print summary. Blank when
+ *  there is none, so a table cell can say so in its own words. */
+export function tripPlanAnswerText(
+  question: TripPlanQuestion,
+  value: TripPlanAnswerValue | undefined,
+): string {
+  if (value === undefined) return "";
+  const copy = TRIP_PLAN_FORMS.copy;
+  const label = (id: string) =>
+    question.options?.find((option) => option.id === id)?.label ?? "";
+  switch (question.kind) {
+    case "choice":
+      return label(String(value));
+    case "multiChoice":
+      return (Array.isArray(value) ? value : []).map(label).join(", ");
+    case "yesNo":
+      return value ? copy.yes : copy.no;
+    case "agree":
+      return value ? copy.agreed : "";
+    default:
+      return String(value);
+  }
+}
+
+/** Whether the caller sees other people's answers to a form: leaders always,
+ *  everyone else when the form says so (the API filters the same way). */
+export function tripPlanSeesAnswers(
+  role: TripPlanRole,
+  visibleTo: TripPlanFormVisibility,
+): boolean {
+  return role === "leader" || visibleTo === "members";
 }

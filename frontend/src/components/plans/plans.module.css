@@ -128,3 +128,82 @@
   flex-wrap: wrap;
   gap: var(--space-1);
 }
+
+/* A question someone answers, or a group of controls under one label. */
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.questionLabel {
+  composes: control from "../../textRoles.generated.module.css";
+  padding: 0;
+  color: var(--color-text);
+}
+
+/* One question in the builder: its fields, set apart by a hairline. */
+.questionEditor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-1-5) 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.questionTools {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-1-5);
+}
+
+.answers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-0-5);
+  margin: 0;
+}
+
+.answers dd {
+  margin: 0 0 var(--space-1);
+}
+
+/* Everyone's answers: a column per question, scrolled sideways on its own
+   when the questions outgrow the panel. */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  composes: detail from "../../textRoles.generated.module.css";
+  border-collapse: collapse;
+  min-width: 100%;
+  color: var(--color-text);
+}
+
+.table th,
+.table td {
+  padding: var(--space-0-5) var(--space-1);
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}

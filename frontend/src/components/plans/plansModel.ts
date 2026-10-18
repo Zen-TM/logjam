@@ -2,13 +2,18 @@
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
 // the value last seen and the new one (shared/DESIGN.md §10).
 import type {
+  TripPlanAnswers,
   TripPlanCreate,
+  TripPlanFormCreate,
+  TripPlanFormPatch,
+  TripPlanQuestion,
   TripPlanPatch,
   TripPlanSectionPatch,
 } from "@logjam/shared";
 
 export type PlanValues = Required<TripPlanCreate>;
 export type SectionValues = { title: string; body: string };
+export type FormValues = Required<TripPlanFormCreate>;
 
 /** Only the fields that changed, each as a compare-and-set pair. */
 export function planPatch(was: PlanValues, now: PlanValues): TripPlanPatch {
@@ -87,4 +92,74 @@ export function adoptTheirs<T extends Record<string, unknown>>(
     if (unit.every((key) => same(values[key], seen[key])))
       for (const key of unit) merged[key] = current[key];
   return { seen: current, values: merged };
+}
+
+/** A form being filled in: what each control holds. A number is the text in
+ *  its field, a yes or no the chip's "true" or "false", an agree box a
+ *  boolean. */
+export type AnswerDraft = Record<string, string | string[] | boolean>;
+
+export function draftFromAnswers(
+  questions: readonly TripPlanQuestion[],
+  answers: TripPlanAnswers,
+): AnswerDraft {
+  const draft: AnswerDraft = {};
+  for (const question of questions) {
+    const value = answers[question.id];
+    if (value === undefined) continue;
+    draft[question.id] =
+      question.kind === "agree"
+        ? value === true
+        : typeof value === "number" || typeof value === "boolean"
+          ? String(value)
+          : value;
+  }
+  return draft;
+}
+
+/** The draft as the wire takes it; an empty control says nothing. The shared
+ *  parser then trims, caps and checks what is required. */
+export function answersFromDraft(
+  questions: readonly TripPlanQuestion[],
+  draft: AnswerDraft,
+): Record<string, unknown> {
+  const answers: Record<string, unknown> = {};
+  for (const question of questions) {
+    const value = draft[question.id];
+    if (value === undefined || value === "" || value === false) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    answers[question.id] =
+      question.kind === "number"
+        ? Number(value)
+        : question.kind === "yesNo"
+          ? value === "true"
+          : value;
+  }
+  return answers;
+}
+
+/** A form's changed parts; the questions compare as one list (design §4). */
+export function formPatch(
+  seen: FormValues,
+  now: FormValues,
+): TripPlanFormPatch {
+  const patch: TripPlanFormPatch = {};
+  if (now.title !== seen.title)
+    patch.title = { from: seen.title, to: now.title };
+  if (JSON.stringify(now.questions) !== JSON.stringify(seen.questions))
+    patch.questions = { from: seen.questions, to: now.questions };
+  if (now.visibleTo !== seen.visibleTo)
+    patch.visibleTo = { from: seen.visibleTo, to: now.visibleTo };
+  if (now.requiredToJoin !== seen.requiredToJoin)
+    patch.requiredToJoin = {
+      from: seen.requiredToJoin,
+      to: now.requiredToJoin,
+    };
+  return patch;
+}
+
+/** A new question's or option's id: stable across edits, unique in its form,
+ *  a slug no plain object already has as a key (`q3f9a…`). */
+export function mintSlug(prefix: "q" | "o"): string {
+  return `${prefix}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
