@@ -110,7 +110,7 @@ describe("GeoPdfDialog, across a Select on map round trip", () => {
 
     fireEvent.change(titleBox(), { target: { value: "My edit" } });
     selectOnMap = () => rerender(dialog({ open: false, ...props }));
-    fireEvent.click(screen.getByRole("button", { name: /Draw the area/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Pick on the map" }));
     rerender(dialog({ open: true, ...props }));
     await vi.waitFor(() => expect(titleBox().value).toBe("My edit"));
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -145,7 +145,7 @@ describe("GeoPdfDialog, across a Select on map round trip", () => {
   });
 });
 
-// "Draw the area on the map" opens the map on the base layer chosen HERE, so the
+// "Pick on the map" opens the map on the base layer chosen HERE, so the
 // frame sits on what will be printed (shared/DESIGN.md §11), and the latest
 // pick wins on every visit. App holds it only for the length of the framing and
 // never writes the user's own layer (`geoPdfFraming.test.ts`).
@@ -162,7 +162,7 @@ describe("GeoPdfDialog, drawing the area", () => {
       }),
     );
     const draw = () =>
-      fireEvent.click(screen.getByRole("button", { name: /Draw the area/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Pick on the map" }));
 
     // Seeded from the map's own layer, until something else is picked.
     draw();
@@ -172,5 +172,70 @@ describe("GeoPdfDialog, drawing the area", () => {
     draw();
 
     expect(handed).toEqual(["six-topo", "six-imagery", "six-topo"]);
+  });
+});
+
+const edges = () =>
+  screen.getByText("Exact edges").closest("details") as HTMLDetailsElement;
+
+// Coordinates, the lock, the edges and the pivot wait behind Exact edges,
+// which starts closed; Make it opens it when a field inside needs fixing, or
+// the banner would point at a field nobody can see. With no map centre the
+// seeded extent is all zeros, so North is not above South. Mutation: drop
+// `setEdgesOpen(true)` from handleGenerate.
+describe("GeoPdfDialog, Exact edges", () => {
+  it("starts closed and opens on Make it when an edge needs fixing", () => {
+    render(dialog({ open: true }));
+    expect(edges().open).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+
+    expect(edges().open).toBe(true);
+    expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+  });
+
+  // A template has no area. Mutation: drop the `!templateMode` gate.
+  it("is absent, with the area, in template mode", () => {
+    render(dialog({ open: true, templateMode: true }));
+    expect(screen.queryByText("Exact edges")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Pick on the map" }),
+    ).toBeNull();
+  });
+});
+
+// The NSW series are chips; Other opens the typed field. The scale picked
+// is the one the map frames at. Mutations: stop applying a preset's scale;
+// show the field for a preset.
+describe("GeoPdfDialog, scale", () => {
+  it("frames at the preset picked, and types any other under Other", () => {
+    const scales: unknown[] = [];
+    render(
+      dialog({
+        open: true,
+        onSelectOnMap: (...args) => scales.push(args[3]),
+      }),
+    );
+    const pick = () =>
+      fireEvent.click(screen.getByRole("button", { name: "Pick on the map" }));
+    const scaleField = () => screen.queryByRole("textbox", { name: "Scale" });
+
+    expect(screen.getByRole("radio", { name: /^1:25.000$/ }).ariaChecked).toBe(
+      "true",
+    );
+    expect(scaleField()).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: /^1:50.000$/ }));
+    pick();
+    expect(scales).toEqual([50000]);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Other" }));
+    const field = scaleField() as HTMLInputElement;
+    expect(field.value).toBe("50000");
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "12500" } });
+    fireEvent.blur(field);
+    pick();
+    expect(scales).toEqual([50000, 12500]);
   });
 });
