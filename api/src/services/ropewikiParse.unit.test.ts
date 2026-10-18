@@ -4,7 +4,10 @@
 // ropewiki-nsw-tricky.csv fifteen picked for their shape (ranges, "6r+2j",
 // nested <i> tags, missing grade, coordinates or rappels, miles and feet,
 // a comma in the name). Shapes the export has not produced (clock times,
-// "2 days", a bad or duplicate PAGEID) are not covered here.
+// "2 days", a bad or duplicate PAGEID) are not covered by those two:
+// ropewiki-synthetic-shapes.csv holds them, made up row by row (names, ids
+// and values are invented, in the export's column layout), so its golden pins
+// the parser's reading of a shape, not anything RopeWiki publishes.
 //
 // The goldens are plain-text JSON (extension .golden) so the formatter leaves them alone.
 // Regenerate the golden after an intended parser change with
@@ -33,6 +36,13 @@ describe("parseRopeWikiCsv corpus", () => {
     const result = parseRopeWikiCsv(fixture("ropewiki-nsw-tricky.csv"));
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-nsw-tricky.golden"),
+    );
+  });
+
+  it("parses the synthetic shapes as the golden says", async () => {
+    const result = parseRopeWikiCsv(fixture("ropewiki-synthetic-shapes.csv"));
+    await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
+      golden("ropewiki-synthetic-shapes.golden"),
     );
   });
 

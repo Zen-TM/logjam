@@ -246,6 +246,27 @@ function parseDMS(
   return null;
 }
 
+/** Parse decimal degrees: `-33.5, 150.4` (signed) or `33.5 S, 150.4 E`. */
+function parseDecimal(
+  coord: string,
+): { latitude: number; longitude: number } | null {
+  const m = coord
+    .trim()
+    .match(
+      /^(-?\d+(?:\.\d+)?)\s*([NSEW])?\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*([NSEW])?$/i,
+    );
+  if (!m) return null;
+  const signed = (n: string, dir?: string) =>
+    /^[SW]$/i.test(dir ?? "") ? -Math.abs(parseFloat(n)) : parseFloat(n);
+  let latitude = signed(m[1], m[2]);
+  let longitude = signed(m[3], m[4]);
+  if (/^[EW]$/i.test(m[2] ?? "") && /^[NS]$/i.test(m[4] ?? "")) {
+    [latitude, longitude] = [longitude, latitude];
+  }
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { latitude, longitude };
+}
+
 /**
  * Parse rating HTML to extract the French grading system.
  * RopeWiki stores two grading systems; the French grade (e.g. "v2a3 III")
@@ -267,12 +288,14 @@ function parseRating(html: string): {
     {};
   if (!html) return result;
 
-  // Extract content inside parentheses
+  // The French grade sits in parentheses; without them, read the whole text
+  // but only if it names a v grade, so a bare "3B III" (the other system)
+  // is not misread.
   const parenMatch = html.match(/\(([^)]+)\)/);
-  if (!parenMatch) return result;
-
-  // Strip all HTML tags to get plain text
-  const plain = parenMatch[1].replace(/<[^>]+>/g, "").trim();
+  const plain = (parenMatch ? parenMatch[1] : html)
+    .replace(/<[^>]+>/g, "")
+    .trim();
+  if (!parenMatch && !/\bv\d/i.test(plain)) return result;
 
   const romanToNum: Record<string, number> = {
     I: 1,
@@ -305,21 +328,33 @@ function parseLongestRappel(value: string): number | null {
   if (feetMatch) return Math.round(parseFloat(feetMatch[1]) * 0.3048 * 10) / 10;
   const mMatch = value.match(/([\d.]+)\s*(?:m|meters?)/i);
   if (mMatch) return Math.round(parseFloat(mMatch[1]) * 10) / 10;
-  const numMatch = value.match(/([\d.]+)/);
-  if (numMatch) return Math.round(parseFloat(numMatch[1]) * 0.3048 * 10) / 10;
+  // A bare number has no unit to trust; null beats a guess (QUESTIONS.md).
   return null;
 }
 
-/** Parse a time string like "5 hours", "4-6 hours", or "5 hr" to a number. */
+/**
+ * Parse a time string like "5 hours", "4-6 hours", "5 hr", "2 hr 30 min" or
+ * "45 min" to hours. A bare number is hours; "days" gives null, since a day
+ * of canyoning is not 24 hours and a guess would be stored as fact.
+ */
 function parseHours(value: string): number | null {
   if (!value || !value.trim()) return null;
-  const rangeMatch = value.match(/([\d.]+)\s*-\s*([\d.]+)/);
+  if (/\bdays?\b/i.test(value)) return null;
+  const unit = (u: string | undefined) => (/^m/i.test(u ?? "") ? 1 / 60 : 1);
+  const rangeMatch = value.match(/([\d.]+)\s*-\s*([\d.]+)\s*([a-z]+)?/i);
   if (rangeMatch) {
-    return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
+    return (
+      ((parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2) *
+      unit(rangeMatch[3])
+    );
   }
-  const numMatch = value.match(/([\d.]+)/);
-  if (numMatch) return parseFloat(numMatch[1]);
-  return null;
+  const parts = [...value.matchAll(/([\d.]+)\s*([a-z]+)?/gi)];
+  if (parts.length === 0) return null;
+  const total = parts.reduce(
+    (sum, m) => sum + parseFloat(m[1]) * unit(m[2]),
+    0,
+  );
+  return Math.round(total * 100) / 100;
 }
 
 /** Parse number of rappels — may be a range like "3-5", take the first number. */
@@ -451,6 +486,7 @@ export function parseRopeWikiCsv(csvText: string): {
 
   const places: RopeWikiCanyon[] = [];
   const errors: string[] = [];
+  const seenPageIds = new Set<number>();
 
   for (let i = 1; i < records.length; i++) {
     const row = records[i];
@@ -462,6 +498,11 @@ export function parseRopeWikiCsv(csvText: string): {
         continue;
       }
 
+      if (seenPageIds.has(pageId)) {
+        errors.push(`Row ${i}: duplicate PAGEID ${pageId}, first row kept`);
+        continue;
+      }
+
       const name = locationCol >= 0 ? row[locationCol]?.trim() : "";
       if (!name) {
         errors.push(`Row ${i}: missing name`);
@@ -469,7 +510,7 @@ export function parseRopeWikiCsv(csvText: string): {
       }
 
       const coordStr = coordCol >= 0 ? row[coordCol]?.trim() : "";
-      const coords = parseDMS(coordStr || "");
+      const coords = parseDMS(coordStr || "") ?? parseDecimal(coordStr || "");
       if (!coords) {
         errors.push(
           `Row ${i} (${name}): could not parse coordinates "${coordStr}"`,
@@ -488,6 +529,7 @@ export function parseRopeWikiCsv(csvText: string): {
       const minTimeRaw = timeCol >= 0 ? row[timeCol] || "" : "";
       const hours = parseHours(maxTimeRaw) ?? parseHours(minTimeRaw);
 
+      seenPageIds.add(pageId);
       places.push({
         ropeWikiId: pageId,
         name,
