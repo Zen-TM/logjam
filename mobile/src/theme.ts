@@ -397,6 +397,8 @@ const notificationHues = (
     export: assetHue.import,
     /** GeoPDFs — as in Saved. */
     geoPdf: assetHue.geoPdf,
+    /** A maintainer message: about Logjam itself, so the scheme accent. */
+    message: theme.accent,
     /** A file a friend sent you — the waterhole blue an accepted copy wears in
      *  Saved's Imports, because that is where accepting it puts it. */
     file: assetHue.import,

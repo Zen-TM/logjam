@@ -3,6 +3,7 @@ import {
   NOTIFICATION_TYPES,
   notificationAnnouncement,
   notificationHaystack,
+  notificationKind,
   notificationLabel,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
@@ -169,6 +170,11 @@ describe("announcement", () => {
     expect(notificationLabel(notification("announcement")).text).toBe(
       "A message from the Logjam maintainer",
     );
+  });
+
+  // Red if it falls back to "people": a friends glyph reads as a friend event.
+  it("is its own kind", () => {
+    expect(notificationKind(notification("announcement"))).toBe("message");
   });
 
   it("hands a client the resolved message", () => {

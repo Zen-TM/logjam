@@ -175,7 +175,7 @@ export function notificationHaystack(n: TNotification): string {
 // ── Identity: the kind ───────────────────────────────────────────────────────
 //
 // Notifications are a genuine open-ended vocabulary of KINDS, so they get a
-// glyph and a hue each (both DESIGN.md files, §3). Which kind a notification is
+// glyph and a hue each (shared/DESIGN.md §8). Which kind a notification is
 // is decided here; each client draws the kind in its own icon family and in
 // the hue of the thing the notification is about.
 
@@ -186,6 +186,7 @@ export type NotificationKind =
   | "topo"
   | "export"
   | "geoPdf"
+  | "message"
   | "problem";
 
 /**
@@ -206,10 +207,10 @@ export function notificationKind(n: TNotification): NotificationKind {
       return "file";
     case "friend_request":
     case "friend_request_accepted":
-    // From a person, the maintainer; a kind of its own would need a glyph and
-    // a hue in both clients' DESIGN.md.
-    case "announcement":
       return "people";
+    // Not "people": a friends glyph would read as a friend event.
+    case "announcement":
+      return "message";
     case "topo_failed":
       return "problem";
     case "topo_complete":
