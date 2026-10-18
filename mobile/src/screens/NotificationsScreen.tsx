@@ -1184,7 +1184,7 @@ const NotificationRow = memo(function NotificationRow({
   const label = notificationLabel(item);
   const meta = notificationMeta(item, theme);
   const target = notificationActions(item);
-  const subtitle = [label.warning, formatTime(item.createdAt)]
+  const subtitle = [label.detail, formatTime(item.createdAt)]
     .filter(Boolean)
     .join(" · ");
   // The row's own STATE beats the unread flag in the one trailing slot: unread

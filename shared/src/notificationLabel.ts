@@ -1,6 +1,6 @@
 // Pure label derivation for the notifications inbox, read by Logjam GPS and
 // Logjam Web alike so the two inboxes cannot word the same event differently.
-// Kept as data (text + optional warning subline) so it is testable and
+// Kept as data (text + optional detail subline) so it is testable and
 // reusable by push handling. A new notification type is a branch here; unknown
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
@@ -8,7 +8,7 @@ import { ANNOUNCEMENT } from "./contracts/inbox.js";
 
 export type NotificationLabel = {
   text: string;
-  warning?: string;
+  detail?: string;
 };
 
 function str(value: unknown): string | null {
@@ -97,7 +97,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         // something a friend told them they had sent. Only ever shown for a
         // send they never took: an accepted one is dropped server-side.
         ...(p.fileSendStatus === "expired" && {
-          warning: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
+          detail: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
         }),
       };
     case "topo_complete":
@@ -106,7 +106,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
           ? `${str(p.jobName)} map ready`
           : "LiDAR map ready",
         ...(p.osmFailed === true && {
-          warning: "Roads and labels didn't download. Try again.",
+          detail: "Roads and labels didn't download. Try again.",
         }),
       };
     case "topo_failed":
@@ -120,7 +120,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       if (p.status === "failed") {
         return {
           text: `${format} export failed`,
-          ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
+          ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return {
@@ -130,13 +130,13 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "topo_export_skipped":
       return {
         text: "Auto-export didn't run",
-        ...(str(p.reason) && { warning: str(p.reason)! }),
+        ...(str(p.reason) && { detail: str(p.reason)! }),
       };
     case "geo_pdf_complete":
       if (p.status === "failed") {
         return {
           text: "Couldn't create GeoPDF",
-          ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
+          ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return { text: "GeoPDF ready" };
@@ -147,12 +147,17 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "egress_quota_exceeded":
       return {
         text: "Monthly download limit reached",
-        warning: "Downloads resume when the limit resets next month.",
+        detail: "Downloads resume when the limit resets next month.",
       };
     // The maintainer's own title, resolved at read time. The push carries a
     // fixed title instead (Guard: api/src/services/push.unit.test.ts).
-    case "announcement":
-      return { text: str(p.title) ?? ANNOUNCEMENT.untitled };
+    // The subline says who it is from, which the title alone does not.
+    case "announcement": {
+      const title = str(p.title);
+      return title
+        ? { text: title, detail: ANNOUNCEMENT.from }
+        : { text: ANNOUNCEMENT.untitled };
+    }
     default:
       return { text: "Notification" };
   }
@@ -169,7 +174,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
  */
 export function notificationHaystack(n: TNotification): string {
   const label = notificationLabel(n);
-  return `${label.text} ${label.warning ?? ""}`.toLowerCase();
+  return `${label.text} ${label.detail ?? ""}`.toLowerCase();
 }
 
 // ── Identity: the kind ───────────────────────────────────────────────────────

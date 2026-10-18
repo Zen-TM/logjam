@@ -103,7 +103,7 @@ describe("notificationLabel", () => {
     const withWarning = notificationLabel(
       notification("topo_complete", { jobName: "Kanangra", osmFailed: true }),
     );
-    expect(withWarning.warning).toMatch(/Roads and labels/);
+    expect(withWarning.detail).toMatch(/Roads and labels/);
   });
 
   it("labels export completion and failure", () => {
@@ -123,7 +123,7 @@ describe("notificationLabel", () => {
           errorMessage: "boom",
         }),
       ),
-    ).toEqual({ text: "PDF export failed", warning: "boom" });
+    ).toEqual({ text: "PDF export failed", detail: "boom" });
   });
 
   it("labels geo_pdf completion and failure", () => {
@@ -137,7 +137,7 @@ describe("notificationLabel", () => {
           errorMessage: "no extent",
         }),
       ),
-    ).toEqual({ text: "Couldn't create GeoPDF", warning: "no extent" });
+    ).toEqual({ text: "Couldn't create GeoPDF", detail: "no extent" });
   });
 
   it("degrades gracefully on missing payload fields", () => {
@@ -163,13 +163,15 @@ describe("announcement", () => {
     body: "Hello **all**",
   };
 
-  it("is labelled with the message's own title, or a generic one", () => {
-    expect(notificationLabel(notification("announcement", resolved)).text).toBe(
-      "Trip season",
-    );
-    expect(notificationLabel(notification("announcement")).text).toBe(
-      "A message from the Logjam maintainer",
-    );
+  // Red if the byline goes: a bare title reads like any system notice.
+  it("is labelled with the message's own title and who it is from", () => {
+    expect(notificationLabel(notification("announcement", resolved))).toEqual({
+      text: "Trip season",
+      detail: "From the Logjam maintainer",
+    });
+    expect(notificationLabel(notification("announcement"))).toEqual({
+      text: "A message from the Logjam maintainer",
+    });
   });
 
   // Red if it falls back to "people": a friends glyph reads as a friend event.
@@ -225,7 +227,7 @@ describe("file_sent", () => {
       }),
     );
     expect(label.text).toBe("bob sent you Exit notes.gpx");
-    expect(label.warning).toBe("This file expired. Ask bob to send it again.");
+    expect(label.detail).toBe("This file expired. Ask bob to send it again.");
   });
 
   // Nothing to explain while it is still answerable.
@@ -237,7 +239,7 @@ describe("file_sent", () => {
             fileSendId: "s1",
             fileSendStatus: status,
           }),
-        ).warning,
+        ).detail,
       ).toBeUndefined();
     }
   });
@@ -261,7 +263,7 @@ describe("notificationHaystack — what the inbox search matches", () => {
     expect(haystack).toContain("bob");
   });
 
-  it("includes the warning line, which is the only place some rows say why", () => {
+  it("includes the detail line, which is the only place some rows say why", () => {
     expect(
       notificationHaystack(
         notification("topo_export_skipped", {

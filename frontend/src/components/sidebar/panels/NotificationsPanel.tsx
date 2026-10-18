@@ -691,7 +691,7 @@ function NotificationsPanel({
       const label = notificationLabel(row);
       title = label.text;
       subtitle = [
-        label.warning,
+        label.detail,
         notificationActions(row)?.pill,
         formatTime(row.createdAt),
       ]
