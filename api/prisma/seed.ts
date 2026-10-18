@@ -1472,6 +1472,11 @@ async function main() {
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
     prisma.friendInvite.deleteMany(),
+    prisma.tripPlanAnswer.deleteMany(),
+    prisma.tripPlanForm.deleteMany(),
+    prisma.tripPlanSection.deleteMany(),
+    prisma.tripPlanMember.deleteMany(),
+    prisma.tripPlan.deleteMany(),
     prisma.deviceToken.deleteMany(),
     prisma.syncTombstone.deleteMany(),
     prisma.egressLogCursor.deleteMany(),
@@ -2400,6 +2405,102 @@ async function main() {
       expiresAt: new Date(
         Date.now() + FRIEND_INVITE_TTL_DAYS * 24 * 60 * 60_000,
       ),
+    },
+  });
+
+  // A made-up plan (#439): alice leads, bob is in it, carol is not. It holds
+  // one place and one route of its own, which belong to no user.
+  const planId = fid(100);
+  const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+  await prisma.tripPlan.create({
+    data: {
+      id: planId,
+      createdById: ALICE_ID,
+      name: "Wollangambe weekend",
+      startDate: inDays(21),
+      endDate: inDays(22),
+      tripTypes: ["canyoning"],
+    },
+  });
+  await prisma.tripPlanMember.createMany({
+    data: [
+      {
+        id: fid(101),
+        planId,
+        userId: ALICE_ID,
+        role: "leader",
+        status: "active",
+      },
+      {
+        id: fid(102),
+        planId,
+        userId: BOB_ID,
+        role: "member",
+        status: "active",
+        invitedById: ALICE_ID,
+      },
+    ],
+  });
+  await prisma.tripPlanSection.create({
+    data: {
+      id: fid(103),
+      planId,
+      title: "Overview",
+      body: "Two days on the Wollangambe. Wetsuits and lilos.",
+      position: 0,
+    },
+  });
+  await prisma.tripPlanForm.create({
+    data: {
+      id: fid(104),
+      planId,
+      title: "Safety contacts",
+      preset: "safetyContacts",
+      questions: [
+        { id: "name", kind: "text", label: "Contact's name", required: true },
+        {
+          id: "phone",
+          kind: "phone",
+          label: "Contact's phone",
+          required: true,
+        },
+      ],
+      visibleTo: "members",
+      requiredToJoin: true,
+      position: 0,
+    },
+  });
+  await prisma.tripPlanAnswer.create({
+    data: {
+      id: fid(105),
+      formId: fid(104),
+      userId: BOB_ID,
+      answers: { name: "Sam Example", phone: "0400 000 000" },
+    },
+  });
+  await prisma.place.create({
+    data: {
+      id: wpid(100),
+      planId,
+      addedById: ALICE_ID,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+      name: "Wollangambe meeting point",
+      latitude: -33.4789,
+      longitude: 150.3612,
+    },
+  });
+  await prisma.route.create({
+    data: {
+      id: rtid(100),
+      planId,
+      addedById: ALICE_ID,
+      name: "Walk in to the Wollangambe",
+      color: TRACK_COLORS[2],
+      points: [
+        [150.3612, -33.4789],
+        [150.3625, -33.4801],
+        [150.3641, -33.4812],
+      ],
     },
   });
 

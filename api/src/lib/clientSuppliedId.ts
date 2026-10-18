@@ -37,7 +37,8 @@ export function parseClientSuppliedId(
  * not-found path).
  */
 export function assertClientIdReplayable(
-  rowOwnerId: string,
+  // Null for a plan's row, which is nobody's: always the 404.
+  rowOwnerId: string | null,
   callerId: string,
   notFoundMessage: UserSentence,
 ): void {

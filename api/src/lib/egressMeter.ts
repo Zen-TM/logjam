@@ -77,7 +77,9 @@ async function resolveOwners(
   ]);
 
   for (const row of [...topoJobs, ...exportJobs, ...geoPdfJobs]) {
-    owners.set(row.id, row.userId);
+    // A plan's GeoPDF (null userId) is not metered: who pays for its
+    // downloads is still open (#439).
+    if (row.userId) owners.set(row.id, row.userId);
   }
   return owners;
 }

@@ -83,10 +83,13 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   const bucket = env.S3_BUCKET_TOPO ?? "";
 
   const job = await prisma.geoPdfJob.findUnique({ where: { id: jobId } });
-  if (!job) {
+  // A plan's GeoPDF (null userId) is a copy of a finished one and is never
+  // rendered; one reaching here is treated as missing.
+  if (!job?.userId) {
     logger.error({ jobId }, "geo_pdf_worker_job_not_found");
     return 1;
   }
+  const userId = job.userId;
 
   // Guarded on `queued`: if the job was reaped or deleted while the task spun
   // up, claim nothing and exit cleanly. started_at anchors the reaper's
@@ -109,7 +112,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     const config = parseStoredConfig(job.config);
     const vectorStyle = parseStoredVectorStyle(job.vectorStyleSnapshot);
 
-    const pdfBuffer = await generateGeoPdf(config, job.userId, vectorStyle);
+    const pdfBuffer = await generateGeoPdf(config, userId, vectorStyle);
 
     const key = resultKeyFor(jobId);
     await s3.send(
@@ -164,7 +167,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
         },
       });
       if (result.count > 0) {
-        await incrementStorageUsed(job.userId, BigInt(resultBytes!), tx);
+        await incrementStorageUsed(userId, BigInt(resultBytes!), tx);
       }
       return result.count;
     });
@@ -186,7 +189,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
 
   await prisma.notification.create({
     data: {
-      userId: job.userId,
+      userId,
       type: "geo_pdf_complete",
       payload: {
         geoPdfJobId: jobId,
@@ -202,7 +205,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   // The stored notification row above deliberately keeps the
   // `geo_pdf_complete` type in both cases — Logjam GPS and Logjam Web both switch
   // on that type and branch on `payload.status` for the failure wording.
-  await sendPushToUser(job.userId, {
+  await sendPushToUser(userId, {
     type: ok ? "geo_pdf_complete" : "geo_pdf_failed",
     geoPdfJobId: jobId,
   });
@@ -212,7 +215,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   // true). The in-app notification above is the source of truth — a missing
   // email/pref or send failure never affects the job outcome.
   const recipient = await prisma.user.findUnique({
-    where: { id: job.userId },
+    where: { id: userId },
     select: { email: true, uiPreferences: true },
   });
   const wantsEmail = normalizeUserUiPreferences(recipient?.uiPreferences)

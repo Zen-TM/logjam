@@ -32,22 +32,22 @@ model User {
   createdAt               DateTime            @default(now()) @map("created_at")
   sharedBy                PlaceShare[]        @relation("sharedBy")
   sharedWith              PlaceShare[]        @relation("sharedWith")
-  places                  Place[]
+  places                  Place[]             @relation("PlaceOwner")
   placeTypes              PlaceType[]
   receivedFriendships     Friendship[]        @relation("addressee")
   sentFriendships         Friendship[]        @relation("requester")
   friendInvites           FriendInvite[]
-  media                   Media[]
+  media                   Media[]             @relation("MediaOwner")
   notifications           Notification[]
   topoJobs                TopoJob[]
   topoExportJobs          TopoExportJob[]
-  geoPdfJobs              GeoPdfJob[]
+  geoPdfJobs              GeoPdfJob[]         @relation("GeoPdfJobOwner")
   tripLogs                TripLog[]
   geoPdfTemplates         GeoPdfTemplate[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
   placeLinks              PlaceLink[]
-  routes                  Route[]
+  routes                  Route[]             @relation("RouteOwner")
   syncTombstones          SyncTombstone[]
   directSharesSent        Share[]             @relation("directSharedBy")
   directSharesReceived    Share[]             @relation("directSharedWith")
@@ -55,6 +55,17 @@ model User {
   fileSendsReceived       FileSendRecipient[]
   customFieldDefs         CustomFieldDef[]
   importSnapshots         ImportSnapshot[]
+  placesAdded             Place[]             @relation("PlaceAddedBy")
+  routesAdded             Route[]             @relation("RouteAddedBy")
+  mediaAdded              Media[]             @relation("MediaAddedBy")
+  mediaCharged            Media[]             @relation("MediaChargedTo")
+  geoPdfJobsAdded         GeoPdfJob[]         @relation("GeoPdfJobAddedBy")
+  geoPdfJobsCharged       GeoPdfJob[]         @relation("GeoPdfJobChargedTo")
+  tripPlansCreated        TripPlan[]
+  tripPlanMemberships     TripPlanMember[]    @relation("TripPlanMemberUser")
+  tripPlanMembersInvited  TripPlanMember[]    @relation("TripPlanMemberInvitedBy")
+  tripPlanInvites         TripPlanInvite[]
+  tripPlanAnswers         TripPlanAnswer[]
 
   @@map("users")
 }
@@ -190,11 +201,17 @@ model CustomFieldDefPlaceType {
 }
 
 model Place {
-  id               String         @id @default(uuid())
-  ownerId          String         @map("owner_id")
-  placeTypeId      String         @map("place_type_id")
+  id               String           @id @default(uuid())
+  /// Exactly one of ownerId and planId is set: a CHECK in
+  /// 20261019120000_trip_plans, which Prisma cannot declare. A plan-owned row
+  /// is nobody's, so every `ownerId: user.id` query skips it.
+  ownerId          String?          @map("owner_id")
+  planId           String?          @map("plan_id")
+  /// Who copied it into the plan; null on an owned row.
+  addedById        String?          @map("added_by_id")
+  placeTypeId      String           @map("place_type_id")
   name             String
-  altNames         String[]       @default([])
+  altNames         String[]         @default([])
   latitude         Float
   longitude        Float
   /// STRUCTURAL, not a field definition — every point on earth has one, so it
@@ -209,27 +226,29 @@ model Place {
   /// `field_values.customFields.<key>` where nothing reads.
   /// Keys starting with `_` are internal (`_sources` today) and cannot
   /// collide with a user key: `makeCustomFieldKey` never produces one.
-  fieldValues      Json           @default("{}") @map("field_values")
+  fieldValues      Json             @default("{}") @map("field_values")
   /// Values that arrived on a COPY keyed by defs this owner does not have, or
   /// were stranded by a type change. Rendered read-only, per-item adoptable.
   /// OWNER-PRIVATE: never emitted on a delta row with syncRole "shared", and
   /// absent from the push allowlist — only copy and type-change write it.
-  foreignFields    Json?          @map("foreign_fields")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-  forkedFromId     String?        @map("forked_from_id")
-  ropeWikiId       Int?           @map("ropewiki_id")
-  ropeWikiSnapshot Json?          @map("ropewiki_snapshot")
-  importKey        String?        @map("import_key")
-  importBatchId    String?        @map("import_batch_id")
-  placeType        PlaceType      @relation(fields: [placeTypeId], references: [id])
+  foreignFields    Json?            @map("foreign_fields")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  forkedFromId     String?          @map("forked_from_id")
+  ropeWikiId       Int?             @map("ropewiki_id")
+  ropeWikiSnapshot Json?            @map("ropewiki_snapshot")
+  importKey        String?          @map("import_key")
+  importBatchId    String?          @map("import_batch_id")
+  placeType        PlaceType        @relation(fields: [placeTypeId], references: [id])
   shares           PlaceShare[]
-  forkedFrom       Place?         @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
-  forks            Place[]        @relation("PlaceForks")
-  owner            User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  forkedFrom       Place?           @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks            Place[]          @relation("PlaceForks")
+  owner            User?            @relation("PlaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan             TripPlan?        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy          User?            @relation("PlaceAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
   tripLogLinks     TripLogPlace[]
-  linksA           PlaceLink[]    @relation("PlaceLinkA")
-  linksB           PlaceLink[]    @relation("PlaceLinkB")
+  linksA           PlaceLink[]      @relation("PlaceLinkA")
+  linksB           PlaceLink[]      @relation("PlaceLinkB")
   // At most one — the place's route slot. See Route.placeId.
   route            Route?
   importSnapshots  ImportSnapshot[]
@@ -246,6 +265,8 @@ model Place {
   @@index([placeTypeId])
   @@index([forkedFromId])
   @@index([ownerId, importBatchId])
+  @@index([planId])
+  @@index([addedById])
   @@map("places")
 }
 
@@ -338,21 +359,27 @@ model TripLogPlace {
 // standalone way rather than destroying it (the Route.placeId SetNull rule,
 // which this now matches deliberately).
 model Media {
-  id             String   @id @default(uuid())
-  ownerId        String   @map("owner_id")
+  id             String    @id @default(uuid())
+  // Exactly one of ownerId and planId: see Place.ownerId.
+  ownerId        String?   @map("owner_id")
+  planId         String?   @map("plan_id")
+  addedById      String?   @map("added_by_id")
+  // Whose storage quota a plan-owned file counts against, and who is refunded
+  // when it goes. An owned file counts against its owner; this stays null.
+  chargedToId    String?   @map("charged_to_id")
   // Polymorphic link to a Place or TripLog, or "none". Deliberately NO
   // database foreign key on linkedId: a single column cannot FK two tables (the
   // previous schema declared FKs to both places and trip_logs, which made
   // every insert fail). Integrity is enforced in the route layer (ownership
   // checks on attach) and cleaned up explicitly on place/trip/account deletion.
-  linkedType     String   @map("linked_type")
+  linkedType     String    @map("linked_type")
   // Null exactly when linkedType is "none".
-  linkedId       String?  @map("linked_id")
-  s3KeyThumbnail String?  @map("s3_key_thumbnail")
-  s3KeyDisplay   String   @map("s3_key_display")
-  mediaType      String   @map("media_type")
+  linkedId       String?   @map("linked_id")
+  s3KeyThumbnail String?   @map("s3_key_thumbnail")
+  s3KeyDisplay   String    @map("s3_key_display")
+  mediaType      String    @map("media_type")
   filename       String
-  fileSizeBytes  BigInt   @map("file_size_bytes")
+  fileSizeBytes  BigInt    @map("file_size_bytes")
   // Assigned only for track (GPX/KML/GeoJSON) media from the shared TRACK_COLORS
   // palette; null for image/video. Drives the track card icon tint and map track layer.
   color          String?
@@ -369,21 +396,27 @@ model Media {
   // by a rename thereafter; null falls back to the filename. Same shape as
   // TripLog.displayName. Null for place/trip attachments — a photo is
   // labelled by what it hangs off.
-  displayName    String?  @map("display_name")
+  displayName    String?   @map("display_name")
   // Row-level stats (bbox, distance, duration, counts) so another device can
   // LIST the file without downloading the blob. Shape is enforced by
   // parseMediaMetadata (shared/src/mediaMetadata.ts), not by the column — see
   // that file. Always {} when origin is null.
-  metadata       Json     @default("{}")
-  createdAt      DateTime @default(now()) @map("created_at")
+  metadata       Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
   // Delta-sync watermark. Backfilled from created_at by migration. A media row
   // used to be immutable, so the delta keyset ran on created_at; link/unlink
   // makes rows mutable and a created_at keyset would never redeliver one.
-  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
-  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+  owner          User?     @relation("MediaOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan           TripPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy        User?     @relation("MediaAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  chargedTo      User?     @relation("MediaChargedTo", fields: [chargedToId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@index([linkedType, linkedId])
+  @@index([planId])
+  @@index([addedById])
+  @@index([chargedToId])
   @@map("media")
 }
 
@@ -552,7 +585,12 @@ model TopoExportJob {
 // s3://BUCKET/exports/geo-pdf/{id}/logjam-export.pdf.
 model GeoPdfJob {
   id                  String    @id @default(uuid())
-  userId              String    @map("user_id")
+  // Exactly one of userId and planId: see Place.ownerId.
+  userId              String?   @map("user_id")
+  planId              String?   @map("plan_id")
+  addedById           String?   @map("added_by_id")
+  // As Media.chargedToId.
+  chargedToId         String?   @map("charged_to_id")
   config              Json
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
   // Adaptive processing-time estimate computed at create from past completed
@@ -572,9 +610,15 @@ model GeoPdfJob {
   ecsTaskArn          String?   @map("ecs_task_arn")
   createdAt           DateTime  @default(now()) @map("created_at")
   completedAt         DateTime? @map("completed_at")
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User?     @relation("GeoPdfJobOwner", fields: [userId], references: [id], onDelete: Cascade)
+  plan                TripPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy             User?     @relation("GeoPdfJobAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  chargedTo           User?     @relation("GeoPdfJobChargedTo", fields: [chargedToId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([planId])
+  @@index([addedById])
+  @@index([chargedToId])
   @@map("geo_pdf_jobs")
 }
 
@@ -689,14 +733,17 @@ model PlaceLink {
 // shared place is part of that shared record (sharees may view and export,
 // never edit); an unlinked route is owner-private.
 model Route {
-  id        String   @id @default(uuid())
-  ownerId   String   @map("owner_id")
+  id        String    @id @default(uuid())
+  // Exactly one of ownerId and planId: see Place.ownerId.
+  ownerId   String?   @map("owner_id")
+  planId    String?   @map("plan_id")
+  addedById String?   @map("added_by_id")
   // The place's single route slot. @unique enforces one-route-per-place in
   // the DB rather than app code (many NULLs are allowed, so unlinked routes
   // are unconstrained). Linking to an occupied place UNLINKS the incumbent,
   // which survives standalone — a link never destroys anything. SetNull keeps
   // routes alive when a place dies.
-  placeId   String?  @unique @map("place_id")
+  placeId   String?   @unique @map("place_id")
   name      String
   // From TRACK_COLORS (shared/src/media.ts), so routes and legacy track media
   // share one palette on the map. Assigned server-side.
@@ -714,12 +761,16 @@ model Route {
   // user's. Kept as indices rather than a second coordinate list so `points`
   // stays the single geometric truth and the two cannot disagree.
   anchors   Json?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  place     Place?   @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  owner     User?     @relation("RouteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan      TripPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy   User?     @relation("RouteAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  place     Place?    @relation(fields: [placeId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
+  @@index([planId])
+  @@index([addedById])
   @@map("routes")
 }
 
@@ -876,4 +927,128 @@ model EgressLogCursor {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("egress_log_cursors")
+}
+
+// Plans (#439): a shared space where a group plans a trip. A plan is a second
+// kind of owner: its places, routes, files and GeoPDFs are rows in the usual
+// tables with planId set instead of their owner column. Deleting a plan
+// cascades to everything in it. Role, status and visibleTo are strings from
+// shared/src/tripPlans.ts.
+model TripPlan {
+  id          String            @id @default(uuid())
+  // SetNull: a plan outlives its creator's account, since other members may
+  // be relying on it.
+  createdById String?           @map("created_by_id")
+  name        String
+  // Calendar days, no time zone. Nullable so a plan can exist before its
+  // dates are fixed.
+  startDate   DateTime?         @map("start_date") @db.Date
+  endDate     DateTime?         @map("end_date") @db.Date
+  tripTypes   String[]          @default([]) @map("trip_types")
+  archivedAt  DateTime?         @map("archived_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  // The poll's watermark: every write inside the plan touches it, in the
+  // same transaction, because children live in other tables.
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  createdBy   User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  members     TripPlanMember[]
+  invites     TripPlanInvite[]
+  sections    TripPlanSection[]
+  forms       TripPlanForm[]
+  places      Place[]
+  routes      Route[]
+  media       Media[]
+  geoPdfJobs  GeoPdfJob[]
+
+  @@index([createdById])
+  @@map("trip_plans")
+}
+
+// A membership goes with its user; what they added stays in the plan.
+model TripPlanMember {
+  id          String   @id @default(uuid())
+  planId      String   @map("plan_id")
+  userId      String   @map("user_id")
+  role        String
+  status      String
+  invitedById String?  @map("invited_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  plan        TripPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user        User     @relation("TripPlanMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy   User?    @relation("TripPlanMemberInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([planId, userId])
+  @@index([userId])
+  @@index([invitedById])
+  @@map("trip_plan_members")
+}
+
+// A link that lets whoever opens it, signed in, ask to join. Unlike
+// FriendInvite it is multi-use, since it grants only a request a leader
+// approves; revoking deletes the row. Only the token's hash is kept, as for
+// FriendInvite.
+model TripPlanInvite {
+  id          String   @id @default(uuid())
+  planId      String   @map("plan_id")
+  tokenHash   String   @unique @map("token_hash")
+  expiresAt   DateTime @map("expires_at")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  plan        TripPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([planId])
+  @@index([createdById])
+  @@map("trip_plan_invites")
+}
+
+model TripPlanSection {
+  id        String   @id @default(uuid())
+  planId    String   @map("plan_id")
+  title     String
+  body      String   @default("")
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  plan      TripPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, position])
+  @@map("trip_plan_sections")
+}
+
+model TripPlanForm {
+  id             String           @id @default(uuid())
+  planId         String           @map("plan_id")
+  title          String
+  questions      Json             @default("[]")
+  // Which preset the form was built from, if any; validated in the API
+  // against shared/src/tripPlans.ts (Plans, #439).
+  preset         String?
+  visibleTo      String           @map("visible_to")
+  requiredToJoin Boolean          @default(false) @map("required_to_join")
+  position       Int
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  plan           TripPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  answers        TripPlanAnswer[]
+
+  @@index([planId, position])
+  @@map("trip_plan_forms")
+}
+
+// One member's answers to one form. Goes with the form and with the member:
+// safety contacts are details of people who are not Logjam users.
+model TripPlanAnswer {
+  id        String       @id @default(uuid())
+  formId    String       @map("form_id")
+  userId    String       @map("user_id")
+  answers   Json
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  form      TripPlanForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, userId])
+  @@index([userId])
+  @@map("trip_plan_answers")
 }

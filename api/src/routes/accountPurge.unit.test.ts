@@ -19,6 +19,10 @@ const purgeSource = read("src", "routes", "users.ts");
 // cascade removes; the purge deliberately has no line for them.
 const REMOVED_BY_CASCADE = ["Share", "FileSendRecipient"];
 
+// Rows that belong to a plan, not to the user who made them, so they outlive
+// the account: every `User` relation is SetNull.
+const OUTLIVES_ACCOUNT = ["TripPlan", "TripPlanInvite"];
+
 /** model name -> its `User` relation lines (the ones that name the owner). */
 function modelsRelatedToUser(): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -28,7 +32,7 @@ function modelsRelatedToUser(): Map<string, string[]> {
     const relations = body
       .split("\n")
       .map((l) => l.trim())
-      .filter((l) => /^\w+\s+User\s+@relation\(/.test(l));
+      .filter((l) => /^\w+\s+User\??\s+@relation\(/.test(l));
     if (relations.length > 0) out.set(name, relations);
   }
   return out;
@@ -60,7 +64,10 @@ describe("account-delete purge covers every model related to User", () => {
   it("deletes each one explicitly or names it as removed by the cascade", () => {
     const purged = explicitlyPurged();
     const uncovered = [...modelsRelatedToUser().keys()].filter(
-      (model) => !purged.has(model) && !REMOVED_BY_CASCADE.includes(model),
+      (model) =>
+        !purged.has(model) &&
+        !REMOVED_BY_CASCADE.includes(model) &&
+        !OUTLIVES_ACCOUNT.includes(model),
     );
     expect(
       uncovered,
@@ -78,6 +85,19 @@ describe("account-delete purge covers every model related to User", () => {
         expect(line, `${model}: ${line}`).toContain("onDelete: Cascade");
       }
       expect(explicitlyPurged().has(model)).toBe(false);
+    }
+  });
+
+  // Mutation that turns this red: making TripPlan.createdBy cascade, which
+  // would delete a group's plan with its creator's account.
+  it("only lists a model as outliving the account when every User relation is SetNull", () => {
+    const related = modelsRelatedToUser();
+    for (const model of OUTLIVES_ACCOUNT) {
+      const relations = related.get(model);
+      expect(relations, `${model} has no User relation`).toBeDefined();
+      for (const line of relations!) {
+        expect(line, `${model}: ${line}`).toContain("onDelete: SetNull");
+      }
     }
   });
 });

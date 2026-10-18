@@ -115,7 +115,7 @@ async function presignResult(
 function rowToView(
   row: {
     id: string;
-    userId: string;
+    userId: string | null;
     status: string;
     config: unknown;
     estimatedSeconds: number | null;
@@ -330,7 +330,8 @@ router.get(
     const row = await prisma.geoPdfJob.findUnique({
       where: { id: getParam(req.params.id) },
     });
-    if (!row) throw new AppError(404, say`Couldn't find that GeoPDF.`);
+    // A plan's GeoPDF (null userId) answers as a missing one.
+    if (!row?.userId) throw new AppError(404, say`Couldn't find that GeoPDF.`);
     // Owner or share recipient; a stranger gets the same 404 a missing id gets.
     // The presigned download below rides this decision — a sharee may download,
     // which is the whole point of sharing a rendered PDF.

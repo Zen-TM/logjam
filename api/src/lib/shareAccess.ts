@@ -75,9 +75,11 @@ async function hasDirectShare(
  */
 export async function getRouteRole(
   userId: string,
-  route: { id: string; ownerId: string; placeId: string | null },
+  route: { id: string; ownerId: string | null; placeId: string | null },
 ): Promise<ShareRole> {
   if (route.ownerId === userId) return "owner";
+  // A plan-owned route (null owner) is nobody's and is never shared.
+  if (route.ownerId === null) return "none";
   if (await hasDirectShare(userId, "route", route.id)) return "shared";
   return (await hasPlaceInheritedAccess(userId, "route", route.id))
     ? "shared"
@@ -117,9 +119,10 @@ export async function hasPlaceInheritedAccess(
 export async function getJobRole(
   userId: string,
   entityType: "topoJob" | "geoPdfJob",
-  job: { id: string; userId: string },
+  job: { id: string; userId: string | null },
 ): Promise<ShareRole> {
   if (job.userId === userId) return "owner";
+  if (job.userId === null) return "none";
   return (await hasDirectShare(userId, entityType, job.id)) ? "shared" : "none";
 }
 
@@ -171,7 +174,8 @@ export async function loadEntityRole(
         where: { id: entityId },
         select: { id: true, ownerId: true, placeId: true },
       });
-      return row
+      // A plan-owned row answers as a missing one.
+      return row?.ownerId
         ? { ownerId: row.ownerId, role: await getRouteRole(userId, row) }
         : null;
     }
@@ -180,7 +184,7 @@ export async function loadEntityRole(
         where: { id: entityId },
         select: { id: true, userId: true },
       });
-      return row
+      return row?.userId
         ? {
             ownerId: row.userId,
             role: await getJobRole(userId, "topoJob", row),
@@ -192,7 +196,7 @@ export async function loadEntityRole(
         where: { id: entityId },
         select: { id: true, userId: true },
       });
-      return row
+      return row?.userId
         ? {
             ownerId: row.userId,
             role: await getJobRole(userId, "geoPdfJob", row),
