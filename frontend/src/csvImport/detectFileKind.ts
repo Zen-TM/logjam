@@ -38,7 +38,6 @@ const NAME_ALIASES = new Set([
   "location",
   "place",
   "site",
-  "canyon",
 ]);
 const DATE_ALIASES = new Set([
   "date",

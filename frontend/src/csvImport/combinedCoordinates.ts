@@ -4,6 +4,7 @@
 // ordinary two-column shape. Rows the column can't be split for (a WKT line,
 // a blank) get empty cells and are reported as skipped like any unreadable
 // coordinate.
+import { detectFileKind } from "./detectFileKind";
 import { detectPlaceColumns } from "./placeColumns";
 import { parseLatLng } from "./placeValueParsers";
 
@@ -13,6 +14,7 @@ const DMS_PAIR = /^(.+?[NSns])[\s,;]+(.+?[EWew])$/;
 
 function splitPair(cell: string): [number, number] | null {
   const text = cell.trim();
+  if (/^-?\d+,\d+$/.test(text)) return null;
   const wkt = text.match(WKT_POINT);
   // WKT is x y: longitude first.
   const halves = wkt
@@ -22,6 +24,7 @@ function splitPair(cell: string): [number, number] | null {
   if (!halves) return null;
   const [lat, lon] = halves.map((h) => parseLatLng(h));
   if (!lat.ok || !lon.ok || isNaN(lat.value) || isNaN(lon.value)) return null;
+  if (Math.abs(lat.value) > 90 || Math.abs(lon.value) > 180) return null;
   return [lat.value, lon.value];
 }
 
@@ -30,7 +33,13 @@ export function splitCombinedCoordinates(
   rows: Record<string, string>[],
 ): { headers: string[]; rows: Record<string, string>[] } {
   const roles = Object.values(detectPlaceColumns(headers));
-  if (roles.includes("latitude") || roles.includes("longitude"))
+  // A logbook (name + date headers) has no coordinates to find; a decimal
+  // comma ("-33,5603") is one number, not a pair.
+  if (
+    roles.includes("latitude") ||
+    roles.includes("longitude") ||
+    detectFileKind(headers) !== "unknown"
+  )
     return { headers, rows };
   const column = headers.find((h) => {
     const cells = rows.map((r) => r[h]).filter(Boolean);
