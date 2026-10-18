@@ -96,6 +96,10 @@ export const redactPaths = [
   "req.body.body",
   "req.body.questions",
   "req.body.answers",
+  // A plan place's position and a plan route's line, as compare-and-set
+  // pairs ({ from, to }), which the coordinate wildcards above can't reach.
+  "req.body.position",
+  "req.body.geometry",
   // Authorization headers (never log credentials)
   "req.headers.authorization",
   'req.headers["x-fake-sub"]',

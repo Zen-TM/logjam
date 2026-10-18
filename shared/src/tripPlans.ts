@@ -1148,6 +1148,32 @@ export function currentTripPlanAnswers(
   return answers;
 }
 
+/**
+ * PATCH /plans/:id/items/place/:itemId. Each field sent is compared with
+ * what is stored and saves only if it still matches (§4); fields not sent
+ * aren't compared. `to` is checked as the place form checks it, against the
+ * place's system type.
+ */
+export type TripPlanPlacePatch = {
+  name?: Cas<string>;
+  altNames?: Cas<string[]>;
+  position?: Cas<{ latitude: number; longitude: number }>;
+  elevation?: Cas<number | null>;
+  notes?: Cas<string | null>;
+  /** One pair per attribute written, each compared on its own; null = no value. */
+  fieldValues?: Record<string, Cas<unknown>>;
+};
+
+/** PATCH /plans/:id/items/route/:itemId. Geometry and its anchors move together. */
+export type TripPlanRoutePatch = {
+  name?: Cas<string>;
+  color?: Cas<string>;
+  geometry?: Cas<{ points: [number, number][]; anchors: number[] | null }>;
+};
+
+/** PATCH /plans/:id/items/media/:itemId. */
+export type TripPlanFilePatch = { displayName?: Cas<string | null> };
+
 /** POST /plans/:id/items: a copy of one of the caller's own things. */
 export type TripPlanItemAdd = {
   kind: TripPlanItemKind;

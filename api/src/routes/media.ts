@@ -169,7 +169,7 @@ async function assertPlaceTrackSlotFree(
  * persists something the rename endpoint would then refuse, stranding the file
  * at a name its own edit screen cannot save.
  */
-function parseMediaDisplayName(value: unknown): string | null {
+export function parseMediaDisplayName(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string")
     throw malformed("displayName must be a string");

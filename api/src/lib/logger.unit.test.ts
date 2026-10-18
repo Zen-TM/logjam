@@ -150,6 +150,34 @@ describe("logger redaction", () => {
     }
   });
 
+  // A plan item's edit nests everything under { from, to }. Mutation: delete
+  // "req.body.position" or "req.body.geometry" from `redactPaths`.
+  it("censors a plan item edit's names, positions, lines and values", () => {
+    const bodies = [
+      { name: { from: "Secret Place", to: "Secret Place 2" } },
+      {
+        position: {
+          from: { latitude: -33.51, longitude: 150.41 },
+          to: { latitude: -33.52, longitude: 150.42 },
+        },
+      },
+      { notes: { from: null, to: "Secret Place beta" } },
+      { fieldValues: { v_grade: { from: null, to: "Secret Place" } } },
+      {
+        geometry: {
+          from: { points: [[150.41, -33.51]], anchors: null },
+          to: { points: [[150.42, -33.52]], anchors: null },
+        },
+      },
+      { displayName: { from: null, to: "Secret Place exit" } },
+    ];
+    for (const body of bodies) {
+      const line = JSON.stringify(captureLog({ req: { body } }));
+      for (const word of ["Secret", "33.5", "150.4"])
+        expect(line).not.toContain(word);
+    }
+  });
+
   it("leaves non-sensitive fields intact", () => {
     const out = captureLog({ req: { body: { id: "place-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;

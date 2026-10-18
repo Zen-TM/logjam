@@ -736,3 +736,189 @@ it("moves the plan's updatedAt on an add of each kind and a delete", async () =>
   expect(del.status).toBe(204);
   expect(await planUpdatedAt()).toBeGreaterThan(before);
 });
+
+describe("compare-and-set", () => {
+  function patch(sub: string, kind: string, id: string, body: object) {
+    return request(API_URL)
+      .patch(`/plans/${planId}/items/${kind}/${id}`)
+      .set(as(sub))
+      .send(body);
+  }
+
+  async function planPlace(sub = ALICE_SUB): Promise<string> {
+    const res = await add(sub, { kind: "place", id: await ownPlace(sub) });
+    expect(res.status).toBe(201);
+    return res.body.item.id;
+  }
+
+  // Mutation: compare without `from` (last write wins).
+  it("saves a field whose from still matches, and refuses one that changed", async () => {
+    const id = await planPlace();
+    const saved = await patch(BOB_SUB, "place", id, {
+      name: { from: "Test gully", to: "Test gully north" },
+      position: {
+        from: { latitude: -33.6, longitude: 150.3 },
+        to: { latitude: -33.61, longitude: 150.31 },
+      },
+    });
+    expect(saved.status, JSON.stringify(saved.body)).toBe(403);
+    await membership(BOB_ID, "editor");
+    const ok = await patch(BOB_SUB, "place", id, {
+      name: { from: "Test gully", to: "Test gully north" },
+      position: {
+        from: { latitude: -33.6, longitude: 150.3 },
+        to: { latitude: -33.61, longitude: 150.31 },
+      },
+    });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body).toMatchObject({
+      kind: "place",
+      name: "Test gully north",
+      latitude: -33.61,
+      longitude: 150.31,
+    });
+
+    // alice still saw the old name: nothing of hers saves, all or nothing.
+    const stale = await patch(ALICE_SUB, "place", id, {
+      name: { from: "Test gully", to: "Test gully south" },
+      notes: { from: null, to: "Test notes" },
+    });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toBe(
+      "Not saved: someone else changed this. Check their change, then save yours again.",
+    );
+    const row = await prisma.place.findUniqueOrThrow({ where: { id } });
+    expect(row).toMatchObject({ name: "Test gully north", notes: null });
+  });
+
+  // Mutation: compare fieldValues as a whole instead of per key.
+  it("lets two members write different attributes, and refuses a stale one", async () => {
+    const id = await planPlace();
+    const first = await patch(ALICE_SUB, "place", id, {
+      fieldValues: { v_grade: { from: null, to: 3 } },
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    // bob added nothing, so he edits through a role.
+    await membership(BOB_ID, "editor");
+    const second = await patch(BOB_SUB, "place", id, {
+      fieldValues: { a_grade: { from: null, to: 2 } },
+    });
+    expect(second.status, JSON.stringify(second.body)).toBe(200);
+    expect(second.body.fieldValues).toEqual({ v_grade: 3, a_grade: 2 });
+
+    const stale = await patch(BOB_SUB, "place", id, {
+      fieldValues: { v_grade: { from: null, to: 4 } },
+    });
+    expect(stale.status).toBe(409);
+    const cleared = await patch(ALICE_SUB, "place", id, {
+      fieldValues: { v_grade: { from: 3, to: null } },
+    });
+    expect(cleared.body.fieldValues).toEqual({ a_grade: 2 });
+  });
+
+  it("checks `to` as the place form does, and refuses what a broken client sends", async () => {
+    const id = await planPlace();
+    const cases: [object, number][] = [
+      [{ fieldValues: { v_grade: { from: null, to: 99 } } }, 400],
+      [{ name: { from: "Test gully", to: " " } }, 400],
+      [{ fieldValues: { not_a_key: { from: null, to: 1 } } }, 400],
+      [
+        {
+          position: {
+            from: { latitude: -33.6, longitude: 150.3 },
+            to: { latitude: 200, longitude: 150 },
+          },
+        },
+        400,
+      ],
+      [{ ownerId: { from: null, to: ALICE_ID } }, 400],
+      [{ name: "Test gully" }, 400],
+      [{}, 400],
+    ];
+    for (const [body, status] of cases) {
+      const res = await patch(ALICE_SUB, "place", id, body);
+      expect(res.status, JSON.stringify(body)).toBe(status);
+    }
+    const row = await prisma.place.findUniqueOrThrow({ where: { id } });
+    expect(row).toMatchObject({ name: "Test gully", latitude: -33.6 });
+  });
+
+  it("edits a route's line with its anchors, and a file's name", async () => {
+    const route = await request(API_URL)
+      .post("/routes")
+      .set(as(ALICE_SUB))
+      .send({
+        name: "Test way",
+        points: [
+          [150.3, -33.6],
+          [150.31, -33.61],
+        ],
+      });
+    const added = await add(ALICE_SUB, { kind: "route", id: route.body.id });
+    const id = added.body.item.id;
+    const from = {
+      points: added.body.item.points,
+      anchors: added.body.item.anchors,
+    };
+    const to = {
+      points: [
+        [150.3, -33.6],
+        [150.305, -33.605],
+        [150.31, -33.61],
+      ],
+      anchors: [0, 2],
+    };
+    const res = await patch(ALICE_SUB, "route", id, {
+      geometry: { from, to },
+      color: { from: added.body.item.color, to: added.body.item.color },
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body).toMatchObject({ points: to.points, anchors: [0, 2] });
+    expect(
+      (await patch(ALICE_SUB, "route", id, { geometry: { from, to } })).status,
+    ).toBe(409);
+    await request(API_URL)
+      .delete(`/routes/${route.body.id}`)
+      .set(as(ALICE_SUB));
+
+    const fileId = await ownFile(ALICE_SUB);
+    const file = await add(ALICE_SUB, { kind: "media", id: fileId });
+    const renamed = await patch(ALICE_SUB, "media", file.body.item.id, {
+      displayName: { from: null, to: "Test exit track" },
+    });
+    expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
+    expect(renamed.body.item.displayName).toBe("Test exit track");
+    await request(API_URL).delete(`/media/${fileId}`).set(as(ALICE_SUB));
+  });
+
+  // Mutation: drop touchPlan from the edit's transaction.
+  it("moves the plan's updatedAt", async () => {
+    const id = await planPlace();
+    const before = await planUpdatedAt();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const res = await patch(ALICE_SUB, "place", id, {
+      notes: { from: null, to: "Test notes" },
+    });
+    expect(res.status).toBe(200);
+    expect(await planUpdatedAt()).toBeGreaterThan(before);
+  });
+
+  it("refuses on an archived plan and 404s an item that isn't in it", async () => {
+    const id = await planPlace();
+    expect(
+      (
+        await patch(ALICE_SUB, "place", SHARED_PLACE_ID, {
+          notes: { from: null, to: "x" },
+        })
+      ).status,
+    ).toBe(404);
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: { archivedAt: new Date() },
+    });
+    expect(
+      (await patch(ALICE_SUB, "place", id, { notes: { from: null, to: "x" } }))
+        .status,
+    ).toBe(409);
+  });
+});
