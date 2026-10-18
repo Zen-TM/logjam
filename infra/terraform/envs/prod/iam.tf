@@ -401,11 +401,11 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
 # bucket and log events in every log group): CI must never be able to read
 # user canyon data (media photos, LiDAR/tile outputs), logs, or secret values.
 # Guard: tests/guards.tftest.hcl.
-# Explicit Deny beats the managed Allow. Objects and log events are denied by
-# default, so a bucket or log group added later is closed without an edit
-# here; the buckets CI does read are the named exceptions. Bucket-level
-# GetBucket* config reads stay allowed — terraform refresh of the storage
-# module needs those; it never reads objects.
+# Explicit Deny beats the managed Allow. Objects in this account's buckets and
+# log events are denied by default, so a bucket or log group added later is
+# closed without an edit here; the buckets CI does read are the named
+# exceptions. Bucket-level GetBucket* config reads stay allowed — terraform
+# refresh of the storage module needs those; it never reads objects.
 #
 # s3:ListBucket is deliberately NOT denied: HeadBucket (terraform's bucket
 # existence check) requires it, and denying it made CI plans propose
@@ -422,13 +422,19 @@ locals {
   ci_readonly_privacy_deny = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Every bucket but the three CI reads objects from: media, topo
+      # Every bucket of ours but the three CI reads objects from: media, topo
       # outputs, the WORM audit sink (pgaudit query text can embed canyon
       # names/coords), the access logs (viewers' IPs and request paths) and
       # any bucket added later. The exceptions: init reads the state file
       # (plans run -lock=false, so no write is needed), the frontend deploy
       # and rollback read release files, and the deploy role's app versions
       # live in the EB bucket.
+      #
+      # Only buckets in this account: an EB configuration change is a
+      # CloudFormation update, and under an unscoped Deny it fails at "S3
+      # error: Access Denied", most likely reading an object in an AWS-owned
+      # bucket with the deploy role's credentials (which bucket is
+      # unconfirmed). User data lives only in this account.
       {
         Sid    = "DenyObjectsByDefault"
         Effect = "Deny"
@@ -438,6 +444,7 @@ locals {
           "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
           "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
         ]
+        Condition = { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
       },
       # The API instance's rotated logs, which EB uploads into the bucket
       # excepted above.
