@@ -56,8 +56,10 @@ describe("logger redaction", () => {
   });
 
   // The vector clip request (POST /basemap/region-clip) is the one place a
-  // saved area's bounds reach the API, and every signed-in region save makes
-  // it (docs/decisions/0029). The body is exactly what Logjam GPS sends.
+  // saved area's bounds reach the API, and every signed-in region save in a
+  // Logjam GPS build older than the phone-cut clips makes it
+  // (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md). The body is
+  // exactly what such a build sends.
   // Mutation: delete any one of "req.body.west|south|east|north" from
   // `redactPaths` and the first test goes red; put `body` back into
   // `serializeRequestForLog` and the second does.

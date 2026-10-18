@@ -85,8 +85,9 @@ feature in NSW, never a geocoding service.**
   and refreshed on Wi-Fi by default, and a download replaces the stored file
   only once it parses. Guards: `mobile/src/offline/placeRegistry.test.ts`,
   and `mobile/src/map/placeSearch.test.ts` for the phone's copy answering
-  first and a guest making no API call. No guard for a guest getting the
-  file: `AppShell` registers the refresh with no account check.
+  first and a guest making no API call, and `mobile/src/shellTriggers.test.ts`
+  for the refresh being registered for a guest as for a signed-in user
+  (updated 2026-10-18).
 
 ## Consequences
 
@@ -121,8 +122,9 @@ feature in NSW, never a geocoding service.**
 - **The NSW Geographical Names Register:** official names only, and last
   updated in 2016 on data.gov.au.
 - **A slice of the registry per downloaded region:** sends a region bbox to our
-  server, which [0029](0029-vector-map-with-every-signed-in-region.md) allows
-  only for the vector clip, and needs a clip endpoint, merging and cleanup.
+  server, which no current Logjam GPS build does
+  ([0036](0036-the-phone-cuts-its-own-offline-clips.md); updated 2026-10-18),
+  and needs a clip endpoint, merging and cleanup.
   The whole state is smaller than most single regions.
 - **Bundling the file in app releases, or shipping guests a fixed copy:**
   freshness tied to releases, a bigger app for everyone, and a guest-only path.
