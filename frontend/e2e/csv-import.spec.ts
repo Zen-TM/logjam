@@ -45,6 +45,14 @@ async function openImportDialog(page: Page) {
 const next = (dialog: Locator) =>
   dialog.getByRole("button", { name: "Next", exact: true }).click();
 
+/** The result's tallies, label over value, in the order shown. */
+async function expectTallies(dialog: Locator, tallies: Record<string, string>) {
+  await expect(dialog.getByRole("term")).toHaveText(Object.keys(tallies));
+  await expect(dialog.getByRole("definition")).toHaveText(
+    Object.values(tallies),
+  );
+}
+
 /** Undo, if the result is on screen: the way out of a case that failed midway. */
 async function undoWhatWasImported(page: Page, dialog: Locator) {
   const undo = dialog.getByRole("button", { name: "Undo this import" });
@@ -95,15 +103,20 @@ test("a place list: map, preview, import, see it in Places, Undo", async ({
     await expect(
       dialog.getByRole("heading", { name: "Import complete" }),
     ).toBeVisible({ timeout: 15_000 });
+    await expectTallies(dialog, { Created: "1", Merged: "2" });
     await expect(dialog).toContainText("2 places merged into existing entries");
     await expect(dialog).toContainText("Claustral Canyon → Claustral Canyon");
 
     // The list behind the dialog was refetched.
     const aside = page.locator("aside");
-    await expect(aside.getByText("Corpus Excel Canyon")).toBeVisible();
+    const created = aside.getByRole("button", {
+      name: "Corpus Excel Canyon",
+      exact: true,
+    });
+    await expect(created).toBeVisible();
 
     await undoWhatWasImported(page, dialog);
-    await expect(aside.getByText("Corpus Excel Canyon")).toHaveCount(0);
+    await expect(created).toHaveCount(0);
   } finally {
     await undoWhatWasImported(page, dialog);
   }
@@ -179,9 +192,12 @@ test("a logbook: the match review, import, Undo", async ({ page }) => {
       dialog.getByRole("heading", { name: "Import complete" }),
     ).toBeVisible({ timeout: 15_000 });
     // 10 rows, one with a date nobody can read, two discarded.
-    await expect(dialog).toContainText("7 imported");
-    await expect(dialog).toContainText("1 couldn't be read");
-    await expect(dialog).toContainText("2 discarded");
+    await expectTallies(dialog, {
+      Imported: "7",
+      "Couldn't be read": "1",
+      "Linked to a place": "7",
+      Discarded: "2",
+    });
 
     await undoWhatWasImported(page, dialog);
     await expect(
