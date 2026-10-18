@@ -91,6 +91,9 @@ describe("parseLatLng", () => {
     expect(v("150 15 0 E")).toBeCloseTo(150.25);
     expect(v("150°15'00\"W")).toBeCloseTo(-150.25);
   });
+  it("refuses minutes or seconds of 60 and over", () => {
+    expect(parseLatLng("33 99 99 S")).toMatchObject({ ok: false });
+  });
   it("reads a decimal comma", () => {
     expect(parseLatLng("-33,5603")).toEqual({ ok: true, value: -33.5603 });
   });

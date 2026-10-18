@@ -80,6 +80,7 @@ export function parseDms(raw: string): number | null {
     .match(/^(-?)(\d+)[°\s]+(\d+)['′\s]+(\d+(?:\.\d+)?)["″\s]*([NSEWnsew]?)$/);
   if (!match) return null;
   const [, sign, deg, min, sec, dir] = match;
+  if (Number(min) >= 60 || Number(sec) >= 60) return null;
   const decimal = Number(deg) + Number(min) / 60 + Number(sec) / 3600;
   return sign === "-" || "SsWw".includes(dir || "-") ? -decimal : decimal;
 }
