@@ -1,0 +1,59 @@
+{
+  "headers": [
+    "Name",
+    "Date",
+    "Notes"
+  ],
+  "dataRows": 3,
+  "parseErrors": [],
+  "kind": "triplog",
+  "assignments": {
+    "Name": "name",
+    "Date": "date",
+    "Notes": "notes"
+  },
+  "dateFormat": "DD/MM/YYYY",
+  "ambiguousDates": true,
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourcePlaceName": "Claustral Canyon",
+      "date": "2020-03-02",
+      "notes": "Corpus note: a US writer meant 3 February",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 2,
+      "sourcePlaceName": "Du Faur Creek",
+      "date": "2020-10-01",
+      "notes": "Corpus note",
+      "types": [],
+      "customFields": {}
+    }
+  ],
+  "warnings": [
+    "Row 3: date \"12/25/2020\" couldn't be read — skipped"
+  ],
+  "droppedRows": 1,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Du Faur Creek",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Du Faur Creek",
+      "candidates": [
+        "Du Faur Creek"
+      ]
+    }
+  ]
+}

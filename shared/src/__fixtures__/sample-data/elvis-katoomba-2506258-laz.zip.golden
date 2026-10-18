@@ -1,0 +1,15 @@
+{
+  "surveyNames": [
+    "Katoomba201804"
+  ],
+  "mode": "LAZ_ONLY",
+  "modeLabel": "LiDAR only",
+  "tileCount": 1,
+  "lazCount": 1,
+  "demCount": 0,
+  "derivativeTifCount": 0,
+  "demResolutionMeters": null,
+  "uncompressedBytes": 14272230,
+  "compressedBytes": 14272230,
+  "overlappingSurveys": false
+}

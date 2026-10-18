@@ -109,8 +109,21 @@ jobs:
       - name: Lint
         working-directory: shared
         run: npm run lint
+      # ~27 MB of public NSW files (ELVIS tile, DEM, topo sheet) from the
+      # hash-pinned sample-data-v1 release; the corpus tests in shared skip
+      # without SAMPLE_DATA_DIR.
+      - name: Fetch public sample inputs
+        run: |
+          echo "SAMPLE_DATA_DIR=$GITHUB_WORKSPACE/.cache/sample-data" >> "$GITHUB_ENV"
+          SAMPLE_DATA_DIR="$GITHUB_WORKSPACE/.cache/sample-data" scripts/sample-data.sh \
+            elvis-katoomba-2506258-laz.zip \
+            elvis-katoomba-2506258-dem2m.zip \
+            nsw-topo-8929-4N-yerranderie.pdf
       - name: Unit tests
         working-directory: shared
+        env:
+          RUN_GEOPDF_SAMPLES: "1"
+          GEOPDF_SAMPLE_DIR: ${{ env.SAMPLE_DATA_DIR }}
         run: npm test
       # Every foreground/background pair both clients render, under all four
       # theme schemes. Bare node: it parses the token sources, no build.
@@ -217,9 +230,10 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
-      # Non-empty so the topo-job routes take the same branch they do locally.
-      # No test reaches an actual RunTask (see the comment atop topoJobs.test.ts).
-      ECS_SUBNETS: subnet-local
+      # No ECS_SUBNETS: an empty list makes POST /geo-pdf leave the job
+      # `queued` and /topo-jobs/:id/start leave it `pending` instead of calling
+      # RunTask, which MiniStack here (S3 only, no Docker socket) cannot serve.
+      # geoPdfRender.test.ts runs the worker itself.
       ECS_SECURITY_GROUPS: sg-local
       # The global limiter is 300 req/60s keyed by IP for pre-auth requests, so
       # the whole suite shares ONE bucket and a full run brushes the cap. Raise
