@@ -102,9 +102,7 @@ export const MAX_REGION_EDGE_KM = 50;
 const EARTH_RADIUS_KM = 6371;
 
 /** Great-circle-ish edge lengths of the bbox (km): [widthAtCenterLat, height]. */
-/** Area cap for every save, which bounds what the clips cut on the phone cost.
- * The API's region clip, kept for older Logjam GPS builds, imports the same
- * number (api/src/lib/regionClip.ts). */
+/** Area cap for every save, which bounds what the clips cut on the phone cost. */
 export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
 
 export function regionEdgesKm(bbox: RegionBbox): [number, number] {

@@ -2,8 +2,8 @@
 // against: a made-up archive, and what go-pmtiles' own `pmtiles extract` cuts
 // from it.
 //
-// Run from the repo root, with the go-pmtiles that `api/Dockerfile` pins on
-// PATH (`pmtiles version` says 1.31.2):
+// Run from the repo root, with go-pmtiles v1.31.2 on PATH (`pmtiles version`
+// says 1.31.2; github.com/protomaps/go-pmtiles/releases/tag/v1.31.2):
 //   node shared/scripts/pmtiles-extract-fixture.mjs
 //
 // The archive is invented, not a map: each tile is three bytes, a counter, so
