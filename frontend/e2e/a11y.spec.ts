@@ -684,7 +684,7 @@ test.describe("desktop", () => {
       .getByRole("button", { name: "How this topo is drawn" })
       .click();
     await expect(
-      dialog.getByRole("radio", { name: "Hillshade" }),
+      dialog.getByRole("radio", { name: "Show hillshade" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
@@ -851,7 +851,7 @@ test.describe("desktop", () => {
     const popover = page.getByRole("dialog", { name: "Map layers" });
     await popover.getByRole("radio", { name: "Terrain" }).click();
     await expect(
-      popover.getByRole("switch", { name: "Hillshade" }),
+      popover.getByRole("switch", { name: "Show hillshade" }),
     ).toBeVisible();
     await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
 

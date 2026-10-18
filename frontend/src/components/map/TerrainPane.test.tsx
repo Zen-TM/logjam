@@ -31,9 +31,9 @@ describe("the Terrain group on Logjam Web", () => {
     const props = draw();
     fireEvent.click(screen.getByRole("switch", { name: "Show slope" }));
     expect(props.onChange).toHaveBeenCalledWith("slope", true);
-    fireEvent.click(screen.getByRole("switch", { name: copy.hillshade }));
+    fireEvent.click(screen.getByRole("switch", { name: "Show hillshade" }));
     expect(props.onChange).toHaveBeenCalledWith("hillshade", true);
-    fireEvent.click(screen.getByRole("switch", { name: copy.contours }));
+    fireEvent.click(screen.getByRole("switch", { name: "Show contours" }));
     expect(props.onChange).toHaveBeenCalledWith("contours", false);
   });
 
@@ -47,7 +47,7 @@ describe("the Terrain group on Logjam Web", () => {
   // sheet it offers a switch that draws nothing.
   it("says a topographic sheet prints its own contours", () => {
     draw("six-topo");
-    const contours = screen.getByRole("switch", { name: copy.contours });
+    const contours = screen.getByRole("switch", { name: "Show contours" });
     expect((contours as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(copy.contoursPrinted)).toBeTruthy();
   });

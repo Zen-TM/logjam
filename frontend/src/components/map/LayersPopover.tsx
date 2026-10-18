@@ -31,7 +31,6 @@ import {
   Popover,
   Row,
   SearchField,
-  SwitchRow,
   Toggle,
   Icon,
   InfoTip,
@@ -372,48 +371,44 @@ export function TerrainPane({
   activeLayerId: string;
   onOpenSlopeBands: () => void;
 }) {
-  const panes: Record<
-    SectionKeysOn<typeof MAP_TERRAIN, "web">,
-    () => ReactNode
-  > = {
-    contours: () => (
-      <SwitchRow
-        key="contours"
-        title={terrainCopy.contours}
-        checked={layers.contours}
-        onChange={(on) => onChange("contours", on)}
-        disabled={!takesNswContours(activeLayerId)}
-        disabledReason={terrainCopy.contoursPrinted}
-      />
-    ),
-    slope: () => (
+  // One shape for all three, so the Slope row's chevron is the only difference.
+  const row = (key: TerrainLayerKey, extra: ReactNode = null) => {
+    const title = terrainCopy[key];
+    const printed = key === "contours" && !takesNswContours(activeLayerId);
+    return (
       <Row
-        key="slope"
-        title={terrainCopy.slope}
+        key={key}
+        title={title}
+        subtitle={printed ? terrainCopy.contoursPrinted : undefined}
         trailing={
           <>
-            <IconButton
-              icon="disclosure"
-              label={terrainCopy.slopeBands}
-              onClick={onOpenSlopeBands}
-            />
+            {extra}
             <Toggle
-              checked={layers.slope}
-              onChange={(on) => onChange("slope", on)}
-              label={`Show ${terrainCopy.slope.toLowerCase()}`}
+              checked={layers[key]}
+              onChange={(on) => onChange(key, on)}
+              label={`Show ${title.toLowerCase()}`}
+              disabled={printed}
             />
           </>
         }
       />
-    ),
-    hillshade: () => (
-      <SwitchRow
-        key="hillshade"
-        title={terrainCopy.hillshade}
-        checked={layers.hillshade}
-        onChange={(on) => onChange("hillshade", on)}
-      />
-    ),
+    );
+  };
+  const panes: Record<
+    SectionKeysOn<typeof MAP_TERRAIN, "web">,
+    () => ReactNode
+  > = {
+    contours: () => row("contours"),
+    slope: () =>
+      row(
+        "slope",
+        <IconButton
+          icon="disclosure"
+          label={terrainCopy.slopeBands}
+          onClick={onOpenSlopeBands}
+        />,
+      ),
+    hillshade: () => row("hillshade"),
     // Opened from the Slope row's chevron, as a view of its own.
     slopeBands: () => null,
   };
