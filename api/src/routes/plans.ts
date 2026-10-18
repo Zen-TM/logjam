@@ -5,7 +5,7 @@ import { Router, Response } from "express";
 import { parseTripPlanCreate, parseTripPlanPatch, say } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { accepted, AppError, malformed } from "../middleware/errorHandler";
+import { accepted, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
