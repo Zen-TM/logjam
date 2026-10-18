@@ -826,8 +826,9 @@ export function AppShell({
   // mutations pile up in the outbox exactly as they would offline, and the day
   // an account is linked the first cycle drains them. Registering triggers that
   // could only ever 401 would also mean a failing sync every foreground, and a
-  // permanently red sync health line on the More tab. The place names go to a
-  // guest too (shellTriggers.ts). The two auto-downloads keep their own
+  // permanently red sync health line on the More tab. Guard:
+  // `shellTriggers.test.ts`. The place names go to a guest too
+  // (shellTriggers.ts). The two auto-downloads keep their own
   // registrations: separate switches and connection policies, and a combined
   // runner would make one's failure the other's.
   useEffect(
