@@ -34,6 +34,7 @@ on:
       - "infra/lambda/**"
       - "infra/scripts/plan-summary*"
       - ".github/workflows/terraform-plan.yml"
+      - ".github/workflows/terraform-plan-sign.yml"
       - ".github/workflows/terraform-apply.yml"
 
 permissions:

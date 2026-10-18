@@ -1,16 +1,12 @@
 name: setup-smoke
 
+# On a PR it starts every time, so it can be a required check, and the
+# `changes` job skips it, which passes, when nothing setup reads changed
+# (infra/scripts/ci-scope.sh, area setup_smoke). Pushes to main keep their
+# path filter: no check is required there.
+
 on:
   pull_request:
-    paths:
-      - "mise.toml"
-      - "Makefile"
-      - "package-lock.json"
-      - "**/package-lock.json"
-      - "topo/requirements.txt"
-      - "topo/requirements*.txt"
-      - "docs/dev-setup.md"
-      - ".github/workflows/setup-smoke.yml"
   push:
     branches: [main]
     paths:
@@ -29,7 +25,30 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      setup_smoke: ${{ steps.scope.outputs.setup_smoke }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Does this change need it?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
+          else
+            infra/scripts/ci-scope.sh all
+          fi
+
   setup-smoke:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.setup_smoke != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
