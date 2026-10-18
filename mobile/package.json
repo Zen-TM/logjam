@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "update:preview": "eas update --branch preview --environment preview --private-key-path keys/private-key.pem",
-    "update:production": "eas update --branch production --environment production --private-key-path keys/private-key.pem",
+    "update:production": "node scripts/check-production-update.js && eas update --branch production --environment production --private-key-path keys/private-key.pem",
+    "promote:production": "sh -c 'node scripts/check-production-update.js promote \"$@\" && eas update:republish --destination-branch production --private-key-path keys/private-key.pem \"$@\"' sh",
     "eas-build-post-install": "cd ../shared && npm ci && npm run build",
     "postinstall": "patch-package"
   },
