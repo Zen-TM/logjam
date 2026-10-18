@@ -11,6 +11,7 @@ vi.mock("@aws-sdk/s3-request-presigner", () => ({
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import {
+  MAX_INPUT_ZIP_COMPRESSED_BYTES,
   TOPO_UPLOAD_PART_BYTES as PART,
   deleteTopoJobObjects,
   joinTopoUpload,
@@ -39,6 +40,8 @@ beforeEach(() => {
 });
 
 describe("signTopoParts", () => {
+  // Mutation: sign without ContentLength, or drop the Math.min, and a part of
+  // any size uploads.
   it("signs each part's exact length: full parts, then the remainder", async () => {
     const parts = await signTopoParts("b", "k", "u", PART + 9, [1, 2]);
     expect(parts).toEqual([
@@ -51,10 +54,27 @@ describe("signTopoParts", () => {
     expect(lengths).toEqual([PART, 9]);
   });
 
+  // Mutation: drop the n > partCount check, and parts past the claimed size
+  // get signed.
   it("refuses a part past the end of the file", async () => {
     await expect(signTopoParts("b", "k", "u", PART, [2])).rejects.toMatchObject(
       { statusCode: 400 },
     );
+  });
+});
+
+describe("signTopoParts over the cap", () => {
+  // Mutation: drop the cap check in signTopoParts, and a client claiming a
+  // larger file gets up to S3's 10,000 parts signed.
+  it("refuses a size over the cap", async () => {
+    await expect(
+      signTopoParts("b", "k", "u", MAX_INPUT_ZIP_COMPRESSED_BYTES + 1, [1]),
+    ).rejects.toMatchObject({
+      statusCode: 413,
+      message:
+        "That ZIP is larger than Logjam can take. Choose a smaller area.",
+    });
+    expect(getSignedUrl).not.toHaveBeenCalled();
   });
 });
 

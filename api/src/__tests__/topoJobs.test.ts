@@ -196,6 +196,10 @@ describe("topo-jobs route (fake auth)", () => {
       expect(signRes.status).toBe(200);
       const [{ partNumber, url }] = signRes.body.parts;
       expect(partNumber).toBe(1);
+      // The URL signs the part's length, so S3 refuses any other size.
+      expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain(
+        "content-length",
+      );
       const put = await fetch(url, { method: "PUT", body });
       expect(put.status).toBe(200);
 

@@ -110,13 +110,11 @@ export function serializeTopoJobFor<
   };
 }
 
-// Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
-// A legitimate ELVIS export is bounded by the monthly tile quota (default 40
-// tiles, ~17 MB compressed LAZ + ~5 MB DEM each). These caps sit well above
-// any realistic export while rejecting pathological archives before the worker
-// is launched. The uncompressed cap is the real bomb guard; the compressed cap
-// bounds wasted S3 transfer/storage.
-// The compressed cap, MAX_INPUT_ZIP_COMPRESSED_BYTES, is in lib/topoUpload.ts.
+// Uncompressed input-ZIP cap, the zip-bomb / disk-DoS guard for the Fargate
+// worker. A legitimate ELVIS export is bounded by the monthly tile quota
+// (default 40 tiles, ~17 MB compressed LAZ + ~5 MB DEM each). This sits well
+// above any realistic export while rejecting pathological archives before the
+// worker is launched.
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 /** Part URLs one request may ask for. */
 const TOPO_UPLOAD_SIGN_MAX = 32;
@@ -269,11 +267,6 @@ router.post(
     const { sizeBytes, partNumbers } = req.body;
     if (!Number.isInteger(sizeBytes) || sizeBytes < 1)
       throw malformed("sizeBytes must be a positive integer");
-    if (sizeBytes > MAX_INPUT_ZIP_COMPRESSED_BYTES)
-      throw new AppError(
-        413,
-        say`That ZIP is larger than Logjam can take. Choose a smaller area.`,
-      );
     if (!Array.isArray(partNumbers) || partNumbers.length === 0)
       throw malformed("partNumbers must be a non-empty array");
     if (partNumbers.length > TOPO_UPLOAD_SIGN_MAX)

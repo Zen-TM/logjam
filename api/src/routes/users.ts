@@ -596,10 +596,12 @@ router.delete(
       .map((e) => e.resultKey)
       .filter((k): k is string => Boolean(k));
 
-    // S3 cleanup first. The helpers throw on failure (see lib/s3Cleanup.ts), so
+    // S3 cleanup first. The deletes throw on failure (see lib/s3Cleanup.ts), so
     // any error here aborts before the DB transaction — the account is not
     // deleted and the user can retry. Belt-and-braces against bucket-lifecycle
-    // drift, not a substitute for it.
+    // drift, not a substitute for it. The multipart abort inside
+    // deleteTopoJobObjects is best-effort; the abort-incomplete-uploads
+    // lifecycle rule clears what it misses.
     await Promise.all([
       deleteS3Keys(MEDIA_BUCKET, mediaKeys),
       deleteS3Keys(TOPO_BUCKET, exportResultKeys),
