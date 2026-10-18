@@ -129,14 +129,26 @@ as below. In full:
   Only a run the maintainer approved can read it, so the Negative
   consequence that anyone who can push a branch reaches it no longer applies.
   A rotation still invalidates open PRs' comments. Everything else above stands.
+- **Update 2026-10-18: the key also signs the comment.** Any PR's workflow
+  can post a comment as `github-actions[bot]` from a job outside the
+  `terraform-plan` Environment, and the address fingerprint is unkeyed, so
+  such a comment could pair the real plan's fingerprint with text that
+  describes another. Where nothing is created, updated or replaced (only
+  deletes, forgets, or a ruleset's unreadable `bypass_actors`), the value map
+  is empty on both sides and nothing keyed was compared. The comment now
+  carries `plan-signature`, an HMAC with `PLAN_FINGERPRINT_KEY` over the
+  root, fingerprint, sha and value map, and `check` counts a comment whose
+  signature does not verify as one whose values cannot be compared, which
+  `enforce` refuses. A comment from before this update is unsigned: re-plan
+  those PRs. Everything else above stands.
 
 Guard: `infra/scripts/plan-summary.test.mjs`, run in
 `.github/workflows/terraform-ci.yml`. Beside 0024's checks it covers: a
 changed value on an updated resource changes its HMAC; a sensitive value, or
 one unknown until apply, does not; a different key gives a different HMAC and
-no key gives none; report mode never refuses; enforce refuses on a mismatch
-and when the values cannot be compared. Each test names the mutation that
-turns it red.
+no key gives none; report mode never refuses; enforce refuses on a mismatch,
+when the values cannot be compared, and on an unsigned or edited comment.
+Each test names the mutation that turns it red.
 
 ## Consequences
 

@@ -21,7 +21,9 @@
 // planned values, so a hand edit to a resource the PR also changes shows up
 // (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Sensitive and
 // unknown values are left out before hashing, the key is never in the repo,
-// and no key means no value check, never an unkeyed hash.
+// and no key means no value check, never an unkeyed hash. The same key signs
+// the root, fingerprint, sha and values together: any PR's workflow can post
+// a comment as github-actions[bot], but only a run with the key can sign one.
 // Tests: plan-summary.test.mjs, over __fixtures__/.
 import { createHash, createHmac } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -199,6 +201,14 @@ export function valueFingerprints(plan, name, key) {
   return out;
 }
 
+// Everything check() reads from a comment, so a forger can neither write a
+// comment from scratch nor edit one line of a real one.
+function signature(name, fp, sha, values, key) {
+  return createHmac("sha256", key).update(canonical({ root: name, fingerprint: fp, sha, values })).digest("hex");
+}
+
+const readSignature = (body) => /^<!-- plan-signature: ([0-9a-f]{64}) -->$/m.exec(body ?? "")?.[1] ?? null;
+
 // One HTML comment line; < and > are escaped so an address cannot end it.
 const encodeValues = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
 
@@ -257,7 +267,10 @@ export function comment({ root: name, planText, status, plan, sha, key, max = MA
     fp = fingerprint(plan, name);
     top.push(`<!-- plan-fingerprint: ${fp} sha: ${sha} -->`);
     const values = valueFingerprints(plan, name, key);
-    if (values) top.push(`<!-- plan-values: ${encodeValues(values)} -->`);
+    if (values) {
+      top.push(`<!-- plan-values: ${encodeValues(values)} -->`);
+      top.push(`<!-- plan-signature: ${signature(name, fp, sha, values, key)} -->`);
+    }
   }
   top.push(`${title} ${ok ? "✅" : "❌ failed"}`, "");
   if (ok) top.push(header(plan, name), "", `Fingerprint \`${fp.slice(0, 12)}\` at ${sha}`, "");
@@ -283,11 +296,12 @@ export function readFingerprint(body) {
 }
 
 // Resources whose planned values now differ from the PR's, or null if the
-// two cannot be compared (no key here, or none when the PR was planned).
-function valueMismatches(name, plan, commentBody, key) {
+// two cannot be compared: no key here, or a comment the key did not sign.
+function valueMismatches(name, plan, commentBody, read, key) {
   const was = readValues(commentBody);
   const now = valueFingerprints(plan, name, key);
   if (!was || !now) return null;
+  if (readSignature(commentBody) !== signature(name, read.fingerprint, read.sha, was, key)) return null;
   return [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((a) => was[a] !== now[a]).sort();
 }
 
@@ -324,7 +338,7 @@ export function check(name, plan, commentBody, headSha, values = {}) {
     };
   }
   const enforce = valueMode(values.mode) === "enforce";
-  const differ = valueMismatches(name, plan, commentBody, values.key);
+  const differ = valueMismatches(name, plan, commentBody, read, values.key);
   let notice;
   if (differ?.length) {
     const list = differ.map((a) => `- \`${a}\``).join("\n");
@@ -351,10 +365,10 @@ export function check(name, plan, commentBody, headSha, values = {}) {
     if (enforce) {
       return {
         ok: false,
-        reason: "The plan's values cannot be compared: this run has no `PLAN_FINGERPRINT_KEY`, or the PR's plan comment carries no value fingerprints. Nothing applied; open a PR touching " + r.touch + " to plan and apply the current diff.",
+        reason: "The plan's values cannot be compared: this run has no `PLAN_FINGERPRINT_KEY`, or the PR's plan comment carries no valid signature (it was not made by the plan workflow with the key, or before comments were signed). Nothing applied; open a PR touching " + r.touch + " to plan and apply the current diff.",
       };
     }
-    notice = "**Value check (report only):** not run, because this run has no `PLAN_FINGERPRINT_KEY` or the PR's plan comment has no value fingerprints.";
+    notice = "**Value check (report only):** not run, because this run has no `PLAN_FINGERPRINT_KEY` or the PR's plan comment carries no valid signature.";
   }
   const self = selfChanges(name, plan);
   if (self.length) {
