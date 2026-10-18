@@ -9,6 +9,9 @@
 .cardCheckbox {
   composes: checkbox;
   composes: pressable from "./Button.module.css";
+  /* Both composed classes set a min-height; which one wins would be decided by
+     their order in the built CSS, so the card's own is stated here. */
+  min-height: var(--control-lg);
 }
 
 .checkbox[data-disabled] {

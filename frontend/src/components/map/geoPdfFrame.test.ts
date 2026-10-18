@@ -1,6 +1,8 @@
 import { metersPerPixel } from "@logjam/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  afterEase,
+  type EasingCamera,
   type FramePick,
   keptFrameSizePx,
   keepScale,
@@ -92,8 +94,9 @@ describe("letGo, then Confirm without moving", () => {
   });
 });
 
-// Mutation: round every scale on Keep (a fractional arrival scale no longer
-// matches, and an unmoved Keep off, on, Confirm moves the edges by metres).
+// Mutations: round every scale on Keep (a fractional arrival scale no longer
+// matches, and an unmoved Keep off, on, Confirm moves the edges by metres);
+// drop the rounding (Confirm hands the dialog 23417.38).
 describe("keepScale", () => {
   it("keeps an exact arrival scale, so nothing moved returns the area", () => {
     const arrival: FramePick = {
@@ -154,5 +157,39 @@ describe("keptFrameSizePx", () => {
       z0.w / 2,
       9,
     );
+  });
+});
+
+// The opening ease ends in a `moveend`, which marks the frame measured so a
+// kept scale may size it. Mutation: always wait for `moveend` (under reduced
+// motion it already fired inside easeTo, so the kept frame stays unsized
+// until the user's first move).
+describe("afterEase", () => {
+  function camera(moving: boolean) {
+    const listeners = new Set<() => void>();
+    const map: EasingCamera = {
+      isMoving: () => moving,
+      once: (_type, fn) => listeners.add(fn),
+      off: (_type, fn) => listeners.delete(fn),
+    };
+    return { map, listeners };
+  }
+
+  it("runs at once when the ease already ended (reduced motion)", () => {
+    const { map, listeners } = camera(false);
+    const done = vi.fn();
+    afterEase(map, done);
+    expect(done).toHaveBeenCalledOnce();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("waits for the ease's moveend, and stops waiting when undone", () => {
+    const { map, listeners } = camera(true);
+    const done = vi.fn();
+    const stop = afterEase(map, done);
+    expect(done).not.toHaveBeenCalled();
+    expect(listeners.size).toBe(1);
+    stop();
+    expect(listeners.size).toBe(0);
   });
 });

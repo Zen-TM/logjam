@@ -85,6 +85,7 @@ import MapSearchBox from "./MapSearchBox";
 import MapChrome, { type MapTool } from "./MapChrome";
 import { collectLngLatPairs } from "./topoFootprint";
 import {
+  afterEase,
   type FramePick,
   keepScale,
   keptFrameSizePx,
@@ -3137,6 +3138,7 @@ function Map({
     }
 
     // Wait one frame so the frame element is in the DOM and measurable.
+    let stopWaiting = () => {};
     const rafId = requestAnimationFrame(() => {
       const frameEl = geoPdfFrameRef.current;
       const m = mapRef.current;
@@ -3163,15 +3165,15 @@ function Map({
         duration: 600,
       });
 
-      const onSettled = () => {
+      stopWaiting = afterEase(m, () => {
         geoPdfFitBoundsSettledRef.current = true;
         geoPdfFrameMeasuredRef.current = true;
-      };
-      m.once("moveend", onSettled);
+      });
     });
 
     return () => {
       cancelAnimationFrame(rafId);
+      stopWaiting();
     };
   }, [
     selectingGeoPdfExtent,

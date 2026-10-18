@@ -66,6 +66,19 @@ describe("a button wears the pressable fill", () => {
     expect(body).toContain(`composes: ${from};`);
     expect(body).not.toMatch(/(^|[;\s])(background|border)[a-z-]*\s*:/);
   });
+
+  // `.checkbox` and `.pressable` both set a min-height, and which composed
+  // class wins depends on the built CSS's order. Mutation: drop the card
+  // checkbox's own min-height (it falls to the plain checkbox's control-md).
+  it("gives the card checkbox the pressable's height itself", () => {
+    const minHeight = (file: string, cls: string) =>
+      rules(css(file), (s) => s === cls)[0][1].match(
+        /min-height:\s*([^;]+)/,
+      )?.[1];
+    expect(minHeight("Choice.module.css", ".cardCheckbox")).toBe(
+      minHeight("Button.module.css", ".pressable"),
+    );
+  });
 });
 
 describe("a row you can act on wears the card fill", () => {

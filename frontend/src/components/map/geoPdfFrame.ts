@@ -83,6 +83,29 @@ export function unmovedPick(
   return { extent: pick.initialExtent, scale: pick.initialScale };
 }
 
+/** The camera calls `afterEase` needs, so a test can stand in for the map. */
+export type EasingCamera = {
+  isMoving(): boolean;
+  once(type: "moveend", listener: () => void): unknown;
+  off(type: "moveend", listener: () => void): unknown;
+};
+
+/**
+ * Runs `done` once the ease just started has ended, and returns what undoes
+ * the wait. Under prefers-reduced-motion MapLibre skips the ease and fires
+ * `moveend` inside `easeTo`, before a listener could be attached, so a camera
+ * already still runs `done` at once. Never attach before `easeTo`: it ends a
+ * running ease with that ease's `moveend`.
+ */
+export function afterEase(map: EasingCamera, done: () => void): () => void {
+  if (!map.isMoving()) {
+    done();
+    return () => {};
+  }
+  map.once("moveend", done);
+  return () => map.off("moveend", done);
+}
+
 /**
  * The frame's size on screen while a scale is kept: the paper's map area on
  * the ground, over the ground a pixel covers. Zooming changes this, never the
