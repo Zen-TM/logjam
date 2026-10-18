@@ -69,6 +69,9 @@ const baseSchema = z.object({
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
+  // Read by nothing since #513; .ebextensions still sets it until #517 lets a
+  // deploy remove it. Delete with .ebextensions/basemap-env.config.
+  PROTOMAPS_ARCHIVE_URI: z.string().optional(),
 
   // Transactional email (Resend). Only the geoPdfWorker sends from the Node
   // side; the API server itself sends none. Both optional so a worker with no
