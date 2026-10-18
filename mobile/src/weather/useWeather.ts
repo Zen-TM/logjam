@@ -12,7 +12,13 @@ import {
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
-import { cacheForecast, readCachedForecast } from "./weatherStorage";
+import { isOfflineOnly } from "../offline/offlineOnlyMode";
+import {
+  cacheForecast,
+  readCachedForecast,
+  weatherEpoch,
+} from "./weatherStorage";
+import { mayFetch } from "./weatherState";
 
 export type WeatherStatus = "idle" | "loading" | "failed";
 
@@ -66,7 +72,13 @@ export function useWeather(
         setHeld((h) =>
           h.key === key && h.forecast
             ? h
-            : { key, forecast: kept, status: "idle", now: Date.now() },
+            : {
+                key,
+                forecast: kept,
+                // A press can beat the read: keep its loading or failed.
+                status: h.key === key ? h.status : "idle",
+                now: Date.now(),
+              },
         );
       })
       .catch(() => {});
@@ -78,7 +90,8 @@ export function useWeather(
   }, [key]);
 
   const refresh = useCallback(() => {
-    if (!canFetch) return;
+    if (!mayFetch({ canFetch, offlineOnlyNow: isOfflineOnly() })) return;
+    const epoch = weatherEpoch();
     inFlight.current?.abort();
     const controller = new AbortController();
     inFlight.current = controller;
@@ -91,7 +104,7 @@ export function useWeather(
       .then((fresh) => {
         if (controller.signal.aborted) return;
         setHeld({ key, forecast: fresh, status: "idle", now: Date.now() });
-        cacheForecast(fresh).catch(() => {});
+        cacheForecast(fresh, epoch).catch(() => {});
       })
       .catch(() => {
         if (controller.signal.aborted) return;

@@ -37,8 +37,21 @@ describe("the kept forecasts", () => {
     expect(parseWeatherCache(text)[weatherCellKey(f.cell)]).toEqual(f);
   });
 
-  // Mutation that turns it red: parse without the try/catch, or accept an
-  // entry without `isForecast`.
+  // Mutation that turns it red: drop `isForecast` from `parseWeatherCache`
+  // (the bad entry then survives under its valid key).
+  it("drops a malformed entry and keeps the good ones", () => {
+    const good = forecastAt(0, 1000);
+    const bad = { ...forecastAt(1, 1000), fetchedAt: "yesterday" };
+    const parsed = parseWeatherCache(
+      JSON.stringify({
+        [weatherCellKey(good.cell)]: good,
+        [weatherCellKey(bad.cell)]: bad,
+      }),
+    );
+    expect(Object.keys(parsed)).toEqual([weatherCellKey(good.cell)]);
+  });
+
+  // Mutation that turns it red: parse without the try/catch.
   it("reads a malformed file as empty", () => {
     expect(parseWeatherCache(null)).toEqual({});
     expect(parseWeatherCache("{not json")).toEqual({});

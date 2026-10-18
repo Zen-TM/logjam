@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WEATHER, weatherCell, type WeatherForecast } from "@logjam/shared";
 
-import { showWeatherRow, weatherViewState } from "./weatherState";
+import { mayFetch, showWeatherRow, weatherViewState } from "./weatherState";
 
 const NOW = Date.parse("2026-10-18T12:00:00");
 const forecast = (date: string): WeatherForecast => ({
@@ -73,5 +73,14 @@ describe("the weather view's state", () => {
     expect(
       weatherViewState({ ...base, forecast: forecast("2026-10-10") }).kind,
     ).toBe("outOfDate");
+  });
+});
+
+describe("whether a press may send", () => {
+  // Mutation that turns it red: drop `!input.offlineOnlyNow`.
+  it("never in Simulating offline mode, even when the screen was not re-rendered", () => {
+    expect(mayFetch({ canFetch: true, offlineOnlyNow: true })).toBe(false);
+    expect(mayFetch({ canFetch: false, offlineOnlyNow: false })).toBe(false);
+    expect(mayFetch({ canFetch: true, offlineOnlyNow: false })).toBe(true);
   });
 });

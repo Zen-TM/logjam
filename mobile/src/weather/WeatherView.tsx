@@ -14,15 +14,8 @@ import {
   type WeatherForecast,
 } from "@logjam/shared";
 
-import {
-  hitSlop,
-  makeStyles,
-  muted,
-  radius,
-  spacing,
-  useTheme,
-} from "../theme";
-import { Button, Icon, StatGrid } from "../ui";
+import { hitSlop, makeStyles, muted, spacing } from "../theme";
+import { Button, ForecastList, StatGrid, type ForecastRow } from "../ui";
 import type { Weather } from "./useWeather";
 import { weatherViewState } from "./weatherState";
 
@@ -32,7 +25,7 @@ type SectionProps = {
   now: number;
 };
 
-/** One drawing per contract section; `tsc` and `weather.test.ts` hold the set. */
+/** One drawing per contract section; `tsc` and `weatherContracts.test.ts` hold the set. */
 export const WEATHER_SECTIONS: Record<
   SectionKeysOn<typeof WEATHER, "gps">,
   (props: SectionProps) => React.ReactNode
@@ -119,39 +112,20 @@ export function WeatherView({ weather }: { weather: Weather }) {
 }
 
 function DayRows({ days, now }: { days: WeatherDay[]; now: number }) {
-  const styles = useStyles();
-  const theme = useTheme();
-  return (
-    <View style={styles.days}>
-      {days.map((day) => {
-        const facts = weatherDayFacts(day, now);
-        const today = facts.day === WEATHER.copy.today;
-        return (
-          <View
-            key={facts.date}
-            style={[styles.day, today && styles.today]}
-            accessible
-            accessibilityLabel={`${facts.day}, ${facts.condition.label}, ${facts.temperature}, rain ${facts.rain}, wind ${facts.wind}`}
-          >
-            <Text style={[styles.dayName, today && styles.emphasis]}>
-              {facts.day}
-            </Text>
-            <Icon
-              idea={facts.condition.icon}
-              size={22}
-              color={theme.text}
-              label={facts.condition.label}
-            />
-            <Text style={[styles.cell, styles.temp, today && styles.emphasis]}>
-              {facts.temperature}
-            </Text>
-            <Text style={[styles.cell, styles.rain]}>{facts.rain}</Text>
-            <Text style={[styles.cell, styles.wind]}>{facts.wind}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
+  const rows = days.map((day): ForecastRow => {
+    const facts = weatherDayFacts(day, now);
+    return {
+      key: facts.date,
+      day: facts.day,
+      glyph: facts.condition.icon,
+      glyphLabel: facts.condition.label,
+      temperature: facts.temperature,
+      rain: facts.rain,
+      wind: facts.wind,
+      current: facts.day === WEATHER.copy.today,
+    };
+  });
+  return <ForecastList rows={rows} label={WEATHER.title} />;
 }
 
 function Credit() {
@@ -172,35 +146,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   header: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   headerText: { flex: 1 },
   note: { ...muted(theme, textRole.detail) },
-  days: { gap: spacing(0.5) },
-  // Read-only rows have no fill: the card colour means "press me". Today is
-  // set apart by its edge and weight instead.
-  day: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-    paddingVertical: spacing(1),
-    paddingHorizontal: spacing(1),
-    borderWidth: 1,
-    borderColor: "transparent",
-    borderRadius: radius.md,
-  },
-  today: { borderColor: theme.accent },
-  dayName: {
-    ...textRole.detail,
-    color: theme.text,
-    width: spacing(6),
-    fontVariant: ["tabular-nums"],
-  },
-  emphasis: { ...textRole.control },
-  cell: {
-    ...textRole.detail,
-    color: theme.text,
-    fontVariant: ["tabular-nums"],
-  },
-  temp: { flex: 3 },
-  rain: { flex: 5 },
-  wind: { flex: 3, textAlign: "right" },
   credit: {
     ...muted(theme, textRole.meta),
     textDecorationLine: "underline",

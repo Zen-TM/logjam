@@ -74,6 +74,8 @@ export function MapPointSheet({
           time the map re-renders. */}
       {point ? (
         <PointDetail
+          // A new point starts clean: its height must not be the last one's.
+          key={`${point.latitude},${point.longitude}`}
           point={point}
           userCoord={userCoord}
           onClose={onClose}

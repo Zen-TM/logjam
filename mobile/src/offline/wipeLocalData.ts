@@ -32,6 +32,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { wipeAllSyncData } from "../sync/syncDb";
+import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
 import { clearOfflineDemCache } from "./demLookup";
@@ -78,6 +79,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(cancelAllRegionDownloads()),
     stoppedInTime(stopGeoPdfImportRun()),
     stoppedInTime(stopTrackRecordingForWipe()),
+    stoppedInTime(stopWeatherForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
 

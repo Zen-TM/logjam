@@ -48,3 +48,15 @@ export function showWeatherRow(input: {
     reason: disabled ? WEATHER.copy.needsConnection : undefined,
   };
 }
+
+/**
+ * Whether a press may send a request. "Simulating offline mode" is read again
+ * at the press: a place page kept mounted in another tab has not re-rendered
+ * since the switch moved.
+ */
+export function mayFetch(input: {
+  canFetch: boolean;
+  offlineOnlyNow: boolean;
+}): boolean {
+  return input.canFetch && !input.offlineOnlyNow;
+}

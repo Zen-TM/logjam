@@ -3,7 +3,8 @@
 //
 // Mutations that turn it red: add `{ key: "wind" }` to `WEATHER.sections`;
 // delete `credit` from `WEATHER_SECTIONS`; drop the `return` after
-// `onShowWeather()` in `MapPointSheet.tsx` (the panel then closes on the press);
+// `weather.refresh()` in `MapPointSheet.tsx` (the panel then closes on the press);
+// drop the `mayFetch` guard from `refresh` in `useWeather.ts`;
 // move the `fetchForecast` call out of `refresh` in `useWeather.ts` (a fetch on
 // opening).
 import { readFileSync } from "node:fs";
@@ -53,6 +54,16 @@ describe("the press is what asks for the weather", () => {
       /onShowWeather\(\);\s*weather\.refresh\(\);\s*return;/,
     );
     expect(source).toContain("if (weatherOpen) return <WeatherView");
+  });
+
+  it("asks mayFetch before sending anything", () => {
+    const source = read("./useWeather.ts");
+    expect(source.indexOf("mayFetch(")).toBeGreaterThan(
+      source.indexOf("const refresh"),
+    );
+    expect(source.indexOf("mayFetch(")).toBeLessThan(
+      source.indexOf("fetchForecast("),
+    );
   });
 
   it("fetches only inside refresh", () => {
