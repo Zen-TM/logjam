@@ -109,8 +109,21 @@ jobs:
       - name: Lint
         working-directory: shared
         run: npm run lint
+      # ~27 MB of public NSW files (ELVIS tile, DEM, topo sheet) from the
+      # hash-pinned sample-data-v1 release; the corpus tests in shared skip
+      # without SAMPLE_DATA_DIR.
+      - name: Fetch public sample inputs
+        run: |
+          echo "SAMPLE_DATA_DIR=$GITHUB_WORKSPACE/.cache/sample-data" >> "$GITHUB_ENV"
+          SAMPLE_DATA_DIR="$GITHUB_WORKSPACE/.cache/sample-data" scripts/sample-data.sh \
+            elvis-katoomba-2506258-laz.zip \
+            elvis-katoomba-2506258-dem2m.zip \
+            nsw-topo-8929-4N-yerranderie.pdf
       - name: Unit tests
         working-directory: shared
+        env:
+          RUN_GEOPDF_SAMPLES: "1"
+          GEOPDF_SAMPLE_DIR: ${{ env.SAMPLE_DATA_DIR }}
         run: npm test
       # Every foreground/background pair both clients render, under all four
       # theme schemes. Bare node: it parses the token sources, no build.
@@ -318,6 +331,15 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/smoke.spec.ts
+      # Same job, not its own: it needs this seeded stack, and this job's
+      # area (api/, shared/, frontend/) is exactly what the spec can break.
+      # Serial, because a parallel run on a cold checkout times out on
+      # page.goto. Playwright starts the second server on 5199 itself.
+      - name: Playwright accessibility
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/a11y.spec.ts --workers=1
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -548,6 +570,8 @@ jobs:
         run: infra/scripts/frontend-prune.sh --self-test
       - name: CI scope
         run: infra/scripts/ci-scope.sh --self-test
+      - name: Sample-data fetch checks hashes
+        run: scripts/sample-data.sh --self-test
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

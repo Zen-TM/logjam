@@ -1,0 +1,15 @@
+{
+  "surveyNames": [
+    "Katoomba201804"
+  ],
+  "mode": "DEM_ONLY",
+  "modeLabel": "DEM only (no vegetation layer)",
+  "tileCount": 1,
+  "lazCount": 0,
+  "demCount": 1,
+  "derivativeTifCount": 0,
+  "demResolutionMeters": 2,
+  "uncompressedBytes": 4896801,
+  "compressedBytes": 4896801,
+  "overlappingSurveys": false
+}

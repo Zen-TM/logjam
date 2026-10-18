@@ -30,12 +30,14 @@ const written = new Set(
 );
 
 /** Written inside another model's `create`, so no `prisma.<model>.create` names it. */
-const WRITTEN_NESTED: Record<string, string> = {
-  TripLogPlace: "the `places: { create }` of each trip log",
+const WRITTEN_NESTED: Record<string, RegExp> = {
+  TripLogPlace: /places:\s*\{\s*create\b/,
 };
 
 /** Deliberately empty, with the reason. */
 const NOT_SEEDED: Record<string, string> = {
+  DeviceToken:
+    "nothing gates push in dev or CI, so a seeded token is sent to Expo's real push service, which refuses it, and the API prunes the row mid-suite; devices.test.ts registers its own",
   EgressLogCursor:
     "written by the egress sweeper as it reads S3 access logs, which MiniStack does not deliver; the seed only clears it",
 };
@@ -51,7 +53,7 @@ describe("the dev seed covers every table", () => {
     const missing = modelNames.filter(
       (model) =>
         !written.has(delegate(model)) &&
-        !(model in WRITTEN_NESTED) &&
+        !(WRITTEN_NESTED[model] && WRITTEN_NESTED[model].test(SEED)) &&
         !(model in NOT_SEEDED),
     );
     expect(

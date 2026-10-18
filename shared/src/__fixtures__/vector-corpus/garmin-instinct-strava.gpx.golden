@@ -1,0 +1,48 @@
+{
+  "name": "Corpus Strava Descent",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.02,
+            -33.01,
+            612.4
+          ],
+          [
+            150.0221,
+            -33.0112,
+            601.2
+          ],
+          [
+            150.024,
+            -33.0125,
+            588
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus Strava Descent",
+        "coordTimes": [
+          "2024-03-09T22:05:00.000Z",
+          "2024-03-09T22:05:30.000Z",
+          "2024-03-09T22:13:10.000Z"
+        ]
+      }
+    }
+  ],
+  "bbox": [
+    150.02,
+    -33.0125,
+    150.024,
+    -33.01
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 3
+  }
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
+import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
 import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
@@ -64,6 +65,10 @@ describe("topo-jobs route (fake auth)", () => {
         .set(AUTH);
       expect(ownRes.status).toBe(200);
       expect(ownRes.body.status).toBe("uploading");
+      // Created without settings, so it gets the ones Logjam Web sends by
+      // default: the worker has no fallback, and pipeline.py fails a job
+      // whose settings lack a layer.
+      expect(ownRes.body.layerOptions).toEqual(RASTER_TEMPLATE_DEFAULTS);
 
       // A stranger gets 404, NOT 403 (the anti-oracle rule in root AGENTS.md):
       // a 403 confirms the job id is real to someone with no right to know

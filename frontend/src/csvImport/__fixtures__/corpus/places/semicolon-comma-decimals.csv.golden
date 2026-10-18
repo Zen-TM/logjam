@@ -1,0 +1,24 @@
+{
+  "headers": [
+    "Name",
+    "Latitude",
+    "Longitude",
+    "Notes"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "Name": "name",
+    "Latitude": "latitude",
+    "Longitude": "longitude",
+    "Notes": "notes"
+  },
+  "rows": [],
+  "warnings": [
+    "Row 2: latitude \"-33,5603\" couldn't be read — skipped",
+    "Row 3: latitude \"-33,3001\" couldn't be read — skipped"
+  ],
+  "droppedRows": 2,
+  "blocked": "No valid place rows found (each needs a name, latitude and longitude)."
+}
