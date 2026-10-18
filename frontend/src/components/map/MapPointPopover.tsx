@@ -4,6 +4,7 @@ import * as maplibregl from "maplibre-gl";
 import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
+  WEATHER,
   mapPointFacts,
   mapPointVerbs,
   type MapPointCoord,
@@ -12,7 +13,10 @@ import {
 import { useElevationProfile } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
+import { WeatherView } from "../weather/WeatherView";
+import { useOnline, useWeather } from "../weather/useWeather";
 import {
+  IconButton,
   IconTile,
   MapPointDot,
   Popover,
@@ -81,6 +85,31 @@ export default function MapPointPopover({
   ]);
   const metres = profile.profile?.samples[0]?.elevationM ?? null;
 
+  // "Show the weather here" swaps the body for the forecast in place and backs
+  // out to the facts (shared/DESIGN.md §10). The press is what fetches.
+  const [view, setView] = useState<"point" | "weather">("point");
+  const online = useOnline();
+  const weather = useWeather(point, metres);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const viewChanged = useRef(false);
+  // The pressed control is unmounted by the swap: focus goes to the arrow on
+  // the way in and to the opened row on the way out (frontend/DESIGN.md §2).
+  useEffect(() => {
+    if (!viewChanged.current) return;
+    if (view === "weather") backRef.current?.focus();
+    else
+      bodyRef.current
+        ?.querySelector<HTMLButtonElement>('[data-verb="weather"] button')
+        ?.focus();
+  }, [view]);
+
+  // Pressed too soon, the weather would be asked without a height and answer
+  // for the cell's own DEM, which in canyon country can be far from the spot.
+  const checkingHeight =
+    metres == null &&
+    (profile.loading || (!profile.error && profile.profile === null));
+
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
@@ -103,11 +132,16 @@ export default function MapPointPopover({
   };
 
   const run: Record<
-    Extract<MapPointVerbId, "addPlace" | "measure" | "copy">,
+    Extract<MapPointVerbId, "addPlace" | "measure" | "copy" | "weather">,
     () => void
   > = {
     addPlace: () => onAddPlace(point),
     measure: () => onMeasure(point),
+    weather: () => {
+      viewChanged.current = true;
+      setView("weather");
+      weather.load();
+    },
     copy: () => {
       void navigator.clipboard
         .writeText(
@@ -130,29 +164,60 @@ export default function MapPointPopover({
         fit
         dismissOnOutsidePress
       >
-        <div className={classes.body}>
-          <StatGrid stats={stats} />
-          {from === null && (
-            <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
-          )}
-          <div className={classes.verbs}>
-            {mapPointVerbs("web").map((verb) => (
-              <Row
-                key={verb.id}
-                title={verb.label}
-                leading={
-                  <IconTile icon={verb.icon} hue="var(--color-accent)" />
-                }
-                onOpen={() => {
-                  run[verb.id as keyof typeof run]();
-                  // Copy leaves the panel where it is; the others go on to a
-                  // flow of their own.
-                  if (verb.id !== "copy") close();
+        {view === "weather" ? (
+          <div className={classes.body} ref={bodyRef}>
+            <div className={classes.weatherHeader}>
+              <IconButton
+                ref={backRef}
+                icon="back"
+                label="Back to this point"
+                onClick={() => {
+                  viewChanged.current = true;
+                  setView("point");
                 }}
               />
-            ))}
+              <span className={classes.weatherTitle}>{WEATHER.title}</span>
+            </div>
+            <WeatherView
+              state={weather.state}
+              online={online}
+              onLoad={weather.load}
+            />
           </div>
-        </div>
+        ) : (
+          <div className={classes.body} ref={bodyRef}>
+            <StatGrid stats={stats} />
+            {from === null && (
+              <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
+            )}
+            <div className={classes.verbs}>
+              {mapPointVerbs("web").map((verb) => (
+                <Row
+                  key={verb.id}
+                  title={verb.label}
+                  leading={
+                    <IconTile icon={verb.icon} hue="var(--color-accent)" />
+                  }
+                  data-verb={verb.id}
+                  {...(verb.id === "weather" && (!online || checkingHeight)
+                    ? {
+                        disabled: true,
+                        subtitle: online
+                          ? MAP_POINT.copy.elevationChecking
+                          : WEATHER.copy.needsConnection,
+                      }
+                    : {})}
+                  onOpen={() => {
+                    run[verb.id as keyof typeof run]();
+                    // Copy and weather leave the panel where it is; the others
+                    // go on to a flow of their own.
+                    if (verb.id !== "copy" && verb.id !== "weather") close();
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </Popover>
     </>
   );
