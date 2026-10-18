@@ -29,24 +29,3 @@ export function undoToastMessage(result: UndoImportResult): string {
       : ` ${result.keptFields} fields you changed since stay as you left them.`;
   return `${parts.length > 0 ? `Import undone — ${parts.join(", ")}.` : "Import undone."}${kept}`;
 }
-
-const CREATED = "Every place and trip this import created is deleted.";
-const FINAL = "This can't be undone.";
-
-/** The Undo confirm. `restorableUntil` is the import's deadline for putting
- *  back what it changed, null when it changed nothing it can put back. */
-export function undoConfirmMessage(
-  restorableUntil: string | null,
-  now: Date,
-): string {
-  if (!restorableUntil) return `${CREATED} ${FINAL}`;
-  const until = new Date(restorableUntil);
-  if (until > now) {
-    return `${CREATED} Places and trips it changed go back to the values they had before it, except fields you've changed since, which stay as you left them. ${FINAL}`;
-  }
-  const at = until.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-  return `${CREATED} Places and trips it changed keep its values: Undo could put them back only until ${at}. ${FINAL}`;
-}

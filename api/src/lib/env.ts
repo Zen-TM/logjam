@@ -96,7 +96,8 @@ const baseSchema = z.object({
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
   // Python `except` ran) is force-failed by the periodic sweep. Set
-  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
+  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely, which also
+  // stops the file-send, tombstone and import-snapshot expiry it runs.
   TOPO_REAPER_INTERVAL_MS: z.coerce
     .number()
     .int()
@@ -241,6 +242,8 @@ const baseSchema = z.object({
     .default(7_776_000_000), // 90 days
   // How long Undo can put back what an import changed on existing places and
   // trips (lib/importSnapshot.ts); the reaper sweeps snapshots older than this.
+  // Logjam Web's Undo confirm tells users "for a day". Unlike its siblings it
+  // has no 0 = keep forever: these rows copy user text.
   IMPORT_SNAPSHOT_TTL_MS: z.coerce
     .number()
     .int()

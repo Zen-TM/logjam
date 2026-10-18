@@ -9,14 +9,15 @@
 // keeps that attribute and nothing else. Guards: importSnapshot.unit.test.ts,
 // src/__tests__/import.test.ts.
 //
-// RETENTION: a snapshot lives IMPORT_SNAPSHOT_TTL_MS (24 h by default) from
-// its last write, then the reaper's sweep deletes it (sweepExpiredImportSnapshots,
-// run by startTopoJobReaper). Undo is offered only on Logjam Web's import
-// result screen, so a snapshot outliving that is clutter holding old copies of
-// user text. Undo after expiry still deletes what the batch created and
-// restores nothing; each import response says until when it can restore
-// (`restorableUntil`), and Logjam Web's confirm says so. Undo, the row's
-// delete and account delete remove a snapshot sooner.
+// RETENTION: a snapshot counts for IMPORT_SNAPSHOT_TTL_MS (24 h by default)
+// from its last write. Undo is offered only on Logjam Web's import result
+// screen, so one kept longer would be clutter holding old copies of user text.
+// Past that, Undo ignores it (it still deletes what the batch created) and the
+// reaper's sweep deletes it (sweepExpiredImportSnapshots, run by
+// startTopoJobReaper, so not while TOPO_REAPER_INTERVAL_MS is 0). Undo, the
+// row's delete and account delete remove a snapshot sooner. Guards: the
+// retention tests in importSnapshot.unit.test.ts and "restores nothing past
+// the retention" in src/__tests__/import.test.ts.
 import { isDeepStrictEqual } from "node:util";
 import {
   enforceCanyoningTag,
@@ -158,7 +159,7 @@ export async function snapshotWrites(
   column: "placeId" | "tripLogId",
   changes: Map<string, Change>,
 ) {
-  if (changes.size === 0) return { writes: [], recorded: 0 };
+  if (changes.size === 0) return [];
   const ids = [...changes.keys()];
   const where = {
     ownerId,
@@ -190,30 +191,21 @@ export async function snapshotWrites(
         ]
       : [];
   });
-  return {
-    writes: [
-      prisma.importSnapshot.deleteMany({ where }),
-      prisma.importSnapshot.createMany({ data: rows }),
-    ],
-    recorded: rows.length,
-  };
+  return [
+    prisma.importSnapshot.deleteMany({ where }),
+    prisma.importSnapshot.createMany({ data: rows }),
+  ];
 }
 
-/** Until when Undo can put back what a request recorded, or null if it
- *  recorded nothing. */
-export function restorableUntil(recorded: number, now = new Date()) {
-  return recorded > 0
-    ? new Date(now.getTime() + getEnv().IMPORT_SNAPSHOT_TTL_MS).toISOString()
-    : null;
-}
+/** The moment before which a snapshot is past its retention. */
+const expiredBefore = (now: Date) =>
+  new Date(now.getTime() - getEnv().IMPORT_SNAPSHOT_TTL_MS);
 
 /** Deletes snapshots past their retention (see the header). */
 export async function sweepExpiredImportSnapshots(now = new Date()) {
   const { count } = await prisma.importSnapshot.deleteMany({
     where: {
-      createdAt: {
-        lt: new Date(now.getTime() - getEnv().IMPORT_SNAPSHOT_TTL_MS),
-      },
+      createdAt: { lt: expiredBefore(now) },
     },
   });
   return count;
@@ -222,9 +214,14 @@ export async function sweepExpiredImportSnapshots(now = new Date()) {
 /** Puts back what a batch changed on rows it did not create, as ordinary
  *  owner-scoped updates (which bump `updatedAt`, so phones and sharees pull
  *  them), and drops the batch's snapshots. */
-export async function restoreBatch(ownerId: string, batchId: string) {
+export async function restoreBatch(
+  ownerId: string,
+  batchId: string,
+  now = new Date(),
+) {
+  // One past its retention restores nothing even before the sweep reaches it.
   const snapshots = await prisma.importSnapshot.findMany({
-    where: { ownerId, batchId },
+    where: { ownerId, batchId, createdAt: { gte: expiredBefore(now) } },
     include: {
       place: {
         select: {

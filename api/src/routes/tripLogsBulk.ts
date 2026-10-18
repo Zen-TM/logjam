@@ -9,7 +9,6 @@ import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
 import {
   diffFields,
-  restorableUntil,
   snapshotWrites,
   tripFields,
   type Change,
@@ -294,19 +293,11 @@ router.post(
       );
     }
 
-    let recorded = 0;
     for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
       const chunk = updates.slice(i, i + CHUNK_SIZE);
       const changes = new Map(
         chunk.flatMap((op) => (op.change ? [[op.id, op.change] as const] : [])),
       );
-      const snapshots = await snapshotWrites(
-        user.id,
-        body.importBatchId,
-        "tripLogId",
-        changes,
-      );
-      recorded += snapshots.recorded;
       await prisma.$transaction([
         ...chunk.map((op) =>
           prisma.tripLog.update({
@@ -314,7 +305,12 @@ router.post(
             data: op.data,
           }),
         ),
-        ...snapshots.writes,
+        ...(await snapshotWrites(
+          user.id,
+          body.importBatchId,
+          "tripLogId",
+          changes,
+        )),
       ]);
     }
 
@@ -323,7 +319,6 @@ router.post(
       imported: creates.length,
       updated: updates.length,
       errors,
-      restorableUntil: restorableUntil(recorded),
     });
   },
 );

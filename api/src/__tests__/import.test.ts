@@ -333,6 +333,60 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
     await request(API_URL).delete(`/places/${preexistingId}`).set(AUTH);
   });
 
+  // Mutation that turns it red: dropping the createdAt cutoff from
+  // restoreBatch's read in lib/importSnapshot.ts.
+  it("restores nothing past the retention, and still deletes what the batch created", async () => {
+    const run = Date.now();
+    const name = `IMP undo expired ${run}`;
+    const created = await request(API_URL).post("/places").set(AUTH).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name,
+      latitude: -33.55,
+      longitude: 150.15,
+    });
+    const placeId = created.body.id as string;
+    try {
+      const batchId = newBatch();
+      const res = await request(API_URL)
+        .post("/places/bulk")
+        .set(AUTH)
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: batchId,
+          rows: [
+            placeRow(`IMP undo expired new ${run}`, -33.56, 150.16),
+            {
+              data: {
+                name,
+                latitude: -33.55,
+                longitude: 150.15,
+                notes: "file",
+              },
+              resolution: { kind: "merge", placeId },
+            },
+          ],
+        });
+      expect(res.body.merged).toBe(1);
+      const aged = await prisma.importSnapshot.updateMany({
+        where: { batchId },
+        data: { createdAt: new Date(Date.now() - 25 * 3_600_000) },
+      });
+      expect(aged.count).toBe(1);
+
+      const undo = await request(API_URL)
+        .delete(`/imports/${batchId}`)
+        .set(AUTH);
+      expect(undo.status).toBe(200);
+      expect(undo.body.deletedPlaces).toBe(1);
+      expect(undo.body.restoredPlaces).toBe(0);
+      const after = await prisma.place.findUnique({ where: { id: placeId } });
+      expect(after?.notes).toBe("file");
+      expect(await prisma.importSnapshot.count({ where: { batchId } })).toBe(0);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
   // Mutation that turns it red: restoring a field without checking it still
   // holds what the import wrote, or a restore that skips updatedAt (a raw
   // write), which phones and sharees would never pull.

@@ -94,7 +94,7 @@ import ImportResultSummary, {
   type DetailSection,
 } from "./ImportResultSummary";
 import classes from "./UnifiedImportDialog.module.css";
-import { undoConfirmMessage, undoToastMessage } from "./undoCopy";
+import { undoToastMessage } from "./undoToastMessage";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,7 +139,6 @@ type ImportOutcome =
   | {
       kind: "place";
       batchId: string;
-      restorableUntil: string | null;
       created: number;
       merged: number;
       merges: PlaceMergePair[];
@@ -151,7 +150,6 @@ type ImportOutcome =
   | {
       kind: "triplog";
       batchId: string;
-      restorableUntil: string | null;
       imported: number;
       updated: number;
       createdPlaces: number;
@@ -390,16 +388,6 @@ function UnifiedImportDialog({
   // One batch id per import session, shared across the place + logbook stages so
   // a single Undo reverts both. Lazily created, cleared on reset.
   const batchIdRef = useRef<string | null>(null);
-  // The earliest `restorableUntil` of the session's requests: past it, Undo
-  // can no longer put back what the import changed.
-  const restorableUntilRef = useRef<string | null>(null);
-  function noteRestorable(until: string | null | undefined) {
-    if (
-      until &&
-      (!restorableUntilRef.current || until < restorableUntilRef.current)
-    )
-      restorableUntilRef.current = until;
-  }
   function sessionBatchId(): string {
     if (!batchIdRef.current) batchIdRef.current = genBatchId();
     return batchIdRef.current;
@@ -422,7 +410,6 @@ function UnifiedImportDialog({
       return;
     }
     batchIdRef.current = null;
-    restorableUntilRef.current = null;
     setStep("map");
     setShowingMergeSettings(false);
     setConfirmingUndo(false);
@@ -1005,7 +992,6 @@ function UnifiedImportDialog({
     setError(null);
     try {
       const result = await bulkPlaceImport(resolvedPlaceBody(batchId));
-      noteRestorable(result.restorableUntil);
 
       // Staged combined import: if a logbook was also dropped, don't finish here.
       // Refetch the place list (now including the just-imported places) and move
@@ -1020,7 +1006,6 @@ function UnifiedImportDialog({
           setOutcome({
             kind: "place",
             batchId,
-            restorableUntil: restorableUntilRef.current,
             created: result.created,
             merged: result.merged,
             merges: result.merges,
@@ -1037,7 +1022,6 @@ function UnifiedImportDialog({
       setOutcome({
         kind: "place",
         batchId,
-        restorableUntil: restorableUntilRef.current,
         created: result.created,
         merged: result.merged,
         merges: result.merges,
@@ -1119,7 +1103,6 @@ function UnifiedImportDialog({
             })),
             mergePolicy,
           });
-          noteRestorable(result.restorableUntil);
           createdPlaces = result.created;
           // Surface server-rejected create rows with their REAL per-row message
           // (the meaningful label here is the place name, not a CSV line) and
@@ -1203,7 +1186,6 @@ function UnifiedImportDialog({
         importBatchId: batchId,
         trips,
       });
-      noteRestorable(result.restorableUntil);
       onRefetchPlaces();
       onRefetchTripLogs();
 
@@ -1212,7 +1194,6 @@ function UnifiedImportDialog({
       setOutcome({
         kind: "triplog",
         batchId,
-        restorableUntil: restorableUntilRef.current,
         imported: result.imported,
         updated: result.updated,
         createdPlaces,
@@ -1975,10 +1956,7 @@ function UnifiedImportDialog({
       <ConfirmDialog
         open={confirmingUndo}
         title="Undo this import?"
-        message={undoConfirmMessage(
-          outcome?.restorableUntil ?? null,
-          new Date(),
-        )}
+        message="Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone."
         confirmLabel="Undo the import"
         confirmColor="error"
         busy={undoing}

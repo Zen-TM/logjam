@@ -10,8 +10,9 @@ const router = Router();
 
 // DELETE /imports/:batchId — undo an entire import batch.
 // Deletes the rows the batch created (stamped with importBatchId), and puts
-// back what it changed on rows it did not create (lib/importSnapshot.ts), less
-// any field changed since (src/__tests__/import.test.ts).
+// back what it changed on rows it did not create, within the snapshots'
+// retention (lib/importSnapshot.ts), less any field changed since
+// (src/__tests__/import.test.ts).
 router.delete(
   "/:batchId",
   requireAuth,

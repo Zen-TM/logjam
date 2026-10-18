@@ -8,7 +8,6 @@ vi.mock("../services/prisma", () => ({
 const {
   combineChanges,
   diffFields,
-  restorableUntil,
   restoreFields,
   sweepExpiredImportSnapshots,
 } = await import("./importSnapshot");
@@ -115,17 +114,11 @@ describe("retention", () => {
   const now = new Date("2026-10-18T12:00:00.000Z");
 
   // Mutation that turns it red: sweeping by anything but createdAt older than
-  // the TTL (24 h by default), or not sweeping at all.
+  // the TTL (24 h by default).
   it("sweeps snapshots written more than a day ago", async () => {
     expect(await sweepExpiredImportSnapshots(now)).toBe(2);
     expect(deleteMany).toHaveBeenCalledWith({
       where: { createdAt: { lt: new Date("2026-10-17T12:00:00.000Z") } },
     });
-  });
-
-  // Mutation that turns it red: promising a restore when nothing was recorded.
-  it("says until when Undo can restore, and nothing when there is nothing", () => {
-    expect(restorableUntil(1, now)).toBe("2026-10-19T12:00:00.000Z");
-    expect(restorableUntil(0, now)).toBeNull();
   });
 });
