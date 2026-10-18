@@ -27,6 +27,7 @@ export * from "./placeValidation.js";
 export * from "./placeMatch.js";
 export * from "./mergePlace.js";
 export * from "./monthlyQuota.js";
+export * from "./leaderboard.js";
 export * from "./computeCredits.js";
 export * from "./topoSettings.js";
 export * from "./topoExport.js";

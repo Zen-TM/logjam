@@ -315,6 +315,7 @@ router.patch(
       autoDownloadGeoPdfs,
       importMergePolicy,
       copyPlaceMedia,
+      leaderboardOptIn,
       consentVersion,
     } = req.body as {
       username?: unknown;
@@ -323,6 +324,7 @@ router.patch(
       autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       copyPlaceMedia?: unknown;
+      leaderboardOptIn?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -372,7 +374,8 @@ router.patch(
       notifications !== undefined ||
       autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined ||
-      copyPlaceMedia !== undefined
+      copyPlaceMedia !== undefined ||
+      leaderboardOptIn !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -397,6 +400,12 @@ router.patch(
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
+      }
+      if (
+        leaderboardOptIn !== undefined &&
+        typeof leaderboardOptIn !== "boolean"
+      ) {
+        throw malformed("Invalid leaderboardOptIn");
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
@@ -423,6 +432,7 @@ router.patch(
           : {}),
         ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
+        ...(leaderboardOptIn !== undefined ? { leaderboardOptIn } : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),
