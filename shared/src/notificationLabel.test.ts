@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  NOTIFICATION_TYPES,
   notificationHaystack,
   notificationLabel,
 } from "./notificationLabel.js";
@@ -230,5 +231,17 @@ describe("notificationHaystack — what the inbox search matches", () => {
         notification("file_sent", { fileSendId: "abc123", filename: "x.gpx" }),
       ),
     ).not.toContain("abc123");
+  });
+});
+
+// Mutation that turns this red: adding a type to NOTIFICATION_TYPES without a
+// branch in notificationLabel, which would show it as the generic fallback.
+describe("NOTIFICATION_TYPES", () => {
+  it("has a label branch for every type", () => {
+    for (const type of NOTIFICATION_TYPES) {
+      expect(notificationLabel(notification(type)).text, type).not.toBe(
+        "Notification",
+      );
+    }
   });
 });
