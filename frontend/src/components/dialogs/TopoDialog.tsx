@@ -12,7 +12,6 @@ import {
   apiFetch,
   fetchComputeEstimate,
   fetchCurrentUser,
-  putToPresignedUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -53,6 +52,7 @@ import { nextTopoName } from "./jobName";
 import { fetchTopoTemplates } from "./topoTemplatesFetch";
 import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
+import { useTopoUpload } from "./topoUpload";
 import classes from "./TopoDialog.module.css";
 
 export type TopoTemplate = {
@@ -198,6 +198,7 @@ export default function TopoDialog({
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("hillshade");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const upload = useTopoUpload();
 
   // Closing empties the form — but going off to draw the area CLOSES this
   // dialog too, and comes back to it (App reopens on `onBboxSelected`). Emptying
@@ -215,6 +216,12 @@ export default function TopoDialog({
     setWasClosedForGood(closedForGood);
     if (closedForGood) resetForm();
   }
+  // A job whose upload failed and was given up on is deleted, not left
+  // "uploading" in the list.
+  const { discard } = upload;
+  useEffect(() => {
+    if (closedForGood) discard();
+  }, [closedForGood, discard]);
 
   function resetForm() {
     setFile(null);
@@ -474,33 +481,30 @@ export default function TopoDialog({
     setUploadedBytes(0);
     setTotalBytes(file.size);
     setPhase("uploading");
+    let uploaded = false;
     try {
-      const { jobId, uploadUrl } = await apiFetch<{
-        jobId: string;
-        uploadUrl: string;
-      }>("/topo-jobs", {
-        method: "POST",
-        body: {
+      // On a resubmit after a failure this carries on with the same job, so
+      // the name and settings are the ones it was first sent with.
+      const jobId = await upload.submit(
+        file,
+        {
           tileCount: stats.tileCount || null,
           jobName: topoName.trim() || stats.surveyNames[0] || null,
           filename: file.name,
           settings,
           autoExport,
         },
-      });
-
-      await putToPresignedUrl(
-        uploadUrl,
-        file,
-        "application/zip",
-        (loaded, total) => {
-          setUploadedBytes(loaded);
-          setTotalBytes(total);
+        {
+          progress: (sent, total) => {
+            setUploadedBytes(sent);
+            setTotalBytes(total);
+          },
+          uploaded: () => {
+            uploaded = true;
+            setPhase("finalizing");
+          },
         },
       );
-
-      setPhase("finalizing");
-      await apiFetch(`/topo-jobs/${jobId}/start`, { method: "POST" });
 
       const newJob = await apiFetch<TopoJob>(`/topo-jobs/${jobId}`);
       onJobCreated(newJob);
@@ -508,14 +512,21 @@ export default function TopoDialog({
       setPhase("done");
     } catch (e: unknown) {
       console.error(e);
-      setError(messageFromError(e, "Submission failed. Please try again."));
-      // File preserved so the ErrorBanner's Retry can resubmit.
+      setError(
+        messageFromError(
+          e,
+          uploaded
+            ? "Submission failed. Please try again."
+            : "The upload stopped. Check your connection, then choose Make it again to carry on from where it stopped.",
+        ),
+      );
+      // File preserved so Make it can resubmit.
       setPhase("form");
     }
   }
 
   function performClose() {
-    // Block closing mid-upload — there's no resumable state to return to.
+    // Block closing mid-upload: closing gives up on the upload.
     if (phase === "uploading" || phase === "finalizing") return;
     onClose();
   }

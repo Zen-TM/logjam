@@ -253,11 +253,14 @@ the task ARN saved on the row.
 ### Topo jobs
 
 A user uploads an ELVIS LiDAR ZIP straight to S3, then starts the job
-(`api/src/routes/topoJobs.ts`, `topo/worker.py`):
+(`api/src/routes/topoJobs.ts`, `topo/worker.py`). The ZIP goes as an S3
+multipart upload: the API signs URLs for its parts (`/parts`), Logjam Web
+sends them a few at a time, and the API joins them (`/complete`). After a
+failure, Logjam Web sends only the missing parts, to the same job.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> uploading: POST /topo-jobs<br/>(returns a presigned upload URL)
+  [*] --> uploading: POST /topo-jobs<br/>(opens the multipart upload)
   uploading --> pending: POST /topo-jobs/{id}/start<br/>(credits, quota, capacity checked)
   pending --> processing: worker claims the job
   pending --> failed: RunTask failed, or the sweep's<br/>pending timeout, or the owner deleted it
@@ -269,8 +272,9 @@ stateDiagram-v2
 
 While processing, the worker records progress, and the sweep fails the job
 only when that progress stops or the job passes an absolute ceiling. A slow
-job that is still advancing is left alone. Nothing fails a job left in
-`uploading`; its owner deletes it. Deleting a job that is still running fails
+job that is still advancing is left alone. The sweep deletes a job left in
+`uploading` for a day, with its ZIP and its parts; the topo bucket's lifecycle
+rule aborts any parts left behind two days after the upload began. Deleting a job that is still running fails
 it, stops its task and then removes the row. Deleting also fails the exports
 queued from the job, and is refused while one of its exports is running.
 When a job with auto-export turned on completes, the sweep queues its export.
