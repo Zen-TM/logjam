@@ -127,6 +127,13 @@ describe("account-delete purge covers every notification type", () => {
     "api/src/routes/fileSends.ts": ["file_sent"],
     "api/src/routes/friendInvites.ts": ["friend_request_accepted"],
     "api/src/routes/friends.ts": ["friend_request", "friend_request_accepted"],
+    "api/src/lib/planMembership.ts": [
+      "plan_invited",
+      "plan_join_request",
+      "plan_join_approved",
+      "plan_member_joined",
+      "plan_access_ended",
+    ],
     "api/src/routes/shares.ts": ["item_shared"],
     "api/src/routes/sharing.ts": ["place_shared"],
     "api/src/worker/geoPdfWorker.ts": ["geo_pdf_complete"],
@@ -134,8 +141,10 @@ describe("account-delete purge covers every notification type", () => {
     "topo/export_worker.py": ["topo_export_complete"],
   };
   // Only ever sent to the user the row is about, so the purge's
-  // `notification.deleteMany({ userId })` already removes them.
+  // `notification.deleteMany({ userId })` already removes them; or, for
+  // plan_access_ended, naming no user at all.
   const HELD_BY_OWNER_ONLY = [
+    "plan_access_ended",
     "egress_quota_exceeded",
     "egress_quota_warning",
     "topo_complete",

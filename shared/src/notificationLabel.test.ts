@@ -245,3 +245,33 @@ describe("NOTIFICATION_TYPES", () => {
     }
   });
 });
+
+// Mutation that turns this red: word a plan_access_ended reason as another's,
+// or drop the planName the payload carries for it.
+describe("plan notifications", () => {
+  it("names the people and the plan resolved at read time", () => {
+    expect(
+      notificationLabel(
+        notification("plan_join_request", {
+          requesterUsername: "tom",
+          planName: "Wollangambe trip",
+        }),
+      ).text,
+    ).toBe("tom asked to join Wollangambe trip");
+  });
+
+  it("says why access ended, by reason", () => {
+    const ended = (reason: string) =>
+      notificationLabel(
+        notification("plan_access_ended", {
+          reason,
+          planName: "Wollangambe trip",
+        }),
+      ).text;
+    expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
+    expect(ended("declined")).toBe(
+      "Your request to join Wollangambe trip was turned down",
+    );
+    expect(ended("deleted")).toBe("Wollangambe trip was deleted");
+  });
+});

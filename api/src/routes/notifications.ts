@@ -25,12 +25,29 @@ const router = Router();
 //       copy of it (lib/fileSendReaper.ts), because the recipient is owed the
 //       name of the file they missed. Nothing else ever writes it.
 //   topo_complete / topo_failed / *_export:   self-only refs (jobId, jobName, footprint)
+//   plan_invited / plan_join_request / plan_join_approved / plan_member_joined:
+//                                             payload.planId and the other person's id
+//                                             (+ planName and their username), shown
+//                                             only while the memberships still say it
+//     — the exception's twin: plan_access_ended carries planName, stamped when
+//       the recipient lost the plan (removed, turned down, deleted), since
+//       there is nothing left they may resolve it from and they are owed which
+//       plan it was. They had seen the name. Never logged.
 // When the referenced place/share/friendship is gone (share revoked, place
 // deleted, friendship removed, or the other user's account deleted), there is
 // nothing to resolve, so the notification is dropped at read time and never
 // leaks a stale name. Opportunistic row deletion on revoke/
 // delete (sharing.ts, friends.ts, places.ts, users.ts) is the primary
 // cleanup; this read-time drop is the fallback.
+/** The plan types resolved at read time, and the payload key of the person
+ *  each names. */
+const PLAN_PERSON_KEY = new Map([
+  ["plan_invited", "invitedById"],
+  ["plan_join_request", "requesterId"],
+  ["plan_join_approved", "approvedById"],
+  ["plan_member_joined", "memberId"],
+]);
+
 function payloadString(payload: unknown, key: string): string | null {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     const v = (payload as Record<string, unknown>)[key];
@@ -64,6 +81,7 @@ router.get(
     const sharerIds = new Set<string>();
     const sharedItems: { entityType: string; entityId: string }[] = [];
     const fileSendIds = new Set<string>();
+    const planIds = new Set<string>();
     for (const n of notifications) {
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
@@ -78,6 +96,11 @@ router.get(
         if (id) fileSendIds.add(id);
         const sentById = payloadString(n.payload, "sentById");
         if (sentById) sharerIds.add(sentById);
+      } else if (PLAN_PERSON_KEY.has(n.type)) {
+        const planId = payloadString(n.payload, "planId");
+        if (planId) planIds.add(planId);
+        const otherId = payloadString(n.payload, PLAN_PERSON_KEY.get(n.type)!);
+        if (otherId) sharerIds.add(otherId);
       } else if (n.type === "item_shared") {
         const entityType = payloadString(n.payload, "entityType");
         const entityId = payloadString(n.payload, "entityId");
@@ -205,6 +228,28 @@ router.get(
       liveFileSends.map((row) => [row.fileSendId, row]),
     );
 
+    // The plan twin of livePlaceShares: a plan row outlives a membership, so
+    // what decides whether the row still shows is where its people stand.
+    const planMembers =
+      planIds.size > 0
+        ? await prisma.tripPlanMember.findMany({
+            where: {
+              planId: { in: [...planIds] },
+              userId: { in: [user.id, ...sharerIds] },
+            },
+            select: {
+              planId: true,
+              userId: true,
+              status: true,
+              role: true,
+              plan: { select: { name: true } },
+            },
+          })
+        : [];
+    const planMember = new Map(
+      planMembers.map((row) => [`${row.planId}:${row.userId}`, row]),
+    );
+
     const visible = notifications.flatMap((n) => {
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
@@ -287,6 +332,37 @@ router.get(
               // means offer nothing and say why.
               fileSendStatus: expired ? "expired" : recipientRow.status,
               ...(sender ? { sentByUsername: sender.username } : {}),
+            },
+          },
+        ];
+      }
+      const personKey = PLAN_PERSON_KEY.get(n.type);
+      if (personKey) {
+        const planId = payloadString(n.payload, "planId");
+        const otherId = payloadString(n.payload, personKey);
+        const mine = planMember.get(`${planId}:${user.id}`);
+        const theirs = planMember.get(`${planId}:${otherId}`);
+        const shows =
+          n.type === "plan_invited"
+            ? mine?.status === "invited"
+            : n.type === "plan_join_request"
+              ? mine?.status === "active" &&
+                mine.role === "leader" &&
+                theirs?.status === "requested"
+              : n.type === "plan_member_joined"
+                ? mine?.status === "active" && theirs?.status === "active"
+                : mine?.status === "active";
+        if (!mine || !shows) return [];
+        const other = otherId ? sharerById.get(otherId) : undefined;
+        return [
+          {
+            ...n,
+            payload: {
+              ...(n.payload as object),
+              planName: mine.plan.name,
+              ...(other && {
+                [personKey.replace(/Id$/, "Username")]: other.username,
+              }),
             },
           },
         ];

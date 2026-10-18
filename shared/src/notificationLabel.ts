@@ -49,6 +49,11 @@ export const NOTIFICATION_TYPES = [
   "geo_pdf_complete",
   "egress_quota_warning",
   "egress_quota_exceeded",
+  "plan_invited",
+  "plan_join_request",
+  "plan_join_approved",
+  "plan_member_joined",
+  "plan_access_ended",
 ] as const;
 
 export function notificationLabel(n: TNotification): NotificationLabel {
@@ -147,6 +152,35 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: "Monthly download limit reached",
         warning: "Downloads resume when the limit resets next month.",
       };
+    // Plans. The plan's name is resolved at read time like a place's, except
+    // in plan_access_ended, which carries it: the plan is gone, or gone for
+    // this person, and they are owed which one (api/src/routes/notifications.ts).
+    case "plan_invited":
+      return {
+        text: `${str(p.invitedByUsername) ?? "Someone"} invited you to ${str(p.planName) ?? "a trip plan"}`,
+      };
+    case "plan_join_request":
+      return {
+        text: `${str(p.requesterUsername) ?? "Someone"} asked to join ${str(p.planName) ?? "your trip plan"}`,
+      };
+    case "plan_join_approved":
+      return {
+        text: `${str(p.approvedByUsername) ?? "A leader"} let you into ${str(p.planName) ?? "a trip plan"}`,
+      };
+    case "plan_member_joined":
+      return {
+        text: `${str(p.memberUsername) ?? "Someone"} joined ${str(p.planName) ?? "your trip plan"}`,
+      };
+    case "plan_access_ended": {
+      const plan = str(p.planName);
+      if (p.reason === "declined")
+        return {
+          text: `Your request to join ${plan ?? "a trip plan"} was turned down`,
+        };
+      if (p.reason === "deleted")
+        return { text: `${plan ?? "A trip plan"} was deleted` };
+      return { text: `You're no longer in ${plan ?? "a trip plan"}` };
+    }
     default:
       return { text: "Notification" };
   }

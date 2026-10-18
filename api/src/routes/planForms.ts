@@ -32,6 +32,7 @@ import {
   TRIP_PLAN_CHANGED_SENTENCE,
   TRIP_PLAN_FORM_CHANGED_SENTENCE,
   TRIP_PLAN_MAX_FORMS,
+  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
   type TripPlanQuestion,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
@@ -276,10 +277,7 @@ router.put(
         select: { questions: true, visibleTo: true, updatedAt: true },
       });
       if (form.visibleTo !== seen)
-        throw new AppError(
-          409,
-          say`Who sees the answers to this form has changed. Check it, then answer again.`,
-        );
+        throw new AppError(409, TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE);
       if (form.updatedAt.toISOString() !== shown)
         throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
       const parsed = parseTripPlanAnswers(

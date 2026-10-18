@@ -14,7 +14,13 @@ import {
   requirePlanMember,
   requirePlanRole,
   requirePlanWrite,
+  touchPlan,
 } from "../lib/planAccess";
+import {
+  dropPlanNotifications,
+  notifyPlan,
+  waitingFor,
+} from "../lib/planMembership";
 import { dateColumn, loadPlanView, planSummary } from "../lib/tripPlanView";
 
 const router = Router();
@@ -43,7 +49,22 @@ router.get(
       ],
     });
     res.json({
-      plans: plans.map((plan) => planSummary(plan, plan.members[0])),
+      plans: await Promise.all(
+        plans.map(async (plan) => {
+          const membership = plan.members[0];
+          return planSummary(
+            plan,
+            membership,
+            membership.status === "requested"
+              ? await waitingFor(
+                  prisma,
+                  plan.id,
+                  membership.invitedBy?.id ?? null,
+                )
+              : null,
+          );
+        }),
+      ),
     });
   },
 );
@@ -180,14 +201,35 @@ router.delete(
       say`Only a leader can delete this plan.`,
     );
     // Hold #439: a plan's files can't be added yet, so there are no S3
-    // objects or storage charges to undo here; and no plan_* notification
-    // type exists yet, so the other members aren't told (plan_access_ended,
-    // reason "deleted", sent in this delete's transaction, comes with #439's
-    // plan notifications).
-    const { count } = await prisma.tripPlan.deleteMany({
-      where: { id: access.plan.id },
+    // objects or storage charges to undo here.
+    const planId = access.plan.id;
+    const push = await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
+      const [plan, others] = await Promise.all([
+        tx.tripPlan.findUniqueOrThrow({
+          where: { id: planId },
+          select: { name: true },
+        }),
+        // Everyone else with a row: members, and anyone invited or asking,
+        // who would otherwise find the plan gone from their list unexplained.
+        tx.tripPlanMember.findMany({
+          where: { planId, userId: { not: user.id } },
+          select: { userId: true },
+        }),
+      ]);
+      await dropPlanNotifications(tx, planId);
+      const told = await notifyPlan(
+        tx,
+        others.map((row) => row.userId),
+        {
+          type: "plan_access_ended",
+          payload: { planId, reason: "deleted", planName: plan.name },
+        },
+      );
+      await tx.tripPlan.delete({ where: { id: planId } });
+      return told;
     });
-    if (count === 0) throw planNotFound();
+    push();
     res.status(204).send();
   },
 );

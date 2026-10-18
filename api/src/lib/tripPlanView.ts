@@ -60,6 +60,8 @@ export function planSummary(
     status: string;
     invitedBy: { id: string; username: string } | null;
   },
+  /** For a request: who it waits for (lib/planMembership.ts `waitingFor`). */
+  waitingFor: { id: string; username: string } | null = null,
 ): TripPlanSummary {
   const summary: TripPlanSummary = {
     id: plan.id,
@@ -74,7 +76,27 @@ export function planSummary(
   };
   if (summary.status === "invited" && membership.invitedBy)
     summary.invitedBy = membership.invitedBy;
+  if (summary.status === "requested" && waitingFor)
+    summary.waitingFor = waitingFor;
   return summary;
+}
+
+export const memberInclude = { user: userRef, invitedBy: userRef } as const;
+
+export function memberView(row: {
+  user: { id: string; username: string };
+  invitedBy: { id: string; username: string } | null;
+  role: string;
+  status: string;
+  createdAt: Date;
+}): TripPlanMemberView {
+  return {
+    user: row.user,
+    role: role(row.role),
+    status: status(row.status),
+    invitedBy: row.invitedBy,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 export function sectionView(row: {
@@ -183,7 +205,7 @@ export async function loadPlanView(
       createdBy: userRef,
       sections: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
       members: {
-        include: { user: userRef, invitedBy: userRef },
+        include: memberInclude,
         orderBy: { createdAt: "asc" },
       },
       forms: {
@@ -199,13 +221,7 @@ export async function loadPlanView(
   // Guard: __tests__/plans.test.ts ("shows who is invited or asking only to leaders").
   const members: TripPlanMemberView[] = plan.members
     .filter((m) => access.role === "leader" || m.status === "active")
-    .map((m) => ({
-      user: m.user,
-      role: role(m.role),
-      status: status(m.status),
-      invitedBy: m.invitedBy,
-      createdAt: m.createdAt.toISOString(),
-    }));
+    .map(memberView);
   return {
     id: plan.id,
     name: plan.name,

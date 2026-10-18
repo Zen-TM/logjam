@@ -23,7 +23,7 @@ import {
 // the plan's own leader and members included.
 //
 // Requires `make dev`. Seed baseline: alice leads the seeded plan, bob is a
-// member, carol is not in it. Synthetic coords only.
+// member, carol asked to join and waits. Synthetic coords only.
 
 const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
 const EVERYONE = [ALICE_SUB, BOB_SUB, CAROL_SUB];

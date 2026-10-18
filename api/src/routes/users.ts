@@ -736,6 +736,23 @@ router.delete(
           ],
         },
       }),
+      // Plan rows other members hold that name this user. Read time would
+      // drop them too, once the memberships are gone (routes/notifications.ts).
+      prisma.notification.deleteMany({
+        where: {
+          type: {
+            in: [
+              "plan_invited",
+              "plan_join_request",
+              "plan_join_approved",
+              "plan_member_joined",
+            ],
+          },
+          OR: ["invitedById", "requesterId", "approvedById", "memberId"].map(
+            (key) => ({ payload: { path: [key], equals: user.id } }),
+          ),
+        },
+      }),
       prisma.placeShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),
