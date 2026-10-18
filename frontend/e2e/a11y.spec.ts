@@ -189,6 +189,12 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Plan actions" }).click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
+
+    // Print a summary: what goes in, before the browser's print dialog.
+    await page.getByRole("menuitem", { name: "Print a summary" }).click();
+    await expect(page.locator("dialog[open]")).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
   });
 
   test("Plans forms: a form's page, answering it, and the builder", async ({

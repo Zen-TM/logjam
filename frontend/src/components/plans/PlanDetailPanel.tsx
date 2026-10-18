@@ -78,6 +78,7 @@ import PlanSectionDialog from "./PlanSectionDialog";
 import PlanAnswerDialog from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanFormPage from "./PlanFormPage";
+import PlanPrintDialog from "./PlanPrintDialog";
 import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
@@ -110,6 +111,7 @@ export default function PlanDetailPanel({
     | null
   >(null);
   const [busy, setBusy] = useState(false);
+  const [printing, setPrinting] = useState(false);
   // A form's page, one step inside the Forms view; and its two dialogs.
   const [openFormId, setOpenFormId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -179,8 +181,7 @@ export default function PlanDetailPanel({
 
   const planVerbRunners: Record<PlanVerbId, () => void> = {
     edit: () => setEditing(true),
-    // Plain print until #549 adds the summary dialog.
-    print: () => window.print(),
+    print: () => setPrinting(true),
     tripLog: () => onStartTripLog(plan),
     archive: () =>
       void run(
@@ -612,6 +613,9 @@ export default function PlanDetailPanel({
         ))
       )}
 
+      {printing && (
+        <PlanPrintDialog plan={plan} onClose={() => setPrinting(false)} />
+      )}
       {answeringForm && (
         <PlanAnswerDialog
           open

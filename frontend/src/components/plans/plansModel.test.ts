@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { parseTripPlanFormCreate } from "@logjam/shared";
+import {
+  parseTripPlanFormCreate,
+  TRIP_PLAN_FORM_PRESETS,
+  type TripPlanFormView,
+  type TripPlanView,
+} from "@logjam/shared";
 import {
   adoptTheirs,
   formPatch,
   type FormValues,
   PLAN_FIELD_GROUPS,
   planPatch,
+  planSummary,
   sectionPatch,
   theirsChanged,
 } from "./plansModel";
@@ -159,5 +165,108 @@ describe("a form edit", () => {
     expect(formPatch(seen, values)).toEqual({
       visibleTo: { from: "members", to: "leaders" },
     });
+  });
+});
+
+describe("the print summary", () => {
+  const user = (username: string) => ({ id: username, username });
+  const form = (
+    preset: TripPlanFormView["preset"],
+    answers: Record<string, unknown>,
+  ): TripPlanFormView => ({
+    id: preset ?? "f",
+    title: preset ?? "Other",
+    preset,
+    questions: preset ? TRIP_PLAN_FORM_PRESETS[preset].questions : [],
+    visibleTo: "members",
+    requiredToJoin: false,
+    position: 0,
+    updatedAt: "",
+    myAnswer: null,
+    answers: [{ user: user("tom"), answers: answers as never, updatedAt: "" }],
+  });
+  const plan = {
+    id: "p",
+    name: "Wollangambe trip",
+    startDate: null,
+    endDate: null,
+    tripTypes: [],
+    archivedAt: null,
+    createdAt: "",
+    updatedAt: "",
+    createdBy: null,
+    myRole: "leader",
+    sections: [
+      {
+        id: "s",
+        title: "Overview",
+        body: "Two days.",
+        position: 0,
+        updatedAt: "",
+      },
+    ],
+    members: [
+      {
+        user: user("mira"),
+        role: "leader",
+        status: "active",
+        invitedBy: null,
+        createdAt: "",
+      },
+      {
+        user: user("tom"),
+        role: "member",
+        status: "active",
+        invitedBy: null,
+        createdAt: "",
+      },
+      {
+        user: user("sue"),
+        role: "member",
+        status: "requested",
+        invitedBy: null,
+        createdAt: "",
+      },
+    ],
+    places: [
+      {
+        kind: "place",
+        name: "Secret pool",
+        latitude: -33.51234,
+        longitude: 150.41234,
+      },
+    ],
+    routes: [],
+    files: [],
+    geoPdfs: [],
+    forms: [
+      form("carpool", { mode: "lift", seats: 2, from: "Katoomba" }),
+      form("safetyContacts", { name: "Ann", phone: "0400 000 000" }),
+      form("firstAid", { cert: "no", conditions: "Bee allergy" }),
+    ],
+  } as unknown as TripPlanView;
+  const all = { writeUp: true, going: true, carpool: true, contacts: true };
+
+  // Mutation: list every form's answers, or the places, and the bee allergy
+  // or the pool's position reaches paper a parent keeps.
+  it("never carries a place, a coordinate or another form's answers", () => {
+    const text = JSON.stringify(planSummary(plan, all));
+    expect(text).not.toContain("Secret pool");
+    expect(text).not.toContain("-33.5");
+    expect(text).not.toContain("Bee allergy");
+    expect(text).toContain("Katoomba");
+    expect(text).toContain("0400 000 000");
+  });
+
+  it("lists who's going, not who asked to join, and leaves out what was unticked", () => {
+    const summary = planSummary(plan, {
+      ...all,
+      carpool: false,
+      writeUp: false,
+    });
+    expect(summary.going.map(([name]) => name)).toEqual(["mira", "tom"]);
+    expect(summary.leaders).toEqual(["mira"]);
+    expect(summary.carpool).toEqual([]);
+    expect(summary.sections).toEqual([]);
   });
 });

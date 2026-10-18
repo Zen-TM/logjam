@@ -1,12 +1,19 @@
 // The pure decisions of Plans' forms, out of the components so a test can
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
 // the value last seen and the new one (shared/DESIGN.md §10).
+import {
+  currentTripPlanAnswers,
+  tripPlanAnswerText,
+  tripPlanSeesAnswers,
+} from "@logjam/shared";
 import type {
   TripPlanCreate,
   TripPlanFormCreate,
   TripPlanFormPatch,
+  TripPlanFormView,
   TripPlanPatch,
   TripPlanSectionPatch,
+  TripPlanView,
 } from "@logjam/shared";
 
 export type PlanValues = Required<TripPlanCreate>;
@@ -130,4 +137,78 @@ export function formPatch(
  *  a slug no plain object already has as a key (`q3f9a…`). */
 export function mintSlug(prefix: "q" | "o"): string {
   return `${prefix}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+}
+
+export type SummaryParts = {
+  writeUp: boolean;
+  going: boolean;
+  carpool: boolean;
+  contacts: boolean;
+};
+
+/** A preset's form whose answers the caller sees, if the plan has one. */
+export function summaryForm(
+  plan: Pick<TripPlanView, "forms" | "myRole">,
+  preset: "carpool" | "safetyContacts",
+): TripPlanFormView | null {
+  return (
+    plan.forms.find(
+      (form) =>
+        form.preset === preset &&
+        tripPlanSeesAnswers(plan.myRole, form.visibleTo),
+    ) ?? null
+  );
+}
+
+/** One table of a preset form's answers: a row per person who answered, a
+ *  cell per named question (blank where a leader removed it). */
+function answerTable(form: TripPlanFormView, questionIds: readonly string[]) {
+  const answers = [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])];
+  return answers
+    .map((answer) => {
+      const values = currentTripPlanAnswers(form.questions, answer.answers);
+      return [
+        answer.user.username,
+        ...questionIds.map((id) => {
+          const question = form.questions.find((each) => each.id === id);
+          return question ? tripPlanAnswerText(question, values[id]) : "";
+        }),
+      ];
+    })
+    .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+/**
+ * What the print summary holds, for someone not on the trip (design §7.7).
+ * PRIVACY: never a place, a coordinate, a way, a map, another form or anyone's
+ * medical answers: only the write-up, who's going, and the carpool and
+ * safety-contact presets' named questions. Guard: plansModel.test.ts.
+ */
+export function planSummary(plan: TripPlanView, parts: SummaryParts) {
+  const carpool = parts.carpool ? summaryForm(plan, "carpool") : null;
+  const contacts = parts.contacts ? summaryForm(plan, "safetyContacts") : null;
+  const active = plan.members.filter((member) => member.status === "active");
+  return {
+    name: plan.name,
+    leaders: active
+      .filter((member) => member.role === "leader")
+      .map((member) => member.user.username),
+    sections: parts.writeUp
+      ? plan.sections.map(({ title, body }) => ({ title, body }))
+      : [],
+    going: parts.going
+      ? active.map((member) => [
+          member.user.username,
+          member.role === "leader"
+            ? "Leader"
+            : member.role === "editor"
+              ? "Editor"
+              : "Member",
+        ])
+      : [],
+    carpool: carpool ? answerTable(carpool, ["mode", "seats", "from"]) : [],
+    contacts: contacts
+      ? answerTable(contacts, ["name", "phone", "name2", "phone2"])
+      : [],
+  };
 }
