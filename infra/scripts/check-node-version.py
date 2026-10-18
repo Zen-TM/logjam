@@ -16,7 +16,8 @@ against `lambda_cognito_email.tf` instead.
 
 Mutations that turn the self-test red: a workflow pin behind mise, the api
 image behind mise, an @types/node pin ahead of mise, and the Lambda's types
-disagreeing with its runtime, and a pin class that matches nothing (a regex
+disagreeing with its runtime, the Lambda's esbuild target disagreeing with its
+runtime, a setup-node step with no node-version, and a pin class that matches nothing (a regex
 that stops matching must not pass the check by checking nothing).
 """
 
@@ -25,9 +26,11 @@ import sys
 from pathlib import Path
 
 WORKFLOW_PIN = re.compile(r"^\s*node-version:\s*\"?([^\"\s]+)\"?\s*(?:#.*)?$")
-DOCKER_PIN = re.compile(r"^\s*FROM\s+node:(\S+)")
+DOCKER_PIN = re.compile(r"^\s*FROM\s+(?:--\S+\s+)*node:(\S+)")
+SETUP_NODE = re.compile(r"uses:\s*actions/setup-node@")
+ESBUILD_TARGET = re.compile(r'target:\s*"node(\d+)"')
 TYPES_PIN = re.compile(r'"@types/node"\s*:\s*"([^"]+)"')
-MISE_PIN = re.compile(r'^\s*node\s*=\s*"([^"]+)"', re.M)
+MISE_PIN = re.compile(r'^\s*node\s*=\s*"([^"]+)"', re.MULTILINE)
 RUNTIME = re.compile(r'runtime\s*=\s*"nodejs(\d+)\.x"')
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,11 +60,20 @@ def pins(root):
     lambda_types = find(
         [root / "infra/lambda/cognito-email-sender/package.json"], TYPES_PIN
     )
+    workflows = sorted((root / ".github/workflows").glob("*.yml"))
+    unpinned = [
+        path
+        for path in workflows
+        if len(SETUP_NODE.findall(path.read_text())) != len(find([path], WORKFLOW_PIN))
+    ]
+    target = find(
+        [root / "infra/lambda/cognito-email-sender/build.mjs"], ESBUILD_TARGET
+    )
     return {
+        "unpinned": unpinned,
+        "lambda_target": [value for _, _, value in target],
         "mise": major(mise.group(1)) if mise else None,
-        "workflows": find(
-            sorted((root / ".github/workflows").glob("*.yml")), WORKFLOW_PIN
-        ),
+        "workflows": find(workflows, WORKFLOW_PIN),
         "docker": find([root / "api/Dockerfile"], DOCKER_PIN),
         "types": find(
             [
@@ -91,6 +103,13 @@ def problems(found):
     if found["lambda_runtime"] is None:
         errors.append("lambda_cognito_email.tf: no nodejsNN.x runtime")
         return errors
+    for path in found["unpinned"]:
+        errors.append(f"{path}: a setup-node step has no node-version")
+    if found["lambda_target"] != [found["lambda_runtime"]]:
+        errors.append(
+            f"build.mjs esbuild target node{found['lambda_target']} != Lambda "
+            f"runtime nodejs{found['lambda_runtime']}.x"
+        )
     if not found["lambda_types"]:
         errors.append("the Lambda has no @types/node pin")
     for path, number, value in found["lambda_types"]:
@@ -104,6 +123,8 @@ def problems(found):
 
 def self_test():
     base = {
+        "unpinned": [],
+        "lambda_target": ["22"],
         "mise": "26",
         "workflows": [(Path("ci.yml"), 1, "26")],
         "docker": [(Path("api/Dockerfile"), 1, "26-slim")],
@@ -129,6 +150,8 @@ def self_test():
             "fail",
             {"lambda_types": [(Path("package.json"), 1, "26")]},
         ),
+        ("a setup-node with no pin", "fail", {"unpinned": [Path("ci.yml")]}),
+        ("the esbuild target ahead of the runtime", "fail", {"lambda_target": ["26"]}),
         ("no mise pin", "fail", {"mise": None}),
         ("no workflow pins found", "fail", {"workflows": []}),
         ("no api image pin found", "fail", {"docker": []}),
