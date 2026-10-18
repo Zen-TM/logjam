@@ -1,17 +1,51 @@
 name: CI
 
-# Test/lint/typecheck gate. Runs on every PR and on pushes to main. This is
-# the workflow branch protection should require (jobs: shared, api,
+# Test/lint/typecheck gate. Runs on every PR, on pushes to main and nightly.
+# This is the workflow branch protection should require (jobs: shared, api,
 # api-integration, frontend, mobile, topo). The api-integration job stands up
 # the live API + Postgres + MiniStack the integration suite needs, so
 # api/src/__tests__ gates PRs too; see api/AGENTS.md "Testing".
+#
+# On a pull request the heavy jobs run only when the diff touches what they
+# depend on (the `changes` job; infra/scripts/ci-scope.sh holds the paths).
+# A skipped job passes as a required check. Pushes to main, the nightly run
+# and a hand run (`gh workflow run CI --ref <branch>`, which reports on that
+# branch's head commit) run everything, so a deploy is always gated on the
+# full suite.
 
 on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 16 * * *"
+  workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api_integration: ${{ steps.scope.outputs.api_integration }}
+      mobile: ${{ steps.scope.outputs.mobile }}
+      migrations: ${{ steps.scope.outputs.migrations }}
+      topo_e2e: ${{ steps.scope.outputs.topo_e2e }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Which heavy jobs does this change need?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
+          else
+            infra/scripts/ci-scope.sh all
+          fi
+
   gitleaks:
     # Scan for committed secrets (.gitleaks.toml allowlists public Cognito ids etc.).
     # Pin the CLI to an exact release rather than a mutable Action tag.
@@ -76,8 +110,21 @@ jobs:
       - name: Lint
         working-directory: shared
         run: npm run lint
+      # ~27 MB of public NSW files (ELVIS tile, DEM, topo sheet) from the
+      # hash-pinned sample-data-v1 release; the corpus tests in shared skip
+      # without SAMPLE_DATA_DIR.
+      - name: Fetch public sample inputs
+        run: |
+          echo "SAMPLE_DATA_DIR=$GITHUB_WORKSPACE/.cache/sample-data" >> "$GITHUB_ENV"
+          SAMPLE_DATA_DIR="$GITHUB_WORKSPACE/.cache/sample-data" scripts/sample-data.sh \
+            elvis-katoomba-2506258-laz.zip \
+            elvis-katoomba-2506258-dem2m.zip \
+            nsw-topo-8929-4N-yerranderie.pdf
       - name: Unit tests
         working-directory: shared
+        env:
+          RUN_GEOPDF_SAMPLES: "1"
+          GEOPDF_SAMPLE_DIR: ${{ env.SAMPLE_DATA_DIR }}
         run: npm test
       # Every foreground/background pair both clients render, under all four
       # theme schemes. Bare node: it parses the token sources, no build.
@@ -128,6 +175,8 @@ jobs:
     # the suite is not idempotent against a reused database (sync_tombstones
     # accumulate until syncBoundary's paged-pull assertions stop finding the
     # tombstone they just wrote). Never cache the Postgres volume here.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
     services:
       # Mirrors the `migrations` job's config exactly.
@@ -182,9 +231,12 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
-      # Non-empty so the topo-job routes take the same branch they do locally.
-      # No test reaches an actual RunTask (see the comment atop topoJobs.test.ts).
-      ECS_SUBNETS: subnet-local
+      # A stub that answers OK (started below): no CI run reaches Expo.
+      EXPO_PUSH_URL: http://localhost:9099
+      # No ECS_SUBNETS: an empty list makes POST /geo-pdf leave the job
+      # `queued` and /topo-jobs/:id/start leave it `pending` instead of calling
+      # RunTask, which MiniStack here (S3 only, no Docker socket) cannot serve.
+      # geoPdfRender.test.ts runs the worker itself.
       ECS_SECURITY_GROUPS: sg-local
       # The global limiter is 300 req/60s keyed by IP for pre-auth requests, so
       # the whole suite shares ONE bucket and a full run brushes the cap. Raise
@@ -240,6 +292,8 @@ jobs:
         run: npm run build
       # dist/index.js, not dist/boot.js: boot resolves DB creds from Secrets
       # Manager, which this job doesn't run.
+      - name: Start the Expo push stub
+        run: node infra/scripts/expo-push-stub.mjs &
       - name: Start API
         working-directory: api
         run: |
@@ -282,6 +336,15 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/smoke.spec.ts
+      # Same job, not its own: it needs this seeded stack, and this job's
+      # area (api/, shared/, frontend/) is exactly what the spec can break.
+      # Serial, because a parallel run on a cold checkout times out on
+      # page.goto. Playwright starts the second server on 5199 itself.
+      - name: Playwright accessibility
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/a11y.spec.ts --workers=1
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -323,6 +386,8 @@ jobs:
         run: npm test
 
   mobile:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.mobile != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -369,6 +434,8 @@ jobs:
     # `migration-upgrade` below covers existing rows. NOTE: runs as the Postgres superuser, so it does NOT
     # catch failures specific to the least-priv `logjam_app` role (a missing
     # grant) — that half remains a prod-boot risk.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -414,6 +481,8 @@ jobs:
     # plus edge-case fixtures, up to this commit. Then asserts the data came
     # across (api/prisma/upgrade-check/) and that the upgraded DB matches
     # schema.prisma exactly, catching drift the empty-DB job cannot.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -471,11 +540,234 @@ jobs:
         # mise.toml holds the one ruff pin; an empty match fails pip loudly.
         run: |
           pip install "ruff==$(sed -n 's/^ruff *= *"\(.*\)"/\1/p' mise.toml)"
-          ruff check topo
-          ruff format --check topo
+          ruff check topo frontend/scripts
+          ruff format --check topo frontend/scripts
       - name: Unit tests
         working-directory: topo
         run: python -m unittest discover -s tests
+
+  # topo/tests/INTEGRATION.md §2, automated: the real worker image on a real
+  # ELVIS tile, through the API's create, upload and start (the ECS RunTask is
+  # the one step CI cannot take, so it runs the container itself with the task
+  # definition's env, topo/tests/e2e/worker.env). The worker gets a network
+  # with no internet: Overpass is a stub serving a committed response, and the
+  # SVTM and fire-history rasters it reads through /vsis3/ are made-up ones in
+  # MiniStack, so a read the job forgot to stub fails instead of reaching out.
+  #
+  # Its own job, not a step of api-integration: it is scoped to what the worker
+  # image is built from rather than to the API, and its six minutes (ten with
+  # a cold image cache) run beside that suite instead of after it. The setup it
+  # repeats is about a minute.
+  topo-e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.topo_e2e != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      ministack:
+        image: ministackorg/ministack
+        env:
+          SERVICES: s3
+          DEFAULT_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        ports:
+          - 4566:4566
+    env:
+      # api-integration's, less what only its suite needs. No ECS_SUBNETS: an
+      # empty subnet list makes /start leave the job pending, which is where
+      # the worker claims it.
+      NODE_ENV: development
+      AUTH_MODE: fake
+      FAKE_USER_SUB: fake-alice-sub
+      PORT: 8080
+      MIN_MOBILE_VERSION: "0.1.0"
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+      PGPASSWORD: logjam
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_MEDIA: logjam-media-local
+      S3_BUCKET_TOPO: logjam-topo-local
+      TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
+      CORS_ORIGIN: http://localhost:5173
+      # No stub runs in this job: a push the API sends fails here, never reaching Expo.
+      EXPO_PUSH_URL: http://localhost:9099
+      IMAGE: logjam-topo-worker:e2e
+      E2E: topo/tests/e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Mutation that turns it red: add a variable to topo_worker in ecs.tf.
+      - name: worker.env names every variable the task definition sets
+        run: |
+          want=$(awk '/resource "aws_ecs_task_definition" "topo_worker"/,/^}/' infra/terraform/envs/prod/ecs.tf \
+            | sed -n 's/.*name *= *"\([A-Z0-9_]*\)".*/\1/p' | sort -u)
+          have=$(sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' "$E2E/worker.env" | sort -u)
+          [ -n "$want" ] || { echo "read no variables from ecs.tf's topo_worker"; exit 1; }
+          missing=$(comm -23 <(echo "$want") <(echo "$have"))
+          [ -z "$missing" ] || { echo "worker.env lacks: $missing"; exit 1; }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the worker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: topo
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=topo-worker
+          cache-to: type=gha,scope=topo-worker,mode=max
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci && npx prisma generate
+      - name: Migrate
+        working-directory: api
+        run: npx prisma migrate deploy
+      - name: Wait for MiniStack and create buckets
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "ministack ready"; break
+            fi
+            if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
+            sleep 2
+          done
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build and start the API
+        working-directory: api
+        run: |
+          npm run build
+          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api.pid"
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health > /dev/null; then echo "API ready"; exit 0; fi
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
+      # One ELVIS LAZ tile as ELVIS ships it: Katoomba 2018, Mount Solitary.
+      - name: Fetch the sample tile
+        id: sample
+        run: echo "zip=$(scripts/sample-data.sh elvis-katoomba-2506258-laz.zip)" >> "$GITHUB_OUTPUT"
+      # Two jobs, so the second can be reaped mid-render below. The API stops
+      # once both are pending, which keeps any reaper sweep off both during the
+      # test.
+      - name: Create, upload and start two jobs through the API
+        id: jobs
+        env:
+          ZIP: ${{ steps.sample.outputs.zip }}
+        run: |
+          # Logjam Web sends the default settings unless the user changes them.
+          settings=$(cd shared && node --input-type=module -e \
+            "import { RASTER_TEMPLATE_DEFAULTS as d } from './dist/topoSettings.js'; console.log(JSON.stringify(d))")
+          for which in complete reaped; do
+            created=$(jq -n --arg name "e2e $which" --argjson settings "$settings" \
+                '{jobName: $name, tileCount: 1, settings: $settings}' \
+              | curl -sf -X POST http://localhost:8080/topo-jobs -H 'content-type: application/json' -d @-)
+            id=$(jq -r .jobId <<<"$created")
+            curl -sf -X PUT -H 'content-type: application/zip' --upload-file "$ZIP" "$(jq -r .uploadUrl <<<"$created")"
+            curl -sf -X POST "http://localhost:8080/topo-jobs/$id/start" | jq -e '.status == "pending"'
+            echo "$which=$id" >> "$GITHUB_OUTPUT"
+          done
+          kill "$(cat "$RUNNER_TEMP/api.pid")"
+      # Made up, not the real rasters: one value over the whole tile. The fire
+      # year postdates the 2018 capture, so the job's fireStaleFraction says
+      # whether the worker read it.
+      - name: Put made-up SVTM and fire-history rasters in MiniStack
+        run: |
+          mkdir -p "$RUNNER_TEMP/rasters"
+          extent="-a_srs EPSG:4326 -a_ullr 150.28 -33.76 150.34 -33.80 -outsize 64 64 -bands 1"
+          docker run --rm -v "$RUNNER_TEMP/rasters:/out" --entrypoint sh "$IMAGE" -c "
+            gdal_create $extent -ot Byte -burn 1 /out/svtm_formation.tif &&
+            gdal_create $extent -ot UInt16 -burn 2019 /out/fire_history_year.tif"
+          aws s3 cp "$RUNNER_TEMP/rasters/svtm_formation.tif" "s3://$S3_BUCKET_TOPO/svtm/svtm_formation.tif"
+          aws s3 cp "$RUNNER_TEMP/rasters/fire_history_year.tif" "s3://$S3_BUCKET_TOPO/fire/fire_history_year.tif"
+      - name: A network with no internet, and the Overpass stub on it
+        run: |
+          docker network create --internal topo-e2e
+          docker network connect --alias postgres topo-e2e "${{ job.services.postgres.id }}"
+          docker network connect --alias ministack topo-e2e "${{ job.services.ministack.id }}"
+          docker run -d --name overpass --network topo-e2e --network-alias overpass \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/overpass_stub.py /e2e/overpass-katoomba-2506258.json
+      - name: Run the worker
+        env:
+          JOB_ID: ${{ steps.jobs.outputs.complete }}
+        run: |
+          set -o pipefail
+          start=$(date +%s)
+          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE" \
+            2>&1 | tee "$RUNNER_TEMP/worker.log"
+          echo "::notice title=topo-e2e::worker took $(( $(date +%s) - start )) s"
+      - name: The job finished, in full
+        env:
+          JOB_ID: ${{ steps.jobs.outputs.complete }}
+        run: |
+          # Mutation that turns the first grep red: drop OVERPASS_ENDPOINTS from
+          # worker.env; the worker tries the real mirrors and logs "Overpass
+          # attempt". Mutation that turns the second red: empty
+          # SVTM_FORMATION_S3_PATH there; the worker logs "skipping" instead.
+          if grep -E 'raster unavailable|Overpass attempt' "$RUNNER_TEMP/worker.log"; then exit 1; fi
+          grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/worker.log" \
+            || { echo "the worker never read the SVTM raster"; exit 1; }
+          # A point on Mount Solitary, inside the tile.
+          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/check.py complete "$JOB_ID" 150.311 -33.780
+      # Runbook step 5: the reaper fails a job whose worker died mid-render,
+      # and a worker relaunched for it must leave it failed.
+      - name: A relaunched worker leaves a reaped job alone
+        env:
+          JOB_ID: ${{ steps.jobs.outputs.reaped }}
+        run: |
+          docker run -d --name reaped --network topo-e2e --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE"
+          sql() { psql -h localhost -U logjam -d logjam -tAc "$1"; }
+          for _ in $(seq 1 120); do
+            [ "$(sql "SELECT coalesce(render_tiles_done, 0) > 0 FROM topo_jobs WHERE id = '$JOB_ID'")" = t ] && break
+            sleep 5
+          done
+          done=$(sql "SELECT coalesce(render_tiles_done, 0) FROM topo_jobs WHERE id = '$JOB_ID'")
+          [ "$done" -gt 0 ] || { echo "second worker never rendered (render_tiles_done=$done)"; docker logs reaped; exit 1; }
+          sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
+          docker kill reaped
+          sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
+          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE"
+          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/check.py reaped "$JOB_ID"
+      - name: Logs (on failure)
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/api.log" || true
+          docker logs reaped || true
+          docker logs overpass || true
 
   # The deploy workflows rewrite live ECS task definitions
   # (infra/scripts/pin-ecs-task-image.sh). Its one piece of real logic
@@ -504,6 +796,10 @@ jobs:
         run: infra/scripts/image-build-scope.sh --self-test
       - name: Frontend prune keep-list
         run: infra/scripts/frontend-prune.sh --self-test
+      - name: CI scope
+        run: infra/scripts/ci-scope.sh --self-test
+      - name: Sample-data fetch checks hashes
+        run: scripts/sample-data.sh --self-test
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

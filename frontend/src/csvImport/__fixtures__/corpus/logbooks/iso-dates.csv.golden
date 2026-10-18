@@ -1,0 +1,74 @@
+{
+  "headers": [
+    "Place",
+    "Trip Date",
+    "Comments"
+  ],
+  "dataRows": 3,
+  "parseErrors": [],
+  "kind": "triplog",
+  "assignments": {
+    "Place": "name",
+    "Trip Date": "date",
+    "Comments": "notes"
+  },
+  "dateFormat": "YYYY-MM-DD",
+  "ambiguousDates": false,
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourcePlaceName": "Claustral Canyon",
+      "date": "2021-02-06",
+      "notes": "Corpus note",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 1,
+      "sourcePlaceName": "Heart Attack Canyon",
+      "date": "2021-02-13",
+      "notes": null,
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 2,
+      "sourcePlaceName": "Du Faur Creek",
+      "date": "2021-03-07",
+      "notes": "Corpus note, with a comma",
+      "types": [],
+      "customFields": {}
+    }
+  ],
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Heart Attack Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Heart Attack Canyon",
+      "candidates": [
+        "Heart Attack Canyon"
+      ]
+    },
+    {
+      "name": "Du Faur Creek",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Du Faur Creek",
+      "candidates": [
+        "Du Faur Creek"
+      ]
+    }
+  ]
+}

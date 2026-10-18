@@ -1,0 +1,63 @@
+{
+  "headers": [
+    "WKT",
+    "name",
+    "description",
+    "Latitude",
+    "Longitude"
+  ],
+  "dataRows": 3,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "WKT": "discard",
+    "name": "name",
+    "description": "notes",
+    "Latitude": "latitude",
+    "Longitude": "longitude"
+  },
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5603,
+        "longitude": 150.4033,
+        "notes": "Corpus note"
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Corpus My Maps Canyon",
+      "input": {
+        "name": "Corpus My Maps Canyon",
+        "latitude": -33.3001,
+        "longitude": 150.2501,
+        "notes": null
+      }
+    }
+  ],
+  "warnings": [
+    "Row 4: latitude \"\" couldn't be read — skipped"
+  ],
+  "droppedRows": 1,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Corpus My Maps Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
+}
