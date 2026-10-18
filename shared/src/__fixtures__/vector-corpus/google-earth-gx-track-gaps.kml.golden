@@ -1,0 +1,42 @@
+{
+  "name": null,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.3,
+            -33.6,
+            800
+          ],
+          [
+            150.32,
+            -33.62,
+            790
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Made up: attributes on when and coord, one lost fix",
+        "coordTimes": [
+          "2026-01-01T00:00:00.000Z",
+          "2026-01-01T00:00:20.000Z"
+        ]
+      }
+    }
+  ],
+  "bbox": [
+    150.3,
+    -33.62,
+    150.32,
+    -33.6
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 2
+  }
+}

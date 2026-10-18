@@ -25,6 +25,8 @@
 //   Feature, an empty title, stroke / "-created-by" style properties. Made up.
 // - google-earth-gx-multitrack.kml: made up, to the kmlreference's gx:MultiTrack
 //   layout (one timed leg, one untimed).
+// - google-earth-gx-track-gaps.kml: made up; an id attribute on a <when> and a
+//   <gx:coord>, and an empty <gx:coord/> (a lost fix) whose time must go with it.
 // - osmand.gpx, gpx10-legacy.gpx, gpx-routes-only.gpx, google-earth-multigeometry.kml:
 //   hand-written to the format spec / the producer's documented tags, with no
 //   reference export to check against.

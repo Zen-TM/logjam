@@ -157,6 +157,9 @@ function asArray<T>(value: T | T[] | undefined): T[] {
 }
 
 function textOf(value: unknown): string | null {
+  // An element with attributes parses to an object holding its text as #text.
+  if (value && typeof value === "object" && "#text" in value)
+    value = (value as Record<string, unknown>)["#text"];
   if (typeof value === "string" && value.trim() !== "") return value.trim();
   if (typeof value === "number") return String(value);
   return null;
@@ -327,13 +330,9 @@ function kmlCoordinates(text: string): ImportedPosition[] {
 
 type KmlShape = { geometry: ImportedGeometry; coordTimes?: string[] };
 
-/** A gx:Track's `<gx:coord>` ("lon lat [alt]", space-separated) as KML tuples. */
-function gxCoordinates(coords: unknown[]): ImportedPosition[] {
-  return kmlCoordinates(
-    coords
-      .map((c) => (textOf(c) ?? "").trim().split(/\s+/).join(","))
-      .join(" "),
-  );
+/** A gx:Track's `<gx:coord>` texts ("lon lat [alt]") as KML tuples. */
+function gxCoordinates(coords: string[]): ImportedPosition[] {
+  return kmlCoordinates(coords.map((c) => c.split(/\s+/).join(",")).join(" "));
 }
 
 function kmlShapes(node: Record<string, unknown>): KmlShape[] {
@@ -383,12 +382,18 @@ function kmlShapes(node: Record<string, unknown>): KmlShape[] {
     ),
   ];
   for (const track of tracks) {
-    const coords = asArray(track?.coord);
-    const whens = asArray(track?.when).map((w) => {
-      const t = Date.parse(String(w));
+    // An empty <gx:coord/> is a <when> with no fix: drop the pair, so the
+    // remaining times stay aligned with their vertices.
+    const raw = asArray(track?.coord).map(textOf);
+    const times = asArray(track?.when).map((w) => {
+      const t = Date.parse(textOf(w) ?? "");
       return Number.isFinite(t) ? new Date(t).toISOString() : null;
     });
-    const coordinates = required(gxCoordinates(coords));
+    const coordinates = required(
+      gxCoordinates(raw.filter((c): c is string => c != null)),
+    );
+    const whens =
+      times.length === raw.length ? times.filter((_, i) => raw[i] != null) : [];
     const timed =
       whens.length === coordinates.length && whens.every((w) => w != null);
     shapes.push({
