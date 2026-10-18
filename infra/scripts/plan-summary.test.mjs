@@ -119,6 +119,7 @@ const SCOPE_CASES = [
   ["infra/scripts/plan-summary.test.mjs", true, true],
   [".github/workflows/terraform-apply.yml", true, true],
   [".github/workflows/terraform-plan.yml", true, true],
+  [".github/workflows/terraform-plan-sign.yml", true, true],
   ["frontend/src/App.tsx", false, false],
 ];
 
