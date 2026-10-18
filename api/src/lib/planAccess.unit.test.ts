@@ -6,8 +6,11 @@ vi.mock("../services/prisma", () => ({
 
 import { say } from "@logjam/shared";
 import prisma from "../services/prisma";
+import type { Prisma } from "@prisma/client";
 import {
   canChangeItem,
+  casMissed,
+  touchPlan,
   requirePlanMember,
   requirePlanRole,
   requirePlanWrite,
@@ -127,5 +130,32 @@ describe("roles", () => {
     );
     expect(canChangeItem(access("editor"), theirs, "u-1")).toBe(true);
     expect(canChangeItem(access("leader"), theirs, "u-1")).toBe(true);
+  });
+});
+
+// Both 404 paths answer a DELETE that landed after the access check.
+describe("touchPlan", () => {
+  // Mutation: drop touchPlan's count === 0 throw (a section create then hits
+  // the plan's foreign key: a 500).
+  it("404s a plan deleted meanwhile", async () => {
+    const tx = { tripPlan: { updateMany: async () => ({ count: 0 }) } };
+    await expect(
+      statusOf(touchPlan(tx as unknown as Prisma.TransactionClient, "plan-1")),
+    ).resolves.toBe(404);
+    const live = { tripPlan: { updateMany: async () => ({ count: 1 }) } };
+    await expect(
+      statusOf(
+        touchPlan(live as unknown as Prisma.TransactionClient, "plan-1"),
+      ),
+    ).resolves.toBe("ok");
+  });
+});
+
+describe("casMissed", () => {
+  // Mutation: answer 409 whatever the count.
+  it("is 404 when the plan has gone, 409 when it moved", async () => {
+    const db = (n: number) => ({ tripPlan: { count: async () => n } });
+    expect((await casMissed(db(0), "plan-1")).statusCode).toBe(404);
+    expect((await casMissed(db(1), "plan-1")).statusCode).toBe(409);
   });
 });

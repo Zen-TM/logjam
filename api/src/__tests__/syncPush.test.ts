@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
-import { MAX_SCOPED_PLACE_TYPES } from "@logjam/shared";
+import {
+  MAX_SCOPED_PLACE_TYPES,
+  MAX_TRIP_TYPES_PER_TRIP,
+} from "@logjam/shared";
 import {
   API_URL,
   ALICE_SUB,
@@ -738,6 +741,33 @@ describe("sync push — a definition keeps a one-sided bound", () => {
       .delete(`/custom-fields/trip-log/${key}`)
       .set(as(ALICE_SUB));
     expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+  });
+});
+
+// The sync twin of POST /trips' cap (tripLogsGlobal.test.ts): both call
+// parseTripTypes, so an over-cap list is the same 413, per op.
+describe("sync push — a trip log's types are capped", () => {
+  it("rejects more than the cap with a 413 on that op", async () => {
+    const pushed = await push(ALICE_SUB, [
+      {
+        opId: `trip-types-capped-${randomUUID()}`,
+        entity: "tripLog",
+        op: "create",
+        id: randomUUID(),
+        fields: {
+          date: "2026-07-12",
+          placeIds: [],
+          types: Array.from(
+            { length: MAX_TRIP_TYPES_PER_TRIP + 1 },
+            (_, i) => `t${i}`,
+          ),
+        },
+      },
+    ]);
+    expect(pushed.body.results[0], JSON.stringify(pushed.body)).toMatchObject({
+      status: "rejected",
+      error: { code: 413 },
+    });
   });
 });
 

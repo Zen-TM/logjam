@@ -1,7 +1,10 @@
 // A plan's write-up: titled sections of plain text, in order. Leaders and
 // editors write them. Every write starts its transaction with touchPlan
-// (lib/planAccess.ts), which moves the plan's `updatedAt` and locks its row,
-// so the cap, the positions and the order check see one write at a time.
+// (lib/planAccess.ts), which moves the plan's `updatedAt` and holds its row
+// until commit, so the cap, the positions and the order check see one write
+// at a time (guard for the cap and positions: __tests__/plans.test.ts "holds
+// the cap against creates that race"; the order check rests on the same
+// lock, at Postgres's READ COMMITTED).
 import { Router, Response } from "express";
 import {
   parseTripPlanOrder,

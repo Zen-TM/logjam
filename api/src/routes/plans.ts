@@ -2,18 +2,14 @@
 // itself; its sections, forms, members and items have their own route files
 // under /plans/:planId. Access is lib/planAccess.ts's alone.
 import { Router, Response } from "express";
-import {
-  parseTripPlanCreate,
-  parseTripPlanPatch,
-  say,
-  TRIP_PLAN_CHANGED_SENTENCE,
-} from "@logjam/shared";
+import { parseTripPlanCreate, parseTripPlanPatch, say } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { accepted, AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
+  casMissed,
   planNotFound,
   requirePlanMember,
   requirePlanRole,
@@ -126,14 +122,7 @@ router.patch(
         ...(patch.tripTypes && { tripTypes: patch.tripTypes.to }),
       },
     });
-    if (count === 0) {
-      const still = await prisma.tripPlan.count({
-        where: { id: access.plan.id },
-      });
-      throw still
-        ? new AppError(409, TRIP_PLAN_CHANGED_SENTENCE)
-        : planNotFound();
-    }
+    if (count === 0) throw await casMissed(prisma, access.plan.id);
     res.json(await loadPlanView(user.id, access));
   },
 );
@@ -155,11 +144,15 @@ router.post(
     const archived = req.body?.archived;
     if (typeof archived !== "boolean")
       throw malformed("archived must be a boolean");
-    const plan = await prisma.tripPlan.update({
+    const { count } = await prisma.tripPlan.updateMany({
       where: { id: access.plan.id },
       data: {
         archivedAt: archived ? (access.plan.archivedAt ?? new Date()) : null,
       },
+    });
+    if (count === 0) throw planNotFound();
+    const plan = await prisma.tripPlan.findUnique({
+      where: { id: access.plan.id },
       include: {
         members: {
           where: { userId: user.id },
@@ -167,6 +160,7 @@ router.post(
         },
       },
     });
+    if (!plan) throw planNotFound();
     res.json(planSummary(plan, plan.members[0]));
   },
 );
@@ -188,7 +182,8 @@ router.delete(
     // Hold #439: a plan's files can't be added yet, so there are no S3
     // objects or storage charges to undo here; and no plan_* notification
     // type exists yet, so the other members aren't told (plan_access_ended,
-    // reason "deleted", sent in this delete's transaction, is P3's).
+    // reason "deleted", sent in this delete's transaction, comes with #439's
+    // plan notifications).
     const { count } = await prisma.tripPlan.deleteMany({
       where: { id: access.plan.id },
     });

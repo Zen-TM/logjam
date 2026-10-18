@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 import {
   isTripPlanRole,
   say,
+  TRIP_PLAN_CHANGED_SENTENCE,
   type TripPlanRole,
   type UserSentence,
 } from "@logjam/shared";
@@ -81,12 +82,29 @@ export function canChangeItem(
 }
 
 /**
+ * What a compare-and-set that changed no row answers: 404 when the plan has
+ * gone meanwhile (a DELETE landed after the access check), else 409.
+ * Guard: planAccess.unit.test.ts ("casMissed").
+ */
+export async function casMissed(
+  db: { tripPlan: { count(args: { where: { id: string } }): Promise<number> } },
+  planId: string,
+): Promise<AppError> {
+  return (await db.tripPlan.count({ where: { id: planId } }))
+    ? new AppError(409, TRIP_PLAN_CHANGED_SENTENCE)
+    : planNotFound();
+}
+
+/**
  * Move the plan's `updatedAt`, the Plans poll's watermark, as the FIRST
  * statement of a write to anything in it. A child row's own `updatedAt`
- * never reaches the poll. Being first, its row lock also makes writes in one
- * plan run one at a time, so a count, a next position or an order check read
- * after it can't be raced by a second write. A plan deleted meanwhile is 404.
- * Guard: __tests__/plans.test.ts ("touches the plan").
+ * never reaches the poll. Being first, its UPDATE holds the plan row until
+ * commit, so writes in one plan run one at a time and, at Postgres's READ
+ * COMMITTED, a count, a next position or an order check read after it sees
+ * every write committed before. A plan deleted meanwhile is 404.
+ * Guards: __tests__/plans.test.ts ("touches the plan"; "holds the cap
+ * against creates that race" for the cap and positions), and
+ * planAccess.unit.test.ts ("touchPlan") for the 404.
  */
 export async function touchPlan(
   tx: Prisma.TransactionClient,
