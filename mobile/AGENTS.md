@@ -59,8 +59,9 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 - **A fresh worktree needs real installs** (`npm ci` in `shared/` and `mobile/`):
   symlinked `node_modules` pass typecheck and vitest, then Metro fails. It also
   lacks the gitignored `.env`, `google-services.json` and `keys/`.
-- **OTA is `npm run update:preview` / `update:production`,** never bare
-  `eas update` (the signing key path). A production update comes only from a
+- **OTA is `npm run update:preview` / `update:production` /
+  `promote:production`,** never bare `eas update` (the signing key path, and
+  the production guard). A production update comes only from a
   `release/mobile-vX.Y.Z` branch, never `main`; anything native needs a
   release. [0009](../docs/decisions/0009-signed-ota-updates.md), [0023](../docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md);
   procedure: `docs/operations/mobile-release.md`.
