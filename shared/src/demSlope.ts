@@ -1,10 +1,10 @@
 // Slope of the ground at a point, from the DEM around it.
 //
-// Pure, and split in two so each client keeps its own tile reader: a caller
-// asks `demSlopeWindow` which nine heights it needs, reads them with whatever
-// sampler it already has (they are ordinary sample positions, so a window that
-// straddles a tile edge needs nothing special), and hands them to
-// `slopeDegrees`.
+// Pure, so each client keeps its own tile reader: a caller hands it to
+// `demSlopeReading` / `demSlopeAt`, which picks the finest regional source that
+// covers the whole window and reads each window pixel exactly (a window that
+// straddles a tile edge needs nothing special). `demSlopeWindow` and
+// `slopeDegrees` are the pure parts it is built from.
 //
 // WHAT THE NUMBER MEANS. It is the slope of a plane fitted across three DEM
 // pixels each way, so it is an average over the window and never the steepest

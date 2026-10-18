@@ -167,6 +167,7 @@ describe("POST /elevation/point", () => {
   // req.body, not req.body.point) and a malformed body reaches the DEM reader.
   it("400s a body that is not one in-range [longitude, latitude] pair", async () => {
     for (const body of [
+      [150.31, -33.7],
       {},
       { point: [] },
       { point: [150.31] },

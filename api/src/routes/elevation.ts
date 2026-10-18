@@ -109,6 +109,7 @@ router.post(
     // The height was read; a slope that could not be (its window reaches tiles
     // the height never touched) must not take it down. Nothing of the error is
     // logged; the line says only that a slope failed.
+    // Guard: elevation.unit.test.ts, "still answers the height it read".
     const slope = await sampleSlope(lon, lat).catch(() => {
       logger.warn("DEM slope could not be read");
       return null;
