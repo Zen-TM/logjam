@@ -106,6 +106,23 @@ run "prod_deploys_from_main_only" {
   }
 }
 
+run "plan_comments_are_signed_on_main_only" {
+  command = plan
+
+  # Mutation: widening terraform-plan-sign's policy (another branch,
+  # protected_branches, or no custom policy) lets a workflow on that branch
+  # read PLAN_FINGERPRINT_KEY and sign a plan comment for any plan.
+  assert {
+    condition = (
+      github_repository_environment.this["terraform-plan-sign"].deployment_branch_policy[0].custom_branch_policies &&
+      !github_repository_environment.this["terraform-plan-sign"].deployment_branch_policy[0].protected_branches &&
+      github_repository_environment_deployment_policy.this["terraform-plan-sign"].branch_pattern == "main" &&
+      github_repository_environment_deployment_policy.this["terraform-plan-sign"].tag_pattern == null
+    )
+    error_message = "The terraform-plan-sign Environment must be deployable from main and nothing else: it holds the key that signs plan comments."
+  }
+}
+
 run "releases_stay_the_maintainers" {
   command = plan
 
