@@ -36,6 +36,16 @@ describe("slopeDegrees", () => {
     expect(slopeDegrees(plane(0, 0), 10)).toBe(0);
   });
 
+  it("reads a bumpy window as topo/build_nsw_dem.py's horn_slope does", () => {
+    // Planes cannot tell 1-2-1 weights over 8 from 1-1-1 over 6. Turns red if a
+    // weight or divisor drifts here; test_nsw_dem.py asserts the same window and
+    // figure, so the archive's slope and the tap's cannot disagree.
+    expect(slopeDegrees([10, 12, 17, 9, 15, 20, 11, 14, 25], 4.5)).toBeCloseTo(
+      51.29179169379886,
+      6,
+    );
+  });
+
   it("scales with the cell size, so the same heights are gentler when further apart", () => {
     expect(slopeDegrees(plane(10, 0), 20)).toBeCloseTo(
       (Math.atan(0.5) * 180) / Math.PI,

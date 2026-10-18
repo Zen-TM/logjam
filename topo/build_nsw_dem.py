@@ -45,6 +45,7 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from multiprocessing import Pool
 from pathlib import Path
@@ -65,10 +66,13 @@ BLOCK_TILES = 2 ** (ZMAX - BLOCK_ZOOM)  # z15 tiles along one block edge
 # open ground. At 1/8 m a rugged tile is ~22 % larger.
 ROUNDING_M = 0.25
 NODATA = -9999.0
-# Whole degrees: a band edge cannot be told from the next degree, and half the
-# bytes of 0.25 degree steps (lab/REPORT.md).
+# Whole degrees: a band edge cannot be told from the next degree, and the tiles
+# are ~half the bytes of 0.25 degree steps (97 MB against 178 MB, Katoomba).
 SLOPE_ROUNDING_DEG = 1.0
-EARTH_CIRCUMFERENCE_M = 40_075_016.686  # as demSlope.ts: the colour and the tap agree
+# The same figure as `EARTH_CIRCUMFERENCE_M` in shared/src/demSlope.ts, so the
+# colour and the number at a tap agree: test_nsw_dem.py
+# `test_the_earth_is_the_one_demSlope_uses` holds it.
+EARTH_CIRCUMFERENCE_M = 40_075_016.686
 # The widest gap interpolated across, in z15 pixels (~4 m each). Enough for
 # the join between two sheets; a real hole in the data is far wider and stays.
 SEAM_FILL_PX = 4
@@ -136,10 +140,11 @@ class Layer:
 
 
 HEIGHTS = Layer("NSW 5 m DEM", "Derived from", halve, ROUNDING_M, 9)
-# Level 6, not 9: measured on every z15 tile of the Katoomba sheet, level 9 takes
-# ~250 ms a slope tile to save 8 to 12 % of the bytes, and level 6 takes ~17 ms.
-# Statewide that is ~8 core-hours against ~85 (lab/REPORT.md, "The cheap
-# statewide slope"). Heights stay at 9: their build is dominated by the warp.
+# Level 6, not 9. Timed on 120 sample Katoomba slope tiles, level 9 takes ~250 ms
+# a tile and level 6 ~17 ms; sized on all 2,681 z15 tiles of the sheet, level 6 is
+# 8 to 12 % bigger. Statewide the encode alone is ~85 core-hours at level 9, and
+# the whole build ~13 at level 6 (topo/README.md). Heights keep 9 so the
+# published height archive's bytes do not change.
 SLOPE = Layer(
     "NSW 5 m DEM slope", "Slope derived from", halve_max, SLOPE_ROUNDING_DEG, 6
 )
@@ -226,7 +231,7 @@ def png_bytes(rgb: np.ndarray, level: int = 9) -> bytes:
     return out.getvalue()
 
 
-def tiles_of(grid: np.ndarray, z: int, x0: int, y0: int, layer: Layer = HEIGHTS):
+def tiles_of(grid: np.ndarray, z: int, x0: int, y0: int, layer: Layer):
     """(z, x, y, png) for each tile of a square grid that has a value."""
     for row in range(grid.shape[0] // TILE):
         for col in range(grid.shape[1] // TILE):
@@ -382,7 +387,7 @@ def tile(src: Path, work: Path, jobs: int) -> None:
 # ── pack ─────────────────────────────────────────────────────────────────────
 
 
-def coarse_tiles(work: Path, layer: Layer = HEIGHTS):
+def coarse_tiles(work: Path, layer: Layer):
     """z9 and z8, reduced from the blocks' own z10 grids."""
     level: Dict[Tuple[int, int], np.ndarray] = {}
     for path in work.glob("*.npy"):
@@ -404,7 +409,7 @@ def coarse_tiles(work: Path, layer: Layer = HEIGHTS):
         level = parents
 
 
-def pack(work: Path, out: Path, extracted: str, layer: Layer = HEIGHTS) -> None:
+def pack(work: Path, out: Path, extracted: str, layer: Layer) -> None:
     from pmtiles.convert import mbtiles_to_pmtiles
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -490,32 +495,43 @@ def height_tile(reader, z: int, x: int, y: int) -> Optional[np.ndarray]:
     return decode_terrarium(np.asarray(Image.open(io.BytesIO(png)).convert("RGB")))
 
 
-def slope_block(job: Tuple[int, int, str]) -> Optional[str]:
-    bx, by, work = job
-    if (Path(work) / f"{bx}-{by}.sqlite").exists():
-        return None
-    # The block's z15 tiles and a ring of its neighbours', so Horn is seamless
-    # across a block edge as well as a tile edge.
-    n = BLOCK_TILES + 2
+def block_slope(
+    get: Callable[[int, int], Optional[np.ndarray]],
+    bx: int,
+    by: int,
+    tiles: int = BLOCK_TILES,
+) -> np.ndarray:
+    """The z15 slope of a block of `tiles` x `tiles` tiles.
+
+    `get(x, y)` is a z15 height tile or None. The ring of neighbouring tiles
+    around the block is read too, so Horn is seamless across a block edge as
+    well as a tile edge; test_nsw_dem.py `TestBlockSlope` holds the indexing.
+    """
+    n = tiles + 2
     padded = np.full((n * TILE, n * TILE), np.nan, np.float32)
     for row in range(n):
         for col in range(n):
-            height = height_tile(
-                _heights, ZMAX, bx * BLOCK_TILES - 1 + col, by * BLOCK_TILES - 1 + row
-            )
+            height = get(bx * tiles - 1 + col, by * tiles - 1 + row)
             if height is not None:
                 padded[row * TILE : (row + 1) * TILE, col * TILE : (col + 1) * TILE] = (
                     height
                 )
-    size = BLOCK_TILES * TILE
+    size = tiles * TILE
     slope = np.empty((size, size), np.float32)
-    for row in range(BLOCK_TILES):
+    for row in range(tiles):
         top = (row + 1) * TILE
         slope[row * TILE : (row + 1) * TILE] = horn_slope(
             padded[top - 1 : top + TILE + 1, TILE - 1 : TILE + size + 1],
-            pixel_size_m((by * BLOCK_TILES + row) * TILE, TILE),
+            pixel_size_m((by * tiles + row) * TILE, TILE),
         )
-    padded = None
+    return slope
+
+
+def slope_block(job: Tuple[int, int, str]) -> Optional[str]:
+    bx, by, work = job
+    if (Path(work) / f"{bx}-{by}.sqlite").exists():
+        return None
+    slope = block_slope(lambda x, y: height_tile(_heights, ZMAX, x, y), bx, by)
     count = save_block(slope, bx, by, Path(work), SLOPE)
     return f"{bx}/{by}: {count} tiles"
 
@@ -526,8 +542,12 @@ def build_slope(
     """The slope archive of a height archive: see the module docstring.
 
     A block is every z15 tile under one z10 tile, as in `tile`, and the same
-    resume rule holds: a finished block's file is kept, so a killed run
-    restarts where it stopped. `work` must not be `tile`'s.
+    resume rule holds: a block file already in `work` is kept, whatever made it,
+    so a killed run restarts where it stopped. The default `work` is the slope
+    archive's own.
+
+    A child killed part-way (out of memory) raises here instead of leaving the
+    run waiting for a block that will never come.
     """
     work.mkdir(parents=True, exist_ok=True)
     reader = open_heights(heights)
@@ -546,9 +566,13 @@ def build_slope(
         if reader.get(BLOCK_ZOOM, bx, by) is not None
     ]
     print(f"{len(todo)} blocks", flush=True)
-    with Pool(jobs, init_worker, (heights,)) as pool:
-        for n, line in enumerate(pool.imap_unordered(slope_block, todo), 1):
-            if line:
+    with ProcessPoolExecutor(
+        jobs, initializer=init_worker, initargs=(heights,)
+    ) as pool:
+        for n, done in enumerate(
+            as_completed(pool.submit(slope_block, j) for j in todo), 1
+        ):
+            if line := done.result():
                 print(f"[{n}/{len(todo)}] {line}", flush=True)
     pack(work, out, extracted, SLOPE)
 
@@ -701,7 +725,7 @@ def main() -> None:
     elif args.command == "tile":
         tile(args.src, args.work, args.jobs)
     else:
-        pack(args.work, args.out, args.extracted)
+        pack(args.work, args.out, args.extracted, HEIGHTS)
 
 
 if __name__ == "__main__":

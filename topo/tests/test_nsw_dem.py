@@ -5,12 +5,15 @@ build_nsw_dem.py imports osgeo at module top, so it is stubbed first (the
 topo/tests/_native_stub.py convention).
 """
 
+import io
 import math
 import os
+import re
 import sys
 import unittest
 
 import numpy as np
+from PIL import Image
 
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -24,6 +27,7 @@ from build_nsw_dem import (  # noqa: E402
     SLOPE,
     TILE,
     ZMAX,
+    block_slope,
     blocks_for,
     credit,
     decode_terrarium,
@@ -33,7 +37,9 @@ from build_nsw_dem import (  # noqa: E402
     horn_slope,
     lonlat_to_tile,
     pixel_size_m,
+    png_bytes,
     tile_bounds_3857,
+    tiles_of,
 )
 
 
@@ -137,17 +143,14 @@ class TestHornSlope(unittest.TestCase):
         out = horn_slope(plane(6, 6, 10.0), self.cell)  # 10 m up per 5 m across
         np.testing.assert_allclose(out, np.degrees(np.arctan(2.0)), atol=1e-4)
 
-    # Mutation: leave the border out of the window (NaN it, or edge-replicate
-    # it) and the pixels on a tile edge read as no-data or gentler than their
-    # neighbours, a visible seam on every tile of the archive.
-    def test_two_halves_with_a_border_equal_the_whole(self):
-        rng = np.random.default_rng(1)
-        ground = rng.uniform(0, 200, (6, 10)).astype(np.float32)
-        cell = np.full(4, 5.0)
-        whole = horn_slope(ground, cell)
-        left = horn_slope(ground[:, :6], cell)  # inner columns 1..4
-        right = horn_slope(ground[:, 4:], cell)  # inner columns 5..8
-        np.testing.assert_array_equal(np.hstack([left, right]), whole)
+    # Mutation: change a weight or the divisor in `horn_slope` in step on a
+    # plane (every plane stays right) and a bumpy window reads differently from
+    # `slopeDegrees` in shared/src/demSlope.ts, which asserts the same window
+    # and figure in demSlope.test.ts.
+    def test_a_bumpy_window_reads_as_the_clients_read_it(self):
+        window = np.array([[10, 12, 17], [9, 15, 20], [11, 14, 25]], np.float32)
+        out = horn_slope(window, np.array([4.5]))
+        self.assertAlmostEqual(float(out[0, 0]), 51.29179169379886, places=4)
 
     # Mutation: check only the centre pixel and a hole's neighbours get a slope
     # made from the eight heights that are there: a confident number about
@@ -169,16 +172,56 @@ class TestHornSlope(unittest.TestCase):
             got, EARTH_CIRCUMFERENCE_M * math.cos(math.radians(lat)) / across, 3
         )
         self.assertLess(got, EARTH_CIRCUMFERENCE_M / across * 0.84)
+        # Down a tile (south, away from the equator) the pixels shrink, row by row.
+        rows = pixel_size_m(int(y), TILE)
+        self.assertTrue(np.all(np.diff(rows) < 0))
 
-    # Mutation: change the constant here alone and archive slopes drift from
-    # what the clients compute at a tap, so a colour and a number disagree.
+    # Mutation: change the constant here alone, or cut either figure short, and
+    # archive slopes drift from what the clients compute at a tap, so a colour
+    # and a number disagree.
     def test_the_earth_is_the_one_demSlope_uses(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         with open(os.path.join(root, "shared/src/demSlope.ts")) as f:
-            self.assertIn(
-                f"EARTH_CIRCUMFERENCE_M = {EARTH_CIRCUMFERENCE_M:_.3f}".rstrip("0"),
-                f.read(),
-            )
+            found = re.search(r"EARTH_CIRCUMFERENCE_M = ([\d_.]+);", f.read())
+        self.assertIsNotNone(found)
+        self.assertEqual(float(found.group(1).replace("_", "")), EARTH_CIRCUMFERENCE_M)
+
+
+class TestBlockSlope(unittest.TestCase):
+    # Mutation: in `block_slope`, read the neighbour ring from the wrong tile
+    # (`bx * tiles - 1` to `bx * tiles`), start the window at `TILE` instead of
+    # `TILE - 1`, or at `top` instead of `top - 1`, or give `pixel_size_m` the
+    # wrong row origin: the pixels on a tile or block edge then read a slope
+    # that is not the whole mosaic's, a visible seam on every tile.
+    def test_a_block_equals_horn_over_the_whole_mosaic(self):
+        bx, by, tiles = 2, 3, 2
+        rng = np.random.default_rng(1)
+        mosaic = rng.uniform(0, 300, (4 * TILE, 4 * TILE)).astype(np.float32)
+
+        def get(x, y):  # the mosaic holds tiles bx*2-1 .. bx*2+2
+            col, row = x - (bx * tiles - 1), y - (by * tiles - 1)
+            if not (0 <= col < 4 and 0 <= row < 4):
+                return None
+            return mosaic[row * TILE : (row + 1) * TILE, col * TILE : (col + 1) * TILE]
+
+        got = block_slope(get, bx, by, tiles)
+        want = horn_slope(
+            mosaic[TILE - 1 : 3 * TILE + 1, TILE - 1 : 3 * TILE + 1],
+            pixel_size_m(by * tiles * TILE, tiles * TILE),
+        )
+        np.testing.assert_array_equal(got, want)
+
+    # Mutation: treat a missing neighbour as flat ground (fill 0) and the block's
+    # edge pixels get a slope from ground nobody measured.
+    def test_a_missing_neighbour_makes_the_edge_no_data(self):
+        flat = np.zeros((TILE, TILE), np.float32)
+        alone = block_slope(lambda x, y: flat if (x, y) == (1, 1) else None, 1, 1, 1)
+        self.assertTrue(np.isnan(alone[[0, -1]]).all())  # the ring is missing
+        self.assertTrue(np.isnan(alone[:, [0, -1]]).all())
+        self.assertEqual(alone[5, 5], 0)
+        ring = block_slope(lambda x, y: None if x == 0 else flat, 1, 1, 1)
+        self.assertTrue(np.isnan(ring[:, 0]).all())
+        self.assertEqual(ring[5, 5], 0)
 
 
 class TestHalveMax(unittest.TestCase):
@@ -218,15 +261,29 @@ class TestSlopeEncoding(unittest.TestCase):
         self.assertEqual(out[0, 0], 0)
         self.assertTrue(np.isnan(out[0, 1]))
 
+    # Mutation: pass `HEIGHTS` (or nothing) where `SLOPE` belongs in the tiling
+    # and a slope archive is written with the heights' quarter-metre steps and
+    # level 9; the slope's tile must decode in whole degrees.
+    def test_a_slope_tile_is_written_with_the_slope_layer(self):
+        grid = np.full((TILE, TILE), 12.4, np.float32)
+        (z, x, y, png), *_ = tiles_of(grid, 15, 3, 4, SLOPE)
+        self.assertEqual((z, x, y), (15, 3, 4))
+        rgb = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
+        np.testing.assert_array_equal(decode_terrarium(rgb), 12.0)
+        self.assertEqual(png, png_bytes(encode_terrarium(grid, grid > 0, 1.0), 6))
+
     # Mutation: change the credit's wording for one archive alone and the
     # slope carries a different licence line than the heights it derives from.
+    # The month is not compared: a rebuild changes it (ADR 0031).
     def test_both_archives_carry_the_credit_of_the_heights(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         with open(os.path.join(root, "shared/src/demSources.ts")) as f:
             source = f.read()
-        tail = credit(HEIGHTS, "October 2026").split("the NSW 5 m", 1)[1]
-        self.assertIn(tail, source)
-        self.assertEqual(credit(SLOPE, "October 2026").split("the NSW 5 m", 1)[1], tail)
+        tail = credit(HEIGHTS, "X").split("the NSW 5 m", 1)[1].split("extracted")[0]
+        self.assertIn(tail + "extracted", source)
+        slope = credit(SLOPE, "X").split("the NSW 5 m", 1)[1]
+        self.assertEqual(slope.split("extracted")[0], tail)
+        self.assertTrue(slope.endswith("CC BY 3.0 AU."))
 
 
 if __name__ == "__main__":

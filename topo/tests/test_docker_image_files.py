@@ -21,8 +21,14 @@ import unittest
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _DOCKERFILE = os.path.join(_ROOT, "Dockerfile")
 
-# The commands the ECS task defs run (see the Dockerfile entrypoint note).
-_ENTRYPOINTS = ("worker.py", "export_worker.py", "build_place_registry.py")
+# The commands the ECS task defs run, and the script a RunTask command override
+# runs (see the Dockerfile entrypoint note).
+_ENTRYPOINTS = (
+    "worker.py",
+    "export_worker.py",
+    "build_place_registry.py",
+    "build_nsw_dem.py",
+)
 
 
 def _local_module_path(name):
