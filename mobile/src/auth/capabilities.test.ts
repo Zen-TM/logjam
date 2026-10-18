@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   capabilityRowProps,
+  changeEmailRowProps,
   capabilityScreenBlock,
   capabilityStatus,
   fieldDefsBlockedReason,
@@ -195,5 +196,27 @@ describe("fieldDefsBlockedReason", () => {
         expect(fieldDefsBlockedReason(accountState, online)).toBeUndefined();
       }
     }
+  });
+});
+
+// Guard: fake auth never configures Amplify, so change-email (an Amplify call)
+// is dimmed there with a reason. Drop the fake branch in changeEmailRowProps
+// and the first test goes red; widen it to Cognito and the second does.
+describe("changeEmailRowProps", () => {
+  it("dims the row with a reason under fake auth, online or not", () => {
+    for (const online of [true, false]) {
+      expect(changeEmailRowProps(online, "fake")).toEqual({
+        disabled: true,
+        subtitle: "Fake sign-in has no email to change.",
+      });
+    }
+  });
+
+  it("leaves a Cognito build to the ordinary connection gate", () => {
+    expect(changeEmailRowProps(true, "cognito")).toEqual({ disabled: false });
+    expect(changeEmailRowProps(false, "cognito")).toEqual({
+      disabled: true,
+      subtitle: "Needs a connection",
+    });
   });
 });
