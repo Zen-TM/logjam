@@ -11,8 +11,9 @@
 // storage: the friends leaderboard (`uiPreferences.leaderboardOptIn`) lives on
 // the user record because the server decides who sees whose count. It is on
 // THIS page because what it decides is what leaves for friends to see, and it
-// is where someone goes to turn that off. Absent for a guest, who has no
-// friends to rank against; "Needs a connection" offline, unlike its neighbours.
+// is where someone goes to turn that off. Unlike its neighbours it is dead
+// with "Needs an account" for a guest, who could link one, and with "Needs a
+// connection" offline (shared/DESIGN.md §5).
 //
 // The closing section is not a setting — it is an answer. "What of mine is on
 // this device, and what protects it?" is a fair question to have about an
@@ -204,23 +205,19 @@ export function PrivacySettingsScreen() {
           onToggle={toggleSaveToGallery}
         />
 
-        {isGuest ? null : (
-          <>
-            <SectionHeader title="Friends" />
-            <PreferenceRow
-              icon="leaderboard"
-              title={LEADERBOARD_SETTING.label}
-              subtitle={leaderboardBlocked ?? LEADERBOARD_SETTING.hint}
-              value={leaderboard ?? false}
-              ready={
-                leaderboardBlocked === undefined &&
-                leaderboard !== null &&
-                !savingLeaderboard
-              }
-              onToggle={toggleLeaderboard}
-            />
-          </>
-        )}
+        <SectionHeader title="Friends" />
+        <PreferenceRow
+          icon="leaderboard"
+          title={LEADERBOARD_SETTING.label}
+          subtitle={leaderboardBlocked ?? LEADERBOARD_SETTING.hint}
+          value={leaderboard ?? false}
+          ready={
+            leaderboardBlocked === undefined &&
+            leaderboard !== null &&
+            !savingLeaderboard
+          }
+          onToggle={toggleLeaderboard}
+        />
 
         <SectionHeader title="What's on this phone" />
         <Text style={styles.note}>

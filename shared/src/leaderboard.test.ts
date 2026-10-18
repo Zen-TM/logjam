@@ -4,7 +4,10 @@ import {
   currentSeason,
   isPodiumWeek,
   medalFor,
+  nudgeKind,
   previousSeason,
+  selfStanding,
+  type LeaderboardBoard,
 } from "./leaderboard";
 
 // Sydney is UTC+10 in June (no DST), so 21 June 00:00 Sydney is 20 June 14:00 UTC.
@@ -84,13 +87,48 @@ describe("computeLeaderboard", () => {
 });
 
 describe("medalFor", () => {
-  it("gives ranks 1–3 a medal, but not on a board of one", () => {
-    expect([1, 2, 3, 4].map((rank) => medalFor(rank, 5))).toEqual([
-      "gold",
-      "silver",
-      "bronze",
+  it("gives ranks 1–3 a medal, but not on a board of one or at 0 canyons", () => {
+    expect(
+      [1, 2, 3, 4].map((rank) => medalFor({ rank, canyonCount: 2 }, 5)),
+    ).toEqual(["gold", "silver", "bronze", null]);
+    expect(medalFor({ rank: 1, canyonCount: 2 }, 1)).toBeNull();
+    expect(medalFor({ rank: 1, canyonCount: 0 }, 5)).toBeNull();
+  });
+});
+
+const board = (
+  entries: { rank: number; isSelf?: boolean }[],
+  notJoined: string[] = [],
+): LeaderboardBoard => ({
+  joined: true,
+  season: "2026–27",
+  entries: entries.map((entry, index) => ({
+    userId: `u${index}`,
+    username: `u${index}`,
+    canyonCount: 1,
+    rank: entry.rank,
+    isSelf: entry.isSelf ?? false,
+  })),
+  notJoined,
+  podium: null,
+});
+
+describe("selfStanding", () => {
+  it("is the user's own rank on a tied board, out of everyone on it", () => {
+    expect(
+      selfStanding(
+        board([{ rank: 1 }, { rank: 1, isSelf: true }, { rank: 3 }]),
+      ),
+    ).toEqual({ rank: 1, size: 3 });
+  });
+});
+
+describe("nudgeKind", () => {
+  it("asks while anyone hasn't joined, says alone on a board of one, else nothing", () => {
+    expect(nudgeKind(board([{ rank: 1, isSelf: true }], ["kit"]))).toBe("ask");
+    expect(nudgeKind(board([{ rank: 1, isSelf: true }]))).toBe("alone");
+    expect(nudgeKind(board([{ rank: 1, isSelf: true }, { rank: 2 }]))).toBe(
       null,
-    ]);
-    expect(medalFor(1, 1)).toBeNull();
+    );
   });
 });

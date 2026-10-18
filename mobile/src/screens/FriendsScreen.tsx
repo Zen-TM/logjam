@@ -53,6 +53,7 @@ import {
   friendVerb,
   LEADERBOARD,
   leaderboardRowSubtitle,
+  selfStanding,
   type LeaderboardResponse,
   messageFromError,
   type FriendsBucket,
@@ -81,7 +82,6 @@ import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
-import { selfStanding } from "./leaderboard";
 import {
   BottomSheet,
   Button,

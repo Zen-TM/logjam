@@ -52,6 +52,7 @@ import {
   friendSearchHint,
   LEADERBOARD,
   leaderboardRowSubtitle,
+  selfStanding,
   type LeaderboardResponse,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
@@ -304,18 +305,18 @@ function FriendsPanel({
       />
     ),
     leaderboard: () => {
-      if (!leaderboardOptIn) return null;
-      const self = board?.joined
-        ? board.entries.find((entry) => entry.isSelf)
-        : undefined;
+      // `false` from the server outranks the cached preference: the user left
+      // on another device since this session fetched it.
+      if (!leaderboardOptIn || board?.joined === false) return null;
+      const standing = board?.joined ? selfStanding(board) : null;
       return (
         <div className={classes.leaderboard}>
           <Row
             leading={<IconTile icon="leaderboard" hue="var(--color-accent)" />}
             title={LEADERBOARD.title}
             subtitle={
-              self && board?.joined
-                ? leaderboardRowSubtitle(self.rank, board.entries.length)
+              standing
+                ? leaderboardRowSubtitle(standing.rank, standing.size)
                 : undefined
             }
             trailing={<Icon idea="disclosure" size={18} aria-hidden />}

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { throttleWrites } from "./_rateLimitGate";
 import {
@@ -17,7 +17,12 @@ import {
 // shared tests own the arithmetic.
 //
 // Mutations that turn it red: default `leaderboardOptIn` to true; return the
-// board to someone who has not joined; add `email` to the participant select.
+// board to someone who has not joined; spread the friend's user row into an
+// entry.
+
+// `join` waits out the per-user PATCH limit (~61 s) when an earlier file spent
+// it, as placeTypes.test.ts does.
+vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 async function join(sub: string, leaderboardOptIn: boolean) {
   const send = () =>

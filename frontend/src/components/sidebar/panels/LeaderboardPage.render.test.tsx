@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LEADERBOARD,
   LEADERBOARD_ASK_MESSAGE,
+  LEADERBOARD_SETTING,
   leaderboardNudge,
   leaderboardPodiumLine,
   leaderboardSeasonLine,
@@ -80,6 +81,17 @@ describe("LeaderboardPage", () => {
     );
     expect(screen.getByRole("heading", { name: "#1 of 4" })).toBeTruthy();
     expect(screen.getByText(leaderboardSeasonLine("2026–27"))).toBeTruthy();
+  });
+
+  // Mutation: drop the 0-canyon condition, and 21 June is all gold.
+  it("gives no medal at 0 canyons, even level at rank 1", () => {
+    show(
+      board({
+        entries: [entry("alice", 0, 1, true), entry("bob", 0, 1)],
+        podium: { season: "2025–26", rank: 1, canyonCount: 0 },
+      }),
+    );
+    expect(screen.queryByRole("img", { name: /medal/ })).toBeNull();
   });
 
   it("gives a board of one no medal, and says it is just you", () => {
@@ -159,6 +171,14 @@ describe("LeaderboardPage", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(
       copy.rules.split("\n").length,
     );
+  });
+
+  // Mutation: treat `{ joined: false }` as still loading, and the page spins
+  // for good after the user leaves on another device.
+  it("says the user has left when the server says they have", () => {
+    show({ joined: false });
+    expect(screen.getByText(LEADERBOARD_SETTING.left)).toBeTruthy();
+    expect(screen.queryByText(copy.loading)).toBeNull();
   });
 
   it("says it is loading, then that it failed", () => {

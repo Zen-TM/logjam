@@ -109,14 +109,20 @@ export function computeLeaderboard(
 
 export type Medal = "gold" | "silver" | "bronze";
 
-/** A medal needs someone to beat: a board of one has none. */
-export function medalFor(rank: number, boardSize: number): Medal | null {
-  if (boardSize < 2) return null;
-  return rank === 1
+/**
+ * A medal needs someone to beat and something done: a board of one has none,
+ * and nor does a count of 0, or every board is all gold on 21 June.
+ */
+export function medalFor(
+  standing: { rank: number; canyonCount: number },
+  boardSize: number,
+): Medal | null {
+  if (boardSize < 2 || standing.canyonCount === 0) return null;
+  return standing.rank === 1
     ? "gold"
-    : rank === 2
+    : standing.rank === 2
       ? "silver"
-      : rank === 3
+      : standing.rank === 3
         ? "bronze"
         : null;
 }
@@ -137,3 +143,21 @@ export type LeaderboardResponse =
        *  season. */
       podium: { season: string; rank: number; canyonCount: number } | null;
     };
+
+export type LeaderboardBoard = Extract<LeaderboardResponse, { joined: true }>;
+
+/** Where the user stands: the hero, and the row on Friends. */
+export function selfStanding(board: LeaderboardBoard): {
+  rank: number;
+  size: number;
+} {
+  const self = board.entries.find((entry) => entry.isSelf);
+  return { rank: self?.rank ?? 1, size: board.entries.length };
+}
+
+/** What the nudge says: who to ask, that it is only the user, or nothing on
+ *  a board every friend has joined. */
+export function nudgeKind(board: LeaderboardBoard): "ask" | "alone" | null {
+  if (board.notJoined.length > 0) return "ask";
+  return board.entries.length < 2 ? "alone" : null;
+}

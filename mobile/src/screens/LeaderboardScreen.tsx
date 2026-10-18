@@ -29,6 +29,9 @@ import {
   leaderboardSeasonLine,
   medalFor,
   messageFromError,
+  nudgeKind,
+  selfStanding,
+  type LeaderboardBoard as Board,
   type LeaderboardResponse,
   type LeaderboardRow,
   type SectionKeysOn,
@@ -38,33 +41,22 @@ import { getLeaderboard } from "../api/friends";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
+import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
-  makeStyles,
-  muted,
-  radius,
-  spacing,
-  useHues,
-  useTheme,
-} from "../theme";
-import {
+  Avatar,
   Button,
   EmptyState,
   ErrorBanner,
   ErrorState,
   Hero,
+  IconTile,
   LoadingState,
   Row,
   SectionHeader,
   Toast,
   type ToastMessage,
 } from "../ui";
-import {
-  dismissPodium,
-  isPodiumDismissed,
-  nudgeKind,
-  selfStanding,
-  type Board,
-} from "./leaderboard";
+import { dismissPodium, isPodiumDismissed } from "./leaderboard";
 
 const copy = LEADERBOARD.copy;
 
@@ -249,7 +241,7 @@ function Podium({
   onDismiss: () => void;
 }) {
   const { medalHue } = useHues();
-  const medal = medalFor(podium.rank, 2);
+  const medal = medalFor(podium, 2);
   return (
     <Row
       icon="leaderboard"
@@ -269,8 +261,8 @@ function Podium({
 }
 
 /** Read-only: a friend's row opens nothing, since there is nothing more of
- *  theirs to see. The rank travels with its medal, so colour is never the
- *  only signal (shared/DESIGN.md §7). */
+ *  theirs to see. The medal travels with "#rank", so colour is never the only
+ *  signal (shared/DESIGN.md §7). Composed as Logjam Web's board row is. */
 function BoardRow({
   entry,
   boardSize,
@@ -278,34 +270,30 @@ function BoardRow({
   entry: LeaderboardRow;
   boardSize: number;
 }) {
-  const theme = useTheme();
   const { medalHue } = useHues();
   const styles = useStyles();
-  const medal = medalFor(entry.rank, boardSize);
+  const medal = medalFor(entry, boardSize);
+  const count = leaderboardCount(entry.canyonCount);
   return (
     <Row
-      leading={
-        <View
-          style={[
-            styles.rank,
-            medal ? { backgroundColor: medalHue[medal] } : null,
-          ]}
-        >
-          <Text
-            style={[
-              styles.rankText,
-              { color: medal ? theme.onFill : theme.textMuted },
-            ]}
-          >
-            {entry.rank}
-          </Text>
-        </View>
-      }
+      leading={<Avatar username={entry.username} />}
       title={entry.username}
       subtitle={entry.isSelf ? copy.you : undefined}
-      accessibilityLabel={`#${entry.rank}, ${entry.username}${entry.isSelf ? `, ${copy.you}` : ""}, ${leaderboardCount(entry.canyonCount)}`}
+      accessibilityLabel={[
+        `#${entry.rank}`,
+        entry.username,
+        entry.isSelf ? copy.you : null,
+        count,
+        medal ? `${medal} medal` : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}
       right={
-        <Text style={styles.count}>{leaderboardCount(entry.canyonCount)}</Text>
+        <View style={styles.place}>
+          <Text style={styles.count}>{count}</Text>
+          {medal ? <IconTile icon="leaderboard" hue={medalHue[medal]} /> : null}
+          <Text style={styles.rank}>#{entry.rank}</Text>
+        </View>
       }
     />
   );
@@ -355,16 +343,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingBottom: spacing(4),
   },
-  // The size of a row's identity tile, so names line up down the board.
-  rank: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rankText: { ...textRole.rowTitle },
+  place: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   count: { ...textRole.body, color: theme.text },
+  rank: { ...textRole.rowTitle, color: theme.text },
   nudge: { gap: spacing(1), paddingTop: spacing(1) },
   note: { ...muted(theme, textRole.paragraph) },
 }));

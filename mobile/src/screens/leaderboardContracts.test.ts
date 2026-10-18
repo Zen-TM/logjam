@@ -4,7 +4,8 @@
 // Mutations that turn it red: add `{ key: "medals" }` to
 // `LEADERBOARD.sections`; delete `rules` from `LEADERBOARD_SECTIONS`; make
 // `podium` draw without `podiumShown`; drop the `leaderboardOptIn &&` guard
-// from Friends' `leaderboard` section; let the Settings switch show for a guest.
+// from Friends' `leaderboard` section; hide the Settings switch for a guest
+// (`isGuest ? null :`), or let it turn on with a reason showing.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -87,9 +88,17 @@ describe("Logjam GPS draws what the leaderboard contracts name", () => {
     );
   });
 
-  it("the Settings switch is absent for a guest", () => {
-    expect(read("./settings/PrivacySettingsScreen.tsx")).toMatch(
-      /\{isGuest \? null : \([\s\S]{0,200}LEADERBOARD_SETTING\.label/,
+  // `capabilityStatus("serverPrefs")` answers "Needs an account" for a guest
+  // (auth/capabilities.test.ts); this holds the switch to it.
+  it("the Settings switch shows for a guest, dead with the reason", () => {
+    const source = read("./settings/PrivacySettingsScreen.tsx");
+    expect(source).not.toMatch(/isGuest \?/);
+    expect(source).toContain(
+      'capabilityStatus("serverPrefs", accountState, online)',
     );
+    expect(source).toContain(
+      "subtitle={leaderboardBlocked ?? LEADERBOARD_SETTING.hint}",
+    );
+    expect(source).toMatch(/ready=\{\s*leaderboardBlocked === undefined &&/);
   });
 });

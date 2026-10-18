@@ -12,6 +12,7 @@ import {
   computeLeaderboard,
   currentSeason,
   isPodiumWeek,
+  medalFor,
   previousSeason,
   SYSTEM_PLACE_TYPE_IDS,
   type LeaderboardResponse,
@@ -268,7 +269,7 @@ router.get(
       const mine = (await buildLeaderboard(participants, last)).find(
         (entry) => entry.userId === user.id,
       );
-      if (mine && mine.rank <= 3 && participants.size > 1) {
+      if (mine && medalFor(mine, participants.size)) {
         podium = {
           season: last.label,
           rank: mine.rank,

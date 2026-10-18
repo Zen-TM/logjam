@@ -16,7 +16,10 @@ import {
   leaderboardNudge,
   leaderboardPodiumLine,
   leaderboardSeasonLine,
+  LEADERBOARD_SETTING,
   medalFor,
+  nudgeKind,
+  selfStanding,
   type LeaderboardResponse,
   type Medal,
   type SectionKeysOn,
@@ -27,6 +30,7 @@ import { useStoredState } from "../../../useStoredState";
 import {
   Avatar,
   Button,
+  EmptyState,
   ErrorState,
   Hero,
   IconTile,
@@ -67,8 +71,8 @@ function LeaderboardPage({
   );
 
   const joined = board?.joined ? board : null;
-  const self = joined?.entries.find((entry) => entry.isSelf);
-  const size = joined?.entries.length ?? 0;
+  const standing = joined ? selfStanding(joined) : null;
+  const nudge = joined ? nudgeKind(joined) : null;
 
   async function handleAsk() {
     try {
@@ -90,7 +94,9 @@ function LeaderboardPage({
       <>
         <Hero
           title={
-            self ? leaderboardHeroTitle(self.rank, size) : LEADERBOARD.title
+            standing
+              ? leaderboardHeroTitle(standing.rank, standing.size)
+              : LEADERBOARD.title
           }
           onBack={onBack}
           backLabel="Back to friends"
@@ -106,7 +112,7 @@ function LeaderboardPage({
       const podium = joined?.podium;
       return podium && dismissedSeason !== podium.season ? (
         <Row
-          leading={medalTile(medalFor(podium.rank, 2))}
+          leading={medalTile(medalFor(podium, 2))}
           title={leaderboardPodiumLine(podium)}
           trailing={
             <Button
@@ -122,7 +128,7 @@ function LeaderboardPage({
     },
     board: () =>
       joined?.entries.map((entry) => {
-        const medal = medalFor(entry.rank, size);
+        const medal = medalFor(entry, joined.entries.length);
         return (
           <Row
             key={entry.userId}
@@ -142,7 +148,7 @@ function LeaderboardPage({
         );
       }),
     nudge: () =>
-      !joined ? null : joined.notJoined.length > 0 ? (
+      joined && nudge === "ask" ? (
         <div className={classes.nudge}>
           <p className={classes.note}>{leaderboardNudge(joined.notJoined)}</p>
           <Button
@@ -153,7 +159,7 @@ function LeaderboardPage({
             {copy.askFriends}
           </Button>
         </div>
-      ) : size < 2 ? (
+      ) : nudge === "alone" ? (
         <div className={classes.nudge}>
           <p className={classes.note}>{copy.alone}</p>
         </div>
@@ -186,7 +192,9 @@ function LeaderboardPage({
         </div>
       ) : (
         <div className={classes.emptyArea}>
-          {error ? (
+          {board && !board.joined ? (
+            <EmptyState icon="leaderboard" title={LEADERBOARD_SETTING.left} />
+          ) : error ? (
             <ErrorState message={error} onRetry={onRetry} />
           ) : (
             <LoadingState label={copy.loading} />
@@ -197,8 +205,7 @@ function LeaderboardPage({
   );
 }
 
-/** A medal is a fill with the award glyph, its name for assistive tech. A
- *  podium is ranks 1–3, so last season's finish always has one. */
+/** A medal is a fill with the award glyph, its name for assistive tech. */
 function medalTile(medal: Medal | null) {
   return (
     medal && (

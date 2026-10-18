@@ -164,6 +164,16 @@ describe("the leaderboard row on Friends", () => {
     expect(getLeaderboard).not.toHaveBeenCalled();
   });
 
+  // Mutation: trust the cached preference over the server's `false`.
+  it("goes when the server says the user left on another device", async () => {
+    vi.mocked(getLeaderboard).mockResolvedValueOnce({ joined: false });
+    show(true);
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByText(LEADERBOARD.title)).toBeNull(),
+    );
+  });
+
   it("says where a joined user stands and opens the board in place", async () => {
     show(true);
     expect(await screen.findByText("You're #2 of 2")).toBeTruthy();
