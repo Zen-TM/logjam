@@ -3,8 +3,8 @@
 // cannot disagree about when a season ends or who is first.
 //
 // PRIVACY. A score is a count of owner-private trip data, which ADR 0002 keeps
-// owner-private by default. The leaderboard shares it only with explicit
-// consent: `uiPreferences.leaderboardOptIn`, default false. Until a user joins
+// owner-private; its 2026-10-18 update makes this the one opt-in exception:
+// `uiPreferences.leaderboardOptIn`, default false. Until a user joins
 // they neither appear on a board nor see one, and once joined a friend sees
 // their username and one integer, never which places. The participant filter
 // is `collectLeaderboardParticipants` in api/src/routes/friends.ts, guarded by
