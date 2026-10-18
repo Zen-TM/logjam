@@ -11,7 +11,8 @@ docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md
     build_nsw_dem.py tile  SRC WORK [--jobs N]
     build_nsw_dem.py pack  WORK OUT.pmtiles --extracted "October 2026"
     build_nsw_dem.py contours SRC WORK OUT.pmtiles --extracted "October 2026"
-    build_nsw_dem.py slope IN.pmtiles OUT.pmtiles --extracted "October 2026" [--jobs N]
+    build_nsw_dem.py slope IN.pmtiles OUT.pmtiles [--jobs N]
+    build_nsw_dem.py slope-s3 BUCKET [--jobs N]  # the same, from and to the topo bucket
 
 `fetch`, `tile` and `slope` skip what is already done, so a killed run restarts
 where it stopped. Run `tile` only once every sheet is fetched: a finished block
@@ -39,10 +40,12 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -523,7 +526,9 @@ def block_slope(
     slope = np.empty((size, size), np.float32)
     for row in range(tiles):
         top = (row + 1) * TILE
-        if not present[row : row + 3].any():  # sea, or off the archive
+        # An all-empty strip (sea, off the archive) costs ~0.5 s of float64 Horn
+        # for nothing; a block of all sea took ~15 s before this skip.
+        if not present[row : row + 3].any():
             slope[row * TILE : (row + 1) * TILE] = np.nan
             continue
         slope[row * TILE : (row + 1) * TILE] = horn_slope(
@@ -542,9 +547,17 @@ def slope_block(job: Tuple[int, int, str]) -> Optional[str]:
     return f"{bx}/{by}: {count} tiles"
 
 
-def build_slope(
-    heights: Path, out: Path, work: Path, extracted: str, jobs: int
-) -> None:
+def extracted_month(attribution: str) -> str:
+    """The month a height archive's credit says the sheets were extracted."""
+    found = re.search(r"extracted (.+?)\. CC BY", attribution)
+    if not found:
+        sys.exit(
+            f"no 'extracted <Month Year>' in the height archive's credit: {attribution!r}"
+        )
+    return found.group(1)
+
+
+def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     """The slope archive of a height archive: see the module docstring.
 
     A block is every z15 tile under one z10 tile, as in `tile`, and the same
@@ -557,6 +570,9 @@ def build_slope(
     """
     work.mkdir(parents=True, exist_ok=True)
     reader = open_heights(heights)
+    # The slope archive says what the heights it came from say, never a month
+    # typed again by hand.
+    extracted = extracted_month(reader.metadata()["attribution"])
     header = reader.header()
     x0, y0 = lonlat_to_tile(
         header["min_lon_e7"] / 1e7, header["max_lat_e7"] / 1e7, BLOCK_ZOOM
@@ -581,11 +597,46 @@ def build_slope(
                 if line := done.result():
                     print(f"[{n}/{len(todo)}] {line}", flush=True)
         except BaseException:
-            # Leaving the `with` waits for every queued block otherwise: hours
-            # of silent work before the traceback prints.
-            pool.shutdown(wait=False, cancel_futures=True)
+            # Cancels what is queued and waits only for the blocks already
+            # running. `wait=False` here would be undone by the `with`'s own
+            # shutdown, which runs every queued block before the process exits
+            # (test_nsw_dem.py `TestBuildSlope`).
+            pool.shutdown(cancel_futures=True)
             raise
     pack(work, out, extracted, SLOPE)
+
+
+# NSW_5M.archivePath in shared/src/demSources.ts, and the slope archive's twin
+# beside it: test_nsw_dem.py `TestSlopeS3` holds the first.
+HEIGHT_KEY = "master/dem/nsw-5m.pmtiles"
+SLOPE_KEY = "master/dem/nsw-5m-slope.pmtiles"
+
+
+def slope_s3(bucket: str, work: Path, jobs: int, client=None) -> None:
+    """`slope` on the published height archive, publishing the result.
+
+    What the Fargate task runs (topo/README.md, "Building it in AWS"). Every
+    step raises on failure, so the task exits non-zero and nothing is uploaded
+    from a build that did not finish.
+    """
+    if client is None:
+        import boto3
+
+        client = boto3.client("s3")
+    work.mkdir(parents=True, exist_ok=True)
+    heights, out = work / "nsw-5m.pmtiles", work / "nsw-5m-slope.pmtiles"
+    print(f"downloading s3://{bucket}/{HEIGHT_KEY}", flush=True)
+    client.download_file(bucket, HEIGHT_KEY, str(heights))
+    print(f"downloaded {heights.stat().st_size:,} bytes", flush=True)
+    build_slope(heights, out, work / "blocks", jobs)
+    print(f"built {out.stat().st_size:,} bytes", flush=True)
+    client.upload_file(
+        str(out),
+        bucket,
+        SLOPE_KEY,
+        ExtraArgs={"ContentType": "application/vnd.pmtiles"},
+    )
+    print(f"uploaded s3://{bucket}/{SLOPE_KEY}", flush=True)
 
 
 # ── contours ─────────────────────────────────────────────────────────────────
@@ -724,7 +775,12 @@ def main() -> None:
         "--work", type=Path, help="default: OUT with .work in place of .pmtiles"
     )
     p.add_argument("--jobs", type=int, default=os.cpu_count())
-    p.add_argument("--extracted", required=True, help="as for pack")
+    p = sub.add_parser("slope-s3")
+    p.add_argument("bucket", help="the topo bucket")
+    p.add_argument(
+        "--work", type=Path, default=Path(tempfile.gettempdir()) / "nsw-slope"
+    )
+    p.add_argument("--jobs", type=int, default=os.cpu_count())
     args = parser.parse_args()
     if args.command == "fetch":
         fetch(args.src, args.sheets)
@@ -732,7 +788,9 @@ def main() -> None:
         contours(args.src, args.work, args.out, args.extracted)
     elif args.command == "slope":
         work = args.work or args.out.with_suffix(".work")
-        build_slope(args.heights, args.out, work, args.extracted, args.jobs)
+        build_slope(args.heights, args.out, work, args.jobs)
+    elif args.command == "slope-s3":
+        slope_s3(args.bucket, args.work, args.jobs)
     elif args.command == "tile":
         tile(args.src, args.work, args.jobs)
     else:

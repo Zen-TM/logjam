@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import unittest
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -31,7 +32,11 @@ from build_nsw_dem import (  # noqa: E402
     block_slope,
     blocks_for,
     credit,
+    HEIGHT_KEY,
+    SLOPE_KEY,
     decode_terrarium,
+    extracted_month,
+    slope_s3,
     encode_terrarium,
     halve,
     halve_max,
@@ -273,6 +278,118 @@ class TestSlopeBlock(unittest.TestCase):
             )
         )
         np.testing.assert_array_equal(got[1:-1, 1:-1], want[1:-1, 1:-1])
+
+
+class TestBuildSlope(unittest.TestCase):
+    # Mutation: `shutdown(wait=False, cancel_futures=True)` (the `with` block's
+    # own shutdown then runs every queued block) or no cancel at all: the
+    # traceback prints at once but the process runs ~1,600 blocks before it
+    # exits, holding 8 vCPU for hours. Only the time to exit shows it.
+    def test_a_failing_block_stops_the_queued_ones(self):
+        import subprocess
+        import tempfile
+        import time
+
+        here = os.path.dirname(__file__)
+        script = f"""
+import multiprocessing, sys, time
+multiprocessing.set_start_method("fork")  # the patches below reach the children
+sys.path[:0] = [{here!r}, {os.path.dirname(here)!r}]
+import _native_stub
+import build_nsw_dem as nd
+from pathlib import Path
+
+class Reader:
+    def metadata(self):
+        return {{"attribution": nd.credit(nd.HEIGHTS, "October 2026")}}
+    def header(self):
+        return dict(min_lon_e7=1409000000, max_lon_e7=1537000000,
+                    min_lat_e7=-376000000, max_lat_e7=-280000000)
+    def get(self, z, x, y):
+        return b"1"
+
+nd.open_heights = lambda path: Reader()
+first = nd.lonlat_to_tile(140.9, -28.0, nd.BLOCK_ZOOM)
+
+def slope_block(job):
+    if job[:2] == first:
+        raise ValueError("boom")
+    time.sleep(0.3)
+
+slope_block.__module__, slope_block.__qualname__ = "build_nsw_dem", "slope_block"
+slope_block.__name__ = "slope_block"
+nd.slope_block = slope_block
+nd.build_slope(Path("unused"), Path(sys.argv[1]) / "out.pmtiles", Path(sys.argv[1]) / "w", 4)
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            started = time.time()
+            done = subprocess.run(
+                [sys.executable, "-c", script, tmp],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn("boom", done.stderr)
+            self.assertLess(time.time() - started, 30)
+
+
+class TestExtractedMonth(unittest.TestCase):
+    # Mutation: a month typed again by hand can disagree with the heights; the
+    # slope archive takes it from the height archive's credit instead.
+    def test_the_month_is_read_back_from_the_credit(self):
+        self.assertEqual(
+            extracted_month(credit(HEIGHTS, "October 2026")), "October 2026"
+        )
+        with self.assertRaises(SystemExit):
+            extracted_month("no month here")
+
+
+class TestSlopeS3(unittest.TestCase):
+    # Mutation: upload before the build, skip the content type, or read the
+    # height archive from another key, and the maintainer publishes a half
+    # build, a file clients cannot range-read, or the wrong archive.
+    def test_downloads_builds_then_uploads_in_that_order(self):
+        import tempfile
+        from unittest import mock
+
+        calls = []
+
+        class Client:
+            def download_file(self, bucket, key, path):
+                calls.append(("download", bucket, key))
+                open(path, "wb").write(b"heights")
+
+            def upload_file(self, path, bucket, key, ExtraArgs):
+                calls.append(("upload", bucket, key, ExtraArgs["ContentType"]))
+
+        def build(heights, out, work, jobs):
+            calls.append(("build", jobs))
+            out.write_bytes(b"slope")
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("build_nsw_dem.build_slope", build),
+        ):
+            slope_s3("bkt", Path(tmp), 8, Client())
+        self.assertEqual(
+            calls,
+            [
+                ("download", "bkt", HEIGHT_KEY),
+                ("build", 8),
+                ("upload", "bkt", SLOPE_KEY, "application/vnd.pmtiles"),
+            ],
+        )
+
+    # Mutation: change HEIGHT_KEY alone and the task reads an archive the
+    # clients do not.
+    def test_the_height_key_is_the_one_the_clients_read(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        with open(os.path.join(root, "shared/src/demSources.ts")) as f:
+            self.assertIn(f'archivePath: "{HEIGHT_KEY}"', f.read())
+        self.assertEqual(
+            SLOPE_KEY, HEIGHT_KEY.replace("5m.pmtiles", "5m-slope.pmtiles")
+        )
 
 
 class TestHalveMax(unittest.TestCase):

@@ -46,8 +46,9 @@ Property ... remains unchanged, maintained and preserved".
 No guard test enforces `NSW_5M.credit`'s own wording or month.
 `shared/src/demSources.test.ts` checks that a result credits the sources it was
 read from, and `topo/tests/test_nsw_dem.py`
-(`test_both_archives_carry_the_credit_of_the_heights`) checks that both archives'
-credit carries `NSW_5M.credit`'s text from "the NSW 5 m" to "extracted"
+(`test_both_archives_carry_the_credit_of_the_heights`) checks that the credit of the height archive `nsw-5m.pmtiles` and of the slope
+archive `nsw-5m-slope.pmtiles` that `build_nsw_dem.py slope` builds from it
+carries `NSW_5M.credit`'s text from "the NSW 5 m" to "extracted"
 (updated 2026-10-18).
 
 ## Consequences
