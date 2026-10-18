@@ -79,6 +79,8 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
+      # A stub that answers OK (started below): no CI run reaches Expo.
+      EXPO_PUSH_URL: http://localhost:9099
       ECS_SECURITY_GROUPS: sg-local
       RATE_LIMIT_GLOBAL_MAX: 1000000
       RATE_LIMIT_USER_PATCH_MAX: 1000000
@@ -137,6 +139,8 @@ jobs:
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
 
+      - name: Start the Expo push stub
+        run: node infra/scripts/expo-push-stub.mjs &
       - name: Start the live release's API
         working-directory: ${{ env.LIVE_DIR }}/api
         run: |
