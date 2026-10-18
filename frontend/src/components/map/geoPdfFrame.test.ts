@@ -78,6 +78,17 @@ describe("letGo, then Confirm without moving", () => {
     expect(after.zoomed).toBe(true);
     expect(scaleNow(after, measured)).toBe(23417);
   });
+
+  // Mutation: `zoomed: zoomingNow` → `zoomed: pick.zoomed` (keep, zoom, let
+  // go after the zoom ends: the label and Confirm show a re-measured scale).
+  it("stands for exactly the kept scale once a past zoom has ended", () => {
+    const after = letGo(
+      { kept: 25000, initialScale: 25000, zoomed: true },
+      false,
+    );
+    expect(after.zoomed).toBe(false);
+    expect(scaleNow(after, measured)).toBe(25000);
+  });
 });
 
 // Mutation: drop the `panned` check (a moved frame snaps back to its arrival).
@@ -111,5 +122,15 @@ describe("keptFrameSizePx", () => {
     const out = keptFrameSizePx(25000, a4MapArea, 13, -33.7);
     const zoomedIn = keptFrameSizePx(25000, a4MapArea, 14, -33.7);
     expect(zoomedIn.w).toBeCloseTo(out.w * 2, 6);
+  });
+
+  // A short viewport zooms Logjam Web below 0. Mutation: pass the live zoom
+  // to metersPerPixel (it throws, and the throw replaces the app).
+  it("sizes the frame below zoom 0", () => {
+    const z0 = keptFrameSizePx(25000, a4MapArea, 0, -33.7);
+    expect(keptFrameSizePx(25000, a4MapArea, -1, -33.7).w).toBeCloseTo(
+      z0.w / 2,
+      9,
+    );
   });
 });

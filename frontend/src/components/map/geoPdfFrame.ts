@@ -71,7 +71,8 @@ export function unmovedPick(
 /**
  * The frame's size on screen while a scale is kept: the paper's map area on
  * the ground, over the ground a pixel covers. Zooming changes this, never the
- * scale.
+ * scale. Logjam Web lets the map zoom below 0 (a short viewport shows the
+ * world), which shared `metersPerPixel` refuses, so this scales from zoom 0.
  */
 export function keptFrameSizePx(
   scale: number,
@@ -79,7 +80,7 @@ export function keptFrameSizePx(
   zoom: number,
   latDeg: number,
 ): { w: number; h: number } {
-  const mpp = metersPerPixel(latDeg, zoom);
+  const mpp = metersPerPixel(latDeg, 0) / 2 ** zoom;
   return {
     w: (scale * paperMm.w) / 1000 / mpp,
     h: (scale * paperMm.h) / 1000 / mpp,
