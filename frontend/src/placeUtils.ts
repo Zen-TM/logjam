@@ -11,6 +11,7 @@ import type {
   MediaMetadata,
   MediaOrigin,
   PlaceMergePolicy,
+  ElevationPoint,
   ElevationProfile,
   TrackClimb,
   SharableEntityType,
@@ -508,6 +509,50 @@ export function getElevationProfile(
         : { points: line },
     },
   );
+}
+
+/** The height and slope at one spot, read server-side from the DEM. */
+export function getElevationPoint(
+  point: [number, number],
+): Promise<ElevationPoint & { attribution: string }> {
+  return apiFetch<ElevationPoint & { attribution: string }>(
+    "/elevation/point",
+    { method: "POST", body: { point } },
+  );
+}
+
+/**
+ * The point popover's one request: height and slope for a tapped spot. Not
+ * cached: the popover is mounted per point, so a tap is a request, and nothing
+ * here keeps the coordinate past it.
+ */
+export function useElevationPoint(lon: number, lat: number) {
+  // Filed under the point it answers, so a new point reads as loading without
+  // the effect having to reset anything.
+  const key = `${lon},${lat}`;
+  const [answer, setAnswer] = useState<{
+    key: string;
+    reading: ElevationPoint | null;
+  } | null>(null);
+  useEffect(() => {
+    let current = true;
+    getElevationPoint([lon, lat])
+      .catch((err) => {
+        console.error(err);
+        return null;
+      })
+      .then((reading) => {
+        if (current) setAnswer({ key: `${lon},${lat}`, reading });
+      });
+    return () => {
+      current = false;
+    };
+  }, [lon, lat]);
+  const settled = answer?.key === key;
+  return {
+    reading: settled ? answer.reading : null,
+    loading: !settled,
+  };
 }
 
 /**
