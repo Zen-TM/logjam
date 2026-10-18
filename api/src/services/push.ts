@@ -13,8 +13,8 @@
 // whitelisted.
 import prisma from "./prisma";
 import { logger } from "../lib/logger";
+import { getEnv } from "../lib/env";
 
-const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 // Expo accepts up to 100 messages per request.
 const EXPO_PUSH_BATCH_LIMIT = 100;
 
@@ -148,7 +148,7 @@ export async function sendPushToUser(
 
     for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_LIMIT) {
       const batchTokens = tokens.slice(i, i + EXPO_PUSH_BATCH_LIMIT);
-      const response = await fetch(EXPO_PUSH_URL, {
+      const response = await fetch(getEnv().EXPO_PUSH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(messages.slice(i, i + EXPO_PUSH_BATCH_LIMIT)),

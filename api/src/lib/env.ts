@@ -85,6 +85,13 @@ const baseSchema = z.object({
   EMAIL_FROM: z.string().optional(),
   FRONTEND_URL: z.string().url().optional(),
 
+  // Where services/push.ts POSTs. CI points it at infra/scripts/expo-push-stub.mjs
+  // so no run reaches Expo; everywhere else the default is the real service.
+  EXPO_PUSH_URL: z
+    .string()
+    .url()
+    .default("https://exp.host/--/api/v2/push/send"),
+
   // Stuck-topo-job reaper. A job stuck in `pending` longer than the
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
