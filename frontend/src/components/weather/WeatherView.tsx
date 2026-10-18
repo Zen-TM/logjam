@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   WEATHER,
   WEATHER_CREDIT_URL,
   contractSectionKeys,
   formatRainMm,
+  localDate,
   weatherAge,
   weatherDayFacts,
   weatherDaysFrom,
@@ -24,18 +25,40 @@ import classes from "./WeatherView.module.css";
  * has fallen, the days ahead, and the credit CC BY 4.0 asks for. It only draws;
  * `useWeather` is what fetches, and only on a press.
  */
-export function WeatherView({
-  state,
-  online,
-  onLoad,
-  now: fixedNow,
-}: {
+export function WeatherView(props: {
   state: WeatherState;
   online: boolean;
   /** Fetches again: Refresh, and Try again after a failure. */
   onLoad: () => void;
   now?: number;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { status } = props.state;
+  // Each state swaps out the control that was pressed (Show, Refresh, Try
+  // again): focus it lost to the page goes to this view instead, so the
+  // keyboard stays in the panel and Escape still reaches the popover.
+  useEffect(() => {
+    const el = ref.current;
+    if (
+      el &&
+      (document.activeElement === document.body ||
+        el.contains(document.activeElement))
+    )
+      el.focus({ preventScroll: true });
+  }, [status]);
+  return (
+    <div ref={ref} tabIndex={-1} className={classes.root}>
+      <WeatherBody {...props} />
+    </div>
+  );
+}
+
+function WeatherBody({
+  state,
+  online,
+  onLoad,
+  now: fixedNow,
+}: Parameters<typeof WeatherView>[0]) {
   if (state.status === "idle" || state.status === "loading")
     return <LoadingState label={WEATHER.copy.loading} />;
   if (state.status === "failed")
@@ -46,8 +69,7 @@ export function WeatherView({
       />
     );
   const { forecast } = state;
-  // Logjam Web keeps nothing, so what is on screen was fetched a moment ago.
-  const now = fixedNow ?? forecast.fetchedAt;
+  const now = fixedNow ?? state.now;
   const days = weatherDaysFrom(forecast, now);
   const sections: Record<
     (typeof WEATHER.sections)[number]["key"],
@@ -80,7 +102,7 @@ export function WeatherView({
               temperature: facts.temperature,
               rain: facts.rain,
               wind: facts.wind,
-              current: facts.day === WEATHER.copy.today,
+              current: facts.date === localDate(now),
             };
           })}
         />

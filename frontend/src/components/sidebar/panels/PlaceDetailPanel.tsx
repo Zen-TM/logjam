@@ -726,7 +726,7 @@ function PlaceDetailPanel({
       <section className={classes.section}>
         <SectionHeader title={WEATHER.title} />
         <PlaceWeather
-          key={current.id}
+          key={`${current.id}:${current.latitude},${current.longitude},${current.elevation ?? ""}`}
           point={current}
           elevationM={current.elevation ?? null}
         />

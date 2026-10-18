@@ -21,10 +21,11 @@ vi.mock("maplibre-gl", () => ({
     remove() {}
   },
 }));
+const terrain = vi.hoisted(() => ({ checking: false }));
 vi.mock("../../placeUtils", () => ({
   useElevationProfile: () => ({
-    profile: { samples: [{ elevationM: 1013 }] },
-    loading: false,
+    profile: terrain.checking ? null : { samples: [{ elevationM: 1013 }] },
+    loading: terrain.checking,
     error: null,
   }),
 }));
@@ -62,15 +63,19 @@ beforeEach(() => {
       disconnect() {}
     },
   );
-  // jsdom has no Popover API.
+  // jsdom has no Popover API, and treats a closed `popover` as unrendered, so
+  // nothing inside can take focus: showing it drops the attribute.
   Object.assign(HTMLElement.prototype, {
-    showPopover() {},
+    showPopover(this: HTMLElement) {
+      this.removeAttribute("popover");
+    },
     hidePopover() {},
     togglePopover() {},
   });
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 });
 afterEach(() => {
+  terrain.checking = false;
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -110,6 +115,45 @@ describe("MapPointPopover weather", () => {
     });
     expect((show as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(WEATHER.copy.needsConnection)).toBeTruthy();
+    fireEvent.click(show);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("MapPointPopover weather, keyboard and height", () => {
+  // Mutation that turns it red: drop the focus effect on `view`, or the
+  // `checkingHeight` condition on the verb row.
+  it("moves focus to Back on the way in and to the weather row on the way out", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(forecastJson)),
+    );
+    mount();
+    fireEvent.click(
+      screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
+    );
+    await act(async () => {});
+    const back = screen.getByRole("button", {
+      name: "Back to this point",
+      hidden: true,
+    });
+    expect(document.activeElement).toBe(back);
+    fireEvent.click(back);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
+    );
+  });
+
+  it("holds the verb until the height is known, so the request carries one", () => {
+    terrain.checking = true;
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    mount();
+    const show = screen.getByRole("button", {
+      name: WEATHER.copy.show,
+      hidden: true,
+    });
+    expect((show as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(show);
     expect(fetch).not.toHaveBeenCalled();
   });

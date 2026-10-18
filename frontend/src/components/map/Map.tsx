@@ -3330,6 +3330,7 @@ function Map({
       />
       {asked && drawableMap && (
         <MapPointPopover
+          key={`${asked.point.latitude},${asked.point.longitude}`}
           map={drawableMap}
           point={asked.point}
           from={asked.from}

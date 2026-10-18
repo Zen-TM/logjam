@@ -90,6 +90,25 @@ export default function MapPointPopover({
   const [view, setView] = useState<"point" | "weather">("point");
   const online = useOnline();
   const weather = useWeather(point, metres);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const viewChanged = useRef(false);
+  // The pressed control is unmounted by the swap: focus goes to the arrow on
+  // the way in and to the opened row on the way out (frontend/DESIGN.md §2).
+  useEffect(() => {
+    if (!viewChanged.current) return;
+    if (view === "weather") backRef.current?.focus();
+    else
+      bodyRef.current
+        ?.querySelector<HTMLButtonElement>('[data-verb="weather"] button')
+        ?.focus();
+  }, [view]);
+
+  // Pressed too soon, the weather would be asked without a height and answer
+  // for the cell's own DEM, which in canyon country can be far from the spot.
+  const checkingHeight =
+    metres == null &&
+    (profile.loading || (!profile.error && profile.profile === null));
 
   const stats: Stat[] = mapPointFacts({
     point,
@@ -119,6 +138,7 @@ export default function MapPointPopover({
     addPlace: () => onAddPlace(point),
     measure: () => onMeasure(point),
     weather: () => {
+      viewChanged.current = true;
       setView("weather");
       weather.load();
     },
@@ -145,12 +165,16 @@ export default function MapPointPopover({
         dismissOnOutsidePress
       >
         {view === "weather" ? (
-          <div className={classes.body}>
+          <div className={classes.body} ref={bodyRef}>
             <div className={classes.weatherHeader}>
               <IconButton
+                ref={backRef}
                 icon="back"
                 label="Back to this point"
-                onClick={() => setView("point")}
+                onClick={() => {
+                  viewChanged.current = true;
+                  setView("point");
+                }}
               />
               <span className={classes.weatherTitle}>{WEATHER.title}</span>
             </div>
@@ -161,7 +185,7 @@ export default function MapPointPopover({
             />
           </div>
         ) : (
-          <div className={classes.body}>
+          <div className={classes.body} ref={bodyRef}>
             <StatGrid stats={stats} />
             {from === null && (
               <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
@@ -174,10 +198,13 @@ export default function MapPointPopover({
                   leading={
                     <IconTile icon={verb.icon} hue="var(--color-accent)" />
                   }
-                  {...(verb.id === "weather" && !online
+                  data-verb={verb.id}
+                  {...(verb.id === "weather" && (!online || checkingHeight)
                     ? {
                         disabled: true,
-                        subtitle: WEATHER.copy.needsConnection,
+                        subtitle: online
+                          ? MAP_POINT.copy.elevationChecking
+                          : WEATHER.copy.needsConnection,
                       }
                     : {})}
                   onOpen={() => {

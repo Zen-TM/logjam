@@ -27,3 +27,8 @@
   composes: meta from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
+
+/* Focus lands here programmatically, never by Tab. */
+.root:focus {
+  outline: none;
+}

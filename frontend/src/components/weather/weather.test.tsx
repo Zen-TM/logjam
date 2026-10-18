@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("WeatherView", () => {
-  const ready = { status: "ready", forecast } as const;
+  const ready = { status: "ready", forecast, now } as const;
 
   // Mutation that turns it red: leave a contract section out of the renderer
   // map in WeatherView.tsx, or draw one the contract does not name (tsc too).
@@ -140,6 +140,23 @@ describe("PlaceWeather", () => {
     expect(url.search).not.toContain("71234");
     expect(url.searchParams.get("elevation")).toBe("1010");
     expect(await screen.findByText(WEATHER.copy.pastRain)).toBeTruthy();
+  });
+
+  // Mutation that turns it red: drop the focus effect in WeatherView.
+  it("keeps focus in the view when Show and Refresh swap their own button away", async () => {
+    stubFetch();
+    const { container } = render(
+      <PlaceWeather point={spot} elevationM={null} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    await screen.findByText(WEATHER.copy.pastRain);
+    expect(container.contains(document.activeElement)).toBe(true);
+    const refresh = screen.getByRole("button", { name: WEATHER.copy.refresh });
+    refresh.focus();
+    fireEvent.click(refresh);
+    await screen.findByText(WEATHER.copy.pastRain);
+    expect(container.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it("shows a failure as the contract's words and logs nothing", async () => {

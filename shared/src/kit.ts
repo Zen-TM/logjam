@@ -71,7 +71,9 @@ export const KIT_COMPONENTS = {
   StatGrid: both,
   Meter: both,
   ActivitySpark: both,
-  ForecastList: both,
+  ForecastList: web(
+    "day rows of the weather view; Logjam GPS draws its own rows inside its weather view",
+  ),
   StatusPill: both,
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
   ProfileChart: both,

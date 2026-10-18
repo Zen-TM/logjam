@@ -24,16 +24,10 @@
   border-top: 1px solid var(--color-line);
 }
 
-/* Today is the row the eye starts on: ink and a wash, not a card (a card means
-   "press me": pressableFill.test.ts). */
+/* Today is told by ink against its muted neighbours, not a fill: a thing you
+   only read sits on the page (shared/DESIGN.md §4). */
 .row[data-current="true"] {
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  border-top-color: transparent;
-}
-
-.row[data-current="true"] + .row {
-  border-top-color: transparent;
 }
 
 .day {

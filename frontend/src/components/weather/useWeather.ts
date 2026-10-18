@@ -15,7 +15,7 @@ export type WeatherState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "failed" }
-  | { status: "ready"; forecast: WeatherForecast };
+  | { status: "ready"; forecast: WeatherForecast; now: number };
 
 function subscribe(onChange: () => void) {
   window.addEventListener("online", onChange);
@@ -58,7 +58,8 @@ export function useWeather(
       signal: abort.signal,
     }).then(
       (forecast) => {
-        if (!abort.signal.aborted) setState({ status: "ready", forecast });
+        if (!abort.signal.aborted)
+          setState({ status: "ready", forecast, now: Date.now() });
       },
       () => {
         if (!abort.signal.aborted) setState({ status: "failed" });
