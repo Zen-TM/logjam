@@ -157,7 +157,9 @@ signing is [0009](../decisions/0009-signed-ota-updates.md).
    an update. Published anyway, it would reach no phone and say nothing.
    `update:production` repeats this check for the checkout, and
    `promote:production` for the update group it republishes (so it needs
-   `--group`); both also check the branch, and refuse to publish on a failure.
+   `--group`). Both also refuse a branch other than `release/mobile-vX.Y.Z` or
+   one that does not descend from the tag, and `update:production` refuses
+   uncommitted changes, which `eas update` would bundle.
 5. **Publish to `preview` and check it** on a release candidate of X.Y.Z, if
    one exists and has the same runtime version:
    `npm run update:preview -- --message "<what it fixes>"`.

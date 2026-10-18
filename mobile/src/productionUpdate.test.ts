@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   branchRefusal,
   buildRefusal,
+  checkoutRefusal,
   promotedGroup,
 } from "../scripts/check-production-update";
 
@@ -17,6 +18,19 @@ describe("production OTA guard", () => {
     expect(branchRefusal("main", "1.2.0")).toMatch(/release\/mobile-v1\.2\.0/);
     // A hotfix keeps the build's version: a bumped package.json is refused.
     expect(branchRefusal("release/mobile-v1.2.0", "1.2.1")).not.toBeNull();
+  });
+
+  // Mutation: drop either condition in checkoutRefusal, or apply the clean-tree
+  // one to a promotion.
+  it("publishes only a clean checkout that descends from the release tag", () => {
+    const clean = { fromTag: true, status: "" };
+    expect(checkoutRefusal(clean, "1.2.0", false)).toBeNull();
+    expect(
+      checkoutRefusal({ ...clean, fromTag: false }, "1.2.0", false),
+    ).toMatch(/mobile-v1\.2\.0/);
+    const dirty = { ...clean, status: " M mobile/App.tsx" };
+    expect(checkoutRefusal(dirty, "1.2.0", false)).toMatch(/App\.tsx/);
+    expect(checkoutRefusal(dirty, "1.2.0", true)).toBeNull();
   });
 
   // Mutation: drop the runtimeVersion or appVersion comparison in buildRefusal.

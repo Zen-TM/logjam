@@ -60,9 +60,10 @@ JavaScript to reach a build whose native code it does not match:
 Rules 2 and 3 are checked when a production update is published (updated
 2026-10-18): `update:production` and `promote:production` first run
 `mobile/scripts/check-production-update.js`, which refuses any branch but
-`release/mobile-v<version>` and a runtime version (the checkout's, or for
-`promote:production` the republished group's) that no finished production
-build of that version has. Guard: `mobile/src/productionUpdate.test.ts`.
+`release/mobile-v<version>`, a checkout that does not descend from the tag
+`mobile-v<version>` or (except for a promotion) has uncommitted changes, and a
+runtime version (the checkout's, or for `promote:production` the
+republished group's) that no finished production build of that version has. Guard: `mobile/src/productionUpdate.test.ts`.
 
 ## Consequences
 

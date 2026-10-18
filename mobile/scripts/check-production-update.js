@@ -2,11 +2,22 @@
 // Runs before every production OTA publish (`update:production`,
 // `promote:production`): rules 2 and 3 of docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md.
 // Guard: src/productionUpdate.test.ts.
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 
 function branchRefusal(branch, version) {
   if (branch === `release/mobile-v${version}`) return null;
   return `A production update is published only from release/mobile-v${version}, cut from the tag of the build it fixes; this checkout is on ${branch}.`;
+}
+
+// A branch of the right name can be created locally from any commit, and
+// `eas update` bundles the working tree as it is, uncommitted edits included.
+// A promotion bundles nothing, so its tree may be dirty.
+function checkoutRefusal({ fromTag, status }, version, promoting) {
+  if (!fromTag)
+    return `This checkout does not descend from tag mobile-v${version} (run git fetch --tags if the tag exists).`;
+  if (!promoting && status)
+    return `The working tree has changes eas update would bundle:\n${status}`;
+  return null;
 }
 
 // `promote:production` passes its own arguments as `promote ...`. The group it
@@ -48,6 +59,21 @@ if (require.main === module) {
   const group = promotedGroup(process.argv.slice(2));
   if (group === undefined)
     refuse("promote:production needs --group <update group id>.");
+
+  const fromTag =
+    spawnSync("git", [
+      "merge-base",
+      "--is-ancestor",
+      `mobile-v${version}`,
+      "HEAD",
+    ]).status === 0;
+  const status = run("git", ["status", "--porcelain"]).trimEnd();
+  const byCheckout = checkoutRefusal(
+    { fromTag, status },
+    version,
+    group !== null,
+  );
+  if (byCheckout) refuse(byCheckout);
   const runtimeVersion = group
     ? JSON.parse(run("eas", ["update:view", group, "--json"])).find(
         (u) => u.platform === "android",
@@ -80,4 +106,9 @@ if (require.main === module) {
   if (byBuild) refuse(byBuild);
 }
 
-module.exports = { branchRefusal, buildRefusal, promotedGroup };
+module.exports = {
+  branchRefusal,
+  buildRefusal,
+  checkoutRefusal,
+  promotedGroup,
+};
