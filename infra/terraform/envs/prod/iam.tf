@@ -401,11 +401,11 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
 # bucket and log events in every log group): CI must never be able to read
 # user canyon data (media photos, LiDAR/tile outputs), logs, or secret values.
 # Guard: tests/guards.tftest.hcl.
-# Explicit Deny beats the managed Allow. Objects and log events are denied by
-# default, so a bucket or log group added later is closed without an edit
-# here; the buckets CI does read are the named exceptions. Bucket-level
-# GetBucket* config reads stay allowed — terraform refresh of the storage
-# module needs those; it never reads objects.
+# Explicit Deny beats the managed Allow. Objects in this account's buckets and
+# log events are denied by default, so a bucket or log group added later is
+# closed without an edit here; the buckets CI does read are the named
+# exceptions. Bucket-level GetBucket* config reads stay allowed — terraform
+# refresh of the storage module needs those; it never reads objects.
 #
 # s3:ListBucket is deliberately NOT denied: HeadBucket (terraform's bucket
 # existence check) requires it, and denying it made CI plans propose
@@ -431,9 +431,10 @@ locals {
       # live in the EB bucket.
       #
       # Only buckets in this account: an EB configuration change is a
-      # CloudFormation update that reads objects in AWS-owned buckets with the
-      # deploy role's own credentials, and denying those fails the deploy at
-      # "S3 error: Access Denied". User data lives only in this account.
+      # CloudFormation update, and under an unscoped Deny it fails at "S3
+      # error: Access Denied", most likely reading an object in an AWS-owned
+      # bucket with the deploy role's credentials (which bucket is
+      # unconfirmed). User data lives only in this account.
       {
         Sid    = "DenyObjectsByDefault"
         Effect = "Deny"
