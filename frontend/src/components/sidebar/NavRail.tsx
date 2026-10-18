@@ -5,6 +5,7 @@ import {
   aggregateBadgeCount,
   isPanelInMore,
   labelWithBadge,
+  MORE_BADGE_NOUN,
   type NavBadgeCounts,
 } from "./navItems";
 import { useIsMobile } from "../../useIsMobile";
@@ -136,6 +137,7 @@ function NavRail({
             icon="moreTab"
             active={isPanelInMore(moreItems, activePanel)}
             count={moreCount}
+            badgeNoun={MORE_BADGE_NOUN}
           />
         )}
       />

@@ -173,6 +173,15 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
     await expect(aside.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
     await expectNoViolations(page, "aside");
+
+    // A section's form: its title takes focus; seen, never sent.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add a section" }).click();
+    const section = page.locator("dialog[open]");
+    await expect(section.getByRole("textbox", { name: "Title" })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(section).toHaveCount(0);
     for (const view of [/^On the map/, /^Forms/, /^People/]) {
       await aside.getByRole("radio", { name: view }).click();
       await expectNoViolations(page, "aside");

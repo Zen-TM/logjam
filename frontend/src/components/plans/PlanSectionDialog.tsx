@@ -1,7 +1,8 @@
 // A write-up section: one form for adding and editing (shared/DESIGN.md §10).
 // An edit sends each changed field as the value last seen and the new one; on
 // a 409 the form stays open with the API's sentence, keeps what was typed and
-// shows what the plan now says, so the next Save compares against that.
+// shows what the plan now says, so the next Save compares against that. A
+// field the user never touched follows the plan (`adoptTheirs`).
 import { useId, useState } from "react";
 import {
   TRIP_PLAN_PAGE,
@@ -9,6 +10,7 @@ import {
   TRIP_PLAN_SECTION_SUGGESTIONS,
   TRIP_PLAN_SECTION_TITLE_MAX_LENGTH,
   parseTripPlanSectionCreate,
+  planAddVerbLabel,
   type TripPlanSectionPatch,
   type TripPlanSectionView,
 } from "@logjam/shared";
@@ -24,7 +26,11 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
-import { sectionPatch, type SectionValues as Values } from "./plansModel";
+import {
+  adoptTheirs,
+  sectionPatch,
+  type SectionValues as Values,
+} from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -57,25 +63,25 @@ function SectionForm({
     title: section?.title ?? "",
     body: section?.body ?? "",
   };
-  // What the form compares against: the section as opened, or as refetched
-  // after a 409. Never moves on its own while the user types.
+  // What the form compares against: the section as opened, then as the plan
+  // was fetched again. Never moves on its own while the user types.
   const [seen, setSeen] = useState<Values>(opened);
   const [values, setValues] = useState<Values>(opened);
   const [error, setError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
-  const [stale, setStale] = useState(false);
+  // Someone else's change arrived while the form was open.
+  const [moved, setMoved] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // After a 409, the refetched section becomes what the next Save compares to.
   const current: Values | null = section
     ? { title: section.title, body: section.body }
     : null;
-  if (
-    stale &&
-    current &&
-    (current.title !== seen.title || current.body !== seen.body)
-  )
-    setSeen(current);
+  if (current && (current.title !== seen.title || current.body !== seen.body)) {
+    const next = adoptTheirs(seen, values, current);
+    setSeen(next.seen);
+    setValues(next.values);
+    setMoved(true);
+  }
 
   const dirty = values.title !== opened.title || values.body !== opened.body;
   const guard = useUnsavedChangesGuard(dirty, onClose);
@@ -101,17 +107,14 @@ function SectionForm({
     } catch (err) {
       console.error(err);
       setError(messageFromError(err, copy.sectionSaveFailed));
-      if (err instanceof ApiError && err.status === 409) {
-        setStale(true);
-        onStale();
-      }
+      if (err instanceof ApiError && err.status === 409) onStale();
     } finally {
       setBusy(false);
     }
   }
 
   const theirs =
-    stale && current && current.body !== values.body ? current.body : null;
+    moved && current && current.body !== values.body ? current.body : null;
 
   return (
     <>
@@ -131,7 +134,7 @@ function SectionForm({
               Cancel
             </Button>
             <Button type="submit" form={formId} variant="filled" busy={busy}>
-              {section ? copy.sectionSave : copy.sectionAdd}
+              {section ? copy.sectionSave : planAddVerbLabel("section")}
             </Button>
           </>
         }
@@ -156,7 +159,7 @@ function SectionForm({
             }}
             error={titleError}
             hint={
-              stale && current && current.title !== values.title
+              moved && current && current.title !== values.title
                 ? `In the plan now: ${current.title}`
                 : undefined
             }

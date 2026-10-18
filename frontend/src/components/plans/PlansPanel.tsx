@@ -49,7 +49,8 @@ export default function PlansPanel({
   loaded: boolean;
   error: string | null;
   onRefetch: () => void;
-  /** Open a plan's page (an active plan) or its invite (an invited one). */
+  /** Open a plan's page. An invited row opens it too, which 404s for now:
+   *  its preview page comes with the people PR (interim on feat/plans). */
   onOpenPlan: (id: string) => void;
 }) {
   const toast = useToast();

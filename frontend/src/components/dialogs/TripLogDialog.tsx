@@ -17,8 +17,8 @@ import {
   todayDateKey,
   tripPrefillFromTrack,
   TRIP_TYPE_SUGGESTIONS,
+  type tripPlanTripLogPrefill,
   tripFieldDefs,
-  tripTypeLabel,
   type MediaItem,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
@@ -49,7 +49,7 @@ import {
 import MediaUpload from "../media/MediaUpload";
 import { generateThumbnail, resolveMediaType } from "../media/mediaFiles";
 import MediaGallery from "../media/MediaGallery";
-import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
+import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import {
   Button,
   ChipPicker,
@@ -100,18 +100,6 @@ function formatDraftSavedAt(iso: string): string {
   });
 }
 
-// Case-insensitive dedupe that preserves the casing of the first occurrence —
-// used to union the built-in TRIP_TYPE_SUGGESTIONS with whatever casing the
-// user has already typed into their own trip history.
-function dedupeTypesPreserveCase(values: string[]): string[] {
-  const seen = new Map<string, string>();
-  for (const v of values) {
-    const key = v.toLowerCase();
-    if (!seen.has(key)) seen.set(key, v);
-  }
-  return Array.from(seen.values());
-}
-
 /**
  * A recorded track to log a trip FROM: the form opens on the track's day, with
  * its place linked and the track already in the Tracks section.
@@ -125,6 +113,10 @@ export type TripLogTrack = {
   placeId: string | null;
 };
 
+/** What a shortcut fills the trip form with ("Start a trip log from this
+ *  plan"); a missing date is today. */
+export type TripLogPrefill = ReturnType<typeof tripPlanTripLogPrefill>;
+
 /**
  * Log or edit a trip — one form for both, because the fields are identical and
  * a second form would drift (Logjam GPS's `TripEditSheet`).
@@ -134,15 +126,6 @@ export type TripLogTrack = {
  * list, the title says which step this is, and Escape, the close button and
  * Done all back out to the form rather than out of the dialog.
  */
-/** What a shortcut fills the trip form with. */
-export type TripLogPrefill = {
-  date: string;
-  displayName: string;
-  types: string[];
-  notes: string;
-  placeIds: string[];
-};
-
 function TripLogDialog({
   open,
   onClose,
@@ -404,11 +387,9 @@ function TripLogDialog({
         ? fromTrackPrefill.placeIds.filter((id) =>
             places.some((place) => place.id === id),
           )
-        : prefill
-          ? prefill.placeIds
-          : defaultPlaceId
-            ? [defaultPlaceId]
-            : [];
+        : defaultPlaceId
+          ? [defaultPlaceId]
+          : [];
       initialDisplayNameInput = prefill?.displayName ?? "";
       initialSelectedTypes = enforceCanyoningTag(
         prefill?.types ?? [],
@@ -849,32 +830,14 @@ function TripLogDialog({
   // The vocabulary in a stable order — seeds, then the user's history, then
   // types added here — each shown in the casing the SELECTION uses, so a picked
   // "Canyoning" lights the seeded "canyoning" chip instead of adding a second.
-  const typeOptions = useMemo(() => {
-    const vocabulary = dedupeTypesPreserveCase([
-      ...TRIP_TYPE_SUGGESTIONS,
-      ...existingTripTypes,
-      ...addedTypes,
-    ]);
-    const values = vocabulary.map(
-      (type) =>
-        selectedTypes.find(
-          (picked) => picked.toLowerCase() === type.toLowerCase(),
-        ) ?? type,
-    );
-    for (const picked of selectedTypes) {
-      if (!values.some((value) => value.toLowerCase() === picked.toLowerCase()))
-        values.push(picked);
-    }
-    return values.map((value) => {
-      const look = tripTypeLook(value);
-      return {
-        value,
-        label: tripTypeLabel(value),
-        icon: look.icon,
-        hue: look.hue,
-      };
-    });
-  }, [existingTripTypes, addedTypes, selectedTypes]);
+  const typeOptions = useMemo(
+    () =>
+      tripTypeOptions(
+        [...TRIP_TYPE_SUGGESTIONS, ...existingTripTypes, ...addedTypes],
+        selectedTypes,
+      ),
+    [existingTripTypes, addedTypes, selectedTypes],
+  );
 
   // The canyoning tag is locked (shown, not removable) while a place is linked
   // — the API re-adds it on save, so offering to remove it would be a lie.

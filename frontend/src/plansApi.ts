@@ -1,6 +1,6 @@
-// The /plans calls Logjam Web makes (design §2), and the list hook. Shapes
+// The /plans calls Logjam Web makes, and the list and plan hooks. Shapes
 // and limits are `@logjam/shared`'s `tripPlans.ts`; nothing here re-lists them.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
@@ -96,11 +96,25 @@ export function usePlans(enabled: boolean) {
   return { plans, loaded, error, refetch };
 }
 
-/** GET /plans/:id: the full fetch the plan's page renders from. */
-export function usePlan(id: string | null) {
+/**
+ * GET /plans/:id: the full fetch the plan's page renders from. A first load
+ * that fails is `error` (the page shows it in place); a later one that fails
+ * while a view is shown goes to `onBackgroundError` (a toast), unless the
+ * refetch was asked `quiet`: after a write whose own failure was just said.
+ */
+export function usePlan(
+  id: string | null,
+  onBackgroundError?: (message: string) => void,
+) {
   const [view, setView] = useState<TripPlanView | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
+  const [request, setRequest] = useState({ count: 0, quiet: false });
+  const report = useRef(onBackgroundError);
+  // Which plan a view has loaded for: a failure before then is the page's.
+  const loaded = useRef<string | null>(null);
+  useEffect(() => {
+    report.current = onBackgroundError;
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -108,20 +122,30 @@ export function usePlan(id: string | null) {
     getPlan(id)
       .then((data) => {
         if (cancelled) return;
+        loaded.current = id;
         setView(data);
         setError(null);
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed));
+        if (cancelled) return;
+        const message = messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed);
+        if (loaded.current !== id) setError(message);
+        else if (!request.quiet) report.current?.(message);
       });
     return () => {
       cancelled = true;
     };
-  }, [id, fetchCount]);
+  }, [id, request]);
 
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+  const refetch = useCallback(
+    (options?: { quiet?: boolean }) =>
+      setRequest((was) => ({
+        count: was.count + 1,
+        quiet: options?.quiet ?? false,
+      })),
+    [],
+  );
   // A view of another plan is never shown while this one loads.
   return { view: view?.id === id ? view : null, error, refetch, setView };
 }

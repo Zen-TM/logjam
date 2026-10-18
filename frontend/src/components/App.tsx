@@ -109,7 +109,6 @@ import {
   drawsNswContours,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
-  todayDateKey,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
 } from "@logjam/shared";
@@ -838,6 +837,9 @@ function App() {
   useEffect(() => {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
+  useEffect(() => {
+    if (plansError) toast.error(plansError);
+  }, [plansError, toast]);
   useEffect(() => {
     if (vectorStyleSaveError) toast.error(vectorStyleSaveError);
   }, [vectorStyleSaveError, toast]);
@@ -1714,14 +1716,9 @@ function App() {
                   setActivePanel("plans");
                 }}
                 onPlansChanged={refetchPlans}
-                onStartTripLog={(plan) => {
-                  const prefill = tripPlanTripLogPrefill(plan);
-                  setTripLogPrefill({
-                    ...prefill,
-                    date: prefill.date ?? todayDateKey(),
-                    placeIds: [],
-                  });
-                }}
+                onStartTripLog={(plan) =>
+                  setTripLogPrefill(tripPlanTripLogPrefill(plan))
+                }
               />
             ) : null
           }
@@ -2121,6 +2118,7 @@ function App() {
           onSaved={() => {
             setTripLogPrefill(null);
             refetchAfterTripWrite();
+            refetchCurrentUser();
           }}
           places={places}
           prefill={tripLogPrefill}

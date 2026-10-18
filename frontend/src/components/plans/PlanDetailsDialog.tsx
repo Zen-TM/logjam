@@ -1,22 +1,30 @@
 // The one form for a plan's name, dates and trip types: New plan and Edit
 // name and dates differ only in title and submit (shared/DESIGN.md §10). An
 // edit sends only what changed, each as the value last seen and the new one,
-// so a save over someone else's change is refused rather than lost (design §4).
+// so a save over someone else's change is refused rather than lost. When the
+// plan is fetched again under the open form, every field the user has not
+// touched follows it (`adoptTheirs`), and an edited field the plan also
+// changed shows what the plan now says.
 import { useId, useMemo, useState } from "react";
 import {
   parseTripPlanCreate,
+  TRIP_PLAN_NAME_MAX_LENGTH,
   TRIP_PLANS_LIST,
   TRIP_TYPE_SUGGESTIONS,
-  tripTypeLabel,
+  tripPlanDatesLabel,
   type TripPlanPatch,
   type TripPlanView,
 } from "@logjam/shared";
 import { Button, ChipPicker, Dialog, ErrorBanner, TextField } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
-import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
+import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
-import { planPatch, type PlanValues as Values } from "./plansModel";
+import {
+  adoptTheirs,
+  planPatch,
+  type PlanValues as Values,
+} from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLANS_LIST.copy;
@@ -42,7 +50,7 @@ function PlanDetailsForm({
   onClose: () => void;
 }) {
   const formId = useId();
-  const initial: Values = useMemo(
+  const current: Values = useMemo(
     () => ({
       name: plan?.name ?? "",
       startDate: plan?.startDate ?? null,
@@ -51,40 +59,38 @@ function PlanDetailsForm({
     }),
     [plan],
   );
-  const [values, setValues] = useState<Values>(initial);
+  const [opened] = useState(current);
+  // What a save compares against: the plan as opened, then as fetched again.
+  const [seen, setSeen] = useState(current);
+  const [values, setValues] = useState<Values>(current);
+  const [moved, setMoved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  if (JSON.stringify(current) !== JSON.stringify(seen)) {
+    const next = adoptTheirs(seen, values, current);
+    setSeen(next.seen);
+    setValues(next.values);
+    setMoved(true);
+  }
+  /** What the plan now says, under a field the user edited and it changed. */
+  const theirs = (field: keyof Values, words: string) =>
+    moved && JSON.stringify(values[field]) !== JSON.stringify(current[field])
+      ? `In the plan now: ${words}`
+      : undefined;
+
+  const dirty = JSON.stringify(values) !== JSON.stringify(opened);
   const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Partial<Values>) => {
     setValues((current) => ({ ...current, ...next }));
     setError(null);
   };
 
-  const typeOptions = useMemo(() => {
-    const seen = new Set<string>();
-    return [...TRIP_TYPE_SUGGESTIONS, ...values.tripTypes]
-      .filter((type) => {
-        const key = type.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((type) => {
-        const look = tripTypeLook(type);
-        return {
-          value:
-            values.tripTypes.find(
-              (picked) => picked.toLowerCase() === type.toLowerCase(),
-            ) ?? type,
-          label: tripTypeLabel(type),
-          icon: look.icon,
-          hue: look.hue,
-        };
-      });
-  }, [values.tripTypes]);
+  const typeOptions = useMemo(
+    () => tripTypeOptions(TRIP_TYPE_SUGGESTIONS, values.tripTypes),
+    [values.tripTypes],
+  );
 
   const toggleType = (type: string) =>
     set({
@@ -95,15 +101,15 @@ function PlanDetailsForm({
 
   async function submit() {
     // The API's own rule, run here first, so the refusal is the one it sends.
+    // The name's own refusals go under the name; the rest above the submit.
+    const failed = plan ? copy.saveFailed : copy.makeFailed;
+    const name = parseTripPlanCreate({ name: values.name });
+    if (!("value" in name))
+      return setNameError("sentence" in name ? name.sentence : failed);
     const parsed = parseTripPlanCreate(values);
-    if (!("value" in parsed)) {
-      const sentence = "sentence" in parsed ? parsed.sentence : null;
-      if (sentence === copy.nameRequired || !values.name.trim())
-        setNameError(sentence ?? copy.nameRequired);
-      else setError(sentence ?? (plan ? copy.saveFailed : copy.makeFailed));
-      return;
-    }
-    const patch = planPatch(initial, parsed.value);
+    if (!("value" in parsed))
+      return setError("sentence" in parsed ? parsed.sentence : failed);
+    const patch = planPatch(seen, parsed.value);
     if (plan && Object.keys(patch).length === 0) return onClose();
     setBusy(true);
     try {
@@ -151,11 +157,13 @@ function PlanDetailsForm({
             required
             value={values.name}
             data-autofocus
+            maxLength={TRIP_PLAN_NAME_MAX_LENGTH}
             onChange={(event) => {
               set({ name: event.target.value });
               setNameError(null);
             }}
             error={nameError}
+            hint={theirs("name", current.name)}
           />
           <div className={classes.pair}>
             <TextField
@@ -174,6 +182,11 @@ function PlanDetailsForm({
               onChange={(event) => set({ endDate: event.target.value || null })}
             />
           </div>
+          {(theirs("startDate", "") || theirs("endDate", "")) && (
+            <p className={classes.note}>
+              {`In the plan now: ${tripPlanDatesLabel(current.startDate, current.endDate)}`}
+            </p>
+          )}
           <ChipPicker
             label={copy.tripTypes}
             options={typeOptions}
@@ -190,6 +203,7 @@ function PlanDetailsForm({
                 set({ tripTypes: [...values.tripTypes, trimmed] });
             }}
             addLabel={copy.addTripType}
+            hint={theirs("tripTypes", current.tripTypes.join(", ") || "—")}
           />
           {error && <ErrorBanner message={error} />}
         </form>

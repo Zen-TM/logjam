@@ -38,7 +38,7 @@ const PAGE_ITEMS: NavItem[] = [
   { id: "ways", label: "Ways", icon: "route" },
   { id: "maps", label: "Maps", icon: "map" },
   // An invite waiting on the user is what its badge counts.
-  { id: "plans", label: "Plans", icon: "plan", badgeNoun: "waiting" },
+  { id: "plans", label: "Plans", icon: "plan", badgeNoun: "invited" },
   { id: "friends", label: "Friends", icon: "friends" },
 ];
 
@@ -56,8 +56,8 @@ const ALL_ITEMS: NavItem[] = [...PAGE_ITEMS, ...PERSONAL_ITEMS];
  *  open one), so it is not in this list. */
 const NARROW_TAB_IDS: NavItemId[] = ["places", "logs", "ways"];
 
-/** The More menu, most- to least-reached. Inbox first: it is the badged item,
- *  and landing on it is what makes More's badge pay off in one glance. */
+/** The More menu, most- to least-reached. Inbox first: it is badged most
+ *  often, and landing on it is what makes More's badge pay off in one glance. */
 const MORE_ITEM_IDS: NavItemId[] = [
   "inbox",
   "plans",
@@ -83,7 +83,7 @@ export type NavPartition = {
 };
 
 /** Split the nav into rail items and More items. The 84px desktop rail holds
- *  all eight; narrow web holds three tabs beside Map and More. */
+ *  all nine; narrow web holds three tabs beside Map and More. */
 export function partitionNavItems(isNarrow: boolean): NavPartition {
   if (!isNarrow) {
     return {
@@ -114,6 +114,9 @@ export function isPanelInMore(
 ): boolean {
   return moreItems.some((item) => item.id === activePanel);
 }
+
+/** More's badge sums items that count different things (unread, invited). */
+export const MORE_BADGE_NOUN = "new";
 
 /** "Inbox, 3 unread" — the badge is aria-hidden, so its count joins the name. */
 export function labelWithBadge(

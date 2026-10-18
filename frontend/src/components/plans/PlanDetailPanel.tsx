@@ -7,6 +7,7 @@ import {
   contractSectionKeys,
   planDeleteConfirm,
   planLeaveConfirm,
+  planAddVerbLabel,
   planSectionDeleteConfirm,
   planVerbs,
   planVerbsFor,
@@ -15,6 +16,10 @@ import {
   PLAN_SECTION_VERBS,
   todayDateKey,
   TRIP_PLAN_PAGE,
+  TRIP_PLANS_LIST,
+  tripPlanAddedByLine,
+  tripPlanGoing,
+  tripPlanLeaveState,
   tripPlanDatesLine,
   tripPlanIsOver,
   tripPlanNotice,
@@ -82,6 +87,12 @@ function menuEntries<Id extends string>(
       icon: verb.icon,
       danger: verb.danger,
       onSelect: () => run(verb.id),
+      // Offered but not yet: the reason is on the item and in its name.
+      ...(verb.disabledReason && {
+        disabled: true,
+        hint: verb.disabledReason,
+        accessibleLabel: `${verb.label}, ${verb.disabledReason}`,
+      }),
     });
   }
   return entries;
@@ -100,7 +111,7 @@ export default function PlanDetailPanel({
   onStartTripLog: (plan: TripPlanView) => void;
 }) {
   const toast = useToast();
-  const { view, error, refetch } = usePlan(planId);
+  const { view, error, refetch } = usePlan(planId, toast.error);
   const [tab, setTab] = useState<TripPlanPageView>("writeUp");
   const [editing, setEditing] = useState(false);
   const [sectionOpen, setSectionOpen] = useState<{ id: string | null } | null>(
@@ -119,7 +130,7 @@ export default function PlanDetailPanel({
         <Hero title={copy.loading} onBack={onBack} backLabel={copy.back} />
         <div className={classes.emptyArea} role="status">
           {error ? (
-            <ErrorState message={error} onRetry={refetch} />
+            <ErrorState message={error} onRetry={() => refetch()} />
           ) : (
             <LoadingState label={copy.loading} />
           )}
@@ -133,7 +144,6 @@ export default function PlanDetailPanel({
   const today = todayDateKey();
   const archived = plan.archivedAt != null;
   const over = tripPlanIsOver(plan, today);
-  const writer = !archived && (role === "leader" || role === "editor");
   const unansweredRequired =
     plan.forms.find((form) => form.requiredToJoin && !form.myAnswer) ?? null;
   const notice = tripPlanNotice({ archived, unansweredRequired, over });
@@ -147,20 +157,21 @@ export default function PlanDetailPanel({
     try {
       await action();
       if (success) toast.success(success);
+      refetch();
       return true;
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, failure));
+      refetch({ quiet: true });
       return false;
     } finally {
       setBusy(false);
-      refetch();
     }
   }
 
   const planVerbRunners: Record<PlanVerbId, () => void> = {
     edit: () => setEditing(true),
-    // The summary comes with its own dialog (design §7.7).
+    // Plain print until #549 adds the summary dialog.
     print: () => window.print(),
     tripLog: () => onStartTripLog(plan),
     archive: () =>
@@ -193,7 +204,7 @@ export default function PlanDetailPanel({
   };
 
   const sectionVerbs = (index: number) =>
-    planVerbsFor(PLAN_SECTION_VERBS, "web", role).filter(
+    planVerbsFor(PLAN_SECTION_VERBS, "web", role, { archived }).filter(
       (verb) =>
         (verb.id !== "moveUp" || index > 0) &&
         (verb.id !== "moveDown" || index < plan.sections.length - 1),
@@ -208,8 +219,13 @@ export default function PlanDetailPanel({
     delete: () => setConfirm({ kind: "section", section }),
   });
 
-  const addVerbs = archived ? [] : planVerbsFor(PLAN_ADD_VERBS, "web", role);
-  const heroVerbs = planVerbs("web", role, { archived, over });
+  const addVerbs = planVerbsFor(PLAN_ADD_VERBS, "web", role, { archived });
+  const canAddSection = addVerbs.some((verb) => verb.id === "section");
+  const heroVerbs = planVerbs("web", role, {
+    archived,
+    over,
+    ...tripPlanLeaveState(plan),
+  });
 
   const counts = {
     places: plan.places.length,
@@ -217,6 +233,50 @@ export default function PlanDetailPanel({
     maps: plan.geoPdfs.length,
   };
 
+  // The plan's things, by kind, in the rows and hues their own pages use.
+  const itemGroups = [
+    {
+      title: copy.itemsPlaces,
+      rows: plan.places.map((place) => ({
+        id: place.id,
+        title: place.name,
+        addedBy: place.addedBy,
+        icon: "place" as const,
+        hue: "var(--color-accent)",
+      })),
+    },
+    {
+      title: copy.itemsWays,
+      rows: [
+        ...plan.routes.map((route) => ({
+          id: route.id,
+          title: route.name,
+          addedBy: route.addedBy,
+          icon: "route" as const,
+          hue: "var(--hue-route)",
+        })),
+        ...plan.files.map((file) => ({
+          id: file.id,
+          title: file.item.displayName ?? file.item.filename,
+          addedBy: file.addedBy,
+          icon: "importedFile" as const,
+          hue: "var(--hue-import)",
+        })),
+      ],
+    },
+    {
+      title: copy.itemsMaps,
+      rows: plan.geoPdfs.map((pdf) => ({
+        id: pdf.id,
+        title: pdf.title,
+        addedBy: pdf.addedBy,
+        icon: "geoPdf" as const,
+        hue: "var(--hue-geo-pdf)",
+      })),
+    },
+  ].filter((group) => group.rows.length > 0);
+
+  const going = tripPlanGoing(plan.members);
   const viewOptions = [
     { value: "writeUp" as const, label: copy.viewWriteUp },
     {
@@ -232,18 +292,9 @@ export default function PlanDetailPanel({
     {
       value: "people" as const,
       label: copy.viewPeople,
-      count: plan.members.filter((member) => member.status === "active").length,
+      count: going.length,
     },
   ];
-
-  const going = plan.members
-    .filter((member) => member.status === "active")
-    // Leaders first, then editors, then members; joined order within each.
-    .sort(
-      (a, b) =>
-        ["leader", "editor", "member"].indexOf(a.role) -
-        ["leader", "editor", "member"].indexOf(b.role),
-    );
 
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_PAGE, "web">,
@@ -294,16 +345,7 @@ export default function PlanDetailPanel({
     ),
     notices: notice && (
       <div className={classes.notice}>
-        <Icon
-          idea={
-            notice.kind === "archived"
-              ? "archive"
-              : notice.kind === "over"
-                ? "trip"
-                : "form"
-          }
-          size={16}
-        />
+        <Icon idea={notice.icon} size={16} />
         <span className={classes.noticeText}>{notice.text}</span>
         {notice.kind === "over" && (
           <Button compact onClick={() => onStartTripLog(plan)}>
@@ -339,13 +381,13 @@ export default function PlanDetailPanel({
             icon="notes"
             title={copy.writeUpEmpty}
             actions={
-              writer && (
+              canAddSection && (
                 <Button
                   variant="filled"
                   icon="add"
                   onClick={() => setSectionOpen({ id: null })}
                 >
-                  {copy.addSection}
+                  {planAddVerbLabel("section")}
                 </Button>
               )
             }
@@ -364,7 +406,7 @@ export default function PlanDetailPanel({
                 >
                   {section.title}
                 </h3>
-                {writer && (
+                {sectionVerbs(index).length > 0 && (
                   <Menu
                     label={`Actions for ${section.title}`}
                     title={section.title}
@@ -394,72 +436,25 @@ export default function PlanDetailPanel({
     ),
     items: tab === "items" && (
       <div className={classes.list}>
-        {counts.places + counts.ways + counts.maps === 0 ? (
+        {itemGroups.length === 0 ? (
           <EmptyState icon="place" title={copy.itemsEmpty} />
         ) : (
-          <>
-            {plan.places.length > 0 && (
-              <SectionHeader
-                title={copy.itemsPlaces}
-                count={plan.places.length}
-              />
-            )}
-            {plan.places.map((place) => (
-              <Row
-                key={place.id}
-                title={place.name}
-                subtitle={
-                  place.addedBy
-                    ? `Added by ${place.addedBy.username}`
-                    : undefined
-                }
-                leading={<IconTile icon="place" hue="var(--color-accent)" />}
-              />
-            ))}
-            {counts.ways > 0 && (
-              <SectionHeader title={copy.itemsWays} count={counts.ways} />
-            )}
-            {plan.routes.map((route) => (
-              <Row
-                key={route.id}
-                title={route.name}
-                subtitle={
-                  route.addedBy
-                    ? `Added by ${route.addedBy.username}`
-                    : undefined
-                }
-                leading={<IconTile icon="route" hue="var(--hue-route)" />}
-              />
-            ))}
-            {plan.files.map((file) => (
-              <Row
-                key={file.id}
-                title={file.item.displayName ?? file.item.filename}
-                subtitle={
-                  file.addedBy ? `Added by ${file.addedBy.username}` : undefined
-                }
-                leading={
-                  <IconTile icon="importedFile" hue="var(--hue-import)" />
-                }
-              />
-            ))}
-            {plan.geoPdfs.length > 0 && (
-              <SectionHeader
-                title={copy.itemsMaps}
-                count={plan.geoPdfs.length}
-              />
-            )}
-            {plan.geoPdfs.map((pdf) => (
-              <Row
-                key={pdf.id}
-                title={pdf.title ?? "GeoPDF"}
-                subtitle={
-                  pdf.addedBy ? `Added by ${pdf.addedBy.username}` : undefined
-                }
-                leading={<IconTile icon="geoPdf" hue="var(--hue-geo-pdf)" />}
-              />
-            ))}
-          </>
+          itemGroups.map((group) => (
+            <Fragment key={group.title}>
+              {/* A heading needs a second group to divide from. */}
+              {itemGroups.length > 1 && (
+                <SectionHeader title={group.title} count={group.rows.length} />
+              )}
+              {group.rows.map((row) => (
+                <Row
+                  key={row.id}
+                  title={row.title}
+                  subtitle={tripPlanAddedByLine(row.addedBy)}
+                  leading={<IconTile icon={row.icon} hue={row.hue} />}
+                />
+              ))}
+            </Fragment>
+          ))
         )}
       </div>
     ),
@@ -498,7 +493,6 @@ export default function PlanDetailPanel({
     ),
     people: tab === "people" && (
       <div className={classes.list}>
-        <SectionHeader title={copy.peopleGoing} count={going.length} />
         {going.map((member) => (
           <Row
             key={member.user.id}
@@ -506,7 +500,11 @@ export default function PlanDetailPanel({
             trailing={
               member.role !== "member" && (
                 <StatusPill
-                  label={member.role === "leader" ? "Leader" : "Editor"}
+                  label={
+                    member.role === "leader"
+                      ? TRIP_PLANS_LIST.copy.pillLeader
+                      : TRIP_PLANS_LIST.copy.pillEditor
+                  }
                   tone="outline"
                 />
               )
@@ -541,9 +539,12 @@ export default function PlanDetailPanel({
         onSubmit={async (_values, patch) => {
           try {
             await patchPlan(plan.id, patch);
-          } finally {
-            refetch();
+          } catch (err) {
+            // The dialog says it, above its submit.
+            refetch({ quiet: true });
+            throw err;
           }
+          refetch();
           setEditing(false);
           onPlansChanged();
         }}
@@ -551,7 +552,7 @@ export default function PlanDetailPanel({
       <PlanSectionDialog
         open={sectionOpen != null}
         section={editingSection}
-        onStale={refetch}
+        onStale={() => refetch({ quiet: true })}
         onClose={() => setSectionOpen(null)}
         onSubmit={async (values, patch) => {
           if (editingSection)

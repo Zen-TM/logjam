@@ -1,6 +1,6 @@
 // The pure decisions of Plans' forms, out of the components so a test can
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
-// the value last seen and the new one (design §4, shared/DESIGN.md §10).
+// the value last seen and the new one (shared/DESIGN.md §10).
 import type {
   TripPlanCreate,
   TripPlanPatch,
@@ -34,4 +34,24 @@ export function sectionPatch(
     patch.title = { from: seen.title, to: now.title };
   if (now.body !== seen.body) patch.body = { from: seen.body, to: now.body };
   return patch;
+}
+
+/**
+ * A form's fields after the plan was fetched again (a 409, or a failed save
+ * followed by someone else's change): every field the user has not touched
+ * takes the plan's current value, and the new baseline is the plan's. A
+ * field they did edit keeps their words, and a save compares it with what
+ * the plan now holds, so nothing of anyone else's is sent back unseen.
+ */
+export function adoptTheirs<T extends Record<string, unknown>>(
+  seen: T,
+  values: T,
+  current: T,
+): { seen: T; values: T } {
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(a) === JSON.stringify(b);
+  const merged = { ...values };
+  for (const key of Object.keys(current) as (keyof T)[])
+    if (same(values[key], seen[key])) merged[key] = current[key];
+  return { seen: current, values: merged };
 }

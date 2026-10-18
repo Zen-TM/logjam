@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planPatch, sectionPatch } from "./plansModel";
+import { adoptTheirs, planPatch, sectionPatch } from "./plansModel";
 
 const plan = {
   name: "Wollangambe trip",
@@ -31,6 +31,26 @@ describe("an edit sends only what changed, with what it last saw", () => {
     const seen = { title: "Gear", body: "Wetsuit." };
     expect(sectionPatch(seen, { ...seen, body: "Wetsuit, helmet." })).toEqual({
       body: { from: "Wetsuit.", to: "Wetsuit, helmet." },
+    });
+  });
+});
+
+describe("a form refetched under the user", () => {
+  // Mutation: keep `values` as they were (drop the merge), and saving again
+  // sends the untouched dates back over the other member's change.
+  it("takes their change in every field the user did not touch, and sends only the user's", () => {
+    const opened = {
+      name: "Wollangambe trip",
+      startDate: "2026-11-07",
+      endDate: "2026-11-08",
+      tripTypes: [],
+    };
+    const mine = { ...opened, name: "Wollangambe" };
+    const theirs = { ...opened, name: "Wolly", startDate: "2026-11-14" };
+    const { seen, values } = adoptTheirs(opened, mine, theirs);
+    expect(values).toEqual({ ...theirs, name: "Wollangambe" });
+    expect(planPatch(seen, values)).toEqual({
+      name: { from: "Wolly", to: "Wollangambe" },
     });
   });
 });
