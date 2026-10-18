@@ -127,29 +127,11 @@ export const ropeWikiHeavyLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
-// Protomaps region clips. One clip is a `pmtiles extract` reading byte ranges
-// of the archive from S3 (under a second against a local copy; not timed in
-// prod, where the route kills it at 25 s), a temporary file of 1 to 7 MB in the bush and 80 MB at the very most, deleted
-// within two minutes, and that many bytes sent back. Cheap, so the limit is
-// set by the honest case, not the cost: Logjam GPS asks for one clip with
-// every area a signed-in user saves, and nobody frames, names and saves an
-// area a minute for an hour. It stays a limit because the worst case is not
-// free: 60 clips of 80 MB is about 5 GB of egress an hour per account.
-// Guard: `rateLimit.unit.test.ts` ("regionClipLimiter").
-export const REGION_CLIPS_PER_HOUR = 60;
-export const regionClipLimiter = rateLimit({
-  windowMs: 60 * 60_000,
-  max: REGION_CLIPS_PER_HOUR,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: userOrIpKey,
-});
-
 // Elevation profiles fan out to DEM tile fetches over the network per request
 // (services/elevation.ts), so cost scales with the bbox a caller asks for, not
 // with request count. Interactive though — the measure tool and route editor
 // re-request on edit — so this is a ceiling on sustained fan-out, not a
-// regionClip-style hard cap.
+// hard cap.
 export const elevationLimiter = rateLimit({
   windowMs: 60_000,
   max: 60,

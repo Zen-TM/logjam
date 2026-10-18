@@ -2,7 +2,14 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { ALICE_ID, CANYON_TYPE_ID } from "./_actors";
+import {
+  ALICE_ID,
+  ALICE_SUB,
+  BOB_ID,
+  BOB_SUB,
+  CANYON_TYPE_ID,
+  as,
+} from "./_actors";
 
 // Idempotent file-import endpoints.
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
@@ -235,7 +242,7 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
 });
 
 describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
-  it("removes batch-created places + trips but spares merged-into pre-existing places", async () => {
+  it("removes batch-created places + trips and restores merged-into pre-existing places", async () => {
     const run = Date.now();
 
     // A pre-existing place (manual) that the batch will merge into.
@@ -293,13 +300,22 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
         ],
       });
 
+    const merged = await prisma.place.findUnique({
+      where: { id: preexistingId },
+    });
+    expect(merged?.notes).toBe("merged note");
+    expect(await prisma.importSnapshot.count({ where: { batchId } })).toBe(1);
+
     // Undo the batch.
     const undo = await request(API_URL).delete(`/imports/${batchId}`).set(AUTH);
     expect(undo.status).toBe(200);
     expect(undo.body.deletedPlaces).toBe(1);
     expect(undo.body.deletedTrips).toBe(1);
+    expect(undo.body.restoredPlaces).toBe(1);
+    expect(undo.body.keptFields).toBe(0);
 
-    // Created place + its trip gone; pre-existing (merged-into) survives.
+    // Created place + its trip gone; pre-existing (merged-into) survives,
+    // with the values it had before the import, and the snapshot is gone.
     const createdAfter = await prisma.place.findFirst({
       where: { ownerId: ALICE_ID, name: `IMP undo created ${run}` },
     });
@@ -308,11 +324,269 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
       where: { id: preexistingId },
     });
     expect(preexistingAfter).not.toBeNull();
-    expect(preexistingAfter?.notes).toBe("merged note"); // merge applied + retained
+    expect(preexistingAfter?.notes).toBeNull();
+    expect(preexistingAfter?.importKey).toBeNull();
+    expect(await prisma.importSnapshot.count({ where: { batchId } })).toBe(0);
 
     await request(API_URL).delete(`/places/${preexistingId}`).set(AUTH);
   });
+
+  // Mutation that turns it red: dropping the createdAt cutoff from
+  // restoreBatch's read in lib/importSnapshot.ts.
+  it("restores nothing past the retention, and still deletes what the batch created", async () => {
+    const run = Date.now();
+    const name = `IMP undo expired ${run}`;
+    const created = await request(API_URL).post("/places").set(AUTH).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name,
+      latitude: -33.55,
+      longitude: 150.15,
+    });
+    const placeId = created.body.id as string;
+    try {
+      const batchId = newBatch();
+      const res = await request(API_URL)
+        .post("/places/bulk")
+        .set(AUTH)
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: batchId,
+          rows: [
+            placeRow(`IMP undo expired new ${run}`, -33.56, 150.16),
+            {
+              data: {
+                name,
+                latitude: -33.55,
+                longitude: 150.15,
+                notes: "file",
+              },
+              resolution: { kind: "merge", placeId },
+            },
+          ],
+        });
+      expect(res.body.merged).toBe(1);
+      const aged = await prisma.importSnapshot.updateMany({
+        where: { batchId },
+        data: { createdAt: new Date(Date.now() - 25 * 3_600_000) },
+      });
+      expect(aged.count).toBe(1);
+
+      const undo = await request(API_URL)
+        .delete(`/imports/${batchId}`)
+        .set(AUTH);
+      expect(undo.status).toBe(200);
+      expect(undo.body.deletedPlaces).toBe(1);
+      expect(undo.body.restoredPlaces).toBe(0);
+      const after = await prisma.place.findUnique({ where: { id: placeId } });
+      expect(after?.notes).toBe("file");
+      expect(await prisma.importSnapshot.count({ where: { batchId } })).toBe(0);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
+  // Mutation that turns it red: restoring a field without checking it still
+  // holds what the import wrote, or a restore that skips updatedAt (a raw
+  // write), which phones and sharees would never pull.
+  it("keeps a field edited since, restores the rest, and the restore reaches a sharee and a phone", async () => {
+    const run = Date.now();
+    const name = `IMP undo edited ${run}`;
+    const created = await request(API_URL).post("/places").set(AUTH).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name,
+      latitude: -33.52,
+      longitude: 150.12,
+    });
+    expect(created.status).toBe(201);
+    const placeId = created.body.id as string;
+    try {
+      const share = await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(AUTH)
+        .send({ sharedWithUserId: BOB_ID });
+      expect(share.status).toBe(201);
+
+      const batchId = newBatch();
+      const merge = await request(API_URL)
+        .post("/places/bulk")
+        .set(AUTH)
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: batchId,
+          rows: [
+            {
+              data: {
+                name,
+                latitude: -33.52,
+                longitude: 150.12,
+                altNames: ["IMP alt"],
+                notes: "file note",
+                fieldValues: { v_grade: 4 },
+              },
+              resolution: { kind: "merge", placeId },
+            },
+          ],
+        });
+      expect(merge.status).toBe(200);
+      expect(merge.body.merged).toBe(1);
+
+      const edit = await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(AUTH)
+        .send({ notes: "my note" });
+      expect(edit.status).toBe(200);
+
+      const bobPlace = async () =>
+        (await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB)))
+          .body as { fieldValues: Record<string, unknown> };
+      expect((await bobPlace()).fieldValues.v_grade).toBe(4);
+      const aliceCursor = await deltaCursor(ALICE_SUB);
+      const bobCursor = await deltaCursor(BOB_SUB);
+
+      const undo = await request(API_URL)
+        .delete(`/imports/${batchId}`)
+        .set(AUTH);
+      expect(undo.status).toBe(200);
+      expect(undo.body.restoredPlaces).toBe(1);
+      expect(undo.body.keptFields).toBe(1);
+
+      const after = await prisma.place.findUnique({ where: { id: placeId } });
+      expect(after?.notes).toBe("my note");
+      expect(after?.altNames).toEqual([]);
+      expect(after?.fieldValues).not.toHaveProperty("v_grade");
+
+      expect((await bobPlace()).fieldValues.v_grade).toBeUndefined();
+      for (const [sub, cursor] of [
+        [ALICE_SUB, aliceCursor],
+        [BOB_SUB, bobCursor],
+      ]) {
+        const row = (await pulledPlaces(sub, cursor)).find(
+          (p) => p.id === placeId,
+        );
+        expect(row, sub).toBeDefined();
+        expect(row!.fieldValues).not.toHaveProperty("v_grade");
+      }
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
+  // Mutations that turn it red: moving restoreBatch after the deletes in
+  // routes/imports.ts (deleting N renames the trip after it, which Undo then
+  // keeps as an edit); dropping the updatedAt touch from a links-only restore
+  // (the phone never pulls it); leaving placeIds out of tripFields.
+  it("restores a trip a re-import re-linked to a place it created, and a phone pulls it", async () => {
+    const run = Date.now();
+    const sourcePlaceName = `IMP undo trip ${run}`;
+    const trip = { sourcePlaceName, date: "2024-06-01", notes: "lap" };
+    const place = await request(API_URL)
+      .post("/places")
+      .set(AUTH)
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: `IMP undo trip place ${run}`,
+        latitude: -33.53,
+        longitude: 150.13,
+      });
+    const placeId = place.body.id as string;
+    try {
+      const first = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({ importBatchId: newBatch(), trips: [{ ...trip, placeId }] });
+      expect(first.body.imported).toBe(1);
+      const tripRow = await prisma.tripLog.findFirstOrThrow({
+        where: { userId: ALICE_ID, places: { some: { placeId } } },
+      });
+
+      // One batch creates a place, then re-links the trip to it: only the
+      // links change (both are canyons, so the types stay ["canyoning"]).
+      const batchId = newBatch();
+      const created = await request(API_URL)
+        .post("/places/bulk")
+        .set(AUTH)
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: batchId,
+          rows: [placeRow(`IMP undo trip new place ${run}`, -33.54, 150.14)],
+        });
+      expect(created.body.created).toBe(1);
+      const newPlace = await prisma.place.findFirstOrThrow({
+        where: { ownerId: ALICE_ID, importBatchId: batchId },
+      });
+      const reimport = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: batchId,
+          trips: [{ ...trip, placeId: newPlace.id }],
+        });
+      expect(reimport.body.updated).toBe(1);
+      const cursor = await deltaCursor(ALICE_SUB);
+
+      const undo = await request(API_URL)
+        .delete(`/imports/${batchId}`)
+        .set(AUTH);
+      expect(undo.status).toBe(200);
+      expect(undo.body.deletedPlaces).toBe(1);
+      expect(undo.body.restoredTrips).toBe(1);
+      expect(undo.body.keptFields).toBe(0);
+
+      const restored = await prisma.tripLog.findUnique({
+        where: { id: tripRow.id },
+        include: { places: true },
+      });
+      expect(restored?.displayName).toBeNull();
+      expect(restored?.places.map((link) => link.placeId)).toEqual([placeId]);
+
+      const res = await request(API_URL)
+        .get("/sync/delta")
+        .query({ cursor })
+        .set(as(ALICE_SUB))
+        .set(CLIENT);
+      const pulled = (
+        res.body.changes.tripLogs as {
+          id: string;
+          places: { id: string }[];
+        }[]
+      ).find((t) => t.id === tripRow.id);
+      expect(pulled?.places.map((p) => p.id)).toEqual([placeId]);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
 });
+
+const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
+
+/** Where a phone that pulled everything now stands. */
+async function deltaCursor(sub: string): Promise<string> {
+  let cursor = "";
+  for (;;) {
+    const res = await request(API_URL)
+      .get("/sync/delta")
+      .query({ cursor })
+      .set(as(sub))
+      .set(CLIENT);
+    expect(res.status).toBe(200);
+    cursor = res.body.cursor;
+    if (!res.body.hasMore) return cursor;
+  }
+}
+
+/** The place rows a phone at `cursor` pulls next. */
+async function pulledPlaces(sub: string, cursor: string) {
+  const res = await request(API_URL)
+    .get("/sync/delta")
+    .query({ cursor })
+    .set(as(sub))
+    .set(CLIENT);
+  expect(res.status).toBe(200);
+  return res.body.changes.places as {
+    id: string;
+    fieldValues: Record<string, unknown>;
+  }[];
+}
 
 afterAll(async () => {
   // Best-effort cleanup: undo every batch, then drop any stray rows by name prefix.

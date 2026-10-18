@@ -35,6 +35,7 @@ import {
   Text,
   TextInput,
   View,
+  type TextInputInstance,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -186,7 +187,7 @@ export function PlacesScreen({
 
   const [bucket, setBucket] = useState<Bucket>("all");
   const [findOpen, setFindOpen] = useState(false);
-  const searchInputRef = useRef<TextInput>(null);
+  const searchInputRef = useRef<TextInputInstance>(null);
   // Focused on the next frame, once the row has mounted: `autoFocus` runs
   // before the field is attached (mobile/DESIGN.md §4).
   useEffect(() => {
@@ -913,7 +914,7 @@ export function PlacesScreen({
                 onPress={() => startEditing(null)}
               />
             </ListEnd>
-          ) : null
+          ) : undefined
         }
         ListEmptyComponent={
           <EmptyPanel

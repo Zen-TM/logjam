@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef } from "react";
-import { Text, View } from "react-native";
+import { Text, View, type HostInstance } from "react-native";
 
 import { spacing, makeStyles, useTheme } from "../theme";
 import { SheetErrorReveal } from "./BottomSheet";
@@ -22,7 +22,7 @@ export function FieldError({ message }: { message?: string | null }) {
   const theme = useTheme();
   const styles = useStyles();
 
-  const ref = useRef<View>(null);
+  const ref = useRef<HostInstance>(null);
   const reveal = useContext(SheetErrorReveal);
   const shown = Boolean(message);
   useEffect(() => {

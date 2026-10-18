@@ -1196,6 +1196,10 @@ export function bulkCreateTripLogs(
 export type UndoImportResult = {
   deletedPlaces: number;
   deletedTrips: number;
+  restoredPlaces: number;
+  restoredTrips: number;
+  /** Fields changed since the import, which Undo left as they were. */
+  keptFields: number;
 };
 
 export function undoImport(batchId: string): Promise<UndoImportResult> {

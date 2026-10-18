@@ -79,6 +79,10 @@ UPDATE custom_field_defs
 SET label = 'field-' || substring(id::text, 1, 8),
     trip_types = pg_temp.scrub_trip_types(trip_types);
 
+-- Undo's copies of the place and trip fields scrubbed above. Blank, Undo
+-- restores nothing.
+UPDATE import_snapshots SET before = '{}', after = '{}';
+
 UPDATE routes SET name = 'route-' || substring(id::text, 1, 8);
 UPDATE media SET display_name = NULL, filename = 'file-' || substring(id::text, 1, 8);
 

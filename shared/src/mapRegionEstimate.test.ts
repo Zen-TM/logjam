@@ -232,40 +232,32 @@ describe("planRegionForBasemaps", () => {
   // Mutation: save only the finest DEM that covers the area and a line that
   // leaves it offline has no height, and no source to measure the seam in.
   it("saves a clip of every DEM archive the area touches, on top of the worldwide tiles", () => {
-    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, true);
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
     expect(job.demArchives.map((a) => a.sourceId)).toEqual(["nsw-5m"]);
     expect(job.perSource.map((s) => s.basemapId)).toEqual([DEM_SOURCE_ID]);
-    const worldwide = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
-    expect(worldwide.demArchives).toEqual([]);
-    // The clip counts toward the bytes the free-space check reads, not the
+    // The clips count toward the bytes the free-space check reads, not the
     // tiles the politeness cap counts.
-    expect(job.p90Bytes).toBeGreaterThan(worldwide.p90Bytes);
-    expect(job.totalTiles).toBe(worldwide.totalTiles);
+    const tiles = job.perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
+    expect(job.totalTiles).toBe(tiles);
+    expect(job.p90Bytes).toBe(
+      job.perSource[0].size.p90Bytes +
+        job.demArchives[0].size.p90Bytes +
+        job.contours.p90Bytes,
+    );
   });
 
   // Mutation: leave the contour clip out of the totals and the free-space
   // check passes an area whose download then does not fit.
-  it("counts a contour clip in the bytes only when one is being saved", () => {
-    const without = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, true);
-    const withClip = planRegionForBasemaps(
-      TEN_KM,
-      [],
-      15,
-      maxZoomFor,
-      true,
-      true,
-    );
-    expect(without.contours).toBeNull();
+  it("counts the contour clip in the bytes", () => {
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
     // A real clip of 10 km of the Grose gorge is 1.7 MB.
-    expect(withClip.contours!.meanBytes).toBeGreaterThan(1_200_000);
-    expect(withClip.contours!.p90Bytes).toBeLessThan(2_500_000);
-    expect(withClip.meanBytes - without.meanBytes).toBe(
-      withClip.contours!.meanBytes,
+    expect(job.contours.meanBytes).toBeGreaterThan(1_200_000);
+    expect(job.contours.p90Bytes).toBeLessThan(2_500_000);
+    expect(job.meanBytes).toBe(
+      job.perSource[0].size.meanBytes +
+        job.demArchives[0].size.meanBytes +
+        job.contours.meanBytes,
     );
-    expect(withClip.p90Bytes - without.p90Bytes).toBe(
-      withClip.contours!.p90Bytes,
-    );
-    expect(withClip.totalTiles).toBe(without.totalTiles);
   });
 
   // Mutation: add an archive source to DEM_SOURCES without its measured tile
@@ -279,7 +271,7 @@ describe("planRegionForBasemaps", () => {
         east: west + 0.05,
         north: south + 0.05,
       };
-      const job = planRegionForBasemaps(inside, [], 15, maxZoomFor, true);
+      const job = planRegionForBasemaps(inside, [], 15, maxZoomFor);
       expect(job.demArchives.map((a) => a.sourceId)).toContain(source.id);
     }
   });

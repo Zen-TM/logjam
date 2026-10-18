@@ -16,8 +16,9 @@ reported as cards.
 
 Two task kinds share that queue (stage4a §9): `tile-pyramid` fetches SIX raster
 tiles straight from the provider into an on-device MBTiles
-(`regionTileDownload.ts` + `regionMbtiles.ts`), and `http-file` pulls the
-self-hosted Protomaps clip through our API (`regionDownloads.ts`). Both end in a
+(`regionTileDownload.ts` + `regionMbtiles.ts`), and `clip` cuts a clip of one
+of our own archives from the CDN by byte range (`regionDownloads.ts`; updated
+2026-10-18, [0036](0036-the-phone-cuts-its-own-offline-clips.md)). Both end in a
 `map_artifact` row, which is the only thing the map resolver ever sees.
 
 ## Decision
@@ -41,15 +42,16 @@ tethered hotspot is Wi-Fi by type and mobile data by cost. The download screen's
 "Use mobile data" row appears on the same answer.
 
 **Nothing large is written without asking whether it fits.** `assertSpaceFor` /
-`hasSpaceFor` (`offline/freeSpace.ts`) gate the region clip (after the POST
-reports its size), the overlay bundle (from the first progress tick — a
+`hasSpaceFor` (`offline/freeSpace.ts`) gate the region clip (once its
+directories give its size; updated 2026-10-18), the overlay bundle (from the first progress tick — a
 presigned GET URL can't be HEADed), the GeoPDF pyramid (from its plan estimate)
 and, via those, both auto-downloaders. There is still **no eviction** anywhere:
 nothing reclaims an artifact by age or pressure, which is why the precheck
 matters.
 
 **Pause is a tile-pyramid affordance only** (`offline/regionJobStatus.ts`). The
-clip is one `expo-file-system` transfer with no mid-flight stop. The same file
+clip's runner stops for a cancel, aborting the request in flight, but not for a pause
+(updated 2026-10-18, [0036](0036-the-phone-cuts-its-own-offline-clips.md)). The same file
 owns the "is this run over?" answer Saved's cards read: a job paused by `user` or
 `provider-backoff` is *settled* (nothing auto-resumes those, by design) even
 though it is not *finished*, so a card never reports work that will never move.
@@ -83,6 +85,9 @@ the API path never could.
   source's id. A guest saves the worldwide tiles only. The worldwide tiles are still
   saved with every area, which is what holds this decision up. Everything else
   above stands.
+- **Update 2026-10-18: a guest's run saves those clips too**, cut on the phone
+  from the public archives with no call to the API ([0036](0036-the-phone-cuts-its-own-offline-clips.md)). The worldwide
+  tiles are still saved with every area. Everything else above stands.
 
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by
@@ -96,7 +101,7 @@ test asserts the range still brackets a real 34-tile download.
 - **Positive:** elevation works offline and for a guest; a run outlives the
   screen that started it.
 - **Negative:** no eviction — nothing reclaims an artifact by age or pressure.
-  The clip cannot be paused mid-flight.
+  The clip cannot be paused, only cancelled (updated 2026-10-18).
 - **Neutral:** Not recorded.
 
 ## Alternatives considered

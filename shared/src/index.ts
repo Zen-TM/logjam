@@ -65,6 +65,7 @@ export * from "./demTiles.js";
 export * from "./demSlope.js";
 export * from "./snapToPath.js";
 export * from "./snapTiles.js";
+export * from "./pmtilesExtract.js";
 export * from "./routeDraft.js";
 export * from "./notificationLabel.js";
 export * from "./listTruncation.js";
