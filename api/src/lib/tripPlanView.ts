@@ -1,9 +1,17 @@
-// The /plans responses, built from rows.
+// The /plans responses, built from rows. Who sees which answer is decided
+// here, once, for the full fetch and every write that returns a form.
+// Guard: __tests__/planForms.test.ts ("leaders-only answers").
 import {
+  currentTripPlanAnswers,
+  isTripPlanFormPresetId,
+  isTripPlanFormVisibility,
   isTripPlanMemberStatus,
   isTripPlanRole,
+  type TripPlanAnswerView,
+  type TripPlanFormView,
   type TripPlanMemberStatus,
   type TripPlanMemberView,
+  type TripPlanQuestion,
   type TripPlanRole,
   type TripPlanSectionView,
   type TripPlanSummary,
@@ -85,6 +93,85 @@ export function sectionView(row: {
   };
 }
 
+export const formInclude = {
+  answers: {
+    select: { answers: true, updatedAt: true, user: userRef },
+    orderBy: { createdAt: "asc" },
+  },
+} as const;
+
+type FormRow = {
+  id: string;
+  title: string;
+  preset: string | null;
+  questions: unknown;
+  visibleTo: string;
+  requiredToJoin: boolean;
+  position: number;
+  updatedAt: Date;
+  answers: {
+    answers: unknown;
+    updatedAt: Date;
+    user: { id: string; username: string };
+  }[];
+};
+
+/** Everyone's membership status in the plan, for `formView`. */
+export async function memberStatuses(
+  planId: string,
+): Promise<Map<string, string>> {
+  const rows = await prisma.tripPlanMember.findMany({
+    where: { planId },
+    select: { userId: true, status: true },
+  });
+  return new Map(rows.map((row) => [row.userId, row.status]));
+}
+
+/**
+ * A form as `viewer` may see it. Their own answer always; someone else's
+ * only to a leader, or to anyone when the form's answers are for everyone
+ * and its author is in the plan (a leader also sees the answers of someone
+ * asking to join). Never anyone's answer whose author is in no plan row.
+ * Guard: __tests__/planForms.test.ts ("leaders-only answers reach …", "an
+ * answer whose author is no longer in the plan reaches no one").
+ */
+export function formView(
+  form: FormRow,
+  viewer: { userId: string; role: TripPlanRole },
+  statuses: Map<string, string>,
+): TripPlanFormView {
+  if (!isTripPlanFormVisibility(form.visibleTo))
+    throw fault("a form row has no known visibility");
+  const questions = (
+    Array.isArray(form.questions) ? form.questions : []
+  ) as TripPlanQuestion[];
+  const answerView = (row: FormRow["answers"][number]): TripPlanAnswerView => ({
+    user: row.user,
+    answers: currentTripPlanAnswers(questions, row.answers),
+    updatedAt: row.updatedAt.toISOString(),
+  });
+  const mine = form.answers.find((row) => row.user.id === viewer.userId);
+  const others = form.answers.filter((row) => {
+    if (row.user.id === viewer.userId) return false;
+    const author = statuses.get(row.user.id);
+    if (viewer.role === "leader") return author !== undefined;
+    return form.visibleTo === "members" && author === "active";
+  });
+  return {
+    id: form.id,
+    title: form.title,
+    preset:
+      form.preset && isTripPlanFormPresetId(form.preset) ? form.preset : null,
+    questions,
+    visibleTo: form.visibleTo,
+    requiredToJoin: form.requiredToJoin,
+    position: form.position,
+    updatedAt: form.updatedAt.toISOString(),
+    myAnswer: mine ? answerView(mine) : null,
+    answers: others.map(answerView),
+  };
+}
+
 /** GET /plans/:id, the full fetch: everything an active member may see. */
 export async function loadPlanView(
   userId: string,
@@ -99,9 +186,15 @@ export async function loadPlanView(
         include: { user: userRef, invitedBy: userRef },
         orderBy: { createdAt: "asc" },
       },
+      forms: {
+        include: formInclude,
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      },
     },
   });
   if (!plan) throw planNotFound();
+  const viewer = { userId, role: access.role };
+  const statuses = new Map(plan.members.map((m) => [m.userId, m.status]));
   // Who is invited or asking to join is the leaders' business.
   // Guard: __tests__/plans.test.ts ("shows who is invited or asking only to leaders").
   const members: TripPlanMemberView[] = plan.members
@@ -131,7 +224,6 @@ export async function loadPlanView(
     routes: [],
     files: [],
     geoPdfs: [],
-    // Hold #439: forms arrive with their routes.
-    forms: [],
+    forms: plan.forms.map((form) => formView(form, viewer, statuses)),
   };
 }

@@ -1,5 +1,5 @@
 // Plans: the words the TripPlan tables store, the wire shapes of /plans, the
-// limits and a validator per write shape, which the API
+// limits, the form presets and a validator per write shape, which the API
 // refuses with and both clients show live. The columns are plain strings,
 // not Postgres enums, so a new word needs no migration; this file is the
 // only list.
@@ -275,6 +275,23 @@ export type TripPlanFormCreate = {
   requiredToJoin: boolean;
 };
 
+/**
+ * PUT …/answers/me: the answers, and the form as the person was shown it.
+ * The API refuses the answer (409) if who sees the answers has changed
+ * since, so an answer never reaches more people than its author was told;
+ * then if the form changed at all (a question added or made required, a
+ * kind changed), so the person answers the form as it is.
+ * Guard: api/src/__tests__/planForms.test.ts ("never widening who sees an
+ * answer", "asks the person to check a form that changed while they answered").
+ */
+export type TripPlanAnswerPut = {
+  answers: TripPlanAnswers;
+  /** The form's `visibleTo` as shown. */
+  visibleTo: TripPlanFormVisibility;
+  /** The form's `updatedAt` as served (TripPlanFormView.updatedAt). */
+  formUpdatedAt: string;
+};
+
 export const TRIP_PLAN_FORM_PRESET_IDS = [
   "gear",
   "carpool",
@@ -285,6 +302,229 @@ export const TRIP_PLAN_FORM_PRESET_IDS = [
 ] as const;
 export type TripPlanFormPresetId = (typeof TRIP_PLAN_FORM_PRESET_IDS)[number];
 export const isTripPlanFormPresetId = oneOf(TRIP_PLAN_FORM_PRESET_IDS);
+
+const options = (...pairs: [string, string][]): TripPlanQuestionOption[] =>
+  pairs.map(([id, label]) => ({ id, label }));
+
+/**
+ * Where a leader's form starts. Choosing one fills the builder; the leader
+ * can change anything before and after saving. Question ids are stable, so
+ * the print summary can find "the phone".
+ * Guard: tripPlans.test.ts ("pins the question ids the print summary reads").
+ */
+export const TRIP_PLAN_FORM_PRESETS: Record<
+  TripPlanFormPresetId,
+  TripPlanFormCreate
+> = {
+  gear: {
+    title: "Gear to borrow",
+    preset: "gear",
+    visibleTo: "leaders",
+    requiredToJoin: false,
+    questions: [
+      {
+        id: "items",
+        kind: "multiChoice",
+        label: "What do you need to borrow?",
+        help: "Tick only what you don't have.",
+        required: false,
+        options: options(
+          ["harness", "Harness"],
+          ["helmet", "Helmet"],
+          ["descender", "Descender and carabiner"],
+          ["wetsuit", "Wetsuit"],
+          ["pack", "Pack and dry bag"],
+          ["rope", "Rope (leaders only)"],
+        ),
+      },
+      {
+        id: "wetsuitSize",
+        kind: "choice",
+        label: "Wetsuit size",
+        required: false,
+        options: options(
+          ["xs", "XS"],
+          ["s", "S"],
+          ["m", "M"],
+          ["l", "L"],
+          ["xl", "XL"],
+          ["xxl", "XXL"],
+        ),
+      },
+      {
+        id: "notes",
+        kind: "text",
+        label: "Anything else?",
+        help: "For example, your own descender is a figure 8.",
+        required: false,
+      },
+    ],
+  },
+  carpool: {
+    title: "Carpooling",
+    preset: "carpool",
+    visibleTo: "members",
+    requiredToJoin: false,
+    questions: [
+      {
+        id: "mode",
+        kind: "choice",
+        label: "How are you getting there?",
+        required: true,
+        options: options(
+          ["seats", "Driving, with seats to offer"],
+          ["full", "Driving, car is full"],
+          ["lift", "Need a lift"],
+          ["own", "Making my own way"],
+        ),
+      },
+      {
+        id: "seats",
+        kind: "number",
+        label: "Seats you can offer",
+        required: false,
+      },
+      {
+        id: "from",
+        kind: "text",
+        label: "Leaving from",
+        help: "A suburb is enough.",
+        required: false,
+      },
+      {
+        id: "notes",
+        kind: "text",
+        label: "Anything else?",
+        help: "For example, can leave after 7 am.",
+        required: false,
+      },
+    ],
+  },
+  experience: {
+    title: "Experience",
+    preset: "experience",
+    visibleTo: "leaders",
+    requiredToJoin: false,
+    questions: [
+      {
+        id: "trips",
+        kind: "choice",
+        label: "How many canyon trips have you done?",
+        required: true,
+        options: options(
+          ["none", "None yet"],
+          ["few", "1 to 5"],
+          ["some", "6 to 20"],
+          ["many", "More than 20"],
+        ),
+      },
+      {
+        id: "abseil",
+        kind: "yesNo",
+        label: "Can you set up and do an abseil on your own?",
+        required: true,
+      },
+      {
+        id: "swim",
+        kind: "yesNo",
+        label: "Can you swim 50 m in a pack?",
+        required: true,
+      },
+      {
+        id: "notes",
+        kind: "longText",
+        label: "Anything the leader should know?",
+        help: "Fitness, injuries, fear of heights or water.",
+        required: false,
+      },
+    ],
+  },
+  firstAid: {
+    title: "First aid",
+    preset: "firstAid",
+    visibleTo: "leaders",
+    requiredToJoin: false,
+    questions: [
+      {
+        id: "cert",
+        kind: "choice",
+        label: "Do you hold a current first aid certificate?",
+        required: true,
+        options: options(
+          ["no", "No"],
+          ["yes", "Yes"],
+          ["remote", "Yes, remote or wilderness first aid"],
+        ),
+      },
+      {
+        id: "conditions",
+        kind: "longText",
+        label: "Medical conditions or allergies",
+        help: "Only what the group needs to know in an emergency.",
+        required: false,
+      },
+      {
+        id: "medication",
+        kind: "text",
+        label: "Medication you carry",
+        help: "For example, an EpiPen in the lid of your pack.",
+        required: false,
+      },
+    ],
+  },
+  // Members, and required: whoever is standing there when something goes
+  // wrong needs them, leader or not.
+  safetyContacts: {
+    title: "Safety contacts",
+    preset: "safetyContacts",
+    visibleTo: "members",
+    requiredToJoin: true,
+    questions: [
+      {
+        id: "name",
+        kind: "text",
+        label: "Contact's name",
+        help: "Someone not on the trip who can act if you're overdue.",
+        required: true,
+      },
+      { id: "phone", kind: "phone", label: "Contact's phone", required: true },
+      {
+        id: "relation",
+        kind: "text",
+        label: "How do they know you?",
+        help: "For example, partner or mum.",
+        required: false,
+      },
+      {
+        id: "name2",
+        kind: "text",
+        label: "Second contact's name",
+        required: false,
+      },
+      {
+        id: "phone2",
+        kind: "phone",
+        label: "Second contact's phone",
+        required: false,
+      },
+    ],
+  },
+  rules: {
+    title: "Trip rules",
+    preset: "rules",
+    visibleTo: "leaders",
+    requiredToJoin: true,
+    questions: [
+      {
+        id: "agree",
+        kind: "agree",
+        label: "I've read the trip rules and agree to follow them.",
+        help: "The rules are in the plan's write-up.",
+        required: true,
+      },
+    ],
+  },
+};
 
 // ── Compare-and-set ─────────────────────────────────────────────────
 
@@ -308,26 +548,33 @@ export type TripPlanSectionPatch = {
   body?: Cas<string>;
 };
 
+export type TripPlanFormPatch = {
+  title?: Cas<string>;
+  questions?: Cas<TripPlanQuestion[]>;
+  visibleTo?: Cas<TripPlanFormVisibility>;
+  requiredToJoin?: Cas<boolean>;
+};
+
 /** What the API answers when a compare-and-set finds the row changed. */
 export const TRIP_PLAN_CHANGED_SENTENCE = say`Not saved: someone else changed this. Check their change, then save yours again.`;
 
 // ── Validators: one per write shape, run by the API and by both clients ──
 
 /**
- * Why a write is refused: a sentence the person reads (400, or 413 for a
- * count over its cap), or a shape only a broken client sends, whose detail
+ * Why a write is refused: a sentence the person reads (400; 409 when what
+ * they saw has changed; 413 for a count over its cap), or a shape only a broken client sends, whose detail
  * never holds what the person wrote (it is logged).
  * Guard: tripPlans.test.ts ("never echoes").
  */
 export type TripPlanRefusal =
-  | { sentence: UserSentence; status: 400 | 413 }
+  | { sentence: UserSentence; status: 400 | 409 | 413 }
   | { malformed: string; status?: 413 };
 export type TripPlanParsed<T> = { value: T } | TripPlanRefusal;
 
 class Refused {
   constructor(readonly refusal: TripPlanRefusal) {}
 }
-function refuse(sentence: UserSentence, status: 400 | 413 = 400): never {
+function refuse(sentence: UserSentence, status: 400 | 409 | 413 = 400): never {
   throw new Refused({ sentence, status });
 }
 function bad(detail: string, status?: 413): never {
@@ -557,4 +804,275 @@ export function parseTripPlanOrder(
     if (new Set(ids).size !== ids.length) bad("ids repeats an id");
     return ids;
   });
+}
+
+const QUESTION_ID = /^[A-Za-z0-9_-]{1,40}$/;
+
+/** A question id an answer object can hold as its own key: not `__proto__`,
+ *  `toString` or anything else a plain object already has. */
+function questionId(value: unknown, what: string, seen: Set<string>): string {
+  const id = text(value, what);
+  if (!QUESTION_ID.test(id) || id in Object.prototype || seen.has(id))
+    bad(`${what} must be a unique slug`);
+  seen.add(id);
+  return id;
+}
+
+/** What a stale client is told: the form moved under the person answering. */
+export const TRIP_PLAN_FORM_CHANGED_SENTENCE = say`This form changed since you opened it. Check it, then answer again.`;
+function stale(): never {
+  refuse(TRIP_PLAN_FORM_CHANGED_SENTENCE, 409);
+}
+
+function formTitle(value: unknown): string {
+  const title = text(value, "title").trim();
+  if (!title) refuse(say`Give the form a title.`);
+  if (title.length > TRIP_PLAN_FORM_TITLE_MAX_LENGTH)
+    refuse(
+      say`A form's title can be up to ${TRIP_PLAN_FORM_TITLE_MAX_LENGTH} characters.`,
+    );
+  return title;
+}
+
+function visibility(value: unknown, what: string): TripPlanFormVisibility {
+  if (!isTripPlanFormVisibility(value)) bad(`${what} is not a visibility`);
+  return value;
+}
+
+function flag(value: unknown, what: string): boolean {
+  if (typeof value !== "boolean") bad(`${what} must be a boolean`);
+  return value;
+}
+
+function questionOptions(value: unknown): TripPlanQuestionOption[] {
+  if (!Array.isArray(value) || value.length < TRIP_PLAN_MIN_OPTIONS)
+    refuse(say`A choice needs at least ${TRIP_PLAN_MIN_OPTIONS} options.`);
+  if (value.length > TRIP_PLAN_MAX_OPTIONS)
+    refuse(say`A choice can have up to ${TRIP_PLAN_MAX_OPTIONS} options.`, 413);
+  const seen = new Set<string>();
+  return value.map((raw) => {
+    const option = record(raw, "option");
+    const id = questionId(option.id, "option.id", seen);
+    const label = text(option.label, "option.label").trim();
+    if (!label) refuse(say`Every option needs a label.`);
+    if (label.length > TRIP_PLAN_OPTION_LABEL_MAX_LENGTH)
+      refuse(
+        say`An option can be up to ${TRIP_PLAN_OPTION_LABEL_MAX_LENGTH} characters.`,
+      );
+    return { id, label };
+  });
+}
+
+function questions(value: unknown): TripPlanQuestion[] {
+  if (!Array.isArray(value) || value.length === 0)
+    refuse(say`A form needs at least one question.`);
+  if (value.length > TRIP_PLAN_MAX_QUESTIONS)
+    refuse(
+      say`A form can have up to ${TRIP_PLAN_MAX_QUESTIONS} questions.`,
+      413,
+    );
+  const seen = new Set<string>();
+  return value.map((raw) => {
+    const input = record(raw, "question");
+    const id = questionId(input.id, "question.id", seen);
+    if (!isTripPlanQuestionKind(input.kind)) bad("question.kind is not a kind");
+    const label = text(input.label, "question.label").trim();
+    if (!label) refuse(say`Every question needs a label.`);
+    if (label.length > TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH)
+      refuse(
+        say`A question can be up to ${TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH} characters.`,
+      );
+    const help =
+      input.help === undefined || input.help === null
+        ? ""
+        : text(input.help, "question.help").trim();
+    if (help.length > TRIP_PLAN_QUESTION_HELP_MAX_LENGTH)
+      refuse(
+        say`A question's hint can be up to ${TRIP_PLAN_QUESTION_HELP_MAX_LENGTH} characters.`,
+      );
+    const question: TripPlanQuestion = {
+      id,
+      kind: input.kind,
+      label,
+      required: flag(input.required, "question.required"),
+    };
+    if (help) question.help = help;
+    // Options belong to the two choice kinds; a builder that switched kind
+    // may still carry them, and they are dropped rather than refused.
+    if (input.kind === "choice" || input.kind === "multiChoice")
+      question.options = questionOptions(input.options);
+    else if (
+      Array.isArray(input.options) &&
+      input.options.length > TRIP_PLAN_MAX_OPTIONS
+    )
+      bad("question.options is over the cap", 413);
+    return question;
+  });
+}
+
+/** POST /plans/:id/forms. */
+export function parseTripPlanFormCreate(
+  body: unknown,
+): TripPlanParsed<Required<TripPlanFormCreate>> {
+  return checked(() => {
+    const input = record(body, "body");
+    const preset = input.preset ?? null;
+    if (preset !== null && !isTripPlanFormPresetId(preset))
+      bad("preset is not a preset");
+    return {
+      title: formTitle(input.title),
+      preset,
+      questions: questions(input.questions),
+      visibleTo: visibility(input.visibleTo, "visibleTo"),
+      requiredToJoin: flag(input.requiredToJoin, "requiredToJoin"),
+    };
+  });
+}
+
+/** PATCH /plans/:id/forms/:formId. */
+export function parseTripPlanFormPatch(
+  body: unknown,
+): TripPlanParsed<TripPlanFormPatch> {
+  return checked(() => {
+    const input = record(body, "body");
+    const patch: TripPlanFormPatch = {};
+    if (input.title !== undefined) {
+      const { from, to } = cas(input.title, "title");
+      patch.title = { from: text(from, "title.from"), to: formTitle(to) };
+    }
+    if (input.questions !== undefined) {
+      const { from, to } = cas(input.questions, "questions");
+      // `from` is what the server served, so it passes the same rules and
+      // comes out the same; one that doesn't could never match anyway.
+      patch.questions = { from: questions(from), to: questions(to) };
+    }
+    if (input.visibleTo !== undefined) {
+      const { from, to } = cas(input.visibleTo, "visibleTo");
+      patch.visibleTo = {
+        from: visibility(from, "visibleTo.from"),
+        to: visibility(to, "visibleTo.to"),
+      };
+    }
+    if (input.requiredToJoin !== undefined) {
+      const { from, to } = cas(input.requiredToJoin, "requiredToJoin");
+      patch.requiredToJoin = {
+        from: flag(from, "requiredToJoin.from"),
+        to: flag(to, "requiredToJoin.to"),
+      };
+    }
+    nothingToChange(patch);
+    return patch;
+  });
+}
+
+/**
+ * One answer, normalised; undefined when it says nothing (an empty string, no
+ * option ticked, an unticked agree box). A value that doesn't fit the
+ * question (a kind or option a leader has changed since the form was opened)
+ * is stale, not malformed: an up-to-date client sends it after a leader's edit.
+ * A value no kind takes at all (an object, a list of anything but strings)
+ * only a broken client sends: malformed.
+ */
+function answerValue(
+  question: TripPlanQuestion,
+  value: unknown,
+): TripPlanAnswerValue | undefined {
+  if (Array.isArray(value)) {
+    if (value.length > TRIP_PLAN_MAX_OPTIONS)
+      bad("an answer list is over the cap", 413);
+    if (value.some((item) => typeof item !== "string"))
+      bad("an answer list holds only strings");
+  } else if (!["string", "number", "boolean"].includes(typeof value))
+    bad("an answer is a string, a number, a boolean or a list of strings");
+  const optionIds = new Set(question.options?.map((option) => option.id));
+  switch (question.kind) {
+    case "text":
+    case "phone":
+    case "longText": {
+      if (typeof value !== "string") stale();
+      const answer = value.trim();
+      const max =
+        question.kind === "longText"
+          ? TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH
+          : TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH;
+      if (answer.length > max)
+        refuse(say`An answer can be up to ${max} characters.`);
+      return answer || undefined;
+    }
+    case "number":
+      if (typeof value !== "number") stale();
+      if (!Number.isInteger(value) || value < 0)
+        refuse(say`Answer with a whole number, 0 or more.`);
+      return value;
+    case "choice":
+      if (typeof value !== "string" || !optionIds.has(value)) stale();
+      return value;
+    case "multiChoice": {
+      if (!Array.isArray(value)) stale();
+      if ((value as string[]).some((id) => !optionIds.has(id))) stale();
+      const unique = [...new Set(value as string[])];
+      return unique.length ? unique : undefined;
+    }
+    case "yesNo":
+      if (typeof value !== "boolean") stale();
+      return value;
+    case "agree":
+      if (typeof value !== "boolean") stale();
+      return value || undefined;
+  }
+}
+
+/**
+ * PUT …/answers/me, and the answers a joiner gives. An answer to a question
+ * the form no longer has, or that no longer fits one, is a 409: the person
+ * answered the form as it was, and is asked to check it.
+ */
+export function parseTripPlanAnswers(
+  formQuestions: readonly TripPlanQuestion[],
+  value: unknown,
+): TripPlanParsed<TripPlanAnswers> {
+  return checked(() => {
+    const input = record(value, "answers");
+    const byId = new Map(formQuestions.map((q) => [q.id, q]));
+    for (const id of Object.keys(input)) if (!byId.has(id)) stale();
+    const answers: TripPlanAnswers = {};
+    for (const question of formQuestions) {
+      const raw = input[question.id];
+      const answer =
+        raw === undefined || raw === null
+          ? undefined
+          : answerValue(question, raw);
+      if (answer !== undefined) answers[question.id] = answer;
+      else if (question.required)
+        refuse(say`Answer every question marked required.`);
+    }
+    return answers;
+  });
+}
+
+/**
+ * A stored answer as the form now reads: values for questions since removed,
+ * or that no longer fit a question whose kind or options changed, are left
+ * out. Questions keep their answers when a leader edits the form, and a tick
+ * list keeps the ticks whose options are still there.
+ */
+export function currentTripPlanAnswers(
+  formQuestions: readonly TripPlanQuestion[],
+  stored: unknown,
+): TripPlanAnswers {
+  if (typeof stored !== "object" || stored === null || Array.isArray(stored))
+    return {};
+  const answers: TripPlanAnswers = {};
+  for (const question of formQuestions) {
+    const raw = (stored as Record<string, unknown>)[question.id];
+    if (raw === undefined || raw === null) continue;
+    const kept =
+      question.kind === "multiChoice" && Array.isArray(raw)
+        ? raw.filter((id) => question.options?.some((o) => o.id === id))
+        : raw;
+    const parsed = checked(() => answerValue(question, kept));
+    if ("value" in parsed && parsed.value !== undefined)
+      answers[question.id] = parsed.value;
+  }
+  return answers;
 }
