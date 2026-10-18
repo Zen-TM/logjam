@@ -392,17 +392,24 @@ describe("statewide slope and hillshade", () => {
     });
   });
 
-  it("offline: not drawn from any other saved clip", () => {
+  // Mutation: match the slope by `dem-region`, and offline the saved
+  // heights are coloured as if they were degrees.
+  it("offline: the slope from its own clips, the shade from none", () => {
     const saved = [
       artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
       artifact({ id: "d", kind: "dem-region", logicalKey: "nsw-5m" }),
+      artifact({ id: "s", kind: "slope-region", sourceType: "raster-dem" }),
     ];
-    for (const kind of ["nsw-slope", "nsw-hillshade"] as const)
-      expect(
-        resolveMapSource(
-          { kind },
-          ctx({ connectivity: "offline", artifacts: saved }),
-        ),
-      ).toMatchObject([{ status: "unavailable" }]);
+    const offline = ctx({ connectivity: "offline", artifacts: saved });
+    const slope = resolveMapSource({ kind: "nsw-slope" }, offline);
+    expect(slope).toHaveLength(1);
+    expect(slope[0]).toMatchObject({
+      status: "ok",
+      origin: "local",
+      sourceType: "raster-dem",
+    });
+    expect(resolveMapSource({ kind: "nsw-hillshade" }, offline)).toMatchObject([
+      { status: "unavailable" },
+    ]);
   });
 });

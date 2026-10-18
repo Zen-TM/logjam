@@ -4,6 +4,7 @@
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
 import { NSW_CONTOURS } from "./nswContours.js";
+import { NSW_SLOPE } from "./terrain.js";
 
 export type RegionBbox = {
   west: number;
@@ -351,23 +352,50 @@ const CONTOUR_TILE_BYTES: Record<
   14: { meanBytes: 24_000, p90Bytes: 28_000 },
 };
 
-export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
-  const { perZoom } = planRegionTiles(
-    bbox,
-    NSW_CONTOURS.minzoom,
-    NSW_CONTOURS.maxzoom,
-  );
+/**
+ * MEASURED bytes of one tile of the statewide slope (1° steps, PNG level 6),
+ * from every whole tile of the Katoomba sheet, one of the most rugged: so the
+ * mean is already a mountain figure. Zooms under 11 take z11's, as the sheet
+ * holds no whole tile there.
+ */
+const SLOPE_TILE_BYTES: Record<
+  number,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  8: { meanBytes: 39_000, p90Bytes: 64_000 },
+  9: { meanBytes: 39_000, p90Bytes: 64_000 },
+  10: { meanBytes: 39_000, p90Bytes: 64_000 },
+  11: { meanBytes: 39_000, p90Bytes: 64_000 },
+  12: { meanBytes: 40_000, p90Bytes: 58_000 },
+  13: { meanBytes: 42_000, p90Bytes: 53_000 },
+  14: { meanBytes: 36_000, p90Bytes: 45_000 },
+  15: { meanBytes: 28_000, p90Bytes: 33_000 },
+};
+
+function estimateStatewideClip(
+  bbox: RegionBbox,
+  archive: { minzoom: number; maxzoom: number },
+  tileBytes: Record<number, RegionSizeEstimate>,
+): RegionSizeEstimate {
+  const { perZoom } = planRegionTiles(bbox, archive.minzoom, archive.maxzoom);
   const bytes = (key: keyof RegionSizeEstimate) =>
-    perZoom.reduce(
-      (sum, { z, count }) => sum + count * CONTOUR_TILE_BYTES[z]![key],
-      0,
-    );
+    perZoom.reduce((sum, { z, count }) => sum + count * tileBytes[z]![key], 0);
   return { meanBytes: bytes("meanBytes"), p90Bytes: bytes("p90Bytes") };
+}
+
+export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_CONTOURS, CONTOUR_TILE_BYTES);
+}
+
+export function estimateSlopeClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_SLOPE, SLOPE_TILE_BYTES);
 }
 
 export interface MultiSourceRegionPlan {
   /** The contour clip: bytes only, like a DEM archive's. */
   contours: RegionSizeEstimate;
+  /** The slope clip, the same way. */
+  slope: RegionSizeEstimate;
   /**
    * DEM archive clips: cut by byte range from our own CDN, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
@@ -401,8 +429,8 @@ export interface MultiSourceRegionPlan {
  * goes offline — which is the trip the download exists for. Costing it into
  * these totals (rather than adding it silently later) is what keeps the size
  * estimate, the tile cap and the free-space check honest. So are the clips
- * of each DEM archive the area touches and of the statewide contours, which
- * every area saves too.
+ * of each DEM archive the area touches and of the statewide contours and
+ * slope, which every area saves too.
  */
 export function planRegionForBasemaps(
   bbox: RegionBbox,
@@ -411,6 +439,7 @@ export function planRegionForBasemaps(
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
 ): MultiSourceRegionPlan {
   const contours = estimateContourClip(bbox);
+  const slope = estimateSlopeClip(bbox);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const demArchives = planDemDownload(bbox).map((source) => {
     const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
@@ -447,9 +476,11 @@ export function planRegionForBasemaps(
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>
     [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
-    contours[key];
+    contours[key] +
+    slope[key];
   return {
     contours,
+    slope,
     perSource,
     demArchives,
     totalTiles,

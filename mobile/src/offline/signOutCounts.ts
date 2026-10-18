@@ -32,7 +32,10 @@ export async function countSignOutLosses(): Promise<SignOutCounts> {
     ]);
   const regionFiles = artifacts.filter(
     (artifact) =>
-      artifact.kind === "basemap-region" || artifact.kind === "dem-region",
+      artifact.kind === "basemap-region" ||
+      artifact.kind === "dem-region" ||
+      artifact.kind === "contours-region" ||
+      artifact.kind === "slope-region",
   );
   return {
     unsynced,

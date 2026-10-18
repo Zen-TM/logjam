@@ -86,13 +86,15 @@ export interface MapArtifact {
     | "dem-region"
     /** A clip of the statewide contours, saved with the basemap they draw on. */
     | "contours-region"
+    /** A clip of the statewide slope, saved the same way. */
+    | "slope-region"
     | "topo-overlay"
     | "geopdf-import"
     | "vector-import";
   /** basemapId | "<jobId>/<layer>" | importId */
   logicalKey: string;
   format: "pmtiles" | "mbtiles";
-  sourceType: "vector" | "raster";
+  sourceType: "vector" | "raster" | "raster-dem";
   /** Absolute app-private path, backup-excluded. */
   path: string;
   bbox: [number, number, number, number] | null;
@@ -415,9 +417,10 @@ export function resolveMapSource(
       return resolveTopoOverlay(ref, ctx);
     case "nsw-contours":
       return resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx);
-    // Nothing saves a clip of either yet, so offline neither draws.
     case "nsw-slope":
-      return resolveStatewide(NSW_SLOPE, "raster-dem", null, ctx);
+      return resolveStatewide(NSW_SLOPE, "raster-dem", "slope-region", ctx);
+    // A saved area's heights are z15 alone, the sampler's zoom, so offline a
+    // shade could only be drawn close in: none is saved.
     case "nsw-hillshade":
       return resolveStatewide(NSW_HILLSHADE, "raster-dem", null, ctx);
     case "geopdf-import":

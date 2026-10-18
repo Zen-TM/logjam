@@ -327,7 +327,7 @@ describe("runRegionClip", () => {
     expect(await settled(pending)).toEqual({ status: "cancelled" });
   });
 
-  // Mutations: drop a DEM or contour clip on any status and a CDN outage
+  // Mutations: drop a DEM, contour or slope clip on any status and a CDN outage
   // saves an area without them, unreported (the 503 line); report a missing
   // one and every area outside its coverage fails a map.
   it("leaves out a DEM or contour archive the CDN lacks, and only that", async () => {
@@ -336,6 +336,7 @@ describe("runRegionClip", () => {
     const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
     expect(await run(dem)).toEqual({ status: "cancelled" });
     expect(await run({ contours: true })).toEqual({ status: "cancelled" });
+    expect(await run({ slope: true })).toEqual({ status: "cancelled" });
     expect(await run()).toEqual({
       status: "failed",
       code: "source-unavailable",
@@ -350,6 +351,22 @@ describe("runRegionClip", () => {
       status: "failed",
       code: "unknown",
     });
+  });
+
+  // Mutation: file the slope clip as a raster, or under the basemap's key,
+  // and offline the map draws the terrarium PNGs as noise, or not at all.
+  it("files a slope clip as the DEM the map colours", async () => {
+    expect((await run({ slope: true })).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/dem/nsw-5m-slope.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "slope-region",
+        logicalKey: "nsw-5m-slope",
+        sourceType: "raster-dem",
+        minzoom: 8,
+      }),
+    );
   });
 
   // Mutation: save the clip of an area outside the archive and the first
