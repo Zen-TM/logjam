@@ -77,7 +77,7 @@ export const ICONS = {
   addFriend: { web: "user-plus", gps: "user-plus" },
   loading: { web: "loader", gps: "loader" },
   dragHandle: { web: "grip-vertical", gps: "mci:drag-vertical" },
-  archive: { web: "box", gps: "mci:archive-outline" }, // archive a plan, bring it back
+  archive: { web: "inbox", gps: "inbox" }, // archive a plan, bring it back: a tray, not moveCopy's box
   leave: { web: "door-open", gps: "mci:exit-run" }, // leave a plan
   print: { web: "printer", gps: "printer" },
 
@@ -107,7 +107,7 @@ export const ICONS = {
   place: { web: "map-pin", gps: "map-pin" },
   trip: { web: "book-open", gps: "book-open" },
   plan: { web: "clipboard-list", gps: "clipboard" }, // a trip plan, the Plans page
-  form: { web: "list-todo", gps: "mci:clipboard-text-outline" }, // a plan's form
+  form: { web: "text-cursor-input", gps: "mci:form-textbox" }, // a plan's form: a field to fill, not plan's clipboard or multiSelect's list
   saved: { web: "folder", gps: "folder" }, // Saved: everything kept on this phone
   route: { web: "route", gps: "mci:map-marker-path" },
   track: { web: "activity", gps: "activity" },

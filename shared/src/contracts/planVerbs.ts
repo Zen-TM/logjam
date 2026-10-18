@@ -1,8 +1,8 @@
 // A PLAN'S VERBS, declared once for both clients: the plan's own (its page's
-// ⋯), the ways in (Add ▾), and the verbs of a section, an item, a form and a
-// person in it. Who may run each is the API's rule (design §2): a verb the
-// caller's role cannot run is absent, never disabled (shared/DESIGN.md §5).
-// Never "Share" anywhere in a plan: what comes in is a copy (ADR 0016).
+// ⋯), the ways in (Add ▾), and a section's and a form's verbs. A verb the
+// caller's role, or the plan's state, cannot run is absent (shared/DESIGN.md
+// §5, §9); the API refuses the same (`requirePlanRole`, `requirePlanWrite`).
+// Guard: plans.test.ts ("a plan's verbs").
 import type { IconIdea } from "../icons.js";
 import type { TripPlanRole } from "../tripPlans.js";
 import type { ContractPlatform } from "./types.js";
@@ -13,6 +13,9 @@ type PlanVerbDeclaration = {
   label: string;
   /** The roles that may run it. */
   roles: readonly TripPlanRole[];
+  /** Still offered on an archived plan: it changes nothing in it. Every
+   *  other verb writes, and the API refuses it while archived. */
+  whenArchived?: true;
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
   reason?: string;
@@ -37,6 +40,7 @@ export const PLAN_VERBS = [
     icon: "print",
     label: "Print a summary",
     roles: ANY,
+    whenArchived: true,
     on: "web",
     reason: PRINT_ON_WEB,
   },
@@ -45,6 +49,7 @@ export const PLAN_VERBS = [
     icon: "trip",
     label: "Start a trip log from this plan",
     roles: ANY,
+    whenArchived: true,
   },
   {
     id: "archive",
@@ -58,6 +63,7 @@ export const PLAN_VERBS = [
     icon: "archive",
     label: "Bring back",
     roles: LEADERS,
+    whenArchived: true,
     separated: true,
   },
   {
@@ -65,6 +71,7 @@ export const PLAN_VERBS = [
     icon: "leave",
     label: "Leave plan",
     roles: ANY,
+    whenArchived: true,
     separated: true,
   },
   {
@@ -72,24 +79,21 @@ export const PLAN_VERBS = [
     icon: "delete",
     label: "Delete plan",
     roles: LEADERS,
+    whenArchived: true,
     danger: true,
     separated: true,
   },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
-/** Add ▾ on the plan's page, in menu order. */
+/** Add ▾ on the plan's page, in menu order. The same words are the buttons
+ *  an empty view and a list's end offer. */
 export const PLAN_ADD_VERBS = [
-  { id: "section", icon: "notes", label: "Section", roles: WRITERS },
-  {
-    id: "copy",
-    icon: "copy",
-    label: "A copy of something of yours",
-    roles: ANY,
-  },
+  { id: "section", icon: "notes", label: "Add a section", roles: WRITERS },
+  { id: "copy", icon: "copy", label: "Add a copy", roles: ANY },
   {
     id: "form",
     icon: "form",
-    label: "Form",
+    label: "Add a form",
     roles: LEADERS,
     on: "web",
     reason: FORMS_ON_WEB,
@@ -132,6 +136,14 @@ export const PLAN_FORM_VERBS = [
   },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
+/** Every plan verb list, for the guards that hold them all. */
+export const PLAN_VERB_LISTS = [
+  PLAN_VERBS,
+  PLAN_ADD_VERBS,
+  PLAN_SECTION_VERBS,
+  PLAN_FORM_VERBS,
+] as const;
+
 export type PlanVerbId = (typeof PLAN_VERBS)[number]["id"];
 export type PlanAddVerbId = (typeof PLAN_ADD_VERBS)[number]["id"];
 export type PlanSectionVerbId = (typeof PLAN_SECTION_VERBS)[number]["id"];
@@ -143,18 +155,28 @@ export type PlanVerb<Id extends string = string> = {
   label: string;
   danger: boolean;
   separated: boolean;
+  /** Offered but not yet runnable, and why (shared/DESIGN.md §5). */
+  disabledReason?: string;
 };
 
-/** One list's verbs a role may run on one client, in order. */
+/** One add verb's words, for a button that offers it outside the menu. */
+export function planAddVerbLabel(id: PlanAddVerbId): string {
+  return PLAN_ADD_VERBS.find((verb) => verb.id === id)!.label;
+}
+
+/** One list's verbs a role may run on one client, on a plan in this state. */
 export function planVerbsFor<D extends readonly PlanVerbDeclaration[]>(
   declarations: D,
   platform: ContractPlatform,
   role: TripPlanRole,
+  state: { archived: boolean },
 ): PlanVerb<D[number]["id"]>[] {
   return (declarations as readonly PlanVerbDeclaration[])
     .filter(
       (verb) =>
-        (verb.on == null || verb.on === platform) && verb.roles.includes(role),
+        (verb.on == null || verb.on === platform) &&
+        verb.roles.includes(role) &&
+        (!state.archived || verb.whenArchived),
     )
     .map((verb) => ({
       id: verb.id as D[number]["id"],
@@ -165,29 +187,36 @@ export function planVerbsFor<D extends readonly PlanVerbDeclaration[]>(
     }));
 }
 
+/** Why Start a trip log waits, while the trip is still ahead. */
+export const PLAN_TRIP_LOG_WAITS = "After the trip";
+
 /**
- * The plan's ⋯ for one caller: Archive or Bring back by its state, Start a
- * trip log once the trip is over, and every verb but Leave, Bring back and
- * Delete gone from an archived plan (design §9 O-8).
+ * The plan's ⋯ for one caller: Archive or Bring back by its state; Start a
+ * trip log disabled until the trip is over; Leave absent for the only person
+ * in the plan and for its only leader, whom the API refuses (they delete it,
+ * or make someone else a leader first).
  */
 export function planVerbs(
   platform: ContractPlatform,
   role: TripPlanRole,
-  state: { archived: boolean; over: boolean },
+  state: {
+    archived: boolean;
+    over: boolean;
+    alone: boolean;
+    soleLeader: boolean;
+  },
 ): PlanVerb<PlanVerbId>[] {
-  const stillWorks: readonly PlanVerbId[] = [
-    "print",
-    "tripLog",
-    "unarchive",
-    "leave",
-    "delete",
-  ];
-  return planVerbsFor(PLAN_VERBS, platform, role).filter(
-    (verb) =>
-      (verb.id !== "tripLog" || state.over) &&
-      verb.id !== (state.archived ? "archive" : "unarchive") &&
-      (!state.archived || stillWorks.includes(verb.id)),
-  );
+  return planVerbsFor(PLAN_VERBS, platform, role, state)
+    .filter(
+      (verb) =>
+        verb.id !== (state.archived ? "archive" : "unarchive") &&
+        (verb.id !== "leave" || (!state.alone && !state.soleLeader)),
+    )
+    .map((verb) =>
+      verb.id === "tripLog" && !state.over
+        ? { ...verb, disabledReason: PLAN_TRIP_LOG_WAITS }
+        : verb,
+    );
 }
 
 // ── Confirms: what goes, what stays, counted ────────────────────────

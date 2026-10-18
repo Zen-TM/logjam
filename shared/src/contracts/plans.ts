@@ -3,12 +3,15 @@
 // GPS's plans screens. A plan's verbs are `planVerbs.ts`; the wire shapes,
 // limits and presets are `../tripPlans.ts`.
 import type { IconIdea } from "../icons.js";
-import type {
-  DateOnly,
-  TripPlanFormView,
-  TripPlanFormVisibility,
-  TripPlanRole,
-  TripPlanSummary,
+import {
+  TRIP_PLAN_INVITE_TTL_DAYS,
+  TRIP_PLAN_ROLES,
+  type DateOnly,
+  type TripPlanFormView,
+  type TripPlanFormVisibility,
+  type TripPlanMemberStatus,
+  type TripPlanRole,
+  type TripPlanSummary,
 } from "../tripPlans.js";
 import type { ScreenContract } from "./types.js";
 
@@ -100,6 +103,14 @@ export function tripPlanIsOver(
   return last != null && last < today;
 }
 
+/** The first day a plan covers: its start, else its end, else none. */
+function firstDay(plan: {
+  startDate: DateOnly | null;
+  endDate: DateOnly | null;
+}): DateOnly | null {
+  return plan.startDate ?? plan.endDate;
+}
+
 /**
  * A bucket's rows in order: the soonest trip first while it is coming, the
  * newest first once it is over or put away. A plan with no dates sorts last.
@@ -112,7 +123,7 @@ export function sortTripPlans<T extends TripPlanSummary>(
     a === b ? 0 : a == null ? 1 : b == null ? -1 : a < b ? -dir : dir;
   return [...plans].sort((a, b) =>
     bucket === "upcoming"
-      ? byDate(a.startDate, b.startDate, 1)
+      ? byDate(firstDay(a), firstDay(b), 1)
       : bucket === "past"
         ? byDate(lastDay(a), lastDay(b), -1)
         : byDate(a.archivedAt, b.archivedAt, -1),
@@ -235,25 +246,35 @@ export function tripPlansBadgeCount(
 }
 
 /**
- * Logjam GPS's hero: the next trip, else that nothing is planned. Logjam
- * Web's hero is `TRIP_PLANS_LIST.title`: its chips show the counts.
+ * Logjam GPS's hero: a trip under way ("On now: …"), else the next one, else
+ * that nothing is planned. Only plans the caller is in, and only dated ones:
+ * an undated plan has no "next". Logjam Web's hero is
+ * `TRIP_PLANS_LIST.title`: its chips show the counts.
  */
 export function tripPlansHeroTitle(
   plans: readonly TripPlanSummary[],
   today: DateOnly,
   thisYear?: number,
 ): string {
-  const next = sortTripPlans(
+  if (plans.length === 0) return TRIP_PLANS_LIST.copy.firstRunTitle;
+  const coming = sortTripPlans(
     plans.filter(
       (plan) =>
         plan.status === "active" &&
-        tripPlanBucket(plan, today) === "upcoming" &&
-        plan.startDate != null,
+        firstDay(plan) != null &&
+        tripPlanBucket(plan, today) === "upcoming",
     ),
     "upcoming",
-  )[0];
-  if (!next) return plans.length === 0 ? "No plans yet" : "Nothing planned";
-  return `Next: ${next.name}, ${tripPlanDayLabel(next.startDate!, thisYear)}`;
+  );
+  const now = coming.find((plan) => firstDay(plan)! <= today);
+  if (now) return `On now: ${now.name}`;
+  const next = coming[0];
+  if (!next) return "Nothing planned";
+  return `Next: ${next.name}, ${
+    next.startDate
+      ? tripPlanDayLabel(next.startDate, thisYear)
+      : `until ${tripPlanDayLabel(next.endDate!, thisYear)}`
+  }`;
 }
 
 // ── A plan's page ───────────────────────────────────────────────────
@@ -302,13 +323,11 @@ export const TRIP_PLAN_PAGE = {
 
     // The write-up.
     writeUpEmpty: "Nothing written yet.",
-    addSection: "Add a section",
     sectionTitle: "Section",
     sectionTitleField: "Title",
     sectionBody: "Text",
     sectionSuggestions: "Suggestions",
     sectionSave: "Save",
-    sectionAdd: "Add section",
     sectionSaveFailed: "Couldn't save the section.",
     sectionMoveFailed: "Couldn't move the section.",
     sectionDeleteFailed: "Couldn't delete the section.",
@@ -326,7 +345,6 @@ export const TRIP_PLAN_PAGE = {
     formsEmptyLeader:
       "No forms yet. Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
     formsEmpty: "No forms yet.",
-    addForm: "Add a form",
     pillRequired: "Required to join",
     pillNotAnswered: "Not answered",
     seenByLeaders: "Leaders see answers",
@@ -341,7 +359,6 @@ export const TRIP_PLAN_PAGE = {
     peopleAsking: "Asking to join",
     peopleGoing: "Going",
     peopleInvited: "Invited",
-    invitePeople: "Invite people",
     letIn: "Let in",
     turnDown: "Turn down",
     seeAnswers: "See answers",
@@ -373,20 +390,56 @@ export function tripPlanNotice(args: {
   unansweredRequired: Pick<TripPlanFormView, "id" | "title"> | null;
   over: boolean;
 }):
-  | { kind: "archived"; text: string }
-  | { kind: "answer"; text: string; formId: string }
-  | { kind: "over"; text: string }
+  | { kind: "archived"; icon: IconIdea; text: string }
+  | { kind: "answer"; icon: IconIdea; text: string; formId: string }
+  | { kind: "over"; icon: IconIdea; text: string }
   | null {
   const copy = TRIP_PLAN_PAGE.copy;
-  if (args.archived) return { kind: "archived", text: copy.noticeArchived };
+  if (args.archived)
+    return { kind: "archived", icon: "archive", text: copy.noticeArchived };
   if (args.unansweredRequired)
     return {
       kind: "answer",
+      icon: "form",
       text: `Answer "${args.unansweredRequired.title}" for the leaders.`,
       formId: args.unansweredRequired.id,
     };
-  if (args.over) return { kind: "over", text: copy.noticeOver };
+  if (args.over) return { kind: "over", icon: "trip", text: copy.noticeOver };
   return null;
+}
+
+/** Who's going: active members, leaders first, then editors, then members,
+ *  each group in the order they were added. */
+export function tripPlanGoing<
+  M extends { role: TripPlanRole; status: TripPlanMemberStatus },
+>(members: readonly M[]): M[] {
+  return members
+    .filter((member) => member.status === "active")
+    .sort(
+      (a, b) =>
+        TRIP_PLAN_ROLES.indexOf(a.role) - TRIP_PLAN_ROLES.indexOf(b.role),
+    );
+}
+
+/** Whether the API would refuse the caller's Leave: the only person in the
+ *  plan deletes it instead; its only leader makes someone else one first. */
+export function tripPlanLeaveState(plan: {
+  myRole: TripPlanRole;
+  members: readonly { role: TripPlanRole; status: TripPlanMemberStatus }[];
+}): { alone: boolean; soleLeader: boolean } {
+  const going = plan.members.filter((member) => member.status === "active");
+  const leaders = going.filter((member) => member.role === "leader").length;
+  return {
+    alone: going.length <= 1,
+    soleLeader: plan.myRole === "leader" && leaders <= 1,
+  };
+}
+
+/** "Added by tom", or nothing once the adder's account is gone. */
+export function tripPlanAddedByLine(
+  addedBy: { username: string } | null,
+): string | undefined {
+  return addedBy ? `Added by ${addedBy.username}` : undefined;
 }
 
 /** The dates line: dates · trip types · the caller's role (a member's says nothing). */
@@ -445,14 +498,28 @@ export const TRIP_PLAN_JOIN = {
     joinFailed: "Couldn't join the plan.",
     linkFailed: "This invite link no longer works. Ask for a new one.",
     signIn: "A trip invite is waiting. Create an account or sign in to see it.",
+  },
+} as const satisfies ScreenContract;
 
-    // The leader's side: inviting.
-    inviteTitle: "Invite people",
+/** A leader inviting people: by username, or by a link, which they can turn
+ *  off. A step inside the plan page's People. */
+export const TRIP_PLAN_INVITE = {
+  id: "plans.invite",
+  question: "Who else should come, and how do they get in?",
+  sections: [
+    // The username search and the role they will get.
+    { key: "search" },
+    // Or a link: the hint, Copy and Share, then the live links.
+    { key: "link" },
+  ],
+  copy: {
+    title: "Invite people",
     searchField: "Search by username",
     role: "Role",
     inviteSend: "Invite",
     invited: "Invited.",
     inviteFailed: "Couldn't invite them.",
+    linkHint: `Or send a link. Anyone with the link can ask to join. A leader lets each person in. It works for ${TRIP_PLAN_INVITE_TTL_DAYS} days.`,
     linkCopy: "Copy invite link",
     linkShare: "Share invite link",
     linkCopied: "Invite link copied.",
@@ -461,6 +528,9 @@ export const TRIP_PLAN_JOIN = {
     linkRevoke: "Turn off",
     linkRevoked: "That link no longer works.",
     linkRevokeFailed: "Couldn't turn off the link.",
+    linksLive: "Links that work",
+    inPlan: "In this plan",
+    searchFailed: "Couldn't search users.",
   },
 } as const satisfies ScreenContract;
 
@@ -477,12 +547,13 @@ export function tripPlanInviteMessage(planName: string, url: string): string {
 /**
  * What "Start a trip log from this plan" puts in the real trip form: the
  * first day, the name, the types, and the write-up as notes ("Title", a blank
- * line, the text, for each section). The places are picked in a step of their
+ * line, the text, for each section that has any). The places are picked in a step of their
  * own, since each is saved as the caller's copy first.
  */
 export function tripPlanTripLogPrefill(plan: {
   name: string;
   startDate: DateOnly | null;
+  endDate: DateOnly | null;
   tripTypes: readonly string[];
   sections: readonly { title: string; body: string }[];
 }): {
@@ -492,13 +563,13 @@ export function tripPlanTripLogPrefill(plan: {
   notes: string;
 } {
   return {
-    date: plan.startDate,
+    date: plan.startDate ?? plan.endDate,
     displayName: plan.name,
     types: [...plan.tripTypes],
+    // An empty section (every plan starts with Overview) says nothing.
     notes: plan.sections
-      .map((section) =>
-        section.body ? `${section.title}\n\n${section.body}` : section.title,
-      )
+      .filter((section) => section.body)
+      .map((section) => `${section.title}\n\n${section.body}`)
       .join("\n\n"),
   };
 }

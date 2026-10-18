@@ -14,7 +14,12 @@ import { TRIP_PAGE } from "./tripPage.js";
 import { TRIPS_ADD, TRIPS_FILTER_SHEET, TRIPS_LIST } from "./tripLogs.js";
 import { PLACES_FILTER_SHEET } from "./placesFilterSheet.js";
 import { PLACES_ADD, PLACES_LIST } from "./placesList.js";
-import { TRIP_PLANS_LIST, TRIP_PLAN_JOIN, TRIP_PLAN_PAGE } from "./plans.js";
+import {
+  TRIP_PLANS_LIST,
+  TRIP_PLAN_INVITE,
+  TRIP_PLAN_JOIN,
+  TRIP_PLAN_PAGE,
+} from "./plans.js";
 import type { ScreenContract } from "./types.js";
 
 export * from "./types.js";
@@ -66,4 +71,5 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   TRIP_PLANS_LIST,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_JOIN,
+  TRIP_PLAN_INVITE,
 ];

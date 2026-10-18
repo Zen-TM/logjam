@@ -99,7 +99,8 @@ export const SCRIM = {
 export const ON_SCRIM = "#FFFFFF";
 
 /**
- * Per-kind identity hues for map material and the things you draw on it.
+ * Per-kind identity hues for map material, the things you draw on it, and
+ * the things that gather them (a trip plan).
  * Mid-light and muted, drawn from the NSW place palette (rock, scrub, water,
  * heath) — never a saturated web primary. Downloaded basemap REGIONS take the
  * scheme's accent instead, so they are not here.
