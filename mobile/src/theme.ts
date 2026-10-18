@@ -302,6 +302,15 @@ export const textRoles = Object.fromEntries(
   }),
 ) as TextRoles;
 
+/**
+ * Inline emphasis inside a role's text (a maintainer announcement's **bold**
+ * and `code`): a weight and a face, never a size, so the run keeps its role's.
+ */
+export const inlineText = {
+  strong: { fontWeight: fontWeight.bold },
+  code: { fontFamily: "monospace" },
+} as const;
+
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
 export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";
 

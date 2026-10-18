@@ -9,7 +9,9 @@
 // Saved" / "View in Friends" is the SAME idea for a notification whose subject
 // lives in a tab rather than on a screen of its own — where that is, and
 // whether there is one at all, is `notificationDestination.ts`; the two never
-// both appear, because a place share is the only kind with an Open. Read/
+// both appear, because a place share is the only kind with an Open. "Read
+// message" is the row's tap on a maintainer announcement, for the same
+// reason Open is repeated, and stands alone on its kind too. Read/
 // unread is ONE row whose direction follows the notification's current state.
 // Delete is last and warning-hued, as everywhere else.
 //
@@ -30,6 +32,7 @@ import {
 import { spacing, useTheme } from "../theme";
 import { BottomSheet, closedSheet, Row } from "../ui";
 import {
+  notificationAnnouncement,
   notificationDeleteConfirm,
   notificationLabel,
   notificationPlaceId,
@@ -40,7 +43,9 @@ export function NotificationOptionsSheet({
   notification,
   visible,
   onClose,
+  onClosed,
   onOpen,
+  onReadMessage,
   onView,
   onSetRead,
   onDelete,
@@ -48,9 +53,15 @@ export function NotificationOptionsSheet({
   notification: TNotification | null;
   visible: boolean;
   onClose: () => void;
+  onClosed?: () => void;
   /** Follow the notification through to the thing it is about. */
   onOpen: (notification: TNotification) => void;
   /** Go to the tab its subject lives in, with that row pulsed on arrival. */
+  /**
+   * Open a maintainer announcement. The message is a sheet of its own, which
+   * cannot open over this one: park it here and open it from `onClosed`.
+   */
+  onReadMessage: (notification: TNotification) => void;
   onView: (
     notification: TNotification,
     destination: NotificationDestination,
@@ -65,6 +76,7 @@ export function NotificationOptionsSheet({
   const label = notificationLabel(notification);
   const openable = notificationPlaceId(notification) !== null;
   const destination = notificationDestination(notification);
+  const message = notificationAnnouncement(notification) !== null;
 
   const act = (run: () => void) => {
     onClose();
@@ -91,13 +103,25 @@ export function NotificationOptionsSheet({
     );
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={label.text}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      onClosed={onClosed}
+      title={label.text}
+    >
       <View style={styles.body}>
         {openable ? (
           <Row
             icon={notificationVerb("open").icon}
             title={notificationVerb("open").label}
             onPress={() => act(() => onOpen(notification))}
+          />
+        ) : null}
+        {message ? (
+          <Row
+            icon={notificationVerb("readMessage").icon}
+            title={notificationVerb("readMessage").label}
+            onPress={() => act(() => onReadMessage(notification))}
           />
         ) : null}
         {destination ? (

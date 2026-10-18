@@ -226,7 +226,10 @@ type SavedStackParams = {
 
 type MoreStackParams = {
   MoreHome: undefined;
-  Inbox: undefined;
+  // A tapped announcement push opens its message over the inbox.
+  Inbox:
+    | { openAnnouncement?: { announcementId: string; nonce: number } }
+    | undefined;
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
@@ -885,11 +888,22 @@ export function AppShell({
         // left to do here". The unread list is the queue of things the user
         // still has to deal with, and emptying it on the strength of a
         // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it.
+        // Opening the row is what reads it, and an announcement push opens its
+        // message, the row opened for the user.
         if (target.kind === "place") {
           nav.navigate("Places", {
             screen: "PlaceDetail",
             params: { placeId: target.placeId, name: "Place" },
+          });
+        } else if (target.kind === "announcement") {
+          nav.navigate("More", {
+            screen: "Inbox",
+            params: {
+              openAnnouncement: {
+                announcementId: target.announcementId,
+                nonce: Date.now(),
+              },
+            },
           });
         } else {
           // Inbox lives inside the More stack.
@@ -1075,8 +1089,9 @@ export function AppShell({
                     name="Inbox"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <NotificationsScreen
+                        openAnnouncement={route.params?.openAnnouncement}
                         onBack={() => navigation.goBack()}
                         onUnreadChanged={refreshUnread}
                         // A share notification is a way in to the place it is

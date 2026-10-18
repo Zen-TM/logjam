@@ -32,6 +32,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -58,6 +59,7 @@ import {
   messageFromError,
   newestNotificationsFirst,
   notificationActions,
+  notificationAnnouncement,
   notificationDeleteConfirm,
   notificationHaystack,
   notificationLabel,
@@ -86,6 +88,7 @@ import {
   type BatchFileActionProgress,
 } from "../notifications/batchFileAction";
 import type { NotificationDestination } from "../notifications/notificationDestination";
+import { AnnouncementSheet } from "../notifications/AnnouncementSheet";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -235,6 +238,7 @@ export function NotificationsScreen({
   onOpenPlace,
   onOpenSaved,
   onOpenFriends,
+  openAnnouncement,
 }: {
   onBack: () => void;
   onUnreadChanged?: () => void;
@@ -247,6 +251,11 @@ export function NotificationsScreen({
    */
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
+  /**
+   * A tapped announcement push: open that message once its row is in the
+   * list. `nonce` so tapping the same push twice opens it twice.
+   */
+  openAnnouncement?: { announcementId: string; nonce: number };
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -273,6 +282,10 @@ export function NotificationsScreen({
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
    *  live list, so a refetch can't leave the sheet holding a stale copy. */
   const [menuId, setMenuId] = useState<string | null>(null);
+  /** Which announcement's message sheet is open, by notification id. */
+  const [messageId, setMessageId] = useState<string | null>(null);
+  /** "Read message" from the ⋯ sheet, opened once that sheet has closed. */
+  const parkedMessage = useRef<TNotification | null>(null);
   // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
@@ -789,15 +802,34 @@ export function NotificationsScreen({
   );
 
   // Reading it is what marks it read, so both happen on one tap; the place
-  // then opens on top.
+  // or the message then opens on top.
   const openNotification = useCallback(
     (n: TNotification) => {
       void markRead(n);
       const placeId = notificationPlaceId(n);
       if (placeId) onOpenPlace(placeId);
+      else if (notificationAnnouncement(n)) setMessageId(n.id);
     },
     [markRead, onOpenPlace],
   );
+
+  // The push named the announcement, not the row, and the cache may not hold
+  // it yet: the message opens once the live fetch brings its row. A
+  // retracted one never arrives, and the inbox is where the tap lands.
+  const openedNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openAnnouncement || openedNonce.current === openAnnouncement.nonce) {
+      return;
+    }
+    const row = query.notifications.find(
+      (n) =>
+        notificationAnnouncement(n)?.id === openAnnouncement.announcementId,
+    );
+    if (!row) return;
+    openedNonce.current = openAnnouncement.nonce;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, and only once the fetch has its row
+    openNotification(row);
+  }, [openAnnouncement, query.notifications, openNotification]);
 
   /**
    * "View in Saved" / "View in Friends" — the other half of a notification
@@ -1055,10 +1087,24 @@ export function NotificationsScreen({
         notification={notifications.find((n) => n.id === menuId) ?? null}
         visible={menuId !== null}
         onClose={() => setMenuId(null)}
+        onClosed={() => {
+          const parked = parkedMessage.current;
+          parkedMessage.current = null;
+          if (parked) openNotification(parked);
+        }}
         onOpen={openNotification}
+        onReadMessage={(n) => {
+          parkedMessage.current = n;
+        }}
         onView={viewNotification}
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
+      />
+
+      <AnnouncementSheet
+        notification={notifications.find((n) => n.id === messageId) ?? null}
+        visible={messageId !== null}
+        onClose={() => setMessageId(null)}
       />
 
       <BottomSheet
