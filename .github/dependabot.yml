@@ -84,10 +84,6 @@ updates:
       # TypeScript 7: see /api. Tracked in #155.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # @types/node must not run ahead of the Node the tooling runs on (22).
-      # Tracked in #229.
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/infra/lambda/cognito-email-sender"
@@ -101,7 +97,8 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # @types/node must not run ahead of the Lambda's nodejs22.x runtime.
+    # The Lambda runs nodejs22.x: its nodejs26.x successor is a public preview
+    # runtime, so @types/node stays on 22.
     # Tracked in #229.
     ignore:
       - dependency-name: "@types/node"
@@ -230,10 +227,6 @@ updates:
       # The SDK pins TypeScript too (6.0 for SDK 57); TypeScript 7 is tracked
       # in #155.
       - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      # @types/node must not run ahead of the Node the tooling runs on.
-      # Tracked in #229.
-      - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
