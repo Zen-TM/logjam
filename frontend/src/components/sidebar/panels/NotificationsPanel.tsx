@@ -189,6 +189,9 @@ function NotificationsPanel({
   );
   const [confirming, setConfirming] = useState(false);
   const [messageOf, setMessageOf] = useState<TNotification | null>(null);
+  // Where focus goes once a closed message's row has left the list: a row id,
+  // or null for the page's title.
+  const refocus = useRef<{ rowId: string | null } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Refetch on every open — notifications are otherwise only fetched at boot, so
@@ -354,8 +357,8 @@ function NotificationsPanel({
   );
 
   // Reading it is what marks it read; a place it is about opens on top. A
-  // message is read once its dialog closes: marked on open, its row would leave
-  // the Unread bucket under the dialog, and focus would have nowhere to return.
+  // message is read once its dialog closes (`closeMessage`), so its row is
+  // still there while it is open.
   const openNotification = (n: TNotification) => {
     if (notificationAnnouncement(n)) {
       setMessageOf(n);
@@ -368,6 +371,36 @@ function NotificationsPanel({
       setActivePanel("place-detail");
     }
   };
+
+  // In Unread, the read row leaves as the dialog closes and takes the focus
+  // the dialog hands back with it: the row that takes its place gets it, else
+  // the previous one, else the page's title (NotificationsPanel.test.tsx).
+  const closeMessage = () => {
+    if (messageOf && !messageOf.read) {
+      void setRead([messageOf.id], true);
+      if (bucket === "unread") {
+        const i = rowIds.indexOf(messageOf.id);
+        refocus.current = { rowId: rowIds[i + 1] ?? rowIds[i - 1] ?? null };
+      }
+    }
+    setMessageOf(null);
+  };
+
+  // After the dialog's own restore, which runs as it unmounts.
+  useEffect(() => {
+    const to = refocus.current;
+    const root = rootRef.current;
+    if (messageOf || !to || !root) return;
+    refocus.current = null;
+    const target = to.rowId
+      ? root.querySelector<HTMLElement>(
+          // The row's open button: its checkbox is the button with a role.
+          `[data-row-id="${CSS.escape(to.rowId)}"] button:not([role])`,
+        )
+      : root.querySelector<HTMLElement>("h2");
+    if (target && !to.rowId) target.tabIndex = -1;
+    target?.focus();
+  }, [messageOf]);
 
   // Following a notification through to its subject reads it, as opening does.
   const goTo = (n: TNotification, destination: InboxDestination) => {
@@ -722,6 +755,7 @@ function NotificationsPanel({
     return (
       <Row
         key={row.id}
+        data-row-id={row.id}
         className={member ? classes.member : undefined}
         title={title}
         subtitle={subtitle || undefined}
@@ -1011,10 +1045,7 @@ function NotificationsPanel({
       />
       <AnnouncementDialog
         message={messageOf && notificationAnnouncement(messageOf)}
-        onClose={() => {
-          if (messageOf && !messageOf.read) void setRead([messageOf.id], true);
-          setMessageOf(null);
-        }}
+        onClose={closeMessage}
       />
     </div>
   );
