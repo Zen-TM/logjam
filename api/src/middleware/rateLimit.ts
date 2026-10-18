@@ -131,8 +131,9 @@ export const ropeWikiHeavyLimiter = rateLimit({
 // of the archive from S3 (under a second against a local copy; not timed in
 // prod, where the route kills it at 25 s), a temporary file of 1 to 7 MB in the bush and 80 MB at the very most, deleted
 // within two minutes, and that many bytes sent back. Cheap, so the limit is
-// set by the honest case, not the cost: Logjam GPS asks for one clip with
-// every area a signed-in user saves, and nobody frames, names and saves an
+// set by the honest case, not the cost: a Logjam GPS build older than the
+// phone-cut clips (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md)
+// asks for one clip with every area a signed-in user saves, and nobody frames, names and saves an
 // area a minute for an hour. It stays a limit because the worst case is not
 // free: 60 clips of 80 MB is about 5 GB of egress an hour per account.
 // Guard: `rateLimit.unit.test.ts` ("regionClipLimiter").

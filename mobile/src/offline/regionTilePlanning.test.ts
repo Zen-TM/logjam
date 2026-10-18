@@ -7,10 +7,9 @@ import {
   exhaustedTileOutcome,
   regionPlanHash,
   regionTileSequence,
-  savesVectorOnly,
+  regionClipSpecs,
   settledStop,
   tileUrlFrom,
-  vectorClipFor,
 } from "./regionTilePlanning";
 
 const BBOX = { west: 150.26, south: -33.745, east: 150.368, north: -33.655 };
@@ -109,23 +108,31 @@ describe("deadTileBudget", () => {
   });
 });
 
-// Mutation: return "include" for a guest and the first line goes red; the
-// download screen then enqueues an authed clip request a guest cannot make.
-describe("vectorClipFor", () => {
-  it("rides along for a signed-in user, never for a guest", () => {
-    expect(vectorClipFor(false)).toBe("include");
-    expect(vectorClipFor(true)).toBe("none");
-  });
-});
-
-// Mutation: ignore the clip and the second line goes red. A guest who
-// deselects the only map then reads "Detailed map only" under the note saying
-// the detailed map needs an account.
-describe("savesVectorOnly", () => {
-  it("is the vector map with no raster picked, and never a save without it", () => {
-    expect(savesVectorOnly("include", 0)).toBe(true);
-    expect(savesVectorOnly("none", 0)).toBe(false);
-    expect(savesVectorOnly("include", 1)).toBe(false);
+describe("regionClipSpecs", () => {
+  // Mutation: drop the contours or the vector map from the list and this goes
+  // red: a saved area is then blank offline, with tools that draw straight
+  // lines. That the screen enqueues this list for every account has no guard.
+  it("gives every area the DEM archives, the contours and the vector map", () => {
+    const run = {
+      bbox: BBOX,
+      groupId: "g",
+      groupLabel: "Area",
+      allowCellular: false,
+    };
+    let n = 0;
+    const specs = regionClipSpecs(run, ["nsw-5m"], (basemapId) => ({
+      id: `id${n++}`,
+      label: basemapId,
+    }));
+    expect(specs.map((s) => [s.basemapId, s.demSourceId, s.contours])).toEqual([
+      ["nsw-5m", "nsw-5m", undefined],
+      ["nsw-contours", undefined, true],
+      ["protomaps", undefined, undefined],
+    ]);
+    for (const spec of specs) {
+      expect(spec).toMatchObject({ taskKind: "clip", ...run });
+    }
+    expect(new Set(specs.map((s) => s.id)).size).toBe(3);
   });
 });
 

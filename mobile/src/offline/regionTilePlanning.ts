@@ -5,9 +5,14 @@
 //
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
-import { type RegionBbox, type RegionTilePlan } from "@logjam/shared";
+import {
+  NSW_CONTOURS,
+  type RegionBbox,
+  type RegionTilePlan,
+} from "@logjam/shared";
 
 import { hashKey } from "../map/sourceResolver";
+import type { RegionClipSpec } from "./regionDownloads";
 
 /** Plan order: zoom ascending, then row-major within a level. */
 export function regionTileSequence(
@@ -60,30 +65,35 @@ export function tileUrlFrom(
 }
 
 /**
- * Does the vector map come with this area?
- *
- * It rides along with every region a signed-in user saves, as the DEM does:
- * it is a few megabytes, and without it the Vector map is blank out there and
- * the route and measure tools stop snapping to tracks. A guest cannot have it
- * (the clip is cut by an authed API call). No area is larger than the clip
- * endpoint cuts: `checkRegionCaps` refuses it for everyone.
- * Guard: `regionTilePlanning.test.ts` ("vectorClipFor").
+ * The clips every saved area carries, whoever saves it: one of each DEM
+ * archive the area touches, the statewide contours, and the vector map. They
+ * cost a few to a few tens of megabytes, and without them the Vector map is blank out
+ * there, the route and measure tools stop snapping to tracks and a height
+ * comes from the coarse worldwide tiles. A guest has them too: each is cut on
+ * the phone from a public archive, with no call to Logjam's API
+ * (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md).
+ * Guard: `regionTilePlanning.test.ts` ("regionClipSpecs").
  */
-export function vectorClipFor(isGuest: boolean): "include" | "none" {
-  return isGuest ? "none" : "include";
-}
-
-/**
- * Is the vector map the whole save? The Detail caption then says so instead of
- * quoting a pixel scale no raster will have. Never true without the clip: a
- * guest with no map picked is saving nothing, not the detailed map.
- * Guard: `regionTilePlanning.test.ts` ("savesVectorOnly").
- */
-export function savesVectorOnly(
-  vectorClip: "include" | "none",
-  pyramids: number,
-): boolean {
-  return vectorClip === "include" && pyramids === 0;
+export function regionClipSpecs(
+  run: Pick<
+    RegionClipSpec,
+    "bbox" | "groupId" | "groupLabel" | "allowCellular"
+  >,
+  demSourceIds: readonly string[],
+  job: (basemapId: string) => { id: string; label: string },
+): ({ taskKind: "clip" } & RegionClipSpec)[] {
+  const clip = (basemapId: string, extra: Partial<RegionClipSpec> = {}) => ({
+    taskKind: "clip" as const,
+    ...job(basemapId),
+    basemapId,
+    ...run,
+    ...extra,
+  });
+  return [
+    ...demSourceIds.map((id) => clip(id, { demSourceId: id })),
+    clip(NSW_CONTOURS.id, { contours: true }),
+    clip("protomaps"),
+  ];
 }
 
 /**

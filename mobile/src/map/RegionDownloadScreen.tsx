@@ -16,10 +16,10 @@
 // (see regionFrame.ts).
 //
 // PRIVACY: the framed bbox exists in component state and goes to the provider as
-// tile coordinates only. The one place it reaches the Logjam API is the body of
-// the vector clip request, which every signed-in save now makes
-// (offline/regionDownloads.ts; the API redacts it from logs and keeps the clip
-// 120 s). A guest's save makes no Logjam request at all.
+// tile coordinates only, and to our CDN as byte ranges of public archives
+// (offline/regionDownloads.ts). A save makes no Logjam API request at all.
+// Guard: offline/regionDownloads.test.ts ("cuts the clip from the CDN, asking
+// for nothing but byte ranges").
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -51,7 +51,6 @@ import {
 
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
-import { useAccountState } from "../auth/AccountStateContext";
 import { spacing, makeStyles, muted } from "../theme";
 import {
   BottomSheet,
@@ -71,7 +70,7 @@ import {
 import { placeRegistryWithRegion } from "../offline/placeRegistry";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
-import { savesVectorOnly, vectorClipFor } from "../offline/regionTilePlanning";
+import { regionClipSpecs } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -100,7 +99,7 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * worse than no affordance.
  *
  * `protomaps`, our own vector basemap, is not a choice here: it comes with
- * every area a signed-in user saves (`vectorClipFor`). It is a few megabytes
+ * every area anyone saves (`regionClipSpecs`). It is a few megabytes
  * against tens for one raster, and the route and measure tools snap to it, so
  * leaving it optional would mean a tool that quietly stops working in the field.
  */
@@ -168,8 +167,8 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  * button) have a fixed shape, the connection confirmation is a dialog at the
  * Save tap, and warnings overlay the map, so the panel does not scroll.
  *
- * That includes the one line under the chips saying whether the detailed map
- * comes with the area: it is always one line, whatever it says.
+ * That includes the one line under the chips saying the detailed map comes
+ * with every area.
  *
  * ponytail: fixed pixels, so a very large OS font setting will clip the last
  * row rather than scroll it. Measure and raise this number if that turns
@@ -218,23 +217,14 @@ export function RegionDownloadScreen({
   );
   const mapRef = useRef<MapRef>(null);
 
-  // The vector clip is cut server-side (POST /basemap/region-clip) and streamed
-  // back over an authenticated request, so it is the one map source a guest
-  // genuinely cannot have. The three SIX rasters are fetched client-direct from
-  // the provider with no Logjam request at all (regionTileDownload.ts) and work
-  // exactly as they do for anyone else.
-  //
-  // Everyone else gets it with every area, unasked (`vectorClipFor`); the
-  // note under the chips says which of the two this is.
-  const isGuest = useAccountState().accountState === "guest";
   const downloadable = DOWNLOADABLE;
 
   const [selected, setSelected] = useState<SelectableId[]>(() =>
     downloadable.includes(startBasemapId as SelectableId)
       ? [startBasemapId as SelectableId]
-      : // Arriving from the Vector map, signed in: that map is coming anyway,
-        // so nothing else is picked for them.
-        startBasemapId === "protomaps" && !isGuest
+      : // Arriving from the Vector map: that map is coming anyway, so nothing
+        // else is picked for them.
+        startBasemapId === "protomaps"
         ? []
         : ["six-topo"],
   );
@@ -273,10 +263,9 @@ export function RegionDownloadScreen({
   // is the one the tap was about. Deselecting the previewed map falls back to
   // the default rather than to whatever happens to be left in the list.
   //
-  // The default is the vector basemap: it is the detailed one, and it is what
-  // the map screen draws. A guest cannot have it (the clip is an authed API
-  // call), so their default is the topo raster.
-  const defaultPreview: BasemapId = isGuest ? "six-topo" : "protomaps";
+  // The default is the vector basemap: it is the detailed one, it is what the
+  // map screen draws, and every area saves it.
+  const defaultPreview: BasemapId = "protomaps";
   const [preview, setPreview] = useState<BasemapId>(() =>
     downloadable.includes(startBasemapId as SelectableId)
       ? startBasemapId
@@ -367,29 +356,15 @@ export function RegionDownloadScreen({
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
   const pyramidIds = selected;
-  const vectorClip = bbox ? vectorClipFor(isGuest) : "none";
-  const includesVector = vectorClip === "include";
-  // The contours ride with the vector map they are always drawn on, unasked:
-  // at most about 19 MB on the largest mountain area. So they follow its rule
-  // (docs/decisions/0029): every signed-in save has them, a guest's has none.
-  const includesContours = includesVector;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
-    ? planRegionForBasemaps(
-        bbox,
-        pyramidIds,
-        detailZoom,
-        catalogMaxZoom,
-        // The clip endpoint needs a signed-in user, as the vector map does.
-        !isGuest,
-        includesContours,
-      )
+    ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
     : null;
   const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
-  // The vector map alone is a download worth making, so no raster need be
-  // picked; with nothing picked and no vector map there is nothing to save.
-  const mapCount = selected.length + (includesVector ? 1 : 0);
-  const canDownload = mapCount > 0 && bbox != null && caps?.ok === true;
+  // The vector map comes with every area and is a download worth making on
+  // its own, so no raster need be picked.
+  const mapCount = selected.length + 1;
+  const canDownload = bbox != null && caps?.ok === true;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
@@ -403,7 +378,7 @@ export function RegionDownloadScreen({
       .map((source) => source.zMax) ?? [];
   const deepestZoom =
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
-  const vectorOnly = savesVectorOnly(vectorClip, pyramidIds.length);
+  const vectorOnly = pyramidIds.length === 0;
 
   // ONE warning, over the map (DESIGN.md). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
@@ -427,57 +402,16 @@ export function RegionDownloadScreen({
           zMax: source.zMax,
           allowCellular,
         })),
-        ...job.demArchives.map(({ sourceId }) => ({
-          taskKind: "http-file" as const,
-          id: uuid(),
-          basemapId: sourceId,
-          demSourceId: sourceId,
-          label: regionLabelFor(sourceId),
-          groupId,
-          groupLabel,
-          bbox,
-          zMax: detailZoom,
-          allowCellular,
-        })),
-        ...(includesContours
-          ? [
-              {
-                taskKind: "http-file" as const,
-                id: uuid(),
-                basemapId: NSW_CONTOURS.id,
-                contours: true,
-                label: regionLabelFor(NSW_CONTOURS.id),
-                groupId,
-                groupLabel,
-                bbox,
-                zMax: NSW_CONTOURS.maxzoom,
-                allowCellular,
-              },
-            ]
-          : []),
-        ...(includesVector
-          ? [
-              {
-                taskKind: "http-file" as const,
-                id: uuid(),
-                basemapId: "protomaps" as const,
-                label: regionLabelFor("protomaps"),
-                groupId,
-                groupLabel,
-                bbox,
-                // Always the archive's full detail, whatever the rail says:
-                // the rail prices rasters, and a full-detail clip is a few
-                // megabytes (measured: 1–7 MB for 5–40 km of bush).
-                zMax: catalogMaxZoom("protomaps"),
-                allowCellular,
-              },
-            ]
-          : []),
+        ...regionClipSpecs(
+          { bbox, groupId, groupLabel, allowCellular },
+          job.demArchives.map(({ sourceId }) => sourceId),
+          (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
+        ),
       ]);
       // The first region brings the place names for search (ADR 0034).
       placeRegistryWithRegion(allowCellular);
     },
-    [bbox, includesContours, includesVector, job],
+    [bbox, job],
   );
 
   const handleSave = useCallback(() => {
@@ -524,10 +458,9 @@ export function RegionDownloadScreen({
         // fail mid-batch and report a generic failure with nothing reclaimed.
         // The p90 estimate is what actually lands, so that is what has to fit.
         //
-        // This covers the RASTER pyramids only — `p90Bytes` has no entry for
-        // the vector clip, whose size the server reports at request time. That
-        // one is checked inside `downloadProtomapsRegion`, through the same
-        // helper.
+        // `p90Bytes` has no entry for the vector clip, whose size is known
+        // once its directories are read. That one is checked inside
+        // `runRegionClip`, through the same helper.
         await assertSpaceFor(job.p90Bytes);
         // One id for the whole run: every map chosen here covers the SAME area,
         // so Saved shows them as one card (see MapArtifact.groupId).
@@ -700,9 +633,7 @@ export function RegionDownloadScreen({
         </ScrollView>
 
         <Text style={styles.sourceNote}>
-          {isGuest
-            ? "The detailed map needs an account. These download without one."
-            : "The detailed map is saved with every area."}
+          The detailed map is saved with every area.
         </Text>
 
         <View style={styles.panelBody}>
