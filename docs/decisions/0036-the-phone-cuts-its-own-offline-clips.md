@@ -148,9 +148,10 @@ Nothing new calls it.
   calls it ([0022](0022-mobile-builds-supported-three-months.md)), and there is
   none. 0022 dates support by a release event, a `mobile-vX.Y.Z` tag or a Play
   Store release, and no Logjam GPS build has either, so none is a supported
-  build in its sense. The only builds that call the endpoint are the
-  maintainer's own, which are updated with the phone-cut clips, and the first
-  release will include them, so no released build ever calls it. The area cap
+  build in its sense. The only build that calls the endpoint is the
+  maintainer's own pre-phone-cut build, which saves an area without its vector,
+  DEM and contour clips until they rebuild it; they accept that. The first
+  release will include the phone-cut clips, so no released build ever calls it. The area cap
   stays in `shared/`, for the phone. The paragraph above and the guards it names
   no longer apply. Everything else above stands.
 
