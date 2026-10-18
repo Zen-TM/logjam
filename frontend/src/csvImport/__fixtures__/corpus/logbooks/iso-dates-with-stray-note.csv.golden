@@ -12,15 +12,65 @@
     "Trip Date": "date",
     "Comments": "notes"
   },
-  "dateFormat": "DD/MM/YYYY",
-  "ambiguousDates": true,
-  "rows": [],
-  "warnings": [
-    "Row 2: date \"2021-02-06\" couldn't be read — skipped",
-    "Row 3: date \"2021-02-13\" couldn't be read — skipped",
-    "Row 4: date \"sometime in March\" couldn't be read — skipped",
-    "Row 5: date \"2021-04-10\" couldn't be read — skipped"
+  "dateFormat": "YYYY-MM-DD",
+  "ambiguousDates": false,
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourcePlaceName": "Claustral Canyon",
+      "date": "2021-02-06",
+      "notes": "Corpus note",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 1,
+      "sourcePlaceName": "Heart Attack Canyon",
+      "date": "2021-02-13",
+      "notes": null,
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 3,
+      "sourcePlaceName": "Butterbox Canyon",
+      "date": "2021-04-10",
+      "notes": null,
+      "types": [],
+      "customFields": {}
+    }
   ],
-  "droppedRows": 4,
-  "blocked": "No valid trip rows found — each row needs a place name and a date we could read. If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023)."
+  "warnings": [
+    "Row 4: date \"sometime in March\" couldn't be read — skipped"
+  ],
+  "droppedRows": 1,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Heart Attack Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Heart Attack Canyon",
+      "candidates": [
+        "Heart Attack Canyon"
+      ]
+    },
+    {
+      "name": "Butterbox Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Butterbox Canyon",
+      "candidates": [
+        "Butterbox Canyon"
+      ]
+    }
+  ]
 }

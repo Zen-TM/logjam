@@ -13,7 +13,7 @@
     "Notes": "notes"
   },
   "dateFormat": "DD/MM/YYYY",
-  "ambiguousDates": false,
+  "ambiguousDates": true,
   "rows": [
     {
       "rowIndex": 0,

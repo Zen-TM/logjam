@@ -22,6 +22,7 @@ import {
 } from "../../ui";
 import {
   matchPlace,
+  matchTripPlace,
   haversineMeters,
   defaultsToMergeOnImport,
   defaultPlaceMergePolicy,
@@ -65,6 +66,7 @@ import {
 import { detectColumns, type ColumnRole } from "../../csvImport/detectColumns";
 import {
   detectDateFormat,
+  parseWithFormat,
   DATE_FORMAT_LABELS,
   type DateFormat,
 } from "../../csvImport/detectDateFormat";
@@ -618,6 +620,21 @@ function UnifiedImportDialog({
     );
   }, [tripFile, tripAssignments, tripNewCfForms]);
 
+  const dateAmbiguous = useMemo(() => {
+    const dateCol = tripFile?.headers.find(
+      (h) => tripAssignments[h] === "date",
+    );
+    if (!tripFile) return false;
+    const samples = dateSamples(tripFile.rows, dateCol);
+    const { format, ambiguous } = detectDateFormat(samples);
+    // Nothing readable is a different problem: the zero-row error covers it.
+    return (
+      ambiguous &&
+      format === "DD/MM/YYYY" &&
+      samples.some((s) => parseWithFormat(s, format))
+    );
+  }, [tripFile, tripAssignments]);
+
   const canProceedFromMap =
     (placeFile ? placeMapValid : false) || (tripFile ? tripMapValid : false);
 
@@ -680,7 +697,7 @@ function UnifiedImportDialog({
         continue;
       }
       displayName[key] = row.sourcePlaceName;
-      const result = matchPlace({ name: row.sourcePlaceName }, candidates);
+      const result = matchTripPlace(row.sourcePlaceName, candidates);
       if (tripRowDecision(result) === "link" && result.best) {
         decisions[key] = { kind: "link", id: result.best.candidate.id };
       } else {
@@ -1492,6 +1509,7 @@ function UnifiedImportDialog({
                       <option value="name">Place name</option>
                       <option value="date">Date</option>
                       <option value="notes">Notes</option>
+                      <option value="appendNotes">Add to notes</option>
                       <option value="type">Type</option>
                       {customFieldDefs.map((d) => (
                         <option key={d.key} value={`cf:${d.key}`}>
@@ -1554,6 +1572,13 @@ function UnifiedImportDialog({
             {ignoredTripCols.length > 0 && (
               <p className={classes.note}>
                 Ignored columns: {ignoredTripCols.join(", ")}
+              </p>
+            )}
+            {tripMapValid && dateAmbiguous && (
+              <p className={classes.note} role="status">
+                Dates like 02/03/2020 can be read day-first or month-first.
+                Logjam Web is reading them as {DATE_FORMAT_LABELS[dateFormat]};
+                change the Date format below if that's wrong.
               </p>
             )}
             {tripMapValid && (
