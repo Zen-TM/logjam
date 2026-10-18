@@ -14,6 +14,8 @@
 //   https://developers.google.com/kml/documentation/kmlreference (Google, CC BY
 //   4.0 with the page's code samples under Apache 2.0). google-earth-gx-track-with-pin.kml is
 //   that sample plus a Point placemark added here.
+// - google-earth-gx-multitrack.kml: made up, to the kmlreference's gx:MultiTrack
+//   layout (one timed leg, one untimed).
 // - osmand.gpx, gpx10-legacy.gpx, gpx-routes-only.gpx, google-earth-multigeometry.kml:
 //   hand-written to the format spec / the producer's documented tags, with no
 //   reference export to check against.

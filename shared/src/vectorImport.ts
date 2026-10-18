@@ -325,8 +325,19 @@ function kmlCoordinates(text: string): ImportedPosition[] {
   return positions;
 }
 
-function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
-  const geometries: ImportedGeometry[] = [];
+type KmlShape = { geometry: ImportedGeometry; coordTimes?: string[] };
+
+/** A gx:Track's `<gx:coord>` ("lon lat [alt]", space-separated) as KML tuples. */
+function gxCoordinates(coords: unknown[]): ImportedPosition[] {
+  return kmlCoordinates(
+    coords
+      .map((c) => (textOf(c) ?? "").trim().split(/\s+/).join(","))
+      .join(" "),
+  );
+}
+
+function kmlShapes(node: Record<string, unknown>): KmlShape[] {
+  const shapes: KmlShape[] = [];
   // An element that IS there and yields nothing is a dropped geometry, not an
   // absent one. Skipping it quietly would lose features while still reporting
   // success (`finalize` only fails when the whole file is empty).
@@ -336,11 +347,11 @@ function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
   };
   for (const point of asArray(node.Point as Record<string, unknown>[])) {
     const coords = required(kmlCoordinates(textOf(point?.coordinates) ?? ""));
-    geometries.push({ type: "Point", coordinates: coords[0] });
+    shapes.push({ geometry: { type: "Point", coordinates: coords[0] } });
   }
   for (const line of asArray(node.LineString as Record<string, unknown>[])) {
     const coords = required(kmlCoordinates(textOf(line?.coordinates) ?? ""));
-    geometries.push({ type: "LineString", coordinates: coords });
+    shapes.push({ geometry: { type: "LineString", coordinates: coords } });
   }
   for (const polygon of asArray(node.Polygon as Record<string, unknown>[])) {
     const rings: ImportedPosition[][] = [];
@@ -360,14 +371,37 @@ function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
       if (ring.length > 0) rings.push(ring);
     }
     if (rings.length > 0)
-      geometries.push({ type: "Polygon", coordinates: rings });
+      shapes.push({ geometry: { type: "Polygon", coordinates: rings } });
+  }
+  // Google Earth's recorded tracks (gx:Track, alone or in gx:MultiTrack; the
+  // namespace prefix is stripped by the parser). Times are kept only when every
+  // vertex has one, as for GPX.
+  const tracks = [
+    ...asArray(node.Track as Record<string, unknown>[]),
+    ...asArray(node.MultiTrack as Record<string, unknown>[]).flatMap((m) =>
+      asArray(m?.Track as Record<string, unknown>[]),
+    ),
+  ];
+  for (const track of tracks) {
+    const coords = asArray(track?.coord);
+    const whens = asArray(track?.when).map((w) => {
+      const t = Date.parse(String(w));
+      return Number.isFinite(t) ? new Date(t).toISOString() : null;
+    });
+    const coordinates = required(gxCoordinates(coords));
+    const timed =
+      whens.length === coordinates.length && whens.every((w) => w != null);
+    shapes.push({
+      geometry: { type: "LineString", coordinates },
+      ...(timed ? { coordTimes: whens as string[] } : {}),
+    });
   }
   for (const multi of asArray(
     node.MultiGeometry as Record<string, unknown>[],
   )) {
-    geometries.push(...kmlGeometries(multi));
+    shapes.push(...kmlShapes(multi));
   }
-  return geometries;
+  return shapes;
 }
 
 function collectPlacemarks(
@@ -378,11 +412,14 @@ function collectPlacemarks(
     node.Placemark as Record<string, unknown>[],
   )) {
     const name = textOf(placemark.name);
-    for (const geometry of kmlGeometries(placemark)) {
+    for (const { geometry, coordTimes } of kmlShapes(placemark)) {
       features.push({
         type: "Feature",
         geometry,
-        properties: name ? { name } : {},
+        properties: {
+          ...(name ? { name } : {}),
+          ...(coordTimes ? { coordTimes } : {}),
+        },
       });
     }
   }
