@@ -21,7 +21,9 @@
 // planned values, so a hand edit to a resource the PR also changes shows up
 // (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Sensitive and
 // unknown values are left out before hashing, the key is never in the repo,
-// and no key means no value check, never an unkeyed hash.
+// and no key means no value check, never an unkeyed hash. The same key signs
+// the root, fingerprint, sha and values together: any PR's workflow can post
+// a comment as github-actions[bot], but only a run with the key can sign one.
 // Tests: plan-summary.test.mjs, over __fixtures__/.
 import { createHash, createHmac } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -30,9 +32,9 @@ import { pathToFileURL } from "node:url";
 // GitHub rejects a comment over 65536 chars.
 export const MAX_COMMENT = 60000;
 
-// Changes to the pipeline itself (this script, the plan and apply workflows)
-// put every root in scope, so its plan comment is refreshed.
-const PIPELINE = String.raw`infra/scripts/plan-summary|\.github/workflows/terraform-(plan|apply)\.yml`;
+// Changes to the pipeline itself (this script, the plan, signing and apply
+// workflows) put every root in scope, so its plan comment is refreshed.
+const PIPELINE = String.raw`infra/scripts/plan-summary|\.github/workflows/terraform-(plan|plan-sign|apply)\.yml`;
 
 // The plan and apply workflows both ask `scope`, so a PR is applied for
 // exactly the roots it was planned for: a root applied without a plan
@@ -44,6 +46,9 @@ export const ROOTS = {
     // The apply role's boundary denies it editing itself (envs/prod/iam_apply.tf),
     // so a plan touching these would fail mid-apply; the maintainer applies it.
     self: /\.github_actions_apply(_|\[|$)/,
+    // The CloudFront origin header's value: CloudFront returns it to any
+    // read-only identity, so state adds no reader it lacks.
+    stateSecrets: ["random_password.origin_verify"],
     changedOutside: "AWS changed outside Terraform",
     handChange: "If AWS was changed by hand",
     touch: "infra/terraform",
@@ -160,6 +165,39 @@ export function fingerprint(plan, name) {
   return createHash("sha256").update(JSON.stringify({ list, artifacts, configured })).digest("hex");
 }
 
+// Paths of `value` that `sensitive` marks and that hold, or will hold, a
+// value: null is no secret, and unknown is one only known after apply.
+function marked(value, sensitive, unknown, path = []) {
+  if (sensitive === true) return value != null || unknown === true ? [path.join(".")] : [];
+  if (!sensitive || typeof sensitive !== "object") return [];
+  return Object.keys(sensitive).flatMap((k) => marked(value?.[k], sensitive[k], unknown?.[k], [...path, k]));
+}
+
+// Sensitive values this plan adds to the state. Every PR's plan job reads
+// the state, so a secret there is one every collaborator can read
+// (docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md).
+export function stateSecrets(plan, name) {
+  const allowed = root(name).stateSecrets ?? [];
+  return changes(plan, name)
+    .filter((c) => ["create", "update", "replace"].includes(c.kind) && !allowed.includes(c.rc.address))
+    .flatMap((c) => {
+      const ch = c.rc.change;
+      const had = new Set(marked(ch.before, ch.before_sensitive));
+      return marked(ch.after, ch.after_sensitive, ch.after_unknown)
+        .filter((p) => !had.has(p))
+        .map((p) => `${c.address}.${p}`);
+    });
+}
+
+// Top-level attributes an update changes, by name only: the comment is
+// public and never shows a value.
+function changedAttributes(rc) {
+  const { before = {}, after = {}, after_unknown: unknown = {} } = rc.change;
+  return [...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])]
+    .filter((k) => unknown[k] === true || canonical(before?.[k]) !== canonical(after?.[k]))
+    .sort();
+}
+
 // `after` without what `sensitive` marks (true, or a tree shaped like it)
 // and what `unknown` marks as only known after apply.
 function strip(after, sensitive, unknown) {
@@ -199,6 +237,14 @@ export function valueFingerprints(plan, name, key) {
   return out;
 }
 
+// Everything check() reads from a comment, so a forger can neither write a
+// comment from scratch nor edit one line of a real one.
+function signature(name, fp, sha, values, key) {
+  return createHmac("sha256", key).update(canonical({ root: name, fingerprint: fp, sha, values })).digest("hex");
+}
+
+const readSignature = (body) => /^<!-- plan-signature: ([0-9a-f]{64}) -->$/m.exec(body ?? "")?.[1] ?? null;
+
 // One HTML comment line; < and > are escaped so an address cannot end it.
 const encodeValues = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
 
@@ -231,6 +277,11 @@ export function header(plan, name) {
     lines.push("", `**Destroys (${destroys.length}):**`);
     for (const c of destroys) lines.push(`- \`${c.address}\` — ${c.kind}`);
   }
+  const updates = all.filter((c) => c.kind === "update");
+  if (updates.length) {
+    lines.push("", `**Updates (${updates.length}):**`);
+    for (const c of updates) lines.push(`- \`${c.address}\` — ${changedAttributes(c.rc).map((a) => `\`${a}\``).join(", ")}`);
+  }
   const hidden = unreadableOnly(plan, name);
   if (hidden.length) {
     const attrs = [...new Set(hidden.flatMap((rc) => root(name).unreadable[rc.type]))].map((a) => `\`${a}\``);
@@ -251,26 +302,48 @@ export function header(plan, name) {
 export function comment({ root: name, planText, status, plan, sha, key, max = MAX_COMMENT }) {
   const ok = status === "success" && Boolean(plan);
   const title = `### Terraform plan — \`envs/${name}\``;
+  const secrets = ok ? stateSecrets(plan, name) : [];
+  if (secrets.length) {
+    return {
+      body: [
+        marker(name),
+        `${title} ❌ puts a secret in Terraform state`,
+        "",
+        "Every PR's plan job can read the state, so these would be readable by anyone who can push a branch:",
+        "",
+        ...secrets.map((s) => `- \`${s}\``),
+        "",
+        "Keep the value out of state: a write-only argument (`*_wo`), an ephemeral resource, or a secret the service manages. If any read-only identity can already read it, add the address to `stateSecrets` in `infra/scripts/plan-summary.mjs` with the reason.",
+      ].join("\n"),
+      ok: false,
+    };
+  }
   const top = [marker(name)];
   let fp = "";
   if (ok) {
     fp = fingerprint(plan, name);
     top.push(`<!-- plan-fingerprint: ${fp} sha: ${sha} -->`);
     const values = valueFingerprints(plan, name, key);
-    if (values) top.push(`<!-- plan-values: ${encodeValues(values)} -->`);
+    if (values) {
+      top.push(`<!-- plan-values: ${encodeValues(values)} -->`);
+      top.push(`<!-- plan-signature: ${signature(name, fp, sha, values, key)} -->`);
+    }
   }
   top.push(`${title} ${ok ? "✅" : "❌ failed"}`, "");
-  if (ok) top.push(header(plan, name), "", `Fingerprint \`${fp.slice(0, 12)}\` at ${sha}`, "");
+  if (ok) {
+    top.push(header(plan, name), "", `Fingerprint \`${fp.slice(0, 12)}\` at ${sha}`, "");
+    top.push("The summary above is computed from the plan the apply checks. The text below is the PR's own run's output: where they disagree, trust the summary and the code diff.", "");
+  }
   const head = top.join("\n");
   const fence = (body) => `${head}\n\`\`\`\n${body}\n\`\`\``;
   if (fence(planText).length <= max) return { body: fence(planText), ok };
   const note = "…(start cut; every delete and replace is listed above)…\n";
   const room = max - fence(note).length;
   if (room < 1000) {
-    // The destroy list alone fills the comment: never post one that hides a
-    // destroy, and never one the apply would accept.
+    // The summary alone fills the comment: never post one that hides a
+    // destroy or an update, and never one the apply would accept.
     return {
-      body: [marker(name), `${title} ❌ too many destroys to show`, "", "Split this PR."].join("\n"),
+      body: [marker(name), `${title} ❌ too many changes to show`, "", "Split this PR."].join("\n"),
       ok: false,
     };
   }
@@ -283,11 +356,12 @@ export function readFingerprint(body) {
 }
 
 // Resources whose planned values now differ from the PR's, or null if the
-// two cannot be compared (no key here, or none when the PR was planned).
-function valueMismatches(name, plan, commentBody, key) {
+// two cannot be compared: no key here, or a comment the key did not sign.
+function valueMismatches(name, plan, commentBody, read, key) {
   const was = readValues(commentBody);
   const now = valueFingerprints(plan, name, key);
   if (!was || !now) return null;
+  if (readSignature(commentBody) !== signature(name, read.fingerprint, read.sha, was, key)) return null;
   return [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((a) => was[a] !== now[a]).sort();
 }
 
@@ -324,7 +398,7 @@ export function check(name, plan, commentBody, headSha, values = {}) {
     };
   }
   const enforce = valueMode(values.mode) === "enforce";
-  const differ = valueMismatches(name, plan, commentBody, values.key);
+  const differ = valueMismatches(name, plan, commentBody, read, values.key);
   let notice;
   if (differ?.length) {
     const list = differ.map((a) => `- \`${a}\``).join("\n");
@@ -351,10 +425,10 @@ export function check(name, plan, commentBody, headSha, values = {}) {
     if (enforce) {
       return {
         ok: false,
-        reason: "The plan's values cannot be compared: this run has no `PLAN_FINGERPRINT_KEY`, or the PR's plan comment carries no value fingerprints. Nothing applied; open a PR touching " + r.touch + " to plan and apply the current diff.",
+        reason: "The plan's values cannot be compared: this run has no `PLAN_FINGERPRINT_KEY`, or the PR's plan comment carries no valid signature (it was not made by the plan workflow with the key, or before comments were signed). Nothing applied; open a PR touching " + r.touch + " to plan and apply the current diff.",
       };
     }
-    notice = "**Value check (report only):** not run, because this run has no `PLAN_FINGERPRINT_KEY` or the PR's plan comment has no value fingerprints.";
+    notice = "**Value check (report only):** not run, because this run has no `PLAN_FINGERPRINT_KEY` or the PR's plan comment carries no valid signature.";
   }
   const self = selfChanges(name, plan);
   if (self.length) {

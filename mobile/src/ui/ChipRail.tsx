@@ -5,6 +5,7 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ScrollViewInstance,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -83,7 +84,7 @@ function Rail<T extends string>({
   children: React.ReactNode[];
   trailing?: React.ReactNode;
 }) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const offsets = useRef(new Map<number, { x: number; width: number }>());
   const viewport = useRef({ x: 0, width: 0 });
   const childArray = children as React.ReactElement<{ children?: unknown }>[];

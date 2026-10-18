@@ -14,20 +14,43 @@ name: Rollback compat
 # ECR: CI has no registry login, and the schema contract is in the code, not
 # in the image's system packages.
 #
-# Only on PRs that add or change a migration. A path-filtered workflow reports
-# no status when it does not run, so it cannot be a required check as is.
+# Only on PRs that add or change a migration. It starts on every PR, because a
+# required check whose workflow never starts leaves the PR waiting; the
+# `changes` job skips it, which passes, when no migration changed
+# (infra/scripts/ci-scope.sh, area rollback_compat).
 
 on:
   pull_request:
-    paths:
-      - "api/prisma/migrations/**"
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rollback_compat: ${{ steps.scope.outputs.rollback_compat }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Does this change need it?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
+          else
+            infra/scripts/ci-scope.sh all
+          fi
+
   rollback-compat:
     name: Live release on this schema
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.rollback_compat != 'false' }}
     runs-on: ubuntu-latest
     # Postgres, MiniStack and the env block mirror ci.yml's api-integration
     # job, which is what the suite is known to pass against.
@@ -90,7 +113,7 @@ jobs:
         with:
           # The live release can be any commit on main.
           fetch-depth: 0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
@@ -123,11 +146,8 @@ jobs:
           (cd "$LIVE_DIR/shared" && npm ci && npm run build)
           cd "$LIVE_DIR/api" && npm ci && npx prisma generate && npm run build
 
-      # The live release's own seed: its writes must work on the new schema too.
-      - name: Seed with the live release
-        working-directory: ${{ env.LIVE_DIR }}/api
-        run: npx prisma db seed
-
+      # Before the seed, which uploads its files and the place registry into
+      # these buckets (best effort, so a missing bucket only warns).
       - name: Wait for MiniStack and create buckets
         run: |
           for i in $(seq 1 60); do
@@ -139,6 +159,11 @@ jobs:
           done
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+
+      # The live release's own seed: its writes must work on the new schema too.
+      - name: Seed with the live release
+        working-directory: ${{ env.LIVE_DIR }}/api
+        run: npx prisma db seed
 
       - name: Start the Expo push stub
         run: node infra/scripts/expo-push-stub.mjs &

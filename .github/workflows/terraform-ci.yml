@@ -4,29 +4,53 @@ name: terraform-ci
 # no backend access, no plan/apply. Catches formatting + syntax/reference errors
 # before merge, and tests the plan comment and apply check
 # (infra/scripts/plan-summary.mjs) that terraform-plan/-apply rely on.
+#
+# Starts on every PR so its jobs can be required checks; the `changes` job
+# skips them, which passes, when nothing they check changed
+# (infra/scripts/ci-scope.sh, area terraform).
 
 on:
   pull_request:
-    paths:
-      - "infra/terraform/**"
-      - "infra/scripts/plan-summary*"
-      - "infra/scripts/__fixtures__/**"
-      - ".github/workflows/terraform-ci.yml"
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.scope.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Does this change need it?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
+          else
+            infra/scripts/ci-scope.sh all
+          fi
+
   plan-summary:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.terraform != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - run: node --test infra/scripts/plan-summary.test.mjs
 
   fmt:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.terraform != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,28 +60,37 @@ jobs:
       - name: terraform fmt -check
         run: terraform fmt -check -recursive infra/terraform
 
+  # One job over every root, not a matrix: a matrix job skipped by its `if:`
+  # reports one bare `validate` check, so the `validate (<root>)` contexts a
+  # ruleset requires would never report and every PR would wait on them.
   validate:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.terraform != 'false' }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        root: [bootstrap, envs/prod, envs/local, envs/github]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "~> 1.13"
       # -backend=false: install providers + modules without touching remote
-      # state or needing AWS credentials.
-      - name: terraform init (no backend)
-        run: terraform -chdir=infra/terraform/${{ matrix.root }} init -backend=false -input=false
-      - name: terraform validate
-        run: terraform -chdir=infra/terraform/${{ matrix.root }} validate
+      # state or needing AWS credentials. Every root is checked before failing.
+      - name: terraform init + validate, each root
+        run: |
+          failed=""
+          for root in bootstrap envs/prod envs/local envs/github; do
+            echo "::group::$root"
+            terraform -chdir="infra/terraform/$root" init -backend=false -input=false \
+              && terraform -chdir="infra/terraform/$root" validate || failed="$failed $root"
+            echo "::endgroup::"
+          done
+          [ -z "$failed" ] || { echo "::error::validate failed in:$failed"; exit 1; }
 
   # The guards on the settings the security model stands on (nobody merges
   # red or unreviewed, admin-only releases, prod deployable from main only):
   # envs/github/tests/guards.tftest.hcl, offline against a mocked provider.
   test-github:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.terraform != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,6 +105,8 @@ jobs:
   # The guards on who may assume the CI roles and on what the prod plan reads
   # back: envs/prod/tests/guards.tftest.hcl, offline against mocked providers.
   test-prod:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.terraform != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

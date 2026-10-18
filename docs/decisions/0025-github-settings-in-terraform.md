@@ -87,6 +87,12 @@ behind main until someone remembered to run it (#128 and #129 both ended in
   is in `environments.tf`, outside `local.environments` because it has no
   branch policy; the guard test fails if its reviewer changes. Everything else
   above stands.
+- **Update 2026-10-18: PR plans run unattended again.** The `terraform-plan`
+  Environment has no reviewer
+  ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)).
+  `SETTINGS_PLAN_APP_KEY` stays a secret of it, never of the repository, but
+  anyone who can push a branch reaches it again, so the Negative consequence
+  above applies as first written. Everything else above stands.
 
 Guards: `infra/terraform/envs/github/tests/guards.tftest.hcl` (run by
 `terraform-ci.yml`'s `test-github`, offline against a mocked provider)

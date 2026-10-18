@@ -34,6 +34,7 @@ on:
       - "infra/lambda/**"
       - "infra/scripts/plan-summary*"
       - ".github/workflows/terraform-plan.yml"
+      - ".github/workflows/terraform-plan-sign.yml"
       - ".github/workflows/terraform-apply.yml"
 
 permissions:
@@ -125,7 +126,7 @@ jobs:
       # Same build as terraform-plan.yml: the fingerprint includes the
       # Lambda's source_code_hash, so a build that differs from the PR's
       # refuses rather than ships.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Build cognito-email-sender Lambda
@@ -218,7 +219,7 @@ jobs:
       # secret of the `prod` Environment, so only a job on main can mint it.
       - name: GitHub token for the apply
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.SETTINGS_APPLY_APP_CLIENT_ID }}
           private-key: ${{ secrets.SETTINGS_APPLY_APP_KEY }}

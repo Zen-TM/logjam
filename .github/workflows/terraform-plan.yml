@@ -3,22 +3,18 @@ name: terraform-plan
 # Plan-on-PR for envs/prod (AWS) and envs/github (this repository's settings).
 # Merge = apply (terraform-apply.yml), so each root's comment is the gate: the
 # maintainer reads it, and the apply refuses any plan whose fingerprint differs
-# from the one embedded here (infra/scripts/plan-summary.mjs). With the
-# PLAN_FINGERPRINT_KEY secret set, it also carries an HMAC of each changed
-# resource's planned values, which the apply compares
-# (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Read-only: the
+# from the one in it (infra/scripts/plan-summary.mjs,
+# docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Read-only: the
 # AWS plan role has ReadOnlyAccess minus the privacy Deny, the GitHub plan App
 # has no write permission beyond Contents, and -lock=false never writes state.
 #
-# The plan jobs run in the terraform-plan Environment, so each run waits for
-# the maintainer's approval ("Review deployments" on the PR) before it gets
-# the AWS plan role, the plan App's key or PLAN_FINGERPRINT_KEY: the plan
-# role trusts only that Environment and main, and both keys are secrets of
-# that Environment. Approving runs this PR's code with them (its workflows,
-# Terraform and infra/lambda), so read those first
-# (docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md). The
-# scope job has no Environment and no credentials, so a PR that changes no
-# infra needs no approval.
+# The plan jobs run the PR's own code (its workflows, Terraform and
+# infra/lambda) with no one's approval, so they hold nothing a collaborator
+# could misuse: the plan role and the plan App's key, both secrets of the
+# terraform-plan Environment, read no more than a collaborator can, and
+# PLAN_FINGERPRINT_KEY is never here. Each job uploads its plan encrypted to
+# terraform-plan-sign.yml, a main-only workflow that renders and signs the
+# comment (docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md).
 #
 # Runs on every PR because `plan-prod` is a required check and so is
 # `plan-github`, and a path-filtered workflow that never starts leaves a
@@ -42,7 +38,10 @@ on:
 permissions:
   id-token: write
   contents: read
-  pull-requests: write
+
+env:
+  # terraform-plan-sign's PLAN_TRANSFER_IDENTITY decrypts what this encrypts.
+  PLAN_TRANSFER_RECIPIENT: age13aqnkrv50eeps6z27r0x7pq3rjldnukwmrvp7yyxymtcfup5qukswhttvu
 
 concurrency:
   group: terraform-plan-${{ github.event.pull_request.number }}
@@ -76,7 +75,7 @@ jobs:
             if [ -n "${!name}" ]; then found="$found $name"; fi
           done
           if [ -n "$found" ]; then
-            echo "::error::Repository secrets that must be Environment secrets:$found. Any pull request's workflow can read a repository secret. Set each in its Environment (PLAN_FINGERPRINT_KEY in terraform-plan and prod, SETTINGS_PLAN_APP_KEY in terraform-plan, SETTINGS_APPLY_APP_KEY in prod), then delete the repository copy."
+            echo "::error::Repository secrets that must be Environment secrets:$found. Any pull request's workflow can read a repository secret. Set each in its Environment (PLAN_FINGERPRINT_KEY in terraform-plan-sign and prod, SETTINGS_PLAN_APP_KEY in terraform-plan, SETTINGS_APPLY_APP_KEY in prod), then delete the repository copy."
             exit 1
           fi
 
@@ -98,15 +97,23 @@ jobs:
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.prod == 'true') }}
     runs-on: ubuntu-latest
     environment: terraform-plan
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PR: ${{ github.event.pull_request.number }}
     steps:
       - name: Stop if the scope job failed
         if: needs.scope.result != 'success'
         run: |
           echo "::error::The scope job failed, so this plan cannot run. Fix what it reports and push again."
           exit 1
+
+      # Every PR's code runs in this Environment, so it must not hold the key
+      # that signs plan comments.
+      - name: This Environment holds no signing key
+        env:
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
+        run: |
+          if [ -n "$PLAN_FINGERPRINT_KEY" ]; then
+            echo "::error::PLAN_FINGERPRINT_KEY is a secret of the terraform-plan Environment, where any PR's code can read it. Rotate it, set the new value in terraform-plan-sign and prod only, and delete it here."
+            exit 1
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -140,7 +147,7 @@ jobs:
       # The prod root's archive_file zips this Lambda's dist/. Built here and
       # in terraform-apply.yml the same way, so the source_code_hash in both
       # plans (and in the fingerprint) comes from the same bytes.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Build cognito-email-sender Lambda
@@ -152,8 +159,8 @@ jobs:
 
       # -lock=false: read-only plan must not take the state lock (the plan
       # role cannot write the state bucket, and a PR plan must never block an
-      # apply). The planfile stays on the runner: it can carry sensitive
-      # values, and artifacts on a public repo are public.
+      # apply). The planfile stays on the runner; what leaves it is encrypted
+      # (below).
       - name: terraform plan
         id: plan
         continue-on-error: true
@@ -163,40 +170,59 @@ jobs:
           terraform plan -input=false -lock=false -no-color -out=prod.tfplan 2>&1 | tee "$RUNNER_TEMP/plan.txt"
           terraform show -json prod.tfplan > "$RUNNER_TEMP/plan.json"
 
-      - name: Comment plan on PR
-        id: comment
+      # Artifacts on a public repository are public, and the plan JSON holds
+      # live values, so both files leave encrypted to terraform-plan-sign,
+      # which posts the comment. No plan.json.age means the plan failed.
+      - name: Encrypt the plan for the signer
+        env:
+          OUTCOME: ${{ steps.plan.outcome }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq age
+          mkdir "$RUNNER_TEMP/out"
+          age -r "$PLAN_TRANSFER_RECIPIENT" -o "$RUNNER_TEMP/out/plan.txt.age" "$RUNNER_TEMP/plan.txt"
+          if [ "$OUTCOME" = success ]; then
+            age -r "$PLAN_TRANSFER_RECIPIENT" -o "$RUNNER_TEMP/out/plan.json.age" "$RUNNER_TEMP/plan.json"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: plan-prod
+          path: ${{ runner.temp }}/out/
+          retention-days: 1
+          if-no-files-found: error
+
+      # The signer posts the comment; this fails the required check on the
+      # same refusals (a failed plan, a summary too long to post, a secret
+      # added to state), so a PR whose comment shows ❌ cannot merge.
+      - name: Check the plan the signer will post
         env:
           OUTCOME: ${{ steps.plan.outcome }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
         run: |
-          rendered=0
           node infra/scripts/plan-summary.mjs comment prod "$RUNNER_TEMP/plan.txt" "$OUTCOME" \
-            "$RUNNER_TEMP/plan.json" "$HEAD_SHA" > "$RUNNER_TEMP/comment.md" || rendered=$?
-          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- terraform-plan-prod -->"))) | .id' \
-            | tail -n1)
-          if [ -n "$existing" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
-          else
-            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
-          fi
-          exit "$rendered"
+            "$RUNNER_TEMP/plan.json" "$HEAD_SHA" > /dev/null
 
   plan-github:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.github == 'true') }}
     runs-on: ubuntu-latest
     environment: terraform-plan
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PR: ${{ github.event.pull_request.number }}
     steps:
       - name: Stop if the scope job failed
         if: needs.scope.result != 'success'
         run: |
           echo "::error::The scope job failed, so this plan cannot run. Fix what it reports and push again."
           exit 1
+
+      # As in plan-prod.
+      - name: This Environment holds no signing key
+        env:
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
+        run: |
+          if [ -n "$PLAN_FINGERPRINT_KEY" ]; then
+            echo "::error::PLAN_FINGERPRINT_KEY is a secret of the terraform-plan Environment, where any PR's code can read it. Rotate it, set the new value in terraform-plan-sign and prod only, and delete it here."
+            exit 1
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -223,15 +249,15 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # The plan App: read-only on settings. Its key is a repository secret,
-      # so anyone who can push a branch here can reach it; it grants nothing
-      # such a collaborator does not already have
+      # The plan App: read-only on settings. Its key is a secret of this
+      # Environment, which every PR's run enters; it grants nothing a
+      # collaborator does not already have
       # (docs/decisions/0025-github-settings-in-terraform.md). Being read-only,
       # it cannot see rulesets' bypass_actors; plan-summary.mjs counts an
       # update to those alone as no change (ROOTS.github.unreadable).
       - name: GitHub token for the plan
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.SETTINGS_PLAN_APP_CLIENT_ID }}
           private-key: ${{ secrets.SETTINGS_PLAN_APP_KEY }}
@@ -244,7 +270,7 @@ jobs:
       - name: terraform init
         run: terraform -chdir=infra/terraform/envs/github init -input=false
 
-      # -lock=false and a planfile kept on the runner, as for envs/prod.
+      # -lock=false, and the planfile stays on the runner, as for envs/prod.
       - name: terraform plan
         id: plan
         continue-on-error: true
@@ -256,21 +282,30 @@ jobs:
           terraform plan -input=false -lock=false -no-color -out=github.tfplan 2>&1 | tee "$RUNNER_TEMP/plan.txt"
           terraform show -json github.tfplan > "$RUNNER_TEMP/plan.json"
 
-      - name: Comment plan on PR
+      # Encrypted to terraform-plan-sign, as for envs/prod.
+      - name: Encrypt the plan for the signer
+        env:
+          OUTCOME: ${{ steps.plan.outcome }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq age
+          mkdir "$RUNNER_TEMP/out"
+          age -r "$PLAN_TRANSFER_RECIPIENT" -o "$RUNNER_TEMP/out/plan.txt.age" "$RUNNER_TEMP/plan.txt"
+          if [ "$OUTCOME" = success ]; then
+            age -r "$PLAN_TRANSFER_RECIPIENT" -o "$RUNNER_TEMP/out/plan.json.age" "$RUNNER_TEMP/plan.json"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: plan-github
+          path: ${{ runner.temp }}/out/
+          retention-days: 1
+          if-no-files-found: error
+
+      # As in plan-prod.
+      - name: Check the plan the signer will post
         env:
           OUTCOME: ${{ steps.plan.outcome }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
         run: |
-          rendered=0
           node infra/scripts/plan-summary.mjs comment github "$RUNNER_TEMP/plan.txt" "$OUTCOME" \
-            "$RUNNER_TEMP/plan.json" "$HEAD_SHA" > "$RUNNER_TEMP/comment.md" || rendered=$?
-          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- terraform-plan-github -->"))) | .id' \
-            | tail -n1)
-          if [ -n "$existing" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
-          else
-            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
-          fi
-          exit "$rendered"
+            "$RUNNER_TEMP/plan.json" "$HEAD_SHA" > /dev/null
