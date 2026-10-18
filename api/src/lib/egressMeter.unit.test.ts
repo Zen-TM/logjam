@@ -45,6 +45,7 @@ describe("tallyLogContents: GeoPDF downloads", () => {
     expect([...(await tallyLogContents([line])).keys()]).toEqual(["payer"]);
   });
 
+  // Mutation: drop the `if (payer)` check in resolveOwners.
   it("drops a plan's GeoPDF charged to nobody", async () => {
     geoPdfFindMany.mockResolvedValue([
       { id: "pdf-1", userId: null, chargedToId: null },
