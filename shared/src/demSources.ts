@@ -256,7 +256,7 @@ export type DemSamples = {
   climbSeries?: number[];
 };
 
-function covers(source: DemSource, position: SamplePosition): boolean {
+export function covers(source: DemSource, position: SamplePosition): boolean {
   if (!source.coverage) return true;
   const [west, south, east, north] = source.coverage;
   return (
