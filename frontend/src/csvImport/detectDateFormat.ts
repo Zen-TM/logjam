@@ -1,6 +1,7 @@
 export type DateFormat =
   | "YYYY-MM-DD"
   | "DD/MM/YYYY"
+  | "MM/DD/YYYY"
   | "DD-MM-YYYY"
   | "DD/MM/YY"
   | "DD-MM-YY";
@@ -8,6 +9,7 @@ export type DateFormat =
 export const DATE_FORMAT_LABELS: Record<DateFormat, string> = {
   "YYYY-MM-DD": "YYYY-MM-DD / ISO 8601 (e.g. 2023-06-15)",
   "DD/MM/YYYY": "DD/MM/YYYY (e.g. 15/06/2023)",
+  "MM/DD/YYYY": "MM/DD/YYYY, month first (e.g. 06/15/2023)",
   "DD-MM-YYYY": "DD-MM-YYYY (e.g. 15-06-2023)",
   "DD/MM/YY": "DD/MM/YY (e.g. 15/06/23)",
   "DD-MM-YY": "DD-MM-YY (e.g. 15-06-23)",
@@ -59,6 +61,17 @@ export function parseWithFormat(s: string, format: DateFormat): Date | null {
       const d = new Date(year, month - 1, day);
       return isExactYMD(d, year, month - 1, day) ? d : null;
     }
+    case "MM/DD/YYYY": {
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!m) return null;
+      const [month, day, year] = [
+        parseInt(m[1]),
+        parseInt(m[2]),
+        parseInt(m[3]),
+      ];
+      const d = new Date(year, month - 1, day);
+      return isExactYMD(d, year, month - 1, day) ? d : null;
+    }
     case "DD-MM-YYYY": {
       const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
       if (!m) return null;
@@ -98,6 +111,11 @@ export function toIsoDate(s: string, format: DateFormat): string | null {
   return `${y}-${mo}-${dd}`;
 }
 
+// The format that reads the most samples wins, so one stray non-date in the
+// first rows no longer drops every real date (the stray row is skipped with a
+// warning instead). `ambiguous` means the pick is a guess: nothing reads, or
+// another format reads just as many (02/03/2020 is 2 March or 3 February); the
+// order of `all` makes day-first the default.
 export function detectDateFormat(samples: string[]): {
   format: DateFormat;
   ambiguous: boolean;
@@ -108,21 +126,16 @@ export function detectDateFormat(samples: string[]): {
   const all: DateFormat[] = [
     "YYYY-MM-DD",
     "DD/MM/YYYY",
+    "MM/DD/YYYY",
     "DD-MM-YYYY",
     "DD/MM/YY",
     "DD-MM-YY",
   ];
-  const matching = all.filter((f) =>
-    nonEmpty.every((s) => parseWithFormat(s, f) !== null),
+  const counts = all.map(
+    (f) => nonEmpty.filter((s) => parseWithFormat(s, f) !== null).length,
   );
-
-  if (matching.length === 0) return { format: "DD/MM/YYYY", ambiguous: true };
-  if (matching.length === 1) return { format: matching[0], ambiguous: false };
-
-  // Multiple match (e.g. ambiguous between slash and dash with identical separators) — prefer 4-digit year
-  const fourDigit = matching.filter((f) => f.endsWith("YYYY"));
-  return {
-    format: fourDigit.length > 0 ? fourDigit[0] : matching[0],
-    ambiguous: true,
-  };
+  const top = Math.max(...counts);
+  if (top === 0) return { format: "DD/MM/YYYY", ambiguous: true };
+  const best = all.filter((_, i) => counts[i] === top);
+  return { format: best[0], ambiguous: best.length > 1 };
 }

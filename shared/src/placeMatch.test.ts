@@ -4,6 +4,7 @@ import {
   damerauLevenshtein,
   nameTier,
   matchPlace,
+  matchTripPlace,
   defaultsToMergeOnImport,
   MERGE_DEFAULT_DIST_M,
   type MatchCandidate,
@@ -431,5 +432,36 @@ describe("defaultsToMergeOnImport", () => {
     );
     expect(result.best?.candidate.id).toBe("near");
     expect(defaultsToMergeOnImport(result.best)).toBe(true);
+  });
+});
+
+// Mutation that turns it red: dropping the `fits.length === 1` test (a
+// numbered twin then pre-selects), or the `confidence !== "none"` early return
+// (an exact match is then re-scored as a prefix).
+describe("matchTripPlace", () => {
+  const one = candidate("1", "Wollangambe One");
+  const two = candidate("2", "Wollangambe Two");
+
+  it("offers the one place a bare name starts", () => {
+    const r = matchTripPlace("Wollangambe", [
+      one,
+      candidate("3", "Grand Canyon"),
+    ]);
+    expect(r.confidence).toBe("review");
+    expect(r.best?.candidate.id).toBe("1");
+  });
+
+  it("offers every fit without choosing when several start with the name", () => {
+    const r = matchTripPlace("Wollangambe", [one, two]);
+    expect(r.confidence).toBe("review");
+    expect(r.best).toBeNull();
+    expect(r.candidates.map((c) => c.candidate.id)).toEqual(["1", "2"]);
+  });
+
+  it("keeps an exact match and refuses a mid-word prefix", () => {
+    expect(matchTripPlace("Wollangambe One", [one, two]).confidence).toBe(
+      "auto",
+    );
+    expect(matchTripPlace("Wollan", [one]).confidence).toBe("none");
   });
 });

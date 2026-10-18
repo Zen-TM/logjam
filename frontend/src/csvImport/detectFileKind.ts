@@ -10,6 +10,7 @@
 // Privacy: only column *names* are inspected here, never row values, so no
 // place name/coord ever flows through this function.
 
+import { DATE_ALIASES, NAME_ALIASES } from "./detectColumns";
 import { normalize as normalizeHeader } from "./placeColumns";
 
 export type FileKind = "place" | "triplog" | "unknown";
@@ -30,22 +31,6 @@ const LONGITUDE_ALIASES = new Set([
   "lon dd",
   "lng dd",
   "longitude dd",
-]);
-const NAME_ALIASES = new Set([
-  "name",
-  "place",
-  "place name",
-  "location",
-  "place",
-  "site",
-]);
-const DATE_ALIASES = new Set([
-  "date",
-  "trip date",
-  "visited",
-  "when",
-  "visit date",
-  "trip",
 ]);
 
 function hasAny(headers: string[], aliases: Set<string>): boolean {

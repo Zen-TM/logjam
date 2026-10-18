@@ -12,30 +12,36 @@
     "Date": "date",
     "Notes": "notes"
   },
-  "dateFormat": "DD/MM/YYYY",
-  "ambiguousDates": true,
+  "dateFormat": "MM/DD/YYYY",
+  "ambiguousDates": false,
   "rows": [
     {
       "rowIndex": 0,
       "sourcePlaceName": "Claustral Canyon",
-      "date": "2020-03-02",
+      "date": "2020-02-03",
       "notes": "Corpus note: a US writer meant 3 February",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 1,
+      "sourcePlaceName": "Heart Attack Canyon",
+      "date": "2020-12-25",
+      "notes": "Corpus note: only readable as month first",
       "types": [],
       "customFields": {}
     },
     {
       "rowIndex": 2,
       "sourcePlaceName": "Du Faur Creek",
-      "date": "2020-10-01",
+      "date": "2020-01-10",
       "notes": "Corpus note",
       "types": [],
       "customFields": {}
     }
   ],
-  "warnings": [
-    "Row 3: date \"12/25/2020\" couldn't be read — skipped"
-  ],
-  "droppedRows": 1,
+  "warnings": [],
+  "droppedRows": 0,
   "matches": [
     {
       "name": "Claustral Canyon",
@@ -44,6 +50,15 @@
       "best": "Claustral Canyon",
       "candidates": [
         "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Heart Attack Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Heart Attack Canyon",
+      "candidates": [
+        "Heart Attack Canyon"
       ]
     },
     {
