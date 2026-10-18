@@ -184,9 +184,11 @@ describe("holding a link", () => {
     });
     bodies.push(await preview(BOB_SUB, token));
     bodies.push(await redeem(CAROL_SUB, token));
+    // Everything but the request's own id.
+    const answer = ({ requestId: _, ...rest }: Record<string, unknown>) => rest;
     for (const res of bodies) {
       expect(res.status).toBe(404);
-      expect(res.body).toEqual(bodies[0].body);
+      expect(answer(res.body)).toEqual(answer(bodies[0].body));
     }
     expect(bodies[0].body.error).toBe("This invite link no longer works.");
   });
