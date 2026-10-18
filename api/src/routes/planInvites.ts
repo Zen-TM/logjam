@@ -231,10 +231,11 @@ router.post(
 
 /**
  * Ask to join behind the plan row. The link is read again there: a revoke,
- * an archive, a plan delete or its maker's account delete may have landed
- * since `resolveLink`, and each is the one dead-link 404. The request is
- * stored as waiting for the leader the response names, so GET /plans says
- * the same.
+ * an archive, a plan delete, or the loss of every leader may have landed
+ * since `resolveLink`, and each is the one dead-link 404 (guard for the
+ * first three: __tests__/planInvites.test.ts "redeeming while the plan
+ * changes"). The request is stored as waiting for the leader the response
+ * names, so GET /plans says the same.
  */
 async function request(
   tokenHash: string,

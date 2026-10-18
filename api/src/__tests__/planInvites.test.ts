@@ -333,8 +333,9 @@ describe("holding a link", () => {
 
 // A redeem reads the link, then waits behind the plan row (touchPlan). What
 // lands in that wait is staged here: the test takes the plan row, starts the
-// redeem, makes its change in the same transaction, and lets go. Mutation:
-// drop the invite re-read in request() (planInvites.ts).
+// redeem, makes its change in the same transaction, and lets go. Mutations:
+// drop the invite re-read in request() (planInvites.ts), or the .catch that
+// turns touchPlan's 404 for a deleted plan into the dead-link one.
 describe("redeeming while the plan changes", () => {
   async function racing(
     during: (tx: Prisma.TransactionClient) => Promise<unknown>,
@@ -372,6 +373,11 @@ describe("redeeming while the plan changes", () => {
           where: { id: planId },
           data: { archivedAt: new Date() },
         }),
+    ],
+    [
+      "whose plan was deleted",
+      (tx: Prisma.TransactionClient) =>
+        tx.tripPlan.delete({ where: { id: planId } }),
     ],
   ] as const)(
     "a link %s meanwhile is dead, and asks nothing",
