@@ -141,16 +141,18 @@ never in a URL, a filename or an error; the clip deleted when sent or after
 Nothing new calls it.
 
 - **Update 2026-10-18: the endpoint is gone (#510).** `POST /basemap/region-clip`
-  and what existed only for it (`regionClip.ts`, `regionClipLimiter`, the bbox
-  redaction paths and their test, the `pmtiles` binary in `api/Dockerfile`,
+  and what existed only for it (`regionClip.ts`, `regionClipLimiter` and its
+  test, the bbox redaction paths and their test, the `pmtiles` binary in `api/Dockerfile`,
   `PROTOMAPS_ARCHIVE_URI`) are removed, so the API has no route that takes a
   saved area's bounds. What held it up was a supported Logjam GPS build that
   calls it ([0022](0022-mobile-builds-supported-three-months.md)), and there is
-  none: no Logjam GPS build has been released (no `mobile-v*` tag, not on the
-  Play Store), and the only builds that call it are the maintainer's own, which
-  are updated with the phone-cut clips. 0022's window runs from a successor's
-  release, so this is within its rule, not an exception to it. The area cap
-  stays in `shared/`, for the phone. Everything else above stands.
+  none. 0022 dates support by a release event, a `mobile-vX.Y.Z` tag or a Play
+  Store release, and no Logjam GPS build has either, so none is a supported
+  build in its sense. The only builds that call the endpoint are the
+  maintainer's own, which are updated with the phone-cut clips, and the first
+  release will include them, so no released build ever calls it. The area cap
+  stays in `shared/`, for the phone. The paragraph above and the guards it names
+  no longer apply. Everything else above stands.
 
 ## Consequences
 
@@ -174,6 +176,9 @@ Nothing new calls it.
   clip. No guard: only the device check shows it.
 - **Negative:** the `/master/*` behaviour caches nothing (`max_ttl = 0`), so
   every range is an S3 GET. At about 130 per save that is a fraction of a cent.
+- **Negative (updated 2026-10-18):** there were two ways to cut a clip until
+  the endpoint went. It is removed (#510), with the API image's `pmtiles`
+  binary and `PROTOMAPS_ARCHIVE_URI`, so there is one way now.
 - **Negative:** a guest now downloads the DEM and contour clips too, up to
   about 80 MB more per mountain area than before.
 - **Neutral:** an area saved before this change keeps what it was saved with.
