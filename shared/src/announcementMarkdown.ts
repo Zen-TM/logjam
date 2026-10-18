@@ -39,9 +39,11 @@ export type ParsedMessage = {
 };
 
 const LINK_SCHEMES = /^(https?|mailto):/i;
-// marked decodes numeric character references but not named ones, which
-// would otherwise show literally ("R&amp;D") or bend a link.
+// marked decodes numeric references in text, but no references in a link
+// destination, where an undecoded one would show literally ("R&amp;D") or
+// bend the link (`&#38;` turns the rest into a fragment).
 const NAMED_ENTITY = /&[a-z][a-z0-9]*;/i;
+const ANY_ENTITY = /&(#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
 
 export function parseMessageMarkdown(markdown: string): ParsedMessage {
   const dropped = new Set<string>();
@@ -87,7 +89,7 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
             drop("a link inside a link");
             return inlines(t.tokens, inLink);
           }
-          if (NAMED_ENTITY.test(href)) drop("an HTML entity");
+          if (ANY_ENTITY.test(href)) drop("an HTML entity");
           if (LINK_SCHEMES.test(href)) {
             return [{ type: "link", href, children: inlines(t.tokens, true) }];
           }
@@ -154,7 +156,7 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
               },
             ];
           }
-          drop("more than three levels of heading");
+          drop("a heading more than two levels below the top one");
           return [{ type: "paragraph", children: inlines(t.tokens) }];
         }
         case "paragraph":

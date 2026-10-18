@@ -177,7 +177,9 @@ describe("parseMessageMarkdown", () => {
     const { blocks, dropped } = parseMessageMarkdown(
       "## Two\n\n### Three\n\n#### Four\n\n###### Six",
     );
-    expect(dropped).toEqual(["more than three levels of heading"]);
+    expect(dropped).toEqual([
+      "a heading more than two levels below the top one",
+    ]);
     expect(blocks).toEqual([
       { type: "heading", level: 1, children: [text("Two")] },
       { type: "heading", level: 2, children: [text("Three")] },
@@ -206,16 +208,16 @@ describe("parseMessageMarkdown", () => {
     ]);
   });
 
-  // Red if a named entity passes unreported: it would show literally, or
-  // bend a link's address.
-  it.each(["R&amp;D", "[x](https://e.com/?a=1&amp;b=2)"])(
-    "reports a named HTML entity in %s",
-    (markdown) => {
-      expect(parseMessageMarkdown(markdown).dropped).toEqual([
-        "an HTML entity",
-      ]);
-    },
-  );
+  // Red if an entity passes unreported: it would show literally, or bend a
+  // link's address (an href decodes no references, numeric ones included).
+  it.each([
+    "R&amp;D",
+    "[x](https://e.com/?a=1&amp;b=2)",
+    "[x](https://e.com/?a=1&#38;b=2)",
+    "[x](https://e.com/?a=1&#x26;b=2)",
+  ])("reports an HTML entity in %s", (markdown) => {
+    expect(parseMessageMarkdown(markdown).dropped).toEqual(["an HTML entity"]);
+  });
 
   // Red if a blank line inside an item is not skipped: valid Markdown would
   // be reported and the item gain an empty line.

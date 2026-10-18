@@ -30,16 +30,19 @@ Questions: [email me](mailto:maintainer@example.com).
 The body can use headings, paragraphs, bullet and numbered lists (one
 level), **bold**, *italic*, `code`, links (`https:`, `http:` or `mailto:`
 only) and line breaks (two trailing spaces). Heading levels are relative: the
-body's shallowest heading is its top level, whether written `#` or `##`, and
-there can be three levels in all. The script refuses a message that uses
-anything else (raw HTML, images, tables, code blocks, nested lists, quotes,
-rules, strikethrough, a link inside a link, a named HTML entity such as
-`&amp;`: type the character) and says what it found.
+shallowest heading is level 1 and the deepest may be two below it (`#` to
+`###`, or `##` to `####`). The script refuses a message that uses anything
+else (raw HTML, images, tables, code blocks, nested lists, quotes, rules,
+strikethrough, a link inside a link, an HTML entity such as `&amp;`: type the
+character) and says what it found. Text that only looks like an entity, such
+as `Q&A;`, is refused too; write `Q\&A;` to keep the `&`.
 
 ## Send it
 
 Send only once Logjam Web and a Logjam GPS release that opens the message
 have shipped: before then, a user sees the title and cannot open the row.
+Even after, anyone still on an older Logjam GPS build gets a row titled
+"Notification" that opens nothing until they update.
 
 Run the script twice. Without `--yes` it checks the message and prints how
 many users would get it. With `--yes` it sends: the announcement and every
