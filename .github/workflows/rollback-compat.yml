@@ -146,11 +146,8 @@ jobs:
           (cd "$LIVE_DIR/shared" && npm ci && npm run build)
           cd "$LIVE_DIR/api" && npm ci && npx prisma generate && npm run build
 
-      # The live release's own seed: its writes must work on the new schema too.
-      - name: Seed with the live release
-        working-directory: ${{ env.LIVE_DIR }}/api
-        run: npx prisma db seed
-
+      # Before the seed, which uploads its files and the place registry into
+      # these buckets (best effort, so a missing bucket only warns).
       - name: Wait for MiniStack and create buckets
         run: |
           for i in $(seq 1 60); do
@@ -162,6 +159,11 @@ jobs:
           done
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+
+      # The live release's own seed: its writes must work on the new schema too.
+      - name: Seed with the live release
+        working-directory: ${{ env.LIVE_DIR }}/api
+        run: npx prisma db seed
 
       - name: Start the Expo push stub
         run: node infra/scripts/expo-push-stub.mjs &
