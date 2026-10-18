@@ -90,7 +90,9 @@ run "ci_reads_no_secret_or_user_data" {
   # Mutation: turning the object Deny back into a list of buckets, adding a
   # bucket to its exceptions, or scoping the log Deny to named log groups
   # leaves the next bucket or log group readable until someone remembers to
-  # add it.
+  # add it. Changing the object Deny's condition (another account, a
+  # negated operator, a second key) leaves buckets of ours readable; dropping
+  # it denies the AWS-owned objects an EB configuration change reads again.
   assert {
     condition = alltrue([
       for p in [
@@ -105,7 +107,8 @@ run "ci_reads_no_secret_or_user_data" {
             "arn:aws:s3:::logjam-tfstate-620853681701/*",
             "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
             "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
-          ])
+          ]) &&
+          try(st.Condition, null) == { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
         ]) &&
         anytrue([
           for st in jsondecode(p).Statement :
@@ -114,7 +117,7 @@ run "ci_reads_no_secret_or_user_data" {
         ])
       )
     ])
-    error_message = "The CI privacy Deny must cover objects in every bucket but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
   }
 
   # Mutation: dropping any of these from the Deny gives the plan and deploy

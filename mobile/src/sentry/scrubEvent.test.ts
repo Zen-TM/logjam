@@ -246,6 +246,23 @@ describe("scrubBreadcrumb", () => {
   });
 });
 
+describe("a forecast request", () => {
+  // Mutation that turns it red: narrow the URL pattern in `redactTilePathPatterns`
+  // so a query string survives. The request holds the 0.1° cell (ADR 0038).
+  it("reaches a breadcrumb as [redacted-url], cell and all", () => {
+    const url =
+      "https://api.open-meteo.com/v1/forecast?latitude=-33.6&longitude=150.4&elevation=600";
+    const crumb = scrubBreadcrumb({
+      category: "xhr",
+      message: `GET ${url}`,
+      data: { url, status_code: 200 },
+    });
+    expect(JSON.stringify(crumb)).not.toContain("open-meteo");
+    expect(JSON.stringify(crumb)).not.toContain("150.4");
+    expect(crumb.message).toBe("GET [redacted-url]");
+  });
+});
+
 describe("the typed search query", () => {
   // Mutation that turns it red: drop "q" or "query" from SENSITIVE_KEYS.
   it("never reaches a breadcrumb or an event", () => {

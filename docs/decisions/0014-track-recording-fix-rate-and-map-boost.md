@@ -33,7 +33,8 @@ by the same `sensorsActive` as the dot watcher, so screen off or tab left means
 back to the user's rate.
 
 **Screen off only works because of a NATIVE PATCH** — the repo's first,
-`patches/expo-location+58.0.17.patch`, applied by `postinstall` (patch-package).
+the `expo-location` patch in `mobile/patches/` (named for the expo-location
+version it patches), applied by `postinstall` (patch-package).
 Stock expo-location refuses `startLocationUpdatesAsync` with a
 `foregroundService` once the activity has paused, and its flag flips at the same
 moment React Native emits `background`, so JS always loses: on a Pixel, Home

@@ -788,18 +788,20 @@ describe("the map point panel", () => {
 
   // Mutation: give a verb `on: "web"` with no client that draws it, or two
   // clients the same verb under one id with different words.
-  it("gives each client its own verbs, in order, each with a reason", () => {
+  it("gives each client its verbs, in order, a one-client verb with a reason", () => {
     expect(mapPointVerbs("web").map((verb) => verb.id)).toEqual([
       "addPlace",
       "measure",
       "copy",
+      "weather",
     ]);
     expect(mapPointVerbs("gps").map((verb) => verb.id)).toEqual([
       "navigate",
       "dropMarker",
+      "weather",
     ]);
     for (const verb of MAP_POINT_VERBS)
-      expect(verb.reason.length).toBeGreaterThan(0);
+      if ("on" in verb) expect(verb.reason.length).toBeGreaterThan(0);
     expect(mapPointVerbs("gps")).toEqual([
       {
         id: "navigate",
@@ -812,6 +814,12 @@ describe("the map point panel", () => {
         icon: "flag",
         label: "Drop a marker here",
         subtitle: "Saved, and synced",
+      },
+      {
+        id: "weather",
+        icon: "weather",
+        label: "Show the weather here",
+        subtitle: null,
       },
     ]);
   });
