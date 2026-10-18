@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { TextInput, View, type TextInputProps } from "react-native";
+import {
+  TextInput,
+  View,
+  type TextInputInstance,
+  type TextInputProps,
+} from "react-native";
 
 import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Field } from "./Field";
@@ -19,7 +24,7 @@ type TextFieldProps = {
    * keyboard never comes up. Callers in that situation keep a ref and call
    * `.focus()` once the animation has settled.
    */
-  inputRef?: React.Ref<TextInput>;
+  inputRef?: React.Ref<TextInputInstance>;
   /** Drawn beside the input box, centred on IT rather than on the label above
    *  — e.g. a remove button. */
   accessory?: React.ReactNode;
