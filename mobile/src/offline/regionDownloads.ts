@@ -104,48 +104,76 @@ const MAX_ATTEMPTS = 3;
  * default User-Agent still goes, and must: the web distribution's WAF refuses
  * a request without one (docs/decisions/0036).
  */
-function rangeSource(url: string, token: RegionCancelToken): Source {
+function rangeSource(
+  url: string,
+  token: RegionCancelToken,
+  /** Called every 30 s while a request is in flight. */
+  alive: () => void,
+): Source {
+  const fetchRange = async (
+    offset: number,
+    length: number,
+    etag: string | undefined,
+  ) => {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      requestTimeoutMs(length),
+    );
+    // A cancel stops the request in flight: an account wipe waits only
+    // seconds for a download to stop, and a large range on 3G takes longer.
+    // The same tick keeps the download's notice, and with it the CPU lock
+    // that lapses after 3 minutes unrenewed, alive through a slow request.
+    // Guard: regionDownloads.test.ts ("keeps the download alive …").
+    let ticks = 0;
+    const watch = setInterval(() => {
+      if (token.stop === "cancel") controller.abort();
+      if (++ticks % 60 === 0) alive();
+    }, 500);
+    try {
+      const response = await expoFetch(url, {
+        headers: { range: `bytes=${offset}-${offset + length - 1}` },
+        signal: controller.signal,
+      });
+      const tag = response.headers.get("etag");
+      const strong = tag && !tag.startsWith("W/") ? tag : undefined;
+      // A 200 is the whole archive, from a server that ignored the range;
+      // another ETag, an archive replaced mid-clip. Either body is aborted
+      // unread, or the native side buffers it.
+      if (response.status !== 206 || (etag && strong && strong !== etag)) {
+        controller.abort();
+        throw new ArchiveStatusError(
+          response.status === 206 ? 412 : response.status,
+        );
+      }
+      const bytes = await response.bytes();
+      return {
+        data:
+          bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+            ? bytes.buffer
+            : bytes.slice().buffer,
+        etag: strong,
+      };
+    } finally {
+      clearTimeout(timer);
+      clearInterval(watch);
+    }
+  };
   return {
     getKey: () => url,
+    // Each range is retried on its own, so a planning walk of a dozen
+    // directory reads is not restarted whole by one failed read.
     getBytes: async (offset, length, _signal, etag) => {
-      const controller = new AbortController();
-      const timer = setTimeout(
-        () => controller.abort(),
-        requestTimeoutMs(length),
-      );
-      // A cancel stops the request in flight: an account wipe waits only
-      // seconds for a download to stop, and a large range on 3G takes longer.
-      const watch = setInterval(() => {
-        if (token.stop === "cancel") controller.abort();
-      }, 500);
-      try {
-        const response = await expoFetch(url, {
-          headers: { range: `bytes=${offset}-${offset + length - 1}` },
-          signal: controller.signal,
-        });
-        const tag = response.headers.get("etag");
-        const strong = tag && !tag.startsWith("W/") ? tag : undefined;
-        // A 200 is the whole archive, from a server that ignored the range;
-        // another ETag, an archive replaced mid-clip. Either body is aborted
-        // unread, or the native side buffers it.
-        if (response.status !== 206 || (etag && strong && strong !== etag)) {
-          controller.abort();
-          throw new ArchiveStatusError(
-            response.status === 206 ? 412 : response.status,
-          );
+      // A function, not the field: the token changes under an await.
+      const cancelled = () => token.stop === "cancel";
+      for (let tries = 1; ; tries++) {
+        if (cancelled()) throw new Error("Cancelled");
+        try {
+          return await fetchRange(offset, length, etag);
+        } catch (error) {
+          if (final(error) || cancelled() || tries >= MAX_ATTEMPTS) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 1000 * tries));
         }
-        const bytes = await response.bytes();
-        return {
-          data:
-            bytes.byteOffset === 0 &&
-            bytes.byteLength === bytes.buffer.byteLength
-              ? bytes.buffer
-              : bytes.slice().buffer,
-          etag: strong,
-        };
-      } finally {
-        clearTimeout(timer);
-        clearInterval(watch);
       }
     },
   };
@@ -198,34 +226,40 @@ function permanent(error: unknown): error is ArchiveStatusError {
   );
 }
 
-/** One network call, retried; a stop it cannot get past says why. */
+/**
+ * Not worth another try in this run: a permanent answer, or an archive
+ * replaced mid-clip (412), which only a replan (the user's Resume) gets past.
+ */
+function final(error: unknown): boolean {
+  return (
+    permanent(error) ||
+    (error instanceof ArchiveStatusError && error.status === 412)
+  );
+}
+
+/** One call through the retrying source; a stop it cannot get past says why. */
 async function attempt<T>(
   spec: RegionClipSpec,
   token: RegionCancelToken,
   call: () => Promise<T>,
 ): Promise<{ value: T } | { stop: RegionRunOutcome; error: unknown }> {
-  for (let tries = 1; ; tries++) {
-    try {
-      return { value: await call() };
-    } catch (error) {
-      if (token.stop === "cancel")
-        return { stop: { status: "cancelled" }, error };
-      if (permanent(error)) {
-        return { stop: { status: "failed", code: "unknown" }, error };
-      }
-      if (tries >= MAX_ATTEMPTS) {
-        const outcome = exhaustedTileOutcome(
-          AppState.currentState,
-          await connectionAllows(spec.allowCellular),
-        );
-        if (outcome === "dead") {
-          return { stop: { status: "failed", code: "unknown" }, error };
-        }
-        const reason = outcome === "park" ? "background" : "connectivity";
-        return { stop: { status: "paused", reason }, error };
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000 * tries));
+  try {
+    return { value: await call() };
+  } catch (error) {
+    if (token.stop === "cancel")
+      return { stop: { status: "cancelled" }, error };
+    if (final(error)) {
+      return { stop: { status: "failed", code: "unknown" }, error };
     }
+    const outcome = exhaustedTileOutcome(
+      AppState.currentState,
+      await connectionAllows(spec.allowCellular),
+    );
+    if (outcome === "dead") {
+      return { stop: { status: "failed", code: "unknown" }, error };
+    }
+    const reason = outcome === "park" ? "background" : "connectivity";
+    return { stop: { status: "paused", reason }, error };
   }
 }
 
@@ -282,9 +316,19 @@ export async function runRegionClip(
     };
     if (!(await allowed())) return { status: "paused", reason: "connectivity" };
     const archive = clipArchiveFor(spec);
+    // The last progress, sent again by the source's heartbeat.
+    let progress: RegionJobProgress = {
+      tilesDone: 0,
+      tilesTotal: 0,
+      tilesGap: 0,
+      tilesFailed: 0,
+      bytesDone: 0,
+      bytesTotal: 0,
+    };
     const source = rangeSource(
       `${config.topoCdnBaseUrl}/${archive.archivePath}`,
       token,
+      () => onProgress({ ...progress }),
     );
     const planned = await attempt(spec, token, () =>
       planExtract(source, {
@@ -307,15 +351,10 @@ export async function runRegionClip(
     const fileUri = clipFileUri(spec.id);
     await FileSystem.makeDirectoryAsync(REGION_DIR, { intermediates: true });
     const file = new File(fileUri);
-    const report = (bytesDone: number) =>
-      onProgress({
-        tilesDone: 0,
-        tilesTotal: 0,
-        tilesGap: 0,
-        tilesFailed: 0,
-        bytesDone,
-        bytesTotal: plan.totalBytes,
-      });
+    const report = (bytesDone: number) => {
+      progress = { ...progress, bytesDone, bytesTotal: plan.totalBytes };
+      onProgress({ ...progress });
+    };
     let start: number | null = null;
     if (file.exists) {
       handle = file.open(FileMode.ReadWrite);

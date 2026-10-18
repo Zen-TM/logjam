@@ -33,8 +33,8 @@ export function isJobStalled(job: RegionJob): boolean {
 /**
  * Is another attempt at this failure worth offering?
  *
- * `region-rejected` is THIS AREA refused (outside the archive, or over the
- * cap), and `source-unavailable` an archive that is missing or not served by
+ * `region-rejected` is THIS AREA refused (outside the archive; a job that
+ * failed under the old API clip may also hold its over-the-cap refusal), and `source-unavailable` an archive that is missing or not served by
  * range, which stays so until an operator fixes it — Resume on
  * either repeats the same failure and teaches the user the button is a lie.
  * Everything else (a dropped connection, a locked database, a batch of tiles

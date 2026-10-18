@@ -50,7 +50,7 @@ nothing reclaims an artifact by age or pressure, which is why the precheck
 matters.
 
 **Pause is a tile-pyramid affordance only** (`offline/regionJobStatus.ts`). The
-clip's runner stops for a cancel between its range requests, not for a pause
+clip's runner stops for a cancel, aborting the request in flight, but not for a pause
 (updated 2026-10-18, [0036](0036-the-phone-cuts-its-own-offline-clips.md)). The same file
 owns the "is this run over?" answer Saved's cards read: a job paused by `user` or
 `provider-backoff` is *settled* (nothing auto-resumes those, by design) even

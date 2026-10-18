@@ -283,6 +283,50 @@ describe("runRegionClip", () => {
     expect(disk.has(FILE)).toBe(false);
   });
 
+  // Mutation: retry the whole plan instead of each read and the count goes
+  // red: one failed directory read then repeats every read before it.
+  it("retries a failed read on its own, not the whole plan", async () => {
+    await run();
+    const clean = cdn.calls.length;
+    disk.clear();
+    cdn.calls = [];
+    let failed = false;
+    fetchMock.mockImplementation(async (url, init) => {
+      if (cdn.calls.length === 2 && !failed) {
+        failed = true;
+        cdn.calls.push({ url, init });
+        return { status: 503, headers: new Headers() };
+      }
+      return serve(url, init);
+    });
+    expect((await settled(run())).status).toBe("ready");
+    expect(cdn.calls.length).toBe(clean + 1);
+  });
+
+  // Mutation: drop the heartbeat and no progress arrives while a request
+  // hangs: the download's notice, and the CPU lock it renews, lapse.
+  it("keeps the download alive through a slow request", async () => {
+    const token: RegionCancelToken = { stop: null };
+    const onProgress = vi.fn();
+    let hanging = false;
+    fetchMock.mockImplementation(async (url, init) => {
+      if (cdn.calls.length < 6) return serve(url, init);
+      cdn.calls.push({ url, init });
+      hanging = true;
+      const { signal } = init as unknown as { signal: AbortSignal };
+      return new Promise((_, reject) =>
+        signal.addEventListener("abort", () => reject(new Error("Aborted"))),
+      );
+    });
+    const pending = runRegionClip(SPEC, onProgress, token);
+    while (!hanging) await vi.advanceTimersByTimeAsync(50);
+    const before = onProgress.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(onProgress.mock.calls.length).toBeGreaterThan(before);
+    token.stop = "cancel";
+    expect(await settled(pending)).toEqual({ status: "cancelled" });
+  });
+
   // Mutations: drop a DEM or contour clip on any status and a CDN outage
   // saves an area without them, unreported (the 503 line); report a missing
   // one and every area outside its coverage fails a map.

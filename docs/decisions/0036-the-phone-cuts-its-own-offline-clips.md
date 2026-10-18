@@ -95,11 +95,17 @@ is cut again from the start. The connection is checked before every request,
 so a Wi-Fi-only clip parks when Wi-Fi drops rather than carrying on over
 mobile data, and a dropped connection parks the job for the queue's
 reconnect. Stop aborts the request in flight and deletes the file; Pause is
-still not offered on a clip (0005). Guards: `regionDownloads.test.ts`
-("picks up where a failed run stopped", "stops for a connection it may not
-use", "waits for a connection that drops mid-clip", "stays cancelled when
-Stop comes during a failing request", "aborts the request in flight on
-Stop"), `pmtilesExtract.test.ts` ("plans the same bytes again later"). A clip the app was killed during is still deleted on the
+still not offered on a clip (0005). Each range is retried on its own, up to
+three times, so one failed directory read does not restart the plan. While a
+range is in flight the run reports progress every 30 s: the download's
+foreground notice renews its CPU lock only on a report, and the lock lapses
+after 3 minutes, less than a 4 MiB range takes on a weak link. Guards:
+`regionDownloads.test.ts` ("picks up where a failed run stopped", "stops for
+a connection it may not use", "waits for a connection that drops mid-clip",
+"stays cancelled when Stop comes during a failing request", "aborts the
+request in flight on Stop", "retries a failed read on its own, not the whole
+plan", "keeps the download alive through a slow request"),
+`pmtilesExtract.test.ts` ("plans the same bytes again later"). A clip the app was killed during is still deleted on the
 next Saved open (`sweepOrphanFiles`), as before.
 
 **The vector clip is always cut at full detail**, the archive's own deepest

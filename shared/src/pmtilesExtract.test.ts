@@ -87,6 +87,8 @@ describe("planExtract", () => {
     expect(ours).toEqual(c.expected);
   });
 
+  // Mutation: write a wrong root offset or length into the header and the
+  // reader finds no tile.
   it("writes a file the pmtiles reader opens tile by tile", async () => {
     const c = cases[0];
     const { out } = await extract(fixture, optionsOf(c));
