@@ -161,15 +161,8 @@ describe("POST /elevation/point", () => {
     expect(res.body.attribution).toBe(NSW_5M.credit);
   });
 
-  // Mutation: drop `requireAuth` and the route becomes a free elevation proxy
-  // for anyone who can name a coordinate.
-  it("401s without a signed-in user", async () => {
-    const res = await request(API_URL)
-      .post("/elevation/point")
-      .send({ point: LINE[0] });
-    expect(res.status).toBe(401);
-  });
-
+  // No unauthenticated-401 case: fake auth treats a missing header as alice.
+  // routes/elevation.unit.test.ts holds it.
   it("400s a body that is not one in-range [longitude, latitude] pair", async () => {
     for (const body of [
       {},
