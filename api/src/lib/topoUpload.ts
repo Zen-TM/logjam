@@ -12,8 +12,8 @@ import { s3 } from "../services/awsClients";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { abortS3MultipartUploads, deleteS3Prefix } from "./s3Cleanup";
 
-// Compressed input-ZIP cap: bounds wasted S3 transfer and storage. A
-// legitimate ELVIS export (at most 40 tiles of ~22 MB) is far below it.
+// Compressed input-ZIP cap: bounds wasted S3 transfer and storage. A typical
+// ELVIS export (tens of tiles, ~22 MB each) is far below it.
 export const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
 
 // Logjam Web sends the ZIP as an S3 multipart upload in parts of this size, so
@@ -29,7 +29,8 @@ const PART_MISSING = say`Part of that ZIP didn't upload. Try again.`;
 /** Presigned PUT URLs for parts of a ZIP of `sizeBytes`. Each signs its
  *  part's exact length, so no part outgrows TOPO_UPLOAD_PART_BYTES, and a size
  *  over the cap is refused, so the parts together cannot pass it whatever size
- *  a client claims. Guards: the signTopoParts cases in topoUpload.unit.test.ts. */
+ *  a client claims. Guards: the signTopoParts cases in topoUpload.unit.test.ts,
+ *  and the X-Amz-SignedHeaders check in __tests__/topoJobs.test.ts. */
 export async function signTopoParts(
   bucket: string,
   key: string,

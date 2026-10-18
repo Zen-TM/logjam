@@ -111,10 +111,9 @@ export function serializeTopoJobFor<
 }
 
 // Uncompressed input-ZIP cap, the zip-bomb / disk-DoS guard for the Fargate
-// worker. A legitimate ELVIS export is bounded by the monthly tile quota
-// (default 40 tiles, ~17 MB compressed LAZ + ~5 MB DEM each). This sits well
-// above any realistic export while rejecting pathological archives before the
-// worker is launched.
+// worker. A legitimate ELVIS export is ~17 MB compressed LAZ + ~5 MB DEM per
+// tile; this sits well above any realistic one while rejecting pathological
+// archives before the worker is launched.
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 /** Part URLs one request may ask for. */
 const TOPO_UPLOAD_SIGN_MAX = 32;

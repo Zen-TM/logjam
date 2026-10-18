@@ -197,6 +197,8 @@ describe("topo-jobs route (fake auth)", () => {
       const [{ partNumber, url }] = signRes.body.parts;
       expect(partNumber).toBe(1);
       // The URL signs the part's length, so S3 refuses any other size.
+      // Mutation: drop ContentLength from signTopoParts' UploadPartCommand,
+      // or a presigner that stops signing content-length.
       expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain(
         "content-length",
       );
