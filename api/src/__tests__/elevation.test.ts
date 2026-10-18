@@ -163,6 +163,8 @@ describe("POST /elevation/point", () => {
 
   // No unauthenticated-401 case: fake auth treats a missing header as alice.
   // routes/elevation.unit.test.ts holds it.
+  // Mutation: drop the route's parseElevationPoint refusal (or parse
+  // req.body, not req.body.point) and a malformed body reaches the DEM reader.
   it("400s a body that is not one in-range [longitude, latitude] pair", async () => {
     for (const body of [
       {},

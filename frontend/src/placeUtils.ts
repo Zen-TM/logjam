@@ -537,8 +537,10 @@ export function useElevationPoint(lon: number, lat: number) {
   useEffect(() => {
     let current = true;
     getElevationPoint([lon, lat])
-      // Not logged on failure: the error could carry the point.
-      .catch(() => null)
+      .catch((err) => {
+        console.error(err);
+        return null;
+      })
       .then((reading) => {
         if (current) setAnswer({ key: `${lon},${lat}`, reading });
       });

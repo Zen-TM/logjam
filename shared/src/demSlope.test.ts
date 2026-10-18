@@ -172,8 +172,8 @@ describe("demSlopeAt", () => {
     coverage: [150, -34, 151, -33],
   } as const satisfies DemSource;
 
-  // Mutation: read `NSW_5M` only (the old default), and the finer source never
-  // answers.
+  // Mutation: ignore `sources` and read `NSW_5M` alone, and the finer source
+  // never answers.
   it("reads the finest source that has the window, all nine heights from it", async () => {
     const asked: string[] = [];
     const reading = await demSlopeReading(
@@ -191,15 +191,42 @@ describe("demSlopeAt", () => {
     );
   });
 
-  // Mutation: take the finer source's heights where it has them and fill the
-  // window's gaps from `NSW_5M`: the slope would span two surfaces.
-  it("falls through to the next source when the finer one has no data in the window", async () => {
-    // No-data pixels (a sampler blends a lone one away from its neighbours,
-    // so the whole tile is blank, as at the edge of a finer area's footprint).
+  /** Ground rising 5 m a pixel on the finer source, 1 m on `NSW_5M`. */
+  const twoGrounds: DemTileReader = (source, tiles) =>
+    rising(source.id === FINE.id ? 5 : 1)(source, tiles);
+
+  /** What `NSW_5M` alone reads at POINT over `rising(1)`. */
+  const coarseOwn = () =>
+    demSlopeReading(POINT.lon, POINT.lat, rising(1), [NSW_5M]);
+
+  // Mutation: fill the finer source's gaps from `NSW_5M`, or accept a window
+  // some of whose positions the finer source does not cover: the slope would
+  // span two surfaces and differ from NSW_5M's own.
+  it("falls through to the next source when the finer one covers only part of the window", async () => {
+    const { positions } = demSlopeWindow(POINT.lon, POINT.lat, FINE.sampleZoom);
+    // East edge halfway between the centre column and the east one.
+    const edge = (positions[4]!.lon + positions[5]!.lon) / 2;
+    const partial = { ...FINE, coverage: [150, -34, edge, -33] } as const;
+    const reading = await demSlopeReading(POINT.lon, POINT.lat, twoGrounds, [
+      partial,
+      NSW_5M,
+    ]);
+    expect(reading?.sourceId).toBe(NSW_5M.id);
+    expect(reading?.slopeDegrees).toBeCloseTo(
+      (await coarseOwn())!.slopeDegrees,
+      6,
+    );
+  });
+
+  // Mutation: read the window through `sampleDem`, whose bilinear blend fills a
+  // lone no-data pixel from its neighbours: the finer source would answer.
+  it("falls through when one pixel of the finer source's window has no data", async () => {
+    const { positions } = demSlopeWindow(POINT.lon, POINT.lat, FINE.sampleZoom);
+    const [corner] = resolveDemSamples([positions[2]!], FINE.sampleZoom);
     const holed: DemTileReader = async (source, tiles) => {
-      const found = await rising(1)(source, tiles);
+      const found = await twoGrounds(source, tiles);
       if (source.id === FINE.id)
-        for (const tile of found.values()) tile.fill(-32768);
+        found.get(`${corner!.tileX}/${corner!.tileY}`)![corner!.index] = -32768;
       return found;
     };
     const reading = await demSlopeReading(POINT.lon, POINT.lat, holed, [
@@ -207,14 +234,9 @@ describe("demSlopeAt", () => {
       NSW_5M,
     ]);
     expect(reading?.sourceId).toBe(NSW_5M.id);
-  });
-
-  it("falls through when the finer source's tile is absent", async () => {
-    const absent: DemTileReader = async (source, tiles) =>
-      source.id === FINE.id ? new Map() : rising(1)(source, tiles);
-    expect(
-      (await demSlopeReading(POINT.lon, POINT.lat, absent, [FINE, NSW_5M]))
-        ?.sourceId,
-    ).toBe(NSW_5M.id);
+    expect(reading?.slopeDegrees).toBeCloseTo(
+      (await coarseOwn())!.slopeDegrees,
+      6,
+    );
   });
 });

@@ -76,8 +76,7 @@ export default function MapPointPopover({
     };
   }, [map, point, anchorEl, onClose]);
 
-  // One request for the height and the slope. Not logged on failure: the
-  // error could carry the point.
+  // One request for the height and the slope.
   const { reading, loading } = useElevationPoint(
     point.longitude,
     point.latitude,

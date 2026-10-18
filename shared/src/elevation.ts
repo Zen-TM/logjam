@@ -21,7 +21,12 @@ import {
   type DemSamples,
 } from "./demSources.js";
 import { haversineMeters } from "./placeGeo.js";
-import { isValidLatitude, isValidLongitude } from "./placeValidation.js";
+import {
+  isValidLatitude,
+  isValidLongitude,
+  LATITUDE_RANGE,
+  LONGITUDE_RANGE,
+} from "./placeValidation.js";
 import type { RoutePoint } from "./routeValidation.js";
 
 /**
@@ -106,8 +111,8 @@ export type ElevationPoint = {
 
 export const ELEVATION_POINT_ERRORS = {
   shape: "point must be a [longitude, latitude] pair",
-  longitude: "Longitude must be a number between -180 and 180",
-  latitude: "Latitude must be a number between -90 and 90",
+  longitude: `Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
+  latitude: `Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
 } as const;
 
 /** The request body's `point`: a GeoJSON-order [longitude, latitude] pair. */

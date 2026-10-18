@@ -15,12 +15,19 @@
 // PRIVACY: positions here are precise wilderness coordinates. Nothing logs.
 
 import {
+  covers,
   DEM_SOURCES,
-  sampleDem,
+  demTileKey,
   type DemSource,
   type DemTileReader,
 } from "./demSources.js";
-import { DEM_TILE_SIZE, demTileCoordinates } from "./demTiles.js";
+import {
+  DEM_TILE_SIZE,
+  demSampleValue,
+  demTileCoordinates,
+  resolveDemSamples,
+  type DemSampleAddress,
+} from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
 
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
@@ -94,7 +101,10 @@ export type DemSlopeReading = {
  *
  * The finest source that has all nine heights answers, and all nine come from
  * that one surface: a source that lacks a pixel of the window (the edge of a
- * finer area, a tile not built) hands the position to the next one down.
+ * finer area, a tile not built, one no-data pixel) hands the position to the
+ * next one down. Each window position's own pixel is read, never the blend of
+ * four that `sampleDem` takes for a height, which would fill a missing pixel
+ * from its neighbours.
  * Never the worldwide 30 m tiles (`coverage` null), which are too coarse for
  * a point slope: within 5° of a 5 m survey at 57 % of points, a median of 34°
  * on ground of 60° or steeper, where the NSW 5 m source is within 5° at 98 %.
@@ -113,7 +123,14 @@ export async function demSlopeReading(
   for (const source of sources) {
     if (source.coverage === null) continue;
     const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
-    const { heights } = await sampleDem(positions, readTiles, [source]);
+    if (!positions.every((position) => covers(source, position))) continue;
+    const addresses = resolveDemSamples(positions, source.sampleZoom);
+    const wanted = new Map<string, DemSampleAddress>();
+    for (const address of addresses) wanted.set(demTileKey(address), address);
+    const tiles = await readTiles(source, [...wanted.values()]);
+    const heights = addresses.map((address) =>
+      demSampleValue(tiles.get(demTileKey(address)), address.index),
+    );
     const slope = slopeDegrees(heights, cellM);
     if (slope != null) return { slopeDegrees: slope, sourceId: source.id };
   }

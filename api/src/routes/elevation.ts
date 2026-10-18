@@ -1,4 +1,5 @@
-// Elevation profiles, derived on demand from a point list plus the DEM.
+// Elevation from the DEM, derived on demand: a profile along a point list, or
+// the height and slope at one point.
 //
 // Deliberately stateless: nothing here reads or writes the database, and no
 // profile is ever persisted. Route geometry is the single source of truth —
@@ -6,11 +7,13 @@
 // shared/src/elevation.ts.
 //
 // Auth is required even though the endpoint owns no user data, because the
-// REQUEST is the sensitive part: the body is a wilderness route line. An
+// REQUEST is the sensitive part: the body is a wilderness route line, or a spot
+// on one. An
 // unauthenticated caller must not be able to use us as an elevation proxy.
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { malformed } from "../middleware/errorHandler";
+import { logger } from "../lib/logger";
 import { elevationLimiter } from "../middleware/rateLimit";
 import {
   buildElevationProfile,
@@ -102,10 +105,14 @@ router.post(
     if ("error" in parsed) throw malformed(parsed.error);
     const { lon, lat } = parsed;
 
-    const [heights, slope] = await Promise.all([
-      sampleElevations([{ lon, lat, distanceM: 0 }]),
-      sampleSlope(lon, lat),
-    ]);
+    const heights = await sampleElevations([{ lon, lat, distanceM: 0 }]);
+    // The height was read; a slope that could not be (its window reaches tiles
+    // the height never touched) must not take it down. Status-only: the error
+    // can carry a tile URL, which names the area.
+    const slope = await sampleSlope(lon, lat).catch(() => {
+      logger.warn("DEM slope could not be read");
+      return null;
+    });
     const demSourceIds = [heights.sourceIds[0], slope?.sourceId].filter(
       (id, i, ids): id is string => id != null && ids.indexOf(id) === i,
     );

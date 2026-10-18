@@ -721,8 +721,9 @@ describe("the map's overlays list", () => {
 
 // What a press on empty map answers, on both clients (shared/DESIGN.md §3).
 describe("the map point panel", () => {
-  // Mutation: mark the slope section `on: "gps"` again and Logjam Web, which
-  // reads it from the API, stops drawing it.
+  // Mutation: mark the slope section `on: "gps"` again and the contract says
+  // Logjam Web shows no slope, though MapPointPopover draws one from the point
+  // route.
   it("declares Slope for both clients", () => {
     for (const platform of ["web", "gps"] as const)
       expect(contractSectionsFor(MAP_POINT, platform, false)).toContain(
