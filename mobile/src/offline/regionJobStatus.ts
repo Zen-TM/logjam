@@ -60,12 +60,3 @@ export function regionRejectedLine(detail: string | undefined): string {
 export function isJobSettled(job: RegionJob): boolean {
   return isJobFinished(job) || isJobStalled(job);
 }
-
-/**
- * Pause can only be honoured on the tile-pyramid task: the vector clip is one
- * `expo-file-system` transfer with no mid-flight stop
- * (regionJobStatus.test.ts).
- */
-export function canPause(job: RegionJob): boolean {
-  return job.spec.taskKind === "tile-pyramid";
-}

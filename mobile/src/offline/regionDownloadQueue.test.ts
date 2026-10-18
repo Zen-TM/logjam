@@ -36,7 +36,10 @@ vi.mock(
 vi.mock("./networkPolicy", () => ({ connectionWorthResuming: () => false }));
 // Every run finds no connection.
 vi.mock("./regionMbtiles", () => ({ deleteRegionFile: vi.fn() }));
-vi.mock("./regionDownloads", () => ({ deleteDownloadedArtifact: vi.fn() }));
+vi.mock("./regionDownloads", () => ({
+  deleteClipFile: vi.fn(),
+  deleteDownloadedArtifact: vi.fn(),
+}));
 vi.mock("./regionTileDownload", () => ({
   connectionAllows: () => Promise.resolve(false),
   runRegionDownload: () =>

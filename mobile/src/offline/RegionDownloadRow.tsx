@@ -16,11 +16,7 @@ import {
   resumeRegionDownload,
   type RegionJob,
 } from "./regionDownloadQueue";
-import {
-  canPause,
-  isRetryableFailure,
-  regionRejectedLine,
-} from "./regionJobStatus";
+import { isRetryableFailure, regionRejectedLine } from "./regionJobStatus";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
   const theme = useTheme();
@@ -105,14 +101,12 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         state.kind === "ready" ? null : (
           <View style={styles.rowActions}>
             {state.kind === "downloading" ? (
-              canPause(job) ? (
-                <Button
-                  label="Pause"
-                  variant="ghost"
-                  compact
-                  onPress={() => pauseRegionDownload(spec.id)}
-                />
-              ) : null
+              <Button
+                label="Pause"
+                variant="ghost"
+                compact
+                onPress={() => pauseRegionDownload(spec.id)}
+              />
             ) : state.kind === "failed" &&
               !isRetryableFailure(state.code) ? null : (
               // Retrying a rejected area, or an endpoint that is down, repeats

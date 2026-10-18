@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { PMTiles, type Source } from "pmtiles";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { lonLatToTile } from "./mapRegionEstimate.js";
 import {
@@ -118,13 +118,31 @@ describe("planExtract", () => {
     expect(capped.out).toEqual(merged.out);
   });
 
-  it("says when the area is outside the archive's tiles", async () => {
-    const { plan } = await extract(fixture, {
-      bbox: { west: 140, south: -30, east: 140.5, north: -29.5 },
-      minzoom: 10,
-      maxzoom: 14,
-    });
-    expect(plan.addressedTiles).toBe(0);
+  // Mutations: drop the west-of test and the first check goes red; call an
+  // area outside unless it is wholly inside and "past the edge" goes red.
+  it("says when the area misses the archive's bounds", async () => {
+    const outside = cases.find((c) => c.name === "outside")!;
+    const { plan } = await extract(fixture, optionsOf(outside));
+    expect(plan.outside).toBe(true);
+    for (const c of cases.filter((c) => c !== outside)) {
+      const { plan } = await extract(fixture, optionsOf(c));
+      expect(plan.outside, c.name).toBe(false);
+    }
+  });
+
+  // A partial clip is resumed only when a replanned one starts with the same
+  // bytes (mobile regionDownloads.ts). Mutation: let gzip stamp the time into
+  // the directories and the two prefixes differ.
+  it("plans the same bytes again later", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const first = await extract(fixture, optionsOf(cases[0]));
+      vi.setSystemTime(Date.now() + 60_000);
+      const again = await extract(fixture, optionsOf(cases[0]));
+      expect(again.plan.prefix).toEqual(first.plan.prefix);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refuses a short range", async () => {

@@ -24,10 +24,11 @@ const GZIP = 2;
 
 /**
  * Bytes of unwanted tiles a request may read through to join the next run.
- * Each skipped gap trades a round trip for at most this many wasted bytes.
- * Measured against the NSW archive: see the ADR above.
+ * Each skipped gap trades a round trip for at most this many wasted bytes:
+ * against the NSW archives the quickest on both a 4G and a 3G link, at up to
+ * 12 % extra bytes (measured in the ADR above).
  */
-export const EXTRACT_MERGE_GAP_BYTES = 256 * 1024;
+export const EXTRACT_MERGE_GAP_BYTES = 64 * 1024;
 /** A response is held in memory whole, so none is larger than this. */
 export const EXTRACT_MAX_REQUEST_BYTES = 4 * 1024 * 1024;
 
@@ -56,8 +57,14 @@ export type ExtractPlan = {
   requests: ExtractRequest[];
   /** The output's size in bytes. */
   totalBytes: number;
-  /** Tiles the output addresses. Zero means the area is outside the archive. */
-  addressedTiles: number;
+  /** The zooms it holds: those asked for, within the archive's. */
+  minzoom: number;
+  maxzoom: number;
+  /**
+   * The area misses the archive's bounds. The clip still holds the few
+   * low-zoom tiles over both, as go-pmtiles' does, and nothing worth saving.
+   */
+  outside: boolean;
   /** The source's ETag when it sent one, so a range from a replaced archive is refused. */
   etag?: string;
 };
@@ -178,7 +185,9 @@ function serializeEntries(entries: Entry[]): Uint8Array {
       i > 0 && e.offset === prev.offset + prev.length ? 0 : e.offset + 1,
     );
   });
-  return gzipSync(Uint8Array.from(out), { level: 9 });
+  // mtime 0: a replanned clip must reproduce its directories byte for byte,
+  // which is how a partial file is known to be resumable.
+  return gzipSync(Uint8Array.from(out), { level: 9, mtime: 0 });
 }
 
 /** go-pmtiles' BuildDirectories: everything in the root if it fits, else leaves. */
@@ -372,7 +381,13 @@ export async function planExtract(
     prefix: concat([new Uint8Array(head.buffer), root, metadata, leaves]),
     requests,
     totalBytes: tileDataOffset + tileDataLength,
-    addressedTiles,
+    minzoom,
+    maxzoom,
+    outside:
+      west > header.maxLon ||
+      east < header.minLon ||
+      south > header.maxLat ||
+      north < header.minLat,
     etag: header.etag,
   };
 }
