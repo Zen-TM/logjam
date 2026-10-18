@@ -4,8 +4,8 @@
 // A plan_* notification stores ids only (plan_access_ended also the plan's
 // name, routes/notifications.ts says why) and is pushed with a static title
 // and the plan's id (services/push.ts). Never an answer, a label or a
-// coordinate. Guard: __tests__/planMembers.test.ts ("no answers in a
-// notification").
+// coordinate. Guard: __tests__/planMembers.test.ts ("removing tells the
+// person which plan, with no answers").
 import { Prisma } from "@prisma/client";
 import {
   isTripPlanFormVisibility,
@@ -28,20 +28,39 @@ import { sendPushToUser } from "../services/push";
 
 type Db = Prisma.TransactionClient;
 
+/**
+ * The plan types that name a user other than their recipient, and the
+ * payload key that holds that user. One declaration for the writers here,
+ * the read (routes/notifications.ts) and the account purge (routes/users.ts).
+ * Guard: routes/accountPurge.unit.test.ts.
+ */
+export const PLAN_PERSON_KEY = {
+  plan_invited: "invitedById",
+  plan_join_request: "requesterId",
+  plan_join_approved: "approvedById",
+  plan_member_joined: "memberId",
+} as const;
+type NamingType = keyof typeof PLAN_PERSON_KEY;
+export const PLAN_NAMING_TYPES = Object.keys(PLAN_PERSON_KEY) as NamingType[];
+
+/** The payload key of the person a notification `type` names, if it is one
+ *  of these. */
+export function planPersonKey(type: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(PLAN_PERSON_KEY, type)
+    ? PLAN_PERSON_KEY[type as NamingType]
+    : undefined;
+}
+
 type PlanNotice =
-  | { type: "plan_invited"; payload: { planId: string; invitedById: string } }
   | {
-      type: "plan_join_request";
-      payload: { planId: string; requesterId: string };
-    }
-  | {
-      type: "plan_join_approved";
-      payload: { planId: string; approvedById: string };
-    }
-  | {
-      type: "plan_member_joined";
-      payload: { planId: string; memberId: string };
-    }
+      [T in NamingType]: {
+        type: T;
+        payload: { planId: string } & Record<
+          (typeof PLAN_PERSON_KEY)[T],
+          string
+        >;
+      };
+    }[NamingType]
   | {
       type: "plan_access_ended";
       payload: {
@@ -50,14 +69,6 @@ type PlanNotice =
         planName: string;
       };
     };
-
-/** The plan types that name a user other than their recipient. */
-const NAMING_TYPES = [
-  "plan_invited",
-  "plan_join_request",
-  "plan_join_approved",
-  "plan_member_joined",
-];
 
 /**
  * Write `notice` for each of `userIds` in the transaction. Returns the pushes
@@ -95,7 +106,7 @@ export async function dropStalePlanNotifications(
 ): Promise<void> {
   await tx.notification.deleteMany({
     where: {
-      type: { in: NAMING_TYPES },
+      type: { in: PLAN_NAMING_TYPES },
       payload: { path: ["planId"], equals: planId },
       OR: [
         { userId },
@@ -113,10 +124,29 @@ export async function dropPlanNotifications(
 ): Promise<void> {
   await tx.notification.deleteMany({
     where: {
-      type: { in: NAMING_TYPES },
+      type: { in: PLAN_NAMING_TYPES },
       payload: { path: ["planId"], equals: planId },
     },
   });
+}
+
+/** Whether `userId` and any of `otherIds` have blocked each other, either
+ *  way. A block is answered as if there were no one there. */
+export async function blockedWithAny(
+  db: Db,
+  userId: string,
+  otherIds: string[],
+): Promise<boolean> {
+  const blocked = await db.friendship.count({
+    where: {
+      status: "blocked",
+      OR: [
+        { requesterId: userId, addresseeId: { in: otherIds } },
+        { requesterId: { in: otherIds }, addresseeId: userId },
+      ],
+    },
+  });
+  return blocked > 0;
 }
 
 /** Active members' ids, minus `except`. */

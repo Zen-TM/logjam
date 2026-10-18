@@ -9,7 +9,10 @@
 // what they added stays in the plan.
 //
 // Every write starts with touchPlan (lib/planAccess.ts), so writes in one
-// plan run one at a time and each reads the memberships the one before left.
+// plan run one at a time, and the rows a write changes (the person invited,
+// joining, asking or leaving) are read again behind it. The caller's own role
+// is checked before, as in planSections.ts: a write that races a change to it
+// lands as if it had run just before that change.
 // Guard: __tests__/planMembers.test.ts.
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
@@ -25,6 +28,8 @@ import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
+  planArchived,
+  planMembershipAnyStatus,
   planNotFound,
   requirePlanMember,
   requirePlanRole,
@@ -40,16 +45,15 @@ import {
 } from "../lib/tripPlanView";
 import {
   activeMemberIds,
+  blockedWithAny,
   dropStalePlanNotifications,
   joinForms,
   notifyPlan,
   saveJoinAnswers,
 } from "../lib/planMembership";
-import { isUniqueViolation } from "./friends";
 
 const router = Router({ mergeParams: true });
 
-const ARCHIVED = say`This plan is archived. A leader can bring it back to change it.`;
 const NEEDS_A_LEADER = say`A plan needs a leader. Make someone else a leader first.`;
 
 function memberNotFound(): AppError {
@@ -67,19 +71,6 @@ async function leader(req: AuthenticatedRequest, forbidden: UserSentence) {
 function target(req: AuthenticatedRequest, callerId: string): string {
   const id = getParam(req.params.userId);
   return id === "me" ? callerId : id;
-}
-
-/** The caller's membership of any status, or 404. */
-async function ownMembership(userId: string, planId: string) {
-  const row = await prisma.tripPlanMember.findUnique({
-    where: { planId_userId: { planId, userId } },
-    select: {
-      status: true,
-      invitedBy: { select: { id: true, username: true } },
-    },
-  });
-  if (!row) throw planNotFound();
-  return row;
 }
 
 async function viewOfMember(planId: string, userId: string) {
@@ -118,53 +109,37 @@ router.post(
     });
     if (!invitee) throw noOne;
     if (invitee.id === userId) throw new AppError(400, say`This is you.`);
-    const blocked = await prisma.friendship.count({
-      where: {
-        status: "blocked",
-        OR: [
-          { requesterId: userId, addresseeId: invitee.id },
-          { requesterId: invitee.id, addresseeId: userId },
-        ],
-      },
-    });
-    if (blocked > 0) throw noOne;
+    if (await blockedWithAny(prisma, userId, [invitee.id])) throw noOne;
 
-    const push = await prisma
-      .$transaction(async (tx) => {
-        await touchPlan(tx, planId);
-        const existing = await tx.tripPlanMember.findUnique({
-          where: { planId_userId: { planId, userId: invitee.id } },
-          select: { status: true },
-        });
-        if (existing?.status === "active")
-          throw new AppError(409, say`They're already in this plan.`);
-        if (existing?.status === "invited")
-          throw new AppError(409, say`They're already invited.`);
-        if (existing)
-          throw new AppError(
-            409,
-            say`They've asked to join. Let them in from the plan's members.`,
-          );
-        await tx.tripPlanMember.create({
-          data: {
-            planId,
-            userId: invitee.id,
-            role,
-            status: "invited",
-            invitedById: userId,
-          },
-        });
-        return notifyPlan(tx, [invitee.id], {
-          type: "plan_invited",
-          payload: { planId, invitedById: userId },
-        });
-      })
-      .catch((err: unknown) => {
-        // Another leader's invite or the person's own link landed first.
-        if (isUniqueViolation(err))
-          throw new AppError(409, say`They're already invited.`);
-        throw err;
+    const push = await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
+      const existing = await tx.tripPlanMember.findUnique({
+        where: { planId_userId: { planId, userId: invitee.id } },
+        select: { status: true },
       });
+      if (existing?.status === "active")
+        throw new AppError(409, say`They're already in this plan.`);
+      if (existing?.status === "invited")
+        throw new AppError(409, say`They're already invited.`);
+      if (existing)
+        throw new AppError(
+          409,
+          say`They've asked to join. Let them in from the plan's members.`,
+        );
+      await tx.tripPlanMember.create({
+        data: {
+          planId,
+          userId: invitee.id,
+          role,
+          status: "invited",
+          invitedById: userId,
+        },
+      });
+      return notifyPlan(tx, [invitee.id], {
+        type: "plan_invited",
+        payload: { planId, invitedById: userId },
+      });
+    });
     push();
     res.status(201).json(await viewOfMember(planId, invitee.id));
   },
@@ -180,7 +155,7 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const planId = getParam(req.params.planId);
-    const own = await ownMembership(user.id, planId);
+    const own = await planMembershipAnyStatus(user.id, planId);
     if (own.status !== "invited") throw planNotFound();
     const plan = await prisma.tripPlan.findUnique({
       where: { id: planId },
@@ -226,7 +201,7 @@ export async function joinInvited(
       select: { status: true, plan: { select: { archivedAt: true } } },
     });
     if (own?.status !== "invited") throw planNotFound();
-    if (own.plan.archivedAt) throw new AppError(409, ARCHIVED);
+    if (own.plan.archivedAt) throw planArchived();
     await saveJoinAnswers(tx, planId, userId, answers);
     await tx.tripPlanMember.update({
       where: { planId_userId: { planId, userId } },
@@ -303,6 +278,16 @@ router.patch(
         where: { planId_userId: { planId, userId: memberId } },
         data: { role },
       });
+      // Requests go to leaders; a former one's would only count in their
+      // unread badge, since the inbox no longer shows them.
+      if (member.role === "leader" && role !== "leader")
+        await tx.notification.deleteMany({
+          where: {
+            userId: memberId,
+            type: "plan_join_request",
+            payload: { path: ["planId"], equals: planId },
+          },
+        });
     });
     res.json(await viewOfMember(planId, memberId));
   },
@@ -373,7 +358,7 @@ router.delete(
     const planId = getParam(req.params.planId);
     const memberId = target(req, user.id);
     const self = memberId === user.id;
-    if (self) await ownMembership(user.id, planId);
+    if (self) await planMembershipAnyStatus(user.id, planId);
     else
       requirePlanRole(
         await requirePlanMember(user.id, planId),
@@ -383,15 +368,10 @@ router.delete(
 
     const push = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
-      // Read again behind the plan row: a leader may have answered, or the
-      // caller stopped leading, since the check above.
-      const [member, caller, plan] = await Promise.all([
+      // Read again behind the plan row: a leader may have answered since.
+      const [member, plan] = await Promise.all([
         tx.tripPlanMember.findUnique({
           where: { planId_userId: { planId, userId: memberId } },
-          select: { status: true, role: true },
-        }),
-        tx.tripPlanMember.findUnique({
-          where: { planId_userId: { planId, userId: user.id } },
           select: { status: true, role: true },
         }),
         tx.tripPlan.findUniqueOrThrow({
@@ -400,8 +380,6 @@ router.delete(
         }),
       ]);
       if (!member) throw self ? planNotFound() : memberNotFound();
-      if (!self && (caller?.status !== "active" || caller.role !== "leader"))
-        throw new AppError(403, say`Only a leader can remove someone.`);
       if (self && member.status === "active") {
         const others = await activeMemberIds(tx, planId, [memberId]);
         if (others.length === 0)

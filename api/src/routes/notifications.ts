@@ -5,6 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import { say, NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
+import { planPersonKey } from "../lib/planMembership";
 
 const router = Router();
 
@@ -19,8 +20,8 @@ const router = Router();
 //   place_shared:                            payload.placeId, payload.sharedById (+ placeName, sharedByUsername)
 //   item_shared:                              payload.entityType, payload.entityId, payload.sharedById (+ sharedByUsername)
 //   file_sent:                                payload.fileSendId, payload.sentById (+ sentByUsername, filename, fileSendStatus)
-//     — filename is resolved from the live send while one exists. The single
-//       exception to "ids only" in this table: when a send EXPIRES unsaved the
+//     — filename is resolved from the live send while one exists. One of two
+//       exceptions to "ids only" in this table: when a send EXPIRES unsaved the
 //       reaper stamps the filename into the payload before deleting the last
 //       copy of it (lib/fileSendReaper.ts), because the recipient is owed the
 //       name of the file they missed. Nothing else ever writes it.
@@ -29,25 +30,16 @@ const router = Router();
 //                                             payload.planId and the other person's id
 //                                             (+ planName and their username), shown
 //                                             only while the memberships still say it
-//     — the exception's twin: plan_access_ended carries planName, stamped when
+//     — the other exception: plan_access_ended carries planName, stamped when
 //       the recipient lost the plan (removed, turned down, deleted), since
 //       there is nothing left they may resolve it from and they are owed which
-//       plan it was. They had seen the name. Never logged.
+//       plan it was. They had seen the name.
 // When the referenced place/share/friendship is gone (share revoked, place
 // deleted, friendship removed, or the other user's account deleted), there is
 // nothing to resolve, so the notification is dropped at read time and never
 // leaks a stale name. Opportunistic row deletion on revoke/
 // delete (sharing.ts, friends.ts, places.ts, users.ts) is the primary
 // cleanup; this read-time drop is the fallback.
-/** The plan types resolved at read time, and the payload key of the person
- *  each names. */
-const PLAN_PERSON_KEY = new Map([
-  ["plan_invited", "invitedById"],
-  ["plan_join_request", "requesterId"],
-  ["plan_join_approved", "approvedById"],
-  ["plan_member_joined", "memberId"],
-]);
-
 function payloadString(payload: unknown, key: string): string | null {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     const v = (payload as Record<string, unknown>)[key];
@@ -96,10 +88,10 @@ router.get(
         if (id) fileSendIds.add(id);
         const sentById = payloadString(n.payload, "sentById");
         if (sentById) sharerIds.add(sentById);
-      } else if (PLAN_PERSON_KEY.has(n.type)) {
+      } else if (planPersonKey(n.type)) {
         const planId = payloadString(n.payload, "planId");
         if (planId) planIds.add(planId);
-        const otherId = payloadString(n.payload, PLAN_PERSON_KEY.get(n.type)!);
+        const otherId = payloadString(n.payload, planPersonKey(n.type)!);
         if (otherId) sharerIds.add(otherId);
       } else if (n.type === "item_shared") {
         const entityType = payloadString(n.payload, "entityType");
@@ -336,7 +328,7 @@ router.get(
           },
         ];
       }
-      const personKey = PLAN_PERSON_KEY.get(n.type);
+      const personKey = planPersonKey(n.type);
       if (personKey) {
         const planId = payloadString(n.payload, "planId");
         const otherId = payloadString(n.payload, personKey);

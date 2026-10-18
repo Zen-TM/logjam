@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NOTIFICATION_TYPES } from "@logjam/shared";
+import { PLAN_PERSON_KEY } from "../lib/planMembership";
 
 const read = (...p: string[]) =>
   readFileSync(join(import.meta.dirname, "..", "..", ...p), "utf8");
@@ -108,7 +109,8 @@ describe("account-delete purge covers every model related to User", () => {
 //
 // Mutations that turn this red: creating a notification in a file not listed
 // here, listing a type its file does not create, or a listed type sent to
-// another user missing from the purge in routes/users.ts, or a type added to
+// another user missing from the purge in routes/users.ts (for the plan
+// types, the purge no longer reading PLAN_PERSON_KEY), or a type added to
 // NOTIFICATION_TYPES that no site lists (or listed but not declared).
 describe("account-delete purge covers every notification type", () => {
   // Every file that creates a notification, and the types it creates.
@@ -177,9 +179,11 @@ describe("account-delete purge covers every notification type", () => {
 
   it("lists each type its file creates", () => {
     const missing = Object.entries(CREATION_SITES).flatMap(([file, types]) =>
-      types.filter(
-        (t) => !readFileSync(join(repo, file), "utf8").includes(`"${t}"`),
-      ),
+      types.filter((t) => {
+        const src = readFileSync(join(repo, file), "utf8");
+        // A string, or a key of an object such as PLAN_PERSON_KEY.
+        return !src.includes(`"${t}"`) && !src.includes(`${t}:`);
+      }),
     );
     expect(missing).toEqual([]);
   });
@@ -190,10 +194,18 @@ describe("account-delete purge covers every notification type", () => {
     );
   });
 
+  // The plan types are named through PLAN_PERSON_KEY, which also says which
+  // payload key holds the person; the purge must read it.
   it("names each type sent to another user in the purge", () => {
     const purge = purgeSource.slice(purgeSource.indexOf("$transaction(["));
+    const viaPlanMap = purge.includes("PLAN_PERSON_KEY")
+      ? Object.keys(PLAN_PERSON_KEY)
+      : [];
     const unnamed = [...new Set(Object.values(CREATION_SITES).flat())].filter(
-      (t) => !HELD_BY_OWNER_ONLY.includes(t) && !purge.includes(`"${t}"`),
+      (t) =>
+        !HELD_BY_OWNER_ONLY.includes(t) &&
+        !viaPlanMap.includes(t) &&
+        !purge.includes(`"${t}"`),
     );
     expect(unnamed).toEqual([]);
   });

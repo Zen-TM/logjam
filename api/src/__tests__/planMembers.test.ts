@@ -121,9 +121,15 @@ afterEach(async () => {
 });
 
 describe("inviting by username", () => {
+  // Mutations: drop touchPlan from POST /members; add `email: true` to
+  // memberInclude's user select (lib/tripPlanView.ts).
   it("invites as invited, never by email, and tells only the invitee", async () => {
-    const res = await invite(ALICE_SUB, { username: "carol", role: "editor" });
-    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    let res = { status: 0, body: {} as Record<string, unknown> };
+    await touches(async () => {
+      res = await invite(ALICE_SUB, { username: "carol", role: "editor" });
+      return res;
+    });
+    expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
       user: { id: CAROL_ID, username: "carol" },
       role: "editor",
@@ -170,7 +176,8 @@ describe("inviting by username", () => {
 });
 
 describe("the invited preview and joining", () => {
-  // Mutation: let the preview through for status "requested".
+  // Mutations: let the preview through for status "requested"; add
+  // `email: true` to the preview's members or invitedBy select.
   it("shows someone invited the write-up, members and required forms, never answers", async () => {
     await invite(ALICE_SUB, { username: "carol" });
     await prisma.tripPlanAnswer.create({
@@ -194,6 +201,7 @@ describe("the invited preview and joining", () => {
       { id: formId, title: "Trip rules", visibleTo: "leaders" },
     ]);
     expect(JSON.stringify(res.body)).not.toContain(SECRET);
+    expect(JSON.stringify(res.body)).not.toMatch(/@/);
 
     await membership(CAROL_ID, "requested");
     expect(
@@ -293,6 +301,7 @@ describe("who reaches a plan", () => {
 });
 
 describe("roles", () => {
+  // Mutation: drop the otherLeaders check in PATCH /members/:userId.
   it("a leader changes roles, but never leaves the plan without one", async () => {
     expect((await setRole(BOB_SUB, BOB_ID, "leader")).status).toBe(403);
     const last = await setRole(ALICE_SUB, "me", "member");
@@ -307,6 +316,29 @@ describe("roles", () => {
       user: { id: ALICE_ID, username: "alice" },
       role: "editor",
     });
+  });
+
+  // Mutation: drop the plan_join_request delete on demotion.
+  it("a demoted leader's badge stops counting the plan's requests", async () => {
+    await setRole(ALICE_SUB, BOB_ID, "leader");
+    await membership(CAROL_ID, "requested");
+    await prisma.notification.create({
+      data: {
+        userId: BOB_ID,
+        type: "plan_join_request",
+        payload: { planId, requesterId: CAROL_ID },
+      },
+    });
+    const unread = async () =>
+      (
+        await request(API_URL)
+          .get("/notifications/unread-count")
+          .set(as(BOB_SUB))
+      ).body.count as number;
+    const before = await unread();
+    expect((await setRole(ALICE_SUB, BOB_ID, "member")).status).toBe(200);
+    expect(await unread()).toBe(before - 1);
+    expect(await notices(BOB_ID, "plan_join_request")).toEqual([]);
   });
 
   it("404s a role change for someone not active in the plan", async () => {
@@ -371,6 +403,8 @@ describe("leaving and removing", () => {
     ).toBe(0);
   });
 
+  // Mutation: drop either 409 check from the self-leave branch of DELETE
+  // /members/:userId.
   it("the only one in a plan deletes it instead; the last leader hands over first", async () => {
     const lastLeader = await remove(ALICE_SUB, "me");
     expect(lastLeader.status).toBe(409);
@@ -508,5 +542,7 @@ describe("the inbox", () => {
         waitingFor: { id: ALICE_ID, username: "alice" },
       }),
     );
+    // Mutation: add `email: true` to waitingFor's user select.
+    expect(JSON.stringify(res.body)).not.toMatch(/@/);
   });
 });
