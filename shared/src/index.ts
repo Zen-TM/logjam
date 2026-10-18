@@ -14,6 +14,7 @@ export * from "./elvisZip.js";
 export * from "./placeNameMatch.js";
 export * from "./placeGeo.js";
 export * from "./geocode.js";
+export * from "./weather.js";
 export * from "./placeRegistry.js";
 export * from "./placeTypes.js";
 export * from "./placeStatus.js";

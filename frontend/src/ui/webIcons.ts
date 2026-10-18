@@ -1,5 +1,14 @@
 import {
   Activity,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  Cloudy,
+  SunMedium,
+  Umbrella,
   AlignLeft,
   Archive,
   ArrowLeft,
@@ -219,6 +228,15 @@ export const WEB_ICONS = {
   sensors: Cpu,
   elevation: TrendingUp,
   scaleBar: RulerDimensionLine,
+  weather: Umbrella,
+  weatherClear: SunMedium,
+  weatherPartCloud: CloudSun,
+  weatherCloud: Cloudy,
+  weatherFog: CloudFog,
+  weatherDrizzle: CloudDrizzle,
+  weatherRain: CloudRain,
+  weatherStorm: CloudLightning,
+  weatherSnow: CloudSnow,
 } as const satisfies Record<IconIdea, LucideIcon>;
 
 /** A compass NEEDLE, not lucide's Compass: that glyph is a symbol for

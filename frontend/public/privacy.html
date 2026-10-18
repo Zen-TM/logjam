@@ -285,6 +285,13 @@
           Foundation&rsquo;s Nominatim service
           (<code>nominatim.openstreetmap.org</code>) along with your IP
           address. Nothing else about you or your places is sent.</li>
+      <li><strong>Weather:</strong> when you press &ldquo;Show the weather
+          here&rdquo; on a place or a point on the map, in Logjam Web or
+          Logjam GPS, your browser or phone asks Open-Meteo
+          (<code>api.open-meteo.com</code>, Switzerland) for the forecast. It
+          sends the square of about 11 km around the spot, never the spot
+          itself, and the spot&rsquo;s height to the nearest 10 m, along with
+          your IP address. Nothing else about you or your places is sent.</li>
       <li><strong>Server-side GeoPDF rendering:</strong> when you generate a
           GeoPDF, our servers fetch the same providers&rsquo; tiles for the
           export area. The providers see our server&rsquo;s requests &mdash;
