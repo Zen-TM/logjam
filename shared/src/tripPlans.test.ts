@@ -9,6 +9,7 @@ import {
   parseTripPlanCreate,
   parseTripPlanFormCreate,
   parseTripPlanFormPatch,
+  parseTripPlanItemAdd,
   parseTripPlanOrder,
   parseTripPlanPatch,
   parseTripPlanSectionCreate,
@@ -155,6 +156,25 @@ describe("order", () => {
     expect(parseTripPlanOrder({ ids: ["a", "b"] }, 1)).toMatchObject({
       status: 413,
     });
+  });
+});
+
+describe("item add", () => {
+  it("takes a kind and an id, and copyMedia only as a boolean", () => {
+    expect(value(parseTripPlanItemAdd({ kind: "geoPdf", id: "a" }))).toEqual({
+      kind: "geoPdf",
+      id: "a",
+    });
+    expect(
+      value(parseTripPlanItemAdd({ kind: "place", id: "a", copyMedia: false })),
+    ).toEqual({ kind: "place", id: "a", copyMedia: false });
+    for (const body of [
+      { kind: "topo", id: "a" },
+      { kind: "place", id: "" },
+      { kind: "place", id: "a", copyMedia: "yes" },
+      null,
+    ])
+      expect(isMalformed(parseTripPlanItemAdd(body))).toBe(true);
   });
 });
 

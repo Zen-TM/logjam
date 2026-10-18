@@ -14,13 +14,13 @@ import {
   requirePlanMember,
   requirePlanRole,
   requirePlanWrite,
-  touchPlan,
 } from "../lib/planAccess";
 import {
   dropPlanNotifications,
   notifyPlan,
   waitingFor,
 } from "../lib/planMembership";
+import { deletePlanWithFiles } from "../lib/planItems";
 import { dateColumn, loadPlanView, planSummary } from "../lib/tripPlanView";
 
 const router = Router();
@@ -200,11 +200,10 @@ router.delete(
       ["leader"],
       say`Only a leader can delete this plan.`,
     );
-    // Hold #439: a plan's files can't be added yet, so there are no S3
-    // objects or storage charges to undo here.
+    // Files first: S3, then refunds in the delete's transaction
+    // (lib/planItems.ts).
     const planId = access.plan.id;
-    const push = await prisma.$transaction(async (tx) => {
-      await touchPlan(tx, planId);
+    const push = await deletePlanWithFiles(planId, async (tx) => {
       const [plan, others] = await Promise.all([
         tx.tripPlan.findUniqueOrThrow({
           where: { id: planId },
@@ -218,7 +217,7 @@ router.delete(
         }),
       ]);
       await dropPlanNotifications(tx, planId);
-      const told = await notifyPlan(
+      return notifyPlan(
         tx,
         others.map((row) => row.userId),
         {
@@ -226,8 +225,6 @@ router.delete(
           payload: { planId, reason: "deleted", planName: plan.name },
         },
       );
-      await tx.tripPlan.delete({ where: { id: planId } });
-      return told;
     });
     push();
     res.status(204).send();

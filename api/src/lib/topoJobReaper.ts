@@ -274,8 +274,8 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
 
 /**
  * The stuck-job sweeps skip a plan's GeoPDF (null userId): there is no owner
- * to tell. Plan GeoPDFs are to be copies of finished ones, never queued or
- * running, but nothing creates them yet (#439); one that is stuck stays so.
+ * to tell. A plan's GeoPDF is a copy of a finished one, made completed
+ * (lib/planItems.ts), so it is never queued or running.
  */
 function ownedJob<T extends { userId: string | null }>(
   row: T,
@@ -689,6 +689,10 @@ export async function expireCompletedExports(
  * removed: S3 object deleted, storage charge decremented, row removed in one
  * transaction. Per-row failures are logged and skipped so one bad row can't
  * wedge the others.
+ *
+ * A plan's GeoPDF never expires: nothing in a plan is deleted on a timer, and
+ * the adder's storage pays for it. Guard: topoJobReaper.unit.test.ts ("leaves
+ * a plan's GeoPDF").
  */
 export async function expireCompletedGeoPdfJobs(
   now: Date = new Date(),
@@ -699,11 +703,10 @@ export async function expireCompletedGeoPdfJobs(
 
   const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
   const expiredRows = await prisma.geoPdfJob.findMany({
-    where: { status: "completed", completedAt: { lt: cutoff } },
+    where: { status: "completed", completedAt: { lt: cutoff }, planId: null },
     select: {
       id: true,
       userId: true,
-      chargedToId: true,
       resultKey: true,
       resultBytes: true,
     },
@@ -718,8 +721,8 @@ export async function expireCompletedGeoPdfJobs(
         );
       }
       await prisma.$transaction(async (tx) => {
-        const payer = row.userId ?? row.chargedToId;
-        if (payer) await decrementStorageUsed(payer, row.resultBytes ?? 0n, tx);
+        if (row.userId)
+          await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
         // Same transaction as the row delete: Share.entityId is polymorphic, so
         // Postgres cannot cascade — without this the rows outlive the job and
         // keep the recipient's notification resolvable to a dead id.
