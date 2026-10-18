@@ -51,6 +51,9 @@ import {
   friendsHeroTitle,
   FRIENDS,
   friendVerb,
+  LEADERBOARD,
+  leaderboardRowSubtitle,
+  type LeaderboardResponse,
   messageFromError,
   type FriendsBucket,
   type SectionKeysOn,
@@ -64,6 +67,7 @@ import {
   getFriendInvites,
   getFriendRequests,
   getFriends,
+  getLeaderboard,
   removeFriend,
   revokeFriendInvites,
   searchUsers,
@@ -72,10 +76,12 @@ import {
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
+import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
+import { selfStanding } from "./leaderboard";
 import {
   BottomSheet,
   Button,
@@ -83,6 +89,7 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
+  Icon,
   ListEnd,
   IconButton,
   LoadingState,
@@ -113,8 +120,11 @@ type FriendItem =
 export function FriendsScreen({
   onBack,
   onOpenShares,
+  onOpenLeaderboard,
 }: {
   onBack: () => void;
+  /** Push the leaderboard, for someone who has joined it. */
+  onOpenLeaderboard: () => void;
   /**
    * Open the per-friend sharing audit — "what does this person see?". Pushed by
    * the caller so Back returns to this list. Reached by tapping the friend's row
@@ -148,6 +158,34 @@ export function FriendsScreen({
     [],
   );
 
+  // The leaderboard row exists only for someone who has joined (Settings →
+  // Privacy and security). Settings' PATCH refreshes the cached user record
+  // (`api/apiFetch.ts`), so this screen, mounted fresh on each visit, reads
+  // the change.
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your account.",
+    !guestBlock,
+  );
+  const { refetch: refetchUser } = userQuery;
+  const leaderboardOptIn =
+    userQuery.data?.uiPreferences?.leaderboardOptIn === true;
+  const [board, setBoard] = useState<LeaderboardResponse | null>(null);
+  const [boardRequest, setBoardRequest] = useState(0);
+  useEffect(() => {
+    if (!leaderboardOptIn) return;
+    let cancelled = false;
+    getLeaderboard()
+      .then((next) => {
+        if (!cancelled) setBoard(next);
+      })
+      // The subtitle is a courtesy; the row opens without it.
+      .catch((err: unknown) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [leaderboardOptIn, boardRequest]);
+
   const load = useCallback(async () => {
     if (guestBlock) return;
     await Promise.all([getFriends(), getFriendRequests()])
@@ -170,9 +208,11 @@ export function FriendsScreen({
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    refetchUser();
+    setBoardRequest((n) => n + 1);
     await load();
     setRefreshing(false);
-  }, [load]);
+  }, [load, refetchUser]);
 
   const runAction = useCallback(
     async (
@@ -324,6 +364,26 @@ export function FriendsScreen({
         }
       />
     ),
+    leaderboard: () =>
+      // Nothing at all until the user joins: Settings is the only way in.
+      leaderboardOptIn && board?.joined !== false ? (
+        <View style={styles.leaderboard}>
+          <Row
+            icon="leaderboard"
+            title={LEADERBOARD.title}
+            subtitle={
+              board?.joined
+                ? leaderboardRowSubtitle(
+                    selfStanding(board).rank,
+                    selfStanding(board).size,
+                  )
+                : undefined
+            }
+            onPress={onOpenLeaderboard}
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          />
+        </View>
+      ) : null,
     buckets: () => (
       <View style={styles.rail}>
         <ChipRail
@@ -763,6 +823,7 @@ function EmptyPanel({
 
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
+  leaderboard: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5) },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),

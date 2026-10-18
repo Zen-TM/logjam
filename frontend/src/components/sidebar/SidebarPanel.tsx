@@ -113,6 +113,7 @@ function SidebarPanel({
   currentUser,
   currentUserError,
   onRetryCurrentUser,
+  onCurrentUserChange,
   onOpenTopoWithTemplate,
   loadsUserData,
   // Friends
@@ -225,6 +226,7 @@ function SidebarPanel({
    *  the Account page has no fallback for. */
   currentUserError: string | null;
   onRetryCurrentUser: () => void;
+  onCurrentUserChange: (user: TUser) => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
   /** App's consent-gate decision, handed to the two Maps views so their own
    *  fetches wait for it (`loadsUserData` there). */
@@ -460,6 +462,9 @@ function SidebarPanel({
         )}
         {activePanel === "friends" && (
           <FriendsPanel
+            leaderboardOptIn={
+              currentUser?.uiPreferences?.leaderboardOptIn ?? false
+            }
             friends={friends}
             friendRequests={friendRequests}
             onRefetchFriends={onRefetchFriends}
@@ -530,6 +535,7 @@ function SidebarPanel({
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
             placeTypes={placeTypes}
             onPlaceTypesChange={onPlaceTypesChange}
+            onCurrentUserChange={onCurrentUserChange}
           />
         )}
         {activePanel === "place-detail" && (

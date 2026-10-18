@@ -32,6 +32,8 @@ export const LEADERBOARD = {
     alone: "It's just you until a friend joins.",
     askFriends: "Ask them",
     askCopied: "Message copied. Send it to them.",
+    // Logjam Web only: the browser refused the clipboard.
+    askCopyFailed: "Couldn't copy the message.",
     rulesTitle: "How it works",
     rules: [
       "You're ranked by how many different canyons your trips this season went to. Doing one canyon twice counts once.",
@@ -65,6 +67,11 @@ export function leaderboardRowSubtitle(
 /** The page's hero: the rank, then the season it is in. */
 export function leaderboardHeroTitle(rank: number, boardSize: number): string {
   return boardSize < 2 ? "Just you so far" : `#${rank} of ${boardSize}`;
+}
+
+/** The hero's second line, on both clients. */
+export function leaderboardSeasonLine(season: string): string {
+  return `${season} season`;
 }
 
 export function leaderboardCount(count: number): string {

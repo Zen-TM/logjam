@@ -63,6 +63,7 @@ import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
+import { LeaderboardScreen } from "./screens/LeaderboardScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
@@ -237,6 +238,7 @@ type MoreStackParams = {
   // rather than a fetch: the friendship id and the username are all the screen
   // needs, and both are already in the row that opened it.
   FriendShares: { friendshipId: string; username: string };
+  Leaderboard: undefined;
   SyncIssues: undefined;
   Settings: undefined;
   // Settings sub-pages. One route each rather than one parameterised route: a
@@ -1191,7 +1193,18 @@ export function AppShell({
                         onOpenShares={(friend) =>
                           navigation.navigate("FriendShares", friend)
                         }
+                        onOpenLeaderboard={() =>
+                          navigation.navigate("Leaderboard")
+                        }
                       />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Leaderboard"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <LeaderboardScreen onBack={() => navigation.goBack()} />
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen

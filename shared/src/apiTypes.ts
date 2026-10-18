@@ -81,6 +81,7 @@ export type TUser = {
     autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
+    leaderboardOptIn?: boolean;
   } | null;
 };
 

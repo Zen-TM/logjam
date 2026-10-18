@@ -6,10 +6,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRIENDS } from "@logjam/shared";
+import { FRIENDS, LEADERBOARD } from "@logjam/shared";
 
-import { sendFriendRequest } from "../../../placeUtils";
-import { AddFriendDialog, InviteLink } from "./FriendsPanel";
+import { getLeaderboard, sendFriendRequest } from "../../../placeUtils";
+import FriendsPanel, { AddFriendDialog, InviteLink } from "./FriendsPanel";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
@@ -21,13 +21,30 @@ vi.mock("../../../placeUtils", async (importOriginal) => ({
     total: 1,
   })),
   sendFriendRequest: vi.fn(),
+  getLeaderboard: vi.fn(async () => ({
+    joined: true,
+    season: "2026–27",
+    entries: [
+      { userId: "a", username: "alice", canyonCount: 4, rank: 2, isSelf: true },
+      { userId: "b", username: "bob", canyonCount: 6, rank: 1, isSelf: false },
+    ],
+    notJoined: [],
+    podium: null,
+  })),
   createFriendInvite: vi.fn(async () => ({
     token: "A".repeat(43),
     expiresAt: "2026-10-19T00:00:00.000Z",
   })),
 }));
 
-// jsdom has no modal dialogs.
+// jsdom has no modal dialogs, ResizeObserver or scrollIntoView. Assigned, not
+// stubbed: `unstubAllGlobals` runs after every test.
+Element.prototype.scrollIntoView = () => {};
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 HTMLDialogElement.prototype.showModal = function () {
   this.setAttribute("open", "");
 };
@@ -122,5 +139,42 @@ describe("sending a request from the Add dialog", () => {
     expect(await screen.findByText(FRIENDS.copy.pillRequested)).toBeTruthy();
     expect(onFriended).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+// Off, the feature is invisible: nothing on Friends mentions it, and it asks
+// the server nothing. Mutation: draw the row whatever the switch says.
+describe("the leaderboard row on Friends", () => {
+  function show(leaderboardOptIn: boolean) {
+    render(
+      <FriendsPanel
+        leaderboardOptIn={leaderboardOptIn}
+        friends={[]}
+        friendRequests={[]}
+        onRefetchFriends={() => {}}
+        onRefetchShared={() => {}}
+        onRefetchNotifications={() => {}}
+      />,
+    );
+  }
+
+  it("is absent for someone who has not joined", () => {
+    show(false);
+    expect(screen.queryByText(LEADERBOARD.title)).toBeNull();
+    expect(getLeaderboard).not.toHaveBeenCalled();
+  });
+
+  it("says where a joined user stands and opens the board in place", async () => {
+    show(true);
+    expect(await screen.findByText("You're #2 of 2")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: LEADERBOARD.title }));
+    expect(
+      await screen.findByRole("heading", { name: "#2 of 2" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: FRIENDS.title })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to friends" }));
+    expect(screen.getByRole("heading", { name: FRIENDS.title })).toBeTruthy();
   });
 });

@@ -9,6 +9,7 @@ import {
   FONT,
   FORM_RHYTHM,
   FONT_WEIGHT,
+  MEDAL_HUES,
   MOTION,
   OPACITY,
   PLACE_STATUS_HUES,
@@ -70,6 +71,11 @@ export function webScaleProperties(): [string, string][] {
     ...Object.entries({ ...ASSET_HUES, ...PLACE_STATUS_HUES }).map(
       ([name, hex]): [string, string] => [`--hue-${kebab(name)}`, hexCss(hex)],
     ),
+    // `--hue-medal-gold`: a bare `--hue-gold` would read as a kind.
+    ...Object.entries(MEDAL_HUES).map(([name, hex]): [string, string] => [
+      `--hue-medal-${name}`,
+      hexCss(hex),
+    ]),
     // Sorted by size: an object's integer-like keys ("1", "2") enumerate
     // before "0.5" and "1.5" otherwise.
     ...Object.entries(SPACE)

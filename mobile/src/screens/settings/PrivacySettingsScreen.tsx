@@ -1,11 +1,18 @@
 // Settings → Privacy and security: what guards this phone's copy of the data,
 // and what leaves it.
 //
-// Both switches are device-scoped and both work as a guest with no signal. The
+// The guard switches are device-scoped and work as a guest with no signal. The
 // asymmetry on the app lock is the load-bearing part: turning it OFF goes
 // through the device authenticator and a cancelled prompt springs the switch
 // back on (DESIGN.md, `appLockPreference.ts`, fail-closed). Without that,
 // the switch is a one-tap bypass of the thing it controls.
+//
+// ONE ROW HERE IS ACCOUNT-SCOPED, like the copy-media row on Offline and
+// storage: the friends leaderboard (`uiPreferences.leaderboardOptIn`) lives on
+// the user record because the server decides who sees whose count. It is on
+// THIS page because what it decides is what leaves for friends to see, and it
+// is where someone goes to turn that off. Absent for a guest, who has no
+// friends to rank against; "Needs a connection" offline, unlike its neighbours.
 //
 // The closing section is not a setting — it is an answer. "What of mine is on
 // this device, and what protects it?" is a fair question to have about an
@@ -14,6 +21,17 @@
 // (shared/DESIGN.md §13).
 import { useCallback, useState } from "react";
 import { Text } from "react-native";
+import { LEADERBOARD_SETTING, messageFromError } from "@logjam/shared";
+
+import { apiFetch } from "../../api/apiFetch";
+import { fetchCurrentUser, useApiQuery } from "../../api/queries";
+import type { TUser } from "../../api/types";
+import { useAccountState } from "../../auth/AccountStateContext";
+import {
+  capabilityStatus,
+  unavailableReasonText,
+} from "../../auth/capabilities";
+import { useConnectivity } from "../../map/connectivity";
 
 import {
   isAppLockEnabled,
@@ -90,6 +108,56 @@ export function PrivacySettingsScreen() {
     setSaveToGalleryState(next);
   }, [saveToGallery, notify]);
 
+  // ── The one account-scoped row (see the header) ──────────────────────────
+  const { accountState } = useAccountState();
+  const isGuest = accountState === "guest";
+  const online = useConnectivity() === "online";
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your settings.",
+    !isGuest,
+  );
+  // Re-seeded on the VALUE, as on Offline and storage, so a change made on
+  // another device and pulled in by a refetch is not dropped.
+  const [leaderboard, setLeaderboard] = useState<boolean | null>(null);
+  const serverLeaderboard = userQuery.data
+    ? userQuery.data.uiPreferences?.leaderboardOptIn === true
+    : null;
+  const [seededFor, setSeededFor] = useState<boolean | null>(null);
+  if (serverLeaderboard !== seededFor) {
+    setSeededFor(serverLeaderboard);
+    if (serverLeaderboard !== null) setLeaderboard(serverLeaderboard);
+  }
+  const [savingLeaderboard, setSavingLeaderboard] = useState(false);
+  // Optimistic with rollback. The PATCH's answer refreshes the cached user
+  // record (`api/apiFetch.ts`), which is what Friends reads its row from.
+  const toggleLeaderboard = useCallback(() => {
+    if (leaderboard === null) return;
+    const next = !leaderboard;
+    setLeaderboard(next);
+    setSavingLeaderboard(true);
+    apiFetch<TUser>("/users/me", {
+      method: "PATCH",
+      body: { leaderboardOptIn: next },
+    })
+      .then(() =>
+        notify(next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left),
+      )
+      .catch((err: unknown) => {
+        console.error(err);
+        setLeaderboard(!next);
+        notify(messageFromError(err, LEADERBOARD_SETTING.saveFailed), "error");
+      })
+      .finally(() => setSavingLeaderboard(false));
+  }, [leaderboard, notify]);
+  const serverPrefs = capabilityStatus("serverPrefs", accountState, online);
+  const leaderboardBlocked: string | undefined =
+    serverPrefs.status === "unavailable"
+      ? unavailableReasonText(serverPrefs.reason)
+      : userQuery.error
+        ? "Couldn't reach your account"
+        : undefined;
+
   return (
     <>
       <ScreenScroll>
@@ -135,6 +203,24 @@ export function PrivacySettingsScreen() {
           ready
           onToggle={toggleSaveToGallery}
         />
+
+        {isGuest ? null : (
+          <>
+            <SectionHeader title="Friends" />
+            <PreferenceRow
+              icon="leaderboard"
+              title={LEADERBOARD_SETTING.label}
+              subtitle={leaderboardBlocked ?? LEADERBOARD_SETTING.hint}
+              value={leaderboard ?? false}
+              ready={
+                leaderboardBlocked === undefined &&
+                leaderboard !== null &&
+                !savingLeaderboard
+              }
+              onToggle={toggleLeaderboard}
+            />
+          </>
+        )}
 
         <SectionHeader title="What's on this phone" />
         <Text style={styles.note}>
