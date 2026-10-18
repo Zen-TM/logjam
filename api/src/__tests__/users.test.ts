@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
+import { MAX_SLOPE_BANDS } from "@logjam/shared";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 //
@@ -163,6 +164,21 @@ describe("users routes (fake auth = alice)", () => {
         .send({ slopeBands });
       expect(res.status).toBe(400);
     }
+  });
+
+  // Mutation: drop the length check before `parseSlopeBands`, and an
+  // over-long list is a 400 checked element by element.
+  it("PATCH /users/me answers too many slope bands with 413", async () => {
+    const slopeBands = Array.from({ length: MAX_SLOPE_BANDS + 1 }, (_, i) => ({
+      fromDeg: i * 10,
+      toDeg: i * 10 + 10,
+      colour: "#ff0000ff",
+    }));
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ slopeBands });
+    expect(res.status).toBe(413);
   });
 
   // Consent boundary: the server is the integrity half of the

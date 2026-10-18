@@ -422,7 +422,7 @@ function inRange(n: unknown, lo: number, hi: number): n is number {
   return typeof n === "number" && Number.isFinite(n) && n >= lo && n <= hi;
 }
 
-const MAX_SLOPE_BANDS = 8;
+export const MAX_SLOPE_BANDS = 8;
 
 export function validateRasterTemplateSettings(
   input: unknown,

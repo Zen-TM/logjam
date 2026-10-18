@@ -6,6 +6,7 @@ import {
   say,
   normalizeThemeSchemeId,
   normalizeUserUiPreferences,
+  MAX_SLOPE_BANDS,
   parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
@@ -403,6 +404,9 @@ router.patch(
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
+      }
+      if (Array.isArray(slopeBands) && slopeBands.length > MAX_SLOPE_BANDS) {
+        throw malformed(`At most ${MAX_SLOPE_BANDS} slopeBands`, 413);
       }
       const nextSlopeBands =
         slopeBands === undefined ? undefined : parseSlopeBands(slopeBands);
