@@ -1,0 +1,29 @@
+{
+  "name": null,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -122.207881,
+          37.371915,
+          0
+        ]
+      },
+      "properties": {}
+    }
+  ],
+  "bbox": [
+    -122.207881,
+    37.371915,
+    -122.207881,
+    37.371915
+  ],
+  "stats": {
+    "points": 1,
+    "lines": 0,
+    "polygons": 0,
+    "positions": 1
+  }
+}

@@ -1,0 +1,16 @@
+PAGEID,Location,Coords,Region,Quality,Rating,"Min Time","Max Time",Hike,Rappels,Longest,"Best Season",Shuttle,Vehicle
+77537,"Danae Brook Canyon","33° 58' 1.92"" S, 150° 6' 31.32"" E",Kanangra,5,"<i>4C</i>   (v4a3 V)",,,,11-15r,114.829 ft,Oct-Apr,0.5 minutes,Passenger
+74259,"Urumbilum Canyon","30° 19' 13.80"" S, 152° 56' 7.08"" E","Coffs Harbour",4.5,"<i>4C1 III</i>  (v4a4 <i>III</i>)",8 hr,,,9r,170.604 ft,Oct-Apr,0.5 minutes,Passenger
+11675,"Hole in the Wall","33° 22' 31.44"" S, 150° 19' 45.12"" E","Newnes Plateau",4.4,"3B <i>III</i>  (v2a2 III)",5 hr,7 hr,,3-5r,49.213 ft,"Dec - Mar",0 minutes,Passenger
+76103,Ranon,"33° 33' 1.44"" S, 150° 23' 32.28"" E","Blue Mountains",4.3,"3<i>B</i>   (v3a2 IV)",,,,5r,65.617 ft,Oct-Apr,0 minutes,Passenger
+44840,"Tiger Snake Canyon","33° 13' 17.04"" S, 150° 15' 9.72"" E","Newnes Plateau",3.6,"<i>3</i>A II  (v2a1 II)",4 hr,7 hr,,4-5r,75.459 ft,Dec-Nov,0 minutes,Passenger
+77775,Midwinter,"32° 56' 20.76"" S, 150° 16' 55.92"" E",Coorongooba,4,"<i>2A</i>   (v1a1)",,,,,,Oct-Apr,,
+77436,"Freshwater Creek","33° 9' 5.40"" S, 150° 18' 28.44"" E","Glen Davis",4,"3B IV  (v3a2 IV)",,,,,82.021 ft,Oct-Apr,,
+80870,"Coombadjha Creek","29° 27' 33.84"" S, 152° 20' 13.92"" E","Gibraltar Range",2.4,"<i>3C</i>   (v3a3)",,,6 mi,3r,20 ft,Oct-Apr,0 minutes,
+83368,"Dry Canyon, The","33° 15' 25.92"" S, 150° 12' 46.80"" E","Newnes Plateau",3.3,"2A I  (v1a1 I)",1 hr,2 hr,2.5 mi,0r,0 ft,"All year round",0 minutes,"High Clearance"
+74267,"Apsley Gorge","31° 6' 11.52"" S, 151° 54' 26.64"" E","New England Tableland",5,,,,,,,Oct-Apr,,
+84422,Kippara,"31° 11' 18.96"" S, 152° 28' 17.04"" E","Port Macquarie Hastings",3,"<i>3B</i> III  (v3a2 <i>III</i>)",7 hr,9 hr,5.157 mi,6r+2j,196.85 ft,"All year round, After light rain",0.5 minutes,
+101500,"Cocky Creek (Upper)","31° 10' 37.20"" S, 152° 22' 45.48"" E","Port Macquarie Hastings",3,"<i>3B II</i>  (v3a2 <i>II</i>)",,,,3r+3j,164.042 ft,Anytime,8.6 minutes,Passenger
+78243,Tweeters,,Wollemi,3,,,,,,,Oct-Apr,,
+88761,"Bells Folly",,"Newnes Plateau",2,"3B   (<i>v3a2</i>)",,,,,,Oct-Apr,,
+77680,Scatters,"33° 23' 59.28"" S, 150° 19' 0.84"" E","Newnes Plateau",2,"2B III  (<i>v1</i>a2 <i>III</i>)",,,,r,0 ft,Oct-Apr,,

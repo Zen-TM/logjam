@@ -1,0 +1,62 @@
+{
+  "name": "corpus-osmand",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          150.05,
+          -33.04,
+          455
+        ]
+      },
+      "properties": {
+        "name": "Corpus Lookout"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.05,
+            -33.04,
+            455
+          ],
+          [
+            150.0511,
+            -33.0412,
+            449.3
+          ],
+          [
+            150.0528,
+            -33.0425,
+            441
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus OsmAnd Track",
+        "coordTimes": [
+          "2023-01-14T22:10:00.000Z",
+          "2023-01-14T22:15:00.000Z",
+          "2023-01-14T22:22:30.000Z"
+        ]
+      }
+    }
+  ],
+  "bbox": [
+    150.05,
+    -33.0425,
+    150.0528,
+    -33.04
+  ],
+  "stats": {
+    "points": 1,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 4
+  }
+}

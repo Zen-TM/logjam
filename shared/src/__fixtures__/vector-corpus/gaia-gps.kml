@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+    <Document id="1">
+        <Placemark id="2">
+            <Style id="3">
+                <LineStyle id="4">
+                    <color>ffE9DA99</color>
+                    <colorMode>normal</colorMode>
+                    <width>4</width>
+                </LineStyle>
+            </Style>
+            <name>Corpus Gaia Walk-in</name>
+            <description/>
+            <MultiGeometry id="5">
+                <LineString id="6">
+                    <extrude>1</extrude>
+                    <altitudeMode>clampToGround</altitudeMode>
+                    <coordinates>150.030000,-33.020000,540.0 150.031500,-33.021000,532.5 150.033300,-33.022400,520.1 150.035000,-33.023000,509.9</coordinates>
+                </LineString>
+            </MultiGeometry>
+        </Placemark>
+    </Document>
+</kml>
