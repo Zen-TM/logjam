@@ -7,10 +7,16 @@ import {
   planVerbsFor,
   PLAN_ADD_VERBS,
   PLAN_FORM_VERBS,
+  PLAN_SECTION_VERBS,
+  PLAN_VERB_LISTS,
   sortTripPlans,
+  tripPlanAddedByLine,
   tripPlanBucket,
   tripPlanDatesLabel,
   tripPlanDatesLine,
+  tripPlanGoing,
+  tripPlanIsOver,
+  tripPlanLeaveState,
   tripPlanNotice,
   tripPlanRowPill,
   tripPlanRowSubtitle,
@@ -38,16 +44,22 @@ function summary(over: Partial<TripPlanSummary>): TripPlanSummary {
 }
 
 describe("the plans list", () => {
+  // Mutation: make the last day `startDate ?? endDate`, and a trip running
+  // today moves to Past and is called over.
   it("keeps a plan upcoming through its last day, and one with no dates", () => {
+    const running = summary({ startDate: "2026-10-18", endDate: "2026-10-20" });
+    expect(tripPlanBucket(running, TODAY)).toBe("upcoming");
+    expect(tripPlanIsOver(running, TODAY)).toBe(false);
     expect(tripPlanBucket(summary({ endDate: TODAY }), TODAY)).toBe("upcoming");
     expect(tripPlanBucket(summary({}), TODAY)).toBe("upcoming");
     expect(tripPlanBucket(summary({ endDate: "2026-10-18" }), TODAY)).toBe(
       "past",
     );
     // No end: the start is the last day.
-    expect(tripPlanBucket(summary({ startDate: "2026-10-18" }), TODAY)).toBe(
-      "past",
-    );
+    const startOnly = summary({ startDate: "2026-10-18" });
+    expect(tripPlanBucket(startOnly, TODAY)).toBe("past");
+    expect(tripPlanIsOver(startOnly, TODAY)).toBe(true);
+    expect(tripPlanIsOver(summary({}), TODAY)).toBe(false);
     expect(
       tripPlanBucket(
         summary({ endDate: "2027-01-01", archivedAt: "2026-10-01" }),
@@ -60,8 +72,11 @@ describe("the plans list", () => {
     const a = summary({ id: "a", startDate: "2026-11-08" });
     const b = summary({ id: "b", startDate: "2026-10-25" });
     const c = summary({ id: "c" });
-    expect(sortTripPlans([c, a, b], "upcoming").map((p) => p.id)).toEqual([
+    // Only an end date: it sorts by that day, not with the undated.
+    const d = summary({ id: "d", endDate: "2026-11-01" });
+    expect(sortTripPlans([c, a, d, b], "upcoming").map((p) => p.id)).toEqual([
       "b",
+      "d",
       "a",
       "c",
     ]);
@@ -121,24 +136,48 @@ describe("the plans list", () => {
     expect(tripPlansEmpty(2, "past").title).toBe("No past plans");
     expect(tripPlansEmpty(2, "archived").title).toBe("Nothing archived");
   });
+});
 
-  it("leads Logjam GPS's hero with the next trip the caller is in", () => {
+describe("Logjam GPS's plans hero", () => {
+  const hero = (plans: TripPlanSummary[]) =>
+    tripPlansHeroTitle(plans, TODAY, 2026);
+
+  it("leads with a trip under way", () => {
     expect(
-      tripPlansHeroTitle(
-        [
-          summary({ name: "Later", startDate: "2026-12-01" }),
-          summary({ name: "Soon", startDate: "2026-11-08" }),
-          summary({
-            name: "Asked",
-            startDate: "2026-10-20",
-            status: "requested",
-          }),
-        ],
-        TODAY,
-        2026,
-      ),
+      hero([
+        summary({ name: "Soon", startDate: "2026-10-25" }),
+        summary({
+          name: "Now",
+          startDate: "2026-10-18",
+          endDate: "2026-10-20",
+        }),
+      ]),
+    ).toBe("On now: Now");
+  });
+
+  it("else the next trip the caller is in, by its first day", () => {
+    expect(
+      hero([
+        summary({ name: "Later", startDate: "2026-12-01" }),
+        summary({ name: "Soon", startDate: "2026-11-08" }),
+        summary({
+          name: "Asked",
+          startDate: "2026-10-20",
+          status: "requested",
+        }),
+      ]),
     ).toBe("Next: Soon, Sun 8 Nov");
-    expect(tripPlansHeroTitle([], TODAY)).toBe("No plans yet");
+    expect(hero([summary({ name: "Ends", endDate: "2026-10-25" })])).toBe(
+      "Next: Ends, until Sun 25 Oct",
+    );
+  });
+
+  it("leaves undated plans out, and says when nothing is planned or there are no plans", () => {
+    expect(hero([summary({ name: "Someday" })])).toBe("Nothing planned");
+    expect(hero([summary({ startDate: "2026-01-01" })])).toBe(
+      "Nothing planned",
+    );
+    expect(hero([])).toBe("No plans yet");
   });
 });
 
@@ -153,9 +192,13 @@ describe("a plan's page", () => {
       tripPlanNotice({ archived: false, unansweredRequired: form, over: true }),
     ).toEqual({
       kind: "answer",
+      icon: "form",
       text: 'Answer "Safety contacts" for the leaders.',
       formId: "f",
     });
+    expect(
+      tripPlanNotice({ archived: false, unansweredRequired: null, over: true }),
+    ).toEqual({ kind: "over", icon: "trip", text: "This trip is over." });
     expect(
       tripPlanNotice({
         archived: false,
@@ -179,20 +222,87 @@ describe("a plan's page", () => {
       "Sat 7 – Sun 8 Nov · canyoning",
     );
   });
+
+  it("lists who's going, leaders first, and never who is invited or asking", () => {
+    const member = (
+      username: string,
+      role: "leader" | "editor" | "member",
+      status: "active" | "invited" | "requested" = "active",
+    ) => ({ username, role, status });
+    expect(
+      tripPlanGoing([
+        member("tom", "member"),
+        member("sue", "editor"),
+        member("ann", "member", "requested"),
+        member("mira", "leader"),
+        member("bo", "member"),
+      ]).map((m) => m.username),
+    ).toEqual(["mira", "sue", "tom", "bo"]);
+  });
+
+  it("says who added an item, and nothing once their account is gone", () => {
+    expect(tripPlanAddedByLine({ username: "tom" })).toBe("Added by tom");
+    expect(tripPlanAddedByLine(null)).toBeUndefined();
+  });
 });
 
 describe("a plan's verbs", () => {
+  const state = {
+    archived: false,
+    over: false,
+    alone: false,
+    soleLeader: false,
+  };
+  const ids = (verbs: { id: string }[]) => verbs.map((verb) => verb.id);
+
   it("gives a member no verb the API refuses them", () => {
-    const ids = planVerbs("web", "member", {
-      archived: false,
-      over: false,
-    }).map((verb) => verb.id);
-    expect(ids).toEqual(["print", "leave"]);
+    expect(ids(planVerbs("web", "member", state))).toEqual([
+      "print",
+      "tripLog",
+      "leave",
+    ]);
   });
 
-  it("offers Archive or Bring back by the plan's state, and only what still works on an archived plan", () => {
-    const live = planVerbs("web", "leader", { archived: false, over: true });
-    expect(live.map((verb) => verb.id)).toEqual([
+  // Mutation: drop the tripLog map in planVerbs, and the verb runs before
+  // the trip has happened.
+  it("offers Start a trip log before the trip, disabled with the reason", () => {
+    const before = planVerbs("web", "member", state).find(
+      (verb) => verb.id === "tripLog",
+    );
+    expect(before?.disabledReason).toBe("After the trip");
+    const after = planVerbs("web", "member", { ...state, over: true }).find(
+      (verb) => verb.id === "tripLog",
+    );
+    expect(after?.disabledReason).toBeUndefined();
+  });
+
+  it("leaves Leave out for the only person and the only leader, whom the API refuses", () => {
+    expect(
+      ids(planVerbs("web", "leader", { ...state, alone: true })),
+    ).not.toContain("leave");
+    expect(
+      ids(planVerbs("web", "leader", { ...state, soleLeader: true })),
+    ).not.toContain("leave");
+    expect(
+      tripPlanLeaveState({
+        myRole: "leader",
+        members: [
+          { role: "leader", status: "active" },
+          { role: "member", status: "active" },
+          { role: "leader", status: "invited" },
+        ],
+      }),
+    ).toEqual({ alone: false, soleLeader: true });
+    expect(
+      tripPlanLeaveState({
+        myRole: "member",
+        members: [{ role: "member", status: "active" }],
+      }),
+    ).toEqual({ alone: true, soleLeader: false });
+  });
+
+  it("offers Archive or Bring back by the plan's state, and only what changes nothing on an archived plan", () => {
+    expect(ids(planVerbs("web", "leader", { ...state, over: true }))).toEqual([
       "edit",
       "print",
       "tripLog",
@@ -200,30 +310,41 @@ describe("a plan's verbs", () => {
       "leave",
       "delete",
     ]);
-    const archived = planVerbs("web", "leader", {
-      archived: true,
-      over: false,
-    });
-    expect(archived.map((verb) => verb.id)).toEqual([
-      "print",
-      "unarchive",
-      "leave",
-      "delete",
-    ]);
+    expect(
+      ids(planVerbs("web", "leader", { ...state, archived: true, over: true })),
+    ).toEqual(["print", "tripLog", "unarchive", "leave", "delete"]);
+  });
+
+  // Mutation: drop the `whenArchived` filter in planVerbsFor, and a client
+  // offers writes the API refuses with 409 on an archived plan.
+  it("offers no add, section or form verb on an archived plan", () => {
+    for (const list of [PLAN_ADD_VERBS, PLAN_SECTION_VERBS, PLAN_FORM_VERBS])
+      expect(planVerbsFor(list, "web", "leader", { archived: true })).toEqual(
+        [],
+      );
   });
 
   it("builds forms and prints on Logjam Web only", () => {
-    expect(
-      planVerbsFor(PLAN_ADD_VERBS, "gps", "leader").map((verb) => verb.id),
-    ).toEqual(["section", "copy", "invite"]);
-    expect(
-      planVerbsFor(PLAN_FORM_VERBS, "gps", "leader").map((verb) => verb.id),
-    ).toEqual(["delete"]);
-    expect(
-      planVerbs("gps", "member", { archived: false, over: false }).map(
-        (verb) => verb.id,
-      ),
-    ).toEqual(["leave"]);
+    const live = { archived: false };
+    expect(ids(planVerbsFor(PLAN_ADD_VERBS, "gps", "leader", live))).toEqual([
+      "section",
+      "copy",
+      "invite",
+    ]);
+    expect(ids(planVerbsFor(PLAN_FORM_VERBS, "gps", "leader", live))).toEqual([
+      "delete",
+    ]);
+    expect(ids(planVerbs("gps", "member", state))).toEqual([
+      "tripLog",
+      "leave",
+    ]);
+  });
+
+  // Mutation: drop `reason` from `form` or `print`.
+  it("gives a reason for each verb only one client has, and for no other", () => {
+    for (const list of PLAN_VERB_LISTS)
+      for (const verb of list)
+        expect("on" in verb, verb.id).toBe("reason" in verb);
   });
 
   it("counts what a delete takes, leaving zeros out", () => {
@@ -240,14 +361,16 @@ describe("a plan's verbs", () => {
 });
 
 describe("a trip log from a plan", () => {
-  it("fills the trip form with the first day, the name, the types and the write-up", () => {
+  it("fills the trip form with the first day, the name, the types and the written sections", () => {
     expect(
       tripPlanTripLogPrefill({
         name: "Wollangambe trip",
         startDate: "2026-11-07",
+        endDate: "2026-11-08",
         tripTypes: ["canyoning"],
         sections: [
-          { title: "Overview", body: "Two days." },
+          { title: "Overview", body: "" },
+          { title: "Access", body: "Two days." },
           { title: "Gear", body: "" },
         ],
       }),
@@ -255,7 +378,19 @@ describe("a trip log from a plan", () => {
       date: "2026-11-07",
       displayName: "Wollangambe trip",
       types: ["canyoning"],
-      notes: "Overview\n\nTwo days.\n\nGear",
+      notes: "Access\n\nTwo days.",
     });
+  });
+
+  it("dates a plan with only an end on that day", () => {
+    expect(
+      tripPlanTripLogPrefill({
+        name: "Ends",
+        startDate: null,
+        endDate: "2026-10-10",
+        tripTypes: [],
+        sections: [],
+      }).date,
+    ).toBe("2026-10-10");
   });
 });
