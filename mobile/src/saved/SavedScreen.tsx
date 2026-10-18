@@ -44,6 +44,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
 } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
@@ -536,7 +537,7 @@ export function SavedScreen({
   const highlightNonce = initialHighlight?.nonce ?? 0;
   const [pulsingKey, setPulsingKey] = useState<string | null>(null);
   const [pulse] = useState(() => new Animated.Value(1));
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   /** One scroll per arrival — `onLayout` fires again on every relayout. */
   const scrolledForNonce = useRef<number | null>(null);
   const scrollToPulse = useCallback(

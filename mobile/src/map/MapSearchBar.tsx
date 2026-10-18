@@ -38,6 +38,7 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  type TextInputInstance,
 } from "react-native";
 import {
   geocode,
@@ -159,7 +160,7 @@ export function MapSearchBar({
   const loading = askedHere && answer === null;
   const results = answer?.results ?? [];
   const error = answer?.error ?? null;
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const { width: windowWidth } = useWindowDimensions();
 
   // ── The place registry, as the user types ───────────────────────────────
