@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { FRIENDS, INBOX, PLACES_LIST, TRIPS_LIST } from "@logjam/shared";
+import {
+  FRIENDS,
+  INBOX,
+  PLACES_LIST,
+  TRIPS_LIST,
+  TRIP_PLANS_LIST,
+} from "@logjam/shared";
 import {
   partitionNavItems,
   aggregateBadgeCount,
@@ -23,6 +29,7 @@ describe("partitionNavItems", () => {
       "logs",
       "ways",
       "maps",
+      "plans",
       "friends",
       "inbox",
       "account",
@@ -70,6 +77,7 @@ describe("every panel is either a nav item or programmatic", () => {
     "place-detail",
     "trip-detail",
     "way-detail",
+    "plan-detail",
     "way-draw",
     "measure",
   ];
@@ -125,6 +133,7 @@ describe("labelWithBadge", () => {
   it("names the count so the visual badge can be hidden from assistive tech", () => {
     expect(labelWithBadge("Inbox", 3)).toBe("Inbox, 3 unread");
     expect(labelWithBadge("Inbox", 0)).toBe("Inbox");
+    expect(labelWithBadge("Plans", 1, "waiting")).toBe("Plans, 1 waiting");
   });
 });
 
@@ -137,6 +146,7 @@ describe("a panel's title is the nav rail's word", () => {
     ["logs", TRIPS_LIST.title],
     ["friends", FRIENDS.title],
     ["inbox", INBOX.title],
+    ["plans", TRIP_PLANS_LIST.title],
   ] as const)("%s", (id, title) => {
     expect(ALL_ITEMS.find((item) => item.id === id)?.label).toBe(title);
   });

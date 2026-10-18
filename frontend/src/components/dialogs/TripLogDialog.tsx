@@ -134,6 +134,15 @@ export type TripLogTrack = {
  * list, the title says which step this is, and Escape, the close button and
  * Done all back out to the form rather than out of the dialog.
  */
+/** What a shortcut fills the trip form with. */
+export type TripLogPrefill = {
+  date: string;
+  displayName: string;
+  types: string[];
+  notes: string;
+  placeIds: string[];
+};
+
 function TripLogDialog({
   open,
   onClose,
@@ -141,6 +150,7 @@ function TripLogDialog({
   places,
   defaultPlaceId = null,
   fromTrack = null,
+  prefill = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -158,6 +168,9 @@ function TripLogDialog({
   defaultPlaceId?: string | null;
   // Create-mode only: log the trip from this track (`TripLogTrack`).
   fromTrack?: TripLogTrack | null;
+  // Create-mode only: a shortcut's values, as "Start a trip log from this
+  // plan" hands them over (shared/DESIGN.md §10: it opens the real form).
+  prefill?: TripLogPrefill | null;
   tripLog?: TTripLog;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -385,18 +398,20 @@ function TripLogDialog({
       const fromTrackPrefill = fromTrack
         ? tripPrefillFromTrack(fromTrack)
         : null;
-      initialDate = fromTrackPrefill?.date ?? todayDateKey();
-      initialNotes = "";
+      initialDate = prefill?.date ?? fromTrackPrefill?.date ?? todayDateKey();
+      initialNotes = prefill?.notes ?? "";
       initialSelectedPlaceIds = fromTrackPrefill
         ? fromTrackPrefill.placeIds.filter((id) =>
             places.some((place) => place.id === id),
           )
-        : defaultPlaceId
-          ? [defaultPlaceId]
-          : [];
-      initialDisplayNameInput = "";
+        : prefill
+          ? prefill.placeIds
+          : defaultPlaceId
+            ? [defaultPlaceId]
+            : [];
+      initialDisplayNameInput = prefill?.displayName ?? "";
       initialSelectedTypes = enforceCanyoningTag(
-        [],
+        prefill?.types ?? [],
         linksCanyon(placeTypeIdsFor(initialSelectedPlaceIds)),
       );
       initialFieldValues = {};

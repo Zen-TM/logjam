@@ -82,7 +82,10 @@ import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
-import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
+import TripLogDialog, {
+  type TripLogPrefill,
+  type TripLogTrack,
+} from "./dialogs/TripLogDialog";
 import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
 import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import {
@@ -93,6 +96,9 @@ import {
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
 import FriendInviteDialog from "./dialogs/FriendInviteDialog";
+import PlansPanel from "./plans/PlansPanel";
+import PlanDetailPanel from "./plans/PlanDetailPanel";
+import { usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
@@ -103,6 +109,9 @@ import {
   drawsNswContours,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  todayDateKey,
+  tripPlansBadgeCount,
+  tripPlanTripLogPrefill,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -175,6 +184,12 @@ function App() {
     null,
   );
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
+  // The plan whose page is open.
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  // "Start a trip log from this plan": the trip form, pre-filled.
+  const [tripLogPrefill, setTripLogPrefill] = useState<TripLogPrefill | null>(
+    null,
+  );
   // Which view the two-view pages open on — remembered for the session, so a
   // return to Logs lands where the user left it.
   const [logsView, setLogsView] = useStoredState<LogsView>(
@@ -600,6 +615,9 @@ function App() {
     if (panel !== "trip-detail") {
       setSelectedTripLogId(null);
     }
+    if (panel !== "plan-detail") {
+      setSelectedPlanId(null);
+    }
     setActivePanel(panel);
   }, []);
 
@@ -610,6 +628,9 @@ function App() {
     }
     if (activePanel === "trip-detail") {
       setSelectedTripLogId(null);
+    }
+    if (activePanel === "plan-detail") {
+      setSelectedPlanId(null);
     }
     setActivePanel(null);
   }, [activePanel]);
@@ -645,6 +666,12 @@ function App() {
     error: placesError,
     refetch,
   } = usePlaces(loadsUserData);
+  const {
+    plans,
+    loaded: plansLoaded,
+    error: plansError,
+    refetch: refetchPlans,
+  } = usePlans(loadsUserData);
   const {
     places: sharedPlaces,
     error: sharedError,
@@ -1598,7 +1625,10 @@ function App() {
         <NavRail
           activePanel={activePanel}
           onPanelChange={handlePanelChange}
-          badgeCounts={{ inbox: unreadCount }}
+          badgeCounts={{
+            inbox: unreadCount,
+            plans: tripPlansBadgeCount(plans),
+          }}
         />
         <SidebarPanel
           activePanel={activePanel}
@@ -1659,6 +1689,39 @@ function App() {
                 onLogTrip={setLogTripFromTrack}
                 onDeleteFile={handleDeleteStandaloneFile}
                 routeHover={routeHover}
+              />
+            ) : null
+          }
+          plansPanel={
+            <PlansPanel
+              plans={plans}
+              loaded={plansLoaded}
+              error={plansError}
+              onRefetch={refetchPlans}
+              onOpenPlan={(id) => {
+                setSelectedPlanId(id);
+                setActivePanel("plan-detail");
+              }}
+            />
+          }
+          planDetail={
+            selectedPlanId ? (
+              <PlanDetailPanel
+                key={selectedPlanId}
+                planId={selectedPlanId}
+                onBack={() => {
+                  setSelectedPlanId(null);
+                  setActivePanel("plans");
+                }}
+                onPlansChanged={refetchPlans}
+                onStartTripLog={(plan) => {
+                  const prefill = tripPlanTripLogPrefill(plan);
+                  setTripLogPrefill({
+                    ...prefill,
+                    date: prefill.date ?? todayDateKey(),
+                    placeIds: [],
+                  });
+                }}
               />
             ) : null
           }
@@ -2042,6 +2105,25 @@ function App() {
           }}
           places={places}
           fromTrack={logTripFromTrack}
+          customFieldDefs={customFieldDefs}
+          onCustomFieldDefsChange={setCustomFieldDefs}
+          existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+          onPickCoords={startPickingCoords}
+          onPlaceCreated={refetch}
+        />
+      )}
+
+      {/* The trip form, opened from a plan's "Start a trip log". */}
+      {tripLogPrefill && (
+        <TripLogDialog
+          open={!pickingCoords}
+          onClose={() => setTripLogPrefill(null)}
+          onSaved={() => {
+            setTripLogPrefill(null);
+            refetchAfterTripWrite();
+          }}
+          places={places}
+          prefill={tripLogPrefill}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
           existingTripTypes={tripLogs.flatMap((trip) => trip.types)}

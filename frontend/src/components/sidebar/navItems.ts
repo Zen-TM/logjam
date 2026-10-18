@@ -9,13 +9,20 @@ import { type Glyph } from "../../ui";
  */
 export type NavItemId = Exclude<
   PanelId,
-  "place-detail" | "trip-detail" | "way-detail" | "way-draw" | "measure"
+  | "place-detail"
+  | "trip-detail"
+  | "way-detail"
+  | "plan-detail"
+  | "way-draw"
+  | "measure"
 >;
 
 export type NavItem = {
   id: NavItemId;
   label: string;
   icon: Glyph;
+  /** What its badge counts, in its accessible name: "Plans, 1 waiting". */
+  badgeNoun?: string;
 };
 
 /** Unread/attention counts keyed by the item they belong to. A count of 0 or an
@@ -30,6 +37,8 @@ const PAGE_ITEMS: NavItem[] = [
   // one of its own three kinds.
   { id: "ways", label: "Ways", icon: "route" },
   { id: "maps", label: "Maps", icon: "map" },
+  // An invite waiting on the user is what its badge counts.
+  { id: "plans", label: "Plans", icon: "plan", badgeNoun: "waiting" },
   { id: "friends", label: "Friends", icon: "friends" },
 ];
 
@@ -51,6 +60,7 @@ const NARROW_TAB_IDS: NavItemId[] = ["places", "logs", "ways"];
  *  and landing on it is what makes More's badge pay off in one glance. */
 const MORE_ITEM_IDS: NavItemId[] = [
   "inbox",
+  "plans",
   "maps",
   "friends",
   "account",
@@ -106,8 +116,12 @@ export function isPanelInMore(
 }
 
 /** "Inbox, 3 unread" — the badge is aria-hidden, so its count joins the name. */
-export function labelWithBadge(label: string, count: number): string {
-  return count > 0 ? `${label}, ${count} unread` : label;
+export function labelWithBadge(
+  label: string,
+  count: number,
+  noun = "unread",
+): string {
+  return count > 0 ? `${label}, ${count} ${noun}` : label;
 }
 
 export const NAV_ITEMS_FOR_TEST = { ALL_ITEMS, PAGE_ITEMS, PERSONAL_ITEMS };
