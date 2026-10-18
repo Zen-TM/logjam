@@ -1,0 +1,255 @@
+{
+  "headers": [
+    "id",
+    "name",
+    "latitude",
+    "longitude",
+    "v_grade",
+    "a_grade",
+    "commitment",
+    "quality",
+    "pitches",
+    "longest_pitch",
+    "hours",
+    "rock_type",
+    "wetsuits",
+    "alt_names",
+    "sources",
+    "description"
+  ],
+  "dataRows": 8,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "id": "discard",
+    "name": "name",
+    "latitude": "latitude",
+    "longitude": "longitude",
+    "v_grade": "vGrade",
+    "a_grade": "aGrade",
+    "commitment": "commitment",
+    "quality": "quality",
+    "pitches": "numAbseils",
+    "longest_pitch": "longestAbseil",
+    "hours": "hours",
+    "rock_type": "discard",
+    "wetsuits": "discard",
+    "alt_names": "altNames",
+    "sources": "sources",
+    "description": "notes"
+  },
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5603,
+        "longitude": 150.4033,
+        "altNames": [],
+        "notes": "Corpus note: classic. Two bolts at the second abseil.",
+        "fieldValues": {
+          "v_grade": 3,
+          "a_grade": 3,
+          "commitment": 3,
+          "quality": 4.9,
+          "num_abseils": 6,
+          "longest_abseil": 15,
+          "hours": 9,
+          "_sources": [
+            [
+              "ropewiki",
+              "https://ropewiki.com/Claustral_Canyon"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Yileen Canyon",
+      "input": {
+        "name": "Yileen Canyon",
+        "latitude": -33.5666,
+        "longitude": 150.3295,
+        "altNames": [
+          "Yileen",
+          "Yileen Creek"
+        ],
+        "notes": null,
+        "fieldValues": {
+          "v_grade": 2,
+          "a_grade": 2,
+          "commitment": 2,
+          "quality": 3.5,
+          "num_abseils": 3,
+          "longest_abseil": 22,
+          "hours": 5,
+          "_sources": []
+        }
+      }
+    },
+    {
+      "rowIndex": 2,
+      "sourceName": "Serendipity Canyon",
+      "input": {
+        "name": "Serendipity Canyon",
+        "latitude": -33.4947,
+        "longitude": 150.3812,
+        "altNames": [
+          "Serendipity"
+        ],
+        "notes": "Corpus note: bring a 60 m rope.",
+        "fieldValues": {
+          "v_grade": 3,
+          "a_grade": 2,
+          "commitment": 3,
+          "quality": 4,
+          "num_abseils": 5,
+          "hours": 6.5,
+          "_sources": []
+        }
+      }
+    },
+    {
+      "rowIndex": 3,
+      "sourceName": "Jugglers Canyon",
+      "input": {
+        "name": "Jugglers Canyon",
+        "latitude": -33.6592,
+        "longitude": 150.3294,
+        "altNames": [],
+        "notes": null,
+        "fieldValues": {
+          "_sources": []
+        }
+      }
+    },
+    {
+      "rowIndex": 4,
+      "sourceName": "Corpus Brand New Canyon",
+      "input": {
+        "name": "Corpus Brand New Canyon",
+        "latitude": -33.4001,
+        "longitude": 150.2002,
+        "altNames": [],
+        "notes": null,
+        "fieldValues": {
+          "v_grade": 4,
+          "a_grade": 3,
+          "commitment": 4,
+          "quality": 3.5,
+          "num_abseils": 8,
+          "longest_abseil": 35,
+          "hours": 10,
+          "_sources": []
+        }
+      }
+    },
+    {
+      "rowIndex": 5,
+      "sourceName": "Corpus Out Of Range Canyon",
+      "input": {
+        "name": "Corpus Out Of Range Canyon",
+        "latitude": -33.4101,
+        "longitude": 150.2102,
+        "altNames": [],
+        "notes": "Quality of seven and a v grade of nine",
+        "fieldValues": {
+          "a_grade": 3,
+          "commitment": 4,
+          "num_abseils": 2,
+          "longest_abseil": 10,
+          "hours": 4,
+          "_sources": []
+        }
+      }
+    },
+    {
+      "rowIndex": 7,
+      "sourceName": "Corpus Decimal Pitches Canyon",
+      "input": {
+        "name": "Corpus Decimal Pitches Canyon",
+        "latitude": -33.4201,
+        "longitude": 150.2202,
+        "altNames": [],
+        "notes": null,
+        "fieldValues": {
+          "v_grade": 3,
+          "a_grade": 2,
+          "commitment": 3,
+          "quality": 3,
+          "longest_abseil": 10.5,
+          "hours": 4.5,
+          "_sources": []
+        }
+      }
+    }
+  ],
+  "warnings": [
+    "Row 7: V Grade \"9\" is above the accepted range 1–7 — the file may use a different scale — left empty",
+    "Row 7: Quality \"7\" is above the accepted range 1–5 — the file may use a different scale — left empty",
+    "Row 8: latitude \"\" couldn't be read — skipped",
+    "Row 9: Pitches \"2.5\" isn't a whole number — left empty"
+  ],
+  "droppedRows": 1,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Yileen Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Yileen Canyon",
+      "candidates": [
+        "Yileen Canyon"
+      ]
+    },
+    {
+      "name": "Serendipity Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Serendipity Canyon",
+      "candidates": [
+        "Serendipity Canyon"
+      ]
+    },
+    {
+      "name": "Jugglers Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Jugglers Canyon",
+      "candidates": [
+        "Jugglers Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Brand New Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    },
+    {
+      "name": "Corpus Out Of Range Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    },
+    {
+      "name": "Corpus Decimal Pitches Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
+}

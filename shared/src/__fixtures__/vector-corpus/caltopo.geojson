@@ -1,0 +1,33 @@
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [
+          [150.3, -33.6],
+          [150.3004, -33.6006],
+          [150.3011, -33.6009],
+          [150.3017, -33.6015],
+          [150.3022, -33.6021]
+        ],
+        "type": "LineString"
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "Feature",
+      "properties": {
+        "-updated-by": "user00",
+        "stroke-opacity": 1,
+        "creator": "user00",
+        "-created-on": 1767225600000,
+        "pattern": "solid",
+        "-updated-on": 1767225600000,
+        "stroke-width": 2,
+        "title": "",
+        "stroke": "#FF0000",
+        "class": "Shape",
+        "updated": 1767225600000,
+        "-created-by": "user00"
+      }
+    }
+  ],
+  "type": "FeatureCollection"
+}
