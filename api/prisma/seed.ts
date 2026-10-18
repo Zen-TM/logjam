@@ -31,6 +31,8 @@ import {
   linksCanyon,
   friendInviteUrl,
   isFriendInviteToken,
+  planInviteUrl,
+  TRIP_PLAN_INVITE_TTL_DAYS,
   setFieldValues,
   routeLengthM,
   routeToGpx,
@@ -1314,6 +1316,9 @@ assertValid(
   isFriendInviteToken(SEED_FRIEND_INVITE_TOKEN) ? null : "not a token",
 );
 
+/** Alice's link to her plan, minted per run like the friend one. */
+const SEED_PLAN_INVITE_TOKEN = mintFriendInviteToken();
+
 const TOPO_TILE = tileAt(12, 150.3179, -33.6563);
 const TOPO_BOUNDS = tileBounds(TOPO_TILE.z, TOPO_TILE.x, TOPO_TILE.y);
 /** What the pipeline stores: the union of the per-tile coverage, here one tile. */
@@ -1472,6 +1477,7 @@ async function main() {
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
     prisma.friendInvite.deleteMany(),
+    prisma.tripPlanInvite.deleteMany(),
     prisma.tripPlanAnswer.deleteMany(),
     prisma.tripPlanForm.deleteMany(),
     prisma.tripPlanSection.deleteMany(),
@@ -2450,6 +2456,15 @@ async function main() {
       },
     ],
   });
+  await prisma.tripPlanInvite.create({
+    data: {
+      id: fid(107),
+      planId,
+      createdById: ALICE_ID,
+      tokenHash: hashFriendInviteToken(SEED_PLAN_INVITE_TOKEN),
+      expiresAt: inDays(TRIP_PLAN_INVITE_TTL_DAYS),
+    },
+  });
   // carol's plan, which she has invited alice to by username.
   const carolPlanId = fid(110);
   await prisma.tripPlan.create({
@@ -2790,6 +2805,9 @@ async function main() {
   );
   console.log(
     `Alice's invite link, for another user: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
+  );
+  console.log(
+    `Alice's plan invite link: open Logjam Web at ${planInviteUrl("", SEED_PLAN_INVITE_TOKEN)}`,
   );
 }
 
