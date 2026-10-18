@@ -25,15 +25,15 @@ import { sendPushToUser } from "../services/push";
 import { generateGeoPdf } from "../services/generateGeoPdf";
 import { sendEmail } from "../services/email";
 import type { GeoPdfConfig, VectorStyleSettings } from "@logjam/shared";
+import { GEO_PDF_FAILURE_MESSAGE } from "../lib/failureCopy";
 import {
   validateGeoPdfConfig,
   validateVectorStyleSettings,
   VECTOR_STYLE_DEFAULTS,
   normalizeUserUiPreferences,
-  say,
 } from "@logjam/shared";
 
-const GENERIC_FAILURE_MESSAGE = say`This GeoPDF couldn't be made. Make it again to try again.`;
+const GENERIC_FAILURE_MESSAGE = GEO_PDF_FAILURE_MESSAGE;
 
 /** Build the S3 key for a job's rendered PDF. Pure (unit-test target). */
 export function resultKeyFor(jobId: string): string {

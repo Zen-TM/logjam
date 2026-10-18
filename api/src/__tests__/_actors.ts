@@ -32,7 +32,7 @@ export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
  *  waypoint space: waypoint ids are preserved as place ids. */
 export const BOB_MARKER_PLACE_ID = "60000000-0000-4000-8000-000000000005";
 /** Bob's route, DIRECTLY shared with alice — the incoming half of the seed's
- *  sharing, and the only thing in alice's received `Share` list. */
+ *  sharing, and one of three things in alice's received `Share` list (below). */
 export const BOB_SHARED_ROUTE_ID = "70000000-0000-4000-8000-000000000003";
 /** Bob's complete topo job and GeoPDF, DIRECTLY shared with alice too. */
 export const BOB_SHARED_TOPO_JOB_ID = "f0000000-0000-4000-8000-000000000004";

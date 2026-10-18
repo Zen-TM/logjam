@@ -10,7 +10,7 @@
 // "6" marker places and the links between places (the waypoint space —
 // waypoint ids are preserved as place ids), "7" routes, "8" direct (per-item)
 // shares, "9" user-created place types, "c" trip logs, "d" friendships, "e"
-// place shares, "f" jobs, templates, sends, invites and device tokens (the
+// place shares, "f" jobs, templates, sends and invites (the
 // rows an account's background work and its inbox leave behind).
 //
 // "a" and "b" are NOT here and MUST NOT BE: they are the SYSTEM field
