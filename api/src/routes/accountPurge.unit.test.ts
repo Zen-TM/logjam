@@ -169,3 +169,14 @@ describe("account-delete purge covers every notification type", () => {
     expect(unnamed).toEqual([]);
   });
 });
+
+describe("account-delete purge of topo jobs", () => {
+  // deleteTopoJobObjects aborts a job's open upload before deleting its
+  // prefixes (lib/topoUpload.unit.test.ts), which a prefix delete alone
+  // cannot see. Mutation: purge the topo prefixes with deleteS3Prefix again.
+  it("removes each topo job's objects through deleteTopoJobObjects", () => {
+    expect(purgeSource).toMatch(
+      /topoJobs\.map\(\(\{ id \}\) => deleteTopoJobObjects\(TOPO_BUCKET, id\)\)/,
+    );
+  });
+});
