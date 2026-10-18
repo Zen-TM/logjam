@@ -1049,57 +1049,56 @@ function GeoPdfDialog({
               </SettingsRow>
             )}
             <SettingsRow label="Scale" tooltip={SCALE_TOOLTIP}>
-              <div className={classes.scaleCell}>
-                <ChipRail
+              <ChipRail
+                label="Scale"
+                className={classes.railCell}
+                options={SCALE_OPTIONS}
+                value={scaleChoice(extentState.scale, scaleOtherPicked)}
+                onChange={(choice) => {
+                  setScaleOtherPicked(choice === "other");
+                  if (choice !== "other")
+                    setExtentState(
+                      applyScaleChange(extentState, Number(choice)),
+                    );
+                  markDirty();
+                }}
+              />
+            </SettingsRow>
+            {/* Under the rail, not beside it: a fifth control on the line
+                pushes the chips over the label at a phone's width. */}
+            {scaleChoice(extentState.scale, scaleOtherPicked) === "other" && (
+              <div className={classes.scaleRow}>
+                <span className={classes.scalePrefix} aria-hidden>
+                  1 :
+                </span>
+                <TextField
                   label="Scale"
-                  className={classes.railCell}
-                  options={SCALE_OPTIONS}
-                  value={scaleChoice(extentState.scale, scaleOtherPicked)}
-                  onChange={(choice) => {
-                    setScaleOtherPicked(choice === "other");
-                    if (choice !== "other")
-                      setExtentState(
-                        applyScaleChange(extentState, Number(choice)),
-                      );
+                  hideLabel
+                  className={classes.scaleField}
+                  type="text"
+                  inputMode="numeric"
+                  value={rawScale}
+                  onFocus={() => {
+                    focusedField.current = "scale";
+                  }}
+                  onChange={(event) => {
+                    setRawScale(sanitizeDecimalInput(event.target.value));
                     markDirty();
                   }}
+                  onBlur={() => {
+                    focusedField.current = null;
+                    const value = Number(rawScale);
+                    if (scaleInputError === null && Number.isFinite(value))
+                      setExtentState((s: ExtentState) =>
+                        applyScaleChange(s, value),
+                      );
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
                 />
-                {scaleChoice(extentState.scale, scaleOtherPicked) ===
-                  "other" && (
-                  <div className={classes.scaleRow}>
-                    <span className={classes.scalePrefix} aria-hidden>
-                      1 :
-                    </span>
-                    <TextField
-                      label="Scale"
-                      hideLabel
-                      className={classes.scaleField}
-                      type="text"
-                      inputMode="numeric"
-                      value={rawScale}
-                      onFocus={() => {
-                        focusedField.current = "scale";
-                      }}
-                      onChange={(event) => {
-                        setRawScale(sanitizeDecimalInput(event.target.value));
-                        markDirty();
-                      }}
-                      onBlur={() => {
-                        focusedField.current = null;
-                        const value = Number(rawScale);
-                        if (scaleInputError === null && Number.isFinite(value))
-                          setExtentState((s: ExtentState) =>
-                            applyScaleChange(s, value),
-                          );
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") event.currentTarget.blur();
-                      }}
-                    />
-                  </div>
-                )}
               </div>
-            </SettingsRow>
+            )}
             <FieldError message={scaleInputError} />
 
             {!templateMode && (

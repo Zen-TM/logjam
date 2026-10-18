@@ -210,10 +210,12 @@
 }
 
 /* "1 :" and the number after it read as one value, so they sit on one line and
-   the prefix is decoration — the field's own name is Scale. */
+   the prefix is decoration — the field's own name is Scale. Other's line,
+   under the presets, at the right edge they end on. */
 .scaleRow {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -235,17 +237,6 @@
 
 .ratioField {
   width: 7ch;
-}
-
-/* The presets, and Other's field beside them once it is picked; the field
-   wraps under the rail when the line is too narrow for both. */
-.scaleCell {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-1);
-  min-width: 0;
 }
 
 /* The area's size, and the button that leaves the form to place it. */
