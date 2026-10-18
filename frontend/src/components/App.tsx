@@ -556,7 +556,8 @@ function App() {
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
       // A Terrain layer is not a topo area's: no badge, but its switch is on,
-      // so say which one draws nothing. Switching it off and on retries it.
+      // so say which one draws nothing. Only a reload retries it: the pmtiles
+      // protocol keeps the failed header for the page's life.
       const terrainKey = TERRAIN_LAYER_KEYS.find(
         (key) => TERRAIN_ENTRIES[key].id === entryId,
       );
