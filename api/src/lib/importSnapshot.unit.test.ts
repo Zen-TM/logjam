@@ -113,8 +113,9 @@ describe("restoreFields", () => {
 describe("retention", () => {
   const now = new Date("2026-10-18T12:00:00.000Z");
 
-  // Mutation that turns it red: sweeping by anything but createdAt older than
-  // the TTL (24 h by default).
+  // Mutation that turns it red: changing SNAPSHOT_TTL_MS from 24 h (Logjam
+  // Web's Undo confirm says "for a day"), or sweeping by anything but
+  // createdAt older than it.
   it("sweeps snapshots written more than a day ago", async () => {
     expect(await sweepExpiredImportSnapshots(now)).toBe(2);
     expect(deleteMany).toHaveBeenCalledWith({

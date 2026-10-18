@@ -9,9 +9,9 @@
 // keeps that attribute and nothing else. Guards: importSnapshot.unit.test.ts,
 // src/__tests__/import.test.ts.
 //
-// RETENTION: a snapshot counts for IMPORT_SNAPSHOT_TTL_MS (24 h by default)
-// from its last write. Undo is offered only on Logjam Web's import result
-// screen, so one kept longer would be clutter holding old copies of user text.
+// RETENTION: a snapshot counts for SNAPSHOT_TTL_MS (24 h) from its last write.
+// Undo is offered only on Logjam Web's import result screen, so one kept
+// longer would be clutter holding old copies of user text.
 // Past that, Undo ignores it (it still deletes what the batch created) and the
 // reaper's sweep deletes it (sweepExpiredImportSnapshots, run by
 // startTopoJobReaper, so not while TOPO_REAPER_INTERVAL_MS is 0). Undo, the
@@ -25,7 +25,6 @@ import {
   setFieldValues,
 } from "@logjam/shared";
 import prisma from "../services/prisma";
-import { getEnv } from "./env";
 
 export type RowFields = Record<string, unknown>;
 export type Change = { before: RowFields; after: RowFields };
@@ -202,9 +201,12 @@ export async function snapshotWrites(
   ];
 }
 
+/** A code constant, not an env knob: Logjam Web's Undo confirm promises "for
+ *  a day". Guard: the retention test in importSnapshot.unit.test.ts. */
+const SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000;
+
 /** The moment before which a snapshot is past its retention. */
-const expiredBefore = (now: Date) =>
-  new Date(now.getTime() - getEnv().IMPORT_SNAPSHOT_TTL_MS);
+const expiredBefore = (now: Date) => new Date(now.getTime() - SNAPSHOT_TTL_MS);
 
 /** Deletes snapshots past their retention (see the header). */
 export async function sweepExpiredImportSnapshots(now = new Date()) {
