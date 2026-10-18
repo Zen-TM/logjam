@@ -266,7 +266,10 @@ describe("the invited preview and joining", () => {
 // or anything under it. Mutation: let requirePlanMember accept any status,
 // or keep the row on remove.
 describe("who reaches a plan", () => {
-  const childRoutes = () => [
+  // Minting is tried once a run: its limiter allows 20 an hour, failures too.
+  const childRoutes = (inviteId: string, mint: boolean) => [
+    ...(mint ? [request(API_URL).post(`/plans/${planId}/invites`)] : []),
+    request(API_URL).delete(`/plans/${planId}/invites/${inviteId}`),
     request(API_URL).get(`/plans/${planId}`),
     request(API_URL).post(`/plans/${planId}/sections`).send({ title: "Gear" }),
     request(API_URL)
@@ -292,7 +295,15 @@ describe("who reaches a plan", () => {
         await membership(CAROL_ID, "active");
         expect((await remove(ALICE_SUB, CAROL_ID)).status).toBe(204);
       } else if (state) await membership(CAROL_ID, state);
-      for (const req of childRoutes()) {
+      const invite = await prisma.tripPlanInvite.create({
+        data: {
+          planId,
+          createdById: ALICE_ID,
+          tokenHash: `test-${planId}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+      for (const req of childRoutes(invite.id, state === null)) {
         const res = await req.set(as(CAROL_SUB));
         expect(res.status, `${req.method} ${req.url}`).toBe(404);
       }

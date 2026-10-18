@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
+import type { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import {
   hashFriendInviteToken,
@@ -19,8 +20,9 @@ import {
 // Plans: invite links (routes/planInvites.ts). alice leads a plan of her
 // own with bob in it and one form required to join; carol holds the link.
 // Links are written straight to the table except where minting is the test:
-// the mint limiter allows 20 an hour per user, across reruns. Answers are
-// made up.
+// the mint limiter allows 20 an hour per user, across reruns. carol's
+// previews and redeems stay under the redeem limiter's 20 a minute. Answers
+// are made up.
 //
 // Requires `make dev`.
 //
@@ -261,21 +263,145 @@ describe("holding a link", () => {
     expect(member.body).toEqual({ planId, status: "active" });
   });
 
-  // Mutation: drop the block check in resolveLink.
-  it("answers a block with a leader as a dead link", async () => {
-    await prisma.friendship.updateMany({
-      where: { requesterId: CAROL_ID, addresseeId: ALICE_ID },
-      data: { status: "blocked" },
+  // Mutations: drop the block check in resolveLink; drop its
+  // leaders-blocked-the-caller arm; narrow it to the link's maker.
+  it("answers a block, either way, with any leader as a dead link", async () => {
+    await prisma.tripPlanMember.update({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+      data: { role: "leader" },
     });
-    try {
-      const res = await preview(CAROL_SUB, token);
+    const dead = async (sub: string) => {
+      const res = await preview(sub, token);
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("This invite link no longer works.");
-    } finally {
-      await prisma.friendship.updateMany({
-        where: { requesterId: CAROL_ID, addresseeId: ALICE_ID },
-        data: { status: "pending" },
+    };
+    const block = (requesterId: string, addresseeId: string, status: string) =>
+      prisma.friendship.updateMany({
+        where: { requesterId, addresseeId },
+        data: { status },
       });
+    try {
+      // The caller blocked the link's maker.
+      await block(CAROL_ID, ALICE_ID, "blocked");
+      await dead(CAROL_SUB);
+      expect((await redeem(CAROL_SUB, token)).status).toBe(404);
+      await block(CAROL_ID, ALICE_ID, "pending");
+      // Another leader, not the link's maker, blocked the caller.
+      await block(BOB_ID, CAROL_ID, "blocked");
+      await dead(CAROL_SUB);
+    } finally {
+      // The seed's rows; the sweep would write them back too.
+      await block(CAROL_ID, ALICE_ID, "pending");
+      await block(BOB_ID, CAROL_ID, "accepted");
     }
+    expect(
+      await prisma.tripPlanMember.count({
+        where: { planId, userId: CAROL_ID },
+      }),
+    ).toBe(0);
+  });
+
+  // Mutation: store the link's invitedById on a repeat request without
+  // updating it, or let a 201 name a leader the row doesn't.
+  it("waits for the leader whose link was used last, in the 201 and in GET /plans", async () => {
+    await prisma.tripPlanMember.update({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+      data: { role: "leader" },
+    });
+    const bobsLink = mintFriendInviteToken();
+    await prisma.tripPlanInvite.create({
+      data: {
+        planId,
+        createdById: BOB_ID,
+        tokenHash: hashFriendInviteToken(bobsLink),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    expect((await redeem(CAROL_SUB, token)).body.waitingFor).toEqual({
+      id: ALICE_ID,
+      username: "alice",
+    });
+    const again = await redeem(CAROL_SUB, bobsLink);
+    expect(again.status).toBe(201);
+    expect(again.body.waitingFor).toEqual({ id: BOB_ID, username: "bob" });
+    const list = await request(API_URL).get("/plans").set(as(CAROL_SUB));
+    expect(
+      list.body.plans.find((p: { id: string }) => p.id === planId).waitingFor,
+    ).toEqual({ id: BOB_ID, username: "bob" });
+  });
+});
+
+// A redeem reads the link, then waits behind the plan row (touchPlan). What
+// lands in that wait is staged here: the test takes the plan row, starts the
+// redeem, makes its change in the same transaction, and lets go. Mutation:
+// drop the invite re-read in request() (planInvites.ts).
+describe("redeeming while the plan changes", () => {
+  async function racing(
+    during: (tx: Prisma.TransactionClient) => Promise<unknown>,
+  ) {
+    const answers = await joinAnswers();
+    let pending!: Promise<{ status: number; body: Record<string, unknown> }>;
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.tripPlan.update({
+          where: { id: planId },
+          data: { updatedAt: new Date() },
+        });
+        pending = new Promise((resolve, reject) => {
+          redeem(CAROL_SUB, token, answers).then(resolve, reject);
+        });
+        // Long enough for the redeem to read the link and reach touchPlan.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await during(tx);
+      },
+      { timeout: 10_000 },
+    );
+    return pending;
+  }
+
+  it.each([
+    [
+      "revoked",
+      (tx: Prisma.TransactionClient) =>
+        tx.tripPlanInvite.deleteMany({ where: { planId } }),
+    ],
+    [
+      "archived",
+      (tx: Prisma.TransactionClient) =>
+        tx.tripPlan.update({
+          where: { id: planId },
+          data: { archivedAt: new Date() },
+        }),
+    ],
+  ] as const)(
+    "a link %s meanwhile is dead, and asks nothing",
+    async (_, change) => {
+      const res = await racing(change);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("This invite link no longer works.");
+      expect(
+        await prisma.tripPlanMember.count({
+          where: { planId, userId: CAROL_ID },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.notification.count({
+          where: { payload: { path: ["planId"], equals: planId } },
+        }),
+      ).toBe(0);
+    },
+  );
+
+  // Mutation: answer an active row with the 409 for a racing invite.
+  it("someone let in meanwhile is told they're in", async () => {
+    expect((await redeem(CAROL_SUB, token)).status).toBe(201);
+    const res = await racing((tx) =>
+      tx.tripPlanMember.update({
+        where: { planId_userId: { planId, userId: CAROL_ID } },
+        data: { status: "active" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ planId, status: "active" });
   });
 });

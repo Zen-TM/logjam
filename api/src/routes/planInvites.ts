@@ -44,17 +44,17 @@ import {
 import { dateOnly } from "../lib/tripPlanView";
 import {
   activeMemberIds,
+  blockedWithAny,
   joinForms,
   notifyPlan,
   saveJoinAnswers,
   waitingFor,
 } from "../lib/planMembership";
-import { isUniqueViolation } from "./friends";
 import { joinInvited } from "./planMembers";
 
 const TTL_MS = TRIP_PLAN_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
-const ONLY_LEADERS = say`Only a leader can make an invite link.`;
+const ONLY_LEADERS_MINT = say`Only a leader can make an invite link.`;
 /** A leader invited the caller by username while they used a link. */
 const RACED = say`Someone in this plan just invited you. Open the plan from your list.`;
 
@@ -71,7 +71,7 @@ planInviteLinksRouter.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const access = await requirePlanWrite(user.id, getParam(req.params.planId));
-    requirePlanRole(access, ["leader"], ONLY_LEADERS);
+    requirePlanRole(access, ["leader"], ONLY_LEADERS_MINT);
     const planId = access.plan.id;
     const token = mintFriendInviteToken();
     const expiresAt = new Date(Date.now() + TTL_MS);
@@ -106,7 +106,11 @@ planInviteLinksRouter.get(
       user.id,
       getParam(req.params.planId),
     );
-    requirePlanRole(access, ["leader"], ONLY_LEADERS);
+    requirePlanRole(
+      access,
+      ["leader"],
+      say`Only a leader can see invite links.`,
+    );
     const invites = await prisma.tripPlanInvite.findMany({
       where: { planId: access.plan.id, expiresAt: { gt: new Date() } },
       select: {
@@ -138,7 +142,11 @@ planInviteLinksRouter.delete(
       user.id,
       getParam(req.params.planId),
     );
-    requirePlanRole(access, ["leader"], ONLY_LEADERS);
+    requirePlanRole(
+      access,
+      ["leader"],
+      say`Only a leader can revoke an invite link.`,
+    );
     const planId = access.plan.id;
     await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
@@ -162,8 +170,9 @@ function invalidLink(): AppError {
 /** The live link a token names, its plan, and the caller's place in it. */
 async function resolveLink(token: unknown, callerId: string) {
   if (!isFriendInviteToken(token)) throw invalidLink();
+  const tokenHash = hashFriendInviteToken(token);
   const invite = await prisma.tripPlanInvite.findUnique({
-    where: { tokenHash: hashFriendInviteToken(token) },
+    where: { tokenHash },
     select: {
       expiresAt: true,
       createdById: true,
@@ -189,20 +198,11 @@ async function resolveLink(token: unknown, callerId: string) {
   if (!leader) throw invalidLink();
   // A block with any leader is not something a link overrides, or reveals.
   const leaders = await activeMemberIds(prisma, plan.id, [], "leader");
-  const blocked = await prisma.friendship.count({
-    where: {
-      status: "blocked",
-      OR: [
-        { requesterId: callerId, addresseeId: { in: leaders } },
-        { requesterId: { in: leaders }, addresseeId: callerId },
-      ],
-    },
-  });
-  if (blocked > 0) throw invalidLink();
+  if (await blockedWithAny(prisma, callerId, leaders)) throw invalidLink();
   return {
     plan,
     leader,
-    createdById: invite.createdById,
+    tokenHash,
     membership: plan.members[0]?.status ?? null,
   };
 }
@@ -229,34 +229,65 @@ router.post(
   },
 );
 
-/** One attempt at asking to join. Throws P2002 when the caller's own other
- *  request, or a leader's invite, gives them a row first. */
+/**
+ * Ask to join behind the plan row. The link is read again there: a revoke,
+ * an archive, a plan delete or its maker's account delete may have landed
+ * since `resolveLink`, and each is the one dead-link 404. The request is
+ * stored as waiting for the leader the response names, so GET /plans says
+ * the same.
+ */
 async function request(
+  tokenHash: string,
   planId: string,
   userId: string,
-  invitedById: string | null,
   answers: unknown,
-): Promise<void> {
+): Promise<TripPlanRedeemResult> {
+  let result!: TripPlanRedeemResult;
   const push = await prisma.$transaction(async (tx) => {
-    await touchPlan(tx, planId);
+    await touchPlan(tx, planId).catch((err: unknown) => {
+      throw err instanceof AppError && err.statusCode === 404
+        ? invalidLink()
+        : err;
+    });
+    const invite = await tx.tripPlanInvite.findFirst({
+      where: {
+        tokenHash,
+        planId,
+        expiresAt: { gt: new Date() },
+        plan: { archivedAt: null },
+      },
+      select: { createdById: true },
+    });
+    const leader = invite && (await waitingFor(tx, planId, invite.createdById));
+    if (!leader) throw invalidLink();
     const existing = await tx.tripPlanMember.findUnique({
       where: { planId_userId: { planId, userId } },
       select: { status: true },
     });
+    // A leader let them in since `resolveLink` read: they are in.
+    if (existing?.status === "active") {
+      result = { planId, status: "active" };
+      return () => {};
+    }
+    if (existing?.status === "invited") throw new AppError(409, RACED);
+    result = { planId, status: "requested", waitingFor: leader };
     // Asked already: the new answers replace the old, and the leaders are
     // not told twice.
-    if (existing?.status === "requested") {
+    if (existing) {
+      await tx.tripPlanMember.update({
+        where: { planId_userId: { planId, userId } },
+        data: { invitedById: leader.id },
+      });
       await saveJoinAnswers(tx, planId, userId, answers);
       return () => {};
     }
-    if (existing) throw new AppError(409, RACED);
     await tx.tripPlanMember.create({
       data: {
         planId,
         userId,
         role: "member",
         status: "requested",
-        invitedById,
+        invitedById: leader.id,
       },
     });
     await saveJoinAnswers(tx, planId, userId, answers);
@@ -268,6 +299,7 @@ async function request(
     });
   });
   push();
+  return result;
 }
 
 // ── POST /plan-invites/redeem ─────────────────────────────────
@@ -290,17 +322,8 @@ router.post(
       res.json(result);
       return;
     }
-    await request(planId, user.id, link.createdById, answers).catch(
-      (err: unknown) => {
-        throw isUniqueViolation(err) ? new AppError(409, RACED) : err;
-      },
-    );
-    const result: TripPlanRedeemResult = {
-      planId,
-      status: "requested",
-      waitingFor: link.leader,
-    };
-    res.status(201).json(result);
+    const result = await request(link.tokenHash, planId, user.id, answers);
+    res.status(result.status === "requested" ? 201 : 200).json(result);
   },
 );
 
