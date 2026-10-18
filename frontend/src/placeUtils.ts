@@ -511,7 +511,7 @@ export function getElevationProfile(
   );
 }
 
-/** The height and slope at one spot, read server-side from the NSW DEM. */
+/** The height and slope at one spot, read server-side from the DEM. */
 export function getElevationPoint(
   point: [number, number],
 ): Promise<ElevationPoint & { attribution: string }> {

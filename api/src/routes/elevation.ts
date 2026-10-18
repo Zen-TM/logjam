@@ -107,8 +107,8 @@ router.post(
 
     const heights = await sampleElevations([{ lon, lat, distanceM: 0 }]);
     // The height was read; a slope that could not be (its window reaches tiles
-    // the height never touched) must not take it down. Status-only: the error
-    // can carry a tile URL, which names the area.
+    // the height never touched) must not take it down. Nothing of the error is
+    // logged; the line says only that a slope failed.
     const slope = await sampleSlope(lon, lat).catch(() => {
       logger.warn("DEM slope could not be read");
       return null;

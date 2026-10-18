@@ -103,8 +103,9 @@ export type DemSlopeReading = {
  * that one surface: a source that lacks a pixel of the window (the edge of a
  * finer area, a tile not built, one no-data pixel) hands the position to the
  * next one down. Each window position's own pixel is read, never the blend of
- * four that `sampleDem` takes for a height, which would fill a missing pixel
- * from its neighbours.
+ * four that `sampleDem` takes for a height, which can let a neighbour stand in
+ * for a missing pixel (at a pixel centre the blend is its own pixel, bar float
+ * noise).
  * Never the worldwide 30 m tiles (`coverage` null), which are too coarse for
  * a point slope: within 5° of a 5 m survey at 57 % of points, a median of 34°
  * on ground of 60° or steeper, where the NSW 5 m source is within 5° at 98 %.

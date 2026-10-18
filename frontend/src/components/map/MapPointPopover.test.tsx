@@ -23,9 +23,11 @@ vi.mock("maplibre-gl", () => ({
 }));
 const terrain = vi.hoisted(() => ({
   checking: false,
-  reading: { elevationM: 1013, slopeDegrees: null, demSourceIds: [] } as
-    | ElevationPoint
-    | null,
+  reading: {
+    elevationM: 1013,
+    slopeDegrees: null,
+    demSourceIds: [],
+  } as ElevationPoint | null,
 }));
 vi.mock("../../placeUtils", () => ({
   useElevationPoint: () => ({

@@ -223,6 +223,13 @@ describe("demSlopeAt", () => {
   it("falls through when one pixel of the finer source's window has no data", async () => {
     const { positions } = demSlopeWindow(POINT.lon, POINT.lat, FINE.sampleZoom);
     const [corner] = resolveDemSamples([positions[2]!], FINE.sampleZoom);
+    // Why position 2: at POINT it round-trips a hair off its pixel centre, so
+    // the `sampleDem` blend gives a neighbour a tiny weight and fills the hole.
+    // Other positions land exactly and would leave the mutation green; this
+    // fails loudly if POINT or the zoom change.
+    expect(
+      corner!.taps.some((t) => t.index !== corner!.index && t.weight > 0),
+    ).toBe(true);
     const holed: DemTileReader = async (source, tiles) => {
       const found = await twoGrounds(source, tiles);
       if (source.id === FINE.id)

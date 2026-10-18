@@ -257,7 +257,7 @@ export async function sampleElevations(
 
 /**
  * The slope of the ground at a position in degrees, or null where the fine
- * DEM has no answer (`demSlopeAt` says why the coarse one is never used).
+ * DEM has no answer (`demSlopeReading` says why the coarse one is never used).
  *
  * Saved areas first, then, when `allowNetwork`, byte ranges of our own
  * archive on the CDN, the way the map already reads its basemap. Our API is
