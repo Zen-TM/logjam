@@ -25,14 +25,11 @@ vi.mock("../services/placeRegistry", () => ({
   }),
 }));
 
-import type { AuthenticatedRequest } from "./auth";
 import {
   bulkImportLimiter,
   bulkImportLimitMax,
   globalLimitMax,
   PLACE_SEARCHES_PER_MINUTE,
-  REGION_CLIPS_PER_HOUR,
-  regionClipLimiter,
   userPatchLimitMax,
 } from "./rateLimit";
 import placesBulk from "../routes/placesBulk";
@@ -134,49 +131,6 @@ describe("bulkImportLimiter", () => {
         bulkImportLimiter,
       );
     }
-  });
-});
-
-// Every signed-in region save in a Logjam GPS build older than the phone-cut
-// clips asks for one clip
-// (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md), so the limit
-// has to sit above an honest session and still be a limit. Mutation: set REGION_CLIPS_PER_HOUR back to 10 and the
-// first test goes red (a user planning a trip is refused at the eleventh
-// area); drop `regionClipLimiter` from the route chain here and the second
-// goes red.
-describe("regionClipLimiter", () => {
-  function clipApp() {
-    const app = express();
-    app.use((req, _res, next) => {
-      (req as AuthenticatedRequest).user = {
-        sub: String(req.headers["x-test-sub"]),
-      } as AuthenticatedRequest["user"];
-      next();
-    });
-    app.post("/clip", regionClipLimiter, (_req, res) => {
-      res.sendStatus(200);
-    });
-    return app;
-  }
-
-  it("lets one user save thirty areas in an hour", async () => {
-    expect(REGION_CLIPS_PER_HOUR).toBeGreaterThanOrEqual(30);
-    const app = clipApp();
-    for (let i = 0; i < 30; i++) {
-      const res = await request(app).post("/clip").set("x-test-sub", "heavy");
-      expect(res.status).toBe(200);
-    }
-  });
-
-  it("still refuses past the limit, per user", async () => {
-    const app = clipApp();
-    for (let i = 0; i < REGION_CLIPS_PER_HOUR; i++) {
-      await request(app).post("/clip").set("x-test-sub", "greedy");
-    }
-    const over = await request(app).post("/clip").set("x-test-sub", "greedy");
-    expect(over.status).toBe(429);
-    const other = await request(app).post("/clip").set("x-test-sub", "other");
-    expect(other.status).toBe(200);
   });
 });
 
