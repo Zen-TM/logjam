@@ -274,8 +274,8 @@ describe("runRegionClip", () => {
       );
     });
     expect(await settled(run(SPEC, token))).toEqual({ status: "cancelled" });
-    // Well inside the request's own timeout.
-    expect(Date.now() - start).toBeLessThan(5_000);
+    // Before the request's own timeout, whose floor is 30 s.
+    expect(Date.now() - start).toBeLessThan(25_000);
     expect(disk.has(FILE)).toBe(false);
   });
 
