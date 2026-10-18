@@ -22,6 +22,7 @@ import {
   validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
   RASTER_TEMPLATE_DEFAULTS,
+  TOPO_UPLOAD_SIGN_MAX,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -115,8 +116,6 @@ export function serializeTopoJobFor<
 // tile; this sits well above any realistic one while rejecting pathological
 // archives before the worker is launched.
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
-/** Part URLs one request may ask for. */
-const TOPO_UPLOAD_SIGN_MAX = 32;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list

@@ -52,7 +52,7 @@ import { nextTopoName } from "./jobName";
 import { fetchTopoTemplates } from "./topoTemplatesFetch";
 import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
-import { useTopoUpload } from "./topoUpload";
+import { submitFailureMessage, useTopoUpload } from "./topoUpload";
 import classes from "./TopoDialog.module.css";
 
 export type TopoTemplate = {
@@ -70,6 +70,8 @@ type Phase = "form" | "uploading" | "finalizing" | "done";
 type Mode = "form" | "instructions" | "settings";
 
 const DEFAULT_TEMPLATE_ID = "default";
+const KEPT_FOR_RESUME =
+  "Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.";
 
 // Deep-copy a template's auto-export slice (or fall back to defaults for older
 // templates saved before the feature existed) so edits don't mutate the cached
@@ -512,14 +514,7 @@ export default function TopoDialog({
       setPhase("done");
     } catch (e: unknown) {
       console.error(e);
-      setError(
-        messageFromError(
-          e,
-          uploaded
-            ? "Submission failed. Please try again."
-            : "The upload stopped. Check your connection, then choose Make it again to carry on from where it stopped.",
-        ),
-      );
+      setError(submitFailureMessage(e, uploaded));
       // File preserved so Make it can resubmit.
       setPhase("form");
     }
@@ -802,8 +797,11 @@ export default function TopoDialog({
             {/* Two short answers about the same topo: one line holds both. */}
             <div className={classes.nameRow}>
               <TextField
+                id="topo-name"
                 label="Name"
                 placeholder="Name this topo"
+                disabled={upload.held}
+                hint={upload.held ? KEPT_FOR_RESUME : undefined}
                 value={topoName}
                 onChange={(e) => {
                   setTopoName(e.target.value);
@@ -813,6 +811,8 @@ export default function TopoDialog({
 
               <Select
                 label="Template"
+                disabled={upload.held}
+                aria-describedby={upload.held ? "topo-name-hint" : undefined}
                 value={selectedTemplateId}
                 onChange={(e) => selectTemplate(e.target.value)}
               >
@@ -837,6 +837,8 @@ export default function TopoDialog({
                 icon="settings"
                 compact
                 variant="outline"
+                disabled={upload.held}
+                disabledReason={KEPT_FOR_RESUME}
                 onClick={() => setMode("settings")}
               >
                 How this topo is drawn

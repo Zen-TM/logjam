@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { ApiError } from "../../errors/ApiError";
 
 const apiFetch = vi.fn();
 const putToPresignedUrl = vi.fn();
@@ -7,7 +9,14 @@ vi.mock("../../placeUtils", () => ({
   putToPresignedUrl: (...args: unknown[]) => putToPresignedUrl(...args),
 }));
 
-import { sendTopoParts, type TopoUploadSession } from "./topoUpload";
+import {
+  UPLOAD_STOPPED,
+  sendTopoParts,
+  submitFailureMessage,
+  useTopoUpload,
+  type TopoJobRequest,
+  type TopoUploadSession,
+} from "./topoUpload";
 
 function session(): TopoUploadSession {
   // 10 bytes in parts of 4: parts 1-3, the last one 2 bytes.
@@ -101,5 +110,170 @@ describe("sendTopoParts", () => {
     expect(sentParts()).toEqual(["part-2"]);
     expect(last).toBe(10);
     expect(completions()).toHaveLength(1);
+  });
+});
+
+describe("sendTopoParts refusals", () => {
+  // Mutation: drop isRefusal from the retry check, and each worker signs
+  // again on backoff, 5 times over.
+  it("stops at once when the API refuses to sign", async () => {
+    apiFetch.mockRejectedValue(
+      new ApiError(404, "/topo-jobs/job-1/parts", "POST"),
+    );
+    const run = sendTopoParts(session(), () => {}).catch((e: Error) => e);
+    await vi.runAllTimersAsync();
+    expect(await run).toBeInstanceOf(ApiError);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useTopoUpload", () => {
+  const file = new File(["0123456789"], "lidar.zip");
+  const job: TopoJobRequest = {
+    tileCount: 1,
+    jobName: "Katoomba",
+    filename: "lidar.zip",
+    settings: {},
+    autoExport: {},
+  };
+  const on = { progress: () => {}, uploaded: () => {} };
+
+  /** The API for one job: `start` and `status` answer /start and GET. */
+  function serveJob(
+    start: () => unknown = () => undefined,
+    status = "pending",
+  ) {
+    apiFetch.mockImplementation(
+      async (
+        path: string,
+        opts?: { method?: string; body?: { partNumbers?: number[] } },
+      ) => {
+        if (path === "/topo-jobs")
+          return { jobId: "job-1", uploadId: "up-1", partSize: 4 };
+        if (path.endsWith("/parts"))
+          return {
+            parts: opts!.body!.partNumbers!.map((n) => ({
+              partNumber: n,
+              url: `part-${n}`,
+            })),
+          };
+        if (path.endsWith("/start")) return start();
+        if (path === "/topo-jobs/job-1" && !opts) return { status };
+        return undefined;
+      },
+    );
+  }
+  const calls = (method: string, path: string) =>
+    apiFetch.mock.calls.filter(
+      ([p, o]) => p === path && (o?.method ?? "GET") === method,
+    );
+  const creates = () => calls("POST", "/topo-jobs");
+  const deletes = () => calls("DELETE", "/topo-jobs/job-1");
+
+  async function submitSettled(
+    submit: ReturnType<typeof useTopoUpload>["submit"],
+  ) {
+    let outcome: unknown;
+    await act(async () => {
+      const run = submit(file, job, on).then(
+        (id) => id,
+        (e: unknown) => e,
+      );
+      await vi.runAllTimersAsync();
+      outcome = await run;
+    });
+    return outcome;
+  }
+
+  // Mutation: make the session check at the top of `submit` always start a
+  // new job, and the second submit POSTs /topo-jobs again.
+  it("a submit after a failed upload carries on the same job; discard deletes it", async () => {
+    serveJob();
+    putToPresignedUrl.mockImplementation(async (url: string) => {
+      if (url === "part-2") throw new Error("Upload failed (network error)");
+    });
+    const { result } = renderHook(() => useTopoUpload());
+    expect(await submitSettled(result.current.submit)).toBeInstanceOf(Error);
+    expect(result.current.held).toBe(true);
+    expect(await submitSettled(result.current.submit)).toBeInstanceOf(Error);
+    expect(creates()).toHaveLength(1);
+    expect(deletes()).toHaveLength(0);
+
+    act(() => result.current.discard());
+    expect(deletes()).toHaveLength(1);
+    expect(result.current.held).toBe(false);
+  });
+
+  // Mutation: decide by /start's error alone (keep the session on anything
+  // under 500), and the lost response leaves a session whose discard
+  // deletes the running job.
+  it("a /start whose response is lost after the job launched still succeeds", async () => {
+    serveJob(() => {
+      throw new TypeError("Failed to fetch");
+    }, "pending");
+    putToPresignedUrl.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useTopoUpload());
+    expect(await submitSettled(result.current.submit)).toBe("job-1");
+    act(() => result.current.discard());
+    expect(deletes()).toHaveLength(0);
+  });
+
+  // Mutation: drop the session on any 5xx from /start, and the next submit
+  // makes a second job and sends the whole ZIP again.
+  it("a 5xx /start that leaves the job uploading keeps the job for the next submit", async () => {
+    let refuse = true;
+    serveJob(() => {
+      if (refuse) throw new ApiError(507, "/topo-jobs/job-1/start", "POST");
+    }, "uploading");
+    putToPresignedUrl.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useTopoUpload());
+    expect(await submitSettled(result.current.submit)).toBeInstanceOf(ApiError);
+    putToPresignedUrl.mockClear();
+    refuse = false;
+    expect(await submitSettled(result.current.submit)).toBe("job-1");
+    expect(creates()).toHaveLength(1);
+    expect(putToPresignedUrl).not.toHaveBeenCalled();
+  });
+
+  // Mutation: keep the session on a 404 from /parts, and every later submit
+  // asks again for the job that is gone.
+  it("a job that is gone is left behind: the next submit makes a new one", async () => {
+    serveJob();
+    const served = apiFetch.getMockImplementation()!;
+    let gone = true;
+    apiFetch.mockImplementation(async (path: string, opts?: unknown) => {
+      if (gone && path.endsWith("/parts"))
+        throw new ApiError(404, path, "POST");
+      return served(path, opts);
+    });
+    putToPresignedUrl.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useTopoUpload());
+    expect(await submitSettled(result.current.submit)).toBeInstanceOf(ApiError);
+    expect(result.current.held).toBe(false);
+    gone = false;
+    expect(await submitSettled(result.current.submit)).toBe("job-1");
+    expect(creates()).toHaveLength(2);
+  });
+});
+
+describe("submitFailureMessage", () => {
+  // Mutation: drop the network branch, and a dropped connection reads as the
+  // generic "Couldn't reach Logjam … try again".
+  it("tells a user whose connection dropped that Make it carries on", () => {
+    expect(submitFailureMessage(new TypeError("Failed to fetch"), false)).toBe(
+      UPLOAD_STOPPED,
+    );
+  });
+
+  it("keeps the server's sentence when the API answered", () => {
+    const refused = new ApiError(
+      402,
+      "/topo-jobs/job-1/parts",
+      "POST",
+      "Not enough processing credits.",
+    );
+    expect(submitFailureMessage(refused, false)).toBe(
+      "Not enough processing credits.",
+    );
   });
 });

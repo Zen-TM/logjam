@@ -2,17 +2,22 @@
 // straight to S3, a few at a time, each retrying on its own, and a submit
 // after a failure sends only the parts S3 does not hold yet, to the same job.
 // Kept out of TopoDialog so the dialog can be rebuilt around it.
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  TOPO_UPLOAD_PART_URL_TTL_SECONDS,
+  TOPO_UPLOAD_SIGN_MAX,
+} from "@logjam/shared";
 import { ApiError } from "../../errors/ApiError";
+import { messageFromError } from "../../errors/messageFromError";
 import { apiFetch, putToPresignedUrl } from "../../placeUtils";
 
 const CONCURRENCY = 4;
 const ATTEMPTS = 5;
 /** A part that sends no bytes for this long is dropped and retried. */
 const STALL_MS = 60_000;
-// Part URLs live 15 minutes (api routes/topoJobs.ts); re-sign well before.
-const URL_FRESH_MS = 10 * 60_000;
-const SIGN_BATCH = 16;
+// Re-sign five minutes before a part URL expires.
+const URL_FRESH_MS = (TOPO_UPLOAD_PART_URL_TTL_SECONDS - 5 * 60) * 1000;
+const SIGN_BATCH = Math.min(16, TOPO_UPLOAD_SIGN_MAX);
 
 /** One ZIP on its way to one job. */
 export type TopoUploadSession = {
@@ -103,7 +108,8 @@ export async function sendTopoParts(
         // An expired URL fails like any other attempt; sign afresh.
         urls.delete(n);
         sending.delete(n);
-        if (attempt >= ATTEMPTS || failures.length) throw error;
+        if (attempt >= ATTEMPTS || failures.length || isRefusal(error))
+          throw error;
         await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
       }
     }
@@ -121,6 +127,7 @@ export async function sendTopoParts(
       report();
     }
   }
+  report();
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   if (failures.length) throw failures[0];
 
@@ -131,20 +138,45 @@ export async function sendTopoParts(
   session.completed = true;
 }
 
+export const UPLOAD_STOPPED =
+  "The upload stopped. Check your connection, then choose Make it again to carry on from where it stopped.";
+
+/** What to tell the user when `submit` failed, before or after the ZIP was
+ *  all `uploaded`. A dropped connection carries no server sentence, and the
+ *  generic "try again" would send them back to the ZIP, losing the parts sent. */
+export function submitFailureMessage(error: unknown, uploaded: boolean) {
+  if (!uploaded && !(error instanceof ApiError)) return UPLOAD_STOPPED;
+  return messageFromError(
+    error,
+    uploaded ? "Submission failed. Please try again." : UPLOAD_STOPPED,
+  );
+}
+
+/** The API turned the request down, and asking again won't change that. Only
+ *  `sign` throws ApiError; 429 is the rate limiter, which waiting does change. */
+const isRefusal = (error: unknown) =>
+  error instanceof ApiError && error.status < 500 && error.status !== 429;
+
 /** Makes a topo job from a ZIP. `submit` again after a failure carries on
  *  with the same job while the file is the same one; `discard` deletes a job
- *  that never started (call it when the user gives up on the ZIP). */
+ *  that never started (call it when the user gives up on the ZIP). `held`
+ *  is true while a submit would carry on that job rather than make one. */
 export function useTopoUpload() {
   const session = useRef<TopoUploadSession | null>(null);
+  const [held, setHeld] = useState(false);
+  const hold = useCallback((next: TopoUploadSession | null) => {
+    session.current = next;
+    setHeld(next !== null);
+  }, []);
 
   const discard = useCallback(() => {
     const abandoned = session.current;
-    session.current = null;
+    hold(null);
     if (abandoned)
       apiFetch(`/topo-jobs/${abandoned.jobId}`, { method: "DELETE" }).catch(
         () => {},
       );
-  }, []);
+  }, [hold]);
   useEffect(() => discard, [discard]);
 
   const submit = useCallback(
@@ -163,34 +195,57 @@ export function useTopoUpload() {
           uploadId: string;
           partSize: number;
         }>("/topo-jobs", { method: "POST", body: job });
-        session.current = {
+        hold({
           file,
           jobId: created.jobId,
           uploadId: created.uploadId,
           partSize: created.partSize,
           done: new Set(),
           completed: false,
-        };
+        });
       }
-      const current = session.current;
-      if (!current.completed) await sendTopoParts(current, on.progress);
+      const current = session.current!;
+      if (!current.completed) {
+        try {
+          await sendTopoParts(current, on.progress);
+        } catch (e) {
+          // The job is gone (deleted, or swept after 24 h) or has left
+          // `uploading`: carrying on can't succeed, so the next submit makes
+          // a new one. Not on 401, so signing in again carries on.
+          if (e instanceof ApiError && (e.status === 404 || e.status === 400))
+            hold(null);
+          throw e;
+        }
+      }
       on.uploaded();
       try {
         await apiFetch(`/topo-jobs/${current.jobId}/start`, {
           method: "POST",
         });
       } catch (e) {
-        // A refusal (credits, a bad ZIP) or a lost response can be submitted
-        // again; a failed launch has failed the job itself, so the next
-        // submit starts anew.
-        if (e instanceof ApiError && e.status >= 500) session.current = null;
+        // A failed /start says nothing of whether the job left `uploading`:
+        // the response may be lost after the job launched, or a 5xx may come
+        // before. The job's own status decides.
+        const status = await apiFetch<{ status: string }>(
+          `/topo-jobs/${current.jobId}`,
+        ).then(
+          (job) => job.status,
+          () => null,
+        );
+        if (status === "pending" || status === "processing") {
+          hold(null);
+          return current.jobId;
+        }
+        // Still uploading: submit again carries on. Anything else (failed,
+        // or unknown) starts anew.
+        if (status !== "uploading") hold(null);
         throw e;
       }
-      session.current = null;
+      hold(null);
       return current.jobId;
     },
-    [discard],
+    [discard, hold],
   );
 
-  return { submit, discard };
+  return { submit, discard, held };
 }
