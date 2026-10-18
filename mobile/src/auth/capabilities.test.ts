@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -207,7 +208,7 @@ describe("changeEmailRowProps", () => {
     for (const online of [true, false]) {
       expect(changeEmailRowProps(online, "fake")).toEqual({
         disabled: true,
-        subtitle: "Fake sign-in has no email to change.",
+        subtitle: "Not available under fake sign-in.",
       });
     }
   });
@@ -218,5 +219,18 @@ describe("changeEmailRowProps", () => {
       disabled: true,
       subtitle: "Needs a connection",
     });
+  });
+});
+
+// Red when the email row stops using it: the row would be live under fake auth
+// and fail on press. To see it: swap the `changeEmailRowProps(online,
+// config.authMode)` spread in AccountScreen.tsx for `capabilityRowProps`.
+describe("the account screen's email row", () => {
+  it("takes its disabled state from changeEmailRowProps", () => {
+    const screen = readFileSync(
+      new URL("../screens/AccountScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(screen).toContain("changeEmailRowProps(online, config.authMode)");
   });
 });

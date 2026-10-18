@@ -197,7 +197,7 @@ export function changeEmailRowProps(
   authMode: "cognito" | "fake",
 ): { disabled: boolean; subtitle?: string } {
   if (authMode === "fake") {
-    return { disabled: true, subtitle: "Fake sign-in has no email to change." };
+    return { disabled: true, subtitle: "Not available under fake sign-in." };
   }
   return capabilityRowProps("serverPrefs", "linked", online);
 }

@@ -2,7 +2,8 @@
 // sign-in and sign-up forms must not call it: they sign straight in as the
 // build's fake user, the way a fake-auth launch does. Drop the fake-mode branch
 // from `handleSignIn` or `handleSignUp` in useAuth.ts and the matching test goes
-// red; make the same branch fire under Cognito and the last two go red.
+// red; write a local identity from it and the first and third go red; make the same
+// branch fire under Cognito and the last two go red.
 //
 // React is stubbed so the hook runs as a plain function: mobile's vitest has no
 // jsdom or renderer.
@@ -19,6 +20,7 @@ const amplify = {
   confirmResetPassword: vi.fn(),
 };
 const writeEntryChoice = vi.fn();
+const writeLocalIdentity = vi.fn();
 const config = { authMode: "fake" };
 
 vi.mock("react", () => ({
@@ -62,7 +64,7 @@ vi.mock("./localIdentity", () => ({
   readLocalIdentity: vi.fn().mockResolvedValue(null),
   readPreviousIdentity: vi.fn().mockResolvedValue(null),
   signInNeedsWipe: vi.fn().mockReturnValue(false),
-  writeLocalIdentity: vi.fn(),
+  writeLocalIdentity,
 }));
 
 const { useAuth } = await import("./useAuth");
@@ -70,6 +72,7 @@ const { useAuth } = await import("./useAuth");
 beforeEach(() => {
   setState.mockReset();
   writeEntryChoice.mockReset().mockReturnValue(true);
+  writeLocalIdentity.mockReset();
   for (const fn of Object.values(amplify)) fn.mockReset();
   config.authMode = "fake";
 });
@@ -80,6 +83,7 @@ describe("fake-auth sign-in", () => {
     expect(ok).toBe(true);
     expect(setState).toHaveBeenLastCalledWith("authenticated");
     expect(amplify.signIn).not.toHaveBeenCalled();
+    expect(writeLocalIdentity).not.toHaveBeenCalled();
   });
 
   it("records the account choice, so a guest who links does not restart as a guest", async () => {
@@ -92,6 +96,7 @@ describe("fake-auth sign-in", () => {
     expect(setState).toHaveBeenLastCalledWith("authenticated");
     expect(writeEntryChoice).toHaveBeenCalledWith("account");
     expect(amplify.signUp).not.toHaveBeenCalled();
+    expect(writeLocalIdentity).not.toHaveBeenCalled();
   });
 });
 
