@@ -188,10 +188,7 @@ function NotificationsPanel({
     null,
   );
   const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState<{
-    title: string;
-    body: string;
-  } | null>(null);
+  const [messageOf, setMessageOf] = useState<TNotification | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Refetch on every open — notifications are otherwise only fetched at boot, so
@@ -356,12 +353,15 @@ function NotificationsPanel({
     [onOverrideRead, onRefetchNotifications, toast],
   );
 
-  // Reading it is what marks it read; a place it is about, or the message it
-  // carries, opens on top.
+  // Reading it is what marks it read; a place it is about opens on top. A
+  // message is read once its dialog closes: marked on open, its row would leave
+  // the Unread bucket under the dialog, and focus would have nowhere to return.
   const openNotification = (n: TNotification) => {
+    if (notificationAnnouncement(n)) {
+      setMessageOf(n);
+      return;
+    }
     if (!n.read) void setRead([n.id], true);
-    const announcement = notificationAnnouncement(n);
-    if (announcement) setMessage(announcement);
     const placeId = notificationPlaceId(n);
     if (placeId) {
       setSelectedPlaceID(placeId);
@@ -1009,7 +1009,13 @@ function NotificationsPanel({
         }}
         onClose={() => setPendingConfirm(null)}
       />
-      <AnnouncementDialog message={message} onClose={() => setMessage(null)} />
+      <AnnouncementDialog
+        message={messageOf && notificationAnnouncement(messageOf)}
+        onClose={() => {
+          if (messageOf && !messageOf.read) void setRead([messageOf.id], true);
+          setMessageOf(null);
+        }}
+      />
     </div>
   );
 }

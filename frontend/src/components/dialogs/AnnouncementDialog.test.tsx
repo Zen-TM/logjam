@@ -52,6 +52,7 @@ describe("AnnouncementDialog", () => {
     expect(dialog.querySelector("em")?.textContent).toBe("slanted");
     expect(dialog.querySelector("code")?.textContent).toBe("code");
     expect(dialog.querySelector("br")).toBeTruthy();
+    expect(view.getByRole("link").textContent).toBe("a link");
     expect(dialog.querySelectorAll("ul > li")).toHaveLength(2);
     expect(dialog.querySelector("ol")?.getAttribute("start")).toBe("3");
     expect(dialog.querySelectorAll("ol > li")).toHaveLength(2);

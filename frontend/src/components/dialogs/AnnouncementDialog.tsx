@@ -31,6 +31,8 @@ function inlines(nodes: MessageInline[]): ReactNode[] {
         );
       case "break":
         return <br key={i} />;
+      default:
+        return node satisfies never;
     }
   });
 }
@@ -43,10 +45,7 @@ function block(node: MessageBlock, i: number): ReactNode {
     case "heading": {
       const Tag = HEADING_TAG[node.level];
       return (
-        <Tag
-          key={i}
-          className={node.level === 1 ? classes.heading : classes.subheading}
-        >
+        <Tag key={i} className={classes.heading}>
           {inlines(node.children)}
         </Tag>
       );
@@ -71,6 +70,8 @@ function block(node: MessageBlock, i: number): ReactNode {
         </ul>
       );
     }
+    default:
+      return node satisfies never;
   }
 }
 

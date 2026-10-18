@@ -77,35 +77,21 @@ async function openApp(page: Page) {
   });
 }
 
-/**
- * A made-up maintainer announcement on top of the real inbox, already read so
- * opening it writes nothing to the account.
- */
-async function withAnnouncement(page: Page) {
+/** The seed's announcement (api/prisma/seed.ts), marked read here so opening it
+ *  writes nothing to the account. */
+const SEEDED_ANNOUNCEMENT = "Logjam is moving to a new server";
+
+async function withAnnouncementRead(page: Page) {
   await page.route("**/notifications", async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     const response = await route.fetch();
-    const rows = await response.json();
-    const announcement = {
-      id: "00000000-0000-4000-8000-00000000a11e",
-      type: "announcement",
-      read: true,
-      createdAt: new Date().toISOString(),
-      payload: {
-        announcementId: "00000000-0000-4000-8000-00000000a11f",
-        title: "Track sharing is here",
-        body: [
-          "## What's new",
-          "You can now **share a track** with a friend, from its *own page*.",
-          "",
-          "- Open the track",
-          "- Press `Share`",
-          "",
-          "Questions? [Write to us](mailto:hello@example.com).",
-        ].join("\n"),
-      },
-    };
-    await route.fulfill({ response, json: [announcement, ...rows] });
+    const rows: { type: string }[] = await response.json();
+    await route.fulfill({
+      response,
+      json: rows.map((row) =>
+        row.type === "announcement" ? { ...row, read: true } : row,
+      ),
+    });
   });
 }
 
@@ -119,9 +105,9 @@ async function openAnnouncement(page: Page, narrow = false) {
   }
   await page
     .locator("aside")
-    .getByRole("button", { name: "Track sharing is here", exact: true })
+    .getByRole("button", { name: SEEDED_ANNOUNCEMENT, exact: true })
     .click({ timeout: 15_000 });
-  const dialog = page.getByRole("dialog", { name: "Track sharing is here" });
+  const dialog = page.getByRole("dialog", { name: SEEDED_ANNOUNCEMENT });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -426,7 +412,7 @@ test.describe("desktop", () => {
   });
 
   test("a maintainer announcement opened from its row", async ({ page }) => {
-    await withAnnouncement(page);
+    await withAnnouncementRead(page);
     await openApp(page);
     const dialog = await openAnnouncement(page);
     await expect(dialog.getByRole("heading", { level: 2 })).toBeFocused();
@@ -1002,7 +988,7 @@ test.describe("narrow web", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test("a maintainer announcement inside the phone", async ({ page }) => {
-    await withAnnouncement(page);
+    await withAnnouncementRead(page);
     await openApp(page);
     const dialog = await openAnnouncement(page, true);
     await expectNoViolations(page, "dialog");

@@ -5,6 +5,8 @@
 
 .message {
   margin-top: var(--space-1-5);
+  /* A bare URL or a long path is one word: wrapped, never scrolled sideways. */
+  overflow-wrap: anywhere;
 }
 
 .message > * {
@@ -15,11 +17,9 @@
   margin-top: var(--space-1-5);
 }
 
+/* One role for every level, the nearest below the dialog title's `heading`
+   (shared/DESIGN.md §2); the tag carries the level. */
 .heading {
-  composes: heading from "../../textRoles.generated.module.css";
-}
-
-.subheading {
   composes: rowTitle from "../../textRoles.generated.module.css";
 }
 
