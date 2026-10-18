@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:ex="http://earth.google.com/kml/ext">
+<Document id="document">
+	<ex:extension>base64;AAAA</ex:extension>
+	<name>Untitled KML file</name>
+	<gx:CascadingStyle kml:id="__managed_style_0000000000000000000_normal">
+		<ex:extension>base64;AAAA</ex:extension>
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=d32f2f&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff9dc9fb</color>
+				<width>3</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+				<displayMode>hide</displayMode>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_0000000000000000000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_0000000000000000000_normal</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Placemark id="00000000000000000000">
+		<name>Corpus Drawn Path</name>
+		<LookAt>
+			<longitude>150.0900</longitude>
+			<latitude>-33.0800</latitude>
+			<altitude>600</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>2500</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0000000000000000000</styleUrl>
+		<LineString>
+			<coordinates>
+				150.0900,-33.0800,0 150.0911,-33.0809,0 150.0925,-33.0818,0
+			</coordinates>
+		</LineString>
+	</Placemark>
+</Document>
+</kml>

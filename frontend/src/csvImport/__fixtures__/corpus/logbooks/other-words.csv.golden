@@ -1,0 +1,11 @@
+{
+  "headers": [
+    "Canyon",
+    "Day",
+    "Who"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "unknown",
+  "blocked": "not a place list or logbook"
+}

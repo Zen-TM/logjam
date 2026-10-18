@@ -16,3 +16,9 @@ indent_style = tab
 
 [*.md]
 trim_trailing_whitespace = false
+
+# The Excel export fixture is the CRLF + BOM case (.gitattributes keeps it
+# byte-exact); an editor must not normalise it.
+[frontend/src/csvImport/__fixtures__/corpus/places/excel-utf8-bom-crlf.csv]
+charset = utf-8-bom
+end_of_line = crlf
