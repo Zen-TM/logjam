@@ -378,6 +378,48 @@ export function matchPlace(
   return { confidence, best, candidates: ranked };
 }
 
+// Whole-word prefix of a longer name: "Wollangambe" for "Wollangambe One".
+// nameTier refuses this on purpose (a bare name cannot say which numbered place
+// it means), so it is a separate step that only ever offers candidates: always
+// "review", never "auto", and `best` is set only when exactly one place fits.
+function isTokenPrefix(input: NormalizedName, other: NormalizedName): boolean {
+  return (
+    input.base.length >= 4 &&
+    input.tokens.length < other.tokens.length &&
+    input.tokens.every((token, i) => token === other.tokens[i]) &&
+    setsEqual(input.qualifiers, other.qualifiers)
+  );
+}
+
+// matchPlace for a logbook row, which carries a name and nothing else: when no
+// place matches, offer the places whose name starts with the row's name.
+export function matchTripPlace(
+  name: string,
+  candidates: MatchCandidate[],
+): MatchResult {
+  const result = matchPlace({ name }, candidates);
+  if (result.confidence !== "none") return result;
+  const inputNorm = normalizePlaceName(name);
+  const fits = candidates
+    .filter((candidate) =>
+      [candidate.name, ...candidate.altNames].some((n) =>
+        isTokenPrefix(inputNorm, normalizePlaceName(n)),
+      ),
+    )
+    // Names are the only order a reviewer can read the cut by when more than
+    // TOP_CANDIDATES fit.
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (fits.length === 0) return result;
+  const scored: ScoredCandidate[] = fits
+    .slice(0, TOP_CANDIDATES)
+    .map((candidate) => ({ candidate, tier: "typo", distanceMeters: null }));
+  return {
+    confidence: "review",
+    best: fits.length === 1 ? scored[0] : null,
+    candidates: scored,
+  };
+}
+
 // Should a surfaced (confidence "review") place-import row start on "merge into
 // this match", or on "create as new"?
 //

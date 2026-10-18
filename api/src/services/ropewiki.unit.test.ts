@@ -107,7 +107,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     return [HEADER, ...dataRows].join("\n");
   }
 
-  it("parses longest rappel in feet, metres, and bare-number (assumed feet)", async () => {
+  it("parses longest rappel in feet, metres, and a bare number (unit unknown, so none)", async () => {
     mockFetchCsv(
       rows(
         `1,Feet,"${COORD}",,,30 ft,,`,
@@ -116,7 +116,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
       ),
     );
     const { places } = await fetchAndParseRopeWiki();
-    expect(places.map((c) => c.longestAbseil)).toEqual([9.1, 18, 30.5]);
+    expect(places.map((c) => c.longestAbseil)).toEqual([9.1, 18, null]);
   });
 
   it("parses min time as a single value and as a range mean", async () => {

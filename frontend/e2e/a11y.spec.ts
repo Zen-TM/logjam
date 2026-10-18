@@ -33,10 +33,18 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
  * on its own — anything translucent over a card's caption is under AA.
  */
 async function settled(page: Page) {
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll("dialog[open]")].every(
-      (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
-    ),
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("dialog[open]")].every(
+        (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
+      ) &&
+      // A button's 150 ms background-color transition otherwise lets axe read
+      // a half-way colour (the flaky "Make a LiDAR topo" case).
+      document
+        .getAnimations()
+        .every(
+          (a) => !(a instanceof CSSTransition) || a.playState !== "running",
+        ),
   );
 }
 

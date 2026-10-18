@@ -2706,7 +2706,11 @@ def fetch_osm_features(
     # Multiple Overpass mirrors — the main endpoint has been returning 406
     # for requests coming from AWS Fargate egress IPs. Rotate across mirrors
     # so transient blocks on one don't kill the whole layer.
+    # OVERPASS_ENDPOINTS (comma-separated) replaces the list: CI's topo-e2e job
+    # points it at a stub serving a committed response (tests/e2e/).
     endpoints = [
+        e for e in os.environ.get("OVERPASS_ENDPOINTS", "").split(",") if e
+    ] or [
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",

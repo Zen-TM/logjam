@@ -17,6 +17,7 @@ import {
   validateRasterTemplateSettings,
   validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
+  RASTER_TEMPLATE_DEFAULTS,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -142,9 +143,9 @@ router.post(
     );
     await assertHasStorageQuota(user.id);
 
-    // Optional raster template settings. Worker falls back to its built-in
-    // defaults if layerOptions is null.
-    let layerOptions: object | undefined;
+    // Optional raster template settings: without them the job gets the
+    // defaults Logjam Web sends, since the worker has no fallback of its own.
+    let layerOptions: object = RASTER_TEMPLATE_DEFAULTS;
     if (settings !== undefined && settings !== null) {
       const validation = validateRasterTemplateSettings(settings);
       if (!validation.ok) {
@@ -184,7 +185,7 @@ router.post(
         name: jobName ?? null,
         tileCount: tileCount ?? null,
         estimatedSeconds,
-        layerOptions: layerOptions ?? undefined,
+        layerOptions,
         autoExport: autoExportConfig ?? undefined,
         vectorStyleSnapshot,
       },
