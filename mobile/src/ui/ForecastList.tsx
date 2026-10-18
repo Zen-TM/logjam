@@ -1,6 +1,13 @@
 import { Text, View } from "react-native";
 
-import { makeStyles, radius, spacing, useTheme, withAlpha } from "../theme";
+import {
+  makeStyles,
+  muted,
+  radius,
+  spacing,
+  useTheme,
+  withAlpha,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 export type ForecastRow = {
@@ -43,16 +50,12 @@ export function ForecastList({
             {row.day}
           </Text>
           <Icon idea={row.glyph} size={22} color={theme.text} />
-          <Text
-            style={[
-              styles.cell,
-              styles.temperature,
-              row.current && styles.emphasis,
-            ]}
-          >
-            {row.temperature}
-          </Text>
-          <Text style={[styles.cell, styles.rain]}>{row.rain}</Text>
+          <View style={styles.figures}>
+            <Text style={[styles.cell, row.current && styles.emphasis]}>
+              {row.temperature}
+            </Text>
+            <Text style={styles.rain}>{row.rain}</Text>
+          </View>
           <Text style={[styles.cell, styles.wind]}>{row.wind}</Text>
         </View>
       ))}
@@ -74,7 +77,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   day: {
     ...textRole.detail,
     color: theme.text,
-    width: spacing(6),
+    // Wide enough for "Today" and "Wed 21" on one line at the default text size.
+    width: spacing(6) + spacing(2),
     fontVariant: ["tabular-nums"],
   },
   emphasis: { ...textRole.control },
@@ -83,7 +87,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     color: theme.text,
     fontVariant: ["tabular-nums"],
   },
-  temperature: { flex: 3 },
-  rain: { flex: 5 },
-  wind: { flex: 3, textAlign: "right" },
+  // The rain sits under the temperature, as on Logjam Web: four figures do
+  // not fit one line of a phone at the default text size.
+  figures: { flex: 1 },
+  rain: { ...muted(theme, textRole.detail), fontVariant: ["tabular-nums"] },
+  wind: { textAlign: "right" },
 }));
