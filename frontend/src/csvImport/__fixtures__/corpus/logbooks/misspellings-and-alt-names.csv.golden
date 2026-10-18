@@ -1,0 +1,204 @@
+{
+  "headers": [
+    "Name",
+    "Date",
+    "Notes"
+  ],
+  "dataRows": 11,
+  "parseErrors": [],
+  "kind": "triplog",
+  "assignments": {
+    "Name": "name",
+    "Date": "date",
+    "Notes": "notes"
+  },
+  "dateFormat": "DD/MM/YYYY",
+  "ambiguousDates": false,
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourcePlaceName": "Claustal Canyon",
+      "date": "2021-05-01",
+      "notes": "One letter missing",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 1,
+      "sourcePlaceName": "Wollangambe 1",
+      "date": "2021-05-02",
+      "notes": "A digit for a number word",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 2,
+      "sourcePlaceName": "wollangambe one",
+      "date": "2021-05-03",
+      "notes": "Lower case",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 3,
+      "sourcePlaceName": "Jugglers",
+      "date": "2021-05-04",
+      "notes": "Short name",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 4,
+      "sourcePlaceName": "Heart Attack",
+      "date": "2021-05-05",
+      "notes": "Short name",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 5,
+      "sourcePlaceName": "Du Faur",
+      "date": "2021-05-06",
+      "notes": "Short name",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 6,
+      "sourcePlaceName": "Valley-of-the-Waters",
+      "date": "2021-05-07",
+      "notes": "Alt name of Empress Falls",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 7,
+      "sourcePlaceName": "Sarcophagus Canyon (Upper)",
+      "date": "2021-05-08",
+      "notes": "A qualifier the list does not have",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 8,
+      "sourcePlaceName": "Bowens Creek North",
+      "date": "2021-05-09",
+      "notes": "Qualifier missing",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 9,
+      "sourcePlaceName": "Grand Canyon",
+      "date": "2021-05-10",
+      "notes": "Exact name",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 10,
+      "sourcePlaceName": "Corpus Gone Canyon",
+      "date": "2021-05-11",
+      "notes": "Matches nothing",
+      "types": [],
+      "customFields": {}
+    }
+  ],
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustal Canyon",
+      "decision": "review",
+      "confidence": "review",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Wollangambe 1",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Wollangambe One",
+      "candidates": [
+        "Wollangambe One"
+      ]
+    },
+    {
+      "name": "wollangambe one",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Wollangambe One",
+      "candidates": [
+        "Wollangambe One"
+      ]
+    },
+    {
+      "name": "Jugglers",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Jugglers Canyon",
+      "candidates": [
+        "Jugglers Canyon"
+      ]
+    },
+    {
+      "name": "Heart Attack",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Heart Attack Canyon",
+      "candidates": [
+        "Heart Attack Canyon"
+      ]
+    },
+    {
+      "name": "Du Faur",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Du Faur Creek",
+      "candidates": [
+        "Du Faur Creek"
+      ]
+    },
+    {
+      "name": "Valley-of-the-Waters",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Empress Falls",
+      "candidates": [
+        "Empress Falls"
+      ]
+    },
+    {
+      "name": "Sarcophagus Canyon (Upper)",
+      "decision": "review",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    },
+    {
+      "name": "Bowens Creek North",
+      "decision": "review",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    },
+    {
+      "name": "Grand Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Grand Canyon",
+      "candidates": [
+        "Grand Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Gone Canyon",
+      "decision": "review",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { NOTIFICATION_TYPES } from "@logjam/shared";
 
 const read = (...p: string[]) =>
   readFileSync(join(import.meta.dirname, "..", "..", ...p), "utf8");
@@ -87,8 +88,8 @@ describe("account-delete purge covers every model related to User", () => {
 //
 // Mutations that turn this red: creating a notification in a file not listed
 // here, listing a type its file does not create, or a listed type sent to
-// another user missing from the purge in routes/users.ts. Not caught: a new
-// type added to a file already listed; whoever adds it updates the list.
+// another user missing from the purge in routes/users.ts, or a type added to
+// NOTIFICATION_TYPES that no site lists (or listed but not declared).
 describe("account-delete purge covers every notification type", () => {
   // Every file that creates a notification, and the types it creates.
   const CREATION_SITES: Record<string, string[]> = {
@@ -152,6 +153,12 @@ describe("account-delete purge covers every notification type", () => {
       ),
     );
     expect(missing).toEqual([]);
+  });
+
+  it("lists exactly the declared notification types", () => {
+    expect([...new Set(Object.values(CREATION_SITES).flat())].sort()).toEqual(
+      [...NOTIFICATION_TYPES].sort(),
+    );
   });
 
   it("names each type sent to another user in the purge", () => {
