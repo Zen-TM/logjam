@@ -197,6 +197,8 @@ to GPU-based tile rendering while avoiding CUDA/ROCm dependency complexity.
 `nsw-5m` archive Logjam reads heights from: terrarium PNG tiles, zoom 8 to 15,
 in one PMTiles file. It is a one-off build, separate from the LiDAR pipeline
 above, and needs GDAL with its Python bindings, NumPy, Pillow and the
+[`pmtiles`](https://pypi.org/project/pmtiles/) Python package (all in
+`requirements.txt`). Only `contours` also needs the
 [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary.
 
 ```bash
@@ -236,7 +238,7 @@ Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM:
 | Result | 16.9 GB, 1,027,356 tiles |
 | Disk | 96 GB in use when `pack` finished; allow 150 GB |
 
-Any machine with GDAL, Python and `pmtiles` does: nothing here touches AWS
+Any machine with GDAL and Python does: nothing here touches AWS
 until the archive is published.
 
 ```bash
@@ -263,6 +265,75 @@ No deploy is needed. The API looks for the archive every five minutes and
 starts reading it when it appears; the clients read it on their next lookup.
 If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
 the same week.
+
+### The statewide slope archive
+
+The same 5 m heights as a second archive, `nsw-5m-slope.pmtiles`, whose
+"height" is the slope of the ground in degrees, rounded to 1°, so a client draws
+it as a `raster-dem` `color-relief` layer and the bands are a style, not a
+rebuild. Format and zooms: z15 is Horn's slope over the z15 height tiles
+(`demSlopeAt` in `shared/src/demSlope.ts`, to 0.000004°), each coarser zoom to z8
+the steepest pixel of the four below. A pixel is no-data wherever any of its nine
+heights is.
+
+`slope` reads the finished height archive, not the sheets, so it runs anywhere
+that has the archive:
+
+```bash
+python3 build_nsw_dem.py slope dem/nsw-5m.pmtiles dem/nsw-5m-slope.pmtiles \
+  --extracted "<Month Year>" --jobs 8
+```
+
+`--extracted` is the month the height archive was built with. The work files go
+in `dem/nsw-5m-slope.work/` (`--work` moves them), one per block, and a stopped
+run on the same disk carries on from the blocks it finished. The Python
+`pmtiles` writer spools the archive through `$TMPDIR`: point it at the disk with
+room if `/tmp` is a small tmpfs.
+
+Measured on the Katoomba sheet (6 blocks, 3,649 tiles), on one core of a busy
+laptop: 45 ms a tile on its fullest blocks (the PNG encoding is nearly all of it,
+at level 6), 845 MB peak per job, and 107 MB against the height archive's
+133 MB (it is one of the most rugged sheets, so a worst case). Scaled to the
+state's 1.03 M tiles that is about 13 core-hours, so under two hours on 8 vCPU,
+and 11 to 13 GB out.
+
+#### Building it in AWS
+
+Fargate has what it needs without a new task definition: the
+`logjam-topo-worker` one has 8 vCPU and 16 GB, its role reads and writes the
+topo bucket, and the image carries `build_nsw_dem.py` and the `pmtiles` package.
+Its default disk is 20 GiB, so the run asks for more: about 17 GB of input, 13 GB
+of block files, and a further 13 GB each for the MBTiles the packer builds, its
+spool and the result. Run it after this has merged and *Deploy topo worker* has
+pushed the image. The commands run from your machine with your AWS login; the
+task, not you, moves the 17 GB:
+
+```bash
+cd infra/terraform/envs/prod
+EXTRACTED="<Month Year>"   # as the height archive's credit
+JOB='set -e; cd /tmp
+python3 -c "import boto3; boto3.client(\"s3\").download_file(\"logjam-topo-jobs\", \"master/dem/nsw-5m.pmtiles\", \"nsw-5m.pmtiles\")"
+python3 /app/build_nsw_dem.py slope nsw-5m.pmtiles nsw-5m-slope.pmtiles --extracted "'"$EXTRACTED"'" --jobs 8
+python3 -c "import boto3; boto3.client(\"s3\").upload_file(\"nsw-5m-slope.pmtiles\", \"logjam-topo-jobs\", \"master/dem/nsw-5m-slope.pmtiles\", ExtraArgs={\"ContentType\": \"application/vnd.pmtiles\"})"'
+aws ecs run-task --cluster "$(terraform output -raw ecs_cluster)" --launch-type FARGATE \
+  --task-definition logjam-topo-worker \
+  --network-configuration "awsvpcConfiguration={subnets=[$(terraform output -raw ecs_subnets)],securityGroups=[$(terraform output -raw ecs_security_groups)],assignPublicIp=ENABLED}" \
+  --overrides "$(jq -n --arg job "$JOB" '{ephemeralStorage: {sizeInGiB: 120},
+      containerOverrides: [{name: "topo-worker", command: ["sh", "-c", $job]}]}')"
+```
+
+Follow it with `aws logs tail /ecs/logjam-topo-worker --follow` (one line per
+finished block, 885 in all). A Fargate disk is gone when the task stops, so a
+task that dies starts over: there is no resuming across tasks. When it has
+exited 0, check the result as for the height archive:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles   # 206
+```
+
+The image's command is now a `CMD`, which is what lets a RunTask command
+override run this script under the worker's task role; the worker with no
+override still starts `worker.py`. No Terraform changes.
 
 ---
 

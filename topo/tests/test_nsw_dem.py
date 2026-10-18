@@ -5,6 +5,7 @@ build_nsw_dem.py imports osgeo at module top, so it is stubbed first (the
 topo/tests/_native_stub.py convention).
 """
 
+import math
 import os
 import sys
 import unittest
@@ -18,10 +19,20 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 
 from build_nsw_dem import (  # noqa: E402
     BLOCK_ZOOM,
+    EARTH_CIRCUMFERENCE_M,
+    HEIGHTS,
+    SLOPE,
+    TILE,
+    ZMAX,
     blocks_for,
+    credit,
+    decode_terrarium,
     encode_terrarium,
     halve,
+    halve_max,
+    horn_slope,
     lonlat_to_tile,
+    pixel_size_m,
     tile_bounds_3857,
 )
 
@@ -110,6 +121,112 @@ class TestContourSchema(unittest.TestCase):
             self.assertIn(f'["get", "elev"]], {CONTOUR_MAJOR_M}]', client, path)
             self.assertIn(layer, client, path)
         self.assertEqual(CONTOUR_MAJOR_M % CONTOUR_INTERVAL_M, 0)
+
+
+def plane(rows: int, cols: int, rise_per_col: float) -> np.ndarray:
+    """Heights that climb eastward at a constant rate."""
+    return np.tile(np.arange(cols, dtype=np.float32) * rise_per_col, (rows, 1))
+
+
+class TestHornSlope(unittest.TestCase):
+    cell = np.full(4, 5.0)
+
+    # Mutation: weight the neighbours 1-1-1 instead of 1-2-1, or divide by 4
+    # instead of 8 cells, and every slope is off by a few degrees.
+    def test_a_plane_has_its_own_slope(self):
+        out = horn_slope(plane(6, 6, 10.0), self.cell)  # 10 m up per 5 m across
+        np.testing.assert_allclose(out, np.degrees(np.arctan(2.0)), atol=1e-4)
+
+    # Mutation: leave the border out of the window (NaN it, or edge-replicate
+    # it) and the pixels on a tile edge read as no-data or gentler than their
+    # neighbours, a visible seam on every tile of the archive.
+    def test_two_halves_with_a_border_equal_the_whole(self):
+        rng = np.random.default_rng(1)
+        ground = rng.uniform(0, 200, (6, 10)).astype(np.float32)
+        cell = np.full(4, 5.0)
+        whole = horn_slope(ground, cell)
+        left = horn_slope(ground[:, :6], cell)  # inner columns 1..4
+        right = horn_slope(ground[:, 4:], cell)  # inner columns 5..8
+        np.testing.assert_array_equal(np.hstack([left, right]), whole)
+
+    # Mutation: check only the centre pixel and a hole's neighbours get a slope
+    # made from the eight heights that are there: a confident number about
+    # ground nobody measured (demSlopeAt returns null for the same window).
+    def test_any_of_the_nine_being_no_data_makes_the_pixel_no_data(self):
+        for row, col in [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (2, 2)]:
+            window = plane(3, 3, 1.0)
+            window[row, col] = np.nan
+            self.assertTrue(np.isnan(horn_slope(window, np.array([5.0]))[0, 0]))
+
+    # Mutation: one cell size for the whole tile, or the equator's, and slopes
+    # in the south of the state read steeper than `demSlopeAt` reports them.
+    def test_a_pixel_is_smaller_further_from_the_equator(self):
+        across = 2**ZMAX * TILE
+        lat = -33.706
+        y = (1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * across
+        got = pixel_size_m(int(y), 1)[0]
+        self.assertAlmostEqual(
+            got, EARTH_CIRCUMFERENCE_M * math.cos(math.radians(lat)) / across, 3
+        )
+        self.assertLess(got, EARTH_CIRCUMFERENCE_M / across * 0.84)
+
+    # Mutation: change the constant here alone and archive slopes drift from
+    # what the clients compute at a tap, so a colour and a number disagree.
+    def test_the_earth_is_the_one_demSlope_uses(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        with open(os.path.join(root, "shared/src/demSlope.ts")) as f:
+            self.assertIn(
+                f"EARTH_CIRCUMFERENCE_M = {EARTH_CIRCUMFERENCE_M:_.3f}".rstrip("0"),
+                f.read(),
+            )
+
+
+class TestHalveMax(unittest.TestCase):
+    # Mutation: a mean (or `halve`) turns a one-pixel cliff into gentle ground
+    # at every coarser zoom, so it vanishes from the map where it matters.
+    def test_keeps_the_steepest_of_each_2x2(self):
+        grid = np.array([[1, 80, 10, 10], [5, 7, 10, 12]], np.float32)
+        np.testing.assert_array_equal(halve_max(grid), [[80, 12]])
+
+    # Mutation: a plain max propagates NaN and the coast's edge pixels, next to
+    # a no-data pixel, lose their slope at every zoom; a fill of 0 does the same
+    # for a quad that is all no-data, which must stay empty.
+    def test_ignores_no_data_and_keeps_all_no_data_empty(self):
+        nan = np.nan
+        grid = np.array([[2, nan, nan, nan], [4, nan, nan, nan]], np.float32)
+        out = halve_max(grid)
+        self.assertEqual(out[0, 0], 4)
+        self.assertTrue(np.isnan(out[0, 1]))
+
+
+class TestSlopeEncoding(unittest.TestCase):
+    # Mutation: encode with ROUNDING_M (a quarter) instead of the slope's whole
+    # degrees and the archive grows by a third for digits no band can show.
+    def test_rounds_to_a_whole_degree_and_round_trips(self):
+        slope = np.array([[0.4, 0.6, 63.43, 90.0]], np.float32)
+        rgb = encode_terrarium(slope, ~np.isnan(slope), SLOPE.rounding)
+        np.testing.assert_array_equal(decode(rgb), [[0, 1, 63, 90]])
+        np.testing.assert_array_equal(decode_terrarium(rgb), [[0, 1, 63, 90]])
+
+    # Mutation: treat a slope of 0 as no-data (a `if value` test) and every flat
+    # lake and floodplain becomes a hole the clients draw nothing on.
+    def test_flat_ground_is_not_no_data(self):
+        flat = np.array([[0.0, np.nan]], np.float32)
+        rgb = encode_terrarium(flat, ~np.isnan(flat), SLOPE.rounding)
+        self.assertNotEqual(tuple(rgb[0, 0]), (0, 0, 0))
+        out = decode_terrarium(rgb)
+        self.assertEqual(out[0, 0], 0)
+        self.assertTrue(np.isnan(out[0, 1]))
+
+    # Mutation: change the credit's wording for one archive alone and the
+    # slope carries a different licence line than the heights it derives from.
+    def test_both_archives_carry_the_credit_of_the_heights(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        with open(os.path.join(root, "shared/src/demSources.ts")) as f:
+            source = f.read()
+        tail = credit(HEIGHTS, "October 2026").split("the NSW 5 m", 1)[1]
+        self.assertIn(tail, source)
+        self.assertEqual(credit(SLOPE, "October 2026").split("the NSW 5 m", 1)[1], tail)
 
 
 if __name__ == "__main__":

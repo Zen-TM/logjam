@@ -11,12 +11,13 @@ docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md
     build_nsw_dem.py tile  SRC WORK [--jobs N]
     build_nsw_dem.py pack  WORK OUT.pmtiles --extracted "October 2026"
     build_nsw_dem.py contours SRC WORK OUT.pmtiles --extracted "October 2026"
+    build_nsw_dem.py slope IN.pmtiles OUT.pmtiles --extracted "October 2026" [--jobs N]
 
-`fetch` and `tile` skip what is already done, so a killed run restarts where
-it stopped. Run `tile` only once every sheet is fetched: a finished block is
-not rebuilt when a neighbouring sheet arrives later. `pack` needs the
-`pmtiles` binary (go-pmtiles) on PATH, and stamps the archive with the month
-the sheets were downloaded, which the data's licence asks derived products to
+`fetch`, `tile` and `slope` skip what is already done, so a killed run restarts
+where it stopped. Run `tile` only once every sheet is fetched: a finished block
+is not rebuilt when a neighbouring sheet arrives later. `pack` and `slope` need
+the `pmtiles` Python package, and stamp the archive with the month the sheets
+were downloaded, which the data's licence asks derived products to
 show (docs/decisions/0031-nsw-heights-come-from-the-spatial-services-5m-dem.md).
 
 The work unit is one zoom-10 tile (a "block", about 33 km across here), NOT
@@ -25,6 +26,11 @@ both neighbours, so each block is warped from every sheet that touches it.
 
 Heights are averaged down for each coarser zoom BEFORE encoding. Averaging
 the encoded RGB instead is wrong: it is not a linear encoding per channel.
+
+`slope` reads the finished height archive and
+writes a second archive in the same format whose "height" is the slope of the
+ground in degrees, so a client draws it as a raster-dem `color-relief` layer
+and the bands stay a style paint expression.
 """
 
 import argparse
@@ -39,9 +45,10 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 from osgeo import gdal, osr
@@ -58,6 +65,10 @@ BLOCK_TILES = 2 ** (ZMAX - BLOCK_ZOOM)  # z15 tiles along one block edge
 # open ground. At 1/8 m a rugged tile is ~22 % larger.
 ROUNDING_M = 0.25
 NODATA = -9999.0
+# Whole degrees: a band edge cannot be told from the next degree, and half the
+# bytes of 0.25 degree steps (lab/REPORT.md).
+SLOPE_ROUNDING_DEG = 1.0
+EARTH_CIRCUMFERENCE_M = 40_075_016.686  # as demSlope.ts: the colour and the tap agree
 # The widest gap interpolated across, in z15 pixels (~4 m each). Enough for
 # the join between two sheets; a real hole in the data is far wider and stays.
 SEAM_FILL_PX = 4
@@ -73,13 +84,15 @@ SHEET_URL = "https://portal.spatial.nsw.gov.au/download/dem/{zone}/{sheet}.zip"
 # ── Pure pieces (topo/tests/test_nsw_dem.py) ─────────────────────────────────
 
 
-def encode_terrarium(heights: np.ndarray, valid: np.ndarray) -> np.ndarray:
-    """Heights (m) to terrarium RGB, rounded to ROUNDING_M.
+def encode_terrarium(
+    heights: np.ndarray, valid: np.ndarray, rounding: float = ROUNDING_M
+) -> np.ndarray:
+    """Heights (m) to terrarium RGB, rounded to `rounding`.
 
     A no-data pixel is (0, 0, 0), which decodes to -32768 m: the value
     `demSampleHeight` in shared/src/demTiles.ts reads as "no height here".
     """
-    rounded = np.round(heights / ROUNDING_M) * ROUNDING_M
+    rounded = np.round(heights / rounding) * rounding
     v = np.where(valid, rounded + 32768.0, 0.0)
     r = np.floor(v / 256)
     g = np.floor(v - r * 256)
@@ -97,6 +110,82 @@ def halve(heights: np.ndarray) -> np.ndarray:
     count = known.sum(axis=2)
     total = np.where(known, quads, 0.0).sum(axis=2)
     return np.where(count > 0, total / np.maximum(count, 1), np.nan).astype(np.float32)
+
+
+def halve_max(grid: np.ndarray) -> np.ndarray:
+    """The next coarser zoom of a slope grid: the steepest of each 2x2, ignoring
+    no-data (NaN).
+
+    The max, not the mean: a cliff is a few pixels wide, and averaged into its
+    gentle neighbours it would stop being steep at the zooms a map is read at.
+    """
+    h, w = grid.shape
+    quads = grid.reshape(h // 2, 2, w // 2, 2).swapaxes(1, 2).reshape(h // 2, w // 2, 4)
+    return np.fmax.reduce(quads, axis=2).astype(np.float32)
+
+
+@dataclass(frozen=True)
+class Layer:
+    """What differs between the height archive and the slope archive."""
+
+    name: str
+    derived: str
+    reduce: Callable[[np.ndarray], np.ndarray]  # one zoom to the next coarser
+    rounding: float
+    png_level: int
+
+
+HEIGHTS = Layer("NSW 5 m DEM", "Derived from", halve, ROUNDING_M, 9)
+# Level 6, not 9: measured on every z15 tile of the Katoomba sheet, level 9 takes
+# ~250 ms a slope tile to save 8 to 12 % of the bytes, and level 6 takes ~17 ms.
+# Statewide that is ~8 core-hours against ~85 (lab/REPORT.md, "The cheap
+# statewide slope"). Heights stay at 9: their build is dominated by the warp.
+SLOPE = Layer(
+    "NSW 5 m DEM slope", "Slope derived from", halve_max, SLOPE_ROUNDING_DEG, 6
+)
+
+
+def decode_terrarium(rgb: np.ndarray) -> np.ndarray:
+    """The inverse of `encode_terrarium`: float32 values, NaN where no-data."""
+    r, g, b = (rgb[..., i].astype(np.float64) for i in range(3))
+    value = r * 256 + g + b / 256 - 32768
+    return np.where(value <= -32000, np.nan, value).astype(np.float32)
+
+
+def pixel_size_m(first_row: int, rows: int, zoom: int = ZMAX) -> np.ndarray:
+    """Ground size of a pixel on each of `rows` rows from global pixel row
+    `first_row`. Web Mercator is conformal, so it is the same both ways."""
+    pixels_across = 2**zoom * TILE
+    y = (first_row + np.arange(rows) + 0.5) / pixels_across
+    lat = np.arctan(np.sinh(np.pi * (1 - 2 * y)))
+    return EARTH_CIRCUMFERENCE_M * np.cos(lat) / pixels_across
+
+
+def horn_slope(window: np.ndarray, cell_m: np.ndarray) -> np.ndarray:
+    """Slope in degrees of the inside of a window that has a one-pixel border.
+
+    Horn's method over each pixel's eight neighbours, as `slopeDegrees` in
+    shared/src/demSlope.ts: NaN wherever any of the nine heights is NaN. `cell_m`
+    is the pixel size on each row of the inside.
+    """
+    win = window.astype(np.float64)
+    nw, n, ne = win[:-2, :-2], win[:-2, 1:-1], win[:-2, 2:]
+    w, e = win[1:-1, :-2], win[1:-1, 2:]
+    sw, s, se = win[2:, :-2], win[2:, 1:-1], win[2:, 2:]
+    cell = cell_m[:, None]
+    eastward = ((ne + 2 * e + se) - (nw + 2 * w + sw)) / (8 * cell)
+    southward = ((sw + 2 * s + se) - (nw + 2 * n + ne)) / (8 * cell)
+    out = np.degrees(np.arctan(np.hypot(eastward, southward)))
+    # The centre pixel is not in Horn's sums but is one of the nine.
+    return np.where(np.isnan(win[1:-1, 1:-1]), np.nan, out).astype(np.float32)
+
+
+def credit(layer: Layer, extracted: str) -> str:
+    """The attribution the licence asks of a derived product."""
+    return (
+        f"{layer.derived} the NSW 5 m Digital Elevation Model, © State of New"
+        f" South Wales (Spatial Services), extracted {extracted}. CC BY 3.0 AU."
+    )
 
 
 def tile_bounds_3857(z: int, x: int, y: int) -> Tuple[float, float, float, float]:
@@ -131,20 +220,21 @@ def blocks_for(extent: Tuple[float, float, float, float]) -> Iterator[Tuple[int,
             yield x, y
 
 
-def png_bytes(rgb: np.ndarray) -> bytes:
+def png_bytes(rgb: np.ndarray, level: int = 9) -> bytes:
     out = io.BytesIO()
-    Image.fromarray(rgb).save(out, "PNG", compress_level=9)
+    Image.fromarray(rgb).save(out, "PNG", compress_level=level)
     return out.getvalue()
 
 
-def tiles_of(heights: np.ndarray, z: int, x0: int, y0: int):
-    """(z, x, y, png) for each tile of a square height grid that has a height."""
-    for row in range(heights.shape[0] // TILE):
-        for col in range(heights.shape[1] // TILE):
-            h = heights[row * TILE : (row + 1) * TILE, col * TILE : (col + 1) * TILE]
+def tiles_of(grid: np.ndarray, z: int, x0: int, y0: int, layer: Layer = HEIGHTS):
+    """(z, x, y, png) for each tile of a square grid that has a value."""
+    for row in range(grid.shape[0] // TILE):
+        for col in range(grid.shape[1] // TILE):
+            h = grid[row * TILE : (row + 1) * TILE, col * TILE : (col + 1) * TILE]
             valid = ~np.isnan(h)
             if valid.any():
-                yield z, x0 + col, y0 + row, png_bytes(encode_terrarium(h, valid))
+                rgb = encode_terrarium(h, valid, layer.rounding)
+                yield z, x0 + col, y0 + row, png_bytes(rgb, layer.png_level)
 
 
 # ── fetch ────────────────────────────────────────────────────────────────────
@@ -218,6 +308,28 @@ def open_block_db(path: Path) -> sqlite3.Connection:
     return db
 
 
+def save_block(grid: np.ndarray, bx: int, by: int, work: Path, layer: Layer) -> int:
+    """Encode a block's z15 grid and every zoom down to its z10 tile into the
+    block's file in `work`, renamed into place whole. Returns the tile count."""
+    tmp = work / f"{bx}-{by}.tmp"
+    tmp.unlink(missing_ok=True)
+    db = open_block_db(tmp)
+    count = 0
+    for z in range(ZMAX, BLOCK_ZOOM - 1, -1):
+        scale = 2 ** (z - BLOCK_ZOOM)
+        rows = list(tiles_of(grid, z, bx * scale, by * scale, layer))
+        db.executemany("insert into tiles values (?,?,?,?)", rows)
+        count += len(rows)
+        if z > BLOCK_ZOOM:
+            grid = layer.reduce(grid)
+    db.commit()
+    db.close()
+    # The block's own tile, for `pack` to reduce into z9 and z8.
+    np.save(work / f"{bx}-{by}.npy", grid)
+    tmp.rename(work / f"{bx}-{by}.sqlite")
+    return count
+
+
 def build_block(job: Tuple[int, int, List[str], str]) -> Optional[str]:
     bx, by, sheets, work = job
     done = Path(work) / f"{bx}-{by}.sqlite"
@@ -247,22 +359,7 @@ def build_block(job: Tuple[int, int, List[str], str]) -> Optional[str]:
     warped = None
     heights[heights <= -1000] = np.nan
 
-    tmp = Path(work) / f"{bx}-{by}.tmp"
-    tmp.unlink(missing_ok=True)
-    db = open_block_db(tmp)
-    count = 0
-    for z in range(ZMAX, BLOCK_ZOOM - 1, -1):
-        scale = 2 ** (z - BLOCK_ZOOM)
-        rows = list(tiles_of(heights, z, bx * scale, by * scale))
-        db.executemany("insert into tiles values (?,?,?,?)", rows)
-        count += len(rows)
-        if z > BLOCK_ZOOM:
-            heights = halve(heights)
-    db.commit()
-    db.close()
-    # The block's own tile as heights, for `pack` to average into z9 and z8.
-    np.save(Path(work) / f"{bx}-{by}.npy", heights)
-    tmp.rename(done)
+    count = save_block(heights, bx, by, Path(work), HEIGHTS)
     return f"{bx}/{by}: {count} tiles from {len(sheets)} sheet(s)"
 
 
@@ -285,8 +382,8 @@ def tile(src: Path, work: Path, jobs: int) -> None:
 # ── pack ─────────────────────────────────────────────────────────────────────
 
 
-def coarse_tiles(work: Path):
-    """z9 and z8, averaged from the blocks' own z10 heights."""
+def coarse_tiles(work: Path, layer: Layer = HEIGHTS):
+    """z9 and z8, reduced from the blocks' own z10 grids."""
     level: Dict[Tuple[int, int], np.ndarray] = {}
     for path in work.glob("*.npy"):
         bx, by = (int(n) for n in path.stem.split("-"))
@@ -302,14 +399,14 @@ def coarse_tiles(work: Path):
                         quad[
                             dy * TILE : (dy + 1) * TILE, dx * TILE : (dx + 1) * TILE
                         ] = child
-            parents[(px, py)] = halve(quad)
-            yield from tiles_of(parents[(px, py)], z, px, py)
+            parents[(px, py)] = layer.reduce(quad)
+            yield from tiles_of(parents[(px, py)], z, px, py, layer)
         level = parents
 
 
-def pack(work: Path, out: Path, extracted: str) -> None:
-    if not shutil.which("pmtiles"):
-        sys.exit("pack needs the `pmtiles` binary (go-pmtiles) on PATH")
+def pack(work: Path, out: Path, extracted: str, layer: Layer = HEIGHTS) -> None:
+    from pmtiles.convert import mbtiles_to_pmtiles
+
     out.parent.mkdir(parents=True, exist_ok=True)
     mbtiles = out.with_suffix(".mbtiles")
     mbtiles.unlink(missing_ok=True)
@@ -331,7 +428,7 @@ def pack(work: Path, out: Path, extracted: str) -> None:
         with contextlib.closing(sqlite3.connect(block)) as tiles:
             rows = tiles.execute("select z, x, y, data from tiles")
             db.executemany(insert, flipped(rows))
-    db.executemany(insert, flipped(coarse_tiles(work)))
+    db.executemany(insert, flipped(coarse_tiles(work, layer)))
     db.execute(
         "create unique index tile_index on tiles (zoom_level, tile_column, tile_row)"
     )
@@ -351,23 +448,109 @@ def pack(work: Path, out: Path, extracted: str) -> None:
     metadata = {
         "bounds": f"{west},{south},{east},{north}",
         "center": f"{(west + east) / 2},{(south + north) / 2},{ZMIN}",
-        "name": "NSW 5 m DEM",
+        "name": layer.name,
         "format": "png",
         "type": "baselayer",
         "encoding": "terrarium",
         "minzoom": str(ZMIN),
         "maxzoom": str(ZMAX),
-        "attribution": (
-            "Derived from the NSW 5 m Digital Elevation Model, © State of New"
-            f" South Wales (Spatial Services), extracted {extracted}."
-            " CC BY 3.0 AU."
-        ),
+        "attribution": credit(layer, extracted),
     }
     db.executemany("insert into metadata values (?,?)", metadata.items())
     db.commit()
     db.close()
-    subprocess.run(["pmtiles", "convert", str(mbtiles), str(out)], check=True)
+    mbtiles_to_pmtiles(str(mbtiles), str(out), None)
     mbtiles.unlink()
+
+
+# ── slope ────────────────────────────────────────────────────────────────────
+
+
+_heights = None  # this process's reader of the height archive
+
+
+def open_heights(archive: Path):
+    """A reader of the height archive. PMTiles read in place: `pmtiles convert`
+    only goes from MBTiles to PMTiles, and the archive is too big to unpack."""
+    from pmtiles.reader import MmapSource, Reader
+
+    return Reader(MmapSource(open(archive, "rb")))
+
+
+def init_worker(archive: Path) -> None:
+    global _heights
+    _heights = open_heights(archive)
+
+
+def height_tile(reader, z: int, x: int, y: int) -> Optional[np.ndarray]:
+    """A terrarium tile as values, or None where the archive has none."""
+    png = reader.get(z, x, y)
+    if png is None:
+        return None
+    return decode_terrarium(np.asarray(Image.open(io.BytesIO(png)).convert("RGB")))
+
+
+def slope_block(job: Tuple[int, int, str]) -> Optional[str]:
+    bx, by, work = job
+    if (Path(work) / f"{bx}-{by}.sqlite").exists():
+        return None
+    # The block's z15 tiles and a ring of its neighbours', so Horn is seamless
+    # across a block edge as well as a tile edge.
+    n = BLOCK_TILES + 2
+    padded = np.full((n * TILE, n * TILE), np.nan, np.float32)
+    for row in range(n):
+        for col in range(n):
+            height = height_tile(
+                _heights, ZMAX, bx * BLOCK_TILES - 1 + col, by * BLOCK_TILES - 1 + row
+            )
+            if height is not None:
+                padded[row * TILE : (row + 1) * TILE, col * TILE : (col + 1) * TILE] = (
+                    height
+                )
+    size = BLOCK_TILES * TILE
+    slope = np.empty((size, size), np.float32)
+    for row in range(BLOCK_TILES):
+        top = (row + 1) * TILE
+        slope[row * TILE : (row + 1) * TILE] = horn_slope(
+            padded[top - 1 : top + TILE + 1, TILE - 1 : TILE + size + 1],
+            pixel_size_m((by * BLOCK_TILES + row) * TILE, TILE),
+        )
+    padded = None
+    count = save_block(slope, bx, by, Path(work), SLOPE)
+    return f"{bx}/{by}: {count} tiles"
+
+
+def build_slope(
+    heights: Path, out: Path, work: Path, extracted: str, jobs: int
+) -> None:
+    """The slope archive of a height archive: see the module docstring.
+
+    A block is every z15 tile under one z10 tile, as in `tile`, and the same
+    resume rule holds: a finished block's file is kept, so a killed run
+    restarts where it stopped. `work` must not be `tile`'s.
+    """
+    work.mkdir(parents=True, exist_ok=True)
+    reader = open_heights(heights)
+    header = reader.header()
+    x0, y0 = lonlat_to_tile(
+        header["min_lon_e7"] / 1e7, header["max_lat_e7"] / 1e7, BLOCK_ZOOM
+    )
+    x1, y1 = lonlat_to_tile(
+        header["max_lon_e7"] / 1e7, header["min_lat_e7"] / 1e7, BLOCK_ZOOM
+    )
+    # A z10 tile exists exactly where one of its z15 tiles has a height.
+    todo = [
+        (bx, by, str(work))
+        for bx in range(x0, x1 + 1)
+        for by in range(y0, y1 + 1)
+        if reader.get(BLOCK_ZOOM, bx, by) is not None
+    ]
+    print(f"{len(todo)} blocks", flush=True)
+    with Pool(jobs, init_worker, (heights,)) as pool:
+        for n, line in enumerate(pool.imap_unordered(slope_block, todo), 1):
+            if line:
+                print(f"[{n}/{len(todo)}] {line}", flush=True)
+    pack(work, out, extracted, SLOPE)
 
 
 # ── contours ─────────────────────────────────────────────────────────────────
@@ -499,11 +682,22 @@ def main() -> None:
     p.add_argument("work", type=Path)
     p.add_argument("out", type=Path)
     p.add_argument("--extracted", required=True, help="as for pack")
+    p = sub.add_parser("slope")
+    p.add_argument("heights", type=Path, help="the nsw-5m.pmtiles height archive")
+    p.add_argument("out", type=Path)
+    p.add_argument(
+        "--work", type=Path, help="default: OUT with .work in place of .pmtiles"
+    )
+    p.add_argument("--jobs", type=int, default=os.cpu_count())
+    p.add_argument("--extracted", required=True, help="as for pack")
     args = parser.parse_args()
     if args.command == "fetch":
         fetch(args.src, args.sheets)
     elif args.command == "contours":
         contours(args.src, args.work, args.out, args.extracted)
+    elif args.command == "slope":
+        work = args.work or args.out.with_suffix(".work")
+        build_slope(args.heights, args.out, work, args.extracted, args.jobs)
     elif args.command == "tile":
         tile(args.src, args.work, args.jobs)
     else:
