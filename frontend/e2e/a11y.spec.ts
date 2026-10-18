@@ -843,6 +843,26 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
+  test("the Layers popover's Terrain tab, and its slope bands", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    const popover = page.getByRole("dialog", { name: "Map layers" });
+    await popover.getByRole("radio", { name: "Terrain" }).click();
+    await expect(
+      popover.getByRole("switch", { name: "Hillshade" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
+
+    await popover.getByRole("button", { name: "Slope bands" }).click();
+    const bands = page.getByRole("dialog", { name: "Slope bands" });
+    await expect(
+      bands.getByRole("button", { name: "Back to terrain" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Slope bands']");
+  });
+
   test("What is here?: asked by a right-click, drawn at the point", async ({
     page,
   }) => {
