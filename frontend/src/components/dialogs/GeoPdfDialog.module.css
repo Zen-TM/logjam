@@ -94,11 +94,6 @@
   gap: 8px 12px;
 }
 
-.extentGrid[data-disabled] {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 .extentField > input {
   text-align: center;
 }
@@ -242,11 +237,41 @@
   width: 7ch;
 }
 
-/* The one button that leaves the form for the map, centred and given room on
-   both sides — the same line the topo dialog puts its errands on. */
-.errandLine {
+/* The presets, and Other's field beside them once it is picked; the field
+   wraps under the rail when the line is too narrow for both. */
+.scaleCell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The area's size, and the button that leaves the form to place it. */
+.areaCell {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 2px 0;
+  gap: var(--space-1);
+}
+
+.areaSize {
+  composes: meta from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Coordinates and the lock only mean something to someone typing edges, so
+   they wait, closed, under the area they refine. */
+.edges[open] > summary {
+  margin-bottom: var(--space-1);
+}
+
+/* The browser's own disclosure triangle stays: it is the open-or-closed
+   signal. The padding takes the line past a mouse target's 24px. */
+.edgesSummary {
+  composes: detail from "../../textRoles.generated.module.css";
+  padding: var(--space-0-5) 0;
+  color: var(--color-text);
+  cursor: pointer;
 }

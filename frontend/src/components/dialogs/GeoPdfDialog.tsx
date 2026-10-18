@@ -1,5 +1,6 @@
 // A GeoPDF: a printable map of one area, on one sheet of paper, at one scale.
-// The form asks those three things in that order, then what goes on top.
+// The form asks the paper and the scale, which size the area, then where it
+// is, then what goes on top.
 //
 // Nothing here is live — the paper is drawn on the map while you pick an area
 // (App's frame), and everything else only matters once the worker renders it —
@@ -39,6 +40,7 @@ import type {
 } from "@logjam/shared";
 import {
   getPaperDimensions,
+  getMapDimensions,
   GEOPDF_PADDING_MM,
   applyNorthChange,
   applySouthChange,
@@ -55,6 +57,12 @@ import {
 import type { GeoPdfConfig } from "@logjam/shared";
 import { useStoredState } from "../../useStoredState";
 import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
+import {
+  SCALE_PRESETS,
+  areaSizeLabel,
+  scaleChoice,
+  type ScaleChoice,
+} from "./geoPdfArea";
 import {
   Button,
   Checkbox,
@@ -113,9 +121,18 @@ const ORIENTATION_OPTIONS: ChipOption<Orientation>[] = [
   { value: "landscape", label: "Landscape" },
 ];
 
+// The lock only decides what typing an edge does, so it is named for that.
 const LOCK_OPTIONS: ChipOption<ExtentState["lockMode"]>[] = [
-  { value: "scale", label: "Scale" },
-  { value: "position", label: "Position" },
+  { value: "scale", label: "Moves the box" },
+  { value: "position", label: "Resizes it" },
+];
+
+const SCALE_OPTIONS: ChipOption<ScaleChoice>[] = [
+  ...SCALE_PRESETS.map((scale) => ({
+    value: `${scale}` as ScaleChoice,
+    label: `1:${scale.toLocaleString()}`,
+  })),
+  { value: "other", label: "Other" },
 ];
 
 const COORD_OPTIONS: ChipOption<CoordMode>[] = [
@@ -124,7 +141,7 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
 ];
 
 const LOCK_TOOLTIP =
-  "Whichever one you lock stays as it is while you change the other.";
+  "Moves the box keeps the scale; Resizes it keeps the opposite edge and changes the scale.";
 const COORD_TOOLTIP =
   "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 const PIVOT_TOOLTIP =
@@ -268,6 +285,11 @@ function GeoPdfDialog({
   const [rawE, setRawE] = useState("");
   const [rawW, setRawW] = useState("");
   const [rawScale, setRawScale] = useState("");
+  // Other was pressed: its field stays open even at a preset's number.
+  const [scaleOtherPicked, setScaleOtherPicked] = useState(false);
+  // Exact edges starts closed on every open; Make it opens it when a field
+  // inside needs fixing, so the field the banner points at can be seen.
+  const [edgesOpen, setEdgesOpen] = useState(false);
 
   // A template's settings, applied over the form: the launch template (once
   // per genuine open) and the template being edited in template mode.
@@ -363,6 +385,8 @@ function GeoPdfDialog({
       setRawE("");
       setRawW("");
       setRawScale("");
+      setScaleOtherPicked(false);
+      setEdgesOpen(false);
       setDirty(false);
     }
   }
@@ -705,6 +729,8 @@ function GeoPdfDialog({
       hasExtentFieldError(extentInputErrors) ||
       scaleInputError !== null
     ) {
+      if (!extentValid || hasExtentFieldError(extentInputErrors))
+        setEdgesOpen(true);
       setError("A field below needs fixing first.");
       return;
     }
@@ -807,6 +833,7 @@ function GeoPdfDialog({
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  const mapMm = getMapDimensions(extentState);
   const title = templateMode
     ? editingTemplate
       ? "Edit template"
@@ -941,9 +968,12 @@ function GeoPdfDialog({
 
           {error && <ErrorBanner message={error} />}
 
+          {/* Paper, orientation and scale set the area's size; the map sets
+              where it is. A template keeps the first three and has no where,
+              so the area itself is absent in template mode. */}
           <section className={classes.group}>
-            <SectionHeader title="Paper" />
-            <SettingsRow label="Size">
+            <SectionHeader title="Area" />
+            <SettingsRow label="Paper">
               <ChipRail
                 label="Paper size"
                 className={classes.railCell}
@@ -1019,197 +1049,240 @@ function GeoPdfDialog({
                 </div>
               </SettingsRow>
             )}
-          </section>
-
-          <section className={classes.group}>
-            <SectionHeader title="Extent" />
-            <SettingsRow label="Lock" tooltip={LOCK_TOOLTIP}>
-              <ChipRail
-                label="Lock"
-                className={classes.railCell}
-                options={LOCK_OPTIONS}
-                value={extentState.lockMode}
-                onChange={(lockMode) =>
-                  setExtentState({ ...extentState, lockMode })
-                }
-              />
-            </SettingsRow>
-            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
-              <ChipRail
-                label="Coordinates"
-                className={classes.railCell}
-                options={COORD_OPTIONS}
-                value={extentState.coordMode}
-                onChange={(coordMode) =>
-                  setExtentState(applyCoordModeChange(extentState, coordMode))
-                }
-              />
-            </SettingsRow>
-
-            {/* The four edges laid out where they are on the map, with the
-                point they move around in the middle of them. In template mode
-                there is no area yet — a template is the HOW, not the where —
-                so the box is inert. */}
-            <div
-              className={classes.extentGrid}
-              data-disabled={templateMode || undefined}
-              inert={templateMode}
-            >
-              <div className={classes.extentNorth}>
-                <ExtentField
-                  which="n"
-                  label={
-                    extentState.coordMode === "latlon"
-                      ? "North"
-                      : "N (northing)"
-                  }
-                  value={rawN}
-                  error={templateMode ? null : extentInputErrors.n}
-                  focusedFieldRef={focusedField}
-                  onDraft={setRawN}
-                  onCommit={(deg) =>
-                    setExtentState((s) => applyNorthChange(s, deg))
-                  }
-                  parse={(raw) => parseExtentField("n", raw, extentState)}
-                  valid={extentInputErrors.n === null}
-                  markDirty={markDirty}
-                />
-              </div>
-              <div className={classes.extentWest}>
-                <ExtentField
-                  which="w"
-                  label={
-                    extentState.coordMode === "latlon" ? "West" : "W (easting)"
-                  }
-                  value={rawW}
-                  error={templateMode ? null : extentInputErrors.w}
-                  focusedFieldRef={focusedField}
-                  onDraft={setRawW}
-                  onCommit={(deg) =>
-                    setExtentState((s) => applyWestChange(s, deg))
-                  }
-                  parse={(raw) => parseExtentField("w", raw, extentState)}
-                  valid={extentInputErrors.w === null}
-                  markDirty={markDirty}
-                />
-              </div>
-              <div className={classes.extentCenter}>
-                <span className={classes.pivotLabel}>
-                  Pivot
-                  <InfoTip label="the pivot" content={PIVOT_TOOLTIP} />
-                </span>
-                <div
-                  className={classes.pivotGrid}
-                  role="radiogroup"
-                  aria-label="Pivot"
-                >
-                  {PIVOT_POINTS.map((point) => (
-                    <button
-                      key={point.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={extentState.pivot === point.value}
-                      aria-label={point.label}
-                      className={
-                        extentState.pivot === point.value
-                          ? classes.pivotButtonActive
-                          : classes.pivotButton
-                      }
-                      onClick={() =>
-                        setExtentState(
-                          applyPivotChange(extentState, point.value),
-                        )
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className={classes.extentEast}>
-                <ExtentField
-                  which="e"
-                  label={
-                    extentState.coordMode === "latlon" ? "East" : "E (easting)"
-                  }
-                  value={rawE}
-                  error={templateMode ? null : extentInputErrors.e}
-                  focusedFieldRef={focusedField}
-                  onDraft={setRawE}
-                  onCommit={(deg) =>
-                    setExtentState((s) => applyEastChange(s, deg))
-                  }
-                  parse={(raw) => parseExtentField("e", raw, extentState)}
-                  valid={extentInputErrors.e === null}
-                  markDirty={markDirty}
-                />
-              </div>
-              <div className={classes.extentSouth}>
-                <ExtentField
-                  which="s"
-                  label={
-                    extentState.coordMode === "latlon"
-                      ? "South"
-                      : "S (northing)"
-                  }
-                  value={rawS}
-                  error={templateMode ? null : extentInputErrors.s}
-                  focusedFieldRef={focusedField}
-                  onDraft={setRawS}
-                  onCommit={(deg) =>
-                    setExtentState((s) => applySouthChange(s, deg))
-                  }
-                  parse={(raw) => parseExtentField("s", raw, extentState)}
-                  valid={extentInputErrors.s === null}
-                  markDirty={markDirty}
-                />
-              </div>
-            </div>
-
             <SettingsRow label="Scale" tooltip={SCALE_TOOLTIP}>
-              <div className={classes.scaleRow}>
-                <span className={classes.scalePrefix} aria-hidden>
-                  1 :
-                </span>
-                <TextField
+              <div className={classes.scaleCell}>
+                <ChipRail
                   label="Scale"
-                  hideLabel
-                  className={classes.scaleField}
-                  type="text"
-                  inputMode="numeric"
-                  value={rawScale}
-                  onFocus={() => {
-                    focusedField.current = "scale";
-                  }}
-                  onChange={(event) => {
-                    setRawScale(sanitizeDecimalInput(event.target.value));
+                  className={classes.railCell}
+                  options={SCALE_OPTIONS}
+                  value={scaleChoice(extentState.scale, scaleOtherPicked)}
+                  onChange={(choice) => {
+                    setScaleOtherPicked(choice === "other");
+                    if (choice !== "other")
+                      setExtentState(
+                        applyScaleChange(extentState, Number(choice)),
+                      );
                     markDirty();
                   }}
-                  onBlur={() => {
-                    focusedField.current = null;
-                    const value = Number(rawScale);
-                    if (scaleInputError === null && Number.isFinite(value))
-                      setExtentState((s: ExtentState) =>
-                        applyScaleChange(s, value),
-                      );
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
                 />
+                {scaleChoice(extentState.scale, scaleOtherPicked) ===
+                  "other" && (
+                  <div className={classes.scaleRow}>
+                    <span className={classes.scalePrefix} aria-hidden>
+                      1 :
+                    </span>
+                    <TextField
+                      label="Scale"
+                      hideLabel
+                      className={classes.scaleField}
+                      type="text"
+                      inputMode="numeric"
+                      value={rawScale}
+                      onFocus={() => {
+                        focusedField.current = "scale";
+                      }}
+                      onChange={(event) => {
+                        setRawScale(sanitizeDecimalInput(event.target.value));
+                        markDirty();
+                      }}
+                      onBlur={() => {
+                        focusedField.current = null;
+                        const value = Number(rawScale);
+                        if (scaleInputError === null && Number.isFinite(value))
+                          setExtentState((s: ExtentState) =>
+                            applyScaleChange(s, value),
+                          );
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </SettingsRow>
             <FieldError message={scaleInputError} />
 
             {!templateMode && (
-              <div className={classes.errandLine}>
-                <Button
-                  icon="pickArea"
-                  compact
-                  variant="outline"
-                  onClick={handleSelectOnMap}
+              <>
+                <SettingsRow label="Area">
+                  <div className={classes.areaCell}>
+                    <span className={classes.areaSize}>
+                      {areaSizeLabel(
+                        (extentState.scale * mapMm.w) / 1000,
+                        (extentState.scale * mapMm.h) / 1000,
+                      )}
+                    </span>
+                    <Button
+                      icon="pickArea"
+                      compact
+                      variant="outline"
+                      onClick={handleSelectOnMap}
+                    >
+                      Pick on the map
+                    </Button>
+                  </div>
+                </SettingsRow>
+
+                <details
+                  className={classes.edges}
+                  open={edgesOpen}
+                  onToggle={(event) => setEdgesOpen(event.currentTarget.open)}
                 >
-                  Draw the area on the map
-                </Button>
-              </div>
+                  <summary className={classes.edgesSummary}>
+                    Exact edges
+                  </summary>
+                  <div className={classes.group}>
+                    <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+                      <ChipRail
+                        label="Coordinates"
+                        className={classes.railCell}
+                        options={COORD_OPTIONS}
+                        value={extentState.coordMode}
+                        onChange={(coordMode) =>
+                          setExtentState(
+                            applyCoordModeChange(extentState, coordMode),
+                          )
+                        }
+                      />
+                    </SettingsRow>
+                    <SettingsRow label="Typing an edge" tooltip={LOCK_TOOLTIP}>
+                      <ChipRail
+                        label="Typing an edge"
+                        className={classes.railCell}
+                        options={LOCK_OPTIONS}
+                        value={extentState.lockMode}
+                        onChange={(lockMode) =>
+                          setExtentState({ ...extentState, lockMode })
+                        }
+                      />
+                    </SettingsRow>
+                    {/* The four edges laid out where they are on the map, with
+                        the point they move around in the middle of them. */}
+                    <div className={classes.extentGrid}>
+                      <div className={classes.extentNorth}>
+                        <ExtentField
+                          which="n"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "North"
+                              : "N (northing)"
+                          }
+                          value={rawN}
+                          error={extentInputErrors.n}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawN}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applyNorthChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("n", raw, extentState)
+                          }
+                          valid={extentInputErrors.n === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                      <div className={classes.extentWest}>
+                        <ExtentField
+                          which="w"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "West"
+                              : "W (easting)"
+                          }
+                          value={rawW}
+                          error={extentInputErrors.w}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawW}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applyWestChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("w", raw, extentState)
+                          }
+                          valid={extentInputErrors.w === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                      <div className={classes.extentCenter}>
+                        <span className={classes.pivotLabel}>
+                          Pivot
+                          <InfoTip label="the pivot" content={PIVOT_TOOLTIP} />
+                        </span>
+                        <div
+                          className={classes.pivotGrid}
+                          role="radiogroup"
+                          aria-label="Pivot"
+                        >
+                          {PIVOT_POINTS.map((point) => (
+                            <button
+                              key={point.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={extentState.pivot === point.value}
+                              aria-label={point.label}
+                              className={
+                                extentState.pivot === point.value
+                                  ? classes.pivotButtonActive
+                                  : classes.pivotButton
+                              }
+                              onClick={() =>
+                                setExtentState(
+                                  applyPivotChange(extentState, point.value),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className={classes.extentEast}>
+                        <ExtentField
+                          which="e"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "East"
+                              : "E (easting)"
+                          }
+                          value={rawE}
+                          error={extentInputErrors.e}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawE}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applyEastChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("e", raw, extentState)
+                          }
+                          valid={extentInputErrors.e === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                      <div className={classes.extentSouth}>
+                        <ExtentField
+                          which="s"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "South"
+                              : "S (northing)"
+                          }
+                          value={rawS}
+                          error={extentInputErrors.s}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawS}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applySouthChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("s", raw, extentState)
+                          }
+                          valid={extentInputErrors.s === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </>
             )}
           </section>
 
