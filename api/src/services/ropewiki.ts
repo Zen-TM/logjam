@@ -255,7 +255,8 @@ function parseDecimal(
     .match(
       /^(-?\d+(?:\.\d+)?)\s*([NSEW])?\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*([NSEW])?$/i,
     );
-  if (!m) return null;
+  // Two bare integers ("0 0", "33 51") are placeholders, not coordinates.
+  if (!m || !/[.NSEW]/i.test(coord)) return null;
   const signed = (n: string, dir?: string) =>
     /^[SW]$/i.test(dir ?? "") ? -Math.abs(parseFloat(n)) : parseFloat(n);
   let latitude = signed(m[1], m[2]);
@@ -328,33 +329,42 @@ function parseLongestRappel(value: string): number | null {
   if (feetMatch) return Math.round(parseFloat(feetMatch[1]) * 0.3048 * 10) / 10;
   const mMatch = value.match(/([\d.]+)\s*(?:m|meters?)/i);
   if (mMatch) return Math.round(parseFloat(mMatch[1]) * 10) / 10;
-  // A bare number has no unit to trust; null beats a guess (QUESTIONS.md).
+  // A bare number has no unit to trust; null beats a guess.
   return null;
 }
 
 /**
  * Parse a time string like "5 hours", "4-6 hours", "5 hr", "2 hr 30 min" or
- * "45 min" to hours. A bare number is hours; "days" gives null, since a day
- * of canyoning is not 24 hours and a guess would be stored as fact.
+ * "45 min" to hours. A bare number is hours. Anything else, including "2 days"
+ * (a day of canyoning is not 24 hours), gives null: a guess would be stored
+ * as fact.
  */
 function parseHours(value: string): number | null {
-  if (!value || !value.trim()) return null;
-  if (/\bdays?\b/i.test(value)) return null;
-  const unit = (u: string | undefined) => (/^m/i.test(u ?? "") ? 1 / 60 : 1);
-  const rangeMatch = value.match(/([\d.]+)\s*-\s*([\d.]+)\s*([a-z]+)?/i);
-  if (rangeMatch) {
-    return (
-      ((parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2) *
-      unit(rangeMatch[3])
+  const NUM = String.raw`(\d+(?:\.\d+)?)`;
+  const UNIT = String.raw`(h|hr|hrs|hours?|m|mins?|minutes?)`;
+  const toHours = (n: string, unit: string | undefined) =>
+    unit?.startsWith("m") ? parseFloat(n) / 60 : parseFloat(n);
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const text = (value ?? "").trim().toLowerCase();
+
+  const range = text.match(
+    new RegExp(`^${NUM}\\s*${UNIT}?\\s*-\\s*${NUM}\\s*${UNIT}?\\.?$`),
+  );
+  if (range) {
+    const unit = range[4] ?? range[2];
+    return round2(
+      (toHours(range[1], range[2] ?? unit) + toHours(range[3], unit)) / 2,
     );
   }
-  const parts = [...value.matchAll(/([\d.]+)\s*([a-z]+)?/gi)];
-  if (parts.length === 0) return null;
-  const total = parts.reduce(
-    (sum, m) => sum + parseFloat(m[1]) * unit(m[2]),
-    0,
+  const sum = text.match(
+    new RegExp(`^${NUM}\\s*${UNIT}?\\.?(?:\\s*${NUM}\\s*${UNIT}\\.?)?$`),
   );
-  return Math.round(total * 100) / 100;
+  if (!sum) return null;
+  // "2 hr 30" has a second number with no unit of its own to read it by.
+  if (sum[3] != null && sum[2] == null) return null;
+  return round2(
+    toHours(sum[1], sum[2]) + (sum[3] != null ? toHours(sum[3], sum[4]) : 0),
+  );
 }
 
 /** Parse number of rappels — may be a range like "3-5", take the first number. */
@@ -527,7 +537,11 @@ export function parseRopeWikiCsv(csvText: string): {
         longestCol >= 0 ? parseLongestRappel(row[longestCol] || "") : null;
       const maxTimeRaw = maxTimeCol >= 0 ? row[maxTimeCol] || "" : "";
       const minTimeRaw = timeCol >= 0 ? row[timeCol] || "" : "";
-      const hours = parseHours(maxTimeRaw) ?? parseHours(minTimeRaw);
+      // Min is the fallback only when Max is empty: an unreadable Max ("2 days")
+      // is no estimate, not licence to report the Min.
+      const hours = maxTimeRaw.trim()
+        ? parseHours(maxTimeRaw)
+        : parseHours(minTimeRaw);
 
       seenPageIds.add(pageId);
       places.push({

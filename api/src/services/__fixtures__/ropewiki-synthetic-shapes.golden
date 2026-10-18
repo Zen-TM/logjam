@@ -32,7 +32,7 @@
       "aGrade": 2,
       "commitment": 3,
       "quality": 3,
-      "hours": 3.25,
+      "hours": 2.5,
       "attributes": {
         "sources": [
           [
@@ -104,10 +104,96 @@
           ]
         ]
       }
+    },
+    {
+      "ropeWikiId": 900007,
+      "name": "Synthetic Max Wins",
+      "latitude": -33.71666666666667,
+      "longitude": 150.38333333333333,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": 3,
+      "hours": 3.25,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=900007"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 900008,
+      "name": "Synthetic Days Beats Min",
+      "latitude": -33.733333333333334,
+      "longitude": 150.4,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=900008"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 900009,
+      "name": "Synthetic Trailing Dot",
+      "latitude": -33.75,
+      "longitude": 150.41666666666666,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": 3,
+      "hours": 5,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=900009"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 900010,
+      "name": "Synthetic Clock Time",
+      "latitude": -33.766666666666666,
+      "longitude": 150.43333333333334,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=900010"
+          ]
+        ]
+      }
     }
   ],
   "errors": [
     "Row 6 (Synthetic Bad Decimal): could not parse coordinates \"133.8, 250.6\"",
-    "Row 7: duplicate PAGEID 900001, first row kept"
+    "Row 11 (Synthetic Placeholder Coords): could not parse coordinates \"0 0\"",
+    "Row 12: invalid PAGEID \"abc\"",
+    "Row 13: duplicate PAGEID 900001, first row kept"
   ]
 }
