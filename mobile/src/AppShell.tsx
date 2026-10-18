@@ -33,6 +33,7 @@ import { AccountStateProvider } from "./auth/AccountStateContext";
 import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
+import { registerShellTriggers } from "./shellTriggers";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import {
   makeThemed,
@@ -815,41 +816,30 @@ export function AppShell({
   // route notification taps: a place reference deep-links to its detail,
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
-  // Sync triggers: initial cycle, app foreground, connectivity regained.
-  // Torn down on sign-out (shell unmount).
+  // Sync triggers: initial cycle, app foreground, connectivity regained, and
+  // the same three moments for the GeoPDF and topo auto-downloads (Settings →
+  // Offline and storage; autoDownload.ts says why not a timer) and the place
+  // names for search. Torn down on sign-out (shell unmount).
   //
-  // A guest registers none of them. This is the load-bearing half of guest
-  // mode: without a cycle ever running, local mutations pile up in the outbox
-  // exactly as they would offline, and the day an account is linked the first
-  // cycle drains them. Registering triggers that could only ever 401 would
-  // also mean a failing sync every foreground, and a permanently red sync
-  // health line on the More tab.
-  useEffect(() => {
-    if (isGuest) return;
-    return registerSyncTriggers();
-  }, [isGuest]);
-
-  // "Auto-download finished GeoPDFs" (Settings → Offline and storage): app
-  // start, foreground, and connection regained — Wi-Fi by default. See
-  // autoDownload.ts for why it checks then and not on a timer. GeoPDFs come
-  // from the user's web account, so there is nothing to download for a guest.
-  useEffect(() => {
-    if (isGuest) return;
-    return registerGeoPdfAutoDownload();
-  }, [isGuest]);
-
-  // The same feature over finished LiDAR topo overlays, on the same three
-  // moments and the same guest rule. Its own registration rather than a shared
-  // one: the two have separate switches and separate connection policies, and a
-  // combined runner would make one's failure the other's.
-  useEffect(() => {
-    if (isGuest) return;
-    return registerTopoAutoDownload();
-  }, [isGuest]);
-
-  // The place names for search, on the same three moments. A guest too: the
-  // file is public and fetched from the CDN, not our API (ADR 0034).
-  useEffect(() => registerPlaceRegistryRefresh(), []);
+  // A guest registers none of the account-backed ones. This is the
+  // load-bearing half of guest mode: without a cycle ever running, local
+  // mutations pile up in the outbox exactly as they would offline, and the day
+  // an account is linked the first cycle drains them. Registering triggers that
+  // could only ever 401 would also mean a failing sync every foreground, and a
+  // permanently red sync health line on the More tab. The place names go to a
+  // guest too (shellTriggers.ts). The two auto-downloads keep their own
+  // registrations: separate switches and connection policies, and a combined
+  // runner would make one's failure the other's.
+  useEffect(
+    () =>
+      registerShellTriggers(accountState, {
+        sync: registerSyncTriggers,
+        geoPdfAutoDownload: registerGeoPdfAutoDownload,
+        topoAutoDownload: registerTopoAutoDownload,
+        placeRegistryRefresh: registerPlaceRegistryRefresh,
+      }),
+    [accountState],
+  );
 
   // Take the account's theme choice, so a scheme picked in the browser (or on
   // another phone) is the one Logjam GPS is painted in. Keyed on the ACCOUNT's
