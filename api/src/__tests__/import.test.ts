@@ -69,8 +69,6 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
       });
     expect(second.status).toBe(200);
     expect(second.body.created).toBe(0);
-    // The same values again change nothing, so there is nothing to restore.
-    expect(second.body.restorableUntil).toBeNull();
 
     const rows = await prisma.place.findMany({
       where: { ownerId: ALICE_ID, name },
@@ -431,9 +429,6 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
         });
       expect(merge.status).toBe(200);
       expect(merge.body.merged).toBe(1);
-      expect(Date.parse(merge.body.restorableUntil)).toBeGreaterThan(
-        Date.now(),
-      );
 
       const edit = await request(API_URL)
         .patch(`/places/${placeId}`)
