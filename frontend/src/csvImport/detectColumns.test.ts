@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { prepareTripRows } from "./prepareRows";
 import { detectFileKind } from "./detectFileKind";
 import { detectColumns } from "./detectColumns";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
@@ -72,5 +73,32 @@ describe("detectColumns", () => {
   it("defaults unrecognised headers to discard", () => {
     const result = detectColumns(["Mystery"], customFields);
     expect(result["Mystery"]).toBe("discard");
+  });
+});
+
+// Mutation that turns it red: dropping the append-column loop in joinNotes
+// (prepareRows.ts) loses the Party text, or not trimming the notes cell leaves
+// a blank first line.
+describe("prepareTripRows notes", () => {
+  it("adds append columns to the notes, trimmed, and skips empty ones", () => {
+    const base = {
+      headers: ["Name", "Date", "Notes", "Party"],
+      tripAssignments: {
+        Name: "name",
+        Date: "date",
+        Notes: "notes",
+        Party: "appendNotes",
+      } as const,
+      tripNewCfForms: {},
+      customFieldDefs: [],
+      dateFormat: "YYYY-MM-DD" as const,
+    };
+    const rows = [
+      { Name: "A", Date: "2021-01-01", Notes: " ", Party: "Sam" },
+      { Name: "B", Date: "2021-01-02", Notes: "dry", Party: " " },
+      { Name: "C", Date: "2021-01-03", Notes: "", Party: "" },
+    ];
+    const out = prepareTripRows({ ...base, rows });
+    expect(out.rows.map((r) => r.notes)).toEqual(["Party: Sam", "dry", null]);
   });
 });

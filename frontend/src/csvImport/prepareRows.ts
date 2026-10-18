@@ -192,6 +192,8 @@ export function buildPlaceInput(
       case "sources":
         values[SOURCES_FIELD_KEY] =
           Array.isArray(value) && value.length > 0 ? value : null;
+        // Guard: the maintainer-shape place golden (mutation: store [] again
+        // and every row without sources gains "_sources": []).
         break;
       default:
         // attr:* / new-attr — an ordinary field value. An `attr:<key>` column
@@ -264,7 +266,7 @@ function joinNotes(
   notesCol: string | undefined,
   appendCols: string[],
 ): string | null {
-  const parts = [notesCol ? (row[notesCol] ?? "") : ""];
+  const parts = [notesCol ? (row[notesCol] ?? "").trim() : ""];
   for (const h of appendCols) {
     const v = (row[h] ?? "").trim();
     if (v) parts.push(`${h}: ${v}`);

@@ -93,6 +93,9 @@ describe("detectDateFormat", () => {
   });
 });
 
+// Mutation that turns it red: requiring every sample to read again (the stray
+// note flips ISO to the default), or putting MM/DD/YYYY before DD/MM/YYYY in
+// the tie order (the last case then reads month-first).
 describe("detectDateFormat on mixed and month-first samples", () => {
   it("keeps ISO when a stray non-date sits among the samples", () => {
     expect(

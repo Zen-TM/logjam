@@ -10,7 +10,7 @@ export type ColumnRole =
   | "appendNotes"
   | "discard";
 
-const NAME_ALIASES = new Set([
+export const NAME_ALIASES = new Set([
   "name",
   "place",
   "place name",
@@ -19,7 +19,7 @@ const NAME_ALIASES = new Set([
   "site",
   "canyon",
 ]);
-const DATE_ALIASES = new Set([
+export const DATE_ALIASES = new Set([
   "date",
   "trip date",
   "trip date",

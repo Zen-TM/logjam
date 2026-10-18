@@ -628,7 +628,11 @@ function UnifiedImportDialog({
     const samples = dateSamples(tripFile.rows, dateCol);
     const { format, ambiguous } = detectDateFormat(samples);
     // Nothing readable is a different problem: the zero-row error covers it.
-    return ambiguous && samples.some((s) => parseWithFormat(s, format));
+    return (
+      ambiguous &&
+      format === "DD/MM/YYYY" &&
+      samples.some((s) => parseWithFormat(s, format))
+    );
   }, [tripFile, tripAssignments]);
 
   const canProceedFromMap =

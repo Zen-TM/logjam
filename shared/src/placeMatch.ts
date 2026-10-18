@@ -400,11 +400,15 @@ export function matchTripPlace(
   const result = matchPlace({ name }, candidates);
   if (result.confidence !== "none") return result;
   const inputNorm = normalizePlaceName(name);
-  const fits = candidates.filter((candidate) =>
-    [candidate.name, ...candidate.altNames].some((n) =>
-      isTokenPrefix(inputNorm, normalizePlaceName(n)),
-    ),
-  );
+  const fits = candidates
+    .filter((candidate) =>
+      [candidate.name, ...candidate.altNames].some((n) =>
+        isTokenPrefix(inputNorm, normalizePlaceName(n)),
+      ),
+    )
+    // Names are the only order a reviewer can read the cut by when more than
+    // TOP_CANDIDATES fit.
+    .sort((a, b) => a.name.localeCompare(b.name));
   if (fits.length === 0) return result;
   const scored: ScoredCandidate[] = fits
     .slice(0, TOP_CANDIDATES)
