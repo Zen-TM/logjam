@@ -1,0 +1,9 @@
+id,name,latitude,longitude,v_grade,a_grade,commitment,quality,pitches,longest_pitch,hours,rock_type,wetsuits,alt_names,sources,description
+1,Claustral Canyon,-33.5603,150.4033,3,3,3,4.9,6,15,9,Sandstone,yes,,https://ropewiki.com/Claustral_Canyon,Corpus note: classic. Two bolts at the second abseil.
+2,Yileen Canyon,-33.5666,150.3295,2,2,2,3.5,3,22,5,Sandstone,,"Yileen, Yileen Creek",,
+3,Serendipity Canyon,-33.4947,150.3812,3,2,3,4,5,,6.5,Sandstone,no,Serendipity,,Corpus note: bring a 60 m rope.
+4,Jugglers Canyon,-33.6592,150.3294,,,,,,,,Sandstone,,,,
+5,Corpus Brand New Canyon,-33.4001,150.2002,4,3,4,3.5,8,35,10,Sandstone,yes,,,
+6,Corpus Out Of Range Canyon,-33.4101,150.2102,9,3,4,7,2,10,4,Sandstone,,,,Quality of seven and a v grade of nine
+7,Corpus No Coords Canyon,,,3,2,3,3,2,10,4,Sandstone,,,,
+8,Corpus Decimal Pitches Canyon,-33.4201,150.2202,3,2,3,3,2.5,10.5,4.5,Shale,,,,
