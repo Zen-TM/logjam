@@ -114,6 +114,7 @@ import {
   type TerrainLayerKey,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  MAP_TERRAIN,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -154,9 +155,6 @@ const TERRAIN_ENTRIES = {
     attribution: NSW_HILLSHADE.creditHtml,
   },
 };
-const TERRAIN_ENTRY_IDS = new Set(
-  Object.values(TERRAIN_ENTRIES).map((entry) => entry.id),
-);
 
 function App() {
   const toast = useToast();
@@ -557,8 +555,17 @@ function App() {
   // user once.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
-      // Not a topo area's layer: the map is simply drawn without it.
-      if (TERRAIN_ENTRY_IDS.has(entryId)) return;
+      // A Terrain layer is not a topo area's: no badge, but its switch is on,
+      // so say which one draws nothing. Switching it off and on retries it.
+      const terrainKey = TERRAIN_LAYER_KEYS.find(
+        (key) => TERRAIN_ENTRIES[key].id === entryId,
+      );
+      if (terrainKey) {
+        toast.error(
+          `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
+        );
+        return;
+      }
       setUnavailableTopoEntryIds((prev) => {
         if (prev.has(entryId)) return prev;
         const next = new Set(prev);

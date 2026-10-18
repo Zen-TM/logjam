@@ -111,6 +111,7 @@ import {
 } from "../../placeUtils";
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
+import { stackTopoLayers } from "./layerOrder";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   BASEMAP_CATALOG,
@@ -2958,32 +2959,11 @@ function Map({
       );
     }
 
-    // Reorder: ensure layers appear in the order specified by topoLayers array.
-    // Each entry may own multiple MapLibre layers — move them all as a group.
-    let afterLayerId: string | undefined = undefined;
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const owned = ownedLayerIds(layers[i].id);
-      for (const lid of owned) {
-        if (map.getLayer(lid)) {
-          map.moveLayer(lid, afterLayerId);
-        }
-      }
-      if (owned.length > 0) afterLayerId = owned[0];
-    }
-
-    // Move place marker layers above all topo layers so they remain visible
-    const placeLayers = [
-      "place-circles",
-      "shared-place-halos",
-      "shared-place-circles",
-      "place-labels",
-      "shared-place-labels",
-    ];
-    for (const cid of placeLayers) {
-      if (map.getLayer(cid)) {
-        map.moveLayer(cid);
-      }
-    }
+    // In the topoLayers order, each entry's layers as a group.
+    stackTopoLayers(
+      map,
+      layers.map(({ id }) => ownedLayerIds(id)),
+    );
   }, [topoLayers, enabledKey, mapLoaded]);
 
   // PAINT pass: apply live colour/width to existing topo layers in place. Runs on
