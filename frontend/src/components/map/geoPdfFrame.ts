@@ -38,6 +38,21 @@ export function scaleNow(
 }
 
 /**
+ * Ticking Keep: the scale the frame stands for, rounded only when it was
+ * measured, so an exact arrival scale (a decimal typed under Other) still
+ * matches the arrival and an unmoved Confirm returns its area unchanged.
+ */
+export function keepScale(
+  pick: FramePick,
+  measure: () => number | null,
+): number | null {
+  const scale = scaleNow({ ...pick, kept: null }, measure);
+  return scale === null || scale === pick.initialScale
+    ? scale
+    : Math.round(scale);
+}
+
+/**
  * Letting go of a kept scale: the frame now stands for exactly that scale
  * until the next zoom, unless a zoom is still running (trackpad momentum, a
  * +/- ease), which is already changing it. The arrival's extent survives only

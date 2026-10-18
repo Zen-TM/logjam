@@ -685,7 +685,7 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Other opens the typed scale beside the presets.
+    // Other opens the typed scale under the presets.
     await dialog.getByRole("radio", { name: "Other" }).click();
     await expect(dialog.getByRole("textbox", { name: "Scale" })).toBeVisible();
     await expectNoViolations(page, "dialog");

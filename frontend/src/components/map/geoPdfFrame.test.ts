@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type FramePick,
   keptFrameSizePx,
+  keepScale,
   keptScaleOnEntry,
   letGo,
   scaleNow,
@@ -88,6 +89,27 @@ describe("letGo, then Confirm without moving", () => {
     );
     expect(after.zoomed).toBe(false);
     expect(scaleNow(after, measured)).toBe(25000);
+  });
+});
+
+// Mutation: round every scale on Keep (a fractional arrival scale no longer
+// matches, and an unmoved Keep off, on, Confirm moves the edges by metres).
+describe("keepScale", () => {
+  it("keeps an exact arrival scale, so nothing moved returns the area", () => {
+    const arrival: FramePick = {
+      kept: 23417.38,
+      initialScale: 23417.38,
+      initialExtent: box,
+      zoomed: false,
+    };
+    const off = letGo({ ...arrival, kept: 23417.38 }, false);
+    const on = { ...off, kept: keepScale(off, measured) };
+    expect(unmovedPick(on, false)).toEqual({ extent: box, scale: 23417.38 });
+  });
+
+  it("rounds a measured scale", () => {
+    const pick: FramePick = { kept: null, zoomed: true };
+    expect(keepScale(pick, () => 23417.38)).toBe(23417);
   });
 });
 

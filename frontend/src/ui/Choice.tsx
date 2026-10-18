@@ -6,11 +6,12 @@ import { Icon } from "./Icon";
  * A checkbox with its label beside it, for an item in a set (which types a
  * field applies to, which layers go in an export). A native checkbox, so Space,
  * forms and assistive tech work as they do everywhere, and the whole line is its
- * target. A setting that takes effect at once is a `SwitchRow` instead.
+ * target. A setting in a panel that takes effect at once is a `SwitchRow`
+ * instead.
  *
- * `card` gives it a button's card fill and pill, for a checkbox floating over
- * the map with the buttons beside it, where a bare label would sit on the
- * basemap.
+ * `card` gives it a button's look, for a setting that takes effect at once
+ * floating over the map with the buttons beside it, where a `SwitchRow`
+ * cannot sit inline and a bare label would sit on the basemap.
  */
 export function Checkbox({
   label,

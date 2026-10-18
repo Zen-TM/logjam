@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
  * selected chip) drift back together one tone at a time.
  *
  * Mutation that turns it red: give `.pill[data-tone="accent"]` a `background`
- * (what it had), or drop `background: var(--color-card)` from `.button`.
+ * (what it had), drop `background: var(--color-card)` from `.pressable`, or
+ * give `.button` or `.cardCheckbox` a look of its own instead of composing it.
  */
 const KIT_DIR = dirname(fileURLToPath(import.meta.url));
 const css = (name: string) => readFileSync(join(KIT_DIR, name), "utf8");
@@ -43,11 +44,27 @@ describe("a status pill has no fill", () => {
 });
 
 describe("a button wears the pressable fill", () => {
+  const source = css("Button.module.css");
+
   it("reads the card colour, and the pressed one under the pointer", () => {
-    const source = css("Button.module.css");
-    const [[, base]] = rules(source, (s) => s === ".button");
+    const [[, base]] = rules(source, (s) => s === ".pressable");
     expect(base).toContain("background: var(--color-card)");
-    expect(source).toContain("var(--color-card-pressed)");
+    const [[, hover]] = rules(source, (s) => s.startsWith(".pressable:hover"));
+    expect(hover).toContain("var(--color-card-pressed)");
+  });
+
+  // The card checkbox sits beside buttons on the map bar: one look, composed.
+  it.each([
+    ["Button.module.css", ".button", "pressable"],
+    [
+      "Choice.module.css",
+      ".cardCheckbox",
+      'pressable from "./Button.module.css"',
+    ],
+  ])("%s %s composes it and draws no fill of its own", (file, cls, from) => {
+    const [[, body]] = rules(css(file), (s) => s === cls);
+    expect(body).toContain(`composes: ${from};`);
+    expect(body).not.toMatch(/(^|[;\s])(background|border)[a-z-]*\s*:/);
   });
 });
 

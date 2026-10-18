@@ -86,6 +86,7 @@ import MapChrome, { type MapTool } from "./MapChrome";
 import { collectLngLatPairs } from "./topoFootprint";
 import {
   type FramePick,
+  keepScale,
   keptFrameSizePx,
   keptScaleOnEntry,
   letGo,
@@ -3061,8 +3062,10 @@ function Map({
   const geoPdfUserPannedRef = useRef(false);
   const geoPdfUserZoomedRef = useRef(false);
 
-  // Set once the opening fit has measured the frame at its CSS size; from
-  // then on a kept scale may size it.
+  // Set once the opening fit has landed the frame where its CSS size and the
+  // kept scale agree, or once Keep is ticked (it keeps the scale of the frame
+  // as it is); from then on a kept scale sizes it. Sizing during the opening
+  // ease would pop the frame to the old zoom's size and shrink it back.
   const geoPdfFrameMeasuredRef = useRef(false);
 
   // The scale the frame is held at, so zooming changes how big the frame
@@ -3143,11 +3146,9 @@ function Map({
         return;
       }
       const framePxW = frameEl.getBoundingClientRect().width;
-      // Measured: a kept scale may size the frame from here on, mid-ease
-      // included, since it reads the live zoom.
-      geoPdfFrameMeasuredRef.current = true;
       if (framePxW <= 0) {
         geoPdfFitBoundsSettledRef.current = true;
+        geoPdfFrameMeasuredRef.current = true;
         return;
       }
 
@@ -3164,6 +3165,7 @@ function Map({
 
       const onSettled = () => {
         geoPdfFitBoundsSettledRef.current = true;
+        geoPdfFrameMeasuredRef.current = true;
       };
       m.once("moveend", onSettled);
     });
@@ -3236,9 +3238,8 @@ function Map({
     return geoWidthM / (geoPdfPaperDimensionsRef.current.w / 1000);
   }, []);
 
-  // While a scale is kept, the frame is sized from it on every move, once the
-  // opening fit has measured the frame at its CSS size (it lands where the two
-  // sizes agree). Unkept, the frame keeps whatever size it has, so letting go
+  // While a scale is kept, the frame is sized from it on every move, once
+  // geoPdfFrameMeasuredRef allows. Unkept, the frame keeps whatever size it has, so letting go
   // of the scale never jumps the frame.
   useEffect(() => {
     const map = mapRef.current;
@@ -3270,8 +3271,10 @@ function Map({
   const setGeoPdfKeepScale = (keep: boolean) => {
     const pick = geoPdfPick();
     if (keep) {
-      const scale = scaleNow(pick, measureGeoPdfScale);
-      if (scale !== null) setGeoPdfKeptScale(Math.round(scale));
+      const scale = keepScale(pick, measureGeoPdfScale);
+      if (scale === null) return;
+      geoPdfFrameMeasuredRef.current = true;
+      setGeoPdfKeptScale(scale);
       return;
     }
     if (pick.kept === null) return;

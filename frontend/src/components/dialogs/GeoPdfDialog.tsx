@@ -1064,8 +1064,8 @@ function GeoPdfDialog({
                 }}
               />
             </SettingsRow>
-            {/* Under the rail, not beside it: a fifth control on the line
-                pushes the chips over the label at a phone's width. */}
+            {/* Under the rail, not beside it: beside it, the field squeezes
+                the presets into a scroll at a phone's width. */}
             {scaleChoice(extentState.scale, scaleOtherPicked) === "other" && (
               <div className={classes.scaleRow}>
                 <span className={classes.scalePrefix} aria-hidden>

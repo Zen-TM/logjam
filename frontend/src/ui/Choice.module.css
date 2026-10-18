@@ -8,16 +8,7 @@
 
 .cardCheckbox {
   composes: checkbox;
-  min-height: var(--control-lg);
-  padding: 0 var(--space-1-5);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-line);
-  background: var(--color-card);
-  white-space: nowrap;
-}
-
-.cardCheckbox:hover:not([data-disabled]) {
-  background: var(--color-card-pressed);
+  composes: pressable from "./Button.module.css";
 }
 
 .checkbox[data-disabled] {
