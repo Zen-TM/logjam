@@ -2,7 +2,7 @@
 // the message's own title, who it is from, and its body drawn from the shared
 // parser's tree with plain `Text`. Nothing in the tree is markup, and there is
 // no WebView (a native dependency would change the fingerprint, ADR 0023).
-import { Linking, Text, View } from "react-native";
+import { Linking, Platform, Text, View } from "react-native";
 import {
   ANNOUNCEMENT,
   notificationAnnouncement,
@@ -13,26 +13,46 @@ import {
 
 import type { TNotification } from "../api/types";
 import { inlineText, makeStyles, muted, spacing } from "../theme";
-import { BottomSheet, closedSheet } from "../ui";
+import { BottomSheet } from "../ui";
 import { listMarker, messageSpans } from "./messageSpans";
 
 export function AnnouncementSheet({
   notification,
   visible,
   onClose,
+  onClosed,
 }: {
   notification: TNotification | null;
   visible: boolean;
   onClose: () => void;
+  onClosed?: () => void;
 }) {
   const styles = useStyles();
   const message = notification ? notificationAnnouncement(notification) : null;
 
-  if (!message) return closedSheet;
+  // Not `closedSheet`: the owner clears the subject as it closes the sheet,
+  // and `onClosed` has to outlive that render to fire at the end of the slide.
+  if (!message) {
+    return (
+      <BottomSheet
+        visible={false}
+        onClose={onClose}
+        onClosed={onClosed}
+        title=""
+      >
+        {null}
+      </BottomSheet>
+    );
+  }
   const { blocks } = parseMessageMarkdown(message.body);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={message.title}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      onClosed={onClosed}
+      title={message.title}
+    >
       <View style={styles.body}>
         <Text style={styles.from}>{ANNOUNCEMENT.from}</Text>
         {blocks.map((block, i) => (
@@ -48,10 +68,7 @@ function Block({ block }: { block: MessageBlock }) {
   switch (block.type) {
     case "heading":
       return (
-        <Text
-          accessibilityRole="header"
-          style={block.level === 1 ? styles.h1 : styles.h2}
-        >
+        <Text accessibilityRole="header" style={styles.heading}>
           <Inlines inlines={block.children} />
         </Text>
       );
@@ -74,6 +91,8 @@ function Block({ block }: { block: MessageBlock }) {
           ))}
         </View>
       );
+    default:
+      return block satisfies never;
   }
 }
 
@@ -88,7 +107,7 @@ function Inlines({ inlines }: { inlines: MessageInline[] }) {
         style={[
           span.strong && inlineText.strong,
           span.em && styles.em,
-          span.code && inlineText.code,
+          span.code && Platform.select(inlineText.code),
           href !== null && styles.link,
         ]}
         {...(href !== null && {
@@ -105,10 +124,9 @@ function Inlines({ inlines }: { inlines: MessageInline[] }) {
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(2), paddingBottom: spacing(2) },
   from: { ...muted(theme, textRole.detail) },
-  // The sheet's title already wears `heading`: the message's own headings
-  // sit below it, the deeper ones as section headings (shared/DESIGN.md §2).
-  h1: { ...textRole.rowTitle, color: theme.text },
-  h2: { ...textRole.section, color: theme.text },
+  // One role for every level, the nearest below the sheet title's `heading`
+  // (shared/DESIGN.md §2), as on Logjam Web.
+  heading: { ...textRole.rowTitle, color: theme.text },
   paragraph: { ...textRole.paragraph, color: theme.text },
   list: { gap: spacing(1) },
   item: { flexDirection: "row", gap: spacing(1) },

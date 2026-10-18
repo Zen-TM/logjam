@@ -9,10 +9,11 @@
 // Saved" / "View in Friends" is the SAME idea for a notification whose subject
 // lives in a tab rather than on a screen of its own — where that is, and
 // whether there is one at all, is `notificationDestination.ts`; the two never
-// both appear, because a place share is the only kind with an Open. "Read
-// message" is the row's tap on a maintainer announcement, for the same
-// reason Open is repeated, and stands alone on its kind too. Read/
-// unread is ONE row whose direction follows the notification's current state.
+// both appear, because a place share is the only kind with an Open. A
+// maintainer announcement has no verb of its own: its message is a sheet, a
+// sheet never opens another (mobile/DESIGN.md), and the row's tap opens it.
+// Read/unread is ONE row whose direction follows the notification's current
+// state.
 // Delete is last and warning-hued, as everywhere else.
 //
 // Accept / Turn down are deliberately NOT here: they already sit in the row, and
@@ -30,9 +31,8 @@ import {
   type NotificationDestination,
 } from "./notificationDestination";
 import { spacing, useTheme } from "../theme";
-import { BottomSheet, closedSheet, Row } from "../ui";
+import { BottomSheet, Row } from "../ui";
 import {
-  notificationAnnouncement,
   notificationDeleteConfirm,
   notificationLabel,
   notificationPlaceId,
@@ -45,7 +45,6 @@ export function NotificationOptionsSheet({
   onClose,
   onClosed,
   onOpen,
-  onReadMessage,
   onView,
   onSetRead,
   onDelete,
@@ -57,11 +56,6 @@ export function NotificationOptionsSheet({
   /** Follow the notification through to the thing it is about. */
   onOpen: (notification: TNotification) => void;
   /** Go to the tab its subject lives in, with that row pulsed on arrival. */
-  /**
-   * Open a maintainer announcement. The message is a sheet of its own, which
-   * cannot open over this one: park it here and open it from `onClosed`.
-   */
-  onReadMessage: (notification: TNotification) => void;
   onView: (
     notification: TNotification,
     destination: NotificationDestination,
@@ -71,12 +65,24 @@ export function NotificationOptionsSheet({
 }) {
   const theme = useTheme();
 
-  if (!notification) return closedSheet;
+  // Not `closedSheet`: the owner clears the subject as it closes the sheet,
+  // and `onClosed` has to outlive that render to fire at the end of the slide.
+  if (!notification) {
+    return (
+      <BottomSheet
+        visible={false}
+        onClose={onClose}
+        onClosed={onClosed}
+        title=""
+      >
+        {null}
+      </BottomSheet>
+    );
+  }
 
   const label = notificationLabel(notification);
   const openable = notificationPlaceId(notification) !== null;
   const destination = notificationDestination(notification);
-  const message = notificationAnnouncement(notification) !== null;
 
   const act = (run: () => void) => {
     onClose();
@@ -115,13 +121,6 @@ export function NotificationOptionsSheet({
             icon={notificationVerb("open").icon}
             title={notificationVerb("open").label}
             onPress={() => act(() => onOpen(notification))}
-          />
-        ) : null}
-        {message ? (
-          <Row
-            icon={notificationVerb("readMessage").icon}
-            title={notificationVerb("readMessage").label}
-            onPress={() => act(() => onReadMessage(notification))}
           />
         ) : null}
         {destination ? (

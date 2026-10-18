@@ -308,7 +308,12 @@ export const textRoles = Object.fromEntries(
  */
 export const inlineText = {
   strong: { fontWeight: fontWeight.bold },
-  code: { fontFamily: "monospace" },
+  // Per platform, for `Platform.select` (this module stays free of React
+  // Native values so vitest can load it): iOS has no family named monospace.
+  code: {
+    ios: { fontFamily: "Menlo" },
+    default: { fontFamily: "monospace" },
+  },
 } as const;
 
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).

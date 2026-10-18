@@ -888,8 +888,8 @@ export function AppShell({
         // left to do here". The unread list is the queue of things the user
         // still has to deal with, and emptying it on the strength of a
         // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it, and an announcement push opens its
-        // message, the row opened for the user.
+        // Opening the row is what reads it. An announcement push opens its
+        // message on the inbox, and the message is read when the user closes it.
         if (target.kind === "place") {
           nav.navigate("Places", {
             screen: "PlaceDetail",

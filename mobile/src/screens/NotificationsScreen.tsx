@@ -284,8 +284,6 @@ export function NotificationsScreen({
   const [menuId, setMenuId] = useState<string | null>(null);
   /** Which announcement's message sheet is open, by notification id. */
   const [messageId, setMessageId] = useState<string | null>(null);
-  /** "Read message" from the ⋯ sheet, opened once that sheet has closed. */
-  const parkedMessage = useRef<TNotification | null>(null);
   // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
@@ -802,34 +800,74 @@ export function NotificationsScreen({
   );
 
   // Reading it is what marks it read, so both happen on one tap; the place
-  // or the message then opens on top.
+  // then opens on top. A message is the exception: it opens over the inbox
+  // and is read when it closes, so in Unread its row stays put until then
+  // (as `toggleBatch` explains).
   const openNotification = useCallback(
     (n: TNotification) => {
+      if (notificationAnnouncement(n)) {
+        setMessageId(n.id);
+        return;
+      }
       void markRead(n);
       const placeId = notificationPlaceId(n);
       if (placeId) onOpenPlace(placeId);
-      else if (notificationAnnouncement(n)) setMessageId(n.id);
     },
     [markRead, onOpenPlace],
   );
 
-  // The push named the announcement, not the row, and the cache may not hold
-  // it yet: the message opens once the live fetch brings its row. A
-  // retracted one never arrives, and the inbox is where the tap lands.
+  const closeMessage = useCallback(() => {
+    const n = notifications.find((row) => row.id === messageId);
+    if (n) void markRead(n);
+    setMessageId(null);
+  }, [markRead, messageId, notifications]);
+
+  // A push can land while a sheet is up, and a second Modal must not stack on
+  // the first: that sheet closes, and its `onClosed` opens the message.
+  const parkedMessage = useRef<TNotification | null>(null);
+  const openParked = useCallback(() => {
+    const parked = parkedMessage.current;
+    parkedMessage.current = null;
+    if (parked) openNotification(parked);
+  }, [openNotification]);
+  const showMessage = useCallback(
+    (n: TNotification) => {
+      if (menuId === null && !actionsOpen && messageId === null) {
+        return openNotification(n);
+      }
+      parkedMessage.current = n;
+      setMenuId(null);
+      setActionsOpen(false);
+      if (messageId !== null) closeMessage();
+    },
+    [actionsOpen, closeMessage, menuId, messageId, openNotification],
+  );
+
+  // The push named the announcement, not the row. The message opens as soon
+  // as the cached or live list holds its row; when neither does, one refetch
+  // per push asks for it, since an inbox already on screen fetches nothing on
+  // its own. A retracted one never arrives, and the inbox is where the tap
+  // lands.
   const openedNonce = useRef<number | null>(null);
+  const fetchedNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!openAnnouncement || openedNonce.current === openAnnouncement.nonce) {
       return;
     }
+    const { announcementId, nonce } = openAnnouncement;
     const row = query.notifications.find(
-      (n) =>
-        notificationAnnouncement(n)?.id === openAnnouncement.announcementId,
+      (n) => notificationAnnouncement(n)?.id === announcementId,
     );
-    if (!row) return;
-    openedNonce.current = openAnnouncement.nonce;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, and only once the fetch has its row
-    openNotification(row);
-  }, [openAnnouncement, query.notifications, openNotification]);
+    if (!row) {
+      if (fetchedNonce.current === nonce) return;
+      fetchedNonce.current = nonce;
+      refetch();
+      return;
+    }
+    openedNonce.current = nonce;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, once the list holds its row
+    showMessage(row);
+  }, [openAnnouncement, query.notifications, refetch, showMessage]);
 
   /**
    * "View in Saved" / "View in Friends" — the other half of a notification
@@ -1087,15 +1125,8 @@ export function NotificationsScreen({
         notification={notifications.find((n) => n.id === menuId) ?? null}
         visible={menuId !== null}
         onClose={() => setMenuId(null)}
-        onClosed={() => {
-          const parked = parkedMessage.current;
-          parkedMessage.current = null;
-          if (parked) openNotification(parked);
-        }}
+        onClosed={openParked}
         onOpen={openNotification}
-        onReadMessage={(n) => {
-          parkedMessage.current = n;
-        }}
         onView={viewNotification}
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
@@ -1104,12 +1135,14 @@ export function NotificationsScreen({
       <AnnouncementSheet
         notification={notifications.find((n) => n.id === messageId) ?? null}
         visible={messageId !== null}
-        onClose={() => setMessageId(null)}
+        onClose={closeMessage}
+        onClosed={openParked}
       />
 
       <BottomSheet
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
+        onClosed={openParked}
         title="Inbox actions"
       >
         <View style={styles.actionsBody}>

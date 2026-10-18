@@ -47,7 +47,7 @@ renumber.
   `scripts/wcag-contrast.mjs`, measured on the surface it renders on; its
   known-failures list only shrinks.
 - **A touch target is 48×48 dp**, even when drawn smaller. A mouse target is
-  never under 24px.
+  never under 24px. A link inside running text is exempt, as in WCAG 2.5.8.
 - **On the map, chrome is the least it can be**: no permanent labels, no
   pinned cards, a badge only while what it says is true. A running job is one
   glyph, its numbers one press away.
@@ -229,7 +229,8 @@ renumber.
 ## 10. Surfaces
 
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
-  for looking.** Never the only way to read something.
+  for looking.** Never the only way to read something, except a maintainer
+  message, which has no page.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title

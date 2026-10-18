@@ -42,13 +42,6 @@ describe("messageSpans", () => {
       { ...plain, text: "then wait" },
     ]);
   });
-
-  // The parser already refuses the scheme; this holds that nothing here
-  // turns its leftover text back into a link.
-  it("never links what the parser dropped", () => {
-    const spans = spansOf("[x](javascript:alert(1))");
-    expect(spans.every((s) => s.href === null)).toBe(true);
-  });
 });
 
 describe("listMarker", () => {

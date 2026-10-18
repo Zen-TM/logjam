@@ -9,7 +9,10 @@ export type MessageSpan = {
   strong: boolean;
   em: boolean;
   code: boolean;
-  /** Already https, http or mailto: the shared parser drops anything else. */
+  /**
+   * Already https, http or mailto: the shared parser drops anything else.
+   * Guard: shared/src/announcementMarkdown.test.ts ("unlinks %s…").
+   */
   href: string | null;
 };
 
