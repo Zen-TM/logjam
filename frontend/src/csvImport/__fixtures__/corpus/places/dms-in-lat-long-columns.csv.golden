@@ -18,5 +18,5 @@
     "Row 3: latitude \"33 18 0 S\" couldn't be read — skipped"
   ],
   "droppedRows": 2,
-  "matches": []
+  "blocked": "No valid place rows found (each needs a name, latitude and longitude)."
 }

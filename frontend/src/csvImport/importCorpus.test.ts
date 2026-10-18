@@ -11,11 +11,15 @@
 // notes, parties and dates are made up. Where the importer turns a shape away,
 // the golden says so (`blocked`): that is a finding, not a pass.
 //
-// "blocked" and the decision words mirror UnifiedImportDialog's own branches
-// (it cannot render here); the row work itself is csvImport/prepareRows.ts, the
-// code the dialog calls. After an intended change:
+// The row work, the decision words and the zero-row errors are csvImport/
+// prepareRows.ts, the code the dialog calls; what stays here is the order the
+// dialog runs them in and the `blocked` labels. After an intended change:
 //   npx vitest run src/csvImport/importCorpus.test.ts -u
 // and read the golden diff.
+//
+// Mutation that turns it red: changing the `rowIndex + 2` line numbering in
+// prepareRows.ts, or making detectDateFormat ignore a sample (the goldens'
+// warnings and dateFormat change).
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,28 +30,42 @@ import { detectDateFormat } from "./detectDateFormat";
 import { detectFileKind } from "./detectFileKind";
 import { detectPlaceColumns, REQUIRED_ROLES } from "./placeColumns";
 import { parseCsv } from "./parseCsv";
-import { preparePlaceRows, prepareTripRows } from "./prepareRows";
+import {
+  dateSamples,
+  NO_PLACE_ROWS_ERROR,
+  NO_TRIP_ROWS_ERROR,
+  placeRowDecision,
+  preparePlaceRows,
+  prepareTripRows,
+  tripRowDecision,
+} from "./prepareRows";
 
-// The seed's Blue Mountains places (api/prisma/seed.ts), including its two
-// "Rocky Creek Canyon"s and its "Grand Canyon (copy)", which a logbook has to
-// cope with.
+// A signed-in user's own places, as GET /places returns them (the dialog
+// matches nothing else): the seed's Blue Mountains places alice owns
+// (api/prisma/seed.ts), names, coordinates and altNames copied by hand, with
+// its two "Rocky Creek Canyon"s, which a logbook has to cope with. Not bound to
+// the seed: a made-up list would serve as well.
 const PLACES: MatchCandidate[] = [
   ["Grand Canyon", [], -33.6563, 150.3179],
-  ["Grand Canyon (copy)", [], -33.6563, 150.3179],
   ["Claustral Canyon", [], -33.5603, 150.4033],
-  ["Empress Falls", [], -33.72, 150.3625],
-  ["Butterbox Canyon", [], -33.6304, 150.397],
+  ["Empress Falls", ["Valley-of-the-Waters"], -33.72, 150.3625],
+  ["Butterbox Canyon", ["Mt Hay"], -33.6304, 150.397],
   ["Rocky Creek Canyon", [], -33.2878, 150.2932],
   ["Rocky Creek Canyon", [], -33.4487, 150.3311],
   ["Wollangambe One", [], -33.4888, 150.3587],
   ["Wollangambe Crater", [], -33.4602, 150.2588],
-  ["Jugglers Canyon", [], -33.6592, 150.3294],
-  ["Yileen Canyon", ["Yileen"], -33.5666, 150.3295],
-  ["Serendipity Canyon", ["Serendipity"], -33.4947, 150.3812],
-  ["Sarcophagus Canyon", ["Sarcophagus"], -33.5693, 150.3235],
-  ["Du Faur Creek", [], -33.5153, 150.3343],
+  ["Jugglers Canyon", ["Pilcher"], -33.6592, 150.3294],
+  ["Yileen Canyon", [], -33.5666, 150.3295],
+  [
+    "Serendipity Canyon",
+    ["Why Don't We Do It In The Road"],
+    -33.4947,
+    150.3812,
+  ],
+  ["Sarcophagus Canyon", [], -33.5693, 150.3235],
+  ["Du Faur Creek", ["Clatterteeth"], -33.5153, 150.3343],
   ["Heart Attack Canyon", [], -33.2383, 150.3029],
-  ["Bowens Creek North (Lower)", [], -33.5215, 150.3932],
+  ["Bowens Creek North (Lower)", ["Gobsmacker"], -33.5215, 150.3932],
 ].map(([name, altNames, latitude, longitude], i) => ({
   id: `p${i + 1}`,
   name: name as string,
@@ -99,6 +117,13 @@ async function runImport(path: string): Promise<unknown> {
         blocked: `no column for ${missing.join(", ")}`,
       };
     const prepared = preparePlaceRows(parsed.rows, assignments);
+    if (prepared.rows.length === 0)
+      return {
+        ...base,
+        assignments,
+        ...prepared,
+        blocked: NO_PLACE_ROWS_ERROR,
+      };
     const seen = new Set<string>();
     const matches: Record<string, unknown>[] = [];
     for (const row of prepared.rows) {
@@ -116,13 +141,7 @@ async function runImport(path: string): Promise<unknown> {
       );
       matches.push({
         name: row.sourceName,
-        // The dialog: auto merges, none creates, anything between is reviewed.
-        decision:
-          result.confidence === "auto"
-            ? "merge"
-            : result.confidence === "none"
-              ? "create"
-              : "review",
+        decision: placeRowDecision(result),
         ...matchSummary(result),
       });
     }
@@ -134,11 +153,9 @@ async function runImport(path: string): Promise<unknown> {
   if (!roles.includes("name") || !roles.includes("date"))
     return { ...base, assignments, blocked: "no place-name or date column" };
   const dateHeader = parsed.headers.find((h) => assignments[h] === "date");
-  const samples = parsed.rows
-    .map((r) => r[dateHeader as string] ?? "")
-    .filter(Boolean)
-    .slice(0, 10);
-  const { format, ambiguous } = detectDateFormat(samples);
+  const { format, ambiguous } = detectDateFormat(
+    dateSamples(parsed.rows, dateHeader),
+  );
   const prepared = prepareTripRows({
     headers: parsed.headers,
     rows: parsed.rows,
@@ -154,7 +171,7 @@ async function runImport(path: string): Promise<unknown> {
       dateFormat: format,
       ambiguousDates: ambiguous,
       ...prepared,
-      blocked: "no valid trip rows",
+      blocked: NO_TRIP_ROWS_ERROR,
     };
   const seen = new Set<string>();
   const matches: Record<string, unknown>[] = [];
@@ -165,9 +182,7 @@ async function runImport(path: string): Promise<unknown> {
     const result = matchPlace({ name: row.sourcePlaceName }, PLACES);
     matches.push({
       name: row.sourcePlaceName,
-      // The dialog: auto links; the rest is reviewed (best guess preselected,
-      // or "no place" when there is none).
-      decision: result.confidence === "auto" ? "link" : "review",
+      decision: tripRowDecision(result),
       ...matchSummary(result),
     });
   }

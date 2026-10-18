@@ -19,6 +19,7 @@ const CORPUS = join(
 const TAG = `corpus-${Date.now()}`;
 // One prefix per file: two files carry the same canyon at the same spot, and a
 // repeated name at one spot folds into the first row instead of being created.
+// It also keeps the name lookups below off alice's seeded places.
 const prefix = (file: string) => `${TAG} ${file.split("/").pop()}`;
 
 type Golden = {
@@ -36,37 +37,41 @@ type Golden = {
 const golden = (path: string): Golden =>
   JSON.parse(readFileSync(join(CORPUS, `${path}.golden`), "utf8")) as Golden;
 
+// Posts a place file's prepared rows as creates; returns them and the response.
+async function importPlaces(file: string) {
+  const rows = golden(file).rows;
+  const res = await request(API_URL)
+    .post("/places/bulk")
+    .set(AUTH)
+    .send({
+      placeTypeId: CANYON_TYPE_ID,
+      importBatchId: randomUUID(),
+      rows: rows.map((row) => ({
+        data: { ...row.input, name: `${prefix(file)} ${row.sourceName}` },
+        resolution: { kind: "create" },
+      })),
+    });
+  return { rows, res };
+}
+
+type Stored = { name: string; notes: string | null; fieldValues: unknown };
+const storedPlace = async (file: string, sourceName?: string) =>
+  ((await request(API_URL).get("/places").set(AUTH)).body as Stored[]).find(
+    (p) => p.name === `${prefix(file)} ${sourceName}`,
+  );
+
 describe("import corpus → POST /places/bulk (fake auth = alice)", () => {
   for (const file of [
     "places/maintainer-shape.csv",
     "places/excel-utf8-bom-crlf.csv",
   ]) {
-    it(`accepts every prepared row of ${file}, with its field values`, async () => {
-      const rows = golden(file).rows;
-      // Prefixed so nothing merges into the seed's own Claustral Canyon etc.
-      const res = await request(API_URL)
-        .post("/places/bulk")
-        .set(AUTH)
-        .send({
-          placeTypeId: CANYON_TYPE_ID,
-          importBatchId: randomUUID(),
-          rows: rows.map((row) => ({
-            data: {
-              ...row.input,
-              name: `${prefix(file)} ${row.sourceName}`,
-            },
-            resolution: { kind: "create" },
-          })),
-        });
+    it(`accepts every prepared row of ${file}, with its notes`, async () => {
+      const { rows, res } = await importPlaces(file);
       expect(res.status).toBe(200);
       expect(res.body.errors).toEqual([]);
       expect(res.body.created).toBe(rows.length);
-
-      const list = await request(API_URL).get("/places").set(AUTH);
       for (const row of rows) {
-        const stored = (
-          list.body as { name: string; notes: string | null }[]
-        ).find((p) => p.name === `${prefix(file)} ${row.sourceName}`);
+        const stored = await storedPlace(file, row.sourceName);
         expect(stored, row.sourceName).toBeDefined();
         expect(stored?.notes ?? null).toBe(row.input?.notes ?? null);
       }
@@ -74,16 +79,30 @@ describe("import corpus → POST /places/bulk (fake auth = alice)", () => {
   }
 
   it("keeps the maintainer's grades and quality on the stored place", async () => {
-    const claustral = golden("places/maintainer-shape.csv").rows[0];
-    const list = await request(API_URL).get("/places").set(AUTH);
-    const stored = (
-      list.body as { name: string; fieldValues: Record<string, unknown> }[]
-    ).find(
-      (p) =>
-        p.name ===
-        `${prefix("places/maintainer-shape.csv")} ${claustral.sourceName}`,
-    );
-    expect(stored?.fieldValues).toMatchObject({
+    // Its own import under its own prefix, so the test runs alone.
+    const file = "places/maintainer-shape.csv";
+    const claustral = golden(file).rows[0];
+    const key = "places/maintainer-shape.csv#grades";
+    const res = await request(API_URL)
+      .post("/places/bulk")
+      .set(AUTH)
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: randomUUID(),
+        rows: [
+          {
+            data: {
+              ...claustral.input,
+              name: `${prefix(key)} ${claustral.sourceName}`,
+            },
+            resolution: { kind: "create" },
+          },
+        ],
+      });
+    expect(res.body.created).toBe(1);
+    expect(
+      (await storedPlace(key, claustral.sourceName))?.fieldValues,
+    ).toMatchObject({
       v_grade: 3,
       a_grade: 3,
       commitment: 3,

@@ -65,9 +65,9 @@
     },
     {
       "rowIndex": 6,
-      "sourcePlaceName": "Yileen",
+      "sourcePlaceName": "Valley-of-the-Waters",
       "date": "2021-05-07",
-      "notes": "Alt name in the seed",
+      "notes": "Alt name of Empress Falls",
       "types": [],
       "customFields": {}
     },
@@ -91,7 +91,7 @@
       "rowIndex": 9,
       "sourcePlaceName": "Grand Canyon",
       "date": "2021-05-10",
-      "notes": "Two places carry this name",
+      "notes": "Exact name",
       "types": [],
       "customFields": {}
     },
@@ -162,12 +162,12 @@
       ]
     },
     {
-      "name": "Yileen",
+      "name": "Valley-of-the-Waters",
       "decision": "link",
       "confidence": "auto",
-      "best": "Yileen Canyon",
+      "best": "Empress Falls",
       "candidates": [
-        "Yileen Canyon"
+        "Empress Falls"
       ]
     },
     {
@@ -186,12 +186,11 @@
     },
     {
       "name": "Grand Canyon",
-      "decision": "review",
-      "confidence": "review",
+      "decision": "link",
+      "confidence": "auto",
       "best": "Grand Canyon",
       "candidates": [
-        "Grand Canyon",
-        "Grand Canyon (copy)"
+        "Grand Canyon"
       ]
     },
     {

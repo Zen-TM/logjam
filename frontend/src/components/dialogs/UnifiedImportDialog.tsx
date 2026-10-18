@@ -69,8 +69,13 @@ import {
   type DateFormat,
 } from "../../csvImport/detectDateFormat";
 import {
+  dateSamples,
+  NO_PLACE_ROWS_ERROR,
+  NO_TRIP_ROWS_ERROR,
+  placeRowDecision,
   preparePlaceRows,
   prepareTripRows,
+  tripRowDecision,
   type PreparedPlaceRow,
   type PreparedTripRow,
 } from "../../csvImport/prepareRows";
@@ -559,13 +564,7 @@ function UnifiedImportDialog({
       for (const h of parsed.headers) forms[h] = { label: h, type: "string" };
       setTripNewCfForms(forms);
       const dateCol = parsed.headers.find((h) => detected[h] === "date");
-      const samples = dateCol
-        ? parsed.rows
-            .map((r) => r[dateCol] ?? "")
-            .filter(Boolean)
-            .slice(0, 10)
-        : [];
-      setDateFormat(detectDateFormat(samples).format);
+      setDateFormat(detectDateFormat(dateSamples(parsed.rows, dateCol)).format);
     }
   }
 
@@ -595,13 +594,7 @@ function UnifiedImportDialog({
       for (const h of moved.headers) forms[h] = { label: h, type: "string" };
       setTripNewCfForms(forms);
       const dateCol = moved.headers.find((h) => detected[h] === "date");
-      const samples = dateCol
-        ? moved.rows
-            .map((r) => r[dateCol] ?? "")
-            .filter(Boolean)
-            .slice(0, 10)
-        : [];
-      setDateFormat(detectDateFormat(samples).format);
+      setDateFormat(detectDateFormat(dateSamples(moved.rows, dateCol)).format);
     }
   }
 
@@ -668,10 +661,7 @@ function UnifiedImportDialog({
     const { rows, warnings: tripRowWarnings, droppedRows } = buildTripRows();
     setTripDroppedRows(droppedRows);
     if (rows.length === 0) {
-      setError(
-        "No valid trip rows found — each row needs a place name and a date we could read. " +
-          "If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023).",
-      );
+      setError(NO_TRIP_ROWS_ERROR);
       return false;
     }
     const decisions: Record<string, ReviewDecision> = {};
@@ -691,7 +681,7 @@ function UnifiedImportDialog({
       }
       displayName[key] = row.sourcePlaceName;
       const result = matchPlace({ name: row.sourcePlaceName }, candidates);
-      if (result.confidence === "auto" && result.best) {
+      if (tripRowDecision(result) === "link" && result.best) {
         decisions[key] = { kind: "link", id: result.best.candidate.id };
       } else {
         // review OR none → surfaced; none defaults to No place.
@@ -741,9 +731,7 @@ function UnifiedImportDialog({
     if (placeFile && placeMapValid) {
       const { rows, warnings, droppedRows } = buildPlaceRows();
       if (rows.length === 0) {
-        setError(
-          "No valid place rows found (each needs a name, latitude and longitude).",
-        );
+        setError(NO_PLACE_ROWS_ERROR);
         return;
       }
       setPlaceWarnings(warnings);
@@ -769,9 +757,10 @@ function UnifiedImportDialog({
           },
           candidates,
         );
-        if (result.confidence === "auto" && result.best) {
+        const decision = placeRowDecision(result);
+        if (decision === "merge" && result.best) {
           autoMergeId[key] = result.best.candidate.id;
-        } else if (result.confidence === "none") {
+        } else if (decision === "create") {
           decisions[key] = { kind: "create" };
         } else {
           surfaced.add(key);

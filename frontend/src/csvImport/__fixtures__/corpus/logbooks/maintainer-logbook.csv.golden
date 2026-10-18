@@ -105,12 +105,11 @@
   "matches": [
     {
       "name": "Grand",
-      "decision": "review",
-      "confidence": "review",
+      "decision": "link",
+      "confidence": "auto",
       "best": "Grand Canyon",
       "candidates": [
-        "Grand Canyon",
-        "Grand Canyon (copy)"
+        "Grand Canyon"
       ]
     },
     {
