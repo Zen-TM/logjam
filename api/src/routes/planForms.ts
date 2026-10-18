@@ -1,13 +1,21 @@
 // A plan's forms and the answers members give them. Leaders build forms;
 // every member answers for themselves, last write wins.
 //
-// WHO SEES AN ANSWER NEVER WIDENS AFTER IT WAS GIVEN (root AGENTS.md): a
-// leader may turn a form from "everyone" to "leaders" at any time, but back
-// only while no one else has answered; and an answer carries the visibility
-// its author was shown, refused if it has changed since. The two lock the
-// form row against each other, so neither can slip between the other's
-// check and write. Reading answers is lib/tripPlanView.ts's `formView`.
-// Guard: __tests__/planForms.test.ts.
+// WHO SEES AN ANSWER NEVER WIDENS AFTER IT WAS GIVEN, following root
+// AGENTS.md's "no default widens who sees something": a leader may turn a
+// form from "everyone" to "leaders" at any time, but back only while no one
+// else has answered; and an answer carries the visibility its author was
+// shown, refused if it has changed since. Guard for the refusals:
+// __tests__/planForms.test.ts ("never widening who sees an answer").
+//
+// The two can't interleave. Every write here starts with touchPlan, whose
+// UPDATE holds the plan row until commit, so writes in one plan run one at a
+// time and, at Postgres's READ COMMITTED, each reads what the one before
+// committed. `lockForm` then also locks the form row (FOR UPDATE in the
+// PATCH, FOR SHARE in the answer PUT), which keeps the pair exclusive for a
+// writer elsewhere that answers without touching the plan first; plan row
+// before form row everywhere, so they never deadlock.
+// Reading answers is lib/tripPlanView.ts's `formView`.
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
 import {
@@ -97,6 +105,7 @@ router.post(
     const planId = access.plan.id;
     const input = accepted(parseTripPlanFormCreate(req.body));
     const form = await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const [count, last] = await Promise.all([
         tx.tripPlanForm.count({ where: { planId } }),
         tx.tripPlanForm.findFirst({
@@ -114,7 +123,6 @@ router.post(
         data: { planId, ...input, position: (last?.position ?? -1) + 1 },
         select: { id: true },
       });
-      await touchPlan(tx, planId);
       return row;
     });
     res.status(201).json(await viewOf(form.id, userId, access));
@@ -131,6 +139,7 @@ router.put(
     const planId = access.plan.id;
     const ids = accepted(parseTripPlanOrder(req.body, TRIP_PLAN_MAX_FORMS));
     await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const current = await tx.tripPlanForm.findMany({
         where: { planId },
         select: { id: true },
@@ -138,12 +147,11 @@ router.put(
       const stored = new Set(current.map((row) => row.id));
       if (stored.size !== ids.length || ids.some((id) => !stored.has(id)))
         throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
-      await Promise.all(
-        ids.map((id, position) =>
-          tx.tripPlanForm.update({ where: { id }, data: { position } }),
-        ),
-      );
-      await touchPlan(tx, planId);
+      for (const [position, id] of ids.entries())
+        await tx.tripPlanForm.updateMany({
+          where: { id, planId },
+          data: { position },
+        });
     });
     const [forms, statuses] = await Promise.all([
       prisma.tripPlanForm.findMany({
@@ -170,6 +178,7 @@ router.patch(
     const id = getParam(req.params.formId);
     const patch = accepted(parseTripPlanFormPatch(req.body));
     await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       await lockForm(tx, planId, id, "update");
       if (patch.visibleTo?.to === "members") {
         const form = await tx.tripPlanForm.findUniqueOrThrow({
@@ -212,7 +221,6 @@ router.patch(
         },
       });
       if (count === 0) throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
-      await touchPlan(tx, planId);
     });
     res.json(await viewOf(id, userId, access));
   },
@@ -228,11 +236,11 @@ router.delete(
     const planId = access.plan.id;
     const id = getParam(req.params.formId);
     await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const { count } = await tx.tripPlanForm.deleteMany({
         where: { id, planId },
       });
       if (count === 0) throw formNotFound();
-      await touchPlan(tx, planId);
     });
     res.status(204).send();
   },
@@ -252,6 +260,7 @@ router.put(
     if (!isTripPlanFormVisibility(seen))
       throw malformed("visibleTo must be the visibility the form showed");
     await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       await lockForm(tx, planId, id, "share");
       const form = await tx.tripPlanForm.findUniqueOrThrow({
         where: { id },
@@ -273,7 +282,6 @@ router.put(
         create: { formId: id, userId, answers },
         update: { answers },
       });
-      await touchPlan(tx, planId);
     });
     const view = await viewOf(id, userId, access);
     res.json(view.myAnswer);
@@ -290,6 +298,7 @@ router.delete(
     const planId = access.plan.id;
     const id = getParam(req.params.formId);
     await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const form = await tx.tripPlanForm.findFirst({
         where: { id, planId },
         select: { requiredToJoin: true },
@@ -301,7 +310,6 @@ router.delete(
           say`Everyone in this plan answers this form. To take your answer back, leave the plan.`,
         );
       await tx.tripPlanAnswer.deleteMany({ where: { formId: id, userId } });
-      await touchPlan(tx, planId);
     });
     res.status(204).send();
   },

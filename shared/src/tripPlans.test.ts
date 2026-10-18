@@ -231,6 +231,57 @@ describe("forms", () => {
     );
   });
 
+  // An answer object is a plain object: an id it already has (`__proto__`,
+  // `toString`) can't hold an answer. Mutation: drop the Object.prototype
+  // check in questionId.
+  it("refuses a question id a plain object already has", () => {
+    const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
+    for (const id of ["__proto__", "toString", "constructor"])
+      expect(
+        isMalformed(
+          parseTripPlanFormCreate({
+            ...base,
+            questions: [{ id, kind: "text", label: "Q", required: true }],
+          }),
+        ),
+      ).toBe(true);
+  });
+
+  it("caps the arrays it drops or only compares", () => {
+    const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
+    const options = Array.from({ length: 31 }, (_, i) => ({
+      id: `o${i}`,
+      label: "O",
+    }));
+    expect(
+      parseTripPlanFormCreate({
+        ...base,
+        questions: [
+          { id: "q", kind: "text", label: "Q", required: false, options },
+        ],
+      }),
+    ).toMatchObject({ status: 413 });
+    const q = { id: "q", kind: "yesNo", label: "Q", required: false };
+    expect(
+      parseTripPlanFormPatch({
+        questions: { from: Array.from({ length: 41 }, () => q), to: [q] },
+      }),
+    ).toMatchObject({ status: 413 });
+  });
+
+  // The print summary reads these answers by question id. Mutation: rename
+  // safetyContacts' phone to tel.
+  it("pins the question ids the print summary reads", () => {
+    const ids = (id: "safetyContacts" | "carpool") =>
+      TRIP_PLAN_FORM_PRESETS[id].questions.map((q) => q.id);
+    expect(ids("safetyContacts")).toEqual(
+      expect.arrayContaining(["name", "phone", "name2", "phone2"]),
+    );
+    expect(ids("carpool")).toEqual(
+      expect.arrayContaining(["mode", "seats", "from"]),
+    );
+  });
+
   it("refuses a repeated question id or an unknown preset as malformed", () => {
     const q = { id: "q", kind: "yesNo", label: "Q", required: false };
     const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
@@ -279,18 +330,34 @@ describe("answers", () => {
     });
   });
 
-  it("refuses an option or a question the form doesn't have", () => {
-    expect(isMalformed(parseTripPlanAnswers(questions, { mode: "bus" }))).toBe(
-      true,
-    );
-    expect(
-      isMalformed(
-        parseTripPlanAnswers(questions, { mode: "lift", ghost: "x" }),
-      ),
-    ).toBe(true);
+  // A stale form, not a broken client: the person gets a sentence to act on.
+  // Mutation: refuse any of these with bad(...) again.
+  it("asks the person to check a form that changed since they opened it", () => {
+    const changed =
+      "This form changed since you opened it. Check it, then answer again.";
+    const stale = [
+      parseTripPlanAnswers(questions, { mode: "bus" }),
+      parseTripPlanAnswers(questions, { mode: "lift", ghost: "x" }),
+      parseTripPlanAnswers(questions, { mode: "lift", seats: "two" }),
+      parseTripPlanAnswers(gear, { items: ["helmet", "crampons"] }),
+      parseTripPlanAnswers(TRIP_PLAN_FORM_PRESETS.experience.questions, {
+        trips: "few",
+        abseil: "yes",
+        swim: true,
+      }),
+    ];
+    for (const parsed of stale)
+      expect(parsed).toEqual({ sentence: changed, status: 409 });
     expect(
       sentence(parseTripPlanAnswers(questions, { mode: "lift", seats: -1 })),
     ).toBe("Answer with a whole number, 0 or more.");
+  });
+
+  it("caps a tick list at the number of options", () => {
+    const many = Array.from({ length: 31 }, () => "helmet");
+    expect(parseTripPlanAnswers(gear, { items: many })).toMatchObject({
+      status: 413,
+    });
   });
 
   it("reads a stored answer against the form as it is now", () => {
@@ -306,6 +373,17 @@ describe("answers", () => {
       }),
     ).toEqual({ from: "Katoomba" });
     expect(currentTripPlanAnswers(edited, "junk")).toEqual({});
+  });
+
+  // Mutation: drop the multiChoice filter in currentTripPlanAnswers.
+  it("keeps the ticks whose options are still there", () => {
+    const fewer: TripPlanQuestion[] = [
+      { ...gear[0], options: gear[0].options?.filter((o) => o.id !== "rope") },
+    ];
+    expect(
+      currentTripPlanAnswers(fewer, { items: ["harness", "rope"] }),
+    ).toEqual({ items: ["harness"] });
+    expect(currentTripPlanAnswers(fewer, { items: ["rope"] })).toEqual({});
   });
 });
 

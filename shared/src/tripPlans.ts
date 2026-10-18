@@ -277,9 +277,10 @@ export type TripPlanFormCreate = {
 
 /**
  * PUT …/answers/me. `visibleTo` is who the form said would see the answers
- * when the person filled it in: the API refuses the answer if a leader has
- * widened it since, so an answer never reaches more people than its author
- * was told.
+ * when the person filled it in: the API refuses the answer if who sees the
+ * answers has changed since, so an answer never reaches more people than its
+ * author was told.
+ * Guard: api/src/__tests__/planForms.test.ts ("never widening who sees an answer").
  */
 export type TripPlanAnswerPut = {
   answers: TripPlanAnswers;
@@ -304,6 +305,7 @@ const options = (...pairs: [string, string][]): TripPlanQuestionOption[] =>
  * Where a leader's form starts. Choosing one fills the builder; the leader
  * can change anything before and after saving. Question ids are stable, so
  * the print summary can find "the phone".
+ * Guard: tripPlans.test.ts ("pins the question ids the print summary reads").
  */
 export const TRIP_PLAN_FORM_PRESETS: Record<
   TripPlanFormPresetId,
@@ -554,20 +556,20 @@ export const TRIP_PLAN_CHANGED_SENTENCE = say`Not saved: someone else changed th
 // ── Validators: one per write shape, run by the API and by both clients ──
 
 /**
- * Why a write is refused: a sentence the person reads (400, or 413 for a
- * count over its cap), or a shape only a broken client sends, whose detail
+ * Why a write is refused: a sentence the person reads (400; 409 when what
+ * they saw has changed; 413 for a count over its cap), or a shape only a broken client sends, whose detail
  * never holds what the person wrote (it is logged).
  * Guard: tripPlans.test.ts ("never echoes").
  */
 export type TripPlanRefusal =
-  | { sentence: UserSentence; status: 400 | 413 }
+  | { sentence: UserSentence; status: 400 | 409 | 413 }
   | { malformed: string; status?: 413 };
 export type TripPlanParsed<T> = { value: T } | TripPlanRefusal;
 
 class Refused {
   constructor(readonly refusal: TripPlanRefusal) {}
 }
-function refuse(sentence: UserSentence, status: 400 | 413 = 400): never {
+function refuse(sentence: UserSentence, status: 400 | 409 | 413 = 400): never {
   throw new Refused({ sentence, status });
 }
 function bad(detail: string, status?: 413): never {
@@ -801,6 +803,22 @@ export function parseTripPlanOrder(
 
 const QUESTION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 
+/** A question id an answer object can hold as its own key: not `__proto__`,
+ *  `toString` or anything else a plain object already has. */
+function questionId(value: unknown, what: string, seen: Set<string>): string {
+  const id = text(value, what);
+  if (!QUESTION_ID.test(id) || id in Object.prototype || seen.has(id))
+    bad(`${what} must be a unique slug`);
+  seen.add(id);
+  return id;
+}
+
+/** What a stale client is told: the form moved under the person answering. */
+const FORM_CHANGED = say`This form changed since you opened it. Check it, then answer again.`;
+function stale(): never {
+  refuse(FORM_CHANGED, 409);
+}
+
 function formTitle(value: unknown): string {
   const title = text(value, "title").trim();
   if (!title) refuse(say`Give the form a title.`);
@@ -829,10 +847,7 @@ function questionOptions(value: unknown): TripPlanQuestionOption[] {
   const seen = new Set<string>();
   return value.map((raw) => {
     const option = record(raw, "option");
-    const id = text(option.id, "option.id");
-    if (!QUESTION_ID.test(id) || seen.has(id))
-      bad("option ids must be unique slugs");
-    seen.add(id);
+    const id = questionId(option.id, "option.id", seen);
     const label = text(option.label, "option.label").trim();
     if (!label) refuse(say`Every option needs a label.`);
     if (label.length > TRIP_PLAN_OPTION_LABEL_MAX_LENGTH)
@@ -854,10 +869,7 @@ function questions(value: unknown): TripPlanQuestion[] {
   const seen = new Set<string>();
   return value.map((raw) => {
     const input = record(raw, "question");
-    const id = text(input.id, "question.id");
-    if (!QUESTION_ID.test(id) || seen.has(id))
-      bad("question ids must be unique slugs");
-    seen.add(id);
+    const id = questionId(input.id, "question.id", seen);
     if (!isTripPlanQuestionKind(input.kind)) bad("question.kind is not a kind");
     const label = text(input.label, "question.label").trim();
     if (!label) refuse(say`Every question needs a label.`);
@@ -884,6 +896,11 @@ function questions(value: unknown): TripPlanQuestion[] {
     // may still carry them, and they are dropped rather than refused.
     if (input.kind === "choice" || input.kind === "multiChoice")
       question.options = questionOptions(input.options);
+    else if (
+      Array.isArray(input.options) &&
+      input.options.length > TRIP_PLAN_MAX_OPTIONS
+    )
+      bad("question.options is over the cap", 413);
     return question;
   });
 }
@@ -921,6 +938,8 @@ export function parseTripPlanFormPatch(
     if (input.questions !== undefined) {
       const { from, to } = cas(input.questions, "questions");
       if (!Array.isArray(from)) bad("questions.from must be an array");
+      if (from.length > TRIP_PLAN_MAX_QUESTIONS)
+        bad("questions.from is over the cap", 413);
       patch.questions = { from: from as TripPlanQuestion[], to: questions(to) };
     }
     if (input.visibleTo !== undefined) {
@@ -944,19 +963,21 @@ export function parseTripPlanFormPatch(
 
 /**
  * One answer, normalised; undefined when it says nothing (an empty string, no
- * option ticked, an unticked agree box).
+ * option ticked, an unticked agree box). A value that doesn't fit the
+ * question (a kind or option a leader has changed since the form was opened)
+ * is stale, not malformed: an up-to-date client sends it after a leader's edit.
  */
 function answerValue(
   question: TripPlanQuestion,
   value: unknown,
 ): TripPlanAnswerValue | undefined {
-  const what = `the answer to a ${question.kind} question`;
   const optionIds = new Set(question.options?.map((option) => option.id));
   switch (question.kind) {
     case "text":
     case "phone":
     case "longText": {
-      const answer = text(value, what).trim();
+      if (typeof value !== "string") stale();
+      const answer = value.trim();
       const max =
         question.kind === "longText"
           ? TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH
@@ -966,32 +987,35 @@ function answerValue(
       return answer || undefined;
     }
     case "number":
-      if (typeof value !== "number") bad(`${what} must be a number`);
+      if (typeof value !== "number") stale();
       if (!Number.isInteger(value) || value < 0)
         refuse(say`Answer with a whole number, 0 or more.`);
       return value;
     case "choice":
-      if (typeof value !== "string" || !optionIds.has(value))
-        bad(`${what} is not one of its options`);
+      if (typeof value !== "string" || !optionIds.has(value)) stale();
       return value;
     case "multiChoice": {
-      const ticked = stringList(value, what);
-      if (ticked.some((id) => !optionIds.has(id)))
-        bad(`${what} is not among its options`);
-      const unique = [...new Set(ticked)];
+      if (!Array.isArray(value)) stale();
+      if (value.length > TRIP_PLAN_MAX_OPTIONS)
+        bad("a multiChoice answer is over the cap", 413);
+      if (value.some((id) => typeof id !== "string" || !optionIds.has(id)))
+        stale();
+      const unique = [...new Set(value as string[])];
       return unique.length ? unique : undefined;
     }
     case "yesNo":
-      return flag(value, what);
+      if (typeof value !== "boolean") stale();
+      return value;
     case "agree":
-      return flag(value, what) || undefined;
+      if (typeof value !== "boolean") stale();
+      return value || undefined;
   }
 }
 
 /**
- * PUT …/answers/me, and the answers a joiner gives. Values for questions the
- * form no longer has are refused: the client sent them against a form it
- * should have refetched.
+ * PUT …/answers/me, and the answers a joiner gives. An answer to a question
+ * the form no longer has, or that no longer fits one, is a 409: the person
+ * answered the form as it was, and is asked to check it.
  */
 export function parseTripPlanAnswers(
   formQuestions: readonly TripPlanQuestion[],
@@ -1000,9 +1024,7 @@ export function parseTripPlanAnswers(
   return checked(() => {
     const input = record(value, "answers");
     const byId = new Map(formQuestions.map((q) => [q.id, q]));
-    for (const id of Object.keys(input))
-      if (!byId.has(id))
-        bad("an answer names a question the form doesn't have");
+    for (const id of Object.keys(input)) if (!byId.has(id)) stale();
     const answers: TripPlanAnswers = {};
     for (const question of formQuestions) {
       const raw = input[question.id];
@@ -1021,7 +1043,8 @@ export function parseTripPlanAnswers(
 /**
  * A stored answer as the form now reads: values for questions since removed,
  * or that no longer fit a question whose kind or options changed, are left
- * out. Questions keep their answers when a leader edits the form.
+ * out. Questions keep their answers when a leader edits the form, and a tick
+ * list keeps the ticks whose options are still there.
  */
 export function currentTripPlanAnswers(
   formQuestions: readonly TripPlanQuestion[],
@@ -1033,7 +1056,11 @@ export function currentTripPlanAnswers(
   for (const question of formQuestions) {
     const raw = (stored as Record<string, unknown>)[question.id];
     if (raw === undefined || raw === null) continue;
-    const parsed = checked(() => answerValue(question, raw));
+    const kept =
+      question.kind === "multiChoice" && Array.isArray(raw)
+        ? raw.filter((id) => question.options?.some((o) => o.id === id))
+        : raw;
+    const parsed = checked(() => answerValue(question, kept));
     if ("value" in parsed && parsed.value !== undefined)
       answers[question.id] = parsed.value;
   }

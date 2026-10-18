@@ -105,6 +105,47 @@ describe("building forms", () => {
     expect((await patch("Experience", "Your experience")).status).toBe(200);
     expect((await patch("Experience", "Background")).status).toBe(409);
   });
+
+  // The one compare-and-set on a JSON column. Mutation: drop the questions
+  // arm from the PATCH's where.
+  it("compare-and-sets the questions as a whole", async () => {
+    const id = await makeForm(experience);
+    const served = (await view(ALICE_SUB)).body.forms[0].questions;
+    const edit = (to: unknown[]) =>
+      request(API_URL)
+        .patch(`/plans/${planId}/forms/${id}`)
+        .set(as(ALICE_SUB))
+        .send({ questions: { from: served, to } });
+    expect((await edit(served.slice(0, 3))).status).toBe(200);
+    expect((await edit(served.slice(0, 2))).status).toBe(409);
+  });
+
+  // A form id is reached only through its own plan. Mutation: drop
+  // `plan_id` from either query in lockForm.
+  it("404s a form of another plan", async () => {
+    const other = await request(API_URL)
+      .post("/plans")
+      .set(as(BOB_SUB))
+      .send({ name: "Bob's own" });
+    const foreign = (
+      await request(API_URL)
+        .post(`/plans/${other.body.id}/forms`)
+        .set(as(BOB_SUB))
+        .send(experience)
+    ).body.id;
+    const patch = await request(API_URL)
+      .patch(`/plans/${planId}/forms/${foreign}`)
+      .set(as(ALICE_SUB))
+      .send({ title: { from: "Experience", to: "Mine now" } });
+    expect(patch.status).toBe(404);
+    expect(patch.body.error).toBe("Couldn't find that.");
+    const put = await answer(ALICE_SUB, foreign, BOB_EXPERIENCE, "leaders");
+    expect(put.status).toBe(404);
+    expect(
+      await prisma.tripPlanAnswer.count({ where: { formId: foreign } }),
+    ).toBe(0);
+    await prisma.tripPlan.delete({ where: { id: other.body.id } });
+  });
 });
 
 describe("answers", () => {
@@ -150,7 +191,8 @@ describe("answers", () => {
     ).toBe(204);
   });
 
-  // Mutation: let a non-leader through formView's visibleTo check.
+  // Mutation: let a non-leader through formView's visibleTo check, e.g.
+  // `viewer.role !== "member"` for the leader test (editors then see it).
   it("leaders-only answers reach the leaders and their author, no one else", async () => {
     const id = await makeForm(experience);
     expect((await answer(BOB_SUB, id, BOB_EXPERIENCE, "leaders")).status).toBe(
@@ -168,6 +210,43 @@ describe("answers", () => {
     expect(alice.body.forms[0].answers).toMatchObject([
       { user: { id: BOB_ID }, answers: BOB_EXPERIENCE },
     ]);
+
+    await prisma.tripPlanMember.update({
+      where: { planId_userId: { planId, userId: CAROL_ID } },
+      data: { role: "editor" },
+    });
+    const editor = await view(CAROL_SUB);
+    expect(editor.body.myRole).toBe("editor");
+    expect(editor.body.forms[0]).toMatchObject({ myAnswer: null, answers: [] });
+    expect(JSON.stringify(editor.body)).not.toContain("Bad knee");
+  });
+
+  // Answers outlive a membership row until the leave route deletes them.
+  // Mutation: `return true` in formView's leader branch.
+  it("an answer whose author is no longer in the plan reaches no one", async () => {
+    const id = await makeForm(experience);
+    await answer(BOB_SUB, id, BOB_EXPERIENCE, "leaders");
+    await prisma.tripPlanMember.delete({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+    });
+    const alice = await view(ALICE_SUB);
+    expect(alice.body.forms[0].answers).toEqual([]);
+    expect(JSON.stringify(alice.body)).not.toContain("Bad knee");
+  });
+
+  // An up-to-date client answering a form a leader just edited.
+  it("asks the person to check a form that changed while they answered", async () => {
+    const id = await makeForm(experience);
+    const served = (await view(ALICE_SUB)).body.forms[0].questions;
+    await request(API_URL)
+      .patch(`/plans/${planId}/forms/${id}`)
+      .set(as(ALICE_SUB))
+      .send({ questions: { from: served, to: served.slice(0, 3) } });
+    const res = await answer(BOB_SUB, id, BOB_EXPERIENCE, "leaders");
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe(
+      "This form changed since you opened it. Check it, then answer again.",
+    );
   });
 
   // Mutation: drop the `author === "active"` condition in formView.

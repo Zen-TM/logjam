@@ -132,6 +132,8 @@ export async function memberStatuses(
  * only to a leader, or to anyone when the form's answers are for everyone
  * and its author is in the plan (a leader also sees the answers of someone
  * asking to join). Never anyone's answer whose author is in no plan row.
+ * Guard: __tests__/planForms.test.ts ("leaders-only answers reach …", "an
+ * answer whose author is no longer in the plan reaches no one").
  */
 export function formView(
   form: FormRow,
