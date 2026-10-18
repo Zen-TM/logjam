@@ -345,8 +345,8 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/a11y.spec.ts --workers=1
-      # Writes to the seeded account and Undoes it, so it runs after the
-      # integration suite and leaves the DB as seeded.
+      # Writes to the seeded account and Undoes it (frontend/AGENTS.md), so a
+      # rerun of the integration suite still finds the DB as seeded.
       - name: Playwright CSV import
         working-directory: frontend
         env:

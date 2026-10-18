@@ -7,13 +7,14 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 // reaches. The expected values below are those files' goldens.
 //
 // Writes to the account, then takes it back: every case ends in Undo (also when
-// an assertion fails, `undoWhatWasImported`), because the integration suite's
-// seed-baseline sweep fails a run that leaves the DB differing from the seed.
+// an assertion fails, `undoWhatWasImported`), because the integration suite
+// refuses to start on a DB that differs from the seed (`_globalSetup.ts`).
+// Only rows an import created are undone, so the files avoid the seeded places.
 // Undo lives on the result, so what the import did is read there, before Undo.
 //
 // Mutations that turn it red: making `handleUndo` in UnifiedImportDialog skip
-// `undoImport` (the created place stays in the list), or changing a default
-// role in placeColumns.ts (the mapping step shows it).
+// `undoImport` (the created places stay in the list), or making `detectColumns`
+// or `placeColumns.ts` assign another role (the mapping step shows it).
 //
 // Local only: it needs fake auth and a seeded API (frontend/AGENTS.md).
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
@@ -34,8 +35,8 @@ async function openImportDialog(page: Page) {
   await page.getByRole("button", { name: "Places", exact: true }).click();
   await page.getByRole("button", { name: /^Add/ }).first().click();
   await page.getByRole("menuitem", { name: "Import from file" }).click();
-  // The Undo confirm is a second <dialog>, later in the DOM.
-  const dialog = page.locator("dialog[open]").first();
+  // Not the Undo confirm: that one is an alertdialog.
+  const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByRole("heading", { name: "Import data" }),
   ).toBeVisible();
@@ -72,10 +73,10 @@ test("a place list: map, preview, import, see it in Places, Undo", async ({
   try {
     await dialog
       .locator("input[type=file]")
-      .setInputFiles(corpus("places/excel-utf8-bom-crlf.csv"));
+      .setInputFiles(corpus("places/new-places-only.csv"));
 
-    // The mapping step: the BOM did not leak into the first header, and each
-    // column landed on its role (the golden's `assignments`).
+    // The mapping step: each column landed on its role (the golden's
+    // `assignments`).
     await expect(
       dialog.getByRole("heading", { name: /^Place columns/ }),
     ).toBeVisible({ timeout: 15_000 });
@@ -91,32 +92,30 @@ test("a place list: map, preview, import, see it in Places, Undo", async ({
       ).toHaveValue(role);
     }
 
-    // Two rows are seeded places (Claustral, Heart Attack: confident merges, so
-    // no review step); the third is new.
+    // Both rows are new, so there is no review step. The file avoids the
+    // seeded places on purpose: Undo spares a place an import merged into, with
+    // the file's values still written (api/src/routes/imports.ts).
     await next(dialog);
     await expect(
       dialog.getByRole("heading", { name: "Confirm import" }),
     ).toBeVisible();
-    await expect(dialog).toContainText("3 place rows ready to import.");
+    await expect(dialog).toContainText("2 place rows ready to import.");
 
     await dialog.getByRole("button", { name: "Import", exact: true }).click();
     await expect(
       dialog.getByRole("heading", { name: "Import complete" }),
     ).toBeVisible({ timeout: 15_000 });
-    await expectTallies(dialog, { Created: "1", Merged: "2" });
-    await expect(dialog).toContainText("2 places merged into existing entries");
-    await expect(dialog).toContainText("Claustral Canyon → Claustral Canyon");
+    await expectTallies(dialog, { Created: "2" });
 
     // The list behind the dialog was refetched.
-    const aside = page.locator("aside");
-    const created = aside.getByRole("button", {
-      name: "Corpus Excel Canyon",
-      exact: true,
-    });
-    await expect(created).toBeVisible();
+    const aside = page.getByRole("complementary", { name: "Places" });
+    const created = ["Corpus E2E Canyon One", "Corpus E2E Canyon Two"].map(
+      (name) => aside.getByRole("button", { name, exact: true }),
+    );
+    for (const place of created) await expect(place).toBeVisible();
 
     await undoWhatWasImported(page, dialog);
-    await expect(created).toHaveCount(0);
+    for (const place of created) await expect(place).toHaveCount(0);
   } finally {
     await undoWhatWasImported(page, dialog);
   }
