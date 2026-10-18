@@ -89,10 +89,11 @@ export function requirePlanRole(
 }
 
 /**
- * For a leader's write to who is in the plan, after touchPlan: the caller
- * still leads, or 403. A check made before the lock can be stale by the time
- * it is held, and two leaders demoting or removing each other would then
- * leave the plan with none.
+ * For a leader's write to who is in the plan, after touchPlan: the caller is
+ * still in it (else 404, as for anyone not in a plan) and still leads (else
+ * 403). A check made before the lock can be stale by the time it is held,
+ * and two leaders demoting or removing each other would then leave the plan
+ * with none.
  * Guard: __tests__/planMembers.test.ts ("a plan keeps a leader").
  */
 export async function requireStillLeader(
@@ -105,8 +106,8 @@ export async function requireStillLeader(
     where: { planId_userId: { planId, userId } },
     select: { status: true, role: true },
   });
-  if (caller?.status !== "active" || caller.role !== "leader")
-    throw new AppError(403, forbidden);
+  if (caller?.status !== "active") throw planNotFound();
+  if (caller.role !== "leader") throw new AppError(403, forbidden);
 }
 
 /** For a write to the plan's content: an active member, and not archived. */

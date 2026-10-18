@@ -301,13 +301,15 @@ describe("who reaches a plan", () => {
 });
 
 // Two leaders acting at once. alice's request reads her role, then waits
-// behind the plan row (touchPlan); this test holds that row, demotes alice
-// in the same transaction, and lets go, as bob's PATCH would.
-// Mutation: drop requireStillLeader from DELETE, PATCH or approve in
-// routes/planMembers.ts (that row then gets 409, or bob is removed).
+// behind the plan row (touchPlan); this test holds that row, demotes or
+// removes alice in the same transaction, and lets go, as bob would.
+// Mutations: drop requireStillLeader from POST /members, PATCH, approve or
+// DELETE in routes/planMembers.ts (that row then gets 409 or 200); let
+// requireStillLeader answer a caller no longer in the plan with 403, not 404.
 describe("a plan keeps a leader", () => {
-  async function whileDemoted(
+  async function whileChanged(
     act: () => PromiseLike<{ status: number }>,
+    change: "demoted" | "removed",
   ): Promise<{ status: number }> {
     let pending!: Promise<{ status: number }>;
     await prisma.$transaction(
@@ -321,10 +323,13 @@ describe("a plan keeps a leader", () => {
         });
         // Long enough for the request to pass its checks and reach touchPlan.
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        await tx.tripPlanMember.update({
-          where: { planId_userId: { planId, userId: ALICE_ID } },
-          data: { role: "member" },
-        });
+        const alice = { planId_userId: { planId, userId: ALICE_ID } };
+        if (change === "demoted")
+          await tx.tripPlanMember.update({
+            where: alice,
+            data: { role: "member" },
+          });
+        else await tx.tripPlanMember.delete({ where: alice });
       },
       { timeout: 10_000 },
     );
@@ -332,29 +337,56 @@ describe("a plan keeps a leader", () => {
   }
 
   it.each([
-    ["removing the other leader", () => remove(ALICE_SUB, BOB_ID)],
-    ["demoting the other leader", () => setRole(ALICE_SUB, BOB_ID, "member")],
     [
+      "demoted",
+      "removing the other leader",
+      403,
+      () => remove(ALICE_SUB, BOB_ID),
+    ],
+    [
+      "demoted",
+      "demoting the other leader",
+      403,
+      () => setRole(ALICE_SUB, BOB_ID, "member"),
+    ],
+    [
+      "demoted",
       "letting someone in",
+      403,
       () =>
         request(API_URL)
           .post(`/plans/${planId}/members/${CAROL_ID}/approve`)
           .set(as(ALICE_SUB)),
     ],
-  ] as const)("refuses a leader demoted while %s", async (_what, act) => {
-    await membership(BOB_ID, "active", "leader");
-    await membership(CAROL_ID, "requested");
-    const res = await whileDemoted(act);
-    expect(res.status).toBe(403);
-    const bob = await prisma.tripPlanMember.findUniqueOrThrow({
-      where: { planId_userId: { planId, userId: BOB_ID } },
-    });
-    expect(bob).toMatchObject({ status: "active", role: "leader" });
-    const carol = await prisma.tripPlanMember.findUniqueOrThrow({
-      where: { planId_userId: { planId, userId: CAROL_ID } },
-    });
-    expect(carol.status).toBe("requested");
-  });
+    [
+      "demoted",
+      "inviting someone",
+      403,
+      () => invite(ALICE_SUB, { username: "carol" }),
+    ],
+    [
+      "removed",
+      "removing the other leader",
+      404,
+      () => remove(ALICE_SUB, BOB_ID),
+    ],
+  ] as const)(
+    "refuses a leader %s while %s",
+    async (change, _what, status, act) => {
+      await membership(BOB_ID, "active", "leader");
+      await membership(CAROL_ID, "requested");
+      const res = await whileChanged(act, change);
+      expect(res.status).toBe(status);
+      const bob = await prisma.tripPlanMember.findUniqueOrThrow({
+        where: { planId_userId: { planId, userId: BOB_ID } },
+      });
+      expect(bob).toMatchObject({ status: "active", role: "leader" });
+      const carol = await prisma.tripPlanMember.findUniqueOrThrow({
+        where: { planId_userId: { planId, userId: CAROL_ID } },
+      });
+      expect(carol.status).toBe("requested");
+    },
+  );
 });
 
 describe("roles", () => {
@@ -460,8 +492,8 @@ describe("leaving and removing", () => {
     ).toBe(0);
   });
 
-  // Mutation: drop either 409 check from the self-leave branch of DELETE
-  // /members/:userId.
+  // Mutation: drop the "only one in this plan" check or the last-leader
+  // check from DELETE /members/:userId.
   it("the only one in a plan deletes it instead; the last leader hands over first", async () => {
     const lastLeader = await remove(ALICE_SUB, "me");
     expect(lastLeader.status).toBe(409);
