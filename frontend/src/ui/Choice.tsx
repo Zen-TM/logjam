@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import classes from "./Choice.module.css";
 import { Icon } from "./Icon";
 
@@ -7,6 +7,10 @@ import { Icon } from "./Icon";
  * field applies to, which layers go in an export). A native checkbox, so Space,
  * forms and assistive tech work as they do everywhere, and the whole line is its
  * target. A setting that takes effect at once is a `SwitchRow` instead.
+ *
+ * `card` gives it a button's card fill and pill, for a checkbox floating over
+ * the map with the buttons beside it, where a bare label would sit on the
+ * basemap.
  */
 export function Checkbox({
   label,
@@ -14,16 +18,21 @@ export function Checkbox({
   checked,
   onChange,
   disabled = false,
+  card = false,
 }: {
-  label: string;
+  label: ReactNode;
   description?: string;
   checked: boolean;
   onChange: (next: boolean) => void;
   disabled?: boolean;
+  card?: boolean;
 }) {
   const descriptionId = useId();
   return (
-    <label className={classes.checkbox} data-disabled={disabled || undefined}>
+    <label
+      className={card ? classes.cardCheckbox : classes.checkbox}
+      data-disabled={disabled || undefined}
+    >
       <span className={classes.box}>
         <input
           type="checkbox"

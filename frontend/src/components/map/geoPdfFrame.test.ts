@@ -1,12 +1,96 @@
+import { metersPerPixel } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
-import { keptFrameSizePx, metresPerPixel } from "./geoPdfFrame";
+import {
+  type FramePick,
+  keptFrameSizePx,
+  keptScaleOnEntry,
+  letGo,
+  scaleNow,
+  unmovedPick,
+} from "./geoPdfFrame";
 
-// Mutation: the 256-tile constant 156543.03 (the frame then covers half the
-// ground at the scale it was kept at).
-describe("metresPerPixel", () => {
-  it("is MapLibre's 512px-tile ground resolution", () => {
-    expect(metresPerPixel(0, 0)).toBeCloseTo(78271.52, 2);
-    expect(metresPerPixel(14, -33.7)).toBeCloseTo(3.9745, 3);
+const box = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
+const measured = () => 23417;
+
+// From the dialog the scale is kept; from Places' box-only "Make a map"
+// nothing is, so the box decides. Mutation: `?? null` → `?? 25000`.
+describe("keptScaleOnEntry", () => {
+  it("keeps the dialog's scale, and nothing for a box alone", () => {
+    expect(keptScaleOnEntry(25000)).toBe(25000);
+    expect(keptScaleOnEntry(undefined)).toBeNull();
+  });
+});
+
+// Mutations: drop the kept branch (a kept scale is re-measured, and zooming
+// changes it); drop the unzoomed-initial branch (an untouched pick comes back
+// as 24 998).
+describe("scaleNow", () => {
+  const pick: FramePick = { kept: null, initialScale: 25000, zoomed: false };
+
+  it("is the kept scale, whatever the zoom", () => {
+    expect(scaleNow({ ...pick, kept: 50000, zoomed: true }, measured)).toBe(
+      50000,
+    );
+  });
+
+  it("is the arrival's scale until a zoom, then measured", () => {
+    expect(scaleNow(pick, measured)).toBe(25000);
+    expect(scaleNow({ ...pick, zoomed: true }, measured)).toBe(23417);
+  });
+});
+
+// Letting go hands the frame exactly the kept scale until the next zoom.
+// Mutations: keep `initialExtent` regardless (Places box, Keep on then off,
+// Confirm unmoved returns the raw box with the measured scale); clear
+// `zoomed` while a zoom is still running (the label and Confirm keep a scale
+// the zoom is already changing).
+describe("letGo, then Confirm without moving", () => {
+  it("never returns a Places box with a scale it was not drawn at", () => {
+    // Places: a box and no scale; Keep on holds the measured scale.
+    const arrival: FramePick = {
+      kept: keptScaleOnEntry(undefined),
+      initialExtent: box,
+      zoomed: false,
+    };
+    const kept = scaleNow(arrival, measured) as number;
+    const after = letGo({ ...arrival, kept }, false);
+
+    expect(after.initialScale).toBe(23417);
+    expect(unmovedPick(after, false)).toBeNull();
+  });
+
+  it("keeps the dialog's area when let go at the scale it came with", () => {
+    const arrival: FramePick = {
+      kept: 25000,
+      initialScale: 25000,
+      initialExtent: box,
+      zoomed: false,
+    };
+    const after = letGo({ ...arrival, kept: 25000 }, false);
+    expect(unmovedPick(after, false)).toEqual({ extent: box, scale: 25000 });
+  });
+
+  it("counts a zoom still running as a zoom", () => {
+    const after = letGo(
+      { kept: 25000, initialScale: 25000, zoomed: true },
+      true,
+    );
+    expect(after.zoomed).toBe(true);
+    expect(scaleNow(after, measured)).toBe(23417);
+  });
+});
+
+// Mutation: drop the `panned` check (a moved frame snaps back to its arrival).
+describe("unmovedPick", () => {
+  it("is the arrival only while the map has not moved", () => {
+    const pick: FramePick = {
+      kept: 25000,
+      initialScale: 25000,
+      initialExtent: box,
+      zoomed: false,
+    };
+    expect(unmovedPick(pick, false)).toEqual({ extent: box, scale: 25000 });
+    expect(unmovedPick(pick, true)).toBeNull();
   });
 });
 
@@ -19,8 +103,8 @@ describe("keptFrameSizePx", () => {
 
   it("is the paper's ground size in pixels", () => {
     const px = keptFrameSizePx(25000, a4MapArea, 14, -33.7);
-    expect(px.w * metresPerPixel(14, -33.7)).toBeCloseTo(4750, 6);
-    expect(px.h * metresPerPixel(14, -33.7)).toBeCloseTo(6925, 6);
+    expect(px.w * metersPerPixel(-33.7, 14)).toBeCloseTo(4750, 6);
+    expect(px.h * metersPerPixel(-33.7, 14)).toBeCloseTo(6925, 6);
   });
 
   it("doubles with each zoom level in", () => {

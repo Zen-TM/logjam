@@ -1,4 +1,4 @@
-import { Button, Notice } from "../../ui";
+import { Button, Checkbox, Notice } from "../../ui";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
@@ -84,7 +84,14 @@ import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
 import MapChrome, { type MapTool } from "./MapChrome";
 import { collectLngLatPairs } from "./topoFootprint";
-import { keptFrameSizePx, metresPerPixel } from "./geoPdfFrame";
+import {
+  type FramePick,
+  keptFrameSizePx,
+  keptScaleOnEntry,
+  letGo,
+  scaleNow,
+  unmovedPick,
+} from "./geoPdfFrame";
 import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
 import type {
@@ -121,6 +128,7 @@ import {
   type OsmPointFeatureKey,
   type OsmFeatureStyle,
   type VectorStyleSettings,
+  metersPerPixel,
 } from "@logjam/shared";
 
 // How long after touching a vertex handle the map ignores its own click. Long
@@ -3053,20 +3061,23 @@ function Map({
   const geoPdfUserPannedRef = useRef(false);
   const geoPdfUserZoomedRef = useRef(false);
 
+  // Set once the opening fit has measured the frame at its CSS size; from
+  // then on a kept scale may size it.
+  const geoPdfFrameMeasuredRef = useRef(false);
+
   // The scale the frame is held at, so zooming changes how big the frame
   // looks and not the scale; or null, when the frame stays put on screen and
-  // zooming changes the scale. Held from the dialog's scale on every visit;
-  // arriving with only a box (Places' "Make a map") it starts null, so the box
-  // decides.
+  // zooming changes the scale (geoPdfFrame.ts).
   const [geoPdfKeptScale, setGeoPdfKeptScale] = useState<number | null>(null);
   const [geoPdfKeptScaleFor, setGeoPdfKeptScaleFor] = useState(false);
-  if (selectingGeoPdfExtent !== geoPdfKeptScaleFor) {
+  if ((selectingGeoPdfExtent ?? false) !== geoPdfKeptScaleFor) {
     setGeoPdfKeptScaleFor(selectingGeoPdfExtent ?? false);
-    if (selectingGeoPdfExtent) setGeoPdfKeptScale(geoPdfInitialScale ?? null);
+    if (selectingGeoPdfExtent)
+      setGeoPdfKeptScale(keptScaleOnEntry(geoPdfInitialScale));
   }
-  // The scale read out on the Keep button. Written on every map move, so
-  // straight to the DOM and not through state: a re-render of this component
-  // per frame is a defect (frontend/DESIGN.md, Performance).
+  // The scale read out on the Keep checkbox. Written on every map move, so
+  // straight to the DOM: through state it would re-render this whole
+  // component each frame (frontend/DESIGN.md, Performance).
   const geoPdfScaleTextRef = useRef<HTMLSpanElement>(null);
 
   // When extent selection activates: position the map so the on-screen frame
@@ -3076,6 +3087,7 @@ function Map({
     if (!selectingGeoPdfExtent) {
       geoPdfInitialExtentRef.current = undefined;
       geoPdfFitBoundsSettledRef.current = false;
+      geoPdfFrameMeasuredRef.current = false;
       geoPdfUserPannedRef.current = false;
       geoPdfUserZoomedRef.current = false;
       return;
@@ -3088,12 +3100,14 @@ function Map({
       h: 297,
     };
     geoPdfFitBoundsSettledRef.current = false;
+    geoPdfFrameMeasuredRef.current = false;
     geoPdfUserPannedRef.current = false;
     geoPdfUserZoomedRef.current = false;
 
     const map = mapRef.current;
     if (!map) {
       geoPdfFitBoundsSettledRef.current = true;
+      geoPdfFrameMeasuredRef.current = true;
       return;
     }
 
@@ -3115,6 +3129,7 @@ function Map({
       targetWidthM = geoPdfInitialScale * (geoPdfPaperDimensions.w / 1000);
     } else {
       geoPdfFitBoundsSettledRef.current = true;
+      geoPdfFrameMeasuredRef.current = true;
       return;
     }
 
@@ -3124,17 +3139,21 @@ function Map({
       const m = mapRef.current;
       if (!frameEl || !m) {
         geoPdfFitBoundsSettledRef.current = true;
+        geoPdfFrameMeasuredRef.current = true;
         return;
       }
       const framePxW = frameEl.getBoundingClientRect().width;
+      // Measured: a kept scale may size the frame from here on, mid-ease
+      // included, since it reads the live zoom.
+      geoPdfFrameMeasuredRef.current = true;
       if (framePxW <= 0) {
         geoPdfFitBoundsSettledRef.current = true;
         return;
       }
 
-      // The zoom at which metresPerPixel × framePxW = targetWidthM.
+      // The zoom at which metersPerPixel × framePxW = targetWidthM.
       const targetZoom = Math.log2(
-        metresPerPixel(0, targetCenter[1]) / (targetWidthM / framePxW),
+        metersPerPixel(targetCenter[1], 0) / (targetWidthM / framePxW),
       );
 
       m.easeTo({
@@ -3188,14 +3207,18 @@ function Map({
     onGeoPdfExtentConfirmedRef.current = onGeoPdfExtentConfirmed;
   }, [onGeoPdfExtentConfirmed]);
 
-  // The scale the frame stands for right now: the kept one; else the one it
-  // arrived with until the user zooms, so an unzoomed pick returns it exactly
-  // rather than re-derived with floating-point drift; else measured from the
-  // frame's ground width at its vertical centre.
-  const geoPdfScaleNow = useCallback((): number | null => {
-    if (geoPdfKeptScale !== null) return geoPdfKeptScale;
-    if (!geoPdfUserZoomedRef.current && geoPdfInitialScaleRef.current)
-      return geoPdfInitialScaleRef.current;
+  const geoPdfPick = useCallback(
+    (): FramePick => ({
+      kept: geoPdfKeptScale,
+      initialScale: geoPdfInitialScaleRef.current,
+      initialExtent: geoPdfInitialExtentRef.current,
+      zoomed: geoPdfUserZoomedRef.current,
+    }),
+    [geoPdfKeptScale],
+  );
+
+  // The frame's ground width at its vertical centre, over the paper's width.
+  const measureGeoPdfScale = useCallback((): number | null => {
     const map = mapRef.current;
     const frame = geoPdfFrameRef.current;
     const container = containerRef.current;
@@ -3211,22 +3234,18 @@ function Map({
       METERS_PER_DEG_LON_EQUATOR *
       Math.cos(((leftMid.lat + rightMid.lat) / 2) * (Math.PI / 180));
     return geoWidthM / (geoPdfPaperDimensionsRef.current.w / 1000);
-  }, [geoPdfKeptScale]);
+  }, []);
 
-  // While a scale is kept, the frame is sized from it on every move. Not
-  // until the opening fit has settled: that fit measures the frame at its CSS
-  // size, and lands where the two sizes agree. Unkept, the frame keeps whatever size it has,
-  // so letting go of the scale never jumps the frame.
+  // While a scale is kept, the frame is sized from it on every move, once the
+  // opening fit has measured the frame at its CSS size (it lands where the two
+  // sizes agree). Unkept, the frame keeps whatever size it has, so letting go
+  // of the scale never jumps the frame.
   useEffect(() => {
     const map = mapRef.current;
     if (!selectingGeoPdfExtent || !map) return;
     const update = () => {
       const frame = geoPdfFrameRef.current;
-      if (
-        frame &&
-        geoPdfKeptScale !== null &&
-        geoPdfFitBoundsSettledRef.current
-      ) {
+      if (frame && geoPdfKeptScale !== null && geoPdfFrameMeasuredRef.current) {
         const px = keptFrameSizePx(
           geoPdfKeptScale,
           geoPdfPaperDimensionsRef.current,
@@ -3236,7 +3255,7 @@ function Map({
         frame.style.width = `${px.w}px`;
         frame.style.height = `${px.h}px`;
       }
-      const scale = geoPdfScaleNow();
+      const scale = scaleNow(geoPdfPick(), measureGeoPdfScale);
       if (geoPdfScaleTextRef.current && scale !== null)
         geoPdfScaleTextRef.current.textContent =
           Math.round(scale).toLocaleString();
@@ -3246,18 +3265,23 @@ function Map({
     return () => {
       map.off("move", update);
     };
-  }, [selectingGeoPdfExtent, geoPdfKeptScale, geoPdfScaleNow]);
+  }, [selectingGeoPdfExtent, geoPdfKeptScale, geoPdfPick, measureGeoPdfScale]);
 
-  const toggleGeoPdfKeepScale = () => {
-    if (geoPdfKeptScale === null) {
-      const scale = geoPdfScaleNow();
+  const setGeoPdfKeepScale = (keep: boolean) => {
+    const pick = geoPdfPick();
+    if (keep) {
+      const scale = scaleNow(pick, measureGeoPdfScale);
       if (scale !== null) setGeoPdfKeptScale(Math.round(scale));
       return;
     }
-    // Let go: the frame now stands for exactly the scale it was kept at, until
-    // the next zoom.
-    geoPdfInitialScaleRef.current = geoPdfKeptScale;
-    geoPdfUserZoomedRef.current = false;
+    if (pick.kept === null) return;
+    const next = letGo(
+      { ...pick, kept: pick.kept },
+      mapRef.current?.isZooming() ?? false,
+    );
+    geoPdfInitialScaleRef.current = next.initialScale;
+    geoPdfInitialExtentRef.current = next.initialExtent;
+    geoPdfUserZoomedRef.current = next.zoomed;
     setGeoPdfKeptScale(null);
   };
 
@@ -3265,17 +3289,10 @@ function Map({
     if (!mapRef.current || !geoPdfFrameRef.current || !containerRef.current)
       return;
 
-    // If the user hasn't moved the map at all, return the exact initial values.
-    if (
-      geoPdfInitialExtentRef.current &&
-      geoPdfInitialScaleRef.current &&
-      !geoPdfUserPannedRef.current &&
-      !geoPdfUserZoomedRef.current
-    ) {
-      onGeoPdfExtentConfirmedRef.current?.(
-        geoPdfInitialExtentRef.current,
-        geoPdfInitialScaleRef.current,
-      );
+    const pick = geoPdfPick();
+    const unmoved = unmovedPick(pick, geoPdfUserPannedRef.current);
+    if (unmoved) {
+      onGeoPdfExtentConfirmedRef.current?.(unmoved.extent, unmoved.scale);
       return;
     }
 
@@ -3289,7 +3306,7 @@ function Map({
     const centerX = (frameRect.left + frameRect.right) / 2 - mapRect.left;
     const centerY = (frameRect.top + frameRect.bottom) / 2 - mapRect.top;
     const center = map.unproject([centerX, centerY]);
-    const scale = geoPdfScaleNow();
+    const scale = scaleNow(pick, measureGeoPdfScale);
     if (scale === null) return;
 
     // Compute a consistent extent from center + scale + paper dimensions.
@@ -3304,7 +3321,7 @@ function Map({
     );
 
     onGeoPdfExtentConfirmedRef.current?.(bounds, scale);
-  }, [geoPdfScaleNow]);
+  }, [geoPdfPick, measureGeoPdfScale]);
 
   // Toggle 3d Terrain
   // Choosing the terrain source is asynchronous, and the answer applies only
@@ -3435,14 +3452,17 @@ function Map({
             style={{ aspectRatio: `${geoPdfPaperAspect ?? 210 / 297}` }}
           />
           <div className={classes.geoPdfConfirmBar}>
-            <Button
-              icon={geoPdfKeptScale !== null ? "success" : undefined}
-              aria-pressed={geoPdfKeptScale !== null}
-              onClick={toggleGeoPdfKeepScale}
-            >
-              Keep 1:
-              <span ref={geoPdfScaleTextRef} />
-            </Button>
+            <Checkbox
+              card
+              label={
+                <>
+                  Keep 1:
+                  <span ref={geoPdfScaleTextRef} />
+                </>
+              }
+              checked={geoPdfKeptScale !== null}
+              onChange={setGeoPdfKeepScale}
+            />
             <Button variant="filled" onClick={handleConfirmGeoPdfExtent}>
               Confirm area
             </Button>

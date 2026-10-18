@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areaSizeLabel, scaleChoice } from "./geoPdfArea";
+import { scaleChoice, sheetSizeLabel } from "./geoPdfArea";
 
 // Mutations: drop `otherPicked ||` (Other closes while a preset's number is
 // typed into it); compare with a tolerance instead of exactly (a derived
@@ -15,9 +15,11 @@ describe("scaleChoice", () => {
   });
 });
 
-describe("areaSizeLabel", () => {
-  it("is in km from a kilometre, in m below", () => {
-    expect(areaSizeLabel(4750, 6925)).toBe("4.8 × 6.9 km");
-    expect(areaSizeLabel(380, 554)).toBe("380 × 554 m");
+// Width first, each side in its own unit. Mutation: swap the two sides (a
+// portrait sheet reads as landscape).
+describe("sheetSizeLabel", () => {
+  it("is width × height, in km from a kilometre and m below", () => {
+    expect(sheetSizeLabel(4750, 6925)).toBe("4.8 km × 6.9 km");
+    expect(sheetSizeLabel(380, 554)).toBe("380 m × 554 m");
   });
 });

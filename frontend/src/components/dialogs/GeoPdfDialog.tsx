@@ -59,7 +59,7 @@ import { useStoredState } from "../../useStoredState";
 import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
 import {
   SCALE_PRESETS,
-  areaSizeLabel,
+  sheetSizeLabel,
   scaleChoice,
   type ScaleChoice,
 } from "./geoPdfArea";
@@ -146,8 +146,7 @@ const COORD_TOOLTIP =
   "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 const PIVOT_TOOLTIP =
   "The part of the box that stays put while the rest of it moves.";
-const SCALE_TOOLTIP =
-  "1:25 000 means 1 cm on the paper is 250 m on the ground. Most topo maps are 1:25 000 or 1:50 000.";
+const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
   paperSize: "A4",
@@ -1108,7 +1107,7 @@ function GeoPdfDialog({
                 <SettingsRow label="Area">
                   <div className={classes.areaCell}>
                     <span className={classes.areaSize}>
-                      {areaSizeLabel(
+                      {sheetSizeLabel(
                         (extentState.scale * mapMm.w) / 1000,
                         (extentState.scale * mapMm.h) / 1000,
                       )}

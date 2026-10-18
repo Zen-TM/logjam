@@ -204,7 +204,7 @@ describe("GeoPdfDialog, Exact edges", () => {
   });
 });
 
-// The NSW series are chips; Other opens today's typed field. The scale picked
+// The NSW series are chips; Other opens the typed field. The scale picked
 // is the one the map frames at. Mutations: stop applying a preset's scale;
 // show the field for a preset.
 describe("GeoPdfDialog, scale", () => {

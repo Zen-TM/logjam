@@ -104,7 +104,9 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   or an accordion.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
-  current answer as the subtitle.
+  current answer as the subtitle; or, inside a `Dialog`, a native `<details>`
+  under the setting it refines, when the two change each other and both must
+  stay in view (the GeoPDF dialog's Exact edges).
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
   field) or `useToast().error` (background).
