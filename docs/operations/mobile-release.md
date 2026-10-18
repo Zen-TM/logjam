@@ -155,6 +155,8 @@ signing is [0009](../decisions/0009-signed-ota-updates.md).
    `node_modules` out of step with the lockfile) or the fix changed something native (a dependency,
    a plugin, `patches/`, `eas.json`, npm scripts), and it needs a release, not
    an update. Published anyway, it would reach no phone and say nothing.
+   `update:production` and `promote:production` repeat this check, and the
+   branch check, and refuse to publish when either fails.
 5. **Publish to `preview` and check it** on a release candidate of X.Y.Z, if
    one exists and has the same runtime version:
    `npm run update:preview -- --message "<what it fixes>"`.
@@ -162,7 +164,7 @@ signing is [0009](../decisions/0009-signed-ota-updates.md).
    environment's variables, not `mobile/.env`, which points at the local
    stack.
 6. **Promote the same update to `production`:**
-   `eas update:republish --group <update group id> --destination-branch production --private-key-path keys/private-key.pem`.
+   `npm run promote:production -- --group <update group id>`.
    With no candidate to check it on, publish directly instead:
    `npm run update:production -- --message "<what it fixes>"`.
 7. **Watch Sentry** for the next launches. To undo:

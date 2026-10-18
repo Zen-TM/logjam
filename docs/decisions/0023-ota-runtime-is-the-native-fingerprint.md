@@ -57,8 +57,11 @@ JavaScript to reach a build whose native code it does not match:
   An FCM config change cannot break JavaScript, so nothing is lost. Guard:
   `mobile/src/runtimeVersion.test.ts`. Everything else above stands.
 
-Rules 2 and 3 have no executable check; `docs/operations/mobile-release.md`
-walks through them, and they are checked when an update is published.
+Rules 2 and 3 are checked when a production update is published (updated
+2026-10-18): `update:production` and `promote:production` first run
+`mobile/scripts/check-production-update.js`, which refuses any branch but
+`release/mobile-v<version>` and a runtime version no finished production build
+of that version has. Guard: `mobile/src/productionUpdate.test.ts`.
 
 ## Consequences
 
