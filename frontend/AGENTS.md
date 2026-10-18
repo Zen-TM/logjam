@@ -22,5 +22,8 @@
 - `e2e/a11y.spec.ts` is the per-surface a11y gate. A case never writes to the
   account: reach a state with a `page.route` stub that calls `route.fetch()`
   and rewrites only the field the decision reads.
+- `e2e/csv-import.spec.ts` is the one spec that writes to the account, and
+  every case ends in Undo: the integration suite's seed-baseline sweep fails a
+  run that leaves the DB differing from the seed.
 - **Against prod, only unauthenticated runs:** assert the sign-in screen and
   nothing more, unless the maintainer signs off.

@@ -11,9 +11,9 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 // seed-baseline sweep fails a run that leaves the DB differing from the seed.
 // Undo lives on the result, so what the import did is read there, before Undo.
 //
-// Mutation that turns it red: in UnifiedImportDialog, dropping the `batchId`
-// the result keeps for Undo (the new place stays in the list), or changing a
-// default role in placeColumns.ts (the mapping step shows it).
+// Mutations that turn it red: making `handleUndo` in UnifiedImportDialog skip
+// `undoImport` (the created place stays in the list), or changing a default
+// role in placeColumns.ts (the mapping step shows it).
 //
 // Local only: it needs fake auth and a seeded API (frontend/AGENTS.md).
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
