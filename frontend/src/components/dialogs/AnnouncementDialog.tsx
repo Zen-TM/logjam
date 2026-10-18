@@ -37,7 +37,8 @@ function inlines(nodes: MessageInline[]): ReactNode[] {
   });
 }
 
-// The dialog's title is the h2, so the message's own headings sit under it.
+// The dialog's title is the h2, so the message's own headings sit under it;
+// the parser makes the shallowest level 1, so none is skipped.
 const HEADING_TAG = { 1: "h3", 2: "h4", 3: "h5" } as const;
 
 function block(node: MessageBlock, i: number): ReactNode {

@@ -416,6 +416,13 @@ test.describe("desktop", () => {
     await openApp(page);
     const dialog = await openAnnouncement(page);
     await expect(dialog.getByRole("heading", { level: 2 })).toBeFocused();
+    // The seed's #, ## and ### sit under the dialog's title, none skipped.
+    for (const [level, name] of [
+      [3, "What to expect"],
+      [4, "If something looks wrong"],
+      [5, "On Logjam GPS"],
+    ] as const)
+      await expect(dialog.getByRole("heading", { level, name })).toBeVisible();
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
