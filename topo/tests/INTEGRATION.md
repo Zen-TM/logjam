@@ -33,27 +33,39 @@ needed.
 ## 2. Full worker end-to-end — CI's `topo-e2e` job
 
 Runs the worker image on a real LiDAR input through the real GDAL/PDAL
-pipeline. **CI runs it** (`topo-e2e` in `.github/workflows/ci.yml`) on one ELVIS
+pipeline, launched through the API's real ECS RunTask path. **CI runs it**
+(`topo-e2e` in `.github/workflows/ci.yml`) on one ELVIS
 LAZ tile as ELVIS ships it, fetched by `scripts/sample-data.sh
 elvis-katoomba-2506258-laz.zip`:
 
-1. Builds the image (layer-cached) and brings up Postgres, MiniStack S3 and the
-   seeded API.
-2. Creates two jobs as Logjam Web does: `POST /topo-jobs`, a PUT to the
-   presigned URL, `POST /topo-jobs/:id/start`. With no `ECS_SUBNETS` the API
-   leaves them `pending` instead of calling RunTask.
-3. Runs the container as the ECS task would, with the task definition's env
-   (`e2e/worker.env`), on a Docker network with no internet: Overpass is a stub
-   serving `e2e/overpass-katoomba-2506258.json`, and the SVTM and fire-history
-   rasters are made-up ones in MiniStack, read through `/vsis3/`.
-4. **Happy path** (`e2e/check.py complete`): the row is `complete` with its
-   outputs, footprint, metrics and storage charge; the objects are in the
-   bucket and the input ZIP is gone; every layer's tile on Mount Solitary
-   decodes and is not blank.
-5. **Resurrection check** (`e2e/check.py reaped`): the second job's worker is
-   killed mid-render and the row force-failed as the reaper would; a worker
-   relaunched for the same `JOB_ID` leaves it `failed`, with no outputs and no
-   notification.
+1. Builds the image (layer-cached) and brings up Postgres, MiniStack (S3 and
+   ECS, with the Docker socket) and the seeded API, which has `ECS_SUBNETS`
+   set.
+2. Puts the worker on a Docker network with no internet: Overpass is a stub
+   serving `e2e/overpass-katoomba-2506258.json`, and the SVTM and
+   fire-history rasters are made-up ones in MiniStack, read through
+   `/vsis3/`. It registers a task definition in MiniStack whose env is
+   `e2e/worker.env` (itself checked against prod's `ecs.tf`) and whose
+   container name is prod's.
+3. Creates a job as Logjam Web does (`e2e/start-job.sh`): `POST /topo-jobs`, a
+   PUT to the presigned URL, `POST /topo-jobs/:id/start`. `/start` calls
+   RunTask, so MiniStack runs the worker. `e2e/ecs-worker.sh` checks that the
+   row has its `ecs_task_arn`, that MiniStack lists that task, and that the
+   container got the `JOB_ID` override and sits on the no-internet network
+   only.
+4. **Happy path** (`e2e/check.py complete`): the worker exits 0 and the row is
+   `complete` with its outputs, footprint, metrics and
+   storage charge; the objects are in the bucket and the input ZIP is gone;
+   every layer's tile on Mount Solitary decodes and is not blank.
+5. **Resurrection check** (`e2e/check.py reaped`): a second job is launched
+   the same way, its worker killed mid-render and the row force-failed as the
+   reaper would; a worker relaunched for the same `JOB_ID` leaves it
+   `failed`, with no outputs and no notification. The relaunch is by `docker
+   run` with `e2e/worker.env`, not RunTask: only the reaper's half is stood in
+   for.
+
+MiniStack runs a task on the first network of its own container, by name, so
+the job's no-internet network is named to sort before the job's own.
 
 What stays manual: a multi-tile or multi-survey ZIP, a real SVTM or fire
 raster, live Overpass, and a run on Fargate itself. Run one by hand (below)

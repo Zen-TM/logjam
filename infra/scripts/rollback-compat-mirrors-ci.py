@@ -11,13 +11,17 @@ or point it at exp.host (no CI run may reach Expo); move either job's seed
 above its bucket step (the seed uploads into those buckets, best effort, so a
 missing bucket fails tests later, not the seed).
 
-topo-e2e boots the same API, so its services must equal api-integration's and
-its env carry every variable of api-integration's, less what only that suite
-needs (API_ONLY_ENV).
+topo-e2e boots the same API, so its services must equal api-integration's
+except that its MiniStack also runs ECS and mounts the Docker socket (to run
+the worker through RunTask), and its env carry every variable of
+api-integration's, less what only that suite needs (API_ONLY_ENV). Mutations
+that turn that red: drop the socket volume from topo-e2e's MiniStack, or ECS
+from its SERVICES.
 
 Usage: rollback-compat-mirrors-ci.py   (from anywhere in the repo; needs PyYAML)
 """
 
+import copy
 import sys
 from pathlib import Path
 
@@ -26,8 +30,9 @@ import yaml
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 # rollback-compat's own additions, which api-integration has no use for.
 OWN_ENV = {"PROD_API_URL", "LIVE_DIR"}
-# api-integration's env that topo-e2e leaves out on purpose: no RunTask (so no
-# ECS_*) and no suite hammering the rate limiter.
+# api-integration's env that topo-e2e leaves out on purpose: it sets its own ECS_*
+# (api-integration has no Docker socket for RunTask to use, so its values leave
+# /start at pending) and no suite hammers its rate limiter.
 API_ONLY_ENV = {
     "API_URL",
     "ECS_SUBNETS",
@@ -35,6 +40,7 @@ API_ONLY_ENV = {
     "RATE_LIMIT_GLOBAL_MAX",
     "RATE_LIMIT_USER_PATCH_MAX",
 }
+DOCKER_SOCKET = "/var/run/docker.sock:/var/run/docker.sock"
 WAIT_STEPS = [
     "Wait for MiniStack and create buckets",
     "Wait for API",
@@ -79,13 +85,26 @@ def main():
 
     for label, j in (("api-integration", ci), ("rollback-compat", rc)):
         names = [st.get("name", "") for st in j["steps"]]
-        seeds = [i for i, st in enumerate(j["steps"]) if "prisma db seed" in (st.get("run") or "")]
+        seeds = [
+            i
+            for i, st in enumerate(j["steps"])
+            if "prisma db seed" in (st.get("run") or "")
+        ]
         buckets = names.index(WAIT_STEPS[0]) if WAIT_STEPS[0] in names else None
         if not seeds or buckets is None or buckets > seeds[0]:
             failures.append(f"{label}: create the buckets before the seed")
 
     topo = job("ci.yml", "topo-e2e")
-    if ci["services"] != topo["services"]:
+    topo_services = copy.deepcopy(topo["services"])
+    ministack = topo_services.get("ministack", {})
+    if ministack.pop("volumes", None) != [DOCKER_SOCKET]:
+        failures.append("topo-e2e's MiniStack must mount only the Docker socket")
+    services = set(ministack.get("env", {}).get("SERVICES", "").split(","))
+    if services != {"s3", "ecs"}:
+        failures.append("topo-e2e's MiniStack must run exactly s3 and ecs")
+    if ministack.get("env"):
+        ministack["env"]["SERVICES"] = ci["services"]["ministack"]["env"]["SERVICES"]
+    if ci["services"] != topo_services:
         failures.append("topo-e2e services differ from api-integration's")
     for key in sorted(set(ci["env"]) - API_ONLY_ENV):
         if ci["env"][key] != topo["env"].get(key):

@@ -551,15 +551,18 @@ jobs:
         run: python -m unittest discover -s tests
 
   # topo/tests/INTEGRATION.md §2, automated: the real worker image on a real
-  # ELVIS tile, through the API's create, upload and start (the ECS RunTask is
-  # the one step CI cannot take, so it runs the container itself with the task
-  # definition's env, topo/tests/e2e/worker.env). The worker gets a network
-  # with no internet: Overpass is a stub serving a committed response, and the
-  # SVTM and fire-history rasters it reads through /vsis3/ are made-up ones in
-  # MiniStack, so a read the job forgot to stub fails instead of reaching out.
+  # ELVIS tile, launched the way prod launches it. The API's POST
+  # /topo-jobs/:id/start calls ECS RunTask against MiniStack's ECS, which runs
+  # the image from a task definition registered here, so the RunTask call, its
+  # network config, the container override and the task definition's env are
+  # all exercised. The worker gets a network with no internet: Overpass is a
+  # stub serving a committed response, and the SVTM and fire-history rasters it
+  # reads through /vsis3/ are made-up ones in MiniStack, so a read the job
+  # forgot to stub fails instead of reaching out.
   #
   # Its own job, not a step of api-integration: it is scoped to what the worker
-  # image is built from rather than to the API, and its six minutes (ten with
+  # image is built from and the two API files that launch it (ci-scope.sh)
+  # rather than to the whole API, and its six minutes (ten with
   # a cold image cache) run beside that suite instead of after it. The setup it
   # repeats is about a minute.
   topo-e2e:
@@ -581,18 +584,23 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # Unlike api-integration's, this one runs RunTask'd containers, so it has
+      # ECS and the Docker socket, as docker-compose.yml's does.
+      # rollback-compat-mirrors-ci.py allows exactly these two differences.
       ministack:
         image: ministackorg/ministack
         env:
-          SERVICES: s3
+          SERVICES: s3,ecs
           DEFAULT_REGION: ap-southeast-2
           AWS_DEFAULT_REGION: ap-southeast-2
         ports:
           - 4566:4566
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
     env:
-      # api-integration's, less what only its suite needs. No ECS_SUBNETS: an
-      # empty subnet list makes /start leave the job pending, which is where
-      # the worker claims it.
+      # api-integration's, less what only its suite needs, plus the ECS
+      # settings that make /start call RunTask (subnet and security group are
+      # names MiniStack records and ignores).
       NODE_ENV: development
       AUTH_MODE: fake
       FAKE_USER_SUB: fake-alice-sub
@@ -615,8 +623,17 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
       # No stub runs in this job: a push the API sends fails here, never reaching Expo.
       EXPO_PUSH_URL: http://localhost:9099
+      ECS_CLUSTER: logjam-cluster
+      ECS_SUBNETS: subnet-local
+      ECS_SECURITY_GROUPS: sg-local
+      # The reaper's sweeps would touch the rows this job drives by hand.
+      TOPO_REAPER_INTERVAL_MS: 0
       IMAGE: logjam-topo-worker:e2e
       E2E: topo/tests/e2e
+      # Sorts before the job's own network (github_network_*): MiniStack runs a
+      # task on the first network of its own container, by name. ecs-worker.sh
+      # fails if a worker landed anywhere else.
+      NET: e2e-offline
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Mutation that turns it red: add a variable to topo_worker in ecs.tf.
@@ -654,7 +671,8 @@ jobs:
       - name: Wait for MiniStack and create buckets
         run: |
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+            health=$(curl -sf http://localhost:4566/_localstack/health || true)
+            if grep -q '"s3": "available"' <<<"$health" && grep -q '"ecs": "available"' <<<"$health"; then
               echo "ministack ready"; break
             fi
             if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
@@ -662,45 +680,6 @@ jobs:
           done
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
-      - name: Seed
-        working-directory: api
-        run: npx prisma db seed
-      - name: Build and start the API
-        working-directory: api
-        run: |
-          npm run build
-          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/api.pid"
-          for _ in $(seq 1 60); do
-            if curl -sf http://localhost:8080/health > /dev/null; then echo "API ready"; exit 0; fi
-            sleep 1
-          done
-          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
-      # One ELVIS LAZ tile as ELVIS ships it: Katoomba 2018, Mount Solitary.
-      - name: Fetch the sample tile
-        id: sample
-        run: echo "zip=$(scripts/sample-data.sh elvis-katoomba-2506258-laz.zip)" >> "$GITHUB_OUTPUT"
-      # Two jobs, so the second can be reaped mid-render below. The API stops
-      # once both are pending, which keeps any reaper sweep off both during the
-      # test.
-      - name: Create, upload and start two jobs through the API
-        id: jobs
-        env:
-          ZIP: ${{ steps.sample.outputs.zip }}
-        run: |
-          # Logjam Web sends the default settings unless the user changes them.
-          settings=$(cd shared && node --input-type=module -e \
-            "import { RASTER_TEMPLATE_DEFAULTS as d } from './dist/topoSettings.js'; console.log(JSON.stringify(d))")
-          for which in complete reaped; do
-            created=$(jq -n --arg name "e2e $which" --argjson settings "$settings" \
-                '{jobName: $name, tileCount: 1, settings: $settings}' \
-              | curl -sf -X POST http://localhost:8080/topo-jobs -H 'content-type: application/json' -d @-)
-            id=$(jq -r .jobId <<<"$created")
-            curl -sf -X PUT -H 'content-type: application/zip' --upload-file "$ZIP" "$(jq -r .uploadUrl <<<"$created")"
-            curl -sf -X POST "http://localhost:8080/topo-jobs/$id/start" | jq -e '.status == "pending"'
-            echo "$which=$id" >> "$GITHUB_OUTPUT"
-          done
-          kill "$(cat "$RUNNER_TEMP/api.pid")"
       # Made up, not the real rasters: one value over the whole tile. The fire
       # year postdates the 2018 capture, so the job's fireStaleFraction says
       # whether the worker read it.
@@ -713,26 +692,73 @@ jobs:
             gdal_create $extent -ot UInt16 -burn 2019 /out/fire_history_year.tif"
           aws s3 cp "$RUNNER_TEMP/rasters/svtm_formation.tif" "s3://$S3_BUCKET_TOPO/svtm/svtm_formation.tif"
           aws s3 cp "$RUNNER_TEMP/rasters/fire_history_year.tif" "s3://$S3_BUCKET_TOPO/fire/fire_history_year.tif"
+      # MiniStack stays on the job's network too (the runner and the API reach
+      # it there), but its tasks run on this one.
       - name: A network with no internet, and the Overpass stub on it
         run: |
-          docker network create --internal topo-e2e
-          docker network connect --alias postgres topo-e2e "${{ job.services.postgres.id }}"
-          docker network connect --alias ministack topo-e2e "${{ job.services.ministack.id }}"
-          docker run -d --name overpass --network topo-e2e --network-alias overpass \
+          docker network create --internal "$NET"
+          docker network connect --alias postgres "$NET" "${{ job.services.postgres.id }}"
+          docker network connect --alias ministack "$NET" "${{ job.services.ministack.id }}"
+          docker run -d --name overpass --network "$NET" --network-alias overpass \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/overpass_stub.py /e2e/overpass-katoomba-2506258.json
-      - name: Run the worker
+      # The task definition is worker.env, which the first step checks against
+      # prod's: one copy of the env. The container name is prod's too, so an
+      # API that overrides a container the definition doesn't have loses its
+      # JOB_ID here as it would on Fargate.
+      - name: Register the cluster and the worker task definition in MiniStack
+        run: |
+          container=$(awk '/resource "aws_ecs_task_definition" "topo_worker"/,/^}/' infra/terraform/envs/prod/ecs.tf \
+            | sed -n 's/^ *name *= *"\(topo-[a-z-]*\)".*/\1/p')
+          [ -n "$container" ] || { echo "read no container name from ecs.tf's topo_worker"; exit 1; }
+          jq -R -s --arg image "$IMAGE" --arg name "$container" '{
+              family: "logjam-topo-worker",
+              requiresCompatibilities: ["FARGATE"],
+              networkMode: "awsvpc",
+              cpu: "4096",
+              memory: "8192",
+              containerDefinitions: [{
+                name: $name,
+                image: $image,
+                essential: true,
+                environment: [split("\n")[] | capture("^(?<name>[A-Z0-9_]+)=(?<value>.*)$")]
+              }]
+            }' "$E2E/worker.env" > "$RUNNER_TEMP/taskdef.json"
+          aws ecs create-cluster --cluster-name "$ECS_CLUSTER"
+          aws ecs register-task-definition --cli-input-json "file://$RUNNER_TEMP/taskdef.json"
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build and start the API
+        working-directory: api
+        run: |
+          npm run build
+          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health > /dev/null; then echo "API ready"; exit 0; fi
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
+      # One ELVIS LAZ tile as ELVIS ships it: Katoomba 2018, Mount Solitary.
+      - name: Fetch the sample tile
+        id: sample
+        run: echo "zip=$(scripts/sample-data.sh elvis-katoomba-2506258-laz.zip)" >> "$GITHUB_OUTPUT"
+      - name: Start a job through the API; ECS runs the worker
+        id: complete
         env:
-          JOB_ID: ${{ steps.jobs.outputs.complete }}
+          ZIP: ${{ steps.sample.outputs.zip }}
         run: |
           set -o pipefail
+          id=$($E2E/start-job.sh "e2e complete" "$ZIP")
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          cid=$($E2E/ecs-worker.sh "$id")
           start=$(date +%s)
-          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE" \
-            2>&1 | tee "$RUNNER_TEMP/worker.log"
+          docker logs -f "$cid" 2>&1 | tee "$RUNNER_TEMP/worker.log"
           echo "::notice title=topo-e2e::worker took $(( $(date +%s) - start )) s"
+          [ "$(docker wait "$cid")" = 0 ] || { echo "the worker exited non-zero"; exit 1; }
       - name: The job finished, in full
         env:
-          JOB_ID: ${{ steps.jobs.outputs.complete }}
+          JOB_ID: ${{ steps.complete.outputs.id }}
         run: |
           # Mutation that turns the first grep red: drop OVERPASS_ENDPOINTS from
           # worker.env; the worker tries the real mirrors and logs "Overpass
@@ -742,36 +768,40 @@ jobs:
           grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/worker.log" \
             || { echo "the worker never read the SVTM raster"; exit 1; }
           # A point on Mount Solitary, inside the tile.
-          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" \
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py complete "$JOB_ID" 150.311 -33.780
       # Runbook step 5: the reaper fails a job whose worker died mid-render,
-      # and a worker relaunched for it must leave it failed.
+      # and a worker relaunched for it must leave it failed. ECS launches the
+      # first worker; the relaunch is by hand, since only the reaper's failing
+      # of the row is stood in for here, not a second RunTask.
       - name: A relaunched worker leaves a reaped job alone
         env:
-          JOB_ID: ${{ steps.jobs.outputs.reaped }}
+          ZIP: ${{ steps.sample.outputs.zip }}
         run: |
-          docker run -d --name reaped --network topo-e2e --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE"
+          JOB_ID=$($E2E/start-job.sh "e2e reaped" "$ZIP")
+          cid=$($E2E/ecs-worker.sh "$JOB_ID")
           sql() { psql -h localhost -U logjam -d logjam -tAc "$1"; }
           for _ in $(seq 1 120); do
             [ "$(sql "SELECT coalesce(render_tiles_done, 0) > 0 FROM topo_jobs WHERE id = '$JOB_ID'")" = t ] && break
             sleep 5
           done
           done=$(sql "SELECT coalesce(render_tiles_done, 0) FROM topo_jobs WHERE id = '$JOB_ID'")
-          [ "$done" -gt 0 ] || { echo "second worker never rendered (render_tiles_done=$done)"; docker logs reaped; exit 1; }
+          [ "$done" -gt 0 ] || { echo "the worker never rendered (render_tiles_done=$done)"; docker logs "$cid"; exit 1; }
           sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
-          docker kill reaped
+          docker kill "$cid"
           sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
-          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE"
-          docker run --rm --network topo-e2e --env-file "$E2E/worker.env" \
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE"
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py reaped "$JOB_ID"
       - name: Logs (on failure)
         if: failure()
         run: |
           cat "$RUNNER_TEMP/api.log" || true
-          docker logs reaped || true
           docker logs overpass || true
+          docker logs "${{ job.services.ministack.id }}" 2>&1 | tail -n 200 || true
+          for c in $(docker ps -aq --filter label=com.amazonaws.ecs.task-arn); do docker logs "$c" 2>&1 | tail -n 100; done || true
 
   # The deploy workflows rewrite live ECS task definitions
   # (infra/scripts/pin-ecs-task-image.sh). Its one piece of real logic
