@@ -1,6 +1,7 @@
 import {
   MALFORMED_REQUEST_SENTENCE,
   SERVER_FAULT_SENTENCE,
+  type TripPlanParsed,
   type UserSentence,
 } from "@logjam/shared";
 
@@ -66,4 +67,12 @@ export function malformed(detail: string, statusCode = 400): AppError {
 /** A state of ours that should be impossible. The detail is logged only. */
 export function fault(detail: string, statusCode = 500): AppError {
   return new AppError(statusCode, SERVER_FAULT_SENTENCE, undefined, detail);
+}
+
+/** A shared validator's value, or the error its refusal answers with. */
+export function accepted<T>(parsed: TripPlanParsed<T>): T {
+  if ("value" in parsed) return parsed.value;
+  throw "malformed" in parsed
+    ? malformed(parsed.malformed, parsed.status)
+    : new AppError(parsed.status, parsed.sentence);
 }

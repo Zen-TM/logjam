@@ -947,8 +947,9 @@ model TripPlan {
   tripTypes   String[]          @default([]) @map("trip_types")
   archivedAt  DateTime?         @map("archived_at")
   createdAt   DateTime          @default(now()) @map("created_at")
-  // The Plans poll's watermark. Children live in other tables, so the plan
-  // routes will have to touch it on every child write; nothing does yet (#439).
+  // The Plans poll's watermark. Children live in other tables, so every write
+  // inside the plan moves it through touchPlan (src/lib/planAccess.ts).
+  // Guard: src/__tests__/plans.test.ts ("touches the plan").
   updatedAt   DateTime          @updatedAt @map("updated_at")
   createdBy   User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
   members     TripPlanMember[]

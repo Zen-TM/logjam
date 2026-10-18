@@ -113,7 +113,7 @@ export function enforceCanyoningTag(
   //
   // The alternative — letting the system tag exceed the cap — is what makes
   // this a bug: storing 11 types means reopening the dialog PATCHes all 11
-  // back and the request 400s ("At most 10 types per trip"), so the trip
+  // back and the request is refused (413), so the trip
   // becomes uneditable. The system would have created a row its own validator
   // rejects. Do not turn this skip into a throw, and do not raise the cap:
   // `types` is a user-controlled unbounded String[] and the cap is a mandatory
