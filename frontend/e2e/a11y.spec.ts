@@ -191,6 +191,38 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='menu']");
   });
 
+  test("Plans forms: a form's page, answering it, and the builder", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const aside = page.locator("aside");
+    await page.getByRole("button", { name: /^Plans/ }).click();
+    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await aside.getByRole("radio", { name: /^Forms/ }).click();
+    // The seeded Safety contacts form: who sees answers first, then the table.
+    await aside.getByRole("button", { name: "Safety contacts" }).click();
+    await expect(aside.getByRole("table")).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    // Answering, seen and never sent.
+    await aside
+      .getByRole("button", { name: /^(Answer|Change my answer)$/ })
+      .click();
+    await expect(page.locator("dialog[open]")).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+
+    // The builder starts from a preset.
+    await aside.getByRole("button", { name: "Back to the plan" }).click();
+    await aside.getByRole("button", { name: "Add" }).click();
+    await page.getByRole("menuitem", { name: "Add a form" }).click();
+    const builder = page.locator("dialog[open]");
+    await expectNoViolations(page, "dialog");
+    await builder.getByRole("button", { name: "Gear to borrow" }).click();
+    await expect(builder.getByRole("textbox", { name: "Title" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+  });
+
   test("Account, Settings and the three lists it keeps", async ({ page }) => {
     await openApp(page);
     const aside = page.locator("aside");
