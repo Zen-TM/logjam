@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   NOTIFICATION_TYPES,
+  notificationAnnouncement,
   notificationHaystack,
   notificationLabel,
 } from "./notificationLabel.js";
@@ -151,6 +152,45 @@ describe("notificationLabel", () => {
     expect(notificationLabel(notification("future_type")).text).toBe(
       "Notification",
     );
+  });
+});
+
+describe("announcement", () => {
+  const resolved = {
+    announcementId: "a1",
+    title: "Trip season",
+    body: "Hello **all**",
+  };
+
+  it("is labelled with the message's own title, or a generic one", () => {
+    expect(notificationLabel(notification("announcement", resolved)).text).toBe(
+      "Trip season",
+    );
+    expect(notificationLabel(notification("announcement")).text).toBe(
+      "A message from the Logjam maintainer",
+    );
+  });
+
+  it("hands a client the resolved message", () => {
+    expect(
+      notificationAnnouncement(notification("announcement", resolved)),
+    ).toEqual({
+      id: "a1",
+      title: "Trip season",
+      body: "Hello **all**",
+    });
+  });
+
+  // Red if the helper stops checking the type or the resolved body.
+  it("is null for another type or an unresolved payload", () => {
+    expect(
+      notificationAnnouncement(notification("topo_complete", resolved)),
+    ).toBeNull();
+    expect(
+      notificationAnnouncement(
+        notification("announcement", { announcementId: "a1" }),
+      ),
+    ).toBeNull();
   });
 });
 

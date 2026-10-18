@@ -4,6 +4,7 @@
 // reusable by push handling. A new notification type is a branch here; unknown
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
+import { ANNOUNCEMENT } from "./contracts/inbox.js";
 
 export type NotificationLabel = {
   text: string;
@@ -49,6 +50,7 @@ export const NOTIFICATION_TYPES = [
   "geo_pdf_complete",
   "egress_quota_warning",
   "egress_quota_exceeded",
+  "announcement",
 ] as const;
 
 export function notificationLabel(n: TNotification): NotificationLabel {
@@ -147,6 +149,10 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: "Monthly download limit reached",
         warning: "Downloads resume when the limit resets next month.",
       };
+    // The maintainer's own title, resolved at read time; the push never
+    // carries it (api/src/services/push.ts).
+    case "announcement":
+      return { text: str(p.title) ?? ANNOUNCEMENT.untitled };
     default:
       return { text: "Notification" };
   }
@@ -200,6 +206,9 @@ export function notificationKind(n: TNotification): NotificationKind {
       return "file";
     case "friend_request":
     case "friend_request_accepted":
+    // From a person, the maintainer; a kind of its own would need a glyph and
+    // a hue in both clients' DESIGN.md.
+    case "announcement":
       return "people";
     case "topo_failed":
       return "problem";
@@ -231,6 +240,22 @@ export function notificationKind(n: TNotification): NotificationKind {
 export function notificationPlaceId(n: TNotification): string | null {
   const placeId = n.payload.placeId;
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
+}
+
+/**
+ * The maintainer announcement a notification carries, as `GET /notifications`
+ * resolved it: null for any other type, or one whose announcement is gone.
+ * `body` is Markdown source, drawn through `parseMessageMarkdown`, never as
+ * HTML.
+ */
+export function notificationAnnouncement(
+  n: TNotification,
+): { id: string; title: string; body: string } | null {
+  const p = n.payload;
+  if (n.type !== "announcement") return null;
+  const id = str(p.announcementId);
+  if (!id || typeof p.body !== "string") return null;
+  return { id, title: str(p.title) ?? ANNOUNCEMENT.untitled, body: p.body };
 }
 
 // ── The list: its cap, order and day grouping ────────────────────────────────
