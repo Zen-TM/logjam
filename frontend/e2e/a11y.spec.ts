@@ -684,7 +684,7 @@ test.describe("desktop", () => {
       .getByRole("button", { name: "How this topo is drawn" })
       .click();
     await expect(
-      dialog.getByRole("radio", { name: "Show hillshade" }),
+      dialog.getByRole("radio", { name: "Hillshade" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 

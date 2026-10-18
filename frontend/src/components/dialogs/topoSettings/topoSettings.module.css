@@ -96,7 +96,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
+  /* The 24px mouse-target floor (shared/DESIGN.md §1). */
+  min-height: var(--space-3);
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
