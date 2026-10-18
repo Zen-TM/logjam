@@ -54,6 +54,7 @@ model User {
   fileSends               FileSend[]
   fileSendsReceived       FileSendRecipient[]
   customFieldDefs         CustomFieldDef[]
+  importSnapshots         ImportSnapshot[]
 
   @@map("users")
 }
@@ -231,6 +232,7 @@ model Place {
   linksB           PlaceLink[]    @relation("PlaceLinkB")
   // At most one — the place's route slot. See Route.placeId.
   route            Route?
+  importSnapshots  ImportSnapshot[]
 
   @@unique([ownerId, ropeWikiId])
   /// TYPE-SCOPED, deliberately. `placeImportKey()` derives from name + rounded
@@ -245,6 +247,29 @@ model Place {
   @@index([forkedFromId])
   @@index([ownerId, importBatchId])
   @@map("places")
+}
+
+/// What one import changed on a place or trip it did not create: the fields it
+/// wrote, with their values before and after, so Undo can put them back
+/// (routes/imports.ts, lib/importSnapshot.ts). `placeId` or `tripLogId` names
+/// the row; the snapshot goes with it when the row is deleted.
+model ImportSnapshot {
+  id        String   @id @default(uuid())
+  ownerId   String   @map("owner_id")
+  batchId   String   @map("batch_id")
+  placeId   String?  @map("place_id")
+  tripLogId String?  @map("trip_log_id")
+  before    Json
+  after     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  place     Place?   @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  tripLog   TripLog? @relation(fields: [tripLogId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, batchId])
+  @@index([placeId])
+  @@index([tripLogId])
+  @@map("import_snapshots")
 }
 
 model Notification {
@@ -275,6 +300,7 @@ model TripLog {
   importBatchId String?        @map("import_batch_id")
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   places        TripLogPlace[]
+  importSnapshots ImportSnapshot[]
 
   @@unique([userId, importKey])
   @@index([userId])

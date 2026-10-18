@@ -25,6 +25,12 @@ import { resolveUser } from "../lib/resolveUser";
 import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
 import { placeImportKey } from "../lib/importKeys";
 import { deletePlacesCascade } from "../lib/bulkDelete";
+import {
+  diffFields,
+  placeFields,
+  snapshotWrites,
+  type Change,
+} from "../lib/importSnapshot";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
@@ -235,6 +241,7 @@ router.post(
               altNames: true,
               notes: true,
               fieldValues: true,
+              importBatchId: true,
             },
           })
         : [];
@@ -277,6 +284,7 @@ router.post(
           altNames: true,
           notes: true,
           fieldValues: true,
+          importBatchId: true,
         },
       });
       for (const row of existing) {
@@ -315,6 +323,7 @@ router.post(
     type MergeOp = {
       kind: "merge";
       placeId: string;
+      target: (typeof mergeTargetLookup)[number];
       mergedData: Record<string, unknown>;
       setImportKey: string | null; // Set importKey if place didn't have one.
       // Reported back so the completion screen can say WHICH places were folded
@@ -347,6 +356,7 @@ router.post(
         merges.push({
           kind: "merge",
           placeId: existingPlace.id,
+          target: existingPlace,
           mergedData: {
             altNames: mergedResult.altNames,
             notes: mergedResult.notes ?? null,
@@ -383,6 +393,7 @@ router.post(
         merges.push({
           kind: "merge",
           placeId: targetId,
+          target,
           mergedData: {
             altNames: mergedResult.altNames,
             notes: mergedResult.notes ?? null,
@@ -456,20 +467,47 @@ router.post(
         });
       }
 
-      // Merges (updates) via batched $transaction.
-      for (let i = 0; i < merges.length; i += CHUNK_SIZE) {
-        const chunk = merges.slice(i, i + CHUNK_SIZE);
-        await prisma.$transaction(
-          chunk.map((op) =>
-            prisma.place.update({
-              where: { id: op.placeId },
-              data: {
-                ...op.mergedData,
-                ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
-              },
-            }),
+      // One update per place. Two rows merging into one place both merged
+      // into its stored values, so the later row's values are the ones that
+      // land, as when each row was its own update.
+      const updateByPlace = new Map<
+        string,
+        { target: MergeOp["target"]; data: Record<string, unknown> }
+      >();
+      for (const op of merges) {
+        updateByPlace.set(op.placeId, {
+          target: op.target,
+          data: {
+            ...updateByPlace.get(op.placeId)?.data,
+            ...op.mergedData,
+            ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
+          },
+        });
+      }
+
+      // Merges (updates) via batched $transaction, each with the snapshot Undo
+      // restores it from. A place this batch created needs none: Undo deletes it.
+      const updates = [...updateByPlace];
+      for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+        const chunk = updates.slice(i, i + CHUNK_SIZE);
+        const changes = new Map<string, Change>();
+        for (const [placeId, { target, data }] of chunk) {
+          if (target.importBatchId === body.importBatchId) continue;
+          const stored = placeFields(target);
+          const change = diffFields(stored, { ...stored, ...data });
+          if (change) changes.set(placeId, change);
+        }
+        await prisma.$transaction([
+          ...chunk.map(([placeId, { data }]) =>
+            prisma.place.update({ where: { id: placeId }, data }),
           ),
-        );
+          ...(await snapshotWrites(
+            user.id,
+            body.importBatchId,
+            "placeId",
+            changes,
+          )),
+        ]);
       }
     } catch (err) {
       if (

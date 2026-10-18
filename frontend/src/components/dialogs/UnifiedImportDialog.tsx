@@ -1226,18 +1226,32 @@ function UnifiedImportDialog({
       const result = await undoImport(outcome.batchId);
       onRefetchPlaces();
       onRefetchTripLogs();
-      const parts = [
-        result.deletedPlaces > 0
-          ? `${result.deletedPlaces} place${result.deletedPlaces === 1 ? "" : "s"}`
-          : null,
-        result.deletedTrips > 0
-          ? `${result.deletedTrips} trip${result.deletedTrips === 1 ? "" : "s"}`
-          : null,
-      ].filter((p): p is string => p != null);
+      const count = (n: number, noun: string) =>
+        n > 0 ? `${n} ${noun}${n === 1 ? "" : "s"}` : null;
+      const listed = (...items: (string | null)[]) =>
+        items.filter((p): p is string => p != null).join(" and ");
+      const removed = listed(
+        count(result.deletedPlaces, "place"),
+        count(result.deletedTrips, "trip"),
+      );
+      const restored = listed(
+        count(result.restoredPlaces, "place"),
+        count(result.restoredTrips, "trip"),
+      );
+      const kept =
+        result.keptFields === 0
+          ? ""
+          : result.keptFields === 1
+            ? " 1 field you changed since stays as you left it."
+            : ` ${result.keptFields} fields you changed since stay as you left them.`;
+      const done = [
+        removed && `${removed} removed`,
+        restored && `${restored} restored`,
+      ]
+        .filter(Boolean)
+        .join(", ");
       toast.success(
-        parts.length > 0
-          ? `Import undone — ${parts.join(" and ")} removed.`
-          : "Import undone.",
+        `${done ? `Import undone — ${done}.` : "Import undone."}${kept}`,
       );
       onClose();
     } catch (err) {
@@ -1967,7 +1981,7 @@ function UnifiedImportDialog({
       <ConfirmDialog
         open={confirmingUndo}
         title="Undo this import?"
-        message="Everything this import created is deleted, and places it merged into go back to the values they had. Anything you had before the import stays. This can't be undone."
+        message="Everything this import created is deleted. Places and trips it changed go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone."
         confirmLabel="Undo the import"
         confirmColor="error"
         busy={undoing}
