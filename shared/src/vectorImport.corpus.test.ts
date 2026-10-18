@@ -14,11 +14,22 @@
 //   https://developers.google.com/kml/documentation/kmlreference (Google, CC BY
 //   4.0 with the page's code samples under Apache 2.0). google-earth-gx-track-with-pin.kml is
 //   that sample plus a Point placemark added here.
+// - avenza-gx-track.kml: structure of an Avenza PDF Maps recording (the
+//   maintainer's reference export, not committed): Document/Schema, a Folder,
+//   a Placemark with its own TimeStamp, one gx:Track whose when / gx:coord /
+//   gx:angles run in parallel, then ExtendedData gx:SimpleArrayData arrays
+//   (speed, horizontal_accuracy, vertical_accuracy, source). Five made-up
+//   vertices; the arrays must not break the parse.
+// - caltopo.geojson: structure of a route drawn in CalTopo web and exported as
+//   GeoJSON (the maintainer's reference export, not committed): one LineString
+//   Feature, an empty title, stroke / "-created-by" style properties. Made up.
+// - google-earth-gx-multitrack.kml: made up, to the kmlreference's gx:MultiTrack
+//   layout (one timed leg, one untimed).
+// - google-earth-gx-track-gaps.kml: made up; an id attribute on a <when> and a
+//   <gx:coord>, and an empty <gx:coord/> (a lost fix) whose time must go with it.
 // - osmand.gpx, gpx10-legacy.gpx, gpx-routes-only.gpx, google-earth-multigeometry.kml:
 //   hand-written to the format spec / the producer's documented tags, with no
 //   reference export to check against.
-// - CalTopo and Avenza have no fixture: no reference export of either was
-//   available, so a hand-written one would only guess at their dialect.
 //
 // A parser change that alters any of these shows up as a diff in the golden.
 // Mutation that turns it red: drop the rte loop in parseGpx; gpx-routes-only.gpx.golden

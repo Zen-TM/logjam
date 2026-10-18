@@ -1,0 +1,61 @@
+{
+  "name": null,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.3,
+            -33.6,
+            800
+          ],
+          [
+            150.31,
+            -33.61,
+            790
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Two legs, second one untimed",
+        "coordTimes": [
+          "2026-01-01T00:00:00.000Z",
+          "2026-01-01T00:01:00.000Z"
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.32,
+            -33.62
+          ],
+          [
+            150.33,
+            -33.63
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Two legs, second one untimed"
+      }
+    }
+  ],
+  "bbox": [
+    150.3,
+    -33.63,
+    150.33,
+    -33.6
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 2,
+    "polygons": 0,
+    "positions": 4
+  }
+}
