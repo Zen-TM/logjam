@@ -299,7 +299,7 @@ export function OfflineSettingsScreen({
           <Hint
             text={
               accountState === "guest"
-                ? "Places, routes, imports and recordings stay on this phone until you link an account. Maps you downloaded stay on this device."
+                ? "Places, routes, imports and recordings are only on this phone until you link an account."
                 : "Places, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device."
             }
           />
