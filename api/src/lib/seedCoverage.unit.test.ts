@@ -36,6 +36,8 @@ const WRITTEN_NESTED: Record<string, RegExp> = {
 
 /** Deliberately empty, with the reason. */
 const NOT_SEEDED: Record<string, string> = {
+  ImportSnapshot:
+    "written only by an import that merges into an existing row; the seed makes no import batch",
   EgressLogCursor:
     "written by the egress sweeper as it reads S3 access logs, which MiniStack does not deliver; the seed only clears it",
 };

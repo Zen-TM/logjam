@@ -133,10 +133,10 @@ const archives = new Map<string, { archive: PMTiles | null; at: number }>();
  * once and remembered, because every profile in NSW would otherwise pay for
  * the failed open. A read that fails AFTER the archive opened throws.
  */
-export async function demArchiveFor(
-  // Structural, so the clip endpoint can ask the same of the contour archive.
-  source: { id: string; archivePath: string },
-): Promise<PMTiles | null> {
+export async function demArchiveFor(source: {
+  id: string;
+  archivePath: string;
+}): Promise<PMTiles | null> {
   // The CDN the clients read it from too: byte ranges of our own file, which
   // say nothing a tile index would.
   const base = getEnv().TOPO_CDN_BASE_URL;

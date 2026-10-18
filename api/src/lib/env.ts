@@ -70,12 +70,6 @@ const baseSchema = z.object({
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  // Protomaps basemap archive the region-clip endpoint extracts from.
-  // s3:// URI in prod (go-pmtiles reads S3 natively under the
-  // task role); an https:// URL works for local dev (public CDN archive).
-  // Optional: the endpoint 503s when unset instead of crashing the API.
-  PROTOMAPS_ARCHIVE_URI: z.string().optional(),
-
   // Transactional email (Resend). Only the geoPdfWorker sends from the Node
   // side; the API server itself sends none. Both optional so a worker with no
   // key configured degrades to a no-op send (services/email.ts) instead of
@@ -96,7 +90,9 @@ const baseSchema = z.object({
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
   // Python `except` ran) is force-failed by the periodic sweep. Set
-  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
+  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely, which also
+  // stops every other sweep startTopoJobReaper runs (topoJobReaper.ts),
+  // import-snapshot expiry among them.
   TOPO_REAPER_INTERVAL_MS: z.coerce
     .number()
     .int()

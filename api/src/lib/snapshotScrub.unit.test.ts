@@ -27,7 +27,12 @@ const schema = readFileSync(
 );
 
 /** Models holding what a user typed about where they have been. */
-const OWNER_DATA_MODELS = ["Place", "TripLog", "CustomFieldDef"];
+const OWNER_DATA_MODELS = [
+  "Place",
+  "TripLog",
+  "CustomFieldDef",
+  "ImportSnapshot",
+];
 
 /**
  * Columns on those models that are NOT scrubbed, each with the reason. An

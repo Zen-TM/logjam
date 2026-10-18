@@ -8,6 +8,7 @@ import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
+import { sweepExpiredImportSnapshots } from "./importSnapshot";
 import { sweepEgress } from "./egressMeter";
 import { createAndLaunchTopoExport } from "./topoExportLauncher";
 import { AppError } from "../middleware/errorHandler";
@@ -973,6 +974,16 @@ export function startTopoJobReaper(): () => void {
       })
       .catch((err) => {
         logger.error({ err: safeErrorForLog(err) }, "file_send_sweep_failed");
+      });
+    sweepExpiredImportSnapshots()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "import_snapshots_expired");
+      })
+      .catch((err) => {
+        logger.error(
+          { err: safeErrorForLog(err) },
+          "import_snapshot_sweep_failed",
+        );
       });
     // Rides this interval rather than owning a timer: the sweep is incremental
     // and does nothing when no new access-log objects have been delivered.

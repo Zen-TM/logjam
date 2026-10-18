@@ -12,11 +12,7 @@
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import {
-  ApiError,
-  type OfflineBasemapId,
-  type RegionBbox,
-} from "@logjam/shared";
+import { type OfflineBasemapId } from "@logjam/shared";
 
 import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui";
@@ -29,10 +25,8 @@ import {
   mayResumeOnReconnect,
   regionGroupToastText,
 } from "./regionDownloadGroups";
-import { failureDetail } from "./failureDetail";
 import { connectionWorthResuming } from "./networkPolicy";
 import {
-  connectionAllows,
   runRegionDownload,
   type PausedReason,
   type RegionCancelToken,
@@ -41,32 +35,20 @@ import {
   type RegionJobSpec,
   type RegionRunOutcome,
 } from "./regionTileDownload";
+import type { RegionClipSpec } from "./regionDownloads";
 
 /**
- * Two task kinds, one queue: the SIX rasters are fetched tile by
- * tile straight from the provider, while the self-hosted vector basemap is one
- * clip file served by our own API. The user is choosing between maps, not
- * between transports, so they share the screen, the queue and this progress
- * shape.
+ * Two task kinds, one queue: the SIX rasters are fetched tile by tile straight
+ * from the provider, while a clip of one of Logjam's own archives (the vector
+ * basemap, a DEM, the contours) is cut by byte range from the CDN
+ * (`regionDownloads.ts`). The user is choosing between maps, not between
+ * transports, so they share the screen, the queue and this progress shape.
  */
 export type RegionTaskSpec =
   | ({ taskKind: "tile-pyramid" } & RegionJobSpec)
-  | {
-      taskKind: "http-file";
-      id: string;
-      /** The vector basemap, or a DEM archive source's id (`demSourceId`). */
-      basemapId: string;
-      /** Set when the clip is of a DEM archive: shared demSources.ts. */
-      demSourceId?: string;
-      /** Set when the clip is of the statewide contours: shared nswContours.ts. */
-      contours?: boolean;
-      label: string;
-      groupId: string;
-      groupLabel: string;
-      bbox: RegionBbox;
-      zMax: number;
-      allowCellular: boolean;
-    };
+  | RegionClipTask;
+
+type RegionClipTask = { taskKind: "clip" } & RegionClipSpec;
 
 export type RegionJobState =
   | { kind: "queued" }
@@ -347,10 +329,19 @@ async function drain(): Promise<void> {
 
     const report = (progress: RegionJobProgress) =>
       patch(next.spec.id, { progress });
-    const outcome =
-      next.spec.taskKind === "tile-pyramid"
-        ? await runRegionDownload(next.spec, report, token)
-        : await runProtomapsClip(next.spec, report, token);
+    // A runner that throws ends its job as failed rather than leaving it
+    // "downloading" for good, its token held and the jobs behind it stalled.
+    // Guard: regionDownloadQueue.test.ts ("a runner that throws").
+    const outcome: RegionRunOutcome = await (next.spec.taskKind ===
+    "tile-pyramid"
+      ? runRegionDownload(next.spec, report, token)
+      : import("./regionDownloads").then((m) =>
+          m.runRegionClip(next.spec as RegionClipTask, report, token),
+        )
+    ).catch((err: unknown) => {
+      console.error(err);
+      return { status: "failed", code: "unknown" } as const;
+    });
     tokens.delete(next.spec.id);
 
     // The spec was snapshotted before the run; the user may have renamed the
@@ -378,95 +369,6 @@ async function drain(): Promise<void> {
             ? { kind: "paused", reason: outcome.reason }
             : { kind: "failed", code: outcome.code, detail: outcome.detail },
     });
-  }
-}
-
-/**
- * The vector basemap's clip, wrapped in the same outcome shape. There is no
- * politeness envelope here: it is one request to our own API, and
- * `expo-file-system`'s resumable download owns the transport.
- */
-async function runProtomapsClip(
-  spec: Extract<RegionTaskSpec, { taskKind: "http-file" }>,
-  onProgress: (progress: RegionJobProgress) => void,
-  token: RegionCancelToken,
-): Promise<RegionRunOutcome> {
-  const { deleteDownloadedArtifact, downloadProtomapsRegion } = await import(
-    "./regionDownloads"
-  );
-  // The tile path re-checks this every 16 tiles; the clip path never checked
-  // it at all. The only guard was an alert on the download screen driven by a
-  // connection state read ONCE on mount — so opening the screen on Wi-Fi at
-  // the trailhead and tapping Save after walking out of range pulled an up-to-
-  // 80 MB clip over mobile data with no warning.
-  if (!(await connectionAllows(spec.allowCellular))) {
-    return { status: "paused", reason: "connectivity" };
-  }
-  try {
-    const artifact = await downloadProtomapsRegion(
-      {
-        id: spec.id,
-        label: spec.label,
-        groupId: spec.groupId,
-        groupLabel: spec.groupLabel,
-        bbox: spec.bbox,
-        zMax: spec.zMax,
-        demSourceId: spec.demSourceId,
-        contours: spec.contours,
-      },
-      (progress) =>
-        onProgress({
-          tilesDone: 0,
-          tilesTotal: 0,
-          tilesGap: 0,
-          tilesFailed: 0,
-          bytesDone: progress.bytesDone,
-          bytesTotal: progress.bytesTotal,
-        }),
-    );
-    // A clip is one request: there is no mid-flight stop, so a cancel that
-    // arrives while it runs is honoured by undoing it.
-    if (token.stop === "cancel") {
-      await deleteDownloadedArtifact(artifact.id);
-      return { status: "cancelled" };
-    }
-    return { status: "ready", artifact, gaps: 0, failed: 0 };
-  } catch (err) {
-    console.error(err);
-    // A 5xx from the clip endpoint is the SERVER saying it cannot cut this map
-    // — the archive isn't configured, the `pmtiles` binary isn't on the host,
-    // or the extract died. None of those get better by tapping Resume, and
-    // reporting them as the generic "That didn't finish. Try again." sent the
-    // user round that loop indefinitely. (It is also the whole of the 503 seen
-    // in local dev: PROTOMAPS_ARCHIVE_URI is unset there and no archive exists
-    // to cut from — see api/src/routes/basemap.ts.)
-    // A DEM archive the server does not have (503) is not this run's failure:
-    // the worldwide tiles are saved regardless, so the area still has heights.
-    // Nor is a missing contour archive: the basemap it is drawn over is saved.
-    // The job leaves the queue as if it had never been planned.
-    if (
-      (spec.demSourceId || spec.contours) &&
-      err instanceof ApiError &&
-      err.status === 503
-    ) {
-      return { status: "cancelled" };
-    }
-    if (err instanceof ApiError && err.status >= 500) {
-      return { status: "failed", code: "source-unavailable" };
-    }
-    // 4xx is the endpoint rejecting THIS AREA (outside the archive extract, or
-    // over the clip cap — see validateRegionClipRequest). Its sentence says
-    // which, to the user, and is static and coordinate-free; the row shows it
-    // as it is (shared/DESIGN.md §11). What it has to say is "reframe", not
-    // "retry".
-    if (err instanceof ApiError && err.status >= 400) {
-      return {
-        status: "failed",
-        code: "region-rejected",
-        detail: err.serverMessage,
-      };
-    }
-    return { status: "failed", code: "unknown", detail: failureDetail(err) };
   }
 }
 
@@ -545,15 +447,18 @@ export async function cancelAllRegionDownloads(): Promise<void> {
 }
 
 /**
- * Clean up after a job cancelled before it ever ran. Both task kinds use the
- * job's own id for their file now, so this covers either: the tile pyramid's
- * `<id>.mbtiles` (plus WAL sidecars) and the clip's `<id>.pmtiles` with its
- * registry row, if one somehow landed. Both are no-ops when nothing is there.
+ * Clean up after a job cancelled while it was not running. Both task kinds
+ * use the job's own id for their file, so this covers either: the tile
+ * pyramid's `<id>.mbtiles` (plus WAL sidecars) and the clip's `<id>.pmtiles`,
+ * partial or with its registry row. All are no-ops when nothing is there.
  */
 async function deleteAbandonedRegion(id: string): Promise<void> {
   const { deleteRegionFile } = await import("./regionMbtiles");
-  const { deleteDownloadedArtifact } = await import("./regionDownloads");
+  const { deleteClipFile, deleteDownloadedArtifact } = await import(
+    "./regionDownloads"
+  );
   await deleteRegionFile(id);
+  await deleteClipFile(id);
   await deleteDownloadedArtifact(id);
 }
 

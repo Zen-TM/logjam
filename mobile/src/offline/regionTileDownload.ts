@@ -119,16 +119,16 @@ export type RegionFailureCode =
   | "provider-errors"
   | "verify-failed"
   /**
-   * The SERVER can't cut this map right now — the vector clip's 5xx, as
-   * against anything the phone did. Separate from `unknown` because the two
-   * deserve opposite advice: "try again" is right for a dropped connection and
-   * wrong for an endpoint that will keep refusing until an operator fixes it.
+   * A clip's archive is missing from the CDN or not served by range
+   * (regionDownloads.ts, `permanent`), as against anything the phone did.
+   * Separate from `unknown` because the two deserve opposite advice: "try
+   * again" is right for a dropped connection and wrong for an archive that
+   * stays missing until an operator fixes it.
    */
   | "source-unavailable"
   /**
-   * The SERVER refused this area for the vector clip — outside the NSW archive
-   * extract, or larger than the clip cap. A 4xx, so retrying it unchanged can
-   * only fail again; the user has to reframe.
+   * This area is outside the vector clip's archive (regionDownloads.ts), so
+   * retrying it unchanged can only fail again; the user has to reframe.
    */
   | "region-rejected"
   | "unknown";
