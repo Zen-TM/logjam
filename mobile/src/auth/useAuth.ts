@@ -39,6 +39,7 @@ import { mapAuthNextStep, messageFromError } from "@logjam/shared";
 import { config } from "../config";
 import { apiFetch, setSessionRejectedHandler } from "../api/apiFetch";
 import { fetchAuthSessionWithTimeout } from "./authSession";
+import { cognitoSignOut } from "./cognitoSignOut";
 import { wipeAllLocalData } from "../offline/wipeLocalData";
 import { unregisterPushNotifications } from "../notifications/pushRegistration";
 import { classifySessionError } from "./sessionErrors";
@@ -388,7 +389,7 @@ export function useAuth() {
     // sent them to the chooser. Same state, same screen, either way.
     clearEntryChoice();
     try {
-      await amplifySignOut();
+      await cognitoSignOut();
     } catch (err) {
       // Offline sign-out: Amplify clears local tokens regardless; the server-
       // side revocation just didn't happen. Log and continue.
