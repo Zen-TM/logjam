@@ -54,6 +54,11 @@ describe("sendTopoParts", () => {
     const s = session();
     await sendTopoParts(s, () => {});
     expect(sentParts().sort()).toEqual(["part-1", "part-2", "part-3"]);
+    // The API signs each part's length from the file's size.
+    expect(apiFetch.mock.calls[0][1].body).toMatchObject({
+      uploadId: "up-1",
+      sizeBytes: 10,
+    });
     expect(completions()).toEqual([
       [
         "/topo-jobs/job-1/complete",

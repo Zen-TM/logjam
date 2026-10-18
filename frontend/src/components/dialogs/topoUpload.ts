@@ -65,7 +65,7 @@ export async function sendTopoParts(
       parts: { partNumber: number; url: string }[];
     }>(`/topo-jobs/${session.jobId}/parts`, {
       method: "POST",
-      body: { uploadId: session.uploadId, partNumbers },
+      body: { uploadId: session.uploadId, sizeBytes: file.size, partNumbers },
     });
     const at = Date.now();
     for (const p of parts) urls.set(p.partNumber, { url: p.url, at });
