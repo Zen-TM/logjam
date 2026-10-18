@@ -1,0 +1,42 @@
+{
+  "name": "ACTIVE LOG",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.06,
+            -33.05,
+            301
+          ],
+          [
+            150.061,
+            -33.0505,
+            299
+          ]
+        ]
+      },
+      "properties": {
+        "name": "ACTIVE LOG",
+        "coordTimes": [
+          "2009-11-07T20:01:00.000Z",
+          "2009-11-07T20:03:00.000Z"
+        ]
+      }
+    }
+  ],
+  "bbox": [
+    150.06,
+    -33.0505,
+    150.061,
+    -33.05
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 2
+  }
+}
