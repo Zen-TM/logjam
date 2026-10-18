@@ -1,8 +1,7 @@
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-0-5);
+/* The pressable look: the pill, the edge and the card fill, pressed under the
+   pointer. Whatever sits beside a button and presses like one composes this
+   (Choice.module.css's card checkbox); pressableFill.test.ts holds both. */
+.pressable {
   min-height: var(--control-lg);
   /* A pill is never narrower than it is tall: a one-glyph label is a circle. */
   min-width: var(--control-lg);
@@ -12,16 +11,24 @@
   /* A button wears the pressable fill, whichever it is; the one
      primary of a surface overrides it with the accent. */
   background: var(--color-card);
-  color: var(--color-text);
-  font-family: inherit;
-  line-height: inherit;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--motion-fast);
 }
 
-.button:hover:not(:disabled, [aria-disabled="true"]) {
+.pressable:hover:not(:disabled, [aria-disabled="true"], [data-disabled]) {
   background: var(--color-card-pressed);
+}
+
+.button {
+  composes: pressable;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-0-5);
+  color: var(--color-text);
+  font-family: inherit;
+  line-height: inherit;
 }
 
 /* A button's label is a row title's size; a compact one is a control's. Exactly

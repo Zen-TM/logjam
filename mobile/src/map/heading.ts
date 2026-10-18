@@ -75,7 +75,7 @@
 // battery: see `publishHeading`.
 import { useSyncExternalStore } from "react";
 
-import { metersPerPixel } from "./scaleBar";
+import { metersPerPixel } from "@logjam/shared";
 
 /**
  * The animation cadence: how often the displayed bearing is advanced, published
