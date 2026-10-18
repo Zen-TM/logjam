@@ -2378,12 +2378,13 @@ async function main() {
     ],
   });
 
-  // A pending invite link from bob, for alice (the dev user) to open: the seed
-  // prints it, as only its hash is stored.
+  // A pending invite link from alice, for another user to open: the seed prints
+  // it, as only its hash is stored. Alice's, since friendInvites.test.ts clears
+  // bob's and carol's.
   await prisma.friendInvite.create({
     data: {
       id: fid(18),
-      inviterId: BOB_ID,
+      inviterId: ALICE_ID,
       tokenHash: hashFriendInviteToken(SEED_FRIEND_INVITE_TOKEN),
       expiresAt: new Date(
         Date.now() + FRIEND_INVITE_TTL_DAYS * 24 * 60 * 60_000,
@@ -2595,7 +2596,7 @@ async function main() {
       `${NOTIFICATION_TYPES.length} notification types`,
   );
   console.log(
-    `Bob's invite for alice: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
+    `Alice's invite link, for another user: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
   );
 }
 
