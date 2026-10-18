@@ -131,3 +131,4 @@ supersede instead.
 | [0033](0033-the-api-writes-the-sentence-a-user-reads.md) | The API writes the sentence a user reads when it refuses a request | 2026-10-13 | Accepted |
 | [0034](0034-location-search-reads-a-public-osm-place-registry.md) | Location search reads a public place registry built from OpenStreetMap | 2026-10-17 | Accepted |
 | [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md) | Pull-request plans run unattended, and a main-only job signs their comments | 2026-10-18 | Accepted |
+| [0036](0036-undo-restores-what-an-import-changed-for-a-day.md) | Undoing an import puts back what it changed, field by field, for a day | 2026-10-18 | Accepted |
