@@ -169,7 +169,12 @@ export async function snapshotWrites(
       : { tripLogId: { in: ids } }),
   };
   const prior = new Map(
-    (await prisma.importSnapshot.findMany({ where })).map((row) => [
+    // An expired snapshot folds into nothing, as if the sweep had run.
+    (
+      await prisma.importSnapshot.findMany({
+        where: { ...where, createdAt: { gte: expiredBefore(new Date()) } },
+      })
+    ).map((row) => [
       row[column],
       { before: row.before as RowFields, after: row.after as RowFields },
     ]),

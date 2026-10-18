@@ -97,7 +97,8 @@ const baseSchema = z.object({
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
   // Python `except` ran) is force-failed by the periodic sweep. Set
   // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely, which also
-  // stops the file-send, tombstone and import-snapshot expiry it runs.
+  // stops every other sweep startTopoJobReaper runs (topoJobReaper.ts),
+  // import-snapshot expiry among them.
   TOPO_REAPER_INTERVAL_MS: z.coerce
     .number()
     .int()

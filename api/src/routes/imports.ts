@@ -24,9 +24,10 @@ router.delete(
       throw malformed("batchId is required");
     }
 
-    // Restore before deleting: a trip the batch re-linked to a place it
-    // created must lose that link first, or deleting the place would rename
-    // the trip after it (bulkDelete.ts) and Undo would count that as an edit.
+    // Restore before deleting: within the retention, a trip the batch
+    // re-linked to a place it created must lose that link first, or deleting
+    // the place would rename the trip after it (bulkDelete.ts) and Undo would
+    // count that as an edit.
     // Guard: "restores a trip a re-import re-linked to a place it created" in
     // src/__tests__/import.test.ts.
     const { restoredPlaces, restoredTrips, keptFields } = await restoreBatch(
