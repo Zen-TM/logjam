@@ -929,7 +929,7 @@ model EgressLogCursor {
   @@map("egress_log_cursors")
 }
 
-// Plans (#439): a shared space where a group plans a trip. A plan is a second
+// Plans: a shared space where a group plans a trip. A plan is a second
 // kind of owner: its places, routes, files and GeoPDFs are rows in the usual
 // tables with planId set instead of their owner column. Deleting a plan
 // cascades to everything in it. Role, status and visibleTo are strings from
@@ -947,8 +947,8 @@ model TripPlan {
   tripTypes   String[]          @default([]) @map("trip_types")
   archivedAt  DateTime?         @map("archived_at")
   createdAt   DateTime          @default(now()) @map("created_at")
-  // The poll's watermark: every write inside the plan touches it, in the
-  // same transaction, because children live in other tables.
+  // The Plans poll's watermark. Children live in other tables, so the plan
+  // routes will have to touch it on every child write; nothing does yet (#439).
   updatedAt   DateTime          @updatedAt @map("updated_at")
   createdBy   User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
   members     TripPlanMember[]
@@ -1021,8 +1021,8 @@ model TripPlanForm {
   planId         String           @map("plan_id")
   title          String
   questions      Json             @default("[]")
-  // Which preset the form was built from, if any; validated in the API
-  // against shared/src/tripPlans.ts (Plans, #439).
+  // Which preset the form was built from, if any. Not validated yet: the
+  // preset list lands with the form routes (#439).
   preset         String?
   visibleTo      String           @map("visible_to")
   requiredToJoin Boolean          @default(false) @map("required_to_join")

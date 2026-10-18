@@ -1,4 +1,4 @@
--- Plans (#439). EXPAND-ONLY (ADR 0003): new tables, new nullable columns, and
+-- Plans. EXPAND-ONLY (ADR 0003): new tables, new nullable columns, and
 -- owner columns widened to nullable. The previous API never writes a plan
 -- row, so every row it writes still has an owner and satisfies the CHECKs.
 

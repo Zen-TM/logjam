@@ -1,6 +1,6 @@
-// Plans (#439): the words the TripPlan tables store. The columns are plain
-// strings, not Postgres enums, so a new word needs no migration; this file
-// is the only list, and the API validates every write against it.
+// Plans: the words the TripPlan tables store. The columns are plain strings,
+// not Postgres enums, so a new word needs no migration; this file is the
+// only list.
 
 /** What a member may do in a plan. A plan can have more than one leader. */
 export const TRIP_PLAN_ROLES = ["leader", "editor", "member"] as const;

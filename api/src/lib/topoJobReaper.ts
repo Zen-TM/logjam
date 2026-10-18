@@ -273,6 +273,17 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
 }
 
 /**
+ * The stuck-job sweeps skip a plan's GeoPDF (null userId): there is no owner
+ * to tell. Plan GeoPDFs are to be copies of finished ones, never queued or
+ * running, but nothing creates them yet (#439); one that is stuck stays so.
+ */
+function ownedJob<T extends { userId: string | null }>(
+  row: T,
+): row is T & { userId: string } {
+  return row.userId !== null;
+}
+
+/**
  * Flip overdue rows to failed ONE AT A TIME and notify only the rows this pass
  * actually claimed.
  *
@@ -290,16 +301,6 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
  * the round-trips are noise. If a pass ever reaps thousands, claim in batches
  * with a per-pass marker column instead.
  */
-/**
- * A plan's GeoPDF has no owner to tell, and is a copy of a finished one, so
- * it is never queued or running: the reaper's stuck-job sweeps skip it.
- */
-function ownedJob<T extends { userId: string | null }>(
-  row: T,
-): row is T & { userId: string } {
-  return row.userId !== null;
-}
-
 async function claimAndNotify<Row extends { id: string }>(
   rows: Row[],
   claimOne: (id: string) => Promise<{ count: number }>,

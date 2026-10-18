@@ -2408,7 +2408,7 @@ async function main() {
     },
   });
 
-  // A made-up plan (#439): alice leads, bob is in it, carol is not. It holds
+  // A made-up plan: alice leads, bob is in it, carol is not. It holds
   // one place and one route of its own, which belong to no user.
   const planId = fid(100);
   const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);

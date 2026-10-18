@@ -9,6 +9,7 @@ import {
   BOB_ID,
   BOB_SUB,
   CAROL_SUB,
+  SHARED_PLACE_ID,
   MARKER_TYPE_ID,
   PLAN_PLACE_ID,
   PLAN_ROUTE_ID,
@@ -16,7 +17,7 @@ import {
   as,
 } from "./_actors";
 
-// A plan-owned row (Plans, #439) has planId set and no owner. Until plan
+// A plan-owned row (Plans) has planId set and no owner. Until plan
 // access lands it is nobody's: it never appears in an owner's lists or
 // /sync, cannot be shared or sent, and every by-id path 404s for everyone,
 // the plan's own leader and members included.
@@ -135,7 +136,7 @@ describe("the one-owner CHECK", () => {
 
 describe("plan rows stay out of every owner-scoped list", () => {
   // Mutation: add `OR: [{ planId: { not: null } }]` to any of these lists'
-  // where clauses, or drop the null-owner filter in POST /media/download-urls.
+  // where clauses.
   it.each([
     "/places",
     "/places/shared",
@@ -151,14 +152,33 @@ describe("plan rows stay out of every owner-scoped list", () => {
     }
   });
 
-  it("POST /media/download-urls", async () => {
-    for (const sub of EVERYONE) {
-      const res = await request(API_URL)
-        .post("/media/download-urls")
-        .set(as(sub))
-        .send({ ids: [planMediaId] });
-      expect(res.status).toBe(200);
-      expect(res.body.items).toEqual([]);
+  // Mutation: drop the null-owner filter in POST /media/download-urls.
+  it("POST /media/download-urls, even for a file on a place shared with the caller", async () => {
+    // Local to this test: a plan file linked to an owned place is not
+    // something any route makes, and /sync would serve it to the place's
+    // sharees.
+    const linked = await prisma.media.create({
+      data: {
+        planId: SEED_PLAN_ID,
+        linkedType: "place",
+        linkedId: SHARED_PLACE_ID,
+        s3KeyDisplay: `plan-test/${randomUUID()}.jpg`,
+        mediaType: "image/jpeg",
+        filename: "plan-photo.jpg",
+        fileSizeBytes: 100n,
+      },
+    });
+    try {
+      for (const sub of EVERYONE) {
+        const res = await request(API_URL)
+          .post("/media/download-urls")
+          .set(as(sub))
+          .send({ ids: [planMediaId, linked.id] });
+        expect(res.status).toBe(200);
+        expect(res.body.items).toEqual([]);
+      }
+    } finally {
+      await prisma.media.delete({ where: { id: linked.id } });
     }
   });
 
@@ -217,8 +237,10 @@ describe("plan rows cannot be shared or sent", () => {
     }
   });
 
+  // Mutation: let a null owner match in filterOwnedPlaceIds or
+  // filterOwnedEntityIds.
   it("a bulk share grants nothing", async () => {
-    await request(API_URL)
+    const res = await request(API_URL)
       .post("/bulk-share")
       .set(as(ALICE_SUB))
       .send({
@@ -230,6 +252,8 @@ describe("plan rows cannot be shared or sent", () => {
           { entityType: "geoPdfJob", entityId: planGeoPdfId },
         ],
       });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ granted: 0, alreadyShared: 0, ineligible: 3 });
     expect(
       await prisma.placeShare.count({ where: { placeId: PLAN_PLACE_ID } }),
     ).toBe(0);
