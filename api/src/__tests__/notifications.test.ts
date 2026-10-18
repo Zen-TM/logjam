@@ -146,6 +146,44 @@ describe("GET /notifications (fake auth = alice)", () => {
   });
 });
 
+// Mutations that turn this red: stop resolving title/body, or keep a row
+// whose announcement was deleted (a retracted message would linger, untitled).
+describe("GET /notifications — announcements (fake auth = alice)", () => {
+  it("resolves the title and body, and drops the row once it is retracted", async () => {
+    const announcement = await prisma.announcement.create({
+      data: { title: "Made-up title", body: "Made-up **body**" },
+    });
+    const notification = await prisma.notification.create({
+      data: {
+        userId: ALICE_ID,
+        type: "announcement",
+        payload: { announcementId: announcement.id },
+      },
+    });
+    try {
+      const res = await request(API_URL).get("/notifications").set(AUTH);
+      expect(res.status).toBe(200);
+      const row = res.body.find(
+        (n: { id: string }) => n.id === notification.id,
+      );
+      expect(row.payload).toEqual({
+        announcementId: announcement.id,
+        title: "Made-up title",
+        body: "Made-up **body**",
+      });
+
+      await prisma.announcement.delete({ where: { id: announcement.id } });
+      const after = await request(API_URL).get("/notifications").set(AUTH);
+      expect(
+        after.body.some((n: { id: string }) => n.id === notification.id),
+      ).toBe(false);
+    } finally {
+      await prisma.notification.deleteMany({ where: { id: notification.id } });
+      await prisma.announcement.deleteMany({ where: { id: announcement.id } });
+    }
+  });
+});
+
 describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth = alice)", () => {
   it("404s for a non-existent notification id", async () => {
     const patchRes = await request(API_URL)

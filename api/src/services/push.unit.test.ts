@@ -93,6 +93,22 @@ describe("buildPushMessages — privacy invariant", () => {
     ).toThrow(/not allowed: latitude/);
   });
 
+  // Mutation: title an announcement push with its own (free-text) title, or
+  // drop announcementId from ALLOWED_DATA_KEYS.
+  it("titles an announcement generically and carries only its id", () => {
+    const [message] = buildPushMessages(["t"], {
+      type: "announcement",
+      announcementId: "a1",
+      notificationId: "n1",
+    });
+    expect(message.title).toBe("A message from the Logjam maintainer");
+    expect(message.data).toEqual({
+      type: "announcement",
+      announcementId: "a1",
+      notificationId: "n1",
+    });
+  });
+
   it("has no body field — titles only, details fetched over the authed API", () => {
     const [message] = buildPushMessages(["t"], {
       type: "topo_complete",
