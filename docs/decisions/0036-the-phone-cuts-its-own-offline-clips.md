@@ -48,7 +48,8 @@ per request plus the bytes at the link's rate:
 | Sydney CBD, vector | 32.5 MB | 56 | 33.3 MB | 30 s | 283 s |
 
 Each clip's tile set, tile bytes and header matched `pmtiles extract`'s
-(go-pmtiles v1.31.2, the version `api/Dockerfile` pins) for the same box. The
+(go-pmtiles v1.31.2, the version `shared/scripts/pmtiles-extract-fixture.mjs`
+names) for the same box. The
 clips are the same files the API sent, so a save costs the phone the same
 bytes as before, plus the gaps it reads through.
 
@@ -139,6 +140,21 @@ never in a URL, a filename or an error; the clip deleted when sent or after
 (`REGION_CLIPS_PER_HOUR`, guard `api/src/middleware/rateLimit.unit.test.ts`).
 Nothing new calls it.
 
+- **Update 2026-10-18: the endpoint is gone (#510).** `POST /basemap/region-clip`
+  and what existed only for it (`regionClip.ts`, `regionClipLimiter` and its
+  test, the bbox redaction paths and their test, the `pmtiles` binary in `api/Dockerfile`,
+  `PROTOMAPS_ARCHIVE_URI`) are removed, so the API has no route that takes a
+  saved area's bounds. What held it up was a supported Logjam GPS build that
+  calls it ([0022](0022-mobile-builds-supported-three-months.md)), and there is
+  none. 0022 dates support by a release event, a `mobile-vX.Y.Z` tag or a Play
+  Store release, and no Logjam GPS build has either, so none is a supported
+  build in its sense. The only build that calls the endpoint is the
+  maintainer's own pre-phone-cut build, which saves an area without its vector,
+  DEM and contour clips until they rebuild it; they accept that. The first
+  release will include the phone-cut clips, so no released build ever calls it. The area cap
+  stays in `shared/`, for the phone. The paragraph above and the guards it names
+  no longer apply. Everything else above stands.
+
 ## Consequences
 
 - **Positive:** offline, a guest's saved area has what a signed-in user's has:
@@ -161,9 +177,9 @@ Nothing new calls it.
   clip. No guard: only the device check shows it.
 - **Negative:** the `/master/*` behaviour caches nothing (`max_ttl = 0`), so
   every range is an S3 GET. At about 130 per save that is a fraction of a cent.
-- **Negative:** two ways to cut a clip until the endpoint goes. Removing it,
-  the API image's `pmtiles` binary and `PROTOMAPS_ARCHIVE_URI` is follow-up
-  work for when no supported build calls it.
+- **Negative (updated 2026-10-18):** there were two ways to cut a clip until
+  the endpoint went. It is removed (#510), with the API image's `pmtiles`
+  binary and `PROTOMAPS_ARCHIVE_URI`, so there is one way now.
 - **Negative:** a guest now downloads the DEM and contour clips too, up to
   about 80 MB more per mountain area than before.
 - **Neutral:** an area saved before this change keeps what it was saved with.

@@ -37,6 +37,16 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
     "scripts/github-settings.sh",
     "github/terraform.tfstate",
   ],
+  // The region-clip endpoint, removed in #510; 0029 is superseded and 0033
+  // and 0036 say it is gone.
+  "0029-vector-map-with-every-signed-in-region.md": [
+    "routes/basemap.ts",
+    "lib/regionClip.ts",
+  ],
+  "0033-the-api-writes-the-sentence-a-user-reads.md": [
+    "api/src/lib/regionClip.ts",
+  ],
+  "0036-the-phone-cuts-its-own-offline-clips.md": ["api/src/routes/basemap.ts"],
   // An S3 prefix in the topo bucket.
   "0034-location-search-reads-a-public-osm-place-registry.md": [
     "master/places/v1/",
