@@ -336,8 +336,9 @@ nd.build_slope(Path("unused"), Path(sys.argv[1]) / "out.pmtiles", Path(sys.argv[
 
 
 class TestExtractedMonth(unittest.TestCase):
-    # Mutation: capture `(\w+)` and it reads "October" for "October 2026", or
-    # drop the `sys.exit` and a credit with no month yields None.
+    # Mutation: capture `(\w+)` and the space in "October 2026" stops the match,
+    # so a good credit exits; drop the `sys.exit` and a credit with no month
+    # raises AttributeError, not SystemExit.
     def test_the_month_is_read_back_from_the_credit(self):
         self.assertEqual(
             extracted_month(credit(HEIGHTS, "October 2026")), "October 2026"

@@ -574,7 +574,8 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     work.mkdir(parents=True, exist_ok=True)
     reader = open_heights(heights)
     # The slope archive says what the heights it came from say, not a month
-    # typed again by hand (test_nsw_dem.py `TestExtractedMonth`).
+    # typed again by hand (test_nsw_dem.py `TestBuildSlopeMonth`;
+    # `TestExtractedMonth` for the parse).
     extracted = extracted_month(reader.metadata()["attribution"])
     header = reader.header()
     x0, y0 = lonlat_to_tile(
