@@ -22,10 +22,12 @@
 # Mutations that turn the self-test red: dropping shared/ from mobile fails
 # "mobile: shared source"; dropping frontend/public/ from mobile fails "mobile:
 # the legal documents it links to"; dropping frontend/ from api_integration
-# fails "api_integration: Logjam Web (Playwright smoke)"; removing the ci.yml
-# rule fails "any area: ci.yml"; dropping --no-renames fails "a rename out of
-# an area"; dropping the worker image's paths from topo_e2e fails "topo_e2e:
-# worker source"; a scoped job whose `if:` is not the fail-open expression, or a
+# fails "api_integration: Logjam Web (Playwright smoke)"; dropping the stub
+# from api_integration fails "api_integration: the Expo push stub it starts";
+# removing the ci.yml rule fails "any area: ci.yml"; dropping --no-renames
+# fails "a rename out of an area"; dropping the worker image's paths from
+# topo_e2e fails "topo_e2e: worker source"; a scoped job whose `if:` is not the
+# fail-open expression, or a
 # `changes` output wired to another area's value, fails the ci.yml checks.
 set -uo pipefail
 
@@ -37,8 +39,9 @@ ALWAYS='^(\.github/workflows/ci\.yml|infra/scripts/ci-scope\.sh)$'
 paths_for() {
   case "$1" in
     # The live-API suite, the topo status guard against its Postgres (it
-    # imports topo's top-level modules), and the Playwright smoke spec.
-    api_integration) echo '^(api/|shared/|frontend/|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
+    # imports topo's top-level modules), the Playwright smoke spec and the Expo
+    # push stub the job starts.
+    api_integration) echo '^(api/|shared/|frontend/|infra/scripts/expo-push-stub\.mjs$|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
     # legalLinks.test.ts checks the documents the consent screen links to.
     mobile) echo '^(mobile/|shared/|frontend/public/)' ;;
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
@@ -92,6 +95,7 @@ self_test() {
   check "api_integration: api source"                     api_integration true  0 'api/src/routes/places.ts'
   check "api_integration: shared source"                  api_integration true  0 'shared/src/sync.ts'
   check "api_integration: Logjam Web (Playwright smoke)"  api_integration true  0 'frontend/src/main.tsx'
+  check "api_integration: the Expo push stub it starts"   api_integration true  0 'infra/scripts/expo-push-stub.mjs'
   check "api_integration: topo module the guard imports"  api_integration true  0 'topo/worker.py'
   check "api_integration: the guard test"                 api_integration true  0 'topo/tests/test_status_guard_db.py'
   check "api_integration: topo requirements"              api_integration true  0 'topo/requirements.txt'

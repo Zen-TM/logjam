@@ -231,6 +231,8 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
+      # A stub that answers OK (started below): no CI run reaches Expo.
+      EXPO_PUSH_URL: http://localhost:9099
       # No ECS_SUBNETS: an empty list makes POST /geo-pdf leave the job
       # `queued` and /topo-jobs/:id/start leave it `pending` instead of calling
       # RunTask, which MiniStack here (S3 only, no Docker socket) cannot serve.
@@ -290,6 +292,8 @@ jobs:
         run: npm run build
       # dist/index.js, not dist/boot.js: boot resolves DB creds from Secrets
       # Manager, which this job doesn't run.
+      - name: Start the Expo push stub
+        run: node infra/scripts/expo-push-stub.mjs &
       - name: Start API
         working-directory: api
         run: |
@@ -605,6 +609,8 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
+      # No stub runs in this job: a push the API sends fails here, never reaching Expo.
+      EXPO_PUSH_URL: http://localhost:9099
       IMAGE: logjam-topo-worker:e2e
       E2E: topo/tests/e2e
     steps:
