@@ -77,6 +77,15 @@ function decodeSubFromIdToken(token: string): string | null {
   }
 }
 
+// Fake auth has no account to check a form against. The forms sign straight in
+// as the build's fake user (alice, or EXPO_PUBLIC_FAKE_SUB), the same
+// "authenticated" with no stored identity that a fake-auth launch starts in;
+// `apiFetch` supplies the identity. The entry choice is what keeps a guest who
+// linked from restarting as a guest.
+function enterAsFakeUser(): void {
+  writeEntryChoice("account");
+}
+
 export type AuthState =
   | "loading"
   /** Fresh install, nothing chosen: sign in, or continue without an account. */
@@ -202,6 +211,11 @@ export function useAuth() {
   const handleSignIn = useCallback(
     async (username: string, password: string): Promise<boolean> => {
       setError(null);
+      if (config.authMode === "fake") {
+        enterAsFakeUser();
+        setState("authenticated");
+        return true;
+      }
       try {
         const result = await amplifySignIn({ username, password });
         if (!result.isSignedIn) {
@@ -277,6 +291,11 @@ export function useAuth() {
   const handleSignUp = useCallback(
     async (username: string, password: string, email: string, name: string) => {
       setError(null);
+      if (config.authMode === "fake") {
+        enterAsFakeUser();
+        setState("authenticated");
+        return;
+      }
       try {
         // Email is the Cognito login identifier; display username goes to
         // preferred_username (same contract as web).
