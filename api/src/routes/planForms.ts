@@ -16,9 +16,9 @@
 // PATCH, FOR SHARE in the answer PUT), which keeps the pair exclusive for a
 // writer elsewhere that answers without touching the plan first. Plan row
 // before any row in the plan, everywhere: here, and in account delete
-// (routes/users.ts), the one other writer that takes plan rows, which
-// updates the plans its user created, taking their rows, before it deletes
-// their answers.
+// (routes/users.ts), the one other writer that takes rows in plans, which
+// first updates every plan its user is in or created, taking their rows,
+// before it deletes their answers and memberships.
 // Reading answers is lib/tripPlanView.ts's `formView`.
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
@@ -282,12 +282,17 @@ router.put(
         );
       if (form.updatedAt.toISOString() !== shown)
         throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
-      const answers = accepted(
-        parseTripPlanAnswers(
-          form.questions as unknown as TripPlanQuestion[],
-          req.body?.answers,
-        ),
+      const parsed = parseTripPlanAnswers(
+        form.questions as unknown as TripPlanQuestion[],
+        req.body?.answers,
       );
+      // The client was shown exactly these questions (formUpdatedAt matched),
+      // so an answer that doesn't fit them is a broken client's, not a stale
+      // one's: "this form changed" would be false, and a refetch would loop.
+      // The parser keeps its 409 for its other callers (the join).
+      if ("status" in parsed && parsed.status === 409)
+        throw malformed("an answer doesn't fit the form it was shown");
+      const answers = accepted(parsed);
       await tx.tripPlanAnswer.upsert({
         where: { formId_userId: { formId: id, userId } },
         create: { formId: id, userId, answers },

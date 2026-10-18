@@ -217,6 +217,20 @@ describe("answers", () => {
     });
   });
 
+  // Shown the form as it is (formUpdatedAt matches), an answer that doesn't
+  // fit it is a broken client's. Mutation: drop the PUT's 409 → malformed.
+  it("refuses as malformed an answer that doesn't fit the form it was shown", async () => {
+    const id = await makeForm(experience);
+    const res = await answer(
+      BOB_SUB,
+      id,
+      { ...BOB_EXPERIENCE, trips: "dozens" },
+      "leaders",
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.detail).toBe("an answer doesn't fit the form it was shown");
+  });
+
   it("can't be taken back on a form required to join", async () => {
     const required = await makeForm(contacts);
     await answer(BOB_SUB, required, { name: "Sam", phone: "0400" }, "members");
