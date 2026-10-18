@@ -2,7 +2,7 @@
 // goes to Logjam's API, a request carries nothing but its byte range, and a
 // failure says nothing about where (docs/decisions/0036).
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const CDN = "https://cdn.test";
 const fixture = new Uint8Array(
@@ -111,6 +111,7 @@ vi.mock("@logjam/shared", async (importOriginal) => {
 
 const { fetchExtractRequest, planExtract } = await import("@logjam/shared");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
+type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
 const BBOX = { west: 150.2, south: -33.8, east: 150.6, north: -33.4 };
 const SPEC = {
@@ -144,9 +145,20 @@ async function reference() {
   return { out, plan };
 }
 
-const run = (spec: object = SPEC) =>
-  runRegionClip({ ...SPEC, ...spec }, () => {}, { stop: null });
+const run = (
+  spec: object = SPEC,
+  token = { stop: null } as RegionCancelToken,
+) => runRegionClip({ ...SPEC, ...spec }, () => {}, token);
 
+/** Runs a clip to its outcome, through the retries' back-off. */
+async function settled(pending: Promise<unknown>) {
+  let outcome: unknown;
+  void pending.then((o) => (outcome = o));
+  while (outcome === undefined) await vi.advanceTimersByTimeAsync(50);
+  return outcome as Awaited<ReturnType<typeof runRegionClip>>;
+}
+
+const serve = fetchMock.getMockImplementation()!;
 beforeEach(() => {
   disk.clear();
   cdn.calls = [];
@@ -154,7 +166,10 @@ beforeEach(() => {
   cdn.status = 503;
   online.value = true;
   insertArtifact.mockClear();
+  fetchMock.mockImplementation(serve);
+  vi.useFakeTimers();
 });
+afterEach(() => vi.useRealTimers());
 
 describe("runRegionClip", () => {
   // Mutations: send a header besides the range (an auth token, a client id),
@@ -172,8 +187,10 @@ describe("runRegionClip", () => {
     }
   });
 
-  // Mutation: start every run from the top and the second run fetches every
-  // range again; resume from the wrong request and the file differs.
+  // Mutations: start every run from the top and the second run fetches every
+  // range again; resume from the wrong request and the file differs; put a
+  // status's text or a request's offset into the row's detail and the
+  // detail check goes red.
   it("picks up where a failed run stopped, and says nothing about where", async () => {
     const { out, plan } = await reference();
     // A clean run, for its count: the directories, then every request.
@@ -184,14 +201,8 @@ describe("runRegionClip", () => {
     cdn.calls = [];
 
     cdn.failFrom = reading + 3;
-    const failed = await run();
-    expect(failed).toMatchObject({ status: "failed", code: "unknown" });
-    // No offset or length of any request reaches the row's text.
-    const detail = (failed as { detail?: string }).detail ?? "";
-    expect(detail).toMatch(/503/);
-    for (const request of plan.requests) {
-      expect(detail).not.toContain(String(request.offset));
-    }
+    const failed = await settled(run());
+    expect(failed).toEqual({ status: "failed", code: "unknown" });
 
     cdn.calls = [];
     cdn.failFrom = Infinity;
@@ -201,46 +212,106 @@ describe("runRegionClip", () => {
     expect(cdn.calls.length).toBe(clean - 3);
   });
 
+  // Mutation: check the connection only before planning and the second half
+  // goes red: a Wi-Fi-only clip carries on over mobile data.
+  it("stops for a connection it may not use, before and during the clip", async () => {
+    online.value = false;
+    expect(await run()).toEqual({ status: "paused", reason: "connectivity" });
+    expect(cdn.calls).toEqual([]);
+
+    online.value = true;
+    fetchMock.mockImplementation(async (url, init) => {
+      if (cdn.calls.length >= 8) online.value = false;
+      return serve(url, init);
+    });
+    expect(await run()).toEqual({ status: "paused", reason: "connectivity" });
+    expect(disk.has(FILE)).toBe(true);
+  });
+
+  // Mutation: retry a network failure into the dead state with no connection
+  // and the job fails instead of waiting for one.
   it("waits for a connection that drops mid-clip", async () => {
-    const serve = fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async (url, init) => {
       if (cdn.calls.length < 6) return serve(url, init);
       cdn.calls.push({ url, init });
       online.value = false;
       throw new Error("Network request failed");
     });
-    vi.useFakeTimers();
-    try {
-      let outcome: unknown;
-      const pending = run().then((o) => (outcome = o));
-      while (outcome === undefined) await vi.advanceTimersByTimeAsync(1000);
-      await pending;
-      expect(outcome).toEqual({ status: "paused", reason: "connectivity" });
-      expect(disk.has(FILE)).toBe(true);
-    } finally {
-      vi.useRealTimers();
-      fetchMock.mockImplementation(serve);
-    }
+    expect(await settled(run())).toEqual({
+      status: "paused",
+      reason: "connectivity",
+    });
+    expect(disk.has(FILE)).toBe(true);
   });
 
-  it("leaves a DEM or contour archive the CDN lacks out of the run", async () => {
+  // Mutation: read the token only between requests and a Stop pressed during
+  // the retries comes back paused, to resume itself on the next reconnect.
+  it("stays cancelled when Stop comes during a failing request", async () => {
+    const token: RegionCancelToken = { stop: null };
+    fetchMock.mockImplementation(async (url, init) => {
+      if (cdn.calls.length < 6) return serve(url, init);
+      cdn.calls.push({ url, init });
+      token.stop = "cancel";
+      online.value = false;
+      throw new Error("Network request failed");
+    });
+    expect(await settled(run(SPEC, token))).toEqual({ status: "cancelled" });
+    expect(disk.has(FILE)).toBe(false);
+  });
+
+  // Mutation: leave the fetch to finish on its own and the clock check goes
+  // red: a cancel then waits out a slow request, longer than a wipe waits.
+  it("aborts the request in flight on Stop", async () => {
+    const token: RegionCancelToken = { stop: null };
+    const start = Date.now();
+    fetchMock.mockImplementation(async (url, init) => {
+      if (cdn.calls.length < 6) return serve(url, init);
+      cdn.calls.push({ url, init });
+      token.stop = "cancel";
+      const { signal } = init as unknown as { signal: AbortSignal };
+      return new Promise((_, reject) =>
+        signal.addEventListener("abort", () => reject(new Error("Aborted"))),
+      );
+    });
+    expect(await settled(run(SPEC, token))).toEqual({ status: "cancelled" });
+    // Well inside the request's own timeout.
+    expect(Date.now() - start).toBeLessThan(5_000);
+    expect(disk.has(FILE)).toBe(false);
+  });
+
+  // Mutations: drop a DEM or contour clip on any status and a CDN outage
+  // saves an area without them, unreported (the 503 line); report a missing
+  // one and every area outside its coverage fails a map.
+  it("leaves out a DEM or contour archive the CDN lacks, and only that", async () => {
     cdn.failFrom = 0;
     cdn.status = 403;
-    expect(await run({ demSourceId: "nsw-5m", basemapId: "nsw-5m" })).toEqual({
-      status: "cancelled",
-    });
+    const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
+    expect(await run(dem)).toEqual({ status: "cancelled" });
     expect(await run({ contours: true })).toEqual({ status: "cancelled" });
     expect(await run()).toEqual({
       status: "failed",
       code: "source-unavailable",
     });
+    cdn.status = 200;
+    expect(await run(dem)).toEqual({
+      status: "failed",
+      code: "source-unavailable",
+    });
+    cdn.status = 503;
+    expect(await settled(run(dem))).toEqual({
+      status: "failed",
+      code: "unknown",
+    });
   });
 
+  // Mutation: save the clip of an area outside the archive and the first
+  // line goes red with a file of a few low-zoom tiles.
   it("refuses a vector area outside the archive", async () => {
     const outside = { west: 140, south: -30, east: 140.5, north: -29.5 };
-    expect(await run({ bbox: outside })).toMatchObject({
+    expect(await run({ bbox: outside })).toEqual({
       status: "failed",
       code: "region-rejected",
+      detail: "outside-nsw",
     });
     expect(await run({ bbox: outside, contours: true })).toEqual({
       status: "cancelled",

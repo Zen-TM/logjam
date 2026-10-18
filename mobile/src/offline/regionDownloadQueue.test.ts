@@ -40,10 +40,12 @@ vi.mock("./regionDownloads", () => ({
   deleteClipFile: vi.fn(),
   deleteDownloadedArtifact: vi.fn(),
 }));
+const runRegionDownload = vi.hoisted(() =>
+  vi.fn(() => Promise.resolve({ status: "paused", reason: "connectivity" })),
+);
 vi.mock("./regionTileDownload", () => ({
   connectionAllows: () => Promise.resolve(false),
-  runRegionDownload: () =>
-    Promise.resolve({ status: "paused", reason: "connectivity" }),
+  runRegionDownload,
 }));
 
 const {
@@ -112,5 +114,17 @@ describe("Cancel on the notification", () => {
 
     expect(vi.mocked(deleteRegionFile).mock.calls).toEqual([["waiting"]]);
     expect(service.stop).toHaveBeenCalled();
+  });
+});
+
+describe("a runner that throws", () => {
+  // Mutation: await the runner unguarded and the second job never runs: the
+  // first stays "downloading" with its token held, and the queue stalls.
+  it("fails its own job and lets the next one run", async () => {
+    runRegionDownload.mockClear();
+    runRegionDownload.mockRejectedValueOnce(new Error("boom"));
+    enqueueRegionDownloads([job("throws"), job("next")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runRegionDownload).toHaveBeenCalledTimes(2);
   });
 });

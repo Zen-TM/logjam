@@ -33,6 +33,7 @@ import {
   type RegionFailureCode,
   type RegionJobProgress,
   type RegionJobSpec,
+  type RegionRunOutcome,
 } from "./regionTileDownload";
 import type { RegionClipSpec } from "./regionDownloads";
 
@@ -45,7 +46,9 @@ import type { RegionClipSpec } from "./regionDownloads";
  */
 export type RegionTaskSpec =
   | ({ taskKind: "tile-pyramid" } & RegionJobSpec)
-  | ({ taskKind: "clip" } & RegionClipSpec);
+  | RegionClipTask;
+
+type RegionClipTask = { taskKind: "clip" } & RegionClipSpec;
 
 export type RegionJobState =
   | { kind: "queued" }
@@ -326,14 +329,19 @@ async function drain(): Promise<void> {
 
     const report = (progress: RegionJobProgress) =>
       patch(next.spec.id, { progress });
-    const outcome =
-      next.spec.taskKind === "tile-pyramid"
-        ? await runRegionDownload(next.spec, report, token)
-        : await (await import("./regionDownloads")).runRegionClip(
-            next.spec,
-            report,
-            token,
-          );
+    // A runner that throws ends its job as failed rather than leaving it
+    // "downloading" for good, its token held and the jobs behind it stalled.
+    // Guard: regionDownloadQueue.test.ts ("a runner that throws").
+    const outcome: RegionRunOutcome = await (next.spec.taskKind ===
+    "tile-pyramid"
+      ? runRegionDownload(next.spec, report, token)
+      : import("./regionDownloads").then((m) =>
+          m.runRegionClip(next.spec as RegionClipTask, report, token),
+        )
+    ).catch((err: unknown) => {
+      console.error(err);
+      return { status: "failed", code: "unknown" } as const;
+    });
     tokens.delete(next.spec.id);
 
     // The spec was snapshotted before the run; the user may have renamed the

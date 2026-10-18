@@ -50,15 +50,11 @@ nothing reclaims an artifact by age or pressure, which is why the precheck
 matters.
 
 **Pause is a tile-pyramid affordance only** (`offline/regionJobStatus.ts`). The
-clip is one `expo-file-system` transfer with no mid-flight stop. The same file
+clip's runner stops for a cancel between its range requests, not for a pause
+(updated 2026-10-18, [0036](0036-the-phone-cuts-its-own-offline-clips.md)). The same file
 owns the "is this run over?" answer Saved's cards read: a job paused by `user` or
 `provider-backoff` is *settled* (nothing auto-resumes those, by design) even
 though it is not *finished*, so a card never reports work that will never move.
-
-- **Update 2026-10-18: a clip can be paused too.** It is cut on the phone in
-  byte ranges and stops between two ([0036](0036-the-phone-cuts-its-own-offline-clips.md)), so the reason above no longer
-  holds. What a paused job means for the "is this run over?" answer stands.
-  Everything else above stands.
 
 **The offline map is drawn to its own edges.** With "Offline maps only" on (or
 no signal), `src/map/offlineMask.ts` fills everywhere outside the downloaded
@@ -83,12 +79,15 @@ into `useElevationProfile` LOCAL FIRST: saved regions answer, and only a line
 nothing on disk covers goes to the API. That also gives a guest elevation, which
 the API path never could.
 
-- **Update 2026-10-11: a run also saves one clip of each DEM archive the area
-  touches** (`planDemDownload` in the same file), cut like the vector
-  basemap's clip and filed as a second `dem-region` artifact under that
-  source's id. A guest's run saves them too (updated 2026-10-18, [0036](0036-the-phone-cuts-its-own-offline-clips.md)). The worldwide tiles are still
+- **Update 2026-10-11: a signed-in run also saves one clip of each DEM archive
+  the area touches** (`planDemDownload` in the same file), fetched like the
+  vector basemap's clip and filed as a second `dem-region` artifact under that
+  source's id. A guest saves the worldwide tiles only. The worldwide tiles are still
   saved with every area, which is what holds this decision up. Everything else
   above stands.
+- **Update 2026-10-18: a guest's run saves those clips too**, cut on the phone
+  from the public archives with no call to the API ([0036](0036-the-phone-cuts-its-own-offline-clips.md)). The worldwide
+  tiles are still saved with every area. Everything else above stands.
 
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by
@@ -102,7 +101,7 @@ test asserts the range still brackets a real 34-tile download.
 - **Positive:** elevation works offline and for a guest; a run outlives the
   screen that started it.
 - **Negative:** no eviction — nothing reclaims an artifact by age or pressure.
-  (Updated 2026-10-18: the clip, which could not be paused mid-flight, now can.)
+  The clip cannot be paused, only cancelled (updated 2026-10-18).
 - **Neutral:** Not recorded.
 
 ## Alternatives considered

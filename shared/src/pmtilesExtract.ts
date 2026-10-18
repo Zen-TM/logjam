@@ -9,8 +9,9 @@
 // directories, then tile data. Guard: `pmtilesExtract.test.ts`, against
 // go-pmtiles' own extracts of a fixture.
 //
-// PRIVACY: offsets and tile ids are the area. Nothing here logs, and no error
-// carries either.
+// PRIVACY: offsets and tile ids are the area. Nothing here logs, and every
+// error is a fixed sentence that carries neither. Guard: pmtilesExtract.test.ts
+// ("refuses a short range, saying nothing about where").
 
 import { gzipSync } from "fflate";
 import { PMTiles, zxyToTileId, type Source } from "pmtiles";
@@ -186,7 +187,8 @@ function serializeEntries(entries: Entry[]): Uint8Array {
     );
   });
   // mtime 0: a replanned clip must reproduce its directories byte for byte,
-  // which is how a partial file is known to be resumable.
+  // which is how a partial file is known to be resumable. Guard:
+  // pmtilesExtract.test.ts ("plans the same bytes again later").
   return gzipSync(Uint8Array.from(out), { level: 9, mtime: 0 });
 }
 
@@ -242,6 +244,10 @@ export async function planExtract(
   const archive = new PMTiles(source);
   const header = await archive.getHeader();
   if (!header.clustered) throw new Error("The map archive isn't clustered");
+  // Its metadata is copied as it is, under a header that says gzip.
+  if (header.internalCompression !== GZIP) {
+    throw new Error("The map archive's directories aren't gzipped");
+  }
   const minzoom = Math.max(options.minzoom ?? header.minZoom, header.minZoom);
   const maxzoom = Math.min(options.maxzoom ?? header.maxZoom, header.maxZoom);
   if (minzoom > maxzoom)

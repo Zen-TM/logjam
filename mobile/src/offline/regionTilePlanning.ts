@@ -67,7 +67,7 @@ export function tileUrlFrom(
 /**
  * The clips every saved area carries, whoever saves it: one of each DEM
  * archive the area touches, the statewide contours, and the vector map. They
- * are a few megabytes each, and without them the Vector map is blank out
+ * cost a few to a few tens of megabytes, and without them the Vector map is blank out
  * there, the route and measure tools stop snapping to tracks and a height
  * comes from the coarse worldwide tiles. A guest has them too: each is cut on
  * the phone from a public archive, with no call to Logjam's API

@@ -18,6 +18,8 @@
 // PRIVACY: the framed bbox exists in component state and goes to the provider as
 // tile coordinates only, and to our CDN as byte ranges of public archives
 // (offline/regionDownloads.ts). A save makes no Logjam API request at all.
+// Guard: offline/regionDownloads.test.ts ("cuts the clip from the CDN, asking
+// for nothing but byte ranges").
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -165,8 +167,8 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
  * button) have a fixed shape, the connection confirmation is a dialog at the
  * Save tap, and warnings overlay the map, so the panel does not scroll.
  *
- * That includes the one line under the chips saying whether the detailed map
- * comes with the area: it is always one line, whatever it says.
+ * That includes the one line under the chips saying the detailed map comes
+ * with every area.
  *
  * ponytail: fixed pixels, so a very large OS font setting will clip the last
  * row rather than scroll it. Measure and raise this number if that turns

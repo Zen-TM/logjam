@@ -2,19 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import type { RegionJob } from "./regionDownloadQueue";
 import {
+  canPause,
   isJobFinished,
   isJobSettled,
   isJobStalled,
   regionRejectedLine,
 } from "./regionJobStatus";
 
-// A job parked by a provider 403/429 — which nothing auto-resumes, by design —
-// must not leave Done disabled on a screen whose only other exits are hardware
-// back or Stop (which deletes tiles).
+// (1) A job parked by a provider 403/429 — which nothing auto-resumes, by
+// design — must not leave Done disabled on a screen whose only other exits are
+// hardware back or Stop (which deletes tiles). (2) Pause is not offered on the
+// clip, whose runner ignores it.
 
-const job = (state: RegionJob["state"]): RegionJob =>
+const job = (state: RegionJob["state"], taskKind = "tile-pyramid"): RegionJob =>
   ({
-    spec: { id: "j", taskKind: "tile-pyramid" },
+    spec: { id: "j", taskKind },
     state,
     progress: {},
   }) as unknown as RegionJob;
@@ -50,6 +52,13 @@ describe("the Done gate", () => {
     const stalled = job({ kind: "paused", reason: "provider-backoff" });
     expect(isJobStalled(stalled)).toBe(true);
     expect(isJobFinished(stalled)).toBe(false);
+  });
+});
+
+describe("pause", () => {
+  it("is offered on a tile pyramid and hidden on a clip", () => {
+    expect(canPause(job({ kind: "downloading" }))).toBe(true);
+    expect(canPause(job({ kind: "downloading" }, "clip"))).toBe(false);
   });
 });
 

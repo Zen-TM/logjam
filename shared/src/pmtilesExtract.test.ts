@@ -130,6 +130,21 @@ describe("planExtract", () => {
     }
   });
 
+  // The fixture cases are all small enough for one root directory. Cutting
+  // the whole fixture makes the writer split its own entries into leaves,
+  // and what it keeps is then every tile, laid out as go-pmtiles laid them
+  // out converting it. Mutation: give each leaf's root entry the wrong
+  // offset, or drop the last leaf, and the dump differs.
+  it("writes leaf directories when the root cannot hold every entry", async () => {
+    const whole = { west: 149, south: -35, east: 152, north: -32 };
+    const { out } = await extract(fixture, { bbox: whole });
+    const ours = await dumpArchive(out);
+    const source = await dumpArchive(fixture);
+    expect(ours.leafDirectories).toBe(true);
+    expect(ours.entries).toEqual(source.entries);
+    expect(ours.tileData).toEqual(source.tileData);
+  });
+
   // A partial clip is resumed only when a replanned one starts with the same
   // bytes (mobile regionDownloads.ts). Mutation: let gzip stamp the time into
   // the directories and the two prefixes differ.
@@ -145,7 +160,9 @@ describe("planExtract", () => {
     }
   });
 
-  it("refuses a short range", async () => {
+  // Mutation: put the request's offset or length in the message and this
+  // goes red; the phone shows and reports what an error says.
+  it("refuses a short range, saying nothing about where", async () => {
     const { source } = memorySource(fixture);
     const plan = await planExtract(source, optionsOf(cases[0]));
     const short: Source = {
@@ -154,6 +171,6 @@ describe("planExtract", () => {
     };
     await expect(
       fetchExtractRequest(short, plan, plan.requests[0]),
-    ).rejects.toThrow(/short range/);
+    ).rejects.toThrow(/^The map archive sent a short range$/);
   });
 });

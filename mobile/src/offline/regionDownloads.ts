@@ -6,8 +6,11 @@
 //
 // PRIVACY: nothing here talks to Logjam's API, so the area never reaches it
 // (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md). A request
-// names the archive and a byte range, never a tile; nothing logs, and no
-// error carries an offset (regionDownloads.test.ts).
+// names the archive and a byte range, never a tile. Nothing here logs, and a
+// failure reports a code, never a status's text or an offset. Guard:
+// regionDownloads.test.ts ("cuts the clip from the CDN, asking for nothing
+// but byte ranges", "picks up where a failed run stopped, and says nothing
+// about where").
 import { File, FileMode, type FileHandle } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
@@ -88,7 +91,11 @@ class ArchiveStatusError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * Per request: a floor, plus the body at 128 kbit/s, so a full 4 MiB request
+ * can finish on a weak link instead of timing out on every retry.
+ */
+const requestTimeoutMs = (length: number) => 30_000 + length / 16;
 const MAX_ATTEMPTS = 3;
 
 /**
@@ -97,26 +104,36 @@ const MAX_ATTEMPTS = 3;
  * default User-Agent still goes, and must: the web distribution's WAF refuses
  * a request without one (docs/decisions/0036).
  */
-function rangeSource(url: string): Source {
+function rangeSource(url: string, token: RegionCancelToken): Source {
   return {
     getKey: () => url,
     getBytes: async (offset, length, _signal, etag) => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => controller.abort(),
+        requestTimeoutMs(length),
+      );
+      // A cancel stops the request in flight: an account wipe waits only
+      // seconds for a download to stop, and a large range on 3G takes longer.
+      const watch = setInterval(() => {
+        if (token.stop === "cancel") controller.abort();
+      }, 500);
       try {
         const response = await expoFetch(url, {
           headers: { range: `bytes=${offset}-${offset + length - 1}` },
           signal: controller.signal,
         });
-        // A 200 is the whole archive, from a server that ignored the range.
-        if (response.status !== 206) {
-          throw new ArchiveStatusError(response.status);
-        }
         const tag = response.headers.get("etag");
         const strong = tag && !tag.startsWith("W/") ? tag : undefined;
-        // The archive was replaced mid-clip: these bytes are from another one.
-        if (etag && strong && strong !== etag)
-          throw new ArchiveStatusError(412);
+        // A 200 is the whole archive, from a server that ignored the range;
+        // another ETag, an archive replaced mid-clip. Either body is aborted
+        // unread, or the native side buffers it.
+        if (response.status !== 206 || (etag && strong && strong !== etag)) {
+          controller.abort();
+          throw new ArchiveStatusError(
+            response.status === 206 ? 412 : response.status,
+          );
+        }
         const bytes = await response.bytes();
         return {
           data:
@@ -128,6 +145,7 @@ function rangeSource(url: string): Source {
         };
       } finally {
         clearTimeout(timer);
+        clearInterval(watch);
       }
     },
   };
@@ -168,17 +186,31 @@ export function resumeIndex(
   return next === -1 ? plan.requests.length : next;
 }
 
+/**
+ * The CDN's answers that asking again cannot change: the archive is not there
+ * (403 from S3 behind CloudFront, 404), or the host ignores ranges (200) or
+ * refuses them (416). Anything else, a 5xx or a 429, is retried.
+ */
+function permanent(error: unknown): error is ArchiveStatusError {
+  return (
+    error instanceof ArchiveStatusError &&
+    [200, 403, 404, 416].includes(error.status)
+  );
+}
+
 /** One network call, retried; a stop it cannot get past says why. */
 async function attempt<T>(
   spec: RegionClipSpec,
+  token: RegionCancelToken,
   call: () => Promise<T>,
 ): Promise<{ value: T } | { stop: RegionRunOutcome; error: unknown }> {
   for (let tries = 1; ; tries++) {
     try {
       return { value: await call() };
     } catch (error) {
-      // A status is the CDN's answer, and asking again gets the same one.
-      if (error instanceof ArchiveStatusError) {
+      if (token.stop === "cancel")
+        return { stop: { status: "cancelled" }, error };
+      if (permanent(error)) {
         return { stop: { status: "failed", code: "unknown" }, error };
       }
       if (tries >= MAX_ATTEMPTS) {
@@ -200,66 +232,90 @@ async function attempt<T>(
 /**
  * Cut, save and register one clip. Returns rather than throws for every
  * outcome the user can act on; a partial file stays for a resume unless the
- * job was cancelled.
+ * job was cancelled or its archive is gone.
  */
 export async function runRegionClip(
   spec: RegionClipSpec,
   onProgress: (progress: RegionJobProgress) => void,
   token: RegionCancelToken,
 ): Promise<RegionRunOutcome> {
-  // Checked before the first request, and again when one fails: opening the
-  // screen on Wi-Fi and tapping Save out of range must not spend mobile data.
-  if (!(await connectionAllows(spec.allowCellular))) {
-    return { status: "paused", reason: "connectivity" };
-  }
-  const archive = clipArchiveFor(spec);
-  const source = rangeSource(`${config.topoCdnBaseUrl}/${archive.archivePath}`);
-  const planned = await attempt(spec, () =>
-    planExtract(source, {
-      bbox: spec.bbox,
-      minzoom: archive.minzoom,
-      maxzoom: archive.maxzoom,
-    }),
-  );
+  // A DEM or contour archive that is not on the CDN (not built yet) is not
+  // this run's failure: the area keeps its worldwide heights and its basemap,
+  // and the job leaves the queue as if it had never been planned.
   const optional = spec.demSourceId != null || spec.contours === true;
-  if ("stop" in planned) {
-    // A DEM or contour archive that is not on the CDN yet is not this run's
-    // failure: the area keeps its worldwide heights and its basemap, and the
-    // job leaves the queue as if it had never been planned.
-    if (optional && planned.error instanceof ArchiveStatusError) {
+  let handle: FileHandle | null = null;
+  const settle = async (stop: {
+    stop: RegionRunOutcome;
+    error: unknown;
+  }): Promise<RegionRunOutcome> => {
+    handle?.close();
+    handle = null;
+    const gone =
+      permanent(stop.error) && [403, 404].includes(stop.error.status);
+    if (stop.stop.status === "cancelled" || (optional && gone)) {
+      await deleteClipFile(spec.id);
       return { status: "cancelled" };
     }
-    if (planned.error instanceof ArchiveStatusError) {
+    if (permanent(stop.error)) {
+      await deleteClipFile(spec.id);
       return { status: "failed", code: "source-unavailable" };
     }
-    return planned.stop.status === "failed"
-      ? { ...planned.stop, detail: failureDetail(planned.error) }
-      : planned.stop;
-  }
-  const plan = planned.value;
-  if (plan.outside) {
-    if (optional) return { status: "cancelled" };
-    return {
-      status: "failed",
-      code: "region-rejected",
-      detail: "That area is outside the map Logjam has. Choose one in NSW.",
-    };
-  }
-
-  const fileUri = clipFileUri(spec.id);
-  await FileSystem.makeDirectoryAsync(REGION_DIR, { intermediates: true });
-  const file = new File(fileUri);
-  let handle: FileHandle | null = null;
-  const report = (bytesDone: number) =>
-    onProgress({
-      tilesDone: 0,
-      tilesTotal: 0,
-      tilesGap: 0,
-      tilesFailed: 0,
-      bytesDone,
-      bytesTotal: plan.totalBytes,
-    });
+    // A status's text is not for the row (shared/DESIGN.md §11).
+    if (
+      stop.stop.status !== "failed" ||
+      stop.error instanceof ArchiveStatusError
+    ) {
+      return stop.stop;
+    }
+    return { ...stop.stop, detail: failureDetail(stop.error) };
+  };
   try {
+    // Checked before every request, as the tile path checks every 16 tiles: a
+    // Wi-Fi-only clip must not carry on over mobile data when Wi-Fi drops,
+    // nor start on it when Save was tapped out of range.
+    // Guard: regionDownloads.test.ts ("stops for a connection it may not use").
+    const allowed = async () => {
+      if (await connectionAllows(spec.allowCellular)) return true;
+      handle?.close();
+      handle = null;
+      return false;
+    };
+    if (!(await allowed())) return { status: "paused", reason: "connectivity" };
+    const archive = clipArchiveFor(spec);
+    const source = rangeSource(
+      `${config.topoCdnBaseUrl}/${archive.archivePath}`,
+      token,
+    );
+    const planned = await attempt(spec, token, () =>
+      planExtract(source, {
+        bbox: spec.bbox,
+        minzoom: archive.minzoom,
+        maxzoom: archive.maxzoom,
+      }),
+    );
+    if ("stop" in planned) return await settle(planned);
+    const plan = planned.value;
+    if (plan.outside) {
+      if (optional) return { status: "cancelled" };
+      return {
+        status: "failed",
+        code: "region-rejected",
+        detail: "outside-nsw",
+      };
+    }
+
+    const fileUri = clipFileUri(spec.id);
+    await FileSystem.makeDirectoryAsync(REGION_DIR, { intermediates: true });
+    const file = new File(fileUri);
+    const report = (bytesDone: number) =>
+      onProgress({
+        tilesDone: 0,
+        tilesTotal: 0,
+        tilesGap: 0,
+        tilesFailed: 0,
+        bytesDone,
+        bytesTotal: plan.totalBytes,
+      });
     let start: number | null = null;
     if (file.exists) {
       handle = file.open(FileMode.ReadWrite);
@@ -291,20 +347,17 @@ export async function runRegionClip(
     report(resumedAt || plan.prefix.length);
 
     for (let i = start; i < plan.requests.length; i++) {
-      if (token.stop === "cancel") break;
-      if (token.stop === "pause") {
-        handle.close();
-        return { status: "paused", reason: "user" };
+      if (token.stop === "cancel") {
+        return await settle({ stop: { status: "cancelled" }, error: null });
+      }
+      if (!(await allowed())) {
+        return { status: "paused", reason: "connectivity" };
       }
       const request = plan.requests[i];
-      const got = await attempt(spec, () =>
+      const got = await attempt(spec, token, () =>
         fetchExtractRequest(source, plan, request),
       );
-      if ("stop" in got) {
-        handle.close();
-        if (got.stop.status !== "failed") return got.stop;
-        return { ...got.stop, detail: failureDetail(got.error) };
-      }
+      if ("stop" in got) return await settle(got);
       handle.offset = request.dstOffset;
       handle.writeBytes(got.value);
       report(request.dstOffset + got.value.length);
@@ -312,8 +365,7 @@ export async function runRegionClip(
     handle.close();
     handle = null;
     if (token.stop === "cancel") {
-      await deleteClipFile(spec.id);
-      return { status: "cancelled" };
+      return await settle({ stop: { status: "cancelled" }, error: null });
     }
     if (new File(fileUri).size !== plan.totalBytes) {
       await deleteClipFile(spec.id);
@@ -348,10 +400,8 @@ export async function runRegionClip(
     await insertArtifact(artifact);
     return { status: "ready", artifact, gaps: 0, failed: 0 };
   } catch (err) {
-    handle?.close();
     // The file stays: a failed job is offered again and picks up where it was.
-    console.error(err);
-    return { status: "failed", code: "unknown", detail: failureDetail(err) };
+    return settle({ stop: { status: "failed", code: "unknown" }, error: err });
   }
 }
 

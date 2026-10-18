@@ -121,7 +121,7 @@ feature in NSW, never a geocoding service.**
 - **The NSW Geographical Names Register:** official names only, and last
   updated in 2016 on data.gov.au.
 - **A slice of the registry per downloaded region:** sends a region bbox to our
-  server, which nothing else does
+  server, which no current Logjam GPS build does
   ([0036](0036-the-phone-cuts-its-own-offline-clips.md); updated 2026-10-18),
   and needs a clip endpoint, merging and cleanup.
   The whole state is smaller than most single regions.

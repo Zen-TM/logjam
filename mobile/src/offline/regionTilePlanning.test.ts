@@ -109,9 +109,9 @@ describe("deadTileBudget", () => {
 });
 
 describe("regionClipSpecs", () => {
-  // Mutation: drop the contours or the vector map from the list, or make it
-  // depend on an account, and this goes red: a saved area is then blank
-  // offline, with tools that draw straight lines.
+  // Mutation: drop the contours or the vector map from the list and this goes
+  // red: a saved area is then blank offline, with tools that draw straight
+  // lines. That the screen enqueues this list for every account has no guard.
   it("gives every area the DEM archives, the contours and the vector map", () => {
     const run = {
       bbox: BBOX,

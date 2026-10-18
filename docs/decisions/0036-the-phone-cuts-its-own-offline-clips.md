@@ -32,13 +32,16 @@ replaced. Its full-detail and area-cap rules stand and are restated here.
 
 Measured on 2026-10-18 against local copies of the archives (the NSW Protomaps
 archive, and the 5 m DEM and contour archives of the Blue Mountains sheets
-built so far), for 40 km boxes, each a whole save's clip of that archive.
-Requests count the header, metadata and leaf directories too. Time is
-modelled as one round trip per request plus the bytes at the link's rate:
+built so far, which hold only part of the Wollangambe box), for 40 km boxes,
+each a whole save's clip of that archive. Requests and bytes read count the
+header, metadata and leaf directories too. Time is modelled as one round trip
+per request plus the bytes at the link's rate:
 
 | Box, archive | Clip | Requests | Bytes read | 4G, 10 Mb/s, 60 ms | 3G, 1 Mb/s, 300 ms |
 |---|---:|---:|---:|---:|---:|
 | Wollangambe, vector | 4.6 MB | 44 | 5.2 MB | 7 s | 54 s |
+| Wollangambe, 5 m DEM | 20.5 MB | 13 | 20.5 MB | 17 s | 168 s |
+| Wollangambe, contours | 8.1 MB | 13 | 8.3 MB | 7 s | 70 s |
 | Katoomba, vector | 7.3 MB | 59 | 8.2 MB | 10 s | 83 s |
 | Katoomba, 5 m DEM | 56.4 MB | 45 | 56.6 MB | 48 s | 466 s |
 | Katoomba, contours | 24.4 MB | 27 | 24.8 MB | 21 s | 206 s |
@@ -79,37 +82,47 @@ regenerates.
 `EXTRACT_MERGE_GAP_BYTES` (64 KiB) apart are one request that reads through
 the gap; it was the quickest gap on both modelled links in every box above,
 for at most 12 % extra bytes. No request is larger than
-`EXTRACT_MAX_REQUEST_BYTES` (4 MiB), which is also the most of a clip the
-phone holds in memory: each response is written to the file as it arrives.
+`EXTRACT_MAX_REQUEST_BYTES` (4 MiB), and each response is written to the file
+as it arrives, so the phone holds one response at a time (and, for a request
+that reads through gaps, a copy of the bytes it keeps).
 Guard: `pmtilesExtract.test.ts` ("coalesces runs across small gaps, and caps
 a request's size").
 
 **The file is the checkpoint, as in 0005.** The directories are written
 first. A partial file whose first bytes are what a replanned clip would write
 picks up at the first request it does not hold all of; any other partial file
-is cut again from the start. A dropped connection parks the job for the
-queue's reconnect, and Pause and Resume work as they do for a raster. Guards:
-`regionDownloads.test.ts` ("picks up where a failed run stopped", "waits for
-a connection that drops mid-clip"), `pmtilesExtract.test.ts` ("plans the same
-bytes again later"). A clip the app was killed during is still deleted on the
+is cut again from the start. The connection is checked before every request,
+so a Wi-Fi-only clip parks when Wi-Fi drops rather than carrying on over
+mobile data, and a dropped connection parks the job for the queue's
+reconnect. Stop aborts the request in flight and deletes the file; Pause is
+still not offered on a clip (0005). Guards: `regionDownloads.test.ts`
+("picks up where a failed run stopped", "stops for a connection it may not
+use", "waits for a connection that drops mid-clip", "stays cancelled when
+Stop comes during a failing request", "aborts the request in flight on
+Stop"), `pmtilesExtract.test.ts` ("plans the same bytes again later"). A clip the app was killed during is still deleted on the
 next Saved open (`sweepOrphanFiles`), as before.
 
 **The vector clip is always cut at full detail**, the archive's own deepest
 zoom (z15), whatever the detail rail says. The rail prices rasters, and a
 lower zoom drops the minor tracks snapping follows. A DEM's clip is its
-`sampleZoom` and the contours' their `minzoom` to `maxzoom`.
+`sampleZoom` and the contours' their `minzoom` to `maxzoom`. No guard.
 
 **No area larger than `MAX_REGION_AREA_KM2` (1600 km², a 40 km square) can be
 saved, by anyone, whatever maps are picked.** `checkRegionCaps` in
-`shared/src/mapRegionEstimate.ts` refuses it on the save screen. The cap now
+`shared/src/mapRegionEstimate.ts` refuses it on the save screen (guard:
+`mapRegionEstimate.test.ts`, "rejects an area over MAX_REGION_AREA_KM2
+whatever is being saved"). The cap now
 bounds what a save costs the phone: about 90 MB and 130 requests for the three
 clips of 40 km of mountains, above.
 
 **A clip that fails never fails the region.** The rest saves and the card
 reports one map that did not finish. A DEM or contour archive the CDN does not
-have (not built yet) leaves that clip out of the run unreported, since the
-worldwide heights and the basemap still save. Guard: `regionDownloads.test.ts`
-("leaves a DEM or contour archive the CDN lacks out of the run").
+have (403 or 404: not built yet) leaves that clip out of the run unreported,
+since the worldwide heights and the basemap still save. A host that ignores
+or refuses ranges (200, 416) fails the clip as `source-unavailable`; any
+other status, a 5xx or a 429, is retried, then fails as one Resume can
+retry. Guard: `regionDownloads.test.ts` ("leaves out a DEM or contour archive
+the CDN lacks, and only that").
 
 **`POST /basemap/region-clip` stays, unchanged, while a Logjam GPS build that
 calls it is supported** ([0022](0022-mobile-builds-supported-three-months.md)).
