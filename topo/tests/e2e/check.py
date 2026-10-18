@@ -9,7 +9,9 @@ something.
 
 Mutations that turn it red: dropping the `expected_status="pending"` guard on
 worker.py's claim fails "status stays failed"; pointing FIRE_HISTORY_S3_PATH
-at a missing key fails "fire history read from S3".
+at a missing key fails "fire history read from S3". A second worker that never
+renders is caught by ci.yml's step, which needs render_tiles_done > 0 before
+it kills the container.
 """
 
 import gzip

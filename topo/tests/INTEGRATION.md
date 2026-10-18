@@ -2,9 +2,9 @@
 
 The host-side unit tests stub the native stack (`_native_stub.py`), so the seam
 between the guarded status logic and a **real** runtime is not exercised by
-`python -m unittest discover -s tests` on the dev host. Two opt-in integration
-layers close that gap. Both skip by default and never run in normal host
-discovery.
+`python -m unittest discover -s tests` on the dev host. Two integration
+layers close that gap. §1 is opt-in and skips in normal host discovery; §2, the
+full worker run, is CI's `topo-e2e` job, which can also be run by hand.
 
 ## 1. Status-guard against a real Postgres — `test_status_guard_db.py`
 
@@ -61,12 +61,20 @@ before committing a worker change that touches those.
 
 ### By hand, against the dev stack
 
-`make dev` launches the worker itself: starting a LiDAR map in Logjam Web makes
-MiniStack's ECS run the image `logjam-topo-worker:latest`
-(`infra/terraform/envs/local/ecs.tf`), so build it under that tag first:
-`docker build -t logjam-topo-worker:latest topo`. To rerun a worker by hand,
-run the image with `JOB_ID=<id>` and the DB/S3 env pointing at the dev stack;
-it claims only a `pending` job.
+`make dev` builds and launches the worker itself: starting a LiDAR map in
+Logjam Web makes MiniStack's ECS run the image `logjam-topo-worker:latest`
+(`infra/terraform/envs/local/ecs.tf`). After a worker change, rebuild it with
+`make build-workers`. To rerun a worker by hand on the dev stack's network
+(`logjam-local`, where `postgres` and `ministack` resolve), give it the task
+definition's env from `worker_common_env` in that `ecs.tf` and the S3 settings
+from the GDAL block of `e2e/worker.env`:
+
+    docker run --rm --network logjam-local --env-file topo/tests/e2e/worker.env \
+      -e JOB_ID=<id> -e OVERPASS_ENDPOINTS=https://overpass-api.de/api/interpreter \
+      -e SVTM_FORMATION_S3_PATH= -e FIRE_HISTORY_S3_PATH= logjam-topo-worker:latest
+
+(`worker.env` points Overpass and the rasters at CI's stubs; the `-e` overrides
+send them to the real mirror and skip the rasters.) It claims only a `pending` job.
 
 The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.

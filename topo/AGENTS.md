@@ -23,5 +23,6 @@ covers flags, output format and troubleshooting.
   is not unit-tested: extract the pure part and test that.
 - `tests/test_status_guard_db.py` needs `RUN_DB_IT=1` and real `psycopg2`.
 - CI's `topo-e2e` job runs the worker image end to end on one real ELVIS tile
-  (`tests/INTEGRATION.md` §2). Its network has no internet, so a network or
-  S3 read added to the worker needs a stub in `tests/e2e/` too.
+  (`tests/INTEGRATION.md` §2). Its network has no internet, so a network read
+  added to the worker needs a stub in `tests/e2e/`, and an S3 read a made-up
+  object in the job's MiniStack setup plus its env in `tests/e2e/worker.env`.

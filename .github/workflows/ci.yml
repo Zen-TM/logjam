@@ -648,8 +648,8 @@ jobs:
         id: sample
         run: echo "zip=$(scripts/sample-data.sh elvis-katoomba-2506258-laz.zip)" >> "$GITHUB_OUTPUT"
       # Two jobs, so the second can be reaped mid-render below. The API stops
-      # once both are pending: its reaper would otherwise fail the second while
-      # the first renders.
+      # once both are pending, which keeps any reaper sweep off both during the
+      # test.
       - name: Create, upload and start two jobs through the API
         id: jobs
         env:
@@ -701,7 +701,13 @@ jobs:
         env:
           JOB_ID: ${{ steps.jobs.outputs.complete }}
         run: |
+          # Mutation that turns the first grep red: drop OVERPASS_ENDPOINTS from
+          # worker.env; the worker tries the real mirrors and logs "Overpass
+          # attempt". Mutation that turns the second red: empty
+          # SVTM_FORMATION_S3_PATH there; the worker logs "skipping" instead.
           if grep -E 'raster unavailable|Overpass attempt' "$RUNNER_TEMP/worker.log"; then exit 1; fi
+          grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/worker.log" \
+            || { echo "the worker never read the SVTM raster"; exit 1; }
           # A point on Mount Solitary, inside the tile.
           docker run --rm --network topo-e2e --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
@@ -718,6 +724,8 @@ jobs:
             [ "$(sql "SELECT coalesce(render_tiles_done, 0) > 0 FROM topo_jobs WHERE id = '$JOB_ID'")" = t ] && break
             sleep 5
           done
+          done=$(sql "SELECT coalesce(render_tiles_done, 0) FROM topo_jobs WHERE id = '$JOB_ID'")
+          [ "$done" -gt 0 ] || { echo "second worker never rendered (render_tiles_done=$done)"; docker logs reaped; exit 1; }
           sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
           docker kill reaped
           sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
