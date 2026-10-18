@@ -401,14 +401,13 @@ function planDates(value: unknown): TripPlanDates {
   return { startDate, endDate };
 }
 
-/** The trip-type rules of POST /trips, with its sentences. */
-function tripTypes(value: unknown): string[] {
-  if (!Array.isArray(value)) bad("tripTypes must be an array of strings");
+function tripTypes(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) bad(`${field} must be an array of strings`);
   const result: string[] = [];
   const seen = new Set<string>();
   for (const item of value) {
-    const type = text(item, "tripTypes entry").trim();
-    if (!type) bad("tripTypes entries must not be empty");
+    const type = text(item, `${field} entry`).trim();
+    if (!type) bad(`${field} entries must not be empty`);
     if (type.length > TRIP_TYPE_MAX_LENGTH)
       refuse(say`A trip type can be up to ${TRIP_TYPE_MAX_LENGTH} characters.`);
     const key = type.toLowerCase();
@@ -420,8 +419,21 @@ function tripTypes(value: unknown): string[] {
     result.push(type);
   }
   if (result.length > MAX_TRIP_TYPES_PER_TRIP)
-    refuse(say`A trip can have up to ${MAX_TRIP_TYPES_PER_TRIP} types.`);
+    refuse(say`A trip can have up to ${MAX_TRIP_TYPES_PER_TRIP} types.`, 413);
   return result;
+}
+
+/**
+ * A list of trip types, as a trip log, a plan and a trip attribute's scoping
+ * all take it: trimmed, none empty, no two the same ignoring case, capped.
+ * `field` names the list in a malformed detail. The API's `parseTripTypes`
+ * (routes/tripLogsGlobal.ts) is this plus its undefined/null handling.
+ */
+export function parseTripTypeList(
+  value: unknown,
+  field: string,
+): TripPlanParsed<string[]> {
+  return checked(() => tripTypes(value, field));
 }
 
 function stringList(value: unknown, what: string): string[] {
@@ -441,7 +453,7 @@ export function parseTripPlanCreate(
       tripTypes:
         input.tripTypes === undefined || input.tripTypes === null
           ? []
-          : tripTypes(input.tripTypes),
+          : tripTypes(input.tripTypes, "tripTypes"),
     };
   });
 }
@@ -470,10 +482,10 @@ export function parseTripPlanPatch(
     }
     if (input.tripTypes !== undefined) {
       const { from, to } = cas(input.tripTypes, "tripTypes");
-      patch.tripTypes = {
-        from: stringList(from, "tripTypes.from"),
-        to: tripTypes(to),
-      };
+      const was = stringList(from, "tripTypes.from");
+      if (was.length > MAX_TRIP_TYPES_PER_TRIP)
+        bad("tripTypes.from is over the cap", 413);
+      patch.tripTypes = { from: was, to: tripTypes(to, "tripTypes") };
     }
     nothingToChange(patch);
     return patch;

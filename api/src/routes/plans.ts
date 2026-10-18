@@ -10,11 +10,10 @@ import {
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError, malformed } from "../middleware/errorHandler";
+import { accepted, AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
-  accepted,
   planNotFound,
   requirePlanMember,
   requirePlanRole,
@@ -127,7 +126,14 @@ router.patch(
         ...(patch.tripTypes && { tripTypes: patch.tripTypes.to }),
       },
     });
-    if (count === 0) throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
+    if (count === 0) {
+      const still = await prisma.tripPlan.count({
+        where: { id: access.plan.id },
+      });
+      throw still
+        ? new AppError(409, TRIP_PLAN_CHANGED_SENTENCE)
+        : planNotFound();
+    }
     res.json(await loadPlanView(user.id, access));
   },
 );
@@ -180,7 +186,9 @@ router.delete(
       say`Only a leader can delete this plan.`,
     );
     // Hold #439: a plan's files can't be added yet, so there are no S3
-    // objects or storage charges to undo here.
+    // objects or storage charges to undo here; and no plan_* notification
+    // type exists yet, so the other members aren't told (plan_access_ended,
+    // reason "deleted", sent in this delete's transaction, is P3's).
     const { count } = await prisma.tripPlan.deleteMany({
       where: { id: access.plan.id },
     });

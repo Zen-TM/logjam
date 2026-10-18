@@ -99,11 +99,18 @@ describe("roles", () => {
     memberId: "m-1",
   });
 
-  it("403s a role not in the list", () => {
+  // Mutation: change requirePlanRole's 403 to any other status.
+  it("403s a role not in the list", async () => {
     const forbidden = say`Only a leader can archive this plan.`;
     expect(() =>
       requirePlanRole(access("editor"), ["leader"], forbidden),
     ).toThrow(forbidden);
+    await expect(
+      statusOf(
+        (async () =>
+          requirePlanRole(access("member"), ["leader"], forbidden))(),
+      ),
+    ).resolves.toBe(403);
     expect(() =>
       requirePlanRole(access("editor"), ["leader", "editor"], forbidden),
     ).not.toThrow();

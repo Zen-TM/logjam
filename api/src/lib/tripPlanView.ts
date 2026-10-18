@@ -102,7 +102,8 @@ export async function loadPlanView(
     },
   });
   if (!plan) throw planNotFound();
-  // Who is invited or asking to join is the leaders' business (design O-13).
+  // Who is invited or asking to join is the leaders' business.
+  // Guard: __tests__/plans.test.ts ("shows who is invited or asking only to leaders").
   const members: TripPlanMemberView[] = plan.members
     .filter((m) => access.role === "leader" || m.status === "active")
     .map((m) => ({

@@ -1,6 +1,7 @@
 // A plan's write-up: titled sections of plain text, in order. Leaders and
-// editors write them; every write moves the plan's `updatedAt` in its
-// transaction (lib/planAccess.ts touchPlan).
+// editors write them. Every write starts its transaction with touchPlan
+// (lib/planAccess.ts), which moves the plan's `updatedAt` and locks its row,
+// so the cap, the positions and the order check see one write at a time.
 import { Router, Response } from "express";
 import {
   parseTripPlanOrder,
@@ -12,11 +13,10 @@ import {
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { accepted, AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
-  accepted,
   requirePlanRole,
   requirePlanWrite,
   touchPlan,
@@ -48,6 +48,7 @@ router.post(
     const planId = await writer(req);
     const input = accepted(parseTripPlanSectionCreate(req.body));
     const section = await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const [count, last] = await Promise.all([
         tx.tripPlanSection.count({ where: { planId } }),
         tx.tripPlanSection.findFirst({
@@ -64,7 +65,6 @@ router.post(
       const row = await tx.tripPlanSection.create({
         data: { planId, ...input, position: (last?.position ?? -1) + 1 },
       });
-      await touchPlan(tx, planId);
       return row;
     });
     res.status(201).json(sectionView(section));
@@ -81,6 +81,7 @@ router.put(
     const planId = await writer(req);
     const ids = accepted(parseTripPlanOrder(req.body, TRIP_PLAN_MAX_SECTIONS));
     const sections = await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const current = await tx.tripPlanSection.findMany({
         where: { planId },
         select: { id: true },
@@ -88,12 +89,11 @@ router.put(
       const stored = new Set(current.map((row) => row.id));
       if (stored.size !== ids.length || ids.some((id) => !stored.has(id)))
         throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
-      await Promise.all(
-        ids.map((id, position) =>
-          tx.tripPlanSection.update({ where: { id }, data: { position } }),
-        ),
-      );
-      await touchPlan(tx, planId);
+      for (const [position, id] of ids.entries())
+        await tx.tripPlanSection.updateMany({
+          where: { id, planId },
+          data: { position },
+        });
       return tx.tripPlanSection.findMany({
         where: { planId },
         orderBy: [...ORDER],
@@ -113,6 +113,7 @@ router.patch(
     const id = getParam(req.params.sectionId);
     const patch = accepted(parseTripPlanSectionPatch(req.body));
     const section = await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const { count } = await tx.tripPlanSection.updateMany({
         where: {
           id,
@@ -128,7 +129,6 @@ router.patch(
       const row = await tx.tripPlanSection.findFirst({ where: { id, planId } });
       if (!row) throw sectionNotFound();
       if (count === 0) throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
-      await touchPlan(tx, planId);
       return row;
     });
     res.json(sectionView(section));
@@ -143,11 +143,11 @@ router.delete(
     const planId = await writer(req);
     const id = getParam(req.params.sectionId);
     await prisma.$transaction(async (tx) => {
+      await touchPlan(tx, planId);
       const { count } = await tx.tripPlanSection.deleteMany({
         where: { id, planId },
       });
       if (count === 0) throw sectionNotFound();
-      await touchPlan(tx, planId);
     });
     res.status(204).send();
   },

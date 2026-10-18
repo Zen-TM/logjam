@@ -6,6 +6,7 @@ import {
   parseTripPlanPatch,
   parseTripPlanSectionCreate,
   parseTripPlanSectionPatch,
+  parseTripTypeList,
   type TripPlanParsed,
 } from "./tripPlans.js";
 import { apiSentenceViolations } from "./copyRules.js";
@@ -53,6 +54,36 @@ describe("plan create", () => {
     expect(
       isMalformed(parseTripPlanCreate({ name: "x", startDate: "soon" })),
     ).toBe(true);
+  });
+});
+
+describe("trip types", () => {
+  const eleven = Array.from({ length: 11 }, (_, i) => `t${i}`);
+
+  // api/AGENTS.md: an array over its cap is 413. Mutation: drop the 413 from
+  // tripTypes()'s cap, or the cap on tripTypes.from.
+  it("refuses a list over the cap with 413, on create and on both sides of a patch", () => {
+    expect(parseTripPlanCreate({ name: "x", tripTypes: eleven })).toMatchObject(
+      {
+        status: 413,
+      },
+    );
+    expect(
+      parseTripPlanPatch({ tripTypes: { from: [], to: eleven } }),
+    ).toMatchObject({ status: 413 });
+    expect(
+      parseTripPlanPatch({ tripTypes: { from: eleven, to: [] } }),
+    ).toMatchObject({
+      status: 413,
+      malformed: "tripTypes.from is over the cap",
+    });
+  });
+
+  it("names the list in a malformed detail", () => {
+    expect(parseTripTypeList("x", "types")).toEqual({
+      malformed: "types must be an array of strings",
+    });
+    expect(value(parseTripTypeList([" A ", "b"], "types"))).toEqual(["A", "b"]);
   });
 });
 
@@ -110,11 +141,17 @@ describe("order", () => {
 // Every refusal is logged (malformed detail) or shown (sentence), so neither
 // may carry what the person wrote. Mutation that turns it red: put the value
 // into any `bad(...)` detail or `say` hole, e.g. `bad(\`${what}: ${value}\`)`.
+// In `cas` only a `JSON.stringify(value)` echo shows: there the value is an
+// object, which a template prints as "[object Object]".
 describe("a refusal never echoes what the person wrote", () => {
   const secret = "Mira 0400 123 456 Hidden Gorge";
   const long = `${secret} `.repeat(400);
   const cases: TripPlanParsed<unknown>[] = [
     parseTripPlanCreate({ name: long }),
+    parseTripPlanCreate({ name: [secret] }),
+    parseTripPlanPatch({ dates: secret }),
+    parseTripPlanCreate({ name: "x", tripTypes: secret }),
+    parseTripPlanPatch({ name: { to: secret } }),
     parseTripPlanCreate({ name: secret, startDate: secret }),
     parseTripPlanCreate({ name: secret, tripTypes: [long] }),
     parseTripPlanCreate({ name: secret, tripTypes: [secret, secret] }),

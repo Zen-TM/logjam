@@ -5,17 +5,17 @@
 // member without the role gets a 403 naming who can. Plan rows reach no one
 // through the owner routes (`placeAccess.getPlaceRole` returns "none" for a
 // plan place), so this file is the only way in.
-// Guard: planAccess.unit.test.ts, __tests__/plans.test.ts.
+// Guard: planAccess.unit.test.ts, __tests__/plans.test.ts,
+// __tests__/tripPlanRows.test.ts.
 import { Prisma } from "@prisma/client";
 import {
   isTripPlanRole,
   say,
-  type TripPlanParsed,
   type TripPlanRole,
   type UserSentence,
 } from "@logjam/shared";
 import prisma from "../services/prisma";
-import { AppError, fault, malformed } from "../middleware/errorHandler";
+import { AppError, fault } from "../middleware/errorHandler";
 
 export type PlanAccess = {
   plan: { id: string; createdById: string | null; archivedAt: Date | null };
@@ -81,26 +81,20 @@ export function canChangeItem(
 }
 
 /**
- * Move the plan's `updatedAt`, the Plans poll's watermark, inside the
- * transaction of a write to anything in it: a child row's own `updatedAt`
- * never reaches the poll. Guard: __tests__/plans.test.ts ("touches the plan").
+ * Move the plan's `updatedAt`, the Plans poll's watermark, as the FIRST
+ * statement of a write to anything in it. A child row's own `updatedAt`
+ * never reaches the poll. Being first, its row lock also makes writes in one
+ * plan run one at a time, so a count, a next position or an order check read
+ * after it can't be raced by a second write. A plan deleted meanwhile is 404.
+ * Guard: __tests__/plans.test.ts ("touches the plan").
  */
 export async function touchPlan(
   tx: Prisma.TransactionClient,
   planId: string,
-): Promise<Date> {
-  const { updatedAt } = await tx.tripPlan.update({
+): Promise<void> {
+  const { count } = await tx.tripPlan.updateMany({
     where: { id: planId },
     data: { updatedAt: new Date() },
-    select: { updatedAt: true },
   });
-  return updatedAt;
-}
-
-/** A shared validator's value, or the error its refusal answers with. */
-export function accepted<T>(parsed: TripPlanParsed<T>): T {
-  if ("value" in parsed) return parsed.value;
-  throw "malformed" in parsed
-    ? malformed(parsed.malformed, parsed.status)
-    : new AppError(parsed.status, parsed.sentence);
+  if (count === 0) throw planNotFound();
 }

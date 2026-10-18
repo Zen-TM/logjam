@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
+import { TRIP_PLAN_MAX_SECTIONS } from "@logjam/shared";
 import prisma from "../services/prisma";
 import {
   API_URL,
@@ -104,6 +105,14 @@ describe("POST /plans", () => {
       .set(as(BOB_SUB))
       .send({ name: "x", startDate: "2026-11-09", endDate: "2026-11-08" });
     expect(backwards.status).toBe(400);
+    const tooMany = await request(API_URL)
+      .post("/plans")
+      .set(as(BOB_SUB))
+      .send({
+        name: "x",
+        tripTypes: Array.from({ length: 11 }, (_, i) => `t${i}`),
+      });
+    expect(tooMany.status).toBe(413);
   });
 });
 
@@ -158,7 +167,8 @@ describe("who sees a plan", () => {
     expect(res.status).toBe(404);
   });
 
-  // Mutation: drop the leader filter on `members` in loadPlanView.
+  // Mutation: drop the leader filter on `members` in loadPlanView, or add
+  // `email: true` to `userRef` in lib/tripPlanView.ts (the last assertion).
   it("shows who is invited or asking only to leaders", async () => {
     await membership(CAROL_ID, "requested");
     const asMember = await request(API_URL)
@@ -355,6 +365,36 @@ describe("sections", () => {
       exit,
       overview,
     ]);
+  });
+
+  // Writes in one plan run one at a time (touchPlan first). Mutation: move
+  // touchPlan after the count in POST sections; the racing creates then all
+  // read the same count and pass the cap together.
+  it("holds the cap against creates that race", async () => {
+    const start = await prisma.tripPlanSection.count({ where: { planId } });
+    await prisma.tripPlanSection.createMany({
+      data: Array.from(
+        { length: TRIP_PLAN_MAX_SECTIONS - 2 - start },
+        (_, i) => ({
+          planId,
+          title: `S${i}`,
+          position: start + i,
+        }),
+      ),
+    });
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => section(ALICE_SUB, { title: "Race" })),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([
+      201, 201, 413, 413, 413,
+    ]);
+    const positions = (
+      await prisma.tripPlanSection.findMany({
+        where: { planId },
+        select: { position: true },
+      })
+    ).map((row) => row.position);
+    expect(new Set(positions).size).toBe(TRIP_PLAN_MAX_SECTIONS);
   });
 
   it("404s a section of another plan", async () => {
