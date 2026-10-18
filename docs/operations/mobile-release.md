@@ -155,8 +155,9 @@ signing is [0009](../decisions/0009-signed-ota-updates.md).
    `node_modules` out of step with the lockfile) or the fix changed something native (a dependency,
    a plugin, `patches/`, `eas.json`, npm scripts), and it needs a release, not
    an update. Published anyway, it would reach no phone and say nothing.
-   `update:production` and `promote:production` repeat this check, and the
-   branch check, and refuse to publish when either fails.
+   `update:production` repeats this check for the checkout, and
+   `promote:production` for the update group it republishes (so it needs
+   `--group`); both also check the branch, and refuse to publish on a failure.
 5. **Publish to `preview` and check it** on a release candidate of X.Y.Z, if
    one exists and has the same runtime version:
    `npm run update:preview -- --message "<what it fixes>"`.

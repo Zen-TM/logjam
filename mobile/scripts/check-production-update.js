@@ -9,6 +9,15 @@ function branchRefusal(branch, version) {
   return `A production update is published only from release/mobile-v${version}, cut from the tag of the build it fixes; this checkout is on ${branch}.`;
 }
 
+// `promote:production` passes its own arguments as `promote ...`. The group it
+// republishes may come from another checkout, so the runtime checked is the group's.
+// Without `--group`, `eas update:republish` asks which group, past this check.
+function promotedGroup(args) {
+  if (args[0] !== "promote") return null;
+  const at = args.indexOf("--group");
+  return at === -1 ? undefined : args[at + 1];
+}
+
 // An update whose runtime no production build has reaches no phone, silently.
 function buildRefusal(builds, runtimeVersion, version) {
   if (
@@ -17,7 +26,7 @@ function buildRefusal(builds, runtimeVersion, version) {
     )
   )
     return null;
-  return `No finished production build of ${version} has runtime ${runtimeVersion}. Either the checkout differs from the tag (another commit, or node_modules out of step with the lockfile) or the fix changed something native and needs a release, not an update.`;
+  return `No finished production build of ${version} has runtime ${runtimeVersion}, so the update would reach no phone: docs/operations/mobile-release.md, OTA hotfixes, step 4.`;
 }
 
 if (require.main === module) {
@@ -36,14 +45,22 @@ if (require.main === module) {
   const byBranch = branchRefusal(branch, version);
   if (byBranch) refuse(byBranch);
 
-  const { runtimeVersion } = JSON.parse(
-    run("npx", [
-      "expo-updates",
-      "runtimeversion:resolve",
-      "--platform",
-      "android",
-    ]),
-  );
+  const group = promotedGroup(process.argv.slice(2));
+  if (group === undefined)
+    refuse("promote:production needs --group <update group id>.");
+  const runtimeVersion = group
+    ? JSON.parse(run("eas", ["update:view", group, "--json"])).find(
+        (u) => u.platform === "android",
+      )?.runtimeVersion
+    : JSON.parse(
+        run("npx", [
+          "expo-updates",
+          "runtimeversion:resolve",
+          "--platform",
+          "android",
+        ]),
+      ).runtimeVersion;
+  if (!runtimeVersion) refuse(`Update group ${group} has no Android update.`);
   const builds = JSON.parse(
     run("eas", [
       "build:list",
@@ -63,4 +80,4 @@ if (require.main === module) {
   if (byBuild) refuse(byBuild);
 }
 
-module.exports = { branchRefusal, buildRefusal };
+module.exports = { branchRefusal, buildRefusal, promotedGroup };
