@@ -71,7 +71,7 @@ export function tileUrlFrom(
  * there, the route and measure tools stop snapping to tracks and a height
  * comes from the coarse worldwide tiles. A guest has them too: each is cut on
  * the phone from a public archive, with no call to Logjam's API
- * (docs/decisions/0035-the-phone-cuts-its-own-offline-clips.md).
+ * (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md).
  * Guard: `regionTilePlanning.test.ts` ("regionClipSpecs").
  */
 export function regionClipSpecs(

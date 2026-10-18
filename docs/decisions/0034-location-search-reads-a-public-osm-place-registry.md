@@ -121,8 +121,9 @@ feature in NSW, never a geocoding service.**
 - **The NSW Geographical Names Register:** official names only, and last
   updated in 2016 on data.gov.au.
 - **A slice of the registry per downloaded region:** sends a region bbox to our
-  server, which [0029](0029-vector-map-with-every-signed-in-region.md) allows
-  only for the vector clip, and needs a clip endpoint, merging and cleanup.
+  server, which nothing else does
+  ([0036](0036-the-phone-cuts-its-own-offline-clips.md); updated 2026-10-18),
+  and needs a clip endpoint, merging and cleanup.
   The whole state is smaller than most single regions.
 - **Bundling the file in app releases, or shipping guests a fixed copy:**
   freshness tied to releases, a bigger app for everyone, and a guest-only path.

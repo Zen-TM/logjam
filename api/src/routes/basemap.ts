@@ -3,6 +3,11 @@
 // short-lived opaque token — no S3 write, no presigned URL, no bbox in any
 // URL or log line.
 //
+// Only Logjam GPS builds released before the phone cut its own clips call
+// this; it stays while one is supported, until three months after its
+// successor ships (docs/decisions/0022-mobile-builds-supported-three-months.md,
+// docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md).
+//
 // PRIVACY BOUNDARY (root AGENTS.md): the request bbox is place-area
 // knowledge. It lives in the POST *body* only (redacted via redactPaths in
 // lib/logger.ts), is never interpolated into error messages, filenames, or

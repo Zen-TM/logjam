@@ -2,7 +2,7 @@
 // `pmtiles extract --bbox --minzoom --maxzoom` (go-pmtiles v1.31.2, its
 // `extract.go`) does, in code both clients can run. Logjam GPS cuts each
 // offline clip from the public archive on the CDN with it, so the area never
-// reaches our API (docs/decisions/0035-the-phone-cuts-its-own-offline-clips.md).
+// reaches our API (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md).
 //
 // The output is the same tile set, tile bytes and header as go-pmtiles
 // writes, with the same layout: header, root directory, metadata, leaf

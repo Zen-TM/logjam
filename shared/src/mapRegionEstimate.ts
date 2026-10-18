@@ -136,7 +136,7 @@ export function checkRegionCaps(
     return { ok: false, reason: "edge-too-long" };
   }
   // One area for every save, whatever is in it
-  // (docs/decisions/0035-the-phone-cuts-its-own-offline-clips.md): every save
+  // (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md): every save
   // cuts the vector map, the contours and a DEM archive, and the cap bounds
   // what that costs a phone in requests, bytes and time.
   if (w * h > MAX_REGION_AREA_KM2) {

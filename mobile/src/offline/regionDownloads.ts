@@ -5,7 +5,7 @@
 // resolver picks it up from the registry with no map code changes.
 //
 // PRIVACY: nothing here talks to Logjam's API, so the area never reaches it
-// (docs/decisions/0035-the-phone-cuts-its-own-offline-clips.md). A request
+// (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md). A request
 // names the archive and a byte range, never a tile; nothing logs, and no
 // error carries an offset (regionDownloads.test.ts).
 import { File, FileMode, type FileHandle } from "expo-file-system";
@@ -95,7 +95,7 @@ const MAX_ATTEMPTS = 3;
  * A pmtiles `Source` over the CDN. No headers but the range: the archive is
  * public, so nothing identifies the user or the app to it. The platform's
  * default User-Agent still goes, and must: the web distribution's WAF refuses
- * a request without one (docs/decisions/0035).
+ * a request without one (docs/decisions/0036).
  */
 function rangeSource(url: string): Source {
   return {
