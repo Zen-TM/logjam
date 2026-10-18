@@ -7,7 +7,15 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { hashFriendInviteToken } from "../src/lib/friendInviteToken";
+import {
+  hashFriendInviteToken,
+  mintFriendInviteToken,
+} from "../src/lib/friendInviteToken";
+import {
+  GEO_PDF_FAILURE_MESSAGE,
+  TOPO_EXPORT_STOPPED_MESSAGE,
+  TOPO_UNREADABLE_MESSAGE,
+} from "../src/lib/failureCopy";
 import {
   AUTO_EXPORT_DEFAULTS,
   NOTIFICATION_TYPES,
@@ -21,6 +29,8 @@ import {
   type GeoPdfConfig,
   enforceCanyoningTag,
   linksCanyon,
+  friendInviteUrl,
+  isFriendInviteToken,
   setFieldValues,
   routeLengthM,
   routeToGpx,
@@ -1297,8 +1307,12 @@ function buildTrips(): SeedTrip[] {
 // (shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf). Every size a row states
 // is the length of the bytes uploaded.
 
-/** Made up; the invite row stores only its hash, as the route does. */
-const SEED_FRIEND_INVITE_TOKEN = "seed-invite-alice-not-a-real-token";
+/** Minted per seed run; the invite row stores only its hash, as the route does. */
+const SEED_FRIEND_INVITE_TOKEN = mintFriendInviteToken();
+assertValid(
+  "the seeded invite token",
+  isFriendInviteToken(SEED_FRIEND_INVITE_TOKEN) ? null : "not a token",
+);
 
 const TOPO_TILE = tileAt(12, 150.3179, -33.6563);
 const TOPO_BOUNDS = tileBounds(TOPO_TILE.z, TOPO_TILE.x, TOPO_TILE.y);
@@ -1350,7 +1364,8 @@ function topoOutputs(jobId: string) {
     // No COG: a raster layer's COG is what an export reads, and building one is
     // the worker's job. An export of a seeded topo is therefore refused as
     // "made before exports existed"; the completed export seeded below has its
-    // result and needs no source.
+    // result and needs no source. Nor can it be drawn on a new GeoPDF: the
+    // archive is one z12 tile and the renderer reads z16.
     cogKey: null,
     pmtilesKey: `outputs/${jobId}/${layer.name}.pmtiles`,
   }));
@@ -2127,27 +2142,9 @@ async function main() {
         name: "Wollangambe LiDAR",
         tileCount: 2,
         estimatedSeconds: 1200,
-        errorMessage:
-          "Couldn't read the LiDAR in that ZIP. Make it again to try again.",
+        errorMessage: TOPO_UNREADABLE_MESSAGE,
         createdAt: ago(200),
         ...topoRun(188, 120),
-      },
-      // Processing with a fresh heartbeat. The reaper fails it after
-      // TOPO_REAPER_PROGRESS_STALL_MS without progress, so it is `failed` once a
-      // dev stack has been up that long after the seed.
-      {
-        id: fid(3),
-        userId: ALICE_ID,
-        status: "processing",
-        name: "Kanangra LiDAR",
-        tileCount: 4,
-        estimatedSeconds: 1800,
-        renderTilesDone: 12,
-        renderTilesTotal: 40,
-        lastProgressAt: ago(1),
-        createdAt: ago(20),
-        attemptCount: 1,
-        startedAt: ago(15),
       },
       // Bob's, shared with alice (below): read-only to her.
       {
@@ -2210,8 +2207,7 @@ async function main() {
         sourceTileCount: 1,
         estimatedSeconds: 60,
         status: "failed",
-        errorMessage:
-          "This export was stopped because it took too long. Start it again to try again.",
+        errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
         startedAt: ago(70),
         createdAt: ago(75),
         completedAt: ago(67),
@@ -2250,8 +2246,7 @@ async function main() {
         vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         estimatedSeconds: 30,
         status: "failed",
-        errorMessage:
-          "This GeoPDF couldn't be made. Make it again to try again.",
+        errorMessage: GEO_PDF_FAILURE_MESSAGE,
         startedAt: ago(50),
         createdAt: ago(52),
         completedAt: ago(48),
@@ -2340,8 +2335,9 @@ async function main() {
   });
 
   // Sends are copies: a pending one for alice to accept and an accepted one
-  // she made. Each has its object in the media bucket, under the key the
-  // route derives (lib/fileSendAccess.ts fileSendKey).
+  // she made. Each has its object in the media bucket, under the key
+  // lib/fileSendAccess.ts fileSendKey gives it today (a download reads the
+  // row's own key, so a change there strands only the seeded object).
   const bobSend = fid(14);
   const aliceSend = fid(15);
   const sendExpires = new Date(
@@ -2382,12 +2378,12 @@ async function main() {
     ],
   });
 
-  // A pending invite link. The token is made up and printed nowhere else: a
-  // dev who wants to open it builds the link from this constant.
+  // A pending invite link from bob, for alice (the dev user) to open: the seed
+  // prints it, as only its hash is stored.
   await prisma.friendInvite.create({
     data: {
       id: fid(18),
-      inviterId: ALICE_ID,
+      inviterId: BOB_ID,
       tokenHash: hashFriendInviteToken(SEED_FRIEND_INVITE_TOKEN),
       expiresAt: new Date(
         Date.now() + FRIEND_INVITE_TTL_DAYS * 24 * 60 * 60_000,
@@ -2504,7 +2500,7 @@ async function main() {
           osmFailed: false,
         },
         read: true,
-        createdAt: ago(290),
+        createdAt: ago(285),
       },
       // topo/worker.py's failure path
       {
@@ -2512,7 +2508,7 @@ async function main() {
         type: "topo_failed",
         payload: { jobId: fid(2), jobName: "Wollangambe LiDAR" },
         read: false,
-        createdAt: ago(190),
+        createdAt: ago(188),
       },
       // topo/export_worker.py
       {
@@ -2557,8 +2553,7 @@ async function main() {
         payload: {
           geoPdfJobId: fid(8),
           status: "failed",
-          errorMessage:
-            "This GeoPDF couldn't be made. Make it again to try again.",
+          errorMessage: GEO_PDF_FAILURE_MESSAGE,
         },
         read: false,
         createdAt: ago(48),
@@ -2593,11 +2588,14 @@ async function main() {
 
   console.log(
     `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
-      `(1 incoming to alice), 4 direct shares (2 incoming to alice), ` +
+      `(1 incoming to alice), 4 direct shares (3 incoming to alice), ` +
       `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
-      `6 media, 4 topo jobs, 2 topo exports, 3 GeoPDFs, 4 templates, ` +
-      `2 file sends, 1 invite, 1 device token, 4 tombstones, ` +
+      `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 4 templates, ` +
+      `2 file sends, 1 invite, 4 tombstones, ` +
       `${NOTIFICATION_TYPES.length} notification types`,
+  );
+  console.log(
+    `Bob's invite for alice: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
   );
 }
 
