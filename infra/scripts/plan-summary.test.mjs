@@ -285,7 +285,12 @@ test("a sensitive value is neither in the comment nor in the fingerprint", () =>
   const beforeOne = topic(tags("prod"), { before: { ...tags("prod"), secret: "b-one" }, before_sensitive: SENSITIVE });
   const beforeTwo = topic(tags("prod"), { before: { ...tags("prod"), secret: "b-two" }, before_sensitive: SENSITIVE });
   assert.deepEqual(valueFingerprints(beforeOne, "prod", KEY), valueFingerprints(beforeTwo, "prod", KEY));
-  const body = comment({ root: "prod", planText: "plan", status: "success", plan: one, sha: SHA, key: KEY }).body;
+  // A secret already in state, so the comment is not refused for adding one.
+  const kept = topic(
+    { ...tags("prod"), secret: "s3cr3t-one" },
+    { after_sensitive: SENSITIVE, before: { ...tags("prod"), secret: "s3cr3t-old" }, before_sensitive: SENSITIVE },
+  );
+  const body = comment({ root: "prod", planText: "plan", status: "success", plan: kept, sha: SHA, key: KEY }).body;
   assert.match(body, /plan-values: \{"aws_sns_topic\.alerts":"[0-9a-f]{16}"\}/);
   assert.doesNotMatch(body, /s3cr3t|hunter2/);
 });
@@ -410,4 +415,67 @@ test("a signed comment whose fingerprint was edited does not apply", () => {
   const out = check("prod", bigger, edited, SHA, { key: KEY, mode: "enforce" });
   assert.equal(out.ok, false);
   assert.match(out.reason, /signature/);
+});
+
+// The plan text comes from the PR's own run, which can print anything; the
+// header is computed from the plan JSON the fingerprint covers
+// (docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md).
+const update = (address, before, after, extra = {}) => ({
+  address,
+  type: address.split(".")[0],
+  change: { actions: ["update"], before, after, after_unknown: {}, after_sensitive: {}, ...extra },
+});
+
+test("the header names every attribute an update changes, whatever the plan text says", () => {
+  // Mutation: listing updates by address alone lets a PR's plan text hide
+  // which attribute changes: red.
+  const plan = {
+    resource_changes: [
+      update("aws_security_group.api", { name: "api", cidr: "10.0.0.0/8" }, { name: "api", cidr: "0.0.0.0/0" }),
+    ],
+  };
+  const h = header(plan, "prod");
+  assert.match(h, /\*\*Updates \(1\):\*\*\n- `aws_security_group\.api` — `cidr`$/m);
+  assert.doesNotMatch(h, /0\.0\.0\.0/, "names, never values");
+  const { body } = comment({ root: "prod", planText: "  ~ name", status: "success", plan, sha: SHA, key: KEY });
+  assert.match(body, /`cidr`[^]*the PR's own run/);
+});
+
+const secret = (actions, before, after, extra = {}) => ({
+  resource_changes: [
+    {
+      address: "random_password.db",
+      type: "random_password",
+      change: { actions, before, after, after_unknown: {}, after_sensitive: {}, before_sensitive: {}, ...extra },
+    },
+  ],
+});
+
+test("a plan that puts a new secret in state posts no fingerprint", () => {
+  // Every PR's plan job can read the state, so a secret in it is a secret
+  // every collaborator can read. Mutation: dropping stateSecrets() from
+  // comment(), or ignoring a value only known after apply, turns this red.
+  const created = secret(["create"], null, { length: 32, result: null }, {
+    after_unknown: { result: true },
+    after_sensitive: { result: true },
+  });
+  const { body, ok } = comment({ root: "prod", planText: "plan", status: "success", plan: created, sha: SHA, key: KEY });
+  assert.equal(ok, false);
+  assert.equal(readFingerprint(body), null);
+  assert.match(body, /`random_password\.db\.result`/);
+});
+
+test("a secret already in state, or one the root allows, does not block a plan", () => {
+  // Mutation: flagging every sensitive value, not only new ones, blocks any
+  // update to a resource that already holds one: red.
+  const kept = secret(
+    ["update"],
+    { length: 32, result: "old", keepers: { a: "1" } },
+    { length: 32, result: "old", keepers: { a: "2" } },
+    { before_sensitive: { result: true }, after_sensitive: { result: true } },
+  );
+  assert.equal(comment({ root: "prod", planText: "plan", status: "success", plan: kept, sha: SHA, key: KEY }).ok, true);
+  const allowed = secret(["create"], null, { result: null }, { after_unknown: { result: true }, after_sensitive: { result: true } });
+  allowed.resource_changes[0].address = "random_password.origin_verify";
+  assert.equal(comment({ root: "prod", planText: "plan", status: "success", plan: allowed, sha: SHA, key: KEY }).ok, true);
 });

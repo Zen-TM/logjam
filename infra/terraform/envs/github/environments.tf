@@ -59,24 +59,16 @@ resource "github_repository_environment_deployment_policy" "this" {
   tag_pattern    = each.value.tag_pattern
 }
 
-# Pull-request plans of envs/prod and envs/github run in this Environment, so
-# each run waits for the maintainer's approval before it gets the AWS plan
-# role or the plan App's key. Approving runs the PR's code with both: read
-# its workflows, Terraform and infra/lambda first. Any branch may use it,
-# since PR branches vary; the reviewer is the gate
-# (docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md). Not in
-# local.environments, which all carry a branch policy. Guard:
-# tests/guards.tftest.hcl.
+# Pull-request plans of envs/prod and envs/github run in this Environment,
+# with no reviewer: it holds only the AWS plan role (which trusts it) and the
+# plan App's key, which read no more than a collaborator can. The key that
+# signs plan comments is never here; the plan jobs fail if it is
+# (docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md).
+# Any branch may use it, since PR branches vary, so it is not in
+# local.environments, which all carry a branch policy.
 resource "github_repository_environment" "terraform_plan" {
   repository  = github_repository.logjam.name
   environment = "terraform-plan"
-
-  reviewers {
-    users = [local.maintainer_user_id]
-  }
-
-  # The maintainer approves the runs of their own PRs too.
-  prevent_self_review = false
 
   lifecycle {
     prevent_destroy = true

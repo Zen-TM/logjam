@@ -1,7 +1,7 @@
 # 0027. Pull-request plans run only after the maintainer approves them
 
 - **Date:** 2026-10-03
-- **Status:** Accepted
+- **Status:** Superseded by [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)
 - **Supersedes:** —
 
 ## Context
