@@ -15,8 +15,8 @@
     "pre-commit": "gitleaks protect --staged && npx lint-staged"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx,mjs,cjs,json,jsonc,css}": "biome format --no-errors-on-unmatched",
-    "*.py": "ruff format --check --force-exclude"
+    "*.{js,ts,jsx,tsx,mjs,cjs,json,jsonc,css}": "biome format --write --no-errors-on-unmatched",
+    "*.py": "ruff format --force-exclude"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
