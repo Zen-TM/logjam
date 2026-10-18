@@ -34,6 +34,8 @@ export type AccountState = "guest" | "linked";
  * works for a guest — places, trip logs, waypoints, media capture, tracks,
  * local GeoPDF import, measure, compass, raster offline regions and the user's
  * own custom fields are all fully local and must never be routed through here.
+ * So is the Offline & Storage tab: it holds device settings a guest needs, and
+ * sorts its own rows (`screens/settings/offlineRows.ts`).
  */
 export type Capability =
   /** Sharing a place, waypoint, route, topo or GeoPDF with another user. */
@@ -59,13 +61,7 @@ export type Capability =
   /** Push-token registration (POST /devices). */
   | "pushNotifications"
   /** Manually running a sync cycle. */
-  | "syncNow"
-  /**
-   * The Offline & Storage settings tab. The switches are device prefs, but they
-   * govern account-backed downloads (finished GeoPDFs, LiDAR topos) and sync —
-   * none of which a guest has — so the whole tab is account-gated.
-   */
-  | "offlineSettings";
+  | "syncNow";
 
 export type CapabilityStatus =
   | { status: "available" }
@@ -96,7 +92,6 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   serverPrefs: true,
   pushNotifications: true,
   syncNow: true,
-  offlineSettings: false,
 };
 
 export function capabilityStatus(
@@ -143,7 +138,6 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   serverPrefs: "This preference",
   pushNotifications: "Push notifications",
   syncNow: "Syncing",
-  offlineSettings: "Offline and storage settings",
 };
 
 /**

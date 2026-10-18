@@ -85,8 +85,9 @@ feature in NSW, never a geocoding service.**
   and refreshed on Wi-Fi by default, and a download replaces the stored file
   only once it parses. Guards: `mobile/src/offline/placeRegistry.test.ts`,
   and `mobile/src/map/placeSearch.test.ts` for the phone's copy answering
-  first and a guest making no API call. No guard for a guest getting the
-  file: `AppShell` registers the refresh with no account check.
+  first and a guest making no API call, and `mobile/src/shellTriggers.test.ts`
+  for the refresh being registered for a guest as for a signed-in user
+  (updated 2026-10-18).
 
 ## Consequences
 
