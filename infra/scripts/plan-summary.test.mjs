@@ -377,3 +377,37 @@ test("the address and actions refusal is unchanged by the value check", () => {
   assert.equal(out.ok, false);
   assert.match(out.reason, /is not the plan on the PR/);
 });
+
+// A PR's own workflow can post as github-actions[bot] from a job outside the
+// terraform-plan Environment, so it can write any comment that does not need
+// the key. Only the signature tells the plan workflow's comment from one.
+const deletes = (...addresses) => ({
+  resource_changes: addresses.map((address) => ({
+    address,
+    type: "aws_x",
+    change: { actions: ["delete"], before: { a: 1 }, after: null },
+  })),
+});
+
+test("a comment made without the key never applies, even one with no values to hash", () => {
+  // Mutation: dropping the signature check, or counting an empty plan-values
+  // map as compared, turns this red: a delete-only plan has no HMAC to forge.
+  const plan = deletes("aws_x.y");
+  const forged = comment({ root: "prod", planText: "No changes.", status: "success", plan, sha: SHA })
+    .body.replace("\n", "\n<!-- plan-values: {} -->\n");
+  assert.deepEqual(readValues(forged), {});
+  assert.equal(check("prod", plan, forged, SHA, { key: KEY, mode: "enforce" }).ok, false);
+  const signed = comment({ root: "prod", planText: "plan", status: "success", plan, sha: SHA, key: KEY }).body;
+  assert.equal(check("prod", plan, signed, SHA, { key: KEY, mode: "enforce" }).ok, true);
+});
+
+test("a signed comment whose fingerprint was edited does not apply", () => {
+  // Mutation: signing only the values map lets a forger keep a real
+  // comment's values and swap in the fingerprint of a bigger plan: red.
+  const read = comment({ root: "prod", planText: "plan", status: "success", plan: deletes("aws_x.y"), sha: SHA, key: KEY }).body;
+  const bigger = deletes("aws_x.y", "aws_x.z");
+  const edited = read.replace(readFingerprint(read).fingerprint, fingerprint(bigger, "prod"));
+  const out = check("prod", bigger, edited, SHA, { key: KEY, mode: "enforce" });
+  assert.equal(out.ok, false);
+  assert.match(out.reason, /signature/);
+});
