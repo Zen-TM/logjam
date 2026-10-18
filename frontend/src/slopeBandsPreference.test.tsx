@@ -65,6 +65,8 @@ describe("useSlopeBands", () => {
     expect(api.update).not.toHaveBeenCalled();
   });
 
+  // Mutation: draw `saved` when the editor holds a band it would refuse, and
+  // the map jumps back to the account's older bands.
   it("says when the bands could not be saved, and keeps drawing the edit", async () => {
     api.update.mockRejectedValue(new Error("offline"));
     const { result } = renderHook(() => useSlopeBands(user, vi.fn()));
@@ -72,6 +74,38 @@ describe("useSlopeBands", () => {
     act(() => result.current.setBands(edit));
     await act(() => vi.advanceTimersByTimeAsync(1000));
     expect(toast.error).toHaveBeenCalledWith("Couldn't save your slope bands.");
+    expect(result.current.drawn).toEqual(edit);
+    act(() => result.current.setBands([{ ...mine[0]!, fromDeg: 95 }]));
+    expect(result.current.drawn).toEqual(edit);
+  });
+
+  // Mutation: key the save on the latest edit rather than the last valid
+  // one, and a refused edit cancels the save of the one before it.
+  it("draws and saves a valid edit the user then breaks", async () => {
+    const { result } = renderHook(() => useSlopeBands(user, vi.fn()));
+    const edit = [{ ...mine[0]!, fromDeg: 35 }];
+    act(() => result.current.setBands(edit));
+    act(() => result.current.setBands([{ ...mine[0]!, fromDeg: 95 }]));
+    expect(result.current.drawn).toEqual(edit);
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(api.update).toHaveBeenCalledTimes(1);
+    expect(api.update).toHaveBeenCalledWith({ slopeBands: edit });
+  });
+
+  // Mutation: forget the edit when the account's bands change, and a save
+  // that lands while the user edits on undoes their newer edit.
+  it("keeps the edit when the account's bands change under it", () => {
+    const { result, rerender } = renderHook(
+      ({ current }) => useSlopeBands(current, vi.fn()),
+      { initialProps: { current: user } },
+    );
+    const edit = [{ ...mine[0]!, fromDeg: 35 }];
+    act(() => result.current.setBands(edit));
+    const older = [{ ...mine[0]!, fromDeg: 20 }];
+    rerender({
+      current: { uiPreferences: { slopeBands: older } } as unknown as TUser,
+    });
+    expect(result.current.bands).toEqual(edit);
     expect(result.current.drawn).toEqual(edit);
   });
 });

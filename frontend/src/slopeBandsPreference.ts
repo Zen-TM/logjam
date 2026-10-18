@@ -1,6 +1,6 @@
 // The account's slope bands (`uiPreferences.slopeBands`): what the Terrain
 // group's statewide slope is coloured in, here and on Logjam GPS.
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   normalizeUserUiPreferences,
   slopeBandsError,
@@ -25,27 +25,41 @@ export function useSlopeBands(
     [currentUser],
   );
   // Once edited, the edit is what both the editor and the map show for the
-  // session: a save that comes back while the user edits on must not undo them.
-  const [edited, setEdited] = useState<SlopeBand[] | null>(null);
-  const valid = edited != null && slopeBandsError(edited) == null;
+  // session, so a save that comes back while the user edits on leaves it be.
+  // The map keeps the last edit MapLibre can take while the editor holds one
+  // it would refuse, and that edit is the one saved.
+  const [edit, setEdit] = useState<{
+    bands: SlopeBand[];
+    lastValid: SlopeBand[] | null;
+  } | null>(null);
+  const setBands = useCallback(
+    (bands: SlopeBand[]) =>
+      setEdit((prev) => ({
+        bands,
+        lastValid:
+          slopeBandsError(bands) == null ? bands : (prev?.lastValid ?? null),
+      })),
+    [],
+  );
+  const lastValid = edit?.lastValid ?? null;
 
   useEffect(() => {
-    if (!edited || !valid) return;
+    if (!lastValid) return;
     const timer = setTimeout(() => {
-      updateUserPreferences({ slopeBands: edited })
+      updateUserPreferences({ slopeBands: lastValid })
         .then(applyCurrentUser)
         .catch((err: unknown) =>
           toast.error(messageFromError(err, "Couldn't save your slope bands.")),
         );
     }, SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [edited, valid, applyCurrentUser, toast]);
+  }, [lastValid, applyCurrentUser, toast]);
 
   return {
     /** What the editor shows, mid-edit problems and all. */
-    bands: edited ?? saved,
+    bands: edit?.bands ?? saved,
     /** What the map draws: the last bands MapLibre can take. */
-    drawn: edited && valid ? edited : saved,
-    setBands: setEdited,
+    drawn: lastValid ?? saved,
+    setBands,
   };
 }
