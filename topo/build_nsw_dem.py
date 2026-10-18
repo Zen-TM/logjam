@@ -526,8 +526,9 @@ def block_slope(
     slope = np.empty((size, size), np.float32)
     for row in range(tiles):
         top = (row + 1) * TILE
-        # An all-empty strip (sea, off the archive) costs ~0.5 s of float64 Horn
-        # for nothing; a block of all sea took ~15 s before this skip.
+        # A strip with no height tile in it or beside it (sea, off the archive)
+        # would spend ~0.5 s of float64 Horn on NaN; coastal and border blocks
+        # are mostly such strips.
         if not present[row : row + 3].any():
             slope[row * TILE : (row + 1) * TILE] = np.nan
             continue
@@ -565,13 +566,15 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     so a killed run restarts where it stopped. The default `work` is the slope
     archive's own.
 
-    A child killed part-way (out of memory) raises here instead of leaving the
-    run waiting for a block that will never come.
+    A child killed part-way (out of memory) raises `BrokenProcessPool` here
+    instead of leaving the run waiting for a block that will never come. That
+    is why this uses `ProcessPoolExecutor`: `multiprocessing.Pool`, as `tile`
+    does, waits forever in the same case.
     """
     work.mkdir(parents=True, exist_ok=True)
     reader = open_heights(heights)
-    # The slope archive says what the heights it came from say, never a month
-    # typed again by hand.
+    # The slope archive says what the heights it came from say, not a month
+    # typed again by hand (test_nsw_dem.py `TestExtractedMonth`).
     extracted = extracted_month(reader.metadata()["attribution"])
     header = reader.header()
     x0, y0 = lonlat_to_tile(
@@ -617,7 +620,7 @@ def slope_s3(bucket: str, work: Path, jobs: int, client=None) -> None:
 
     What the Fargate task runs (topo/README.md, "Building it in AWS"). Every
     step raises on failure, so the task exits non-zero and nothing is uploaded
-    from a build that did not finish.
+    from a build that did not finish (test_nsw_dem.py `TestSlopeS3`).
     """
     if client is None:
         import boto3

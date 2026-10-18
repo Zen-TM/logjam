@@ -24,6 +24,7 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 
 from build_nsw_dem import (  # noqa: E402
     BLOCK_ZOOM,
+    build_slope,
     EARTH_CIRCUMFERENCE_M,
     HEIGHTS,
     SLOPE,
@@ -283,7 +284,7 @@ class TestSlopeBlock(unittest.TestCase):
 class TestBuildSlope(unittest.TestCase):
     # Mutation: `shutdown(wait=False, cancel_futures=True)` (the `with` block's
     # own shutdown then runs every queued block) or no cancel at all: the
-    # traceback prints at once but the process runs ~1,600 blocks before it
+    # traceback prints at once but the process runs ~1,250 blocks before it
     # exits, holding 8 vCPU for hours. Only the time to exit shows it.
     def test_a_failing_block_stops_the_queued_ones(self):
         import subprocess
@@ -335,14 +336,46 @@ nd.build_slope(Path("unused"), Path(sys.argv[1]) / "out.pmtiles", Path(sys.argv[
 
 
 class TestExtractedMonth(unittest.TestCase):
-    # Mutation: a month typed again by hand can disagree with the heights; the
-    # slope archive takes it from the height archive's credit instead.
+    # Mutation: capture `(\w+)` and it reads "October" for "October 2026", or
+    # drop the `sys.exit` and a credit with no month yields None.
     def test_the_month_is_read_back_from_the_credit(self):
         self.assertEqual(
             extracted_month(credit(HEIGHTS, "October 2026")), "October 2026"
         )
         with self.assertRaises(SystemExit):
             extracted_month("no month here")
+
+
+class TestBuildSlopeMonth(unittest.TestCase):
+    # Mutation: `extracted = "October 2026"` in `build_slope` (a month typed by
+    # hand) and the slope archive's credit disagrees with the heights it was
+    # built from.
+    def test_pack_gets_the_month_the_heights_say(self):
+        import tempfile
+        from unittest import mock
+
+        class Reader:
+            def metadata(self):
+                return {"attribution": credit(HEIGHTS, "March 2031")}
+
+            def header(self):
+                return dict(
+                    min_lon_e7=1509000000,
+                    max_lon_e7=1510000000,
+                    min_lat_e7=-337000000,
+                    max_lat_e7=-336000000,
+                )
+
+            def get(self, z, x, y):
+                return None
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("build_nsw_dem.open_heights", lambda path: Reader()),
+            mock.patch("build_nsw_dem.pack") as pack,
+        ):
+            build_slope(Path("unused"), Path(tmp) / "o", Path(tmp) / "w", 1)
+        self.assertEqual(pack.call_args.args[2], "March 2031")
 
 
 class TestSlopeS3(unittest.TestCase):
@@ -380,6 +413,35 @@ class TestSlopeS3(unittest.TestCase):
                 ("upload", "bkt", SLOPE_KEY, "application/vnd.pmtiles"),
             ],
         )
+
+    # Mutation: swallow a build error (`try: build_slope(...) except Exception:
+    # pass`), or move the upload into a `finally`, and a half build is
+    # published.
+    def test_a_failed_build_uploads_nothing(self):
+        import tempfile
+        from unittest import mock
+
+        calls = []
+
+        class Client:
+            def download_file(self, bucket, key, path):
+                calls.append("download")
+                open(path, "wb").write(b"heights")
+
+            def upload_file(self, *args, **kwargs):
+                calls.append("upload")
+
+        def build(heights, out, work, jobs):
+            calls.append("build")
+            raise ValueError("boom")
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("build_nsw_dem.build_slope", build),
+        ):
+            with self.assertRaises(ValueError):
+                slope_s3("bkt", Path(tmp), 8, Client())
+        self.assertEqual(calls, ["download", "build"])
 
     # Mutation: change HEIGHT_KEY alone and the task reads an archive the
     # clients do not.

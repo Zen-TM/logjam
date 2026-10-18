@@ -279,7 +279,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem
 No deploy is needed. The API looks for the archive every five minutes and
 starts reading it when it appears; the clients read it on their next lookup.
 If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
-the same week.
+the same week. A new height archive leaves the slope archive (below) on the old
+heights and month: rebuild it, deleting `dem/nsw-5m-slope.work/` first if an
+earlier local run left one.
 
 ### The statewide slope archive
 
@@ -321,6 +323,8 @@ and the Terraform outputs, which a contributor's read-only access does not have.
 Fargate has what it needs without a new task definition: the
 `logjam-topo-worker` one has 8 vCPU and 16 GB, its role reads and writes the
 topo bucket, and the image carries `build_nsw_dem.py` and the `pmtiles` package.
+The image starts `worker.py` as a `CMD`, which the run's command override
+replaces.
 The task runs `python3 /app/build_nsw_dem.py slope-s3 logjam-topo-jobs`, which
 downloads `master/dem/nsw-5m.pmtiles`, builds the slope archive and uploads
 `master/dem/nsw-5m-slope.pmtiles`, and exits non-zero at the first step that
@@ -336,8 +340,10 @@ API's cap on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default, in
 `api/src/lib/env.ts`) counts job rows, not tasks, so it does not see it. A user
 job that starts while it runs can fail to start, and shows as failed, once user
 load passes 22 vCPU. Run it when Logjam is quiet. The `logjam-topo-stuck-task`
-alarm emails when a task has run through six clock hours, which a run of four to
-five hours can do: that is expected, so do not stop the task because of it.
+alarm emails when some task has been running in each of six clock hours in a
+row. This run can set it off if it takes over four hours, or with user jobs
+running either side of it: that is expected, so do not stop the task because
+of it.
 
 First the cluster, subnets and security group. All three lines must print a
 value:
@@ -346,17 +352,22 @@ value:
 cd "$(git rev-parse --show-toplevel)/infra/terraform/envs/prod" && terraform init -input=false && CLUSTER=$(terraform output -raw ecs_cluster) && SUBNETS=$(terraform output -raw ecs_subnets) && SG=$(terraform output -raw ecs_security_groups) && echo "$CLUSTER" && echo "$SUBNETS" && echo "$SG"
 ```
 
+The later blocks use `CLUSTER`, `SUBNETS`, `SG` and `TASK`, and stop with an
+error if one is not set. In a new shell, run the block above again, and set
+`TASK` to the ARN the start block printed (keep it; while the task runs,
+`aws ecs list-tasks --cluster "$CLUSTER" --started-by slope-build` finds it).
+
 Then see what is running. Before the start the list should be empty (a user job
 in it means wait); during the run it should hold only your task:
 
 ```bash
-aws ecs list-tasks --cluster "$CLUSTER" --desired-status RUNNING
+: "${CLUSTER:?run the first block}" && aws ecs list-tasks --cluster "$CLUSTER" --desired-status RUNNING
 ```
 
 Start it. `TASK` must print a task ARN:
 
 ```bash
-OUT=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition logjam-topo-worker --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}" --overrides '{"ephemeralStorage":{"sizeInGiB":120},"containerOverrides":[{"name":"topo-worker","command":["python3","/app/build_nsw_dem.py","slope-s3","logjam-topo-jobs","--jobs","8"]}]}' --output json)
+OUT=; : "${CLUSTER:?run the first block}" "${SUBNETS:?run the first block}" "${SG:?run the first block}" && OUT=$(aws ecs run-task --cluster "$CLUSTER" --started-by slope-build --launch-type FARGATE --task-definition logjam-topo-worker --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}" --overrides '{"ephemeralStorage":{"sizeInGiB":120},"containerOverrides":[{"name":"topo-worker","command":["python3","/app/build_nsw_dem.py","slope-s3","logjam-topo-jobs","--jobs","8"]}]}' --output json)
 TASK=$(jq -er '.tasks[0].taskArn' <<<"$OUT") || { TASK=; echo "NOT STARTED:"; jq '.failures' <<<"$OUT"; }
 echo "$TASK"
 ```
@@ -367,7 +378,7 @@ accepts a task that then fails to pull the image or to start, and that would
 otherwise look like a silent download:
 
 ```bash
-if [ -n "$TASK" ] && aws ecs wait tasks-running --cluster "$CLUSTER" --tasks "$TASK"; then echo RUNNING; fi
+if : "${CLUSTER:?run the first block}" "${TASK:?no task started}" && aws ecs wait tasks-running --cluster "$CLUSTER" --tasks "$TASK"; then echo RUNNING; fi
 ```
 
 If it did not print `RUNNING`, read why with the `describe-tasks` command below
@@ -376,26 +387,29 @@ If it did not print `RUNNING`, read why with the `describe-tasks` command below
 Follow the log (the log group also holds every user job's streams):
 
 ```bash
-aws logs tail /ecs/logjam-topo-worker --follow --log-stream-name-prefix "ecs/topo-worker/${TASK##*/}"
+: "${TASK:?run the start block}" && aws logs tail /ecs/logjam-topo-worker --follow --log-stream-name-prefix "ecs/topo-worker/${TASK##*/}"
 ```
 
-The first line gives the block count (885 at most), then one line per finished
-block, `[N/count]`, and a block that fails stops the run with its traceback. The
-download before the first line, and the packing and upload after the last, print
-nothing for tens of minutes each. If 15 minutes pass with no new block line
-*before* the last `[N/count]`, stop the task and read the log:
+The log reads, in order: `downloading s3://…/nsw-5m.pmtiles`, `downloaded N
+bytes`, `N blocks` (885 at most), one `[n/N] …` line per finished block, `built N
+bytes`, and `uploaded s3://…/nsw-5m-slope.pmtiles`. The download (`downloading`
+to `downloaded`) and the packing (the last block line to `built`) are each
+silent for tens of minutes. A block that fails stops the run with its
+traceback. From the `N blocks` line on, if 15 minutes pass with no new block
+line before the last `[n/N]`, stop the task and read the log:
 
 ```bash
-aws ecs stop-task --cluster "$CLUSTER" --task "$TASK"
+: "${CLUSTER:?run the first block}" "${TASK:?run the start block}" && aws ecs stop-task --cluster "$CLUSTER" --task "$TASK"
 ```
 
-After the last `[N/count]` line press Ctrl-C (the tail never exits by itself) and
-check the task every 15 minutes. It has finished when this prints `STOPPED`; the
-exit code beside it must be `0`, and ECS forgets a stopped task after about an
-hour, so read it within the hour:
+After the last block line, wait for `uploaded s3://…`: the run has succeeded
+when the log prints it. Press Ctrl-C then (the tail never exits by itself).
+Confirm with the task, checking every 15 minutes: it has finished when this
+prints `STOPPED`, with exit code `0` beside it. ECS forgets a stopped task after
+about an hour, so read it within the hour:
 
 ```bash
-aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" --query 'tasks[0].[lastStatus,containers[0].exitCode,stoppedReason]' --output text
+: "${CLUSTER:?run the first block}" "${TASK:?run the start block}" && aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" --query 'tasks[0].[lastStatus,containers[0].exitCode,stoppedReason]' --output text
 ```
 
 Later than that, the upload is the task's last step, so a `LastModified` after
@@ -412,9 +426,6 @@ it should print `206`:
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
 ```
-
-The image starts `worker.py` as its `CMD`, so a RunTask command override
-replaces it and can run this script under the worker's task role.
 
 ---
 
