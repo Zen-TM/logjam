@@ -71,13 +71,19 @@ async function resolveOwners(
     byTable.geoPdfJob.size
       ? prisma.geoPdfJob.findMany({
           where: { id: { in: [...byTable.geoPdfJob] } },
-          select: { id: true, userId: true },
+          select: { id: true, userId: true, chargedToId: true },
         })
       : [],
   ]);
 
-  for (const row of [...topoJobs, ...exportJobs, ...geoPdfJobs]) {
+  for (const row of [...topoJobs, ...exportJobs]) {
     owners.set(row.id, row.userId);
+  }
+  // A plan's GeoPDF has no owner: its downloads go to whoever its storage
+  // is charged to, and are dropped when that is nobody.
+  for (const row of geoPdfJobs) {
+    const payer = row.userId ?? row.chargedToId;
+    if (payer) owners.set(row.id, payer);
   }
   return owners;
 }

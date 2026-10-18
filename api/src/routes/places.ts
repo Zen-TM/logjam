@@ -432,7 +432,9 @@ router.post(
 
     const placeId = getParam(req.params.id);
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, say`Couldn't find that place.`);
+    // A plan's place (null owner) answers as a missing one.
+    if (!place?.ownerId)
+      throw new AppError(404, say`Couldn't find that place.`);
 
     // Owner and share recipients may copy (hybrid model: the place record
     // itself is visible to sharees).

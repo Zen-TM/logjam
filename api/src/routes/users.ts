@@ -759,6 +759,15 @@ router.delete(
       // account being deleted. Explicit per convention even though the FK
       // cascade covers the rows.
       prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
+      // The user's own place types, after their places (Place.placeTypeId
+      // restricts). Explicit per convention even though the FK cascades.
+      prisma.placeType.deleteMany({ where: { ownerId: user.id } }),
+      // Plans: the user's answers (safety contacts name people who are not
+      // Logjam users) and memberships go with them; the plans, and what the
+      // user added to them, stay with the group. Explicit per convention
+      // even though the FK cascade covers the rows.
+      prisma.tripPlanAnswer.deleteMany({ where: { userId: user.id } }),
+      prisma.tripPlanMember.deleteMany({ where: { userId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 

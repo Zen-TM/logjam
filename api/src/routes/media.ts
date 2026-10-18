@@ -542,8 +542,10 @@ router.post(
           ).map((s) => s.placeId)
         : [],
     );
-    const visible = rows.filter((m) => {
+    const visible = rows.filter((m): m is typeof m & { ownerId: string } => {
       if (m.ownerId === user.id) return true;
+      // A plan's file (null owner) is nobody's, so never served here.
+      if (m.ownerId === null) return false;
       const placeId = placeIdOfMedia(m);
       return placeId !== null && sharedPlaceIds.has(placeId);
     });

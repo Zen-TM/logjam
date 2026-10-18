@@ -951,6 +951,21 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
     expect(count).toBe(2);
   });
 
+  // Mutation: drop `.filter(ownedJob)` from either GeoPDF sweep.
+  it("skips a plan's GeoPDF (null userId) in both stuck sweeps", async () => {
+    stageByStatus(geoPdfFindMany, {
+      queued: [{ id: "plan-q", userId: null }],
+      running: [{ id: "plan-r", userId: null, ecsTaskArn: "arn:task/r" }],
+    });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
+
+    const count = await reapStuckTopoJobs(NOW);
+
+    expect(geoPdfUpdateMany).not.toHaveBeenCalled();
+    expect(ecsSend).not.toHaveBeenCalled();
+    expect(count).toBe(0);
+  });
+
   it("includes geo_pdf_jobs counts in the total reaped", async () => {
     stageByStatus(geoPdfFindMany, {
       queued: ["q1", "q2", "q3", "q4"].map((id) => ({ id, userId: "u1" })),
@@ -1003,6 +1018,31 @@ describe("expireCompletedGeoPdfJobs", () => {
     expect(s3Send.mock.invocationCallOrder[0]).toBeLessThan(
       transaction.mock.invocationCallOrder[0],
     );
+  });
+
+  // Mutation: refund `row.userId` alone in expireCompletedGeoPdfJobs.
+  it("refunds a plan's GeoPDF to whoever it is charged to", async () => {
+    geoPdfFindMany.mockResolvedValue([
+      { ...expiredRow, userId: null, chargedToId: "payer" },
+    ]);
+
+    expect(await expireCompletedGeoPdfJobs(NOW)).toBe(1);
+
+    expect(txExecuteRaw).toHaveBeenCalledTimes(1);
+    expect(txExecuteRaw.mock.calls[0].slice(1)).toEqual([5678n, "payer"]);
+    expect(txGeoPdfDelete).toHaveBeenCalledWith({ where: { id: "geo-1" } });
+  });
+
+  // Mutation: decrement whenever the row has bytes, payer or not.
+  it("refunds nobody when a plan's GeoPDF is charged to no one", async () => {
+    geoPdfFindMany.mockResolvedValue([
+      { ...expiredRow, userId: null, chargedToId: null },
+    ]);
+
+    expect(await expireCompletedGeoPdfJobs(NOW)).toBe(1);
+
+    expect(txExecuteRaw).not.toHaveBeenCalled();
+    expect(txGeoPdfDelete).toHaveBeenCalledWith({ where: { id: "geo-1" } });
   });
 
   it("cleans up rows without a resultKey and skips the S3 call", async () => {
