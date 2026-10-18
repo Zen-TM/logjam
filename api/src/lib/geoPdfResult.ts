@@ -1,6 +1,6 @@
 // Where a GeoPDF's rendered file lives in the topo bucket, and how it is
 // handed out. The worker renders to the key; a copy into or out of a plan
-// (lib/planItems.ts) writes a new one beside it; account delete removes the
+// (lib/planItems.ts) writes a new one; account delete removes the
 // per-job prefix (routes/users.ts).
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -14,6 +14,16 @@ const PRESIGN_TTL_SECONDS = 86400; // 24h
 /** The S3 key of a job's rendered PDF. Guard: geoPdfWorker.unit.test.ts. */
 export function resultKeyFor(jobId: string): string {
   return `exports/geo-pdf/${jobId}/logjam-export.pdf`;
+}
+
+/**
+ * The S3 key of a plan's copy of a GeoPDF. It sits outside `exports/`, which
+ * the topo bucket's lifecycle rule expires after 7 days
+ * (infra/terraform/envs/prod/s3.tf): a plan's GeoPDF is exempt from the
+ * export TTL. Guard: __tests__/planItems.test.ts ("copies a GeoPDF with its own object").
+ */
+export function planResultKeyFor(jobId: string): string {
+  return `plans/geo-pdf/${jobId}/logjam-export.pdf`;
 }
 
 // Derive a human download filename from the job's title, falling back to a

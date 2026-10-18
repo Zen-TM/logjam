@@ -54,15 +54,12 @@ import {
   incrementStorageUsed,
   storageFull,
 } from "./storageQuota";
-import {
-  deleteS3Keys,
-  deleteS3KeysBestEffort,
-  deleteS3Prefix,
-} from "./s3Cleanup";
+import { deleteS3Keys, deleteS3KeysBestEffort } from "./s3Cleanup";
 import { geoPdfTitle } from "./geoPdfTitle";
 import {
   geoPdfDownloadFilename,
   presignResult,
+  planResultKeyFor,
   resultKeyFor,
   TOPO_BUCKET,
 } from "./geoPdfResult";
@@ -309,7 +306,7 @@ export async function copyGeoPdf(
   const bytes = source.resultBytes ?? 0n;
   await assertHasStorageQuota(recipientId, bytes);
   const id = randomUUID();
-  const key = resultKeyFor(id);
+  const key = "planId" in owner ? planResultKeyFor(id) : resultKeyFor(id);
   try {
     await s3.send(
       new CopyObjectCommand({
@@ -560,7 +557,7 @@ export async function deletePlanItem(
     );
   }
   if (kind === "geoPdf")
-    await deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`);
+    await deleteS3Keys(TOPO_BUCKET, [planResultKeyFor(id)]);
 
   await prisma.$transaction(async (tx) => {
     await touchPlan(tx, planId);
@@ -629,9 +626,7 @@ export async function deletePlanWithFiles<T>(
   const knownJobs = new Set(jobs.map((j) => j.id));
   await Promise.all([
     deleteS3Keys(MEDIA_BUCKET, knownKeys),
-    ...[...knownJobs].map((id) =>
-      deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
-    ),
+    deleteS3Keys(TOPO_BUCKET, [...knownJobs].map(planResultKeyFor)),
   ]);
 
   const late = await prisma.$transaction(async (tx) => {
@@ -655,6 +650,6 @@ export async function deletePlanWithFiles<T>(
     };
   });
   await deleteS3KeysBestEffort(MEDIA_BUCKET, late.keys);
-  await deleteS3KeysBestEffort(TOPO_BUCKET, late.jobs.map(resultKeyFor));
+  await deleteS3KeysBestEffort(TOPO_BUCKET, late.jobs.map(planResultKeyFor));
   return late.result;
 }

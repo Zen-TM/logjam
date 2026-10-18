@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
-import { resultKeyFor } from "../lib/geoPdfResult";
+import { planResultKeyFor, resultKeyFor } from "../lib/geoPdfResult";
 import {
   API_URL,
   ALICE_ID,
@@ -338,8 +338,28 @@ describe("plan files and storage", () => {
       where: { id: res.body.item.id },
     });
     expect(copy).toMatchObject({ userId: null, planId, status: "completed" });
-    expect(copy.resultKey).toBe(resultKeyFor(copy.id));
+    // Guard: outside the bucket's 7-day `exports/` expiry. Mutation: copy
+    // into a plan at resultKeyFor in copyGeoPdf.
+    expect(copy.resultKey).toBe(planResultKeyFor(copy.id));
+    await s3.send(
+      new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: copy.resultKey! }),
+    );
     expect(await used(ALICE_ID)).toBe(before + 1234n);
+
+    // Saved out, it is an owned export again, under the export TTL.
+    const bobBefore = await used(BOB_ID);
+    const saved = await request(API_URL)
+      .post(`/plans/${planId}/items/geoPdf/${copy.id}/save`)
+      .set(as(BOB_SUB))
+      .send({});
+    expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+    const own = await prisma.geoPdfJob.findUniqueOrThrow({
+      where: { id: saved.body.id },
+    });
+    expect(own).toMatchObject({ userId: BOB_ID, planId: null });
+    expect(own.resultKey).toBe(resultKeyFor(own.id));
+    expect(await used(BOB_ID)).toBe(bobBefore + 1234n);
+    await request(API_URL).delete(`/geo-pdf/${own.id}`).set(as(BOB_SUB));
 
     // Guard: deleting the plan refunds. Mutation: drop refund() in
     // deletePlanWithFiles, leaving the cascade to take the rows.
@@ -348,6 +368,11 @@ describe("plan files and storage", () => {
       .set(as(ALICE_SUB));
     expect(del.status).toBe(204);
     expect(await used(ALICE_ID)).toBe(before);
+    await expect(
+      s3.send(
+        new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: copy.resultKey! }),
+      ),
+    ).rejects.toThrow();
     await prisma.geoPdfJob.delete({ where: { id: jobId } });
   });
 
