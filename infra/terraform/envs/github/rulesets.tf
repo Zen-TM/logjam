@@ -15,9 +15,13 @@ locals {
   # (image-build.yml) build the Docker images on a PR that changes what they
   # are built from, and pass at once otherwise. gitleaks (ci.yml) catches
   # what push protection cannot: it knows only providers' key formats, while
-  # gitleaks also flags generic high-entropy secrets. The heavy ci.yml jobs
-  # (api-integration, mobile, migrations, migration-upgrade) skip, and so
-  # pass, on a PR that touches nothing they test (infra/scripts/ci-scope.sh).
+  # gitleaks also flags generic high-entropy secrets. The heavy jobs
+  # (api-integration, mobile, migrations, migration-upgrade, topo-e2e,
+  # rollback-compat's "Live release on this schema", terraform-ci's,
+  # setup-smoke) skip, and so pass, on a PR that touches nothing they test
+  # (infra/scripts/ci-scope.sh); dependency-review passes when no manifest
+  # changed. Each workflow starts on every PR: a required check whose
+  # workflow never starts leaves the PR waiting.
   required_checks = [
     "shared",
     "api",
@@ -28,6 +32,15 @@ locals {
     "migrations",
     "migration-upgrade",
     "infra-scripts",
+    "topo-e2e",
+    "Live release on this schema",
+    "plan-summary",
+    "fmt",
+    "validate",
+    "test-github",
+    "test-prod",
+    "dependency-review",
+    "setup-smoke",
     "format",
     "actionlint",
     "plan-prod",
