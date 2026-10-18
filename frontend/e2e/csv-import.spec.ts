@@ -56,6 +56,11 @@ async function expectTallies(dialog: Locator, tallies: Record<string, string>) {
 
 /** Undo, if the result is on screen: the way out of a case that failed midway. */
 async function undoWhatWasImported(page: Page, dialog: Locator) {
+  // A failure while the request is in flight: let it land, or it is never undone.
+  await dialog
+    .getByRole("heading", { name: "Importing…" })
+    .waitFor({ state: "hidden", timeout: 30_000 })
+    .catch(() => {});
   const undo = dialog.getByRole("button", { name: "Undo this import" });
   if (!(await undo.isVisible())) return;
   await undo.click();
