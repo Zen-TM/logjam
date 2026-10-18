@@ -36,8 +36,9 @@ platform: privacy constrains every feature. Each package has its own
   `shared/` build, the Prisma client and `frontend/.env`. Without it the
   typecheck fails far from the cause.
 - A non-trivial feature, schema migration or convention change needs an issue
-  or the maintainer's sign-off on the approach; the PR says which. Small fixes
-  land directly.
+  or the maintainer's sign-off on the approach. Small fixes land directly.
+  Every PR body says which: `Closes #N`, or a line `No issue: <why>`. Guard:
+  the `pr-closes` check.
 - Logic both clients need lives in `shared/`, with a parity test; look for it
   there before writing it in a client. [0020](docs/decisions/0020-share-the-decision-not-the-drawing.md)
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
