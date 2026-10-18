@@ -17,16 +17,23 @@ import {
 } from "./topoSettings.js";
 
 /**
- * The colour MapLibre draws at `degrees`: the stop at or below it, because
- * every pair of stops either side of a band edge is a hair apart, so between
- * them the colour is the one the band holds.
+ * The colour MapLibre draws at `degrees` under `interpolate ["linear"]`:
+ * clamped outside the stops, a stop's own colour on it, and between two stops
+ * of different colours a blend of them.
  */
 function colourAt(expression: unknown[], degrees: number): unknown {
   const stops = expression.slice(3);
-  let colour = stops[1];
-  for (let i = 0; i < stops.length; i += 2)
-    if ((stops[i] as number) <= degrees) colour = stops[i + 1];
-  return colour;
+  const at = (i: number) => stops[i] as number;
+  if (degrees <= at(0)) return stops[1];
+  for (let i = 0; i + 2 < stops.length; i += 2) {
+    if (degrees > at(i + 2)) continue;
+    if (degrees === at(i)) return stops[i + 1];
+    if (degrees === at(i + 2)) return stops[i + 3];
+    return stops[i + 1] === stops[i + 3]
+      ? stops[i + 1]
+      : `a blend of ${String(stops[i + 1])} and ${String(stops[i + 3])}`;
+  }
+  return stops[stops.length - 1];
 }
 
 const CLEAR = "rgba(0,0,0,0)";
@@ -48,6 +55,7 @@ describe("slopeReliefColor", () => {
   it("paints each band in its own colour, with hard edges", () => {
     expect(colourAt(expression, 39.9)).toBe(CLEAR);
     expect(colourAt(expression, 40)).toBe(rgbaCssFromHex(BANDS[0]!.colour));
+    expect(colourAt(expression, 45)).toBe(rgbaCssFromHex(BANDS[0]!.colour));
     expect(colourAt(expression, 49.99)).toBe(rgbaCssFromHex(BANDS[0]!.colour));
     expect(colourAt(expression, 50)).toBe(rgbaCssFromHex(BANDS[1]!.colour));
     expect(colourAt(expression, 90)).toBe(rgbaCssFromHex(BANDS[3]!.colour));
@@ -57,8 +65,8 @@ describe("slopeReliefColor", () => {
     );
   });
 
-  // Mutation: drop the leading clear stop, and no-data (−32768) clamps to the
-  // first band's colour wherever a band starts at 0°.
+  // Mutation: start `below` at the first band's colour, and no-data (−32768)
+  // clamps to it wherever a band starts at 0°.
   it("leaves no-data clear, even under a band from 0°", () => {
     const fromFlat: SlopeBand[] = [
       { fromDeg: 0, toDeg: 10, colour: "#00ff00ff" },

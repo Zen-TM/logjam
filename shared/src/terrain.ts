@@ -90,7 +90,7 @@ const EDGE = 0.001;
  * Guard: `terrain.test.ts`.
  */
 export function slopeReliefColor(bands: readonly SlopeBand[]): unknown[] {
-  const stops: (string | number)[] = [-1, CLEAR];
+  const stops: (string | number)[] = [];
   let below = CLEAR;
   for (const band of bands) {
     const colour = rgbaCssFromHex(band.colour);

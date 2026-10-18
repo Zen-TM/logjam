@@ -410,7 +410,10 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   };
 }
 
-/** A fresh copy: a caller that edits it must not edit the template default. */
+/**
+ * A fresh copy: a caller that edits it must not edit the template default.
+ * Guard: `terrain.test.ts` ("hands out a copy of the defaults").
+ */
 function defaultSlopeBands(): SlopeBand[] {
   return RASTER_TEMPLATE_DEFAULTS.slope.bands.map((band) => ({ ...band }));
 }
