@@ -7,8 +7,8 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 // reaches. The expected values below are those files' goldens.
 //
 // Writes to the account, then takes it back: every case ends in Undo (also when
-// an assertion fails, `undoWhatWasImported`), and touches no seeded place,
-// because Undo spares a place an import merged into. Undo leaves sync
+// an assertion fails, `undoWhatWasImported`), and touches no seeded place, so
+// a pass never rests on Undo putting a merged-into place back. Undo leaves sync
 // tombstones behind, so a local integration run after this spec needs a
 // re-seed: `_globalSetup.ts` refuses to start on a DB that differs from the seed.
 // Undo lives on the result, so what the import did is read there, before Undo.
@@ -98,9 +98,7 @@ test("a place list: map, preview, import, see it in Places, Undo", async ({
       ).toHaveValue(role);
     }
 
-    // Both rows are new, so there is no review step. The file avoids the
-    // seeded places on purpose: Undo spares a place an import merged into, with
-    // the file's values still written (api/src/routes/imports.ts).
+    // Both rows are new, so there is no review step.
     await next(dialog);
     await expect(
       dialog.getByRole("heading", { name: "Confirm import" }),

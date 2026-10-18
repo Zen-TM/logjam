@@ -740,6 +740,8 @@ router.delete(
       prisma.tripLogPlace.deleteMany({
         where: { tripLog: { userId: user.id } },
       }),
+      // Explicit even though every relation cascades.
+      prisma.importSnapshot.deleteMany({ where: { ownerId: user.id } }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.place.deleteMany({ where: { ownerId: user.id } }),
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
