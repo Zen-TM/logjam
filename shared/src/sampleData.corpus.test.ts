@@ -1,17 +1,24 @@
 // Golden tests on the large PUBLIC inputs that are not committed (an ELVIS
 // LiDAR ZIP and DEM ZIP, an NSW topo GeoPDF sheet; CC BY 4.0, © State of NSW).
 // `scripts/sample-data.sh` fetches them from the hash-pinned `sample-data-v1`
-// release into SAMPLE_DATA_DIR; without that variable this file is skipped, like
-// nswSample.test.ts beside the parsers:
+// release into SAMPLE_DATA_DIR; without that variable the real-file cases here
+// are skipped, like nswSample.test.ts beside the parsers. To run them, from the
+// repo root fetch the files (they land in the gitignored .cache/sample-data):
 //
-//   SAMPLE_DATA_DIR=$(dirname "$(scripts/sample-data.sh elvis-katoomba-2506258-laz.zip \
-//     elvis-katoomba-2506258-dem2m.zip nsw-topo-8929-4N-yerranderie.pdf | head -1)") \
-//     npx vitest run src/sampleData.corpus.test.ts
+//   scripts/sample-data.sh elvis-katoomba-2506258-laz.zip \
+//     elvis-katoomba-2506258-dem2m.zip nsw-topo-8929-4N-yerranderie.pdf
+//
+// then from shared/:
+//
+//   SAMPLE_DATA_DIR=../.cache/sample-data npx vitest run src/sampleData.corpus.test.ts
 //
 // Each golden (`__fixtures__/sample-data/*.golden`) is what the parser reports
 // for that file, numbers rounded to 6 places. After an intended change, rerun
-// with `-u` and read the diff. The ZIP-slip and empty-ZIP cases are synthetic
-// and always run.
+// with `-u` and read the diff. The ZIP-slip and empty-ZIP guards are in
+// elvisZip.test.ts.
+// Mutation that turns it red: changing DERIVATIVE_STEM_TOKENS (the ELVIS
+// goldens change), or the control-point transform in buildGeoTransform (the
+// sheet golden changes).
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -121,55 +128,5 @@ describe.runIf(sampleDir)("public sample inputs", () => {
         },
       }),
     ).toMatchFileSnapshot(golden("nsw-topo-8929-4N-yerranderie.pdf"));
-  });
-});
-
-// The two bad ZIPs, built here: only the central directory is read.
-function zipWithEntries(names: string[]): Uint8Array {
-  const enc = new TextEncoder();
-  const centrals = names.map((n) => {
-    const nameBytes = enc.encode(n);
-    const c = new Uint8Array(46 + nameBytes.length);
-    const v = new DataView(c.buffer);
-    v.setUint32(0, 0x02014b50, true);
-    v.setUint16(28, nameBytes.length, true);
-    c.set(nameBytes, 46);
-    return c;
-  });
-  const cdSize = centrals.reduce((s, c) => s + c.length, 0);
-  const eocd = new Uint8Array(22);
-  const ev = new DataView(eocd.buffer);
-  ev.setUint32(0, 0x06054b50, true);
-  ev.setUint16(8, names.length, true);
-  ev.setUint16(10, names.length, true);
-  ev.setUint32(12, cdSize, true);
-  ev.setUint32(16, 0, true);
-  const out = new Uint8Array(cdSize + 22);
-  let pos = 0;
-  for (const c of [...centrals, eocd]) {
-    out.set(c, pos);
-    pos += c.length;
-  }
-  return out;
-}
-
-describe("synthetic bad ELVIS ZIPs", () => {
-  const report = (zip: Uint8Array) => {
-    try {
-      return classifyElvisEntries(parseZipCentralDirectory(zip, zip.length));
-    } catch (err) {
-      const e = err as ElvisZipError;
-      return { error: e.code, sentence: e.sentence };
-    }
-  };
-
-  it("refuses a ZIP-slip entry with UNSAFE_PATH", () => {
-    expect(
-      report(zipWithEntries(["../../evil.laz", "Katoomba201804/ok.laz"])),
-    ).toMatchObject({ error: "UNSAFE_PATH" });
-  });
-
-  it("refuses an empty ZIP with EMPTY_ZIP", () => {
-    expect(report(zipWithEntries([]))).toMatchObject({ error: "EMPTY_ZIP" });
   });
 });
