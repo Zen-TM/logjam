@@ -84,11 +84,15 @@ describe("parseLatLng", () => {
   it("parses decimal degrees", () => {
     expect(parseLatLng("-33.5")).toEqual({ ok: true, value: -33.5 });
   });
-  it("returns coordFormat for DMS notation (not auto-converted)", () => {
-    expect(parseLatLng("33°44'00\"S")).toMatchObject({
-      ok: false,
-      reason: "coordFormat",
-    });
+  it("converts DMS notation, south and west negative", () => {
+    const v = (raw: string) => (parseLatLng(raw) as { value: number }).value;
+    expect(v("33°30'00\"S")).toBeCloseTo(-33.5);
+    expect(v("33° 33' 33.12\" S")).toBeCloseTo(-33.5592);
+    expect(v("150 15 0 E")).toBeCloseTo(150.25);
+    expect(v("150°15'00\"W")).toBeCloseTo(-150.25);
+  });
+  it("reads a decimal comma", () => {
+    expect(parseLatLng("-33,5603")).toEqual({ ok: true, value: -33.5603 });
   });
   it("returns nonNumeric for unrecognised text", () => {
     expect(parseLatLng("somewhere")).toMatchObject({

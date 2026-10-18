@@ -12,7 +12,6 @@ export type MismatchKind =
   | "nonNumeric"
   | "unparsableArray"
   | "unparsableJson"
-  | "coordFormat"
   | "booleanish"
   | "mixedTypes"
   | "emptyDominant";
@@ -73,34 +72,32 @@ export function parseIntStrict(
   return { ok: true, value: n };
 }
 
+// Degrees minutes seconds with a hemisphere letter or a leading minus: 33°44'00"S,
+// 33° 33' 33.12" S, 33 44 00 S. Null when the text isn't DMS.
+export function parseDms(raw: string): number | null {
+  const match = raw
+    .trim()
+    .match(/^(-?)(\d+)[°\s]+(\d+)['′\s]+(\d+(?:\.\d+)?)["″\s]*([NSEWnsew]?)$/);
+  if (!match) return null;
+  const [, sign, deg, min, sec, dir] = match;
+  const decimal = Number(deg) + Number(min) / 60 + Number(sec) / 3600;
+  return sign === "-" || "SsWw".includes(dir || "-") ? -decimal : decimal;
+}
+
 export function parseLatLng(raw: string): ParseResult<number> {
   const trimmed = raw.trim();
   if (!trimmed) return { ok: true, value: NaN };
 
-  // Decimal degrees — happy path
-  const n = Number(trimmed);
+  // Decimal degrees — happy path; a lone comma between digits is a decimal
+  // comma (-33,5603), as a semicolon-separated export writes it.
+  const n = Number(
+    /^-?\d+,\d+$/.test(trimmed) ? trimmed.replace(",", ".") : trimmed,
+  );
   if (!isNaN(n)) return { ok: true, value: n };
 
-  // DMS: e.g. 33°44'00"S or 33 44 00 S
-  const dmsMatch = trimmed.match(
-    /^(-?)(\d+)[°\s](\d+)['\s](\d+(?:\.\d+)?)["\s]?([NSEWnsew]?)$/,
-  );
-  if (dmsMatch) {
-    return { ok: false, reason: "coordFormat", raw };
-  }
+  const dms = parseDms(trimmed);
+  if (dms !== null) return { ok: true, value: dms };
   return { ok: false, reason: "nonNumeric", raw };
-}
-
-export function parseDms(raw: string): number | null {
-  const trimmed = raw.trim();
-  const dmsMatch = trimmed.match(
-    /^(-?)(\d+)[°\s](\d+)['\s](\d+(?:\.\d+)?)["\s]?([NSEWnsew]?)$/,
-  );
-  if (!dmsMatch) return null;
-  const [, sign, deg, min, sec, dir] = dmsMatch;
-  const decimal = Number(deg) + Number(min) / 60 + Number(sec) / 3600;
-  const negative = sign === "-" || ["S", "s", "W", "w"].includes(dir);
-  return negative ? -decimal : decimal;
 }
 
 // Parses altNames from various formats:

@@ -2,10 +2,61 @@
   "headers": [
     "Name",
     "Coordinates",
-    "Rating"
+    "Rating",
+    "Latitude",
+    "Longitude"
   ],
   "dataRows": 2,
   "parseErrors": [],
-  "kind": "unknown",
-  "blocked": "not a place list or logbook"
+  "kind": "place",
+  "assignments": {
+    "Name": "name",
+    "Coordinates": "discard",
+    "Rating": "quality",
+    "Latitude": "latitude",
+    "Longitude": "longitude"
+  },
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5592,
+        "longitude": 150.4033
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Corpus Ropewiki Style Canyon",
+      "input": {
+        "name": "Corpus Ropewiki Style Canyon",
+        "latitude": -33.3,
+        "longitude": 150.25
+      }
+    }
+  ],
+  "warnings": [
+    "Row 2: Quality \"3B III\" isn't a number — left empty",
+    "Row 3: Quality \"2A II\" isn't a number — left empty"
+  ],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Ropewiki Style Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
 }
