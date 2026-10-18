@@ -28,6 +28,7 @@ import { deletePlacesCascade } from "../lib/bulkDelete";
 import {
   diffFields,
   placeFields,
+  restorableUntil,
   snapshotWrites,
   type Change,
 } from "../lib/importSnapshot";
@@ -458,6 +459,7 @@ router.post(
     // importKey between our idempotency lookup and this write (TOCTOU). Surface it
     // as a structured 409 instead of a raw 500. No place name/coords
     // in the message (privacy rule).
+    let recorded = 0;
     try {
       // Creates via createMany in chunks.
       for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
@@ -497,16 +499,18 @@ router.post(
           const change = diffFields(stored, { ...stored, ...data });
           if (change) changes.set(placeId, change);
         }
+        const snapshots = await snapshotWrites(
+          user.id,
+          body.importBatchId,
+          "placeId",
+          changes,
+        );
+        recorded += snapshots.recorded;
         await prisma.$transaction([
           ...chunk.map(([placeId, { data }]) =>
             prisma.place.update({ where: { id: placeId }, data }),
           ),
-          ...(await snapshotWrites(
-            user.id,
-            body.importBatchId,
-            "placeId",
-            changes,
-          )),
+          ...snapshots.writes,
         ]);
       }
     } catch (err) {
@@ -534,6 +538,7 @@ router.post(
       })),
       skipped: 0,
       errors,
+      restorableUntil: restorableUntil(recorded),
     });
   },
 );

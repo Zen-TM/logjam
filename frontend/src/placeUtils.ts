@@ -1155,6 +1155,9 @@ export type BulkPlaceResult = {
   merges: PlaceMergePair[];
   skipped: number;
   errors: { rowIndex: number; message: string }[];
+  /** Until when Undo can put back what this request changed; null (or absent,
+   *  from an older API) when it changed nothing it can put back. */
+  restorableUntil?: string | null;
 };
 
 export function bulkPlaceImport(
@@ -1185,6 +1188,8 @@ export type BulkTripLogResult = {
   imported: number;
   updated: number;
   errors: { index: number; error: string }[];
+  /** As on BulkPlaceResult. */
+  restorableUntil?: string | null;
 };
 
 export function bulkCreateTripLogs(

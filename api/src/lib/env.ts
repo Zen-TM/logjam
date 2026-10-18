@@ -239,6 +239,13 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(7_776_000_000), // 90 days
+  // How long Undo can put back what an import changed on existing places and
+  // trips (lib/importSnapshot.ts); the reaper sweeps snapshots older than this.
+  IMPORT_SNAPSHOT_TTL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(86_400_000), // 24 h
   // Fleet-wide full-resync lever: bump when server-side data
   // changes shape without moving updatedAt (e.g. a migration rewriting rows).
   // Clients whose cursor was minted under a different epoch get resetRequired.

@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../services/prisma", () => ({ default: {} }));
+const deleteMany = vi.fn(async () => ({ count: 2 }));
+vi.mock("../services/prisma", () => ({
+  default: { importSnapshot: { deleteMany } },
+}));
 
-const { combineChanges, diffFields, restoreFields } = await import(
-  "./importSnapshot"
-);
+const {
+  combineChanges,
+  diffFields,
+  restorableUntil,
+  restoreFields,
+  sweepExpiredImportSnapshots,
+} = await import("./importSnapshot");
 
 const stored = {
   notes: null,
@@ -101,5 +108,24 @@ describe("restoreFields", () => {
     expect(
       restoreFields({ notes: null, fieldValues: { aca: "a" } }, change),
     ).toEqual({ restore: {}, kept: 0 });
+  });
+});
+
+describe("retention", () => {
+  const now = new Date("2026-10-18T12:00:00.000Z");
+
+  // Mutation that turns it red: sweeping by anything but createdAt older than
+  // the TTL (24 h by default), or not sweeping at all.
+  it("sweeps snapshots written more than a day ago", async () => {
+    expect(await sweepExpiredImportSnapshots(now)).toBe(2);
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { createdAt: { lt: new Date("2026-10-17T12:00:00.000Z") } },
+    });
+  });
+
+  // Mutation that turns it red: promising a restore when nothing was recorded.
+  it("says until when Undo can restore, and nothing when there is nothing", () => {
+    expect(restorableUntil(1, now)).toBe("2026-10-19T12:00:00.000Z");
+    expect(restorableUntil(0, now)).toBeNull();
   });
 });

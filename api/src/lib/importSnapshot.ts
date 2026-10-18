@@ -8,6 +8,15 @@
 // compared and restored key by key, so editing one attribute after an import
 // keeps that attribute and nothing else. Guards: importSnapshot.unit.test.ts,
 // src/__tests__/import.test.ts.
+//
+// RETENTION: a snapshot lives IMPORT_SNAPSHOT_TTL_MS (24 h by default) from
+// its last write, then the reaper's sweep deletes it (sweepExpiredImportSnapshots,
+// run by startTopoJobReaper). Undo is offered only on Logjam Web's import
+// result screen, so a snapshot outliving that is clutter holding old copies of
+// user text. Undo after expiry still deletes what the batch created and
+// restores nothing; each import response says until when it can restore
+// (`restorableUntil`), and Logjam Web's confirm says so. Undo, the row's
+// delete and account delete remove a snapshot sooner.
 import { isDeepStrictEqual } from "node:util";
 import {
   enforceCanyoningTag,
@@ -15,6 +24,7 @@ import {
   setFieldValues,
 } from "@logjam/shared";
 import prisma from "../services/prisma";
+import { getEnv } from "./env";
 
 export type RowFields = Record<string, unknown>;
 export type Change = { before: RowFields; after: RowFields };
@@ -148,7 +158,7 @@ export async function snapshotWrites(
   column: "placeId" | "tripLogId",
   changes: Map<string, Change>,
 ) {
-  if (changes.size === 0) return [];
+  if (changes.size === 0) return { writes: [], recorded: 0 };
   const ids = [...changes.keys()];
   const where = {
     ownerId,
@@ -180,10 +190,33 @@ export async function snapshotWrites(
         ]
       : [];
   });
-  return [
-    prisma.importSnapshot.deleteMany({ where }),
-    prisma.importSnapshot.createMany({ data: rows }),
-  ];
+  return {
+    writes: [
+      prisma.importSnapshot.deleteMany({ where }),
+      prisma.importSnapshot.createMany({ data: rows }),
+    ],
+    recorded: rows.length,
+  };
+}
+
+/** Until when Undo can put back what a request recorded, or null if it
+ *  recorded nothing. */
+export function restorableUntil(recorded: number, now = new Date()) {
+  return recorded > 0
+    ? new Date(now.getTime() + getEnv().IMPORT_SNAPSHOT_TTL_MS).toISOString()
+    : null;
+}
+
+/** Deletes snapshots past their retention (see the header). */
+export async function sweepExpiredImportSnapshots(now = new Date()) {
+  const { count } = await prisma.importSnapshot.deleteMany({
+    where: {
+      createdAt: {
+        lt: new Date(now.getTime() - getEnv().IMPORT_SNAPSHOT_TTL_MS),
+      },
+    },
+  });
+  return count;
 }
 
 /** Puts back what a batch changed on rows it did not create, as ordinary
