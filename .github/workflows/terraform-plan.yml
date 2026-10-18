@@ -223,12 +223,11 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # The plan App: read-only on settings. Its key is a repository secret,
-      # so anyone who can push a branch here can reach it; it grants nothing
-      # such a collaborator does not already have
-      # (docs/decisions/0025-github-settings-in-terraform.md). Being read-only,
-      # it cannot see rulesets' bypass_actors; plan-summary.mjs counts an
-      # update to those alone as no change (ROOTS.github.unreadable).
+      # The plan App: read-only on settings. Its key is a secret of the
+      # terraform-plan Environment, so only a run the maintainer approved
+      # reaches it (docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md).
+      # Being read-only, it cannot see rulesets' bypass_actors; plan-summary.mjs
+      # counts an update to those alone as no change (ROOTS.github.unreadable).
       - name: GitHub token for the plan
         id: app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
