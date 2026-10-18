@@ -133,3 +133,4 @@ supersede instead.
 | [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md) | Pull-request plans run unattended, and a main-only job signs their comments | 2026-10-18 | Accepted |
 | [0036](0036-the-phone-cuts-its-own-offline-clips.md) | Logjam GPS cuts every offline clip itself, from the public archives, for guests too | 2026-10-18 | Accepted |
 | [0037](0037-undo-restores-what-an-import-changed-for-a-day.md) | Undoing an import puts back what it changed, field by field, for a day | 2026-10-18 | Accepted |
+| [0038](0038-a-forecast-request-sends-the-cell-not-the-spot.md) | A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo | 2026-10-18 | Accepted |

@@ -57,6 +57,7 @@ import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
+import { PlaceWeatherSection } from "../weather/PlaceWeatherSection";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { AddWaySheet } from "./AddWaySheet";
@@ -393,6 +394,8 @@ export function PlaceDetailScreen({
     navigate: () => (
       <Row icon="navigateTo" title={copy.openInMaps} onPress={openInMapsApp} />
     ),
+
+    weather: () => <PlaceWeatherSection place={place} />,
 
     // Named for the TYPE, like the form and the filter sheet: on a campsite
     // these are Capacity and Is-a-cave, which are system definitions, not custom ones.

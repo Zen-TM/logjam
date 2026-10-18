@@ -89,6 +89,13 @@ export const PLACE_REGISTRY_DIR = `${FileSystem.documentDirectory}place-registry
 export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 
 /**
+ * The last forecast for each 0.1° cell the user asked about
+ * (`weather/weatherStorage.ts`, ADR 0038). WIPED: a cell is where this person
+ * went looking, which is location history at 11 km rather than none.
+ */
+export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
+
+/**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
  * cleared by table, so their files survive with no rows (see wipeLocalData.ts).
  */
@@ -100,6 +107,7 @@ export const WIPED_DIRS = [
   RECORDED_TRACK_DIR,
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
+  WEATHER_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */

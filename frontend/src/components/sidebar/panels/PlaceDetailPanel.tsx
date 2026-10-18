@@ -31,6 +31,7 @@ import {
   contractSectionsFor,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
+  WEATHER,
   placeAttributesTitle,
   placeSources,
   placeStatus,
@@ -45,6 +46,7 @@ import {
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
+import { PlaceWeather } from "../../weather/PlaceWeather";
 import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
@@ -714,6 +716,19 @@ function PlaceDetailPanel({
               onClick={() => void handleCopyCoordinates()}
             />
           }
+        />
+      </section>
+    ),
+
+    // Asks Open-Meteo for the 0.1° cell round the place and nothing more
+    // (ADR 0038), and only on this press.
+    weather: () => (
+      <section className={classes.section}>
+        <SectionHeader title={WEATHER.title} />
+        <PlaceWeather
+          key={`${current.id}:${current.latitude},${current.longitude},${current.elevation ?? ""}`}
+          point={current}
+          elevationM={current.elevation ?? null}
         />
       </section>
     ),

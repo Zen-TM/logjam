@@ -26,6 +26,8 @@ export const PLACE_PAGE = {
       reason:
         "A phone hands a position to its navigation app. A desktop browser has none to hand it to.",
     },
+    // "Show the weather here": WEATHER's words and figures.
+    { key: "weather" },
     // Only the attributes the place answered: a form asks every question, a
     // page reports the answers.
     { key: "attributes" },
