@@ -122,6 +122,8 @@ export const ASSET_HUES = {
    *  waypoint is a thing you are trying to FIND again. Lifted for contrast as
    *  a glyph on Sandstone. */
   waypoint: "#D98170",
+  /** Trip plans — dusk sky: a trip still ahead, cooler than anything done. */
+  plan: "#A8B6D6",
 } as const;
 
 /**
