@@ -130,3 +130,4 @@ supersede instead.
 | [0032](0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md) | A contributor's AWS access is read-only, behind the CI privacy Deny and MFA | 2026-10-08 | Accepted |
 | [0033](0033-the-api-writes-the-sentence-a-user-reads.md) | The API writes the sentence a user reads when it refuses a request | 2026-10-13 | Accepted |
 | [0034](0034-location-search-reads-a-public-osm-place-registry.md) | Location search reads a public place registry built from OpenStreetMap | 2026-10-17 | Accepted |
+| [0035](0035-a-forecast-request-sends-the-cell-not-the-spot.md) | A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo | 2026-10-18 | Accepted |

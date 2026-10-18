@@ -133,6 +133,18 @@ export const ICONS = {
   sensors: { web: "cpu", gps: "cpu" },
   elevation: { web: "trending-up", gps: "trending-up" },
   scaleBar: { web: "ruler-dimension-line", gps: "mci:ruler-square-compass" },
+  weather: { web: "umbrella", gps: "umbrella" }, // the forecast for a spot
+
+  // — weather: one per `WEATHER_CONDITIONS` entry. Feather's plain cloud is
+  // already sync's and its sun a trip type's, so those draw MaterialCommunityIcons' —
+  weatherClear: { web: "sun-medium", gps: "mci:weather-sunny" }, // "sun" is bushwalking's
+  weatherPartCloud: { web: "cloud-sun", gps: "mci:weather-partly-cloudy" },
+  weatherCloud: { web: "cloudy", gps: "mci:weather-cloudy" },
+  weatherFog: { web: "cloud-fog", gps: "mci:weather-fog" },
+  weatherDrizzle: { web: "cloud-drizzle", gps: "cloud-drizzle" },
+  weatherRain: { web: "cloud-rain", gps: "cloud-rain" },
+  weatherStorm: { web: "cloud-lightning", gps: "cloud-lightning" },
+  weatherSnow: { web: "cloud-snow", gps: "cloud-snow" },
 } as const satisfies Record<string, { web: LucideKebabName; gps: GpsGlyph }>;
 
 export type IconIdea = keyof typeof ICONS;
