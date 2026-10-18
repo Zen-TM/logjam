@@ -143,10 +143,11 @@ Nothing new calls it.
 - **Update 2026-10-18: the endpoint is gone (#510).** `POST /basemap/region-clip`
   and what existed only for it (`regionClip.ts`, `regionClipLimiter` and its
   test, the bbox redaction paths and their test, the `pmtiles` binary in `api/Dockerfile`,
-  `PROTOMAPS_ARCHIVE_URI` from the API and its environment) are removed, so
-  the API has no route that takes a saved area's bounds. What held it up was a supported Logjam GPS build that
-  calls it ([0022](0022-mobile-builds-supported-three-months.md)), and there is
-  none. 0022 dates support by a release event, a `mobile-vX.Y.Z` tag or a Play
+  `PROTOMAPS_ARCHIVE_URI` from the API and its environment (updated
+  2026-10-18)) are removed, so the API has no route that takes a saved area's
+  bounds. What held it up was a supported Logjam GPS build that calls it
+  ([0022](0022-mobile-builds-supported-three-months.md)), and there is none.
+  0022 dates support by a release event, a `mobile-vX.Y.Z` tag or a Play
   Store release, and no Logjam GPS build has either, so none is a supported
   build in its sense. The only build that calls the endpoint is the
   maintainer's own pre-phone-cut build, which saves an area without its vector,
