@@ -60,6 +60,7 @@ import {
   newestNotificationsFirst,
   notificationActions,
   notificationAnnouncement,
+  notificationVerb,
   notificationDeleteConfirm,
   notificationHaystack,
   notificationLabel,
@@ -1346,6 +1347,18 @@ const NotificationRow = memo(function NotificationRow({
               <Text style={styles.actionHint}>Needs a connection</Text>
             ) : null}
           </>
+        ) : notificationAnnouncement(item) ? (
+          // A button, not only the row: nothing else says a row opens a message.
+          <View style={styles.actions}>
+            <Button
+              label={notificationVerb("readMessage").label}
+              variant="outlineAccent"
+              compact
+              grow
+              disabled={selecting}
+              onPress={() => onPress(item)}
+            />
+          </View>
         ) : null
       }
     />
