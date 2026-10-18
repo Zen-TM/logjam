@@ -9,6 +9,10 @@ Mutations that turn this red: add a variable to either job's env block; delete
 the Expo push stub step from either workflow; delete EXPO_PUSH_URL from ci.yml
 or point it at exp.host (no CI run may reach Expo).
 
+topo-e2e boots the same API, so its services must equal api-integration's and
+its env carry every variable of api-integration's, less what only that suite
+needs (API_ONLY_ENV).
+
 Usage: rollback-compat-mirrors-ci.py   (from anywhere in the repo; needs PyYAML)
 """
 
@@ -20,6 +24,15 @@ import yaml
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 # rollback-compat's own additions, which api-integration has no use for.
 OWN_ENV = {"PROD_API_URL", "LIVE_DIR"}
+# api-integration's env that topo-e2e leaves out on purpose: no RunTask (so no
+# ECS_*) and no suite hammering the rate limiter.
+API_ONLY_ENV = {
+    "API_URL",
+    "ECS_SUBNETS",
+    "ECS_SECURITY_GROUPS",
+    "RATE_LIMIT_GLOBAL_MAX",
+    "RATE_LIMIT_USER_PATCH_MAX",
+}
 WAIT_STEPS = [
     "Wait for MiniStack and create buckets",
     "Wait for API",
@@ -62,13 +75,25 @@ def main():
         if ci_runs.get(name) is None or ci_runs.get(name) != rc_runs.get(name):
             failures.append(f"step {name!r} differs or is missing")
 
+    topo = job("ci.yml", "topo-e2e")
+    if ci["services"] != topo["services"]:
+        failures.append("topo-e2e services differ from api-integration's")
+    for key in sorted(set(ci["env"]) - API_ONLY_ENV):
+        if ci["env"][key] != topo["env"].get(key):
+            failures.append(
+                f"env {key}: api-integration {ci['env'][key]!r}, "
+                f"topo-e2e {topo['env'].get(key)!r}"
+            )
+
     for f in failures:
         print(f"FAIL — {f}")
     if failures:
-        print("rollback-compat.yml must mirror ci.yml's api-integration job.")
+        print(
+            "rollback-compat.yml and topo-e2e must mirror ci.yml's api-integration job."
+        )
         return 1
     print(
-        "ok   — rollback-compat.yml mirrors api-integration's services, env and wait steps"
+        "ok   — rollback-compat.yml and topo-e2e mirror api-integration's services, env and wait steps"
     )
     return 0
 

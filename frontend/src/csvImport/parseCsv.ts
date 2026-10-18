@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { splitCombinedCoordinates } from "./combinedCoordinates";
 
 export type ParsedCsv = {
   headers: string[];
@@ -26,11 +27,33 @@ function renamedHeaderNotices(
   );
 }
 
+// A title line above the header ("My canyons - 2024", or Excel's "Title,,,")
+// would become the header. Skip leading lines with at most one filled cell
+// while a later line has more, looking at the first few lines only.
+const MAX_TITLE_LINES = 5;
+function dropTitleLines(chunk: string): string {
+  const lines = chunk
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/, MAX_TITLE_LINES + 1);
+  const filled = lines.map(
+    (l) =>
+      (Papa.parse<string[]>(l).data[0] ?? []).filter((c) => c.trim()).length,
+  );
+  const header = filled.findIndex((n) => n > 1);
+  if (header < 1) return chunk;
+  return chunk
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .slice(header)
+    .join("\n");
+}
+
 export function parseCsv(file: File): Promise<ParsedCsv> {
   return new Promise((resolve, reject) => {
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
+      beforeFirstChunk: dropTitleLines,
       // Trim headers at parse time so the row objects papaparse builds are keyed
       // by the SAME trimmed names we expose in `headers`. Without this, a CSV
       // whose header cells carry surrounding whitespace (" Name ,Date") keys the
@@ -54,7 +77,10 @@ export function parseCsv(file: File): Promise<ParsedCsv> {
           ),
           ...renamedHeaderNotices(result.meta.renamedHeaders),
         ];
-        resolve({ headers, rows, parseErrors });
+        resolve({
+          ...splitCombinedCoordinates(headers, rows),
+          parseErrors,
+        });
       },
       error: (err) => reject(new Error(err.message)),
     });

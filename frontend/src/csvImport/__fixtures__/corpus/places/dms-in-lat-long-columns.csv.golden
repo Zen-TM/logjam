@@ -12,11 +12,44 @@
     "Latitude": "latitude",
     "Longitude": "longitude"
   },
-  "rows": [],
-  "warnings": [
-    "Row 2: latitude \"33°33'33.12\"S\" couldn't be read — skipped",
-    "Row 3: latitude \"33 18 0 S\" couldn't be read — skipped"
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5592,
+        "longitude": 150.4033
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Corpus Spaced Dms Canyon",
+      "input": {
+        "name": "Corpus Spaced Dms Canyon",
+        "latitude": -33.3,
+        "longitude": 150.25
+      }
+    }
   ],
-  "droppedRows": 2,
-  "blocked": "No valid place rows found (each needs a name, latitude and longitude)."
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Spaced Dms Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
 }

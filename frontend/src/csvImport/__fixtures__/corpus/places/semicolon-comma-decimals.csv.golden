@@ -14,11 +14,46 @@
     "Longitude": "longitude",
     "Notes": "notes"
   },
-  "rows": [],
-  "warnings": [
-    "Row 2: latitude \"-33,5603\" couldn't be read — skipped",
-    "Row 3: latitude \"-33,3001\" couldn't be read — skipped"
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5603,
+        "longitude": 150.4033,
+        "notes": "Corpus note"
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Corpus Euro Canyon",
+      "input": {
+        "name": "Corpus Euro Canyon",
+        "latitude": -33.3001,
+        "longitude": 150.2501,
+        "notes": null
+      }
+    }
   ],
-  "droppedRows": 2,
-  "blocked": "No valid place rows found (each needs a name, latitude and longitude)."
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Euro Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
 }
