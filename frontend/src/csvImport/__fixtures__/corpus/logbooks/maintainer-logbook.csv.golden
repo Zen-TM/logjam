@@ -15,7 +15,7 @@
   "assignments": {
     "Name": "name",
     "Date": "date",
-    "Party": "discard",
+    "Party": "appendNotes",
     "Notes": "notes",
     "": "discard",
     "Total Unique Canyons": "discard",
@@ -23,13 +23,13 @@
     "Total Canyons": "discard"
   },
   "dateFormat": "DD/MM/YYYY",
-  "ambiguousDates": true,
+  "ambiguousDates": false,
   "rows": [
     {
       "rowIndex": 0,
       "sourcePlaceName": "Grand",
       "date": "2019-02-03",
-      "notes": "Corpus note: cold start, warm finish. The pool at the end was low, so we walked the last bit.",
+      "notes": "Corpus note: cold start, warm finish. The pool at the end was low, so we walked the last bit.\nParty: Sam, Pete",
       "types": [],
       "customFields": {}
     },
@@ -37,7 +37,7 @@
       "rowIndex": 1,
       "sourcePlaceName": "Jugglers",
       "date": "2019-02-03",
-      "notes": "Second canyon the same day",
+      "notes": "Second canyon the same day\nParty: Sam, Pete",
       "types": [],
       "customFields": {}
     },
@@ -45,7 +45,7 @@
       "rowIndex": 3,
       "sourcePlaceName": "Yileen",
       "date": "2019-11-17",
-      "notes": "Water was \"low\" and\nthe exit was overgrown",
+      "notes": "Water was \"low\" and\nthe exit was overgrown\nParty: Alex, Sam",
       "types": [],
       "customFields": {}
     },
@@ -53,7 +53,7 @@
       "rowIndex": 4,
       "sourcePlaceName": "Rocky Creek",
       "date": "2020-01-05",
-      "notes": "Which Rocky Creek? Corpus note",
+      "notes": "Which Rocky Creek? Corpus note\nParty: Sam",
       "types": [],
       "customFields": {}
     },
@@ -61,7 +61,7 @@
       "rowIndex": 5,
       "sourcePlaceName": "Wollangambe",
       "date": "2020-01-25",
-      "notes": null,
+      "notes": "Party: Sam, Pete, Alex",
       "types": [],
       "customFields": {}
     },
@@ -69,7 +69,7 @@
       "rowIndex": 6,
       "sourcePlaceName": "Empres Falls",
       "date": "2020-03-08",
-      "notes": "Misspelled in the spreadsheet",
+      "notes": "Misspelled in the spreadsheet\nParty: Sam",
       "types": [],
       "customFields": {}
     },
@@ -77,7 +77,7 @@
       "rowIndex": 7,
       "sourcePlaceName": "Serendipity",
       "date": "2020-03-22",
-      "notes": "Short name of Serendipity Canyon",
+      "notes": "Short name of Serendipity Canyon\nParty: Pete",
       "types": [],
       "customFields": {}
     },
@@ -85,7 +85,7 @@
       "rowIndex": 8,
       "sourcePlaceName": "Sarcophagus",
       "date": "2020-04-12",
-      "notes": null,
+      "notes": "Party: Alex",
       "types": [],
       "customFields": {}
     },
@@ -93,7 +93,7 @@
       "rowIndex": 9,
       "sourcePlaceName": "Corpus Unknown Gully",
       "date": "2020-04-19",
-      "notes": "A place that is not on the list",
+      "notes": "A place that is not on the list\nParty: Sam",
       "types": [],
       "customFields": {}
     }
@@ -143,9 +143,12 @@
     {
       "name": "Wollangambe",
       "decision": "review",
-      "confidence": "none",
+      "confidence": "review",
       "best": null,
-      "candidates": []
+      "candidates": [
+        "Wollangambe One",
+        "Wollangambe Crater"
+      ]
     },
     {
       "name": "Empres Falls",

@@ -17,6 +17,7 @@ const NAME_ALIASES = new Set([
   "location",
   "place",
   "site",
+  "canyon",
 ]);
 const DATE_ALIASES = new Set([
   "date",
@@ -36,6 +37,7 @@ const NOTES_ALIASES = new Set([
   "details",
   "remarks",
 ]);
+const PARTY_ALIASES = new Set(["party", "partners", "companions", "who"]);
 const TYPE_ALIASES = new Set(["type", "activity", "trip type"]);
 
 function normalize(s: string): string {
@@ -61,6 +63,8 @@ export function detectColumns(
       result[header] = "date";
     } else if (NOTES_ALIASES.has(n)) {
       result[header] = "notes";
+    } else if (PARTY_ALIASES.has(n)) {
+      result[header] = "appendNotes";
     } else if (TYPE_ALIASES.has(n)) {
       result[header] = "type";
     } else {

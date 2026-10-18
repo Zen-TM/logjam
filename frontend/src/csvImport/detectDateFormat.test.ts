@@ -93,6 +93,28 @@ describe("detectDateFormat", () => {
   });
 });
 
+describe("detectDateFormat on mixed and month-first samples", () => {
+  it("keeps ISO when a stray non-date sits among the samples", () => {
+    expect(
+      detectDateFormat(["2021-02-06", "sometime in March", "2021-04-10"]),
+    ).toEqual({ format: "YYYY-MM-DD", ambiguous: false });
+  });
+
+  it("reads month-first when a day above 12 only fits there", () => {
+    expect(detectDateFormat(["02/03/2020", "12/25/2020"])).toEqual({
+      format: "MM/DD/YYYY",
+      ambiguous: false,
+    });
+  });
+
+  it("flags day-first or month-first when every sample reads both ways", () => {
+    expect(detectDateFormat(["02/03/2020", "01/10/2020"])).toEqual({
+      format: "DD/MM/YYYY",
+      ambiguous: true,
+    });
+  });
+});
+
 describe("toIsoDate (ISO 8601)", () => {
   it("round-trips an ISO date", () => {
     expect(toIsoDate("2023-06-15", "YYYY-MM-DD")).toBe("2023-06-15");

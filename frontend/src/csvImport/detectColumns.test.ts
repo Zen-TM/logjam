@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { detectFileKind } from "./detectFileKind";
 import { detectColumns } from "./detectColumns";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 
@@ -44,10 +45,29 @@ describe("detectColumns", () => {
     expect(result["date"]).toBe("date");
     expect(result["type"]).toBe("type");
     expect(result["notes"]).toBe("notes");
-    // "Party" has no built-in trip field (TripLog has no participants column),
-    // so it is left for the user to map or ignore.
-    expect(result["Party"]).toBe("discard");
+    // "Party" has no field of its own (TripLog has no participants column), so
+    // it is added to the notes.
+    expect(result["Party"]).toBe("appendNotes");
   });
+
+  // detectFileKind and detectColumns each keep a name and a date alias list.
+  // Mutation that turns it red: adding an alias to one list only.
+  it.each(["Name", "Place", "Place name", "Location", "Site", "Canyon"])(
+    "agrees with detectFileKind on the name header %s",
+    (name) => {
+      for (const date of [
+        "Date",
+        "Trip Date",
+        "Visited",
+        "When",
+        "Visit date",
+      ]) {
+        const roles = Object.values(detectColumns([name, date], []));
+        expect(roles).toEqual(["name", "date"]);
+        expect(detectFileKind([name, date])).toBe("triplog");
+      }
+    },
+  );
 
   it("defaults unrecognised headers to discard", () => {
     const result = detectColumns(["Mystery"], customFields);
