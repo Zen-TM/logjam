@@ -15,7 +15,7 @@
 // PRIVACY: positions here are precise wilderness coordinates. Nothing logs.
 
 import {
-  NSW_5M,
+  DEM_SOURCES,
   sampleDem,
   type DemSource,
   type DemTileReader,
@@ -82,26 +82,52 @@ export function slopeDegrees(
   return (Math.atan(Math.hypot(eastward, southward)) * 180) / Math.PI;
 }
 
+export type DemSlopeReading = {
+  slopeDegrees: number;
+  /** The one source all nine heights were read from. */
+  sourceId: string;
+};
+
 /**
- * The slope at a position, or null where it cannot be told honestly.
+ * The slope at a position and the source it came from, or null where it
+ * cannot be told honestly.
  *
- * Read from ONE source and never down the usual list: all nine heights must
- * come from the same surface, and the worldwide 30 m tiles are too coarse for a
- * point slope (within 5° of a 5 m survey at 57 % of points, a median of 34° on
- * ground of 60° or steeper), where the NSW 5 m source is within 5° at 98 %. So
- * outside NSW, or where a saved area lacks a tile, the answer is null and no
- * slope is shown. `demSlope.test.ts` holds this.
+ * The finest source that has all nine heights answers, and all nine come from
+ * that one surface: a source that lacks a pixel of the window (the edge of a
+ * finer area, a tile not built) hands the position to the next one down.
+ * Never the worldwide 30 m tiles (`coverage` null), which are too coarse for
+ * a point slope: within 5° of a 5 m survey at 57 % of points, a median of 34°
+ * on ground of 60° or steeper, where the NSW 5 m source is within 5° at 98 %.
+ * So outside every regional source the answer is null and no slope is shown.
+ * `demSlope.test.ts` holds this.
  *
  * At zoom 15 the window is about 12 m across: a drop or slot narrower than
  * that is averaged away.
  */
+export async function demSlopeReading(
+  lon: number,
+  lat: number,
+  readTiles: DemTileReader,
+  sources: readonly DemSource[] = DEM_SOURCES,
+): Promise<DemSlopeReading | null> {
+  for (const source of sources) {
+    if (source.coverage === null) continue;
+    const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
+    const { heights } = await sampleDem(positions, readTiles, [source]);
+    const slope = slopeDegrees(heights, cellM);
+    if (slope != null) return { slopeDegrees: slope, sourceId: source.id };
+  }
+  return null;
+}
+
+/** `demSlopeReading`'s number alone. */
 export async function demSlopeAt(
   lon: number,
   lat: number,
   readTiles: DemTileReader,
-  source: DemSource = NSW_5M,
+  sources: readonly DemSource[] = DEM_SOURCES,
 ): Promise<number | null> {
-  const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
-  const { heights } = await sampleDem(positions, readTiles, [source]);
-  return slopeDegrees(heights, cellM);
+  return (
+    (await demSlopeReading(lon, lat, readTiles, sources))?.slopeDegrees ?? null
+  );
 }

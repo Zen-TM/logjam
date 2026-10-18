@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { demSlopeAt, demSlopeWindow, slopeDegrees } from "./demSlope.js";
-import { NSW_5M, type DemTileReader } from "./demSources.js";
+import {
+  demSlopeAt,
+  demSlopeReading,
+  demSlopeWindow,
+  slopeDegrees,
+} from "./demSlope.js";
+import { NSW_5M, type DemSource, type DemTileReader } from "./demSources.js";
 import { DEM_TILE_SIZE, resolveDemSamples } from "./demTiles.js";
 import { haversineMeters } from "./placeGeo.js";
 
@@ -157,5 +162,59 @@ describe("demSlopeAt", () => {
       source.id === NSW_5M.id ? new Map() : rising(1, asked)(source, tiles);
     expect(await demSlopeAt(POINT.lon, POINT.lat, onlyCoarse)).toBeNull();
     expect(asked).toEqual([]);
+  });
+
+  /** A made-up finer source over the same ground as POINT. */
+  const FINE = {
+    ...NSW_5M,
+    id: "fine-1m",
+    sampleZoom: 17,
+    coverage: [150, -34, 151, -33],
+  } as const satisfies DemSource;
+
+  // Mutation: read `NSW_5M` only (the old default), and the finer source never
+  // answers.
+  it("reads the finest source that has the window, all nine heights from it", async () => {
+    const asked: string[] = [];
+    const reading = await demSlopeReading(
+      POINT.lon,
+      POINT.lat,
+      rising(1, asked),
+      [FINE, NSW_5M],
+    );
+    expect(reading?.sourceId).toBe(FINE.id);
+    expect(asked).toEqual([FINE.id]);
+    const { cellM } = demSlopeWindow(POINT.lon, POINT.lat, FINE.sampleZoom);
+    expect(reading?.slopeDegrees).toBeCloseTo(
+      (Math.atan(1 / cellM) * 180) / Math.PI,
+      2,
+    );
+  });
+
+  // Mutation: take the finer source's heights where it has them and fill the
+  // window's gaps from `NSW_5M`: the slope would span two surfaces.
+  it("falls through to the next source when the finer one has no data in the window", async () => {
+    // No-data pixels (a sampler blends a lone one away from its neighbours,
+    // so the whole tile is blank, as at the edge of a finer area's footprint).
+    const holed: DemTileReader = async (source, tiles) => {
+      const found = await rising(1)(source, tiles);
+      if (source.id === FINE.id)
+        for (const tile of found.values()) tile.fill(-32768);
+      return found;
+    };
+    const reading = await demSlopeReading(POINT.lon, POINT.lat, holed, [
+      FINE,
+      NSW_5M,
+    ]);
+    expect(reading?.sourceId).toBe(NSW_5M.id);
+  });
+
+  it("falls through when the finer source's tile is absent", async () => {
+    const absent: DemTileReader = async (source, tiles) =>
+      source.id === FINE.id ? new Map() : rising(1)(source, tiles);
+    expect(
+      (await demSlopeReading(POINT.lon, POINT.lat, absent, [FINE, NSW_5M]))
+        ?.sourceId,
+    ).toBe(NSW_5M.id);
   });
 });

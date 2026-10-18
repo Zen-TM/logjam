@@ -21,6 +21,7 @@ import {
   type DemSamples,
 } from "./demSources.js";
 import { haversineMeters } from "./placeGeo.js";
+import { isValidLatitude, isValidLongitude } from "./placeValidation.js";
 import type { RoutePoint } from "./routeValidation.js";
 
 /**
@@ -90,6 +91,38 @@ export type ElevationProfile = {
    */
   filledFromGps?: boolean;
 };
+
+/**
+ * What `POST /elevation/point` answers for one position: its height and the
+ * slope of the ground around it (`demSlopeReading`). Each is null where no
+ * source can tell. The two are read independently, so they may come from
+ * different sources; `demSourceIds` lists those used.
+ */
+export type ElevationPoint = {
+  elevationM: number | null;
+  slopeDegrees: number | null;
+  demSourceIds: string[];
+};
+
+export const ELEVATION_POINT_ERRORS = {
+  shape: "point must be a [longitude, latitude] pair",
+  longitude: "Longitude must be a number between -180 and 180",
+  latitude: "Latitude must be a number between -90 and 90",
+} as const;
+
+/** The request body's `point`: a GeoJSON-order [longitude, latitude] pair. */
+export function parseElevationPoint(
+  value: unknown,
+): { lon: number; lat: number } | { error: string } {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return { error: ELEVATION_POINT_ERRORS.shape };
+  }
+  const [lon, lat] = value as unknown[];
+  if (!isValidLongitude(lon))
+    return { error: ELEVATION_POINT_ERRORS.longitude };
+  if (!isValidLatitude(lat)) return { error: ELEVATION_POINT_ERRORS.latitude };
+  return { lon, lat };
+}
 
 /** A position to sample, with its distance along the line. */
 export type SamplePosition = {

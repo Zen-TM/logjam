@@ -721,6 +721,15 @@ describe("the map's overlays list", () => {
 
 // What a press on empty map answers, on both clients (shared/DESIGN.md §3).
 describe("the map point panel", () => {
+  // Mutation: mark the slope section `on: "gps"` again and Logjam Web, which
+  // reads it from the API, stops drawing it.
+  it("declares Slope for both clients", () => {
+    for (const platform of ["web", "gps"] as const)
+      expect(contractSectionsFor(MAP_POINT, platform, false)).toContain(
+        "slope",
+      );
+  });
+
   const point = { latitude: -33.65, longitude: 150.35 };
 
   it("shows where it is and how high, and nothing from a fix it lacks", () => {

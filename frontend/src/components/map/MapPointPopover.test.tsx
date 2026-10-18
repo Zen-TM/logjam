@@ -6,7 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAP_POINT, WEATHER } from "@logjam/shared";
+import { MAP_POINT, WEATHER, type ElevationPoint } from "@logjam/shared";
 import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.json";
 import MapPointPopover from "./MapPointPopover";
 
@@ -21,12 +21,16 @@ vi.mock("maplibre-gl", () => ({
     remove() {}
   },
 }));
-const terrain = vi.hoisted(() => ({ checking: false }));
+const terrain = vi.hoisted(() => ({
+  checking: false,
+  reading: { elevationM: 1013, slopeDegrees: null, demSourceIds: [] } as
+    | ElevationPoint
+    | null,
+}));
 vi.mock("../../placeUtils", () => ({
-  useElevationProfile: () => ({
-    profile: terrain.checking ? null : { samples: [{ elevationM: 1013 }] },
+  useElevationPoint: () => ({
+    reading: terrain.checking ? null : terrain.reading,
     loading: terrain.checking,
-    error: null,
   }),
 }));
 vi.mock("../../useIsMobile", () => ({ useIsMobile: () => false }));
@@ -76,6 +80,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   terrain.checking = false;
+  terrain.reading = { elevationM: 1013, slopeDegrees: null, demSourceIds: [] };
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -156,5 +161,32 @@ describe("MapPointPopover weather, keyboard and height", () => {
     expect((show as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(show);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("the point popover's slope", () => {
+  // Mutation: stop passing `slopeDegrees` to `mapPointFacts`, and the first
+  // case loses its Slope; show 0° for null, and the second gains one.
+  it("shows Slope beside Elevation when the API has one", () => {
+    terrain.reading = {
+      elevationM: 412.4,
+      slopeDegrees: 37.6,
+      demSourceIds: [],
+    };
+    mount();
+    expect(screen.getByText("Slope")).toBeTruthy();
+    expect(screen.getByText("38°")).toBeTruthy();
+    expect(screen.getByText("412 m")).toBeTruthy();
+  });
+
+  it("shows no Slope where the API has none", () => {
+    terrain.reading = {
+      elevationM: 412.4,
+      slopeDegrees: null,
+      demSourceIds: [],
+    };
+    mount();
+    expect(screen.getByText("412 m")).toBeTruthy();
+    expect(screen.queryByText("Slope")).toBeNull();
   });
 });

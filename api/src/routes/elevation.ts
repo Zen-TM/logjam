@@ -19,11 +19,13 @@ import {
   ELEVATION_PROFILE_MAX_SAMPLES,
   ELEVATION_TRACK_MAX_SAMPLES,
   MAX_ROUTE_POINTS,
+  parseElevationPoint,
   parseRoutePoints,
   ROUTE_ERRORS,
+  type ElevationPoint,
   type RoutePoint,
 } from "@logjam/shared";
-import { sampleElevations } from "../services/elevation";
+import { sampleElevations, sampleSlope } from "../services/elevation";
 
 const router = Router();
 
@@ -84,6 +86,35 @@ router.post(
       ...profile,
       attribution: demCredits(profile.demSourceIds).join(" "),
     });
+  },
+);
+
+// ── POST /elevation/point ─────────────────────────────────────
+// Body: { point: [lon, lat] }. The height and slope at one spot, for the
+// point popover: one tap, one request. POST rather than GET so the position
+// is in the body and never in a URL the access log or a proxy would keep.
+router.post(
+  "/point",
+  requireAuth,
+  elevationLimiter,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const parsed = parseElevationPoint(req.body?.point);
+    if ("error" in parsed) throw malformed(parsed.error);
+    const { lon, lat } = parsed;
+
+    const [heights, slope] = await Promise.all([
+      sampleElevations([{ lon, lat, distanceM: 0 }]),
+      sampleSlope(lon, lat),
+    ]);
+    const demSourceIds = [heights.sourceIds[0], slope?.sourceId].filter(
+      (id, i, ids): id is string => id != null && ids.indexOf(id) === i,
+    );
+    const body: ElevationPoint = {
+      elevationM: heights.heights[0] ?? null,
+      slopeDegrees: slope?.slopeDegrees ?? null,
+      demSourceIds,
+    };
+    res.json({ ...body, attribution: demCredits(demSourceIds).join(" ") });
   },
 );
 
