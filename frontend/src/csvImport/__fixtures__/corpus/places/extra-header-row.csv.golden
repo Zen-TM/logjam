@@ -1,0 +1,13 @@
+{
+  "headers": [
+    "Corpus canyon list - updated 2024"
+  ],
+  "dataRows": 3,
+  "parseErrors": [
+    "Row 2: Too many fields: expected 1 fields but parsed 4",
+    "Row 3: Too many fields: expected 1 fields but parsed 4",
+    "Row 4: Too many fields: expected 1 fields but parsed 4"
+  ],
+  "kind": "unknown",
+  "blocked": "not a place list or logbook"
+}

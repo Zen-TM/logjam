@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.sh text eol=lf
 *.bat text eol=crlf
+# Byte-exact: the Excel export fixture is the CRLF + BOM case.
+frontend/src/csvImport/__fixtures__/corpus/places/excel-utf8-bom-crlf.csv -text

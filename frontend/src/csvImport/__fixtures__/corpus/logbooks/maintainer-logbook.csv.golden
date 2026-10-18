@@ -1,0 +1,185 @@
+{
+  "headers": [
+    "Name",
+    "Date",
+    "Party",
+    "Notes",
+    "",
+    "Total Unique Canyons",
+    "Total Days Canyoning",
+    "Total Canyons"
+  ],
+  "dataRows": 10,
+  "parseErrors": [],
+  "kind": "triplog",
+  "assignments": {
+    "Name": "name",
+    "Date": "date",
+    "Party": "discard",
+    "Notes": "notes",
+    "": "discard",
+    "Total Unique Canyons": "discard",
+    "Total Days Canyoning": "discard",
+    "Total Canyons": "discard"
+  },
+  "dateFormat": "DD/MM/YYYY",
+  "ambiguousDates": true,
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourcePlaceName": "Grand",
+      "date": "2019-02-03",
+      "notes": "Corpus note: cold start, warm finish. The pool at the end was low, so we walked the last bit.",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 1,
+      "sourcePlaceName": "Jugglers",
+      "date": "2019-02-03",
+      "notes": "Second canyon the same day",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 3,
+      "sourcePlaceName": "Yileen",
+      "date": "2019-11-17",
+      "notes": "Water was \"low\" and\nthe exit was overgrown",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 4,
+      "sourcePlaceName": "Rocky Creek",
+      "date": "2020-01-05",
+      "notes": "Which Rocky Creek? Corpus note",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 5,
+      "sourcePlaceName": "Wollangambe",
+      "date": "2020-01-25",
+      "notes": null,
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 6,
+      "sourcePlaceName": "Empres Falls",
+      "date": "2020-03-08",
+      "notes": "Misspelled in the spreadsheet",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 7,
+      "sourcePlaceName": "Serendipity",
+      "date": "2020-03-22",
+      "notes": "Short name of Serendipity Canyon",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 8,
+      "sourcePlaceName": "Sarcophagus",
+      "date": "2020-04-12",
+      "notes": null,
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 9,
+      "sourcePlaceName": "Corpus Unknown Gully",
+      "date": "2020-04-19",
+      "notes": "A place that is not on the list",
+      "types": [],
+      "customFields": {}
+    }
+  ],
+  "warnings": [
+    "Row 4: date \"not sure of the exact date\" couldn't be read — skipped"
+  ],
+  "droppedRows": 1,
+  "matches": [
+    {
+      "name": "Grand",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Grand Canyon",
+      "candidates": [
+        "Grand Canyon"
+      ]
+    },
+    {
+      "name": "Jugglers",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Jugglers Canyon",
+      "candidates": [
+        "Jugglers Canyon"
+      ]
+    },
+    {
+      "name": "Yileen",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Yileen Canyon",
+      "candidates": [
+        "Yileen Canyon"
+      ]
+    },
+    {
+      "name": "Rocky Creek",
+      "decision": "review",
+      "confidence": "review",
+      "best": "Rocky Creek Canyon",
+      "candidates": [
+        "Rocky Creek Canyon",
+        "Rocky Creek Canyon"
+      ]
+    },
+    {
+      "name": "Wollangambe",
+      "decision": "review",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    },
+    {
+      "name": "Empres Falls",
+      "decision": "review",
+      "confidence": "review",
+      "best": "Empress Falls",
+      "candidates": [
+        "Empress Falls"
+      ]
+    },
+    {
+      "name": "Serendipity",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Serendipity Canyon",
+      "candidates": [
+        "Serendipity Canyon"
+      ]
+    },
+    {
+      "name": "Sarcophagus",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Sarcophagus Canyon",
+      "candidates": [
+        "Sarcophagus Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Unknown Gully",
+      "decision": "review",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
+}
