@@ -58,12 +58,12 @@ vi.mock("expo-file-system", () => {
       const uri = this.uri;
       return {
         offset: 0 as number | null,
-        readBytes(length: number) {
+        async readBytes(length: number) {
           const at = this.offset ?? 0;
           this.offset = at + length;
           return disk.get(uri)!.slice(at, at + length);
         },
-        writeBytes(bytes: Uint8Array) {
+        async writeBytes(bytes: Uint8Array) {
           const at = this.offset ?? 0;
           const old = disk.get(uri)!;
           const next = new Uint8Array(Math.max(old.length, at + bytes.length));

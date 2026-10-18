@@ -362,7 +362,7 @@ export async function runRegionClip(
       start = resumeIndex(
         plan,
         size >= plan.prefix.length
-          ? handle.readBytes(plan.prefix.length)
+          ? await handle.readBytes(plan.prefix.length)
           : null,
         size,
       );
@@ -380,7 +380,7 @@ export async function runRegionClip(
     await assertSpaceFor(plan.totalBytes - resumedAt);
     if (start == null) {
       handle.offset = 0;
-      handle.writeBytes(plan.prefix);
+      await handle.writeBytes(plan.prefix);
       start = 0;
     }
     report(resumedAt || plan.prefix.length);
@@ -398,7 +398,7 @@ export async function runRegionClip(
       );
       if ("stop" in got) return await settle(got);
       handle.offset = request.dstOffset;
-      handle.writeBytes(got.value);
+      await handle.writeBytes(got.value);
       report(request.dstOffset + got.value.length);
     }
     handle.close();
