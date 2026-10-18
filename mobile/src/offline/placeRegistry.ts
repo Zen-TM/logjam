@@ -388,8 +388,11 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
     throw new Error(`Place registry download answered ${result.status}`);
   }
   // Parsed before it replaces anything, off the first frames. Not indexed:
-  // the index is built only for a search.
-  await new Promise<void>((resolve) => requestIdleCallback(() => resolve()));
+  // the index is built only for a search. The timeout keeps a busy JS thread
+  // (map animation, track recording) from deferring the update forever.
+  await new Promise<void>((resolve) =>
+    requestIdleCallback(() => resolve(), { timeout: 2000 }),
+  );
   await readFile(DOWNLOAD_URI, pointer);
 
   const target = dataUri(pointer);
