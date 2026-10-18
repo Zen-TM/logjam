@@ -105,8 +105,10 @@ function Inlines({ inlines }: { inlines: MessageInline[] }) {
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(2), paddingBottom: spacing(2) },
   from: { ...muted(theme, textRole.detail) },
-  h1: { ...textRole.heading, color: theme.text },
-  h2: { ...textRole.rowTitle, color: theme.text },
+  // The sheet's title already wears `heading`: the message's own headings
+  // sit below it, the deeper ones as section headings (shared/DESIGN.md §2).
+  h1: { ...textRole.rowTitle, color: theme.text },
+  h2: { ...textRole.section, color: theme.text },
   paragraph: { ...textRole.paragraph, color: theme.text },
   list: { gap: spacing(1) },
   item: { flexDirection: "row", gap: spacing(1) },
