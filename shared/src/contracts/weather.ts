@@ -30,6 +30,7 @@ export const WEATHER = {
     failed: "Couldn’t get the forecast.",
     needsConnection: "Needs a connection",
     refresh: "Refresh",
+    tryAgain: "Try again",
     // Every day the forecast held is past: a stale forecast is never shown.
     outOfDate: "This forecast has run out.",
     today: "Today",

@@ -1,13 +1,6 @@
 import { Text, View } from "react-native";
 
-import {
-  makeStyles,
-  muted,
-  radius,
-  spacing,
-  useTheme,
-  withAlpha,
-} from "../theme";
+import { makeStyles, muted, spacing, useTheme } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 export type ForecastRow = {
@@ -42,7 +35,7 @@ export function ForecastList({
       {rows.map((row) => (
         <View
           key={row.key}
-          style={[styles.row, row.current && styles.current]}
+          style={styles.row}
           accessible
           accessibilityLabel={`${row.day}, ${row.glyphLabel}, ${row.temperature}, rain ${row.rain}, wind ${row.wind}`}
         >
@@ -71,9 +64,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingVertical: spacing(1),
     paddingHorizontal: spacing(1),
-    borderRadius: radius.md,
   },
-  current: { backgroundColor: withAlpha(theme.accent, 0.14) },
   day: {
     ...textRole.detail,
     color: theme.text,

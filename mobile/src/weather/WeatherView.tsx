@@ -61,7 +61,7 @@ export function WeatherView({ weather }: { weather: Weather }) {
         <Text style={styles.note}>{copy.failed}</Text>
         {state.canRetry ? (
           <Button
-            label="Try again"
+            label={copy.tryAgain}
             variant="outlineAccent"
             compact
             onPress={weather.refresh}
