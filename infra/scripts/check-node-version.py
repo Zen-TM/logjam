@@ -16,14 +16,15 @@ against `lambda_cognito_email.tf` instead.
 
 Mutations that turn the self-test red: a workflow pin behind mise, the api
 image behind mise, an @types/node pin ahead of mise, and the Lambda's types
-disagreeing with its runtime.
+disagreeing with its runtime, and a pin class that matches nothing (a regex
+that stops matching must not pass the check by checking nothing).
 """
 
 import re
 import sys
 from pathlib import Path
 
-WORKFLOW_PIN = re.compile(r"^\s*node-version:\s*\"?([^\"\s]+)\"?\s*$")
+WORKFLOW_PIN = re.compile(r"^\s*node-version:\s*\"?([^\"\s]+)\"?\s*(?:#.*)?$")
 DOCKER_PIN = re.compile(r"^\s*FROM\s+node:(\S+)")
 TYPES_PIN = re.compile(r'"@types/node"\s*:\s*"([^"]+)"')
 MISE_PIN = re.compile(r'^\s*node\s*=\s*"([^"]+)"', re.M)
@@ -84,6 +85,12 @@ def problems(found):
     for path, number, value in found["workflows"] + found["docker"] + found["types"]:
         if major(value) != mise:
             errors.append(f"{path}:{number}: {value} != mise.toml's node {mise}")
+    for name in ("workflows", "docker", "types"):
+        if not found[name]:
+            errors.append(f"no {name} pin found: its pattern matches nothing")
+    if found["lambda_runtime"] is None:
+        errors.append("lambda_cognito_email.tf: no nodejsNN.x runtime")
+        return errors
     if not found["lambda_types"]:
         errors.append("the Lambda has no @types/node pin")
     for path, number, value in found["lambda_types"]:
@@ -123,6 +130,10 @@ def self_test():
             {"lambda_types": [(Path("package.json"), 1, "26")]},
         ),
         ("no mise pin", "fail", {"mise": None}),
+        ("no workflow pins found", "fail", {"workflows": []}),
+        ("no api image pin found", "fail", {"docker": []}),
+        ("no @types/node pins found", "fail", {"types": []}),
+        ("no Lambda runtime found", "fail", {"lambda_runtime": None}),
     ]
     failures = 0
     for description, want, overrides in cases:

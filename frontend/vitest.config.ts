@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 // and build settings are irrelevant to tests). jsdom so the useStoredState
 // hook test has a localStorage; pure-logic suites ignore the environment.
 // execArgv: Node 26 otherwise installs an undefined localStorage global that
-// shadows jsdom's (43 tests fail without it).
+// shadows jsdom's.
 export default defineConfig({
   test: {
     environment: "jsdom",

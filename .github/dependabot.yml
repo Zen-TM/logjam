@@ -97,8 +97,8 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # The Lambda runs nodejs22.x: its nodejs26.x successor is in public preview
-    # (AWS's target for GA: November 2026), so @types/node stays on 22.
+    # The Lambda runs nodejs22.x: its nodejs26.x successor is a public preview
+    # runtime, so @types/node stays on 22.
     # Tracked in #229.
     ignore:
       - dependency-name: "@types/node"
