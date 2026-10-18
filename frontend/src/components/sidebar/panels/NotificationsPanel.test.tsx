@@ -134,6 +134,16 @@ describe("NotificationsPanel: an announcement", () => {
     expect(api.markNotificationRead).toHaveBeenCalledWith("n1", true);
   });
 
+  // Mutation: drop the announcement's button from `rowFooter`.
+  it("opens its message from the row's Read message button", () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Read message" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Track sharing is here" }),
+    ).toBeTruthy();
+  });
+
   // Mutation: drop the "Read message" entry from `rowEntries`.
   it("opens its message from the row's ⋯", () => {
     renderPanel();

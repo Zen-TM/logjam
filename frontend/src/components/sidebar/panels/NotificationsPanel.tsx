@@ -712,6 +712,20 @@ function NotificationsPanel({
         </Button>
       );
     }
+    // A button, not only the row: nothing else says a row opens a message.
+    if (notificationAnnouncement(n)) {
+      return (
+        <Button
+          compact
+          variant="outline"
+          disabled={selecting}
+          disabledReason="Not while selecting"
+          onClick={() => openNotification(n)}
+        >
+          {notificationVerb("readMessage").label}
+        </Button>
+      );
+    }
     return null;
   };
 
