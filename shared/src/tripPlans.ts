@@ -276,15 +276,20 @@ export type TripPlanFormCreate = {
 };
 
 /**
- * PUT …/answers/me. `visibleTo` is who the form said would see the answers
- * when the person filled it in: the API refuses the answer if who sees the
- * answers has changed since, so an answer never reaches more people than its
- * author was told.
- * Guard: api/src/__tests__/planForms.test.ts ("never widening who sees an answer").
+ * PUT …/answers/me: the answers, and the form as the person was shown it.
+ * The API refuses the answer (409) if who sees the answers has changed
+ * since, so an answer never reaches more people than its author was told;
+ * then if the form changed at all (a question added or made required, a
+ * kind changed), so the person answers the form as it is.
+ * Guard: api/src/__tests__/planForms.test.ts ("never widening who sees an
+ * answer", "asks the person to check a form that changed while they answered").
  */
 export type TripPlanAnswerPut = {
   answers: TripPlanAnswers;
+  /** The form's `visibleTo` as shown. */
   visibleTo: TripPlanFormVisibility;
+  /** The form's `updatedAt` as served (TripPlanFormView.updatedAt). */
+  formUpdatedAt: string;
 };
 
 export const TRIP_PLAN_FORM_PRESET_IDS = [
@@ -814,9 +819,9 @@ function questionId(value: unknown, what: string, seen: Set<string>): string {
 }
 
 /** What a stale client is told: the form moved under the person answering. */
-const FORM_CHANGED = say`This form changed since you opened it. Check it, then answer again.`;
+export const TRIP_PLAN_FORM_CHANGED_SENTENCE = say`This form changed since you opened it. Check it, then answer again.`;
 function stale(): never {
-  refuse(FORM_CHANGED, 409);
+  refuse(TRIP_PLAN_FORM_CHANGED_SENTENCE, 409);
 }
 
 function formTitle(value: unknown): string {
@@ -937,10 +942,9 @@ export function parseTripPlanFormPatch(
     }
     if (input.questions !== undefined) {
       const { from, to } = cas(input.questions, "questions");
-      if (!Array.isArray(from)) bad("questions.from must be an array");
-      if (from.length > TRIP_PLAN_MAX_QUESTIONS)
-        bad("questions.from is over the cap", 413);
-      patch.questions = { from: from as TripPlanQuestion[], to: questions(to) };
+      // `from` is what the server served, so it passes the same rules and
+      // comes out the same; one that doesn't could never match anyway.
+      patch.questions = { from: questions(from), to: questions(to) };
     }
     if (input.visibleTo !== undefined) {
       const { from, to } = cas(input.visibleTo, "visibleTo");
@@ -966,11 +970,20 @@ export function parseTripPlanFormPatch(
  * option ticked, an unticked agree box). A value that doesn't fit the
  * question (a kind or option a leader has changed since the form was opened)
  * is stale, not malformed: an up-to-date client sends it after a leader's edit.
+ * A value no kind takes at all (an object, a list of anything but strings)
+ * only a broken client sends: malformed.
  */
 function answerValue(
   question: TripPlanQuestion,
   value: unknown,
 ): TripPlanAnswerValue | undefined {
+  if (Array.isArray(value)) {
+    if (value.length > TRIP_PLAN_MAX_OPTIONS)
+      bad("an answer list is over the cap", 413);
+    if (value.some((item) => typeof item !== "string"))
+      bad("an answer list holds only strings");
+  } else if (!["string", "number", "boolean"].includes(typeof value))
+    bad("an answer is a string, a number, a boolean or a list of strings");
   const optionIds = new Set(question.options?.map((option) => option.id));
   switch (question.kind) {
     case "text":
@@ -996,10 +1009,7 @@ function answerValue(
       return value;
     case "multiChoice": {
       if (!Array.isArray(value)) stale();
-      if (value.length > TRIP_PLAN_MAX_OPTIONS)
-        bad("a multiChoice answer is over the cap", 413);
-      if (value.some((id) => typeof id !== "string" || !optionIds.has(id)))
-        stale();
+      if ((value as string[]).some((id) => !optionIds.has(id))) stale();
       const unique = [...new Set(value as string[])];
       return unique.length ? unique : undefined;
     }

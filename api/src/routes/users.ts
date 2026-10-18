@@ -668,6 +668,15 @@ router.delete(
     });
 
     await prisma.$transaction([
+      // First, so this transaction takes the plan rows before any row in a
+      // plan (an answer), the order every plan write takes them in
+      // (lib/planAccess.ts touchPlan): the other order deadlocks against a
+      // leader deleting a form this user answered. The user.delete below
+      // would set these to null anyway (SetNull), but last.
+      prisma.tripPlan.updateMany({
+        where: { createdById: user.id },
+        data: { createdById: null },
+      }),
       ...(accountTombstones.length > 0
         ? [prisma.syncTombstone.createMany({ data: accountTombstones })]
         : []),

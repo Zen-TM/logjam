@@ -11,10 +11,14 @@
 // The two can't interleave. Every write here starts with touchPlan, whose
 // UPDATE holds the plan row until commit, so writes in one plan run one at a
 // time and, at Postgres's READ COMMITTED, each reads what the one before
-// committed. `lockForm` then also locks the form row (FOR UPDATE in the
+// committed (guard for the forms cap: __tests__/planForms.test.ts "holds the
+// cap against creates that race"). `lockForm` then also locks the form row (FOR UPDATE in the
 // PATCH, FOR SHARE in the answer PUT), which keeps the pair exclusive for a
-// writer elsewhere that answers without touching the plan first; plan row
-// before form row everywhere, so they never deadlock.
+// writer elsewhere that answers without touching the plan first. Plan row
+// before any row in the plan, everywhere: here, and in account delete
+// (routes/users.ts), the one other writer that takes plan rows, which
+// updates the plans its user created, taking their rows, before it deletes
+// their answers.
 // Reading answers is lib/tripPlanView.ts's `formView`.
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
@@ -26,6 +30,7 @@ import {
   parseTripPlanOrder,
   say,
   TRIP_PLAN_CHANGED_SENTENCE,
+  TRIP_PLAN_FORM_CHANGED_SENTENCE,
   TRIP_PLAN_MAX_FORMS,
   type TripPlanQuestion,
 } from "@logjam/shared";
@@ -247,8 +252,9 @@ router.delete(
 );
 
 // ── PUT /plans/:planId/forms/:formId/answers/me ───────────────
-// Body { answers, visibleTo }: the whole answer, replacing any before it, and
-// who the form said would see it.
+// Body TripPlanAnswerPut { answers, visibleTo, formUpdatedAt }: the whole
+// answer, replacing any before it, and the form as the person was shown it.
+// Who sees the answers is checked first, so its own sentence wins.
 router.put(
   "/:formId/answers/me",
   requireAuth,
@@ -259,18 +265,23 @@ router.put(
     const seen = req.body?.visibleTo;
     if (!isTripPlanFormVisibility(seen))
       throw malformed("visibleTo must be the visibility the form showed");
+    const shown = req.body?.formUpdatedAt;
+    if (typeof shown !== "string")
+      throw malformed("formUpdatedAt must be the form's updatedAt as served");
     await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
       await lockForm(tx, planId, id, "share");
       const form = await tx.tripPlanForm.findUniqueOrThrow({
         where: { id },
-        select: { questions: true, visibleTo: true },
+        select: { questions: true, visibleTo: true, updatedAt: true },
       });
       if (form.visibleTo !== seen)
         throw new AppError(
           409,
           say`Who sees the answers to this form has changed. Check it, then answer again.`,
         );
+      if (form.updatedAt.toISOString() !== shown)
+        throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
       const answers = accepted(
         parseTripPlanAnswers(
           form.questions as unknown as TripPlanQuestion[],

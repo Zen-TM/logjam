@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { TRIP_PLAN_FORM_PRESETS } from "@logjam/shared";
+import { TRIP_PLAN_FORM_PRESETS, TRIP_PLAN_MAX_FORMS } from "@logjam/shared";
 import prisma from "../services/prisma";
 import {
   API_URL,
@@ -39,16 +39,28 @@ async function makeForm(form: object): Promise<string> {
   return res.body.id;
 }
 
-const answer = (
+/** The form's updatedAt as the full fetch serves it. */
+async function shownAt(formId: string): Promise<string> {
+  const form = await prisma.tripPlanForm.findUnique({ where: { id: formId } });
+  return form?.updatedAt.toISOString() ?? "1970-01-01T00:00:00.000Z";
+}
+
+/** An answer from someone shown the form as it is now, or at `formUpdatedAt`. */
+const answer = async (
   sub: string,
   formId: string,
   answers: object,
   visibleTo: string,
+  formUpdatedAt?: string,
 ) =>
   request(API_URL)
     .put(`/plans/${planId}/forms/${formId}/answers/me`)
     .set(as(sub))
-    .send({ answers, visibleTo });
+    .send({
+      answers,
+      visibleTo,
+      formUpdatedAt: formUpdatedAt ?? (await shownAt(formId)),
+    });
 
 const view = (sub: string) =>
   request(API_URL).get(`/plans/${planId}`).set(as(sub));
@@ -76,6 +88,39 @@ afterEach(async () => {
 });
 
 describe("building forms", () => {
+  // Writes in one plan run one at a time (touchPlan first). Mutation: move
+  // touchPlan after the count in POST forms; the racing creates then all
+  // read the same count and pass the cap together.
+  it("holds the cap against creates that race", async () => {
+    await prisma.tripPlanForm.createMany({
+      data: Array.from({ length: TRIP_PLAN_MAX_FORMS - 2 }, (_, i) => ({
+        planId,
+        title: `F${i}`,
+        questions: experience.questions,
+        visibleTo: "leaders",
+        position: i,
+      })),
+    });
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        request(API_URL)
+          .post(`/plans/${planId}/forms`)
+          .set(as(ALICE_SUB))
+          .send(experience),
+      ),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([
+      201, 201, 413, 413, 413,
+    ]);
+    const positions = (
+      await prisma.tripPlanForm.findMany({
+        where: { planId },
+        select: { position: true },
+      })
+    ).map((row) => row.position);
+    expect(new Set(positions).size).toBe(TRIP_PLAN_MAX_FORMS);
+  });
+
   it("a leader makes one from a preset; anyone else can't", async () => {
     const id = await makeForm(contacts);
     const res = await view(BOB_SUB);
@@ -234,18 +279,38 @@ describe("answers", () => {
     expect(JSON.stringify(alice.body)).not.toContain("Bad knee");
   });
 
-  // An up-to-date client answering a form a leader just edited.
+  // An up-to-date client answering a form a leader edited after serving it:
+  // a question removed, or one made required that the person never saw.
+  // Mutation: drop the formUpdatedAt check in the answer PUT (the second
+  // case then gets the "required" 400 instead).
   it("asks the person to check a form that changed while they answered", async () => {
+    const changed =
+      "This form changed since you opened it. Check it, then answer again.";
     const id = await makeForm(experience);
-    const served = (await view(ALICE_SUB)).body.forms[0].questions;
+    const served = (await view(BOB_SUB)).body.forms[0];
     await request(API_URL)
       .patch(`/plans/${planId}/forms/${id}`)
       .set(as(ALICE_SUB))
-      .send({ questions: { from: served, to: served.slice(0, 3) } });
-    const res = await answer(BOB_SUB, id, BOB_EXPERIENCE, "leaders");
+      .send({
+        questions: {
+          from: served.questions,
+          to: served.questions.map((q: { id: string }) =>
+            q.id === "notes" ? { ...q, required: true } : q,
+          ),
+        },
+      });
+    const withoutNotes = { trips: "few", abseil: true, swim: false };
+    const res = await answer(
+      BOB_SUB,
+      id,
+      withoutNotes,
+      "leaders",
+      served.updatedAt,
+    );
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe(
-      "This form changed since you opened it. Check it, then answer again.",
+    expect(res.body.error).toBe(changed);
+    expect(await prisma.tripPlanAnswer.count({ where: { formId: id } })).toBe(
+      0,
     );
   });
 
@@ -316,8 +381,18 @@ describe("never widening who sees an answer", () => {
       .patch(`/plans/${planId}/forms/${id}`)
       .set(as(ALICE_SUB))
       .send({ visibleTo: { from: "leaders", to: "members" } });
-    const stale = await answer(BOB_SUB, id, BOB_EXPERIENCE, "leaders");
+    // The form changed too; the visibility sentence wins.
+    const stale = await answer(
+      BOB_SUB,
+      id,
+      BOB_EXPERIENCE,
+      "leaders",
+      "2000-01-01T00:00:00.000Z",
+    );
     expect(stale.status).toBe(409);
+    expect(stale.body.error).toBe(
+      "Who sees the answers to this form has changed. Check it, then answer again.",
+    );
     expect(
       await prisma.tripPlanAnswer.count({
         where: { formId: id, userId: BOB_ID },

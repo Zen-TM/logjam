@@ -345,12 +345,29 @@ describe("answers", () => {
         abseil: "yes",
         swim: true,
       }),
+      parseTripPlanAnswers(questions, { mode: "lift", from: 5 }),
+      parseTripPlanAnswers(rules, { agree: "yes" }),
     ];
     for (const parsed of stale)
       expect(parsed).toEqual({ sentence: changed, status: 409 });
     expect(
       sentence(parseTripPlanAnswers(questions, { mode: "lift", seats: -1 })),
     ).toBe("Answer with a whole number, 0 or more.");
+  });
+
+  // ADR 0033: what no leader edit could make valid is a broken client's.
+  // Mutation: replace the shape gate's bad() with stale().
+  it("refuses as malformed a value no kind takes", () => {
+    for (const answers of [
+      { mode: "lift", notes: {} },
+      { mode: [["x"]] },
+      { mode: "lift", from: ["Katoomba", 1] },
+    ])
+      expect(isMalformed(parseTripPlanAnswers(questions, answers))).toBe(true);
+    expect(isMalformed(parseTripPlanAnswers(gear, { items: [1] }))).toBe(true);
+    expect(
+      isMalformed(parseTripPlanAnswers(gear, { items: ["helmet", {}] })),
+    ).toBe(true);
   });
 
   it("caps a tick list at the number of options", () => {
