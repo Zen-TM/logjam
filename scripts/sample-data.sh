@@ -10,7 +10,9 @@
 # root, gitignored) and are reused while their hash still matches. The
 # release notes list each asset's source and licence. A changed file is a new
 # release (`sample-data-v2`) and a new manifest line, never an asset replaced
-# in place: the hash would stop matching for every older commit.
+# in place: the hash would stop matching for every older commit. Every release
+# is a full snapshot (it re-uploads the assets it keeps), so a new release
+# also bumps BASE_URL below.
 #
 # Mutation that turns the self-test red: dropping the hash check (the
 # `sha256sum -c`) lets "a corrupt download fails" pass the bad file.
@@ -21,6 +23,9 @@ MANIFEST="${SAMPLE_DATA_MANIFEST:-$ROOT/scripts/sample-data.sha256}"
 BASE_URL="${SAMPLE_DATA_BASE_URL:-https://github.com/Zen-TM/logjam/releases/download/sample-data-v1}"
 DIR="${SAMPLE_DATA_DIR:-$ROOT/.cache/sample-data}"
 
+# GNU coreutils on Linux; macOS ships only shasum.
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+
 fetch() {
   local name=$1 line
   line=$(awk -v n="$name" '$2 == n' "$MANIFEST")
@@ -28,10 +33,10 @@ fetch() {
     echo "unknown sample asset '$name' (see $MANIFEST)" >&2; return 1
   }
   mkdir -p "$DIR"
-  if ! (cd "$DIR" && sha256sum -c --status <<<"$line" >/dev/null 2>&1); then
+  if ! (cd "$DIR" && sha256 -c --status <<<"$line" >/dev/null 2>&1); then
     curl -fsSL --retry 3 -o "$DIR/$name.part" "$BASE_URL/$name"
     mv "$DIR/$name.part" "$DIR/$name"
-    (cd "$DIR" && sha256sum -c --status <<<"$line") || {
+    (cd "$DIR" && sha256 -c --status <<<"$line") || {
       rm -f "$DIR/$name"; echo "sha256 mismatch for $name" >&2; return 1
     }
   fi
@@ -46,7 +51,7 @@ self_test() {
   echo corrupt > "$tmp/served/bad.bin"
   # Both lines carry the hash of "good": bad.bin is served with other bytes.
   local hash
-  hash=$(sha256sum < "$tmp/served/good.bin" | cut -d' ' -f1)
+  hash=$(sha256 < "$tmp/served/good.bin" | cut -d' ' -f1)
   printf '%s  good.bin\n%s  bad.bin\n' "$hash" "$hash" > "$tmp/manifest"
   run() { SAMPLE_DATA_MANIFEST="$tmp/manifest" SAMPLE_DATA_BASE_URL="file://$tmp/served" SAMPLE_DATA_DIR="$tmp/out" "$0" "$@"; }
   check() { if [ "$2" = "$3" ]; then echo "ok   — $1"; else echo "FAIL — $1: want $2, got $3"; fails=1; fi; }
@@ -59,5 +64,5 @@ self_test() {
 }
 
 if [ "${1:-}" = --self-test ]; then set +e; self_test; exit; fi
-[ $# -gt 0 ] || { sed -n '2,9p' "$0" >&2; exit 2; }
+[ $# -gt 0 ] || { sed -n '2,7p' "$0" >&2; exit 2; }
 for name in "$@"; do fetch "$name"; done

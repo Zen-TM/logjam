@@ -20,10 +20,13 @@
 # package, everything it imports, and every file its tests read.
 #
 # Mutations that turn the self-test red: dropping shared/ from mobile fails
-# "mobile: shared source"; dropping frontend/ from api_integration fails
-# "api_integration: Logjam Web (Playwright smoke)"; dropping the worker image's
-# paths from topo_e2e fails "topo_e2e: worker source"; removing the ci.yml rule
-# fails "any area: ci.yml".
+# "mobile: shared source"; dropping frontend/public/ from mobile fails "mobile:
+# the legal documents it links to"; dropping frontend/ from api_integration
+# fails "api_integration: Logjam Web (Playwright smoke)"; removing the ci.yml
+# rule fails "any area: ci.yml"; dropping --no-renames fails "a rename out of
+# an area"; dropping the worker image's paths from topo_e2e fails "topo_e2e:
+# worker source"; a scoped job whose `if:` is not the fail-open expression, or a
+# `changes` output wired to another area's value, fails the ci.yml checks.
 set -uo pipefail
 
 AREAS="api_integration mobile migrations topo_e2e"
@@ -36,14 +39,16 @@ paths_for() {
     # The live-API suite, the topo status guard against its Postgres (it
     # imports topo's top-level modules), and the Playwright smoke spec.
     api_integration) echo '^(api/|shared/|frontend/|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
-    mobile) echo '^(mobile/|shared/)' ;;
+    # legalLinks.test.ts checks the documents the consent screen links to.
+    mobile) echo '^(mobile/|shared/|frontend/public/)' ;;
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
     # upgraded to this commit (the head's seed never runs there).
     migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/migration-upgrade-test\.sh)' ;;
     # The worker image (image-build-scope.sh holds what it is built from), the
-    # job's stubs and checks, its sample input, and the task definition whose
-    # env worker.env mirrors.
-    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$)" ;;
+    # job's stubs and checks, its sample input, the task definition whose env
+    # worker.env mirrors, and the settings the job submits (the worker
+    # re-validates them in Python).
+    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$)" ;;
     *) return 1 ;;
   esac
 }
@@ -97,16 +102,19 @@ self_test() {
   check "mobile: source"                                  mobile true  0 'mobile/app.json'
   check "mobile: shared source"                           mobile true  0 'shared/src/a.ts'
   check "mobile: api only"                                mobile false 0 'api/src/a.ts'
+  check "mobile: the legal documents it links to"         mobile true  0 'frontend/public/tos.html'
   check "migrations: a migration"                         migrations true  0 'api/prisma/migrations/2026/migration.sql'
   check "migrations: upgrade checks"                      migrations true  0 'api/prisma/upgrade-check/verify.sql'
   check "migrations: the Prisma version"                  migrations true  0 'api/package.json'
   check "migrations: the upgrade script"                  migrations true  0 'scripts/migration-upgrade-test.sh'
   check "migrations: api route"                           migrations false 0 'api/src/routes/a.ts'
-  check "topo_e2e: worker source"                        topo_e2e true  0 'topo/pipeline.py'
+  check "topo_e2e: worker source"                         topo_e2e true  0 'topo/pipeline.py'
   check "topo_e2e: worker image Dockerfile"               topo_e2e true  0 'topo/Dockerfile'
   check "topo_e2e: its stub and checks"                   topo_e2e true  0 'topo/tests/e2e/check.py'
   check "topo_e2e: the sample manifest"                   topo_e2e true  0 'scripts/sample-data.sha256'
   check "topo_e2e: the task definition"                   topo_e2e true  0 'infra/terraform/envs/prod/ecs.tf'
+  check "topo_e2e: the settings it sends"                 topo_e2e true  0 'shared/src/topoSettings.ts'
+  check "topo_e2e: another shared source"                 topo_e2e false 0 'shared/src/sync.ts'
   check "topo_e2e: a topo unit test"                      topo_e2e false 0 'topo/tests/test_labels.py'
   check "topo_e2e: api only"                              topo_e2e false 0 'api/src/routes/topoJobs.ts'
   check "any area: ci.yml"                                mobile true  0 $'docs/a.md\n.github/workflows/ci.yml'
@@ -115,23 +123,50 @@ self_test() {
   check "empty diff"                                      api_integration false 0 ''
   check "diff unreadable"                                 mobile true  128 'fatal: bad revision'
 
-  # Every area ci.yml reads is declared here, and the reverse, so an area
-  # added on one side only fails here rather than running or skipping wrong.
-  local yml declared
-  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z0-9_]+' "$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
+  # ci.yml agrees with AREAS, in all three places a skip could go wrong.
+  local ci declared yml bad needs reads
+  ci="$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml"
   declared=$(tr ' ' '\n' <<<"$AREAS" | sort -u | tr '\n' ' ')
-  if [ "$yml" = "$declared" ]; then echo "ok   — ci.yml reads exactly the declared areas"; else echo "FAIL — ci.yml reads [$yml], declared [$declared]"; fails=1; fi
+  ok_if() { if [ -z "$2" ]; then echo "ok   — $1"; else echo "FAIL — $1: $2"; fails=1; fi; }
+  # Scoped jobs read exactly the declared areas...
+  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z0-9_]+' "$ci" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
+  ok_if "ci.yml reads exactly the declared areas" "$([ "$yml" = "$declared" ] || echo "reads [$yml], declared [$declared]")"
+  # ...each through the fail-open expression, one per `needs: changes` job...
+  bad=$(grep -E 'needs\.changes\.outputs\.' "$ci" | grep -vE "^    if: \\$\\{\\{ !cancelled\\(\\) && needs\\.changes\\.outputs\\.[a-z0-9_]+ != 'false' \\}\\}$" || true)
+  ok_if "every scoped job's if: fails open" "$bad"
+  needs=$(grep -cE '^    needs: changes$' "$ci"); reads=$(grep -cE 'needs\.changes\.outputs\.' "$ci")
+  ok_if "every job that needs changes reads an area" "$([ "$needs" = "$reads" ] || echo "$needs jobs need changes, $reads read an area")"
+  # ...and the changes job hands each area its own value.
+  bad=$(grep -E '^      [a-z0-9_]+: \$\{\{ steps\.scope\.outputs\.' "$ci" | sed -E 's/^ +([a-z0-9_]+): .*outputs\.([a-z0-9_]+) .*/\1 \2/' | awk '$1 != $2' || true)
+  yml=$(grep -oE '^      [a-z0-9_]+: \$\{\{ steps\.scope\.outputs\.' "$ci" | sed -E 's/^ +([a-z0-9_]+):.*/\1/' | sort -u | tr '\n' ' ')
+  ok_if "the changes job outputs each area as itself" "$bad$([ "$yml" = "$declared" ] || echo " outputs [$yml], declared [$declared]")"
+
+  # The diff lists both sides of a rename, unquoted, or a file moved out of an
+  # area would scope as if it were never there.
+  local repo files
+  repo=$(mktemp -d)
+  (cd "$repo" && git init -q && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base \
+    && mkdir -p api/prisma/migrations && echo x > api/prisma/migrations/m.sql && echo y > 'é.md' \
+    && git add -A && git -c user.email=t@t -c user.name=t commit -q -m add \
+    && git mv api/prisma/migrations/m.sql m.sql && git -c user.email=t@t -c user.name=t commit -q -m move)
+  files=$(cd "$repo" && changed_files HEAD~1 HEAD)
+  ok_if "a rename out of an area lists its old path" "$(grep -qx 'api/prisma/migrations/m.sql' <<<"$files" || echo "got: $files")"
+  files=$(cd "$repo" && changed_files HEAD~2 HEAD~1)
+  ok_if "a non-ASCII path is not quoted" "$(grep -qx 'é.md' <<<"$files" || echo "got: $files")"
+  rm -rf "$repo"
 
   rm -f "$tmp"
   return $fails
 }
+
+changed_files() { git -c core.quotePath=false diff --name-only --no-renames "$1...$2"; }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   case "${1:-}" in
     --self-test) self_test ;;
     all) all ;;
     scope)
-      FILES=$(git diff --name-only "${2:?base}...${3:?head}" 2>&1)
+      FILES=$(changed_files "${2:?base}" "${3:?head}" 2>&1)
       decide "$?" "$FILES"
       ;;
     *) echo "usage: $0 scope <base> <head> | all | --self-test" >&2; exit 2 ;;
