@@ -29,6 +29,10 @@
 // treatment the notifications page states once, because unlike its neighbours
 // it cannot be changed offline.
 //
+// A GUEST opens this page too: the place-names allowance and the Saved link are
+// theirs. The rows that govern account-backed jobs are dead with "Needs an
+// account" (`offlineRows.ts`), and the account query below stays off for them.
+//
 // PRIVACY: seven booleans. No place names, no regions named.
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -54,6 +58,7 @@ import {
   unavailableReasonText,
 } from "../../auth/capabilities";
 import { useConnectivity } from "../../map/connectivity";
+import { offlineRowNeedsAccount, type OfflineRow } from "./offlineRows";
 import type { TUser } from "../../api/types";
 import { messageFromError } from "@logjam/shared";
 import {
@@ -181,6 +186,10 @@ export function OfflineSettingsScreen({
     });
   }, [notify]);
 
+  const needsAccount = (row: OfflineRow) =>
+    offlineRowNeedsAccount(row, accountState);
+  const accountText = unavailableReasonText("needs-account");
+
   const serverPrefs = capabilityStatus("serverPrefs", accountState, online);
   const copyMediaBlocked: string | undefined =
     serverPrefs.status === "unavailable"
@@ -196,9 +205,13 @@ export function OfflineSettingsScreen({
         <PreferenceRow
           icon="geoPdf"
           title="Finished GeoPDFs"
-          subtitle="GeoPDFs generated on Logjam Web download here automatically."
+          subtitle={
+            needsAccount("autoGeoPdf")
+              ? accountText
+              : "GeoPDFs generated on Logjam Web download here automatically."
+          }
           value={autoDownload}
-          ready
+          ready={!needsAccount("autoGeoPdf")}
           onToggle={() => {
             const next = !autoDownload;
             if (!stored(setAutoDownloadEnabled(next))) return;
@@ -208,9 +221,13 @@ export function OfflineSettingsScreen({
         <PreferenceRow
           icon="lidar"
           title="Finished LiDAR topos"
-          subtitle="LiDAR topos generated on Logjam Web download here automatically."
+          subtitle={
+            needsAccount("autoTopo")
+              ? accountText
+              : "LiDAR topos generated on Logjam Web download here automatically."
+          }
           value={topoAutoDownload}
-          ready
+          ready={!needsAccount("autoTopo")}
           onToggle={() => {
             const next = !topoAutoDownload;
             if (!stored(setTopoAutoDownloadEnabled(next))) return;
@@ -220,6 +237,7 @@ export function OfflineSettingsScreen({
 
         <SectionHeader title="Allow on mobile data" />
         {METERED_ROWS.map((row) => {
+          const blocked = needsAccount(row.job);
           const off =
             (row.needs === "geoPdf" && !autoDownload) ||
             (row.needs === "topo" && !topoAutoDownload);
@@ -227,9 +245,15 @@ export function OfflineSettingsScreen({
             <PreferenceRow
               key={row.job}
               title={row.title}
-              subtitle={off ? "Auto-download is off" : row.subtitle}
+              subtitle={
+                blocked
+                  ? accountText
+                  : off
+                    ? "Auto-download is off"
+                    : row.subtitle
+              }
               value={metered[row.job]}
-              ready={!off}
+              ready={!blocked && !off}
               onToggle={() => {
                 const next = !metered[row.job];
                 if (!stored(setMeteredAllowed(row.job, next))) return;
@@ -272,7 +296,13 @@ export function OfflineSettingsScreen({
             the four above it are switches. Wrapping a statement of fact in the
             same card promises a tap that does nothing. */}
         <View style={styles.footnote}>
-          <Hint text="Places, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device." />
+          <Hint
+            text={
+              accountState === "guest"
+                ? "Places, routes, imports and recordings stay on this phone until you link an account. Maps you downloaded stay on this device."
+                : "Places, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device."
+            }
+          />
         </View>
       </ScreenScroll>
 
