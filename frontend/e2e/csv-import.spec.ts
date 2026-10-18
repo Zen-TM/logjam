@@ -7,9 +7,10 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 // reaches. The expected values below are those files' goldens.
 //
 // Writes to the account, then takes it back: every case ends in Undo (also when
-// an assertion fails, `undoWhatWasImported`), because the integration suite
-// refuses to start on a DB that differs from the seed (`_globalSetup.ts`).
-// Only rows an import created are undone, so the files avoid the seeded places.
+// an assertion fails, `undoWhatWasImported`), and touches no seeded place,
+// because Undo spares a place an import merged into. Undo leaves sync
+// tombstones behind, so a local integration run after this spec needs a
+// re-seed: `_globalSetup.ts` refuses to start on a DB that differs from the seed.
 // Undo lives on the result, so what the import did is read there, before Undo.
 //
 // Mutations that turn it red: making `handleUndo` in UnifiedImportDialog skip
