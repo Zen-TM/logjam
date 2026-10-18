@@ -799,7 +799,7 @@ jobs:
           sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
           docker kill "$cid"
           sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
-          docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e JOB_ID "$IMAGE"
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE"
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py reaped "$JOB_ID"
