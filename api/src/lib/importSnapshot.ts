@@ -8,7 +8,7 @@
 // compared and restored key by key, so editing one attribute after an import
 // keeps that attribute and nothing else. Guards: importSnapshot.unit.test.ts,
 // src/__tests__/import.test.ts. Why this over a whole-row copy or an
-// unconditional restore: docs/decisions/0036-undo-restores-what-an-import-changed-for-a-day.md.
+// unconditional restore: docs/decisions/0037-undo-restores-what-an-import-changed-for-a-day.md.
 //
 // RETENTION: a snapshot counts for SNAPSHOT_TTL_MS (24 h) from its last write.
 // Undo is offered only on Logjam Web's import result screen, so one kept
