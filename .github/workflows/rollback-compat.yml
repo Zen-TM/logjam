@@ -79,7 +79,8 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
-      # A stub that answers OK (started below): no CI run reaches Expo.
+      # A stub that answers OK (started below). The live release posts to it
+      # only once it reads EXPO_PUSH_URL; until then it still reaches Expo.
       EXPO_PUSH_URL: http://localhost:9099
       ECS_SECURITY_GROUPS: sg-local
       RATE_LIMIT_GLOBAL_MAX: 1000000

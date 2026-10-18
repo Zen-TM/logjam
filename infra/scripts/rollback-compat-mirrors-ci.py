@@ -5,7 +5,9 @@ steps. Otherwise a variable added to api-integration only (with the code
 that needs it) makes the next migration PR's rollback-compat boot that code
 without it and go red for a reason unrelated to the PR.
 
-Mutation that turns this red: add a variable to either job's env block.
+Mutations that turn this red: add a variable to either job's env block; delete
+the Expo push stub step from either workflow; delete EXPO_PUSH_URL from ci.yml
+or point it at exp.host (no CI run may reach Expo).
 
 Usage: rollback-compat-mirrors-ci.py   (from anywhere in the repo; needs PyYAML)
 """
@@ -18,7 +20,11 @@ import yaml
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 # rollback-compat's own additions, which api-integration has no use for.
 OWN_ENV = {"PROD_API_URL", "LIVE_DIR"}
-WAIT_STEPS = ["Wait for MiniStack and create buckets", "Wait for API"]
+WAIT_STEPS = [
+    "Wait for MiniStack and create buckets",
+    "Wait for API",
+    "Start the Expo push stub",
+]
 
 
 def job(file, name):
@@ -44,6 +50,12 @@ def main():
                 f"env {key}: ci.yml {ci['env'].get(key)!r}, "
                 f"rollback-compat.yml {rc_env.get(key)!r}"
             )
+
+    push_url = ci["env"].get("EXPO_PUSH_URL")
+    if not push_url or "exp.host" in push_url:
+        failures.append(
+            "api-integration must point EXPO_PUSH_URL at the stub, not Expo"
+        )
 
     ci_runs, rc_runs = step_runs(ci), step_runs(rc)
     for name in WAIT_STEPS:
