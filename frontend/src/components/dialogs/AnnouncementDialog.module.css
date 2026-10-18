@@ -1,0 +1,44 @@
+.from {
+  composes: detail from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+.message {
+  margin-top: var(--space-1-5);
+}
+
+.message > * {
+  margin: 0;
+}
+
+.message > * + * {
+  margin-top: var(--space-1-5);
+}
+
+.heading {
+  composes: heading from "../../textRoles.generated.module.css";
+}
+
+.subheading {
+  composes: rowTitle from "../../textRoles.generated.module.css";
+}
+
+.paragraph {
+  composes: paragraph from "../../textRoles.generated.module.css";
+}
+
+.list {
+  composes: paragraph from "../../textRoles.generated.module.css";
+  padding-left: var(--space-3);
+}
+
+/* `text` and underlined, not accent: accent fails 4.5:1 (ConsentGate's legal line). */
+.message a {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+/* No fill: a fill says "press here" (shared/DESIGN.md §4). */
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

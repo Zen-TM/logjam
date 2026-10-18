@@ -26,6 +26,7 @@ import {
   inboxTruncatedNote,
   isResolvedElsewhereError,
   newestNotificationsFirst,
+  notificationAnnouncement,
   notificationActions,
   notificationDeleteConfirm,
   notificationHaystack,
@@ -59,6 +60,7 @@ import { triggerDownload } from "../../../download";
 import type { MapsView, PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import AnnouncementDialog from "../../dialogs/AnnouncementDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -186,6 +188,10 @@ function NotificationsPanel({
     null,
   );
   const [confirming, setConfirming] = useState(false);
+  const [message, setMessage] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Refetch on every open — notifications are otherwise only fetched at boot, so
@@ -350,9 +356,12 @@ function NotificationsPanel({
     [onOverrideRead, onRefetchNotifications, toast],
   );
 
-  // Reading it is what marks it read; a place it is about opens on top.
+  // Reading it is what marks it read; a place it is about, or the message it
+  // carries, opens on top.
   const openNotification = (n: TNotification) => {
     if (!n.read) void setRead([n.id], true);
+    const announcement = notificationAnnouncement(n);
+    if (announcement) setMessage(announcement);
     const placeId = notificationPlaceId(n);
     if (placeId) {
       setSelectedPlaceID(placeId);
@@ -552,6 +561,17 @@ function NotificationsPanel({
   const rowEntries = (n: TNotification): MenuEntry[] => {
     const destination = inboxDestination(n);
     const entries: MenuEntry[] = [];
+    if (notificationAnnouncement(n)) {
+      entries.push(
+        {
+          id: "read-message",
+          label: notificationVerb("readMessage").label,
+          icon: "forward",
+          onSelect: () => openNotification(n),
+        },
+        { id: "sep-message", separator: true },
+      );
+    }
     if (destination) {
       entries.push(
         {
@@ -989,6 +1009,7 @@ function NotificationsPanel({
         }}
         onClose={() => setPendingConfirm(null)}
       />
+      <AnnouncementDialog message={message} onClose={() => setMessage(null)} />
     </div>
   );
 }

@@ -77,6 +77,55 @@ async function openApp(page: Page) {
   });
 }
 
+/**
+ * A made-up maintainer announcement on top of the real inbox, already read so
+ * opening it writes nothing to the account.
+ */
+async function withAnnouncement(page: Page) {
+  await page.route("**/notifications", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const rows = await response.json();
+    const announcement = {
+      id: "00000000-0000-4000-8000-00000000a11e",
+      type: "announcement",
+      read: true,
+      createdAt: new Date().toISOString(),
+      payload: {
+        announcementId: "00000000-0000-4000-8000-00000000a11f",
+        title: "Track sharing is here",
+        body: [
+          "## What's new",
+          "You can now **share a track** with a friend, from its *own page*.",
+          "",
+          "- Open the track",
+          "- Press `Share`",
+          "",
+          "Questions? [Write to us](mailto:hello@example.com).",
+        ].join("\n"),
+      },
+    };
+    await route.fulfill({ response, json: [announcement, ...rows] });
+  });
+}
+
+async function openAnnouncement(page: Page, narrow = false) {
+  if (narrow) {
+    // Narrow web keeps the Inbox in the tab bar's More menu.
+    await page.getByRole("button", { name: /^More/ }).click();
+    await page.getByRole("menuitem", { name: /^Inbox/ }).click();
+  } else {
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+  }
+  await page
+    .locator("aside")
+    .getByRole("button", { name: "Track sharing is here", exact: true })
+    .click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog", { name: "Track sharing is here" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 test.describe("desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -374,6 +423,16 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "aside");
     await page.keyboard.press("Escape");
     await expect(inbox.getByRole("radiogroup", { name: "Show" })).toBeVisible();
+  });
+
+  test("a maintainer announcement opened from its row", async ({ page }) => {
+    await withAnnouncement(page);
+    await openApp(page);
+    const dialog = await openAnnouncement(page);
+    await expect(dialog.getByRole("heading", { level: 2 })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
   });
 
   test("a confirm dialog", async ({ page }) => {
@@ -941,6 +1000,14 @@ test.describe("ghost gum", () => {
 
 test.describe("narrow web", () => {
   test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a maintainer announcement inside the phone", async ({ page }) => {
+    await withAnnouncement(page);
+    await openApp(page);
+    const dialog = await openAnnouncement(page, true);
+    await expectNoViolations(page, "dialog");
+    expect((await dialog.boundingBox())!.width).toBe(390);
+  });
 
   test("the tab bar and its More menu", async ({ page }) => {
     await openApp(page);
