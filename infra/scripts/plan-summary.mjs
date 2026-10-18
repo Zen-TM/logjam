@@ -30,9 +30,9 @@ import { pathToFileURL } from "node:url";
 // GitHub rejects a comment over 65536 chars.
 export const MAX_COMMENT = 60000;
 
-// Changes to the pipeline itself (this script, the plan and apply workflows)
-// put every root in scope, so its plan comment is refreshed.
-const PIPELINE = String.raw`infra/scripts/plan-summary|\.github/workflows/terraform-(plan|apply)\.yml`;
+// Changes to the pipeline itself (this script, the plan, signing and apply
+// workflows) put every root in scope, so its plan comment is refreshed.
+const PIPELINE = String.raw`infra/scripts/plan-summary|\.github/workflows/terraform-(plan|plan-sign|apply)\.yml`;
 
 // The plan and apply workflows both ask `scope`, so a PR is applied for
 // exactly the roots it was planned for: a root applied without a plan
