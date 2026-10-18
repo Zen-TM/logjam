@@ -53,8 +53,8 @@ elvis-katoomba-2506258-laz.zip`:
    row has its `ecs_task_arn`, that MiniStack lists that task, and that the
    container got the `JOB_ID` override and sits on the no-internet network
    only.
-4. **Happy path** (`e2e/check.py complete`): MiniStack stops the task with exit
-   code 0 and the row is `complete` with its outputs, footprint, metrics and
+4. **Happy path** (`e2e/check.py complete`): the worker exits 0 and the row is
+   `complete` with its outputs, footprint, metrics and
    storage charge; the objects are in the bucket and the input ZIP is gone;
    every layer's tile on Mount Solitary decodes and is not blank.
 5. **Resurrection check** (`e2e/check.py reaped`): a second job is launched

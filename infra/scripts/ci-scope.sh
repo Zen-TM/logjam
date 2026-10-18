@@ -53,9 +53,11 @@ paths_for() {
     # The worker image (image-build-scope.sh holds what it is built from), the
     # job's stubs and checks, its sample input, the task definition whose env
     # worker.env mirrors, and the settings the job submits (the worker
-    # re-validates them in Python), and the two API files that launch the worker
-    # through RunTask.
-    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/src/(lib/ecsRunTask|routes/topoJobs)\\.ts$)" ;;
+    # re-validates them in Python), and the API files that launch the worker
+    # through RunTask: the helper, the route and the ECS client. lib/env.ts is
+    # left out: its ECS_SUBNETS parsing has a unit test, and most env changes
+    # are for other variables.
+    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
     # A migration, run under the live release (rollback-compat.yml).
     rollback_compat) echo '^(api/prisma/migrations/|\.github/workflows/rollback-compat\.yml$)' ;;
     # Static Terraform checks and the plan-comment tests (terraform-ci.yml).
@@ -132,6 +134,7 @@ self_test() {
   check "topo_e2e: a topo unit test"                      topo_e2e false 0 'topo/tests/test_labels.py'
   check "topo_e2e: the RunTask helper"                    topo_e2e true  0 'api/src/lib/ecsRunTask.ts'
   check "topo_e2e: the start route"                       topo_e2e true  0 'api/src/routes/topoJobs.ts'
+  check "topo_e2e: the ECS client"                       topo_e2e true  0 'api/src/services/awsClients.ts'
   check "topo_e2e: api only"                              topo_e2e false 0 'api/src/routes/media.ts'
   check "any area: ci.yml"                                mobile true  0 $'docs/a.md\n.github/workflows/ci.yml'
   check "any area: this script"                           migrations true  0 'infra/scripts/ci-scope.sh'

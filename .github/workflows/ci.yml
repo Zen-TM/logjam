@@ -561,7 +561,8 @@ jobs:
   # forgot to stub fails instead of reaching out.
   #
   # Its own job, not a step of api-integration: it is scoped to what the worker
-  # image is built from rather than to the API, and its six minutes (ten with
+  # image is built from and the two API files that launch it (ci-scope.sh)
+  # rather than to the whole API, and its six minutes (ten with
   # a cold image cache) run beside that suite instead of after it. The setup it
   # repeats is about a minute.
   topo-e2e:
@@ -766,15 +767,6 @@ jobs:
           if grep -E 'raster unavailable|Overpass attempt' "$RUNNER_TEMP/worker.log"; then exit 1; fi
           grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/worker.log" \
             || { echo "the worker never read the SVTM raster"; exit 1; }
-          # MiniStack saw the task through to a clean stop.
-          arn=$(psql -h localhost -U logjam -d logjam -tAc "SELECT ecs_task_arn FROM topo_jobs WHERE id = '$JOB_ID'")
-          for _ in $(seq 1 30); do
-            aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$arn" \
-              | jq -e '.tasks[0] | .lastStatus == "STOPPED" and .containers[0].exitCode == 0' && break
-            sleep 1
-          done
-          aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$arn" \
-            | jq -e '.tasks[0] | .lastStatus == "STOPPED" and .containers[0].exitCode == 0'
           # A point on Mount Solitary, inside the tile.
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \

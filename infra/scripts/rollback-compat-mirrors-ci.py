@@ -100,8 +100,8 @@ def main():
     if ministack.pop("volumes", None) != [DOCKER_SOCKET]:
         failures.append("topo-e2e's MiniStack must mount only the Docker socket")
     services = set(ministack.get("env", {}).get("SERVICES", "").split(","))
-    if not {"s3", "ecs"} <= services:
-        failures.append("topo-e2e's MiniStack must run s3 and ecs")
+    if services != {"s3", "ecs"}:
+        failures.append("topo-e2e's MiniStack must run exactly s3 and ecs")
     if ministack.get("env"):
         ministack["env"]["SERVICES"] = ci["services"]["ministack"]["env"]["SERVICES"]
     if ci["services"] != topo_services:
