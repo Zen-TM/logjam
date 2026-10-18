@@ -803,6 +803,10 @@ jobs:
         run: |
           pip install pyyaml==6.0.3
           infra/scripts/rollback-compat-mirrors-ci.py
+      # A required check no job reports, or whose workflow skips PRs by path,
+      # leaves every PR waiting; the ruleset names them only as strings.
+      - name: Required checks are reported on every PR
+        run: infra/scripts/check-required-checks.py
       # Every Dependabot `ignore` names an open tracking issue (see the header of
       # .github/dependabot.yml). The self-test needs no network; the check asks
       # GitHub for each issue's state, and only warns if it cannot.
