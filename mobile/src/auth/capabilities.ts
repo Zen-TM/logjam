@@ -178,6 +178,21 @@ export function capabilityRowProps(
 }
 
 /**
+ * The change-email row. Fake auth (dev only) never configures Amplify, which
+ * is what changing an email calls, so the row says why it is dimmed instead of
+ * failing on press.
+ */
+export function changeEmailRowProps(
+  online: boolean,
+  authMode: "cognito" | "fake",
+): { disabled: boolean; subtitle?: string } {
+  if (authMode === "fake") {
+    return { disabled: true, subtitle: "Not available under fake sign-in." };
+  }
+  return capabilityRowProps("serverPrefs", "linked", online);
+}
+
+/**
  * The same `Row` shape for a status that did NOT come from `capabilityStatus` —
  * today only sharing's, which has an axis the capability matrix cannot express.
  * One implementation, so a third reason can never render as a dimmed row with
