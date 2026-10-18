@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Install
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: shared/package-lock.json
       - name: Install
@@ -137,7 +137,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared and imports from shared/dist
@@ -251,7 +251,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared and imports from shared/dist.
@@ -363,8 +363,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # jsdom 30 (vitest's DOM) needs Node 22.22+; the api jobs stay on 20.
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Build shared
@@ -393,10 +392,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # 22, not 20: outboxPurge.test.ts runs the real mirror schema through
-          # node:sqlite, which Node ships unflagged from 22.13. On 20 the import
-          # fails lint (import/no-unresolved) before the test can fail to load.
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       # mobile depends on shared via file:../shared and imports from shared/dist
@@ -455,7 +451,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared; npm ci resolves it.
@@ -510,7 +506,7 @@ jobs:
         run: git fetch --no-tags --depth=1 origin main
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       - name: Build shared
@@ -635,7 +631,7 @@ jobs:
           cache-to: type=gha,scope=topo-worker,mode=max
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       - name: Build shared
@@ -816,6 +812,13 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # One Node for every toolchain: the workflows, the api image and the
+      # @types/node pins must all equal mise.toml's. The Lambda's types are
+      # checked against its own runtime instead.
+      - name: Node pins agree with mise.toml
+        run: |
+          infra/scripts/check-node-version.py --self-test
+          infra/scripts/check-node-version.py
       # prod and github apply from the shared, locked S3 state; local's is
       # disposable and must never bind to it. Neither direction is visible in a
       # plan until it is too late, so it is checked here.

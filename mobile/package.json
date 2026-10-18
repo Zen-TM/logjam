@@ -74,7 +74,7 @@
     "react-native-url-polyfill": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.19.1",
+    "@types/node": "^26.6.5",
     "@types/react": "~19.3.0",
     "babel-preset-expo": "~58.0.0",
     "eslint": "^9.0.0",
