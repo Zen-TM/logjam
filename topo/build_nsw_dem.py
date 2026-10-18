@@ -141,10 +141,11 @@ class Layer:
 
 HEIGHTS = Layer("NSW 5 m DEM", "Derived from", halve, ROUNDING_M, 9)
 # Level 6, not 9. Timed on 120 sample Katoomba slope tiles, level 9 takes ~250 ms
-# a tile and level 6 ~17 ms; sized on all 2,681 z15 tiles of the sheet, level 6 is
-# 8 to 12 % bigger. Statewide the encode alone is ~85 core-hours at level 9, and
-# the whole build ~13 at level 6 (topo/README.md). Heights keep 9 so the
-# published height archive's bytes do not change.
+# a tile and level 6 ~17 ms; sized on all 2,681 z15 tiles of the sheet, level 6
+# is 8 to 12 % bigger. Statewide that is ~70 core-hours of encoding at level 9
+# (250 ms x 1.03 M tiles) against ~13 for the whole build at level 6
+# (topo/README.md). Heights keep 9 so the published height archive's bytes do
+# not change.
 SLOPE = Layer(
     "NSW 5 m DEM slope", "Slope derived from", halve_max, SLOPE_ROUNDING_DEG, 6
 )
@@ -509,10 +510,12 @@ def block_slope(
     """
     n = tiles + 2
     padded = np.full((n * TILE, n * TILE), np.nan, np.float32)
+    present = np.zeros((n, n), bool)
     for row in range(n):
         for col in range(n):
             height = get(bx * tiles - 1 + col, by * tiles - 1 + row)
             if height is not None:
+                present[row, col] = True
                 padded[row * TILE : (row + 1) * TILE, col * TILE : (col + 1) * TILE] = (
                     height
                 )
@@ -520,6 +523,9 @@ def block_slope(
     slope = np.empty((size, size), np.float32)
     for row in range(tiles):
         top = (row + 1) * TILE
+        if not present[row : row + 3].any():  # sea, or off the archive
+            slope[row * TILE : (row + 1) * TILE] = np.nan
+            continue
         slope[row * TILE : (row + 1) * TILE] = horn_slope(
             padded[top - 1 : top + TILE + 1, TILE - 1 : TILE + size + 1],
             pixel_size_m((by * tiles + row) * TILE, TILE),
@@ -569,11 +575,16 @@ def build_slope(
     with ProcessPoolExecutor(
         jobs, initializer=init_worker, initargs=(heights,)
     ) as pool:
-        for n, done in enumerate(
-            as_completed(pool.submit(slope_block, j) for j in todo), 1
-        ):
-            if line := done.result():
-                print(f"[{n}/{len(todo)}] {line}", flush=True)
+        futures = [pool.submit(slope_block, job) for job in todo]
+        try:
+            for n, done in enumerate(as_completed(futures), 1):
+                if line := done.result():
+                    print(f"[{n}/{len(todo)}] {line}", flush=True)
+        except BaseException:
+            # Leaving the `with` waits for every queued block otherwise: hours
+            # of silent work before the traceback prints.
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
     pack(work, out, extracted, SLOPE)
 
 

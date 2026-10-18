@@ -61,8 +61,8 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 ```bash
 # 1. Clone / copy this project
-git clone <this-repo> logjam-topo
-cd logjam-topo
+git clone <this-repo> logjam
+cd logjam/topo     # the commands below run from here
 
 # 2. Create input/output directories
 mkdir -p input output
@@ -253,8 +253,8 @@ through `$TMPDIR`; `pack` now takes longer and about one archive more disk):
 | Result | 16.9 GB, 1,027,356 tiles |
 | Disk | 96 GB in use when `pack` finished (go-pmtiles); allow 150 GB, and more with the Python writer |
 
-Any machine with GDAL and Python does: nothing here touches AWS
-until the archive is published.
+Any machine with GDAL and Python (and the `pmtiles` binary for the check) does:
+nothing here touches AWS until the archive is published.
 
 ```bash
 python3 build_nsw_dem.py fetch dem/src
@@ -316,43 +316,64 @@ hours. It has not been run statewide.
 
 #### Building it in AWS
 
+Running it is a prod change and the maintainer's to make: it needs `ecs run-task`
+and the Terraform outputs, which a contributor's read-only access does not have.
 Fargate has what it needs without a new task definition: the
 `logjam-topo-worker` one has 8 vCPU and 16 GB, its role reads and writes the
 topo bucket, and the image carries `build_nsw_dem.py` and the `pmtiles` package.
 Its default disk is 20 GiB, so the run asks for more: about 17 GB of input, 13 GB
 of block files, and a further 13 GB each for the MBTiles the packer builds, its
 spool and the result. Run it once *Deploy topo worker* has pushed an image that
-has `build_nsw_dem.py`. The commands run from `topo/` on your machine with your
-AWS login; the task, not you, moves the 17 GB.
+has `build_nsw_dem.py`. The commands run from `topo/`.
 
-The task takes 8 of the account's 30 Fargate vCPU for hours, and the API's cap
-on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default) does not see it. Start
-it only when no topo, export or GeoPDF job is in flight, or a user's job will
-fail to start and show as failed.
+The task holds 8 of the account's 30 Fargate vCPU for two to three hours, and the
+API's cap on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default, in
+`api/src/lib/env.ts`) counts job rows, not tasks, so it does not see it. A user
+job that starts while it runs can fail to start, and shows as failed, once user
+load passes 22 vCPU. Run it when Logjam is quiet, or lower that cap to 16 for
+the run. Before starting, and at any time to see what is running, list the
+cluster's tasks: before the start the list should be empty, and during the run it
+should hold only yours.
 
 ```bash
 cd ../infra/terraform/envs/prod
+CLUSTER=$(terraform output -raw ecs_cluster)
+aws ecs list-tasks --cluster "$CLUSTER" --desired-status RUNNING
 EXTRACTED="<Month Year>"   # as the height archive's credit
 JOB='set -e; cd /tmp
 python3 -c "import boto3; boto3.client(\"s3\").download_file(\"logjam-topo-jobs\", \"master/dem/nsw-5m.pmtiles\", \"nsw-5m.pmtiles\")"
 python3 /app/build_nsw_dem.py slope nsw-5m.pmtiles nsw-5m-slope.pmtiles --extracted "'"$EXTRACTED"'" --jobs 8
+ls -l nsw-5m.pmtiles nsw-5m-slope.pmtiles
 python3 -c "import boto3; boto3.client(\"s3\").upload_file(\"nsw-5m-slope.pmtiles\", \"logjam-topo-jobs\", \"master/dem/nsw-5m-slope.pmtiles\", ExtraArgs={\"ContentType\": \"application/vnd.pmtiles\"})"'
-TASK=$(aws ecs run-task --cluster "$(terraform output -raw ecs_cluster)" --launch-type FARGATE \
+OUT=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE \
   --task-definition logjam-topo-worker \
   --network-configuration "awsvpcConfiguration={subnets=[$(terraform output -raw ecs_subnets)],securityGroups=[$(terraform output -raw ecs_security_groups)],assignPublicIp=ENABLED}" \
   --overrides "$(jq -n --arg job "$JOB" '{ephemeralStorage: {sizeInGiB: 120},
       containerOverrides: [{name: "topo-worker", command: ["sh", "-c", $job]}]}')" \
-  --query 'tasks[0].taskArn' --output text)
+  --output json)
+TASK=$(jq -er '.tasks[0].taskArn' <<<"$OUT") || { TASK=; echo "NOT STARTED:"; jq '.failures' <<<"$OUT"; }
 echo "$TASK"
 ```
 
-Follow it with
+If it printed `NOT STARTED`, nothing is running: read the failure reason, fix it
+and run the block again; do not run the commands below. Otherwise follow the
+task with
 `aws logs tail /ecs/logjam-topo-worker --follow --log-stream-name-prefix ecs/topo-worker/${TASK##*/}`
 (the log group also holds every user job's streams). The first line gives the
-block count (885 at most), then one line per finished block. The download, the
-packing and the upload print nothing, each for some minutes. If no block line
-has appeared for 15 minutes after the first, stop the task with
-`aws ecs stop-task --cluster "$(terraform output -raw ecs_cluster)" --task "$TASK"` and look at the log.
+block count (885 at most), then one line per finished block, `[N/count]`. The
+download before the first line, and the packing and upload after the last, print
+nothing for tens of minutes each: wait for the task to exit. If 15 minutes pass
+with no new block line *before* the last `[N/count]`, stop the task with
+`aws ecs stop-task --cluster "$CLUSTER" --task "$TASK"` and read the log. A block
+that fails stops the run with its traceback in the log.
+
+When the log stops, check how the task ended: it must say `STOPPED` with exit
+code `0`, and anything else means no archive was uploaded.
+
+```bash
+aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+  --query 'tasks[0].{status: lastStatus, exit: containers[0].exitCode, reason: stoppedReason}'
+```
 
 A Fargate disk is gone when the task stops, so a task that dies starts over:
 there is no resuming across tasks. When it has exited 0, check the result as for

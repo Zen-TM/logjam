@@ -6,6 +6,7 @@ topo/tests/_native_stub.py convention).
 """
 
 import io
+import json
 import math
 import os
 import re
@@ -143,18 +144,22 @@ class TestHornSlope(unittest.TestCase):
         out = horn_slope(plane(6, 6, 10.0), self.cell)  # 10 m up per 5 m across
         np.testing.assert_allclose(out, np.degrees(np.arctan(2.0)), atol=1e-4)
 
-    # Mutation: change a weight or the divisor in `horn_slope` in step on a
-    # plane (every plane stays right) and a bumpy window reads differently from
-    # `slopeDegrees` in shared/src/demSlope.ts, which asserts the same window
-    # and figure in demSlope.test.ts.
+    # Mutation: change a weight or the divisor in `horn_slope` (every plane
+    # stays right) and the bumpy window of shared/src/__fixtures__/
+    # horn-window.json reads differently; demSlope.test.ts reads the same file
+    # for `slopeDegrees`, so editing the figure alone turns that test red.
     def test_a_bumpy_window_reads_as_the_clients_read_it(self):
-        window = np.array([[10, 12, 17], [9, 15, 20], [11, 14, 25]], np.float32)
-        out = horn_slope(window, np.array([4.5]))
-        self.assertAlmostEqual(float(out[0, 0]), 51.29179169379886, places=4)
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        with open(os.path.join(root, "shared/src/__fixtures__/horn-window.json")) as f:
+            fixture = json.load(f)
+        window = np.array(fixture["heights"], np.float32).reshape(3, 3)
+        out = horn_slope(window, np.array([fixture["cellM"]]))
+        self.assertAlmostEqual(float(out[0, 0]), fixture["degrees"], places=4)
 
-    # Mutation: check only the centre pixel and a hole's neighbours get a slope
-    # made from the eight heights that are there: a confident number about
-    # ground nobody measured (demSlopeAt returns null for the same window).
+    # Mutation: NaN-ignoring sums (`np.nansum`, `np.nan_to_num`) and a hole's
+    # neighbours get a slope made from the heights that are there, or drop the
+    # centre `np.where` and a hole at the centre gets one: a confident number
+    # about ground nobody measured (demSlopeAt returns null for the same window).
     def test_any_of_the_nine_being_no_data_makes_the_pixel_no_data(self):
         for row, col in [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (2, 2)]:
             window = plane(3, 3, 1.0)
@@ -224,6 +229,52 @@ class TestBlockSlope(unittest.TestCase):
         self.assertEqual(ring[5, 5], 0)
 
 
+class TestSlopeBlock(unittest.TestCase):
+    # Mutation: `slope_block` hands `save_block` HEIGHTS instead of SLOPE (or
+    # skips Horn), and a block written to the work dir carries quarter-metre
+    # heights, not whole degrees; the z15 tile and its z10 parent must be there.
+    def test_a_block_is_written_in_whole_degrees(self):
+        import sqlite3
+        import tempfile
+
+        import build_nsw_dem
+
+        rise = np.tile(np.arange(TILE, dtype=np.float32) * 3.0, (TILE, 1))
+        png = png_bytes(encode_terrarium(rise, np.ones_like(rise, bool)))
+
+        class Heights:  # one z15 height tile, the block's north-west corner
+            def get(self, z, x, y):
+                return png if (z, x, y) == (15, 7 * 32, 9 * 32) else None
+
+        build_nsw_dem._heights = Heights()
+        try:
+            with tempfile.TemporaryDirectory() as work:
+                self.assertIn("7/9", build_nsw_dem.slope_block((7, 9, work)))
+                self.assertIsNone(build_nsw_dem.slope_block((7, 9, work)))  # resumed
+                db = sqlite3.connect(os.path.join(work, "7-9.sqlite"))
+                rows = dict(
+                    ((z, x, y), data)
+                    for z, x, y, data in db.execute("select z, x, y, data from tiles")
+                )
+                db.close()
+        finally:
+            build_nsw_dem._heights = None
+        self.assertIn((15, 7 * 32, 9 * 32), rows)
+        self.assertIn((10, 7, 9), rows)
+        got = decode_terrarium(
+            np.asarray(
+                Image.open(io.BytesIO(rows[(15, 7 * 32, 9 * 32)])).convert("RGB")
+            )
+        )
+        want = np.round(
+            horn_slope(
+                np.pad(rise, 1, constant_values=np.nan),
+                pixel_size_m(9 * 32 * TILE, TILE),
+            )
+        )
+        np.testing.assert_array_equal(got[1:-1, 1:-1], want[1:-1, 1:-1])
+
+
 class TestHalveMax(unittest.TestCase):
     # Mutation: a mean (or `halve`) turns a one-pixel cliff into gentle ground
     # at every coarser zoom, so it vanishes from the map where it matters.
@@ -261,9 +312,9 @@ class TestSlopeEncoding(unittest.TestCase):
         self.assertEqual(out[0, 0], 0)
         self.assertTrue(np.isnan(out[0, 1]))
 
-    # Mutation: pass `HEIGHTS` (or nothing) where `SLOPE` belongs in the tiling
-    # and a slope archive is written with the heights' quarter-metre steps and
-    # level 9; the slope's tile must decode in whole degrees.
+    # Mutation: `tiles_of` ignores its layer's rounding or PNG level (uses
+    # ROUNDING_M or level 9) and slope tiles carry quarter-degree steps at the
+    # heights' cost. The call sites are held by `TestSlopeBlock`.
     def test_a_slope_tile_is_written_with_the_slope_layer(self):
         grid = np.full((TILE, TILE), 12.4, np.float32)
         (z, x, y, png), *_ = tiles_of(grid, 15, 3, 4, SLOPE)

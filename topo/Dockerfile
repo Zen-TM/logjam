@@ -131,6 +131,9 @@ COPY icons/ /app/icons/
 # override can run another script from this image under the same task role: the
 # slope archive build (topo/README.md, "The statewide slope archive"). A task
 # definition that sets an entryPoint drops this CMD, as the other two do.
+# tests/test_docker_image_files.py `test_the_image_starts_the_worker_as_a_cmd`
+# holds it: with an ENTRYPOINT the slope recipe and `docker compose run topo
+# python3 /app/pipeline.py ...` would pass their command to worker.py as arguments.
 # Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected

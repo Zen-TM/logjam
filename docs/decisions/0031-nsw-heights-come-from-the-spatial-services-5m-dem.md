@@ -43,11 +43,12 @@ Property ... remains unchanged, maintained and preserved".
 - **A rebuild** replaces the whole archive and updates the month in the credit
   in the same change.
 
-No guard test enforces the credit's wording or month. `shared/src/demSources.test.ts`
-checks that a result credits the sources it was read from, and
-`topo/tests/test_nsw_dem.py` (`test_both_archives_carry_the_credit_of_the_heights`)
-checks that the height and slope archives' metadata word the credit as
-`NSW_5M.credit` does, up to the month (updated 2026-10-18).
+No guard test enforces `NSW_5M.credit`'s own wording or month.
+`shared/src/demSources.test.ts` checks that a result credits the sources it was
+read from, and `topo/tests/test_nsw_dem.py`
+(`test_both_archives_carry_the_credit_of_the_heights`) checks that both archives'
+credit carries `NSW_5M.credit`'s text from "the NSW 5 m" to "extracted"
+(updated 2026-10-18).
 
 ## Consequences
 
