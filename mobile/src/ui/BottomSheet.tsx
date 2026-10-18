@@ -13,10 +13,11 @@ import {
   Keyboard,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
+  type HostInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -104,9 +105,9 @@ export const SheetScrollLock = createContext<{
  * How a `FieldError` that has just appeared asks the sheet to bring it into
  * view (shared/DESIGN.md §11, "Form errors"). Null outside a sheet.
  */
-export const SheetErrorReveal = createContext<((target: View) => void) | null>(
-  null,
-);
+export const SheetErrorReveal = createContext<
+  ((target: HostInstance) => void) | null
+>(null);
 
 /**
  * The sheet as it was last drawn open. An owner empties its sheet in the
@@ -191,12 +192,12 @@ export function BottomSheet({
   // topmost of the frame wins, and the sheet scrolls only when THAT one is out
   // of view — so a live limit appearing under the field being typed in never
   // moves the sheet.
-  const scrollRef = useRef<ScrollView>(null);
-  const contentRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const contentRef = useRef<HostInstance>(null);
   const viewport = useRef({ y: 0, height: 0 });
   const pendingReveal = useRef<{ y: number; height: number } | null>(null);
   const revealError = useMemo(
-    () => (target: View) => {
+    () => (target: HostInstance) => {
       const content = contentRef.current;
       if (content == null) return;
       target.measureLayout(content, (_left, top, _width, height) => {
@@ -249,7 +250,7 @@ export function BottomSheet({
   // The modal's own height: the spacer above the sheet is at least this
   // tall, so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
-  const outerRef = useRef<ScrollView>(null);
+  const outerRef = useRef<ScrollViewInstance>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
   // that is from its end. `touching`: a finger is dragging it. `dragged`: a
   // finger has, since it last settled. `closing`: the drag has asked to close

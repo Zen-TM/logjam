@@ -7,7 +7,9 @@ without it and go red for a reason unrelated to the PR.
 
 Mutations that turn this red: add a variable to either job's env block; delete
 the Expo push stub step from either workflow; delete EXPO_PUSH_URL from ci.yml
-or point it at exp.host (no CI run may reach Expo).
+or point it at exp.host (no CI run may reach Expo); move either job's seed
+above its bucket step (the seed uploads into those buckets, best effort, so a
+missing bucket fails tests later, not the seed).
 
 topo-e2e boots the same API, so its services must equal api-integration's and
 its env carry every variable of api-integration's, less what only that suite
@@ -74,6 +76,13 @@ def main():
     for name in WAIT_STEPS:
         if ci_runs.get(name) is None or ci_runs.get(name) != rc_runs.get(name):
             failures.append(f"step {name!r} differs or is missing")
+
+    for label, j in (("api-integration", ci), ("rollback-compat", rc)):
+        names = [st.get("name", "") for st in j["steps"]]
+        seeds = [i for i, st in enumerate(j["steps"]) if "prisma db seed" in (st.get("run") or "")]
+        buckets = names.index(WAIT_STEPS[0]) if WAIT_STEPS[0] in names else None
+        if not seeds or buckets is None or buckets > seeds[0]:
+            failures.append(f"{label}: create the buckets before the seed")
 
     topo = job("ci.yml", "topo-e2e")
     if ci["services"] != topo["services"]:

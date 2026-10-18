@@ -27,7 +27,7 @@
 // path, and every phone fetches the same file. Guard: placeRegistry.test.ts
 // ("from the CDN with nothing else sent").
 import { useSyncExternalStore } from "react";
-import { AppState, InteractionManager } from "react-native";
+import { AppState } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { gunzipSync, strFromU8 } from "fflate";
@@ -388,9 +388,10 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
     throw new Error(`Place registry download answered ${result.status}`);
   }
   // Parsed before it replaces anything, off the first frames. Not indexed:
-  // the index is built only for a search.
+  // the index is built only for a search. The timeout keeps a busy JS thread
+  // (map animation, track recording) from deferring the update forever.
   await new Promise<void>((resolve) =>
-    InteractionManager.runAfterInteractions(() => resolve()),
+    requestIdleCallback(() => resolve(), { timeout: 2000 }),
   );
   await readFile(DOWNLOAD_URI, pointer);
 

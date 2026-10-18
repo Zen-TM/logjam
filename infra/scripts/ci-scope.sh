@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Which of ci.yml's heavy jobs a pull request needs, so a docs change does not
-# stand up Postgres, MiniStack and the API. Writes `<area>=true|false` for
+# Which heavy CI jobs a pull request needs, so a docs change does not stand up
+# Postgres, MiniStack and the API. ci.yml, rollback-compat.yml, terraform-ci.yml
+# and setup-smoke.yml each run it in a `changes` job. Writes `<area>=true|false` for
 # every area to $GITHUB_OUTPUT (stdout when unset); ci.yml's `changes` job
 # passes them on, and each scoped job runs unless its area is `false`.
 #
@@ -26,12 +27,13 @@
 # from api_integration fails "api_integration: the Expo push stub it starts";
 # removing the ci.yml rule fails "any area: ci.yml"; dropping --no-renames
 # fails "a rename out of an area"; dropping the worker image's paths from
-# topo_e2e fails "topo_e2e: worker source"; a scoped job whose `if:` is not the
-# fail-open expression, or a
-# `changes` output wired to another area's value, fails the ci.yml checks.
+# topo_e2e fails "topo_e2e: worker source"; dropping lockfiles from setup_smoke
+# fails "setup_smoke: a nested lockfile"; a scoped job in any workflow whose
+# `if:` is not the fail-open expression, or a `changes` output wired to another
+# area's value, fails that workflow's checks.
 set -uo pipefail
 
-AREAS="api_integration mobile migrations topo_e2e"
+AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke"
 
 # A change to the gate itself runs the whole gate.
 ALWAYS='^(\.github/workflows/ci\.yml|infra/scripts/ci-scope\.sh)$'
@@ -52,6 +54,12 @@ paths_for() {
     # worker.env mirrors, and the settings the job submits (the worker
     # re-validates them in Python).
     topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$)" ;;
+    # A migration, run under the live release (rollback-compat.yml).
+    rollback_compat) echo '^(api/prisma/migrations/|\.github/workflows/rollback-compat\.yml$)' ;;
+    # Static Terraform checks and the plan-comment tests (terraform-ci.yml).
+    terraform) echo '^(infra/terraform/|infra/scripts/plan-summary|infra/scripts/__fixtures__/|\.github/workflows/terraform-ci\.yml$)' ;;
+    # What `make setup` reads on a fresh machine (setup-smoke.yml).
+    setup_smoke) echo '^(mise\.toml|Makefile|docs/dev-setup\.md|\.github/workflows/setup-smoke\.yml)$|(^|/)package-lock\.json$|^topo/requirements[^/]*\.txt$' ;;
     *) return 1 ;;
   esac
 }
@@ -124,26 +132,45 @@ self_test() {
   check "any area: ci.yml"                                mobile true  0 $'docs/a.md\n.github/workflows/ci.yml'
   check "any area: this script"                           migrations true  0 'infra/scripts/ci-scope.sh'
   check "other workflow is not the gate"                  mobile false 0 '.github/workflows/smoke.yml'
+  check "rollback_compat: a migration"                    rollback_compat true  0 'api/prisma/migrations/2026/migration.sql'
+  check "rollback_compat: its workflow"                   rollback_compat true  0 '.github/workflows/rollback-compat.yml'
+  check "rollback_compat: the schema alone"               rollback_compat false 0 'api/prisma/schema.prisma'
+  check "terraform: a root"                               terraform true  0 'infra/terraform/envs/prod/ecs.tf'
+  check "terraform: the plan-summary script"              terraform true  0 'infra/scripts/plan-summary.mjs'
+  check "terraform: its workflow"                         terraform true  0 '.github/workflows/terraform-ci.yml'
+  check "terraform: another infra script"                 terraform false 0 'infra/scripts/deploy-guard.sh'
+  check "setup_smoke: a nested lockfile"                  setup_smoke true  0 'frontend/package-lock.json'
+  check "setup_smoke: the root lockfile"                  setup_smoke true  0 'package-lock.json'
+  check "setup_smoke: mise.toml"                          setup_smoke true  0 'mise.toml'
+  check "setup_smoke: topo requirements"                  setup_smoke true  0 'topo/requirements-test.txt'
+  check "setup_smoke: the guide"                          setup_smoke true  0 'docs/dev-setup.md'
+  check "setup_smoke: a package.json alone"               setup_smoke false 0 'api/package.json'
   check "empty diff"                                      api_integration false 0 ''
   check "diff unreadable"                                 mobile true  128 'fatal: bad revision'
 
-  # ci.yml agrees with AREAS, in all three places a skip could go wrong.
-  local ci declared yml bad needs reads
-  ci="$(dirname "${BASH_SOURCE[0]}")/../../.github/workflows/ci.yml"
+  # Every workflow that runs this script agrees with AREAS, in all three
+  # places a skip could go wrong.
+  local wf declared yml all_reads="" bad needs reads outs
   declared=$(tr ' ' '\n' <<<"$AREAS" | sort -u | tr '\n' ' ')
   ok_if() { if [ -z "$2" ]; then echo "ok   — $1"; else echo "FAIL — $1: $2"; fails=1; fi; }
-  # Scoped jobs read exactly the declared areas...
-  yml=$(grep -oE 'needs\.changes\.outputs\.[a-z0-9_]+' "$ci" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
-  ok_if "ci.yml reads exactly the declared areas" "$([ "$yml" = "$declared" ] || echo "reads [$yml], declared [$declared]")"
-  # ...each through the fail-open expression, one per `needs: changes` job...
-  bad=$(grep -E 'needs\.changes\.outputs\.' "$ci" | grep -vE "^    if: \\$\\{\\{ !cancelled\\(\\) && needs\\.changes\\.outputs\\.[a-z0-9_]+ != 'false' \\}\\}$" || true)
-  ok_if "every scoped job's if: fails open" "$bad"
-  needs=$(grep -cE '^    needs: changes$' "$ci"); reads=$(grep -cE 'needs\.changes\.outputs\.' "$ci")
-  ok_if "every job that needs changes reads an area" "$([ "$needs" = "$reads" ] || echo "$needs jobs need changes, $reads read an area")"
-  # ...and the changes job hands each area its own value.
-  bad=$(grep -E '^      [a-z0-9_]+: \$\{\{ steps\.scope\.outputs\.' "$ci" | sed -E 's/^ +([a-z0-9_]+): .*outputs\.([a-z0-9_]+) .*/\1 \2/' | awk '$1 != $2' || true)
-  yml=$(grep -oE '^      [a-z0-9_]+: \$\{\{ steps\.scope\.outputs\.' "$ci" | sed -E 's/^ +([a-z0-9_]+):.*/\1/' | sort -u | tr '\n' ' ')
-  ok_if "the changes job outputs each area as itself" "$bad$([ "$yml" = "$declared" ] || echo " outputs [$yml], declared [$declared]")"
+  for wf in "$(dirname "${BASH_SOURCE[0]}")"/../../.github/workflows/*.yml; do
+    grep -q 'ci-scope\.sh scope' "$wf" || continue
+    local name; name=$(basename "$wf")
+    yml=$(grep -oE 'needs\.changes\.outputs\.[a-z0-9_]+' "$wf" | sed 's/.*\.//' | sort -u | tr '\n' ' ')
+    all_reads="$all_reads $yml"
+    # Each scoped job reads its area through the fail-open expression...
+    bad=$(grep -E 'needs\.changes\.outputs\.' "$wf" | grep -vE "^    if: \\$\\{\\{ !cancelled\\(\\) && needs\\.changes\\.outputs\\.[a-z0-9_]+ != 'false' \\}\\}$" || true)
+    ok_if "$name: every scoped job's if: fails open" "$bad"
+    needs=$(grep -cE '^    needs: changes$' "$wf"); reads=$(grep -cE 'needs\.changes\.outputs\.' "$wf")
+    ok_if "$name: every job that needs changes reads an area" "$([ "$needs" = "$reads" ] || echo "$needs jobs need changes, $reads read an area")"
+    # ...and the changes job hands each area it reads its own value.
+    bad=$(grep -E '^      [a-z0-9_]+: \$\{\{ steps\.scope\.outputs\.' "$wf" | sed -E 's/^ +([a-z0-9_]+): .*outputs\.([a-z0-9_]+) .*/\1 \2/' | awk '$1 != $2' || true)
+    outs=$(grep -oE '^      [a-z0-9_]+: \$\{\{ steps\.scope\.outputs\.' "$wf" | sed -E 's/^ +([a-z0-9_]+):.*/\1/' | sort -u | tr '\n' ' ')
+    ok_if "$name: the changes job outputs each area it reads, as itself" "$bad$([ "$outs" = "$yml" ] || echo " outputs [$outs], reads [$yml]")"
+  done
+  # Together the workflows read exactly the declared areas.
+  yml=$(tr ' ' '\n' <<<"$all_reads" | grep . | sort -u | tr '\n' ' ')
+  ok_if "the workflows read exactly the declared areas" "$([ "$yml" = "$declared" ] || echo "read [$yml], declared [$declared]")"
 
   # The diff lists both sides of a rename, unquoted, or a file moved out of an
   # area would scope as if it were never there.

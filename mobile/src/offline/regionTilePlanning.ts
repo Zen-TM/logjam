@@ -153,7 +153,7 @@ export function deadTileBudget(totalTiles: number): number {
  * Guard: `regionTilePlanning.test.ts` ("exhaustedTileOutcome").
  */
 export function exhaustedTileOutcome(
-  appState: string,
+  appState: string | null | undefined,
   online: boolean,
 ): "dead" | "park" | "offline" {
   if (!online) return "offline";

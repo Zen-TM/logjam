@@ -131,7 +131,8 @@ export function describeSeedMismatch(seed: Snapshot | null, live: Snapshot) {
   if (!diff.length) return null;
   return (
     `The database is not as the seed left it (${diff.length} row(s)): a ` +
-    "run killed before its cleanup, or local use of the app, leaves rows " +
+    "run killed before its cleanup, or local use of the app (a local e2e " +
+    "run included: its Undo leaves sync tombstones), leaves rows " +
     `the suite would adopt as seed.\n${describeDrift(diff)}\n${fix}`
   );
 }

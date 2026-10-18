@@ -27,8 +27,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type TextInputInstance,
 } from "react-native";
 import {
   Camera,
@@ -251,7 +251,7 @@ export function RegionDownloadScreen({
     groupId: string;
     name: string;
   } | null>(null);
-  const nameInputRef = useRef<TextInput>(null);
+  const nameInputRef = useRef<TextInputInstance>(null);
 
   // "Region 3", numbered off what this phone already holds plus what is still
   // downloading. Nothing in it needs the network or says where the area is
