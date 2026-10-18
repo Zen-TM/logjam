@@ -263,19 +263,23 @@ describe("runRegionClip", () => {
   // red: a cancel then waits out a slow request, longer than a wipe waits.
   it("aborts the request in flight on Stop", async () => {
     const token: RegionCancelToken = { stop: null };
-    const start = Date.now();
+    let abortedAfter = Infinity;
     fetchMock.mockImplementation(async (url, init) => {
       if (cdn.calls.length < 6) return serve(url, init);
       cdn.calls.push({ url, init });
       token.stop = "cancel";
+      const began = Date.now();
       const { signal } = init as unknown as { signal: AbortSignal };
       return new Promise((_, reject) =>
-        signal.addEventListener("abort", () => reject(new Error("Aborted"))),
+        signal.addEventListener("abort", () => {
+          abortedAfter = Date.now() - began;
+          reject(new Error("Aborted"));
+        }),
       );
     });
     expect(await settled(run(SPEC, token))).toEqual({ status: "cancelled" });
-    // Before the request's own timeout, whose floor is 30 s.
-    expect(Date.now() - start).toBeLessThan(25_000);
+    // Well before the request's own timeout, whose floor is 30 s.
+    expect(abortedAfter).toBeLessThan(5_000);
     expect(disk.has(FILE)).toBe(false);
   });
 
