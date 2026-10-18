@@ -2449,7 +2449,8 @@ async function main() {
   // them. Bob's two place_shared rows predate this block.
   const egressQuota = 53_687_091_200n; // the column default
   // Made up, and using every piece of the Markdown subset the clients draw
-  // (shared/src/announcementMarkdown.ts), so the dialog shows them all.
+  // (shared/src/announcementMarkdown.ts), all three heading levels included,
+  // so the dialog shows them all.
   const announcement = await prisma.announcement.create({
     data: {
       id: fid(20),
@@ -2457,15 +2458,19 @@ async function main() {
       body: [
         "Logjam will be **offline for about an hour** on Saturday morning while it moves.",
         "",
-        "## What to expect",
+        "# What to expect",
         "",
         "- Logjam GPS keeps recording and *syncs* when it is back.",
         "- Logjam Web shows `Couldn't reach Logjam` until then.",
         "",
-        "### If something looks wrong",
+        "## If something looks wrong",
         "",
         "1. Pull to refresh.",
         "2. Sign out and in again.",
+        "",
+        "### On Logjam GPS",
+        "",
+        "Recorded tracks wait on the phone until it syncs.",
         "",
         "Questions go to [the issue tracker](https://example.com/issues) or [email](mailto:maintainer@example.com).  ",
         "Thanks for your patience.",

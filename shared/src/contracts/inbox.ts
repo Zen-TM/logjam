@@ -152,5 +152,4 @@ export function notificationDeleteConfirm(count: number): {
 export const ANNOUNCEMENT = {
   from: "From the Logjam maintainer",
   untitled: "A message from the Logjam maintainer",
-  close: "Close",
 } as const;

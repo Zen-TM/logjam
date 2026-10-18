@@ -87,6 +87,12 @@ meantime.
 3. If a worker deploy just ran, roll the worker back
    ([rollback.md](rollback.md)).
 
+A maintainer announcement runs on the `logjam-geo-pdf-worker` family and
+exits 1 when the script refuses a message, cannot find one to retract, or
+fails ([announcements.md](announcements.md)). Its event carries the
+announce command in `detail.overrides`; that failure is the script's, not
+the worker's, so there is nothing to roll back.
+
 ### `logjam-topo-stuck-task`
 
 Made by hand before Terraform owned monitoring and adopted as it was.

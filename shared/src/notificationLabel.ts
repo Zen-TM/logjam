@@ -149,8 +149,8 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: "Monthly download limit reached",
         warning: "Downloads resume when the limit resets next month.",
       };
-    // The maintainer's own title, resolved at read time; the push never
-    // carries it (api/src/services/push.ts).
+    // The maintainer's own title, resolved at read time. The push carries a
+    // fixed title instead (Guard: api/src/services/push.unit.test.ts).
     case "announcement":
       return { text: str(p.title) ?? ANNOUNCEMENT.untitled };
     default:

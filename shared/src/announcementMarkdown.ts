@@ -1,12 +1,16 @@
 // A maintainer announcement's body is Markdown, drawn by each client with its
-// own components. This turns it into the small tree both clients draw, and is
-// the only place the Markdown is read: the send script refuses a message whose
-// `dropped` is not empty, so the maintainer finds out before sending.
+// own components. This turns it into the small tree both clients draw. The
+// send script refuses a message whose `dropped` is not empty, so the
+// maintainer finds out before sending (Guard: api/src/scripts/announce.unit.test.ts).
 //
-// Nothing here ever yields markup. What the tree cannot hold (raw HTML, an
-// image, a table, a code block, a nested list, a link to anything but https,
-// http or mailto) becomes plain text and is named in `dropped`. marked's lexer
-// only tokenizes; its HTML renderer is never called.
+// Nothing here yields markup. What the tree cannot hold (raw HTML, an image, a
+// table, a code block, a nested list, a link to anything but https, http or
+// mailto) becomes plain text and is named in `dropped`; marked's lexer only
+// tokenizes and its HTML renderer is never called. Guard:
+// announcementMarkdown.test.ts ("keeps raw HTML…", "unlinks…").
+//
+// Heading levels are relative: the shallowest heading in a message is level
+// 1, so a body that starts at `##` reads the same as one that starts at `#`.
 import { Lexer, type Token, type Tokens } from "marked";
 
 export type MessageInline =
@@ -35,6 +39,9 @@ export type ParsedMessage = {
 };
 
 const LINK_SCHEMES = /^(https?|mailto):/i;
+// marked decodes numeric character references but not named ones, which
+// would otherwise show literally ("R&amp;D") or bend a link.
+const NAMED_ENTITY = /&[a-z][a-z0-9]*;/i;
 
 export function parseMessageMarkdown(markdown: string): ParsedMessage {
   const dropped = new Set<string>();
@@ -55,26 +62,34 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
     text: text.replace(/\n/g, " "),
   });
 
-  const inlines = (tokens: Token[] = []): MessageInline[] =>
+  const inlines = (tokens: Token[] = [], inLink = false): MessageInline[] =>
     tokens.flatMap((token): MessageInline[] => {
       const t = token as Tokens.Generic;
       switch (t.type) {
         case "text":
           // A list item's text token nests its own inline tokens.
-          return t.tokens ? inlines(t.tokens) : [plain(t.text)];
+          if (t.tokens) return inlines(t.tokens, inLink);
+          if (NAMED_ENTITY.test(t.text)) drop("an HTML entity");
+          return [plain(t.text)];
         case "escape":
           return [plain(t.text)];
         case "strong":
         case "em":
-          return [{ type: t.type, children: inlines(t.tokens) }];
+          return [{ type: t.type, children: inlines(t.tokens, inLink) }];
         case "codespan":
           return [{ type: "code", text: t.text.replace(/\n/g, " ") }];
         case "br":
           return [{ type: "break" }];
         case "link": {
           const href = String(t.href).trim();
+          if (inLink) {
+            // An autolink inside a link's text: a link can't hold a link.
+            drop("a link inside a link");
+            return inlines(t.tokens, inLink);
+          }
+          if (NAMED_ENTITY.test(href)) drop("an HTML entity");
           if (LINK_SCHEMES.test(href)) {
-            return [{ type: "link", href, children: inlines(t.tokens) }];
+            return [{ type: "link", href, children: inlines(t.tokens, true) }];
           }
           drop("a link that isn't https, http or mailto");
           return inlines(t.tokens);
@@ -84,7 +99,7 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
           return [plain(t.text)];
         case "del":
           drop("strikethrough");
-          return inlines(t.tokens);
+          return inlines(t.tokens, inLink);
         case "html":
           drop("raw HTML");
           return [plain(t.raw)];
@@ -99,7 +114,8 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
     const out: MessageInline[] = [];
     for (const token of item.tokens) {
       let content: MessageInline[];
-      if (token.type === "checkbox") continue;
+      // A blank line inside an item; the break between its parts is enough.
+      if (token.type === "checkbox" || token.type === "space") continue;
       if (token.type === "text" || token.type === "paragraph") {
         content = inlines((token as Tokens.Generic).tokens);
       } else if (token.type === "list") {
@@ -127,18 +143,20 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
         // A reference definition: its links already resolved into the text.
         case "def":
           return [];
-        case "heading":
-          if (t.depth <= 3) {
+        case "heading": {
+          const level = t.depth - topDepth + 1;
+          if (level <= 3) {
             return [
               {
                 type: "heading",
-                level: t.depth as 1 | 2 | 3,
+                level: level as 1 | 2 | 3,
                 children: inlines(t.tokens),
               },
             ];
           }
-          drop("a heading below level 3");
+          drop("more than three levels of heading");
           return [{ type: "paragraph", children: inlines(t.tokens) }];
+        }
         case "paragraph":
         case "text":
           return [{ type: "paragraph", children: inlines(t.tokens) }];
@@ -174,6 +192,17 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
       }
     });
 
-  const tree = blocks(Lexer.lex(markdown));
+  const tokens = Lexer.lex(markdown);
+  // Over every heading blocks() draws, a blockquote's included.
+  const depths = (ts: Token[]): number[] =>
+    ts.flatMap((t) =>
+      t.type === "heading"
+        ? [(t as Tokens.Heading).depth]
+        : t.type === "blockquote"
+          ? depths((t as Tokens.Blockquote).tokens)
+          : [],
+    );
+  const topDepth = Math.min(...depths(tokens));
+  const tree = blocks(tokens);
   return { blocks: tree, dropped: [...dropped] };
 }

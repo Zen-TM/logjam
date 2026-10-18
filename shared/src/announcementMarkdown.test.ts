@@ -8,7 +8,7 @@ describe("parseMessageMarkdown", () => {
     // Red if any supported token falls through to the dropped default.
     const { blocks, dropped } = parseMessageMarkdown(
       [
-        "## What's new",
+        "# What's new",
         "",
         "Some **bold**, *italic*, `code` and a [link](https://example.com).  ",
         "Next line.",
@@ -22,7 +22,7 @@ describe("parseMessageMarkdown", () => {
     );
     expect(dropped).toEqual([]);
     expect(blocks).toEqual([
-      { type: "heading", level: 2, children: [text("What's new")] },
+      { type: "heading", level: 1, children: [text("What's new")] },
       {
         type: "paragraph",
         children: [
@@ -107,8 +107,6 @@ describe("parseMessageMarkdown", () => {
       [
         "![alt](https://example.com/a.png) ~~gone~~",
         "",
-        "#### Deep",
-        "",
         "> quoted",
         "",
         "---",
@@ -126,7 +124,6 @@ describe("parseMessageMarkdown", () => {
     expect(dropped).toEqual([
       "an image",
       "strikethrough",
-      "a heading below level 3",
       "a blockquote",
       "a horizontal rule",
       "a code block",
@@ -134,7 +131,6 @@ describe("parseMessageMarkdown", () => {
     ]);
     expect(blocks).toEqual([
       { type: "paragraph", children: [text("alt"), text(" "), text("gone")] },
-      { type: "paragraph", children: [text("Deep")] },
       { type: "paragraph", children: [text("quoted")] },
       {
         type: "paragraph",
@@ -175,6 +171,68 @@ describe("parseMessageMarkdown", () => {
     ]);
   });
 
+  // Red if levels stay absolute (a body starting at ## skips a level in the
+  // dialog) or lose their spacing.
+  it("makes the shallowest heading level 1 and keeps the rest relative", () => {
+    const { blocks, dropped } = parseMessageMarkdown(
+      "## Two\n\n### Three\n\n#### Four\n\n###### Six",
+    );
+    expect(dropped).toEqual(["more than three levels of heading"]);
+    expect(blocks).toEqual([
+      { type: "heading", level: 1, children: [text("Two")] },
+      { type: "heading", level: 2, children: [text("Three")] },
+      { type: "heading", level: 3, children: [text("Four")] },
+      { type: "paragraph", children: [text("Six")] },
+    ]);
+  });
+
+  // Red if a link's text keeps a link of its own: no client can draw that.
+  it("flattens a link inside a link to its text and reports it", () => {
+    const { blocks, dropped } = parseMessageMarkdown(
+      "[see <https://a.example> now](https://b.example)",
+    );
+    expect(dropped).toEqual(["a link inside a link"]);
+    expect(blocks).toEqual([
+      {
+        type: "paragraph",
+        children: [
+          {
+            type: "link",
+            href: "https://b.example",
+            children: [text("see "), text("https://a.example"), text(" now")],
+          },
+        ],
+      },
+    ]);
+  });
+
+  // Red if a named entity passes unreported: it would show literally, or
+  // bend a link's address.
+  it.each(["R&amp;D", "[x](https://e.com/?a=1&amp;b=2)"])(
+    "reports a named HTML entity in %s",
+    (markdown) => {
+      expect(parseMessageMarkdown(markdown).dropped).toEqual([
+        "an HTML entity",
+      ]);
+    },
+  );
+
+  // Red if a blank line inside an item is not skipped: valid Markdown would
+  // be reported and the item gain an empty line.
+  it("keeps a list item's blank-line continuation as one more line", () => {
+    const { blocks, dropped } = parseMessageMarkdown("- a\n\n  more\n- b");
+    expect(dropped).toEqual([]);
+    expect(blocks).toEqual([
+      {
+        type: "list",
+        ordered: false,
+        start: 1,
+        items: [[text("a"), { type: "break" }, text("more")], [text("b")]],
+      },
+    ]);
+  });
+
+  // Red if a task list is not reported, or its checkbox survives as text.
   it("reports a task list and drops its checkbox", () => {
     const { blocks, dropped } = parseMessageMarkdown("- [x] done");
     expect(dropped).toEqual(["a task list"]);

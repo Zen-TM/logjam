@@ -35,6 +35,7 @@ const PUSH_TITLES: Record<string, string> = {
   egress_quota_warning: "Approaching your monthly download limit",
   egress_quota_exceeded: "Monthly download limit reached",
   // Never the message's own title: that is free text, and the inbox has it.
+  // Guard: push.unit.test.ts, "titles an announcement generically…".
   announcement: ANNOUNCEMENT.untitled,
   // ONE buzz for a whole bulk action, whatever it contained. Deliberately says
   // neither who nor how many: a count is not free text, but a title is built by

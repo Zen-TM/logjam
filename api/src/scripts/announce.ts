@@ -1,5 +1,5 @@
-// The maintainer's announcement script: the only way an Announcement is made
-// or removed. There is deliberately no HTTP surface for it.
+// The maintainer's announcement script, which makes and removes
+// Announcements; the API has no endpoint for either.
 //
 //   node dist/scripts/announce.js send <file.md>          # checks, counts, sends nothing
 //   node dist/scripts/announce.js send <file.md> --yes    # sends
@@ -8,8 +8,9 @@
 // How to run it against prod: docs/operations/announcements.md.
 //
 // Every existing user gets one Notification naming the announcement; whoever
-// signs up later gets none. Never email (privacy.html promises account codes
-// and finished jobs only); the push is a fixed title (services/push.ts).
+// signs up later gets none. Nothing is emailed: privacy.html promises account
+// codes and finished jobs only. The push is a fixed title and the id (Guard:
+// services/push.unit.test.ts, "titles an announcement generically…").
 import { readFileSync } from "node:fs";
 import { parseMessageMarkdown } from "@logjam/shared";
 import prisma from "../services/prisma";
@@ -24,7 +25,11 @@ import { logger, safeErrorForLog } from "../lib/logger";
 export function prepareAnnouncement(
   markdown: string,
 ): { title: string; body: string } | { refused: string[] } {
-  const [first, ...rest] = markdown.replace(/^\s*\n/, "").split("\n");
+  const [first, ...rest] = markdown
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/^\s*\n/, "")
+    .split("\n");
   const title = /^# (.+)$/.exec(first ?? "")?.[1].trim() ?? "";
   const body = rest.join("\n").trim();
   if (!title) return { refused: ["the file must start with a `# ` title"] };
@@ -32,17 +37,22 @@ export function prepareAnnouncement(
 
   const refused = parseMessageMarkdown(body).dropped;
   // The title is drawn as plain text, so Markdown in it would show literally.
-  const titleTree = parseMessageMarkdown(title).blocks;
+  const titleTree = parseMessageMarkdown(title);
   const plainTitle =
-    titleTree.length === 1 &&
-    titleTree[0].type === "paragraph" &&
-    titleTree[0].children.every((c) => c.type === "text");
+    titleTree.dropped.length === 0 &&
+    titleTree.blocks.length === 1 &&
+    titleTree.blocks[0].type === "paragraph" &&
+    titleTree.blocks[0].children.every((c) => c.type === "text");
   if (!plainTitle) refused.push("Markdown in the title");
   return refused.length > 0 ? { refused } : { title, body };
 }
 
-async function send(path: string, confirmed: boolean): Promise<number> {
-  const prepared = prepareAnnouncement(readFileSync(path, "utf8"));
+/** Checks a message; with `confirmed`, sends it. Returns the exit code. */
+export async function send(
+  markdown: string,
+  confirmed: boolean,
+): Promise<number> {
+  const prepared = prepareAnnouncement(markdown);
   if ("refused" in prepared) {
     logger.error({ refused: prepared.refused }, "announcement_refused");
     return 1;
@@ -84,7 +94,8 @@ async function send(path: string, confirmed: boolean): Promise<number> {
   return 0;
 }
 
-async function retract(id: string): Promise<number> {
+/** Deletes the announcement and every inbox row naming it. Returns the exit code. */
+export async function retract(id: string): Promise<number> {
   const [notifications, announcements] = await prisma.$transaction([
     prisma.notification.deleteMany({
       where: {
@@ -107,7 +118,8 @@ async function retract(id: string): Promise<number> {
 
 async function main(args: string[]): Promise<number> {
   const [command, target] = args;
-  if (command === "send" && target) return send(target, args.includes("--yes"));
+  if (command === "send" && target)
+    return send(readFileSync(target, "utf8"), args.includes("--yes"));
   if (command === "retract" && target) return retract(target);
   logger.error(
     "usage: announce.js send <file.md> [--yes] | retract <announcementId>",

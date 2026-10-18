@@ -27,13 +27,19 @@ Logjam will be **offline for about an hour** on Saturday morning.
 Questions: [email me](mailto:maintainer@example.com).
 ```
 
-The body can use headings (`#` to `###`), paragraphs, bullet and numbered
-lists (one level), **bold**, *italic*, `code`, links (`https:`, `http:` or
-`mailto:` only) and line breaks (two trailing spaces). The script refuses a
-message that uses anything else (raw HTML, images, tables, code blocks,
-nested lists, quotes, rules, strikethrough) and says what it found.
+The body can use headings, paragraphs, bullet and numbered lists (one
+level), **bold**, *italic*, `code`, links (`https:`, `http:` or `mailto:`
+only) and line breaks (two trailing spaces). Heading levels are relative: the
+body's shallowest heading is its top level, whether written `#` or `##`, and
+there can be three levels in all. The script refuses a message that uses
+anything else (raw HTML, images, tables, code blocks, nested lists, quotes,
+rules, strikethrough, a link inside a link, a named HTML entity such as
+`&amp;`: type the character) and says what it found.
 
 ## Send it
+
+Send only once Logjam Web and a Logjam GPS release that opens the message
+have shipped: before then, a user sees the title and cannot open the row.
 
 Run the script twice. Without `--yes` it checks the message and prints how
 many users would get it. With `--yes` it sends: the announcement and every
@@ -61,6 +67,18 @@ image (pinned by every deploy) with the API's environment and database
 credentials, and reaches the internet for the pushes. Only the command
 changes; the message travels in an environment variable. This needs the
 maintainer's AWS access, in `ap-southeast-2`.
+
+The task connects as the application's database role, not the master
+account, and reads only user ids and push device tokens. Its record is the
+`RunTask` call in CloudTrail, command and message included, in the write-once
+audit log ([DATA-ACCESS-POLICY.md](../DATA-ACCESS-POLICY.md)).
+
+A run that exits 1 (a refused message, a retract that finds nothing, an
+error) is a stopped task with a non-zero exit in `logjam-cluster`, so it
+counts towards the `logjam-worker-failures` alarm like a failed GeoPDF job,
+and its event, overrides and message included, is kept in
+`/aws/events/logjam-worker-failures`. Three in an hour page; the alarm's
+runbook says what to do ([alarms.md](alarms.md#logjam-worker-failures)).
 
 Define the helpers once in your shell:
 
