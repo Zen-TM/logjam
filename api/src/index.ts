@@ -37,6 +37,8 @@ import bulkShareRouter from "./routes/bulkShare";
 import fileSendsRouter from "./routes/fileSends";
 import friendsRouter from "./routes/friends";
 import friendInvitesRouter from "./routes/friendInvites";
+import plansRouter from "./routes/plans";
+import planSectionsRouter from "./routes/planSections";
 import notificationsRouter from "./routes/notifications";
 import ropewikiRouter from "./routes/ropewiki";
 import topoJobsRouter from "./routes/topoJobs";
@@ -222,6 +224,8 @@ app.use("/bulk-share", bulkShareRouter);
 app.use("/file-sends", fileSendsRouter);
 // Before /friends: its DELETE /:id would otherwise take DELETE /friends/invites.
 app.use("/friends/invites", friendInvitesRouter);
+app.use("/plans/:planId/sections", planSectionsRouter);
+app.use("/plans", plansRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);
 app.use("/devices", devicesRouter);
