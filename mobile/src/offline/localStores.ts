@@ -90,7 +90,7 @@ export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 
 /**
  * The last forecast for each 0.1° cell the user asked about
- * (`weather/weatherStorage.ts`, ADR 0035). WIPED: a cell is where this person
+ * (`weather/weatherStorage.ts`, ADR 0038). WIPED: a cell is where this person
  * went looking, which is location history at 11 km rather than none.
  */
 export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;

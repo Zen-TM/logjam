@@ -34,7 +34,7 @@ import {
   useWindowDimensions,
   type GestureResponderEvent,
   type NativeSyntheticEvent,
-  type TextInput,
+  type TextInputInstance,
 } from "react-native";
 import {
   Camera,
@@ -2468,7 +2468,7 @@ export function MapScreen({
   // surface, so it gets the same progress card in Saved and the same toast; a
   // successful one also re-centres the map, which the other surfaces can't do.
   const handleIncomingUrl = useCallback(
-    async (url: string | null) => {
+    async (url: string | null | undefined) => {
       if (!url || !isFileIntentUrl(url) || handledIntentUrls.has(url)) return;
       handledIntentUrls.add(url);
       try {
@@ -5493,7 +5493,7 @@ function RouteNameForm({
   // Empty-name requirement shows on SUBMIT, not while typing (shared/DESIGN.md §11);
   // clears as soon as the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   useEffect(() => {
     // autoFocus runs before the field is attached and is unreliable here.

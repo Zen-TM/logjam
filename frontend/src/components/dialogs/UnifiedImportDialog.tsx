@@ -94,6 +94,7 @@ import ImportResultSummary, {
   type DetailSection,
 } from "./ImportResultSummary";
 import classes from "./UnifiedImportDialog.module.css";
+import { undoToastMessage } from "./undoToastMessage";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1226,19 +1227,7 @@ function UnifiedImportDialog({
       const result = await undoImport(outcome.batchId);
       onRefetchPlaces();
       onRefetchTripLogs();
-      const parts = [
-        result.deletedPlaces > 0
-          ? `${result.deletedPlaces} place${result.deletedPlaces === 1 ? "" : "s"}`
-          : null,
-        result.deletedTrips > 0
-          ? `${result.deletedTrips} trip${result.deletedTrips === 1 ? "" : "s"}`
-          : null,
-      ].filter((p): p is string => p != null);
-      toast.success(
-        parts.length > 0
-          ? `Import undone — ${parts.join(" and ")} removed.`
-          : "Import undone.",
-      );
+      toast.success(undoToastMessage(result));
       onClose();
     } catch (err) {
       console.error(err);
@@ -1967,7 +1956,7 @@ function UnifiedImportDialog({
       <ConfirmDialog
         open={confirmingUndo}
         title="Undo this import?"
-        message="Everything this import created is deleted, and places it merged into go back to the values they had. Anything you had before the import stays. This can't be undone."
+        message="Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone."
         confirmLabel="Undo the import"
         confirmColor="error"
         busy={undoing}

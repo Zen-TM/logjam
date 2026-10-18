@@ -18,8 +18,8 @@ run "plan_role_trusts_only_approved_runs_and_main" {
   }
 
   # Mutation: adding a subject (`pull_request`, a branch, `*`, a StringLike
-  # condition) or a second statement lets workflows nobody approved assume
-  # the plan role.
+  # condition) or a second statement lets workflows outside the
+  # terraform-plan Environment and main assume the plan role.
   assert {
     condition = (
       length(jsondecode(aws_iam_role.github_actions_plan.assume_role_policy).Statement) == 1 &&

@@ -38,8 +38,8 @@ import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
 import { useAccountState } from "../auth/AccountStateContext";
 import { deleteAccountEverywhere } from "../auth/deleteAccount";
-import { capabilityRowProps } from "../auth/capabilities";
-import { CLIENT_VERSION } from "../config";
+import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
+import { CLIENT_VERSION, config } from "../config";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -311,7 +311,7 @@ function LinkedAccountScreen({
           icon="email"
           title={copy.email}
           subtitle={online ? user.email : undefined}
-          {...capabilityRowProps("serverPrefs", "linked", online)}
+          {...changeEmailRowProps(online, config.authMode)}
           onPress={() => setSheet("email")}
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />

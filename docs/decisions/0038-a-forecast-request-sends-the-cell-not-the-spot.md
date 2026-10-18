@@ -1,4 +1,4 @@
-# 0035. A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo
+# 0038. A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo
 
 - **Date:** 2026-10-18
 - **Status:** Accepted

@@ -46,6 +46,9 @@ export const ROOTS = {
     // The apply role's boundary denies it editing itself (envs/prod/iam_apply.tf),
     // so a plan touching these would fail mid-apply; the maintainer applies it.
     self: /\.github_actions_apply(_|\[|$)/,
+    // The CloudFront origin header's value: CloudFront returns it to any
+    // read-only identity, so state adds no reader it lacks.
+    stateSecrets: ["random_password.origin_verify"],
     changedOutside: "AWS changed outside Terraform",
     handChange: "If AWS was changed by hand",
     touch: "infra/terraform",
@@ -162,6 +165,39 @@ export function fingerprint(plan, name) {
   return createHash("sha256").update(JSON.stringify({ list, artifacts, configured })).digest("hex");
 }
 
+// Paths of `value` that `sensitive` marks and that hold, or will hold, a
+// value: null is no secret, and unknown is one only known after apply.
+function marked(value, sensitive, unknown, path = []) {
+  if (sensitive === true) return value != null || unknown === true ? [path.join(".")] : [];
+  if (!sensitive || typeof sensitive !== "object") return [];
+  return Object.keys(sensitive).flatMap((k) => marked(value?.[k], sensitive[k], unknown?.[k], [...path, k]));
+}
+
+// Sensitive values this plan adds to the state. Every PR's plan job reads
+// the state, so a secret there is one every collaborator can read
+// (docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md).
+export function stateSecrets(plan, name) {
+  const allowed = root(name).stateSecrets ?? [];
+  return changes(plan, name)
+    .filter((c) => ["create", "update", "replace"].includes(c.kind) && !allowed.includes(c.rc.address))
+    .flatMap((c) => {
+      const ch = c.rc.change;
+      const had = new Set(marked(ch.before, ch.before_sensitive));
+      return marked(ch.after, ch.after_sensitive, ch.after_unknown)
+        .filter((p) => !had.has(p))
+        .map((p) => `${c.address}.${p}`);
+    });
+}
+
+// Top-level attributes an update changes, by name only: the comment is
+// public and never shows a value.
+function changedAttributes(rc) {
+  const { before = {}, after = {}, after_unknown: unknown = {} } = rc.change;
+  return [...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])]
+    .filter((k) => unknown[k] === true || canonical(before?.[k]) !== canonical(after?.[k]))
+    .sort();
+}
+
 // `after` without what `sensitive` marks (true, or a tree shaped like it)
 // and what `unknown` marks as only known after apply.
 function strip(after, sensitive, unknown) {
@@ -241,6 +277,11 @@ export function header(plan, name) {
     lines.push("", `**Destroys (${destroys.length}):**`);
     for (const c of destroys) lines.push(`- \`${c.address}\` — ${c.kind}`);
   }
+  const updates = all.filter((c) => c.kind === "update");
+  if (updates.length) {
+    lines.push("", `**Updates (${updates.length}):**`);
+    for (const c of updates) lines.push(`- \`${c.address}\` — ${changedAttributes(c.rc).map((a) => `\`${a}\``).join(", ")}`);
+  }
   const hidden = unreadableOnly(plan, name);
   if (hidden.length) {
     const attrs = [...new Set(hidden.flatMap((rc) => root(name).unreadable[rc.type]))].map((a) => `\`${a}\``);
@@ -261,6 +302,22 @@ export function header(plan, name) {
 export function comment({ root: name, planText, status, plan, sha, key, max = MAX_COMMENT }) {
   const ok = status === "success" && Boolean(plan);
   const title = `### Terraform plan — \`envs/${name}\``;
+  const secrets = ok ? stateSecrets(plan, name) : [];
+  if (secrets.length) {
+    return {
+      body: [
+        marker(name),
+        `${title} ❌ puts a secret in Terraform state`,
+        "",
+        "Every PR's plan job can read the state, so these would be readable by anyone who can push a branch:",
+        "",
+        ...secrets.map((s) => `- \`${s}\``),
+        "",
+        "Keep the value out of state: a write-only argument (`*_wo`), an ephemeral resource, or a secret the service manages. If any read-only identity can already read it, add the address to `stateSecrets` in `infra/scripts/plan-summary.mjs` with the reason.",
+      ].join("\n"),
+      ok: false,
+    };
+  }
   const top = [marker(name)];
   let fp = "";
   if (ok) {
@@ -273,17 +330,20 @@ export function comment({ root: name, planText, status, plan, sha, key, max = MA
     }
   }
   top.push(`${title} ${ok ? "✅" : "❌ failed"}`, "");
-  if (ok) top.push(header(plan, name), "", `Fingerprint \`${fp.slice(0, 12)}\` at ${sha}`, "");
+  if (ok) {
+    top.push(header(plan, name), "", `Fingerprint \`${fp.slice(0, 12)}\` at ${sha}`, "");
+    top.push("The summary above is computed from the plan the apply checks. The text below is the PR's own run's output: where they disagree, trust the summary and the code diff.", "");
+  }
   const head = top.join("\n");
   const fence = (body) => `${head}\n\`\`\`\n${body}\n\`\`\``;
   if (fence(planText).length <= max) return { body: fence(planText), ok };
   const note = "…(start cut; every delete and replace is listed above)…\n";
   const room = max - fence(note).length;
   if (room < 1000) {
-    // The destroy list alone fills the comment: never post one that hides a
-    // destroy, and never one the apply would accept.
+    // The summary alone fills the comment: never post one that hides a
+    // destroy or an update, and never one the apply would accept.
     return {
-      body: [marker(name), `${title} ❌ too many destroys to show`, "", "Split this PR."].join("\n"),
+      body: [marker(name), `${title} ❌ too many changes to show`, "", "Split this PR."].join("\n"),
       ok: false,
     };
   }

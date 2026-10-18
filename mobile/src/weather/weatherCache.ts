@@ -1,5 +1,5 @@
 // The last forecast for each cell, as the one small file Logjam GPS keeps
-// (ADR 0035). Pure: `weatherStorage.ts` reads and writes the file.
+// (ADR 0038). Pure: `weatherStorage.ts` reads and writes the file.
 import { weatherCellKey, type WeatherForecast } from "@logjam/shared";
 
 /** Cells kept; the oldest by `fetchedAt` go first. */

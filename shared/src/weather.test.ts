@@ -24,7 +24,7 @@ const cell = weatherCell(spot, 1013.4);
 const now = new Date(2026, 9, 18, 9).getTime();
 
 describe("weatherCell", () => {
-  // The privacy boundary of ADR 0035. Mutation that turns it red: return
+  // The privacy boundary of ADR 0038. Mutation that turns it red: return
   // `point.latitude` unrounded from `weatherCell`, or set `elevation` from the
   // height as given.
   it("sends only the cell, never the spot", () => {

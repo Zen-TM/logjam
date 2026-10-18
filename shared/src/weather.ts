@@ -1,4 +1,4 @@
-// The forecast for a spot, from Open-Meteo's free API (ADR 0035).
+// The forecast for a spot, from Open-Meteo's free API (ADR 0038).
 //
 // PRIVACY: a forecast request is the one place a client sends a position of
 // the user's choosing to a third party, so it never sends the position: only

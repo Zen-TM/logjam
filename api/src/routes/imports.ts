@@ -4,13 +4,15 @@ import prisma from "../services/prisma";
 import { malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { deletePlacesCascade, deleteTripsCascade } from "../lib/bulkDelete";
+import { restoreBatch } from "../lib/importSnapshot";
 
 const router = Router();
 
 // DELETE /imports/:batchId — undo an entire import batch.
-// Deletes ONLY rows created by that batch (stamped with importBatchId).
-// Pre-existing places that were merged-into during the import are never
-// stamped with importBatchId and therefore survive undo (src/__tests__/import.test.ts).
+// Deletes the rows the batch created (stamped with importBatchId), and puts
+// back what it changed on rows it did not create, within the snapshots'
+// retention (lib/importSnapshot.ts), less any field changed since
+// (src/__tests__/import.test.ts).
 router.delete(
   "/:batchId",
   requireAuth,
@@ -21,6 +23,17 @@ router.delete(
     if (!batchId || typeof batchId !== "string") {
       throw malformed("batchId is required");
     }
+
+    // Restore before deleting: within the retention, a trip the batch
+    // re-linked to a place it created must lose that link first, or deleting
+    // the place would rename the trip after it (bulkDelete.ts) and Undo would
+    // count that as an edit.
+    // Guard: "restores a trip a re-import re-linked to a place it created" in
+    // src/__tests__/import.test.ts.
+    const { restoredPlaces, restoredTrips, keptFields } = await restoreBatch(
+      user.id,
+      batchId,
+    );
 
     // Find all trips created by this batch for this user.
     const batchTrips = await prisma.tripLog.findMany({
@@ -50,6 +63,9 @@ router.delete(
     res.json({
       deletedPlaces: deletedPlaceIds.length,
       deletedTrips: deletedTripIds.length,
+      restoredPlaces,
+      restoredTrips,
+      keptFields,
     });
   },
 );

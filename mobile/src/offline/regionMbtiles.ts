@@ -376,10 +376,11 @@ export async function listUnfinishedRegions(
 ): Promise<UnfinishedRegion[]> {
   const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
-  // The single-file Protomaps clip (regionDownloads.ts) writes a
-  // `.pmtiles` here with no checkpoint of its own — an app kill mid-transfer
-  // leaves it with nothing to resume into, unlike the MBTiles below. This is
-  // the one place that already walks this directory on every Saved-tab open.
+  // A clip (regionDownloads.ts) writes a `.pmtiles` here. Its checkpoint is
+  // the file, but the job that knows what it was cut for lives only in the
+  // queue's memory, so after an app kill nothing can resume it, unlike the
+  // MBTiles below. This is the one place that already walks this directory
+  // on every Saved-tab open.
   await sweepOrphanFiles(REGION_DIR, ".pmtiles", liveIds);
   const names = await FileSystem.readDirectoryAsync(REGION_DIR);
   const unfinished: UnfinishedRegion[] = [];

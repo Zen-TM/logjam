@@ -248,7 +248,7 @@ describe("scrubBreadcrumb", () => {
 
 describe("a forecast request", () => {
   // Mutation that turns it red: narrow the URL pattern in `redactTilePathPatterns`
-  // so a query string survives. The request holds the 0.1° cell (ADR 0035).
+  // so a query string survives. The request holds the 0.1° cell (ADR 0038).
   it("reaches a breadcrumb as [redacted-url], cell and all", () => {
     const url =
       "https://api.open-meteo.com/v1/forecast?latitude=-33.6&longitude=150.4&elevation=600";

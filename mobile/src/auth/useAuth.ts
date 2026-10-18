@@ -39,6 +39,7 @@ import { mapAuthNextStep, messageFromError } from "@logjam/shared";
 import { config } from "../config";
 import { apiFetch, setSessionRejectedHandler } from "../api/apiFetch";
 import { fetchAuthSessionWithTimeout } from "./authSession";
+import { cognitoSignOut } from "./cognitoSignOut";
 import { wipeAllLocalData } from "../offline/wipeLocalData";
 import { unregisterPushNotifications } from "../notifications/pushRegistration";
 import { classifySessionError } from "./sessionErrors";
@@ -74,6 +75,15 @@ function decodeSubFromIdToken(token: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Fake auth has no account to check a form against. The forms sign straight in
+// as the build's fake user (alice, or EXPO_PUBLIC_FAKE_SUB), the same
+// "authenticated" with no stored identity that a fake-auth launch starts in;
+// `apiFetch` supplies the identity. The entry choice is what keeps a guest who
+// linked from restarting as a guest.
+function enterAsFakeUser(): void {
+  writeEntryChoice("account");
 }
 
 export type AuthState =
@@ -201,6 +211,11 @@ export function useAuth() {
   const handleSignIn = useCallback(
     async (username: string, password: string): Promise<boolean> => {
       setError(null);
+      if (config.authMode === "fake") {
+        enterAsFakeUser();
+        setState("authenticated");
+        return true;
+      }
       try {
         const result = await amplifySignIn({ username, password });
         if (!result.isSignedIn) {
@@ -276,6 +291,11 @@ export function useAuth() {
   const handleSignUp = useCallback(
     async (username: string, password: string, email: string, name: string) => {
       setError(null);
+      if (config.authMode === "fake") {
+        enterAsFakeUser();
+        setState("authenticated");
+        return;
+      }
       try {
         // Email is the Cognito login identifier; display username goes to
         // preferred_username (same contract as web).
@@ -388,7 +408,7 @@ export function useAuth() {
     // sent them to the chooser. Same state, same screen, either way.
     clearEntryChoice();
     try {
-      await amplifySignOut();
+      await cognitoSignOut();
     } catch (err) {
       // Offline sign-out: Amplify clears local tokens regardless; the server-
       // side revocation just didn't happen. Log and continue.

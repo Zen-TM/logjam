@@ -721,7 +721,7 @@ function PlaceDetailPanel({
     ),
 
     // Asks Open-Meteo for the 0.1° cell round the place and nothing more
-    // (ADR 0035), and only on this press.
+    // (ADR 0038), and only on this press.
     weather: () => (
       <section className={classes.section}>
         <SectionHeader title={WEATHER.title} />

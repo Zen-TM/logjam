@@ -41,8 +41,9 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 - **What leaves the device carries ids, not place data:** push payloads and
   crash reports (through `src/sentry/scrubEvent.ts`) never carry a place's
-  name, coordinates or fields, and a region-of-interest bbox reaches the
-  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0029](../docs/decisions/0029-vector-map-with-every-signed-in-region.md)
+  name, coordinates or fields, and a region-of-interest bbox never reaches
+  our API: offline clips are cut on the phone (`offline/regionDownloads.ts`,
+  guard `offline/regionDownloads.test.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0036](../docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md)
 - **A new dependency can add Android permissions:** block each with
   `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a
@@ -59,8 +60,9 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 - **A fresh worktree needs real installs** (`npm ci` in `shared/` and `mobile/`):
   symlinked `node_modules` pass typecheck and vitest, then Metro fails. It also
   lacks the gitignored `.env`, `google-services.json` and `keys/`.
-- **OTA is `npm run update:preview` / `update:production`,** never bare
-  `eas update` (the signing key path). A production update comes only from a
+- **OTA is `npm run update:preview` / `update:production` /
+  `promote:production`,** never bare `eas update` (the signing key path, and
+  the production guard). A production update comes only from a
   `release/mobile-vX.Y.Z` branch, never `main`; anything native needs a
   release. [0009](../docs/decisions/0009-signed-ota-updates.md), [0023](../docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md);
   procedure: `docs/operations/mobile-release.md`.

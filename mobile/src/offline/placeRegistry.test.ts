@@ -110,8 +110,15 @@ vi.mock("expo-file-system", () => ({
 }));
 vi.mock("react-native", () => ({
   AppState: { addEventListener: () => ({ remove: () => {} }) },
-  InteractionManager: { runAfterInteractions: (run: () => void) => run() },
 }));
+// React Native 0.88 removed InteractionManager; the module waits on the
+// runtime's requestIdleCallback instead. jsdom has none, so run it inline.
+const idleOptions: (IdleRequestOptions | undefined)[] = [];
+globalThis.requestIdleCallback = (run, options) => {
+  idleOptions.push(options);
+  run({ didTimeout: false, timeRemaining: () => 0 });
+  return 0;
+};
 vi.mock("@react-native-community/netinfo", () => ({
   default: {
     refresh: async () => ({
@@ -233,6 +240,17 @@ describe("the first download", () => {
     expect(download.mock.calls).toEqual([
       [`${CDN}/master/places/v1/${built.pointer.path}`, `${DIR}download.tmp`],
     ]);
+  });
+
+  // Mutation: drop the `timeout` option in `installBuild`; a busy JS thread
+  // then defers the install for as long as it stays busy.
+  it("waits for an idle frame, but not forever", async () => {
+    idleOptions.length = 0;
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.placeRegistryWithRegion(false);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    expect(idleOptions).toEqual([{ timeout: expect.any(Number) }]);
   });
 
   // Mutation: ignore `allowMetered` in `placeRegistryWithRegion`.

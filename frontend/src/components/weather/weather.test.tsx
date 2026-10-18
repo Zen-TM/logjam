@@ -125,7 +125,7 @@ describe("WeatherView", () => {
 });
 
 describe("PlaceWeather", () => {
-  // The privacy boundary of ADR 0035 as this page meets it. Mutation that turns
+  // The privacy boundary of ADR 0038 as this page meets it. Mutation that turns
   // it red: fetch on mount, or pass the place's own coordinates to
   // `fetchForecast` instead of the cell.
   it("asks nothing until pressed, then sends only the cell", async () => {

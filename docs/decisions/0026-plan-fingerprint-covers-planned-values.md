@@ -141,6 +141,12 @@ as below. In full:
   signature does not verify as one whose values cannot be compared, which
   `enforce` refuses. A comment from before this update is unsigned: re-plan
   those PRs. Everything else above stands.
+- **Update 2026-10-18: `PLAN_FINGERPRINT_KEY` is a secret of
+  `terraform-plan-sign` and `prod`.** The PR's plan jobs now run unapproved
+  and never hold it: a main-only workflow decrypts their plan and renders and
+  signs the comment
+  ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)).
+  The key still never reaches a PR's code. Everything else above stands.
 
 Guard: `infra/scripts/plan-summary.test.mjs`, run in
 `.github/workflows/terraform-ci.yml`. Beside 0024's checks it covers: a

@@ -12,7 +12,7 @@ import {
 // (1) A job parked by a provider 403/429 — which nothing auto-resumes, by
 // design — must not leave Done disabled on a screen whose only other exits are
 // hardware back or Stop (which deletes tiles). (2) Pause is not offered on the
-// vector clip, where it does nothing.
+// clip, whose runner ignores it.
 
 const job = (state: RegionJob["state"], taskKind = "tile-pyramid"): RegionJob =>
   ({
@@ -56,9 +56,9 @@ describe("the Done gate", () => {
 });
 
 describe("pause", () => {
-  it("is offered on a tile pyramid and hidden on the one-shot clip", () => {
+  it("is offered on a tile pyramid and hidden on a clip", () => {
     expect(canPause(job({ kind: "downloading" }))).toBe(true);
-    expect(canPause(job({ kind: "downloading" }, "http-file"))).toBe(false);
+    expect(canPause(job({ kind: "downloading" }, "clip"))).toBe(false);
   });
 });
 

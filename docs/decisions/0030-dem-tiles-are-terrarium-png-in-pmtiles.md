@@ -51,7 +51,8 @@ clients' formula, and checks the no-data value and the rounding.
 
 - **Positive:** no new decoder in any runtime, and no new native dependency in
   Logjam GPS. The archive is served, clipped and read the way the vector
-  basemap already is: `pmtiles extract` cuts an offline area out of it, and
+  basemap already is: the phone cuts an offline area out of it by byte range
+  (`shared/src/pmtilesExtract.ts`, updated 2026-10-18), and
   `shared/src/snapTiles.ts` shows the reader working in all three runtimes.
 - **Negative:** PNG is about a third larger than lossless WebP, on the server
   and in every offline area a phone saves. A quarter metre is coarser than the

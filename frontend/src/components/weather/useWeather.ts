@@ -35,7 +35,7 @@ export function useOnline(): boolean {
 }
 
 /**
- * The forecast for a spot (ADR 0035). Nothing is asked until `load` is called
+ * The forecast for a spot (ADR 0038). Nothing is asked until `load` is called
  * from a press, and nothing is kept: closing the view drops the forecast. A
  * failure is only ever `failed`, never the error, which could carry the cell.
  */

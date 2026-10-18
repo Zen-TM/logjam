@@ -1,5 +1,5 @@
 // The forecast for one cell: the phone's kept copy at once, a fresh one only
-// when `refresh` is called, which is only ever on a press (ADR 0035).
+// when `refresh` is called, which is only ever on a press (ADR 0038).
 //
 // PRIVACY: a failure is a state, never a log line: the error could carry the
 // cell.

@@ -66,7 +66,7 @@ run "main_admits_only_green_squashed_prs" {
   # off strict lets a PR merge against a main it was not planned on.
   assert {
     condition = alltrue([
-      for c in ["shared", "api", "frontend", "topo", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks", "pr-closes"] :
+      for c in ["shared", "api", "api-integration", "frontend", "mobile", "topo", "migrations", "migration-upgrade", "infra-scripts", "topo-e2e", "Live release on this schema", "plan-summary", "fmt", "validate", "test-github", "test-prod", "dependency-review", "setup-smoke", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks", "pr-closes"] :
       contains([for r in github_repository_ruleset.main.rules[0].required_status_checks[0].required_check : r.context], c)
     ]) && github_repository_ruleset.main.rules[0].required_status_checks[0].strict_required_status_checks_policy
     error_message = "A required check left the main ruleset, or branches no longer need to be up to date. Add checks freely; removing one needs this test changed too."
@@ -183,21 +183,5 @@ run "security_alerts_stay_on" {
   assert {
     condition     = github_repository_dependabot_security_updates.logjam.enabled
     error_message = "Dependabot security updates must stay enabled."
-  }
-}
-
-run "pr_plans_wait_for_the_maintainer" {
-  command = plan
-
-  # Mutation: removing the reviewers block, emptying it, or adding another
-  # user or a team lets a PR's plan run get the AWS plan role and the plan
-  # App's key without the maintainer's approval, or with someone else's.
-  assert {
-    condition = (
-      length(github_repository_environment.terraform_plan.reviewers) == 1 &&
-      github_repository_environment.terraform_plan.reviewers[0].users == toset([86338167]) &&
-      length(coalesce(github_repository_environment.terraform_plan.reviewers[0].teams, toset([]))) == 0
-    )
-    error_message = "The terraform-plan Environment must require the maintainer's approval, and only theirs."
   }
 }

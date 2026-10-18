@@ -1,6 +1,6 @@
 // "Show the weather here" on a place's page: one row until it is pressed (or
 // until the phone already holds this cell's forecast), then the forecast in
-// place. Opening the page sends nothing (ADR 0035).
+// place. Opening the page sends nothing (ADR 0038).
 import { useState } from "react";
 import { WEATHER, weatherCell, weatherCellKey } from "@logjam/shared";
 

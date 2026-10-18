@@ -61,6 +61,6 @@
     "If new tile providers / image hosts are added, update CSP_PROD in frontend/vite.config.ts AND the allowlist in this file.",
     "media-src allows blob: plus awsAssetHosts so uploaded videos (presigned S3 URLs) play inline via <video>; img-src/connect-src already cover photo display + presigned PUT uploads.",
     "geocoderHosts (Nominatim) are connect-src only — used by the map-pick place search (frontend/src/geocode.ts). Only the user-typed place string is sent; no place data.",
-    "weatherHosts (Open-Meteo) are connect-src only — used by the weather view (frontend/src/components/weather/). Only the 0.1° cell and height are sent, never the spot (docs/decisions/0035)."
+    "weatherHosts (Open-Meteo) are connect-src only — used by the weather view (frontend/src/components/weather/). Only the 0.1° cell and height are sent, never the spot (docs/decisions/0038)."
   ]
 }

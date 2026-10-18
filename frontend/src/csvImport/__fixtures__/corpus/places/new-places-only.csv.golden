@@ -1,0 +1,57 @@
+{
+  "headers": [
+    "Name",
+    "Latitude",
+    "Longitude",
+    "Notes"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "Name": "name",
+    "Latitude": "latitude",
+    "Longitude": "longitude",
+    "Notes": "notes"
+  },
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Corpus E2E Canyon One",
+      "input": {
+        "name": "Corpus E2E Canyon One",
+        "latitude": -33.3101,
+        "longitude": 150.2601,
+        "notes": "Corpus note"
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Corpus E2E Canyon Two",
+      "input": {
+        "name": "Corpus E2E Canyon Two",
+        "latitude": -33.3201,
+        "longitude": 150.2701,
+        "notes": null
+      }
+    }
+  ],
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Corpus E2E Canyon One",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    },
+    {
+      "name": "Corpus E2E Canyon Two",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
+}
