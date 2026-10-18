@@ -152,4 +152,82 @@ describe("topo-jobs route (fake auth)", () => {
       await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
     }
   });
+
+  it("multipart: only the owner signs parts or completes, and a gap refuses to join", async () => {
+    const createRes = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "topo-multipart-test" });
+    expect(createRes.status).toBe(201);
+    const { jobId, uploadId, partSize } = createRes.body;
+    expect(typeof uploadId).toBe("string");
+    expect(partSize).toBeGreaterThanOrEqual(5 * 1024 * 1024);
+
+    try {
+      // Privacy boundary: a stranger gets the 404 a missing job gets, and a
+      // sharee, who may see the job, is refused the owner's upload.
+      // Mutation: drop requireShareOwner from ownUploadingJob.
+      for (const path of ["parts", "complete"]) {
+        const body = { uploadId, partNumbers: [1], partCount: 1 };
+        const bobRes = await request(API_URL)
+          .post(`/topo-jobs/${jobId}/${path}`)
+          .set(as(BOB_SUB))
+          .send(body);
+        expect(bobRes.status).toBe(404);
+      }
+      const shareRes = await request(API_URL).post("/shares").set(AUTH).send({
+        entityType: "topoJob",
+        entityId: jobId,
+        sharedWithUserId: BOB_ID,
+      });
+      expect(shareRes.status).toBe(201);
+      const shareeRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/parts`)
+        .set(as(BOB_SUB))
+        .send({ uploadId, partNumbers: [1] });
+      expect(shareeRes.status).toBe(403);
+
+      // The owner signs part 1 and sends it straight to S3.
+      const signRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/parts`)
+        .set(AUTH)
+        .send({ uploadId, partNumbers: [1] });
+      expect(signRes.status).toBe(200);
+      const [{ partNumber, url }] = signRes.body.parts;
+      expect(partNumber).toBe(1);
+      const put = await fetch(url, { method: "PUT", body: "not a zip" });
+      expect(put.status).toBe(200);
+
+      // Two parts claimed, one stored: no join.
+      const gapRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/complete`)
+        .set(AUTH)
+        .send({ uploadId, partCount: 2 });
+      expect(gapRes.status).toBe(400);
+
+      const doneRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/complete`)
+        .set(AUTH)
+        .send({ uploadId, partCount: 1 });
+      expect(doneRes.status).toBe(204);
+      // Completing again (a retry after a lost response) still succeeds.
+      const againRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/complete`)
+        .set(AUTH)
+        .send({ uploadId, partCount: 1 });
+      expect(againRes.status).toBe(204);
+
+      // The object now exists, so /start gets past "didn't finish uploading"
+      // to reading the ZIP, which these bytes are not. Still launch-free.
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(AUTH);
+      expect(startRes.status).toBe(400);
+      expect(startRes.body.error).not.toBe(
+        "That ZIP didn't finish uploading. Try again.",
+      );
+    } finally {
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
+  });
 });

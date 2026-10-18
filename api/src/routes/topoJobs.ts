@@ -7,7 +7,15 @@ import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  GetObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  ListPartsCommand,
+  CompleteMultipartUploadCommand,
+  type Part,
+} from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
 import {
   say,
@@ -29,7 +37,7 @@ import {
   assertHasStorageQuota,
   decrementStorageUsed,
 } from "../lib/storageQuota";
-import { deleteS3Prefix } from "../lib/s3Cleanup";
+import { abortS3MultipartUploads, deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import {
@@ -107,6 +115,15 @@ export function serializeTopoJobFor<
 // bounds wasted S3 transfer/storage.
 const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
+// Logjam Web sends the ZIP as an S3 multipart upload in parts of this size, so
+// a dropped connection costs one part, not the file. 32 MiB keeps even the
+// compressed cap to 800 parts, well under S3's 10,000.
+export const TOPO_UPLOAD_PART_BYTES = 32 * 1024 * 1024;
+const TOPO_UPLOAD_MAX_PARTS = Math.ceil(
+  MAX_INPUT_ZIP_COMPRESSED_BYTES / TOPO_UPLOAD_PART_BYTES,
+);
+/** Part URLs one request may ask for. */
+export const TOPO_UPLOAD_SIGN_MAX = 32;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list
@@ -197,6 +214,8 @@ router.post(
       data: { s3InputKey },
     });
 
+    // uploadUrl is the single-PUT path a Logjam Web tab loaded before the
+    // multipart client still takes; it can go once that client is everywhere.
     const uploadUrl = await getSignedUrl(
       s3,
       new PutObjectCommand({
@@ -206,8 +225,144 @@ router.post(
       }),
       { expiresIn: 900 }, // 15 minutes
     );
+    const { UploadId: uploadId } = await s3.send(
+      new CreateMultipartUploadCommand({
+        Bucket: TOPO_BUCKET,
+        Key: s3InputKey,
+        ContentType: "application/zip",
+      }),
+    );
 
-    res.status(201).json({ jobId: job.id, uploadUrl });
+    res.status(201).json({
+      jobId: job.id,
+      uploadUrl,
+      uploadId,
+      partSize: TOPO_UPLOAD_PART_BYTES,
+    });
+  },
+);
+
+/** The owner's job, still waiting for its ZIP; the upload id from the body.
+ *  The id needs no lookup of its own: S3 ties it to the job's key, so an id
+ *  from another job's upload signs nothing here. */
+async function ownUploadingJob(req: AuthenticatedRequest) {
+  const user = await getUser(req.user!.sub);
+  const job = await prisma.topoJob.findUnique({
+    where: { id: getParam(req.params.id) },
+  });
+  if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
+  requireShareOwner(
+    await getJobRole(user.id, "topoJob", job),
+    "topoJob",
+    say`Only the owner can upload to this LiDAR map.`,
+  );
+  if (job.status !== "uploading")
+    throw new AppError(400, say`That upload has already been received.`);
+  const { uploadId } = req.body ?? {};
+  if (typeof uploadId !== "string" || !uploadId || uploadId.length > 1024)
+    throw malformed("uploadId must be a non-empty string");
+  return { key: job.s3InputKey!, uploadId };
+}
+
+// POST /topo-jobs/:id/parts — presigned PUT URLs for parts of the ZIP
+router.post(
+  "/:id/parts",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { key, uploadId } = await ownUploadingJob(req);
+    const { partNumbers } = req.body;
+    if (!Array.isArray(partNumbers) || partNumbers.length === 0)
+      throw malformed("partNumbers must be a non-empty array");
+    if (partNumbers.length > TOPO_UPLOAD_SIGN_MAX)
+      throw new AppError(413, say`Too many parts in one request.`);
+    for (const n of partNumbers) {
+      if (!Number.isInteger(n) || n < 1 || n > TOPO_UPLOAD_MAX_PARTS)
+        throw malformed("partNumbers must be integers in range");
+    }
+    const parts = await Promise.all(
+      (partNumbers as number[]).map(async (partNumber) => ({
+        partNumber,
+        url: await getSignedUrl(
+          s3,
+          new UploadPartCommand({
+            Bucket: TOPO_BUCKET,
+            Key: key,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+          }),
+          { expiresIn: 900 }, // 15 minutes, like the single PUT
+        ),
+      })),
+    );
+    res.json({ parts });
+  },
+);
+
+// POST /topo-jobs/:id/complete — join the uploaded parts into the ZIP. The
+// parts come from S3, not the client, so the client never needs a part's
+// ETag (and the bucket's CORS never has to expose it).
+router.post(
+  "/:id/complete",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { key, uploadId } = await ownUploadingJob(req);
+    const { partCount } = req.body;
+    if (
+      !Number.isInteger(partCount) ||
+      partCount < 1 ||
+      partCount > TOPO_UPLOAD_MAX_PARTS
+    )
+      throw malformed("partCount must be an integer in range");
+
+    let parts: Part[] = [];
+    try {
+      let marker: string | undefined;
+      do {
+        const page = await s3.send(
+          new ListPartsCommand({
+            Bucket: TOPO_BUCKET,
+            Key: key,
+            UploadId: uploadId,
+            PartNumberMarker: marker,
+          }),
+        );
+        parts = parts.concat(page.Parts ?? []);
+        marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
+      } while (marker);
+    } catch (err) {
+      if ((err as { name?: string }).name !== "NoSuchUpload") throw err;
+      // Already completed (a retry after a lost response) or aborted.
+      try {
+        await s3.send(new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: key }));
+      } catch {
+        throw new AppError(
+          400,
+          say`That upload expired. Choose the ZIP again.`,
+        );
+      }
+      res.status(204).send();
+      return;
+    }
+
+    // Every part from 1 to partCount and nothing past it: a gap would join
+    // into a ZIP with a hole in it.
+    if (
+      parts.length !== partCount ||
+      parts.some((p, i) => p.PartNumber !== i + 1)
+    )
+      throw new AppError(400, say`Part of that ZIP didn't upload. Try again.`);
+
+    await s3.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: TOPO_BUCKET,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.map(({ PartNumber, ETag }) => ({ PartNumber, ETag })),
+        },
+      }),
+    );
+    res.status(204).send();
   },
 );
 
@@ -572,11 +727,12 @@ router.delete(
     // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
     // — no orphaned objects, and the quota is only decremented once the bytes
     // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
-    await Promise.all(
-      [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map(
+    await Promise.all([
+      ...[`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map(
         (prefix) => deleteS3Prefix(TOPO_BUCKET, prefix),
       ),
-    );
+      abortS3MultipartUploads(TOPO_BUCKET, `inputs/${jobId}/`),
+    ]);
 
     // One transaction: queued exports referencing this job are
     // force-failed with a clear message (their COG source is about to
