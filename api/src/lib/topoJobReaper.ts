@@ -23,6 +23,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
+import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
 import { deleteSharesFor } from "./shareAccess";
 
 // Stuck-job reaper for both topo pipelines.
@@ -66,7 +67,7 @@ import { deleteSharesFor } from "./shareAccess";
 // Retry means submitting a new job/export — the reaper never re-launches
 // anything (see the attempt_count comment in schema.prisma).
 const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
-const REAPER_EXPORT_MESSAGE = say`This export was stopped because it took too long. Start it again to try again.`;
+const REAPER_EXPORT_MESSAGE = TOPO_EXPORT_STOPPED_MESSAGE;
 const REAPER_GEO_PDF_MESSAGE = say`This GeoPDF was stopped because it took too long. Make it again to try again.`;
 
 // Headroom multiplier on the API's own duration estimate. A code constant,

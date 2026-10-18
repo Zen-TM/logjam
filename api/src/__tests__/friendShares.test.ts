@@ -8,8 +8,7 @@ import {
   ALICE_ID,
   BOB_ID,
   SHARED_PLACE_ID,
-  BOB_SHARED_PLACE_ID,
-  BOB_SHARED_ROUTE_ID,
+  BOB_SHARES_WITH_ALICE,
   NONEXISTENT_ID,
   as,
   CANYON_TYPE_ID,
@@ -24,11 +23,10 @@ import {
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Seed baseline: alice owns 4 places shared with bob (incl. SHARED_PLACE_ID);
-// bob shares two rows back with alice (BOB_SHARED_PLACE_ID and
-// BOB_SHARED_ROUTE_ID); alice<->bob is an accepted friendship; carol->alice
+// bob shares four rows back with alice (BOB_SHARES_WITH_ALICE); alice<->bob is an accepted friendship; carol->alice
 // is PENDING and carol is shared nothing.
 //
-// The incoming pair is named in `_actors.ts` rather than assumed absent, so
+// The incoming rows are named in `_actors.ts` rather than assumed absent, so
 // assertions match the incoming shares present in the seed.
 //
 // The bulk-revoke test destroys the seeded alice->bob shares, and
@@ -132,7 +130,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(res.status).toBe(200);
     const received = (res.body as SharesBody).sharedWithYou;
     expect(received.map((row) => row.entityId).sort()).toEqual(
-      [BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort(),
+      [...BOB_SHARES_WITH_ALICE].sort(),
     );
   });
 
@@ -145,10 +143,10 @@ describe("GET /friends/:id/shares — the audit surface", () => {
       .set(as(BOB_SUB));
     expect(res.status).toBe(200);
     const body = res.body as SharesBody;
-    // Bob's forward list is what HE owns and shares — the same two rows alice
+    // Bob's forward list is what HE owns and shares — the same rows alice
     // saw as incoming, now read from the other end of the same friendship.
     expect(body.sharedWithThem.map((row) => row.entityId).sort()).toEqual(
-      [BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort(),
+      [...BOB_SHARES_WITH_ALICE].sort(),
     );
     // ...and alice's places appear in his received list.
     expect(placeIdsIn(body.sharedWithYou)).toContain(SHARED_PLACE_ID);
@@ -196,7 +194,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     // list — which holds only what the seed says bob owns and shares.
     expect(
       (theirs.body as SharesBody).sharedWithThem.map((r) => r.entityId).sort(),
-    ).toEqual([BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort());
+    ).toEqual([...BOB_SHARES_WITH_ALICE].sort());
 
     // Alice's route is hers to clean up: it is shared with bob, so leaving it
     // moves the baseline the exact-set assertions above read.

@@ -30,6 +30,27 @@ const SHARED_ITEM_NOUN: Record<string, string> = {
   geoPdfJob: "a GeoPDF",
 };
 
+/**
+ * Every type a Notification row is stored with, one declaration. The labels
+ * below branch on them, the dev seed writes one row of each
+ * (api/src/lib/seedCoverage.unit.test.ts), and the label test checks each has a
+ * branch. `bulk_shared` and `geo_pdf_failed` are push-only titles and never rows.
+ */
+export const NOTIFICATION_TYPES = [
+  "friend_request",
+  "friend_request_accepted",
+  "place_shared",
+  "item_shared",
+  "file_sent",
+  "topo_complete",
+  "topo_failed",
+  "topo_export_complete",
+  "topo_export_skipped",
+  "geo_pdf_complete",
+  "egress_quota_warning",
+  "egress_quota_exceeded",
+] as const;
+
 export function notificationLabel(n: TNotification): NotificationLabel {
   const p = n.payload;
   switch (n.type) {

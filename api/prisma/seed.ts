@@ -8,8 +8,29 @@ import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
+  hashFriendInviteToken,
+  mintFriendInviteToken,
+} from "../src/lib/friendInviteToken";
+import {
+  GEO_PDF_FAILURE_MESSAGE,
+  TOPO_EXPORT_STOPPED_MESSAGE,
+  TOPO_UNREADABLE_MESSAGE,
+} from "../src/lib/failureCopy";
+import {
+  AUTO_EXPORT_DEFAULTS,
+  NOTIFICATION_TYPES,
+  FILE_SEND_TTL_DAYS,
+  FRIEND_INVITE_TTL_DAYS,
+  RASTER_TEMPLATE_DEFAULTS,
+  VECTOR_STYLE_DEFAULTS,
+  validateGeoPdfConfig,
+  validateGeoPdfTemplateConfig,
+  validateRasterTemplateSettings,
+  type GeoPdfConfig,
   enforceCanyoningTag,
   linksCanyon,
+  friendInviteUrl,
+  isFriendInviteToken,
   setFieldValues,
   routeLengthM,
   routeToGpx,
@@ -27,6 +48,13 @@ import {
 } from "@logjam/shared";
 import { s3 } from "../src/services/awsClients";
 import { seedId, cid } from "./seedIds";
+import {
+  flatPng,
+  lineVectorTile,
+  singleTilePmtiles,
+  tileAt,
+  tileBounds,
+} from "./seedArchives";
 import { saveSeedSnapshot } from "../src/__tests__/_seedBaseline";
 
 // ── Place registry ──────────────────────────────────────────────────────────
@@ -425,7 +453,47 @@ const ALICE_PLACE_FIELD_DEFS = [
     placeTypeIds: [] as string[],
     appliesToAllTypes: true,
   },
+  // The other value types a definition can have (string is `permit_no`), so a
+  // form, a filter and a sync round trip each meet every type in dev. The
+  // system fields add integer, float and boolean on the campsite type.
+  {
+    id: seedId("5", 12),
+    key: "water_temp_c",
+    label: "Water temperature (°C)",
+    type: "float",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+  {
+    id: seedId("5", 13),
+    key: "last_checked",
+    label: "Last checked",
+    type: "date",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+  {
+    id: seedId("5", 14),
+    key: "rope_count",
+    label: "Ropes needed",
+    type: "integer",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+  {
+    id: seedId("5", 15),
+    key: "needs_permit",
+    label: "Needs a permit",
+    type: "boolean",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
 ];
+
+// Types bob and carol made themselves, so the user-type paths are reachable
+// as each of them and not only as alice.
+const BOB_TYPE_ID = seedId("9", 2);
+const CAROL_TYPE_ID = seedId("9", 3);
 
 type SeedPlace = {
   id: string;
@@ -945,7 +1013,42 @@ const ALICE_PLACES: SeedPlace[] = [
     quality: 4,
     fieldValues: { capacity: 12, is_cave: false },
   },
+  // One value of each type a definition can have: string, float, date,
+  // integer, boolean.
+  {
+    id: cid(32),
+    ownerId: ALICE_ID,
+    name: "Fabricated Pool",
+    latitude: -33.52,
+    longitude: 150.27,
+    notes: "Fabricated place for local development.",
+    quality: 3,
+    fieldValues: {
+      permit_no: "NPWS-2026-207",
+      water_temp_c: 14.5,
+      last_checked: "2026-08-02",
+      rope_count: 2,
+      needs_permit: true,
+    },
+  },
 ];
+
+/** A made-up place that is only here to be of a type; nothing about it is real. */
+const fabricated = (
+  id: string,
+  ownerId: string,
+  name: string,
+  latitude: number,
+  longitude: number,
+): SeedPlace => ({
+  id,
+  ownerId,
+  name,
+  latitude,
+  longitude,
+  notes: "Fabricated place for local development.",
+  fieldValues: {},
+});
 
 // bob owns a fork of alice's shared Grand Canyon + two of his own.
 const BOB_PLACES: SeedPlace[] = [
@@ -992,6 +1095,21 @@ const BOB_PLACES: SeedPlace[] = [
     hours: 10,
     fieldValues: {},
   },
+  {
+    ...fabricated(seedId("2", 4), BOB_ID, "Galah camp", -33.2531, 150.3012),
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite,
+    fieldValues: { capacity: 6 },
+  },
+  {
+    ...fabricated(
+      seedId("2", 5),
+      BOB_ID,
+      "Coin Slot lookout",
+      -33.1202,
+      150.3331,
+    ),
+    placeTypeId: BOB_TYPE_ID,
+  },
 ];
 
 // carol owns her own places (and is shared nothing of alice's — the stranger).
@@ -1019,6 +1137,27 @@ const CAROL_PLACES: SeedPlace[] = [
     quality: 4.5,
     hours: 12,
     fieldValues: {},
+  },
+  {
+    ...fabricated(
+      seedId("3", 3),
+      CAROL_ID,
+      "Surefire camp",
+      -33.2301,
+      150.2911,
+    ),
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite,
+    fieldValues: { capacity: 4 },
+  },
+  {
+    ...fabricated(
+      seedId("3", 4),
+      CAROL_ID,
+      "Pipeline lookout",
+      -33.1671,
+      150.2652,
+    ),
+    placeTypeId: CAROL_TYPE_ID,
   },
 ];
 
@@ -1160,6 +1299,152 @@ function buildTrips(): SeedTrip[] {
   return trips;
 }
 
+// ── Jobs, templates and what they leave in S3 ───────────────────────────────
+//
+// A COMPLETE job has its outputs in S3 behind it, as a vector file does: the
+// topo ones are tiny real PMTiles archives (seedArchives.ts) at the keys the
+// rows name, and a GeoPDF's result is the PDF Logjam's own generator wrote
+// (shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf). Every size a row states
+// is the length of the bytes uploaded.
+
+/** Minted per seed run; the invite row stores only its hash, as the route does. */
+const SEED_FRIEND_INVITE_TOKEN = mintFriendInviteToken();
+assertValid(
+  "the seeded invite token",
+  isFriendInviteToken(SEED_FRIEND_INVITE_TOKEN) ? null : "not a token",
+);
+
+const TOPO_TILE = tileAt(12, 150.3179, -33.6563);
+const TOPO_BOUNDS = tileBounds(TOPO_TILE.z, TOPO_TILE.x, TOPO_TILE.y);
+/** What the pipeline stores: the union of the per-tile coverage, here one tile. */
+const TOPO_FOOTPRINT = {
+  type: "Polygon" as const,
+  coordinates: [
+    [
+      [TOPO_BOUNDS[0], TOPO_BOUNDS[1]],
+      [TOPO_BOUNDS[2], TOPO_BOUNDS[1]],
+      [TOPO_BOUNDS[2], TOPO_BOUNDS[3]],
+      [TOPO_BOUNDS[0], TOPO_BOUNDS[3]],
+      [TOPO_BOUNDS[0], TOPO_BOUNDS[1]],
+    ],
+  ],
+};
+/** A made-up contour across the tile, in tile units (extent 4096). */
+const CONTOUR_LINE: [number, number][] = [
+  [0, 2600],
+  [1200, 2100],
+  [2600, 2300],
+  [4096, 1500],
+];
+/** The same line in degrees, so an export of the layer matches its tile. */
+const CONTOUR_LONLAT = CONTOUR_LINE.map(([x, y]) => [
+  TOPO_BOUNDS[0] + (x / 4096) * (TOPO_BOUNDS[2] - TOPO_BOUNDS[0]),
+  TOPO_BOUNDS[3] - (y / 4096) * (TOPO_BOUNDS[3] - TOPO_BOUNDS[1]),
+]);
+
+type SeededObject = { key: string; body: Buffer | string; contentType: string };
+
+const TOPO_LAYER_ARCHIVES = [
+  { name: "hillshade", tile: flatPng(150), type: "png" as const },
+  { name: "slope", tile: flatPng(95), type: "png" as const },
+  {
+    name: "contours",
+    tile: lineVectorTile("contours", CONTOUR_LINE),
+    type: "mvt" as const,
+  },
+].map((layer) => ({
+  ...layer,
+  archive: singleTilePmtiles({ ...TOPO_TILE, ...layer }),
+}));
+
+/** The outputs of a complete job: its rows' `s3OutputKeys` and the objects. */
+function topoOutputs(jobId: string) {
+  const keys = TOPO_LAYER_ARCHIVES.map((layer) => ({
+    name: layer.name,
+    // No COG: a raster layer's COG is what an export reads, and building one is
+    // the worker's job. An export of a seeded topo is therefore refused as
+    // "made before exports existed"; the completed export seeded below has its
+    // result and needs no source. Nor can it be drawn on a new GeoPDF: the
+    // archive is one z12 tile and the renderer reads z16.
+    cogKey: null,
+    pmtilesKey: `outputs/${jobId}/${layer.name}.pmtiles`,
+  }));
+  const objects: SeededObject[] = TOPO_LAYER_ARCHIVES.map((layer, i) => ({
+    key: keys[i].pmtilesKey,
+    body: layer.archive,
+    contentType: "application/octet-stream",
+  }));
+  return {
+    keys,
+    objects,
+    bytes: BigInt(
+      TOPO_LAYER_ARCHIVES.reduce((sum, l) => sum + l.archive.length, 0),
+    ),
+  };
+}
+
+const GEO_PDF_FIXTURE = readFileSync(
+  join(__dirname, "../../shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf"),
+);
+/** The config that fixture was rendered from (see its README). */
+const GEO_PDF_CONFIG: GeoPdfConfig = {
+  paperSize: "A5",
+  orientation: "landscape",
+  extent: { north: -33.6, south: -33.7, east: 150.3, west: 150.2 },
+  scale: 25000,
+  baseLayer: "osm-topo",
+  overlays: [],
+  elements: {
+    title: "Wollemi test sheet",
+    compass: false,
+    scaleText: false,
+    scaleBar: false,
+  },
+};
+/** A layout only: a template holds no extent. */
+const GEO_PDF_TEMPLATE_CONFIG: Omit<GeoPdfConfig, "extent"> = {
+  paperSize: "A4",
+  orientation: "portrait",
+  scale: 25000,
+  baseLayer: "six-topo",
+  overlays: ["hillshade"],
+  elements: { compass: true, scaleText: true, scaleBar: true },
+};
+
+/** Puts seeded objects in a bucket; best effort for the reason uploadSeededFiles gives. */
+async function uploadObjects(
+  bucketVar: "S3_BUCKET_MEDIA" | "S3_BUCKET_TOPO",
+  objects: SeededObject[],
+): Promise<void> {
+  const bucket = process.env[bucketVar];
+  if (!bucket) {
+    console.warn(`${bucketVar} is unset — seeded job files were not uploaded.`);
+    return;
+  }
+  try {
+    for (const object of objects) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: object.key,
+          Body: object.body,
+          ContentType: object.contentType,
+        }),
+      );
+    }
+    console.log(`Uploaded ${objects.length} seeded objects to s3://${bucket}/`);
+  } catch (err) {
+    console.warn(
+      `Could not upload seeded job files (${(err as Error).message}). The rows still exist; their downloads and tiles will report a file that isn't there.`,
+    );
+  }
+}
+
+/** Throws when a seeded config is one the API would refuse to store. */
+function assertValid(what: string, error: string | null): void {
+  if (error) throw new Error(`seed: ${what} is invalid: ${error}`);
+}
+
 async function main() {
   // Delete in reverse FK dependency order (Postgres enforces constraints per
   // statement). Every seeded table is NAMED here even where `user.deleteMany()`
@@ -1180,7 +1465,16 @@ async function main() {
     prisma.placeType.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.topoJob.deleteMany(),
+    prisma.topoExportJob.deleteMany(),
+    prisma.geoPdfJob.deleteMany(),
     prisma.geoPdfTemplate.deleteMany(),
+    prisma.topoTemplate.deleteMany(),
+    prisma.fileSendRecipient.deleteMany(),
+    prisma.fileSend.deleteMany(),
+    prisma.friendInvite.deleteMany(),
+    prisma.deviceToken.deleteMany(),
+    prisma.syncTombstone.deleteMany(),
+    prisma.egressLogCursor.deleteMany(),
     prisma.user.deleteMany(),
   ]);
 
@@ -1267,6 +1561,27 @@ async function main() {
       color: PLACE_TYPE_COLORS[6],
       position: 0,
     },
+  });
+
+  await prisma.placeType.createMany({
+    data: [
+      {
+        id: BOB_TYPE_ID,
+        ownerId: BOB_ID,
+        name: "Lookout",
+        iconKey: "droplet",
+        color: PLACE_TYPE_COLORS[2],
+        position: 0,
+      },
+      {
+        id: CAROL_TYPE_ID,
+        ownerId: CAROL_ID,
+        name: "Swim spot",
+        iconKey: "droplet",
+        color: PLACE_TYPE_COLORS[4],
+        position: 0,
+      },
+    ],
   });
 
   await prisma.customFieldDef.createMany({
@@ -1419,6 +1734,14 @@ async function main() {
         name: "Galah exit gully",
         latitude: -33.2521,
         longitude: 150.3044,
+      },
+      {
+        id: wpid(6),
+        ownerId: CAROL_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Surefire carpark",
+        latitude: -33.2279,
+        longitude: 150.2919,
       },
     ],
   });
@@ -1764,7 +2087,355 @@ async function main() {
     ],
   });
 
-  // Notifications (payloads are enriched server-side from the referenced ids).
+  // Jobs, templates and everything an account's background work leaves behind.
+  // Ids are the "f" space. `ago` keeps the dates relative to the seed run, so a
+  // completed export is never older than the sweeps that expire it.
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+  const fid = (n: number) => seedId("f", n);
+
+  const aliceTopo = fid(1);
+  const bobTopo = fid(4);
+  const aliceTopoOutputs = topoOutputs(aliceTopo);
+  const bobTopoOutputs = topoOutputs(bobTopo);
+  // What a finished run costs the owner's monthly credits is its elapsed time
+  // (lib/computeCredits.ts): the worker's own `wallSeconds` for a complete
+  // topo, `updatedAt - startedAt` for a failed one. Both are minutes here, as
+  // a run of one tile is, so seeding spends nothing worth noticing.
+  const topoRun = (endedMinutesAgo: number, wallSeconds: number) => ({
+    attemptCount: 1,
+    startedAt: ago(endedMinutesAgo + wallSeconds / 60),
+    updatedAt: ago(endedMinutesAgo),
+  });
+  const pipelineMetrics = (wallSeconds: number) => ({
+    schemaVersion: 1,
+    wallSeconds,
+    phases: { pdal: wallSeconds / 2, render: wallSeconds / 2 },
+    inputTileCount: 1,
+    outputTileCount: 1,
+    zoomMin: TOPO_TILE.z,
+    zoomMax: TOPO_TILE.z,
+  });
+  await prisma.topoJob.createMany({
+    data: [
+      // Complete: what Logjam Web's Maps page and GeoPDF dialog need to draw a
+      // topo and offer it as a layer.
+      {
+        id: aliceTopo,
+        userId: ALICE_ID,
+        status: "complete",
+        name: "Grand Canyon LiDAR",
+        footprint: TOPO_FOOTPRINT,
+        tileCount: 1,
+        estimatedSeconds: 600,
+        outputTileCount: 1,
+        s3OutputKeys: aliceTopoOutputs.keys,
+        outputBytes: aliceTopoOutputs.bytes,
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        createdAt: ago(300),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(285, 300),
+      },
+      {
+        id: fid(2),
+        userId: ALICE_ID,
+        status: "failed",
+        name: "Wollangambe LiDAR",
+        tileCount: 2,
+        estimatedSeconds: 1200,
+        errorMessage: TOPO_UNREADABLE_MESSAGE,
+        createdAt: ago(200),
+        ...topoRun(188, 120),
+      },
+      // Bob's, shared with alice (below): read-only to her.
+      {
+        id: bobTopo,
+        userId: BOB_ID,
+        status: "complete",
+        name: "Coin Slot LiDAR",
+        footprint: TOPO_FOOTPRINT,
+        tileCount: 1,
+        estimatedSeconds: 600,
+        outputTileCount: 1,
+        s3OutputKeys: bobTopoOutputs.keys,
+        outputBytes: bobTopoOutputs.bytes,
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        createdAt: ago(400),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(385, 300),
+      },
+    ],
+  });
+
+  const exportDone = fid(5);
+  const exportFile = JSON.stringify({
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { layer: "contours" },
+        geometry: { type: "LineString", coordinates: CONTOUR_LONLAT },
+      },
+    ],
+  });
+  await prisma.topoExportJob.createMany({
+    data: [
+      {
+        id: exportDone,
+        userId: ALICE_ID,
+        sourceJobIds: [aliceTopo],
+        layers: ["contours"],
+        format: "geojson",
+        bundling: "per-layer",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        sourceTileCount: 1,
+        estimatedSeconds: 60,
+        status: "completed",
+        resultKey: `exports/${exportDone}/contours.geojson`,
+        resultBytes: BigInt(Buffer.byteLength(exportFile)),
+        startedAt: ago(100),
+        createdAt: ago(105),
+        completedAt: ago(98),
+      },
+      {
+        id: fid(6),
+        userId: ALICE_ID,
+        sourceJobIds: [aliceTopo],
+        layers: ["contours"],
+        format: "gpkg",
+        bundling: "composite",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        sourceTileCount: 1,
+        estimatedSeconds: 60,
+        status: "failed",
+        errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+        startedAt: ago(70),
+        createdAt: ago(75),
+        completedAt: ago(67),
+      },
+    ],
+  });
+
+  assertValid("the GeoPDF config", validateGeoPdfConfig(GEO_PDF_CONFIG));
+  const geoPdfDone = fid(7);
+  const bobGeoPdf = fid(9);
+  const geoPdfResult = (id: string) => ({
+    resultKey: `exports/geo-pdf/${id}/logjam-export.pdf`,
+    resultBytes: BigInt(GEO_PDF_FIXTURE.length),
+  });
+  await prisma.geoPdfJob.createMany({
+    data: [
+      {
+        id: geoPdfDone,
+        userId: ALICE_ID,
+        config: GEO_PDF_CONFIG as object,
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        estimatedSeconds: 30,
+        status: "completed",
+        ...geoPdfResult(geoPdfDone),
+        startedAt: ago(60),
+        createdAt: ago(62),
+        completedAt: ago(58),
+      },
+      {
+        id: fid(8),
+        userId: ALICE_ID,
+        config: {
+          ...GEO_PDF_CONFIG,
+          elements: { ...GEO_PDF_CONFIG.elements, title: "Failed test sheet" },
+        } as object,
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        estimatedSeconds: 30,
+        status: "failed",
+        errorMessage: GEO_PDF_FAILURE_MESSAGE,
+        startedAt: ago(50),
+        createdAt: ago(52),
+        completedAt: ago(48),
+      },
+      {
+        id: bobGeoPdf,
+        userId: BOB_ID,
+        config: GEO_PDF_CONFIG as object,
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        estimatedSeconds: 30,
+        status: "completed",
+        ...geoPdfResult(bobGeoPdf),
+        startedAt: ago(90),
+        createdAt: ago(92),
+        completedAt: ago(88),
+      },
+    ],
+  });
+
+  await prisma.share.createMany({
+    data: [
+      {
+        id: seedId("8", 4),
+        entityType: "topoJob",
+        entityId: bobTopo,
+        sharedById: BOB_ID,
+        sharedWithId: ALICE_ID,
+      },
+      {
+        id: seedId("8", 5),
+        entityType: "geoPdfJob",
+        entityId: bobGeoPdf,
+        sharedById: BOB_ID,
+        sharedWithId: ALICE_ID,
+      },
+    ],
+  });
+
+  // Templates of both kinds, validated as the routes validate them so the seed
+  // cannot hold a config the API would refuse to store.
+  assertValid(
+    "the GeoPDF template",
+    validateGeoPdfTemplateConfig(GEO_PDF_TEMPLATE_CONFIG),
+  );
+  const topoTemplateConfig = validateRasterTemplateSettings({
+    ...RASTER_TEMPLATE_DEFAULTS,
+    hillshade: { ...RASTER_TEMPLATE_DEFAULTS.hillshade, azimuth: 270 },
+  });
+  if (!topoTemplateConfig.ok) {
+    throw new Error(
+      `seed: the topo template is invalid: ${topoTemplateConfig.errors.join("; ")}`,
+    );
+  }
+  await prisma.geoPdfTemplate.createMany({
+    data: [
+      {
+        id: fid(10),
+        userId: ALICE_ID,
+        name: "A4 portrait with hillshade",
+        config: GEO_PDF_TEMPLATE_CONFIG as object,
+      },
+      {
+        id: fid(11),
+        userId: BOB_ID,
+        name: "Bob's A4",
+        config: { ...GEO_PDF_TEMPLATE_CONFIG, overlays: [] } as object,
+      },
+    ],
+  });
+  await prisma.topoTemplate.createMany({
+    data: [
+      {
+        id: fid(12),
+        userId: ALICE_ID,
+        name: "Low sun",
+        config: topoTemplateConfig.value as object,
+        autoExport: AUTO_EXPORT_DEFAULTS as object,
+      },
+      {
+        id: fid(13),
+        userId: BOB_ID,
+        name: "Bob's default",
+        config: RASTER_TEMPLATE_DEFAULTS as object,
+      },
+    ],
+  });
+
+  // Sends are copies: a pending one for alice to accept and an accepted one
+  // she made. Each has its object in the media bucket, under the key
+  // lib/fileSendAccess.ts fileSendKey gives it today (a download reads the
+  // row's own key, so a change there strands only the seeded object).
+  const bobSend = fid(14);
+  const aliceSend = fid(15);
+  const sendExpires = new Date(
+    Date.now() + FILE_SEND_TTL_DAYS * 24 * 60 * 60_000,
+  );
+  await prisma.fileSend.createMany({
+    data: [
+      {
+        id: bobSend,
+        senderId: BOB_ID,
+        sourceKind: "import",
+        filename: "coin-slot.gpx",
+        s3Key: `file-sends/${BOB_ID}/${bobSend}/copy.gpx`,
+        sizeBytes: BigInt(coinSlotFile.fileSizeBytes),
+        expiresAt: sendExpires,
+      },
+      {
+        id: aliceSend,
+        senderId: ALICE_ID,
+        sourceKind: "track",
+        filename: "Wollangambe, 2 Aug.gpx",
+        s3Key: `file-sends/${ALICE_ID}/${aliceSend}/copy.gpx`,
+        sizeBytes: BigInt(wollangambeFile.fileSizeBytes),
+        expiresAt: sendExpires,
+      },
+    ],
+  });
+  await prisma.fileSendRecipient.createMany({
+    data: [
+      { id: fid(16), fileSendId: bobSend, userId: ALICE_ID, status: "pending" },
+      {
+        id: fid(17),
+        fileSendId: aliceSend,
+        userId: BOB_ID,
+        status: "accepted",
+        respondedAt: ago(30),
+      },
+    ],
+  });
+
+  // A pending invite link from alice, for another user to open: the seed prints
+  // it, as only its hash is stored. Alice's, since friendInvites.test.ts clears
+  // bob's and carol's.
+  await prisma.friendInvite.create({
+    data: {
+      id: fid(18),
+      inviterId: ALICE_ID,
+      tokenHash: hashFriendInviteToken(SEED_FRIEND_INVITE_TOKEN),
+      expiresAt: new Date(
+        Date.now() + FRIEND_INVITE_TTL_DAYS * 24 * 60 * 60_000,
+      ),
+    },
+  });
+
+  // Deletions a phone has yet to hear about. The ids name nothing: the rows are
+  // gone, which is what a tombstone says.
+  await prisma.syncTombstone.createMany({
+    data: [
+      { userId: ALICE_ID, entityType: "place", entityId: seedId("1", 900) },
+      { userId: ALICE_ID, entityType: "media", entityId: seedId("4", 900) },
+      { userId: ALICE_ID, entityType: "route", entityId: seedId("7", 900) },
+      { userId: BOB_ID, entityType: "place", entityId: seedId("2", 900) },
+    ],
+  });
+
+  await uploadObjects("S3_BUCKET_TOPO", [
+    ...aliceTopoOutputs.objects,
+    ...bobTopoOutputs.objects,
+    {
+      key: `exports/${exportDone}/contours.geojson`,
+      body: exportFile,
+      contentType: "application/geo+json",
+    },
+    ...[geoPdfDone, bobGeoPdf].map((id) => ({
+      key: geoPdfResult(id).resultKey,
+      body: GEO_PDF_FIXTURE,
+      contentType: "application/pdf",
+    })),
+  ]);
+  await uploadObjects("S3_BUCKET_MEDIA", [
+    {
+      key: `file-sends/${BOB_ID}/${bobSend}/copy.gpx`,
+      body: coinSlotFile.body,
+      contentType: coinSlotFile.contentType,
+    },
+    {
+      key: `file-sends/${ALICE_ID}/${aliceSend}/copy.gpx`,
+      body: wollangambeFile.body,
+      contentType: wollangambeFile.contentType,
+    },
+  ]);
+
+  // Notifications: one of every stored type for alice, with the payload its
+  // producer writes (the producer is named on each). Payloads carry ids only;
+  // names are resolved at read time (routes/notifications.ts). The types are
+  // NOTIFICATION_TYPES, and src/lib/seedCoverage.unit.test.ts holds the seed to
+  // them. Bob's two place_shared rows predate this block.
+  const egressQuota = 53_687_091_200n; // the column default
   await prisma.notification.createMany({
     data: [
       {
@@ -1779,29 +2450,153 @@ async function main() {
         payload: { placeId: PLACE_IDS[1], sharedById: ALICE_ID },
         read: true,
       },
+      // routes/friends.ts
       {
         userId: ALICE_ID,
         type: "friend_request",
-        payload: { friendshipId: carolPending.id, requesterUsername: "carol" },
+        payload: { friendshipId: carolPending.id, requesterId: CAROL_ID },
         read: false,
+        createdAt: ago(5),
+      },
+      // routes/friends.ts, on acceptance
+      {
+        userId: ALICE_ID,
+        type: "friend_request_accepted",
+        payload: { friendshipId: seedId("d", 1), acceptedById: BOB_ID },
+        read: true,
+        createdAt: ago(600),
+      },
+      // routes/sharing.ts
+      {
+        userId: ALICE_ID,
+        type: "place_shared",
+        payload: { placeId: BOB_SHARED_PLACE_ID, sharedById: BOB_ID },
+        read: false,
+        createdAt: ago(120),
+      },
+      // routes/shares.ts
+      {
+        userId: ALICE_ID,
+        type: "item_shared",
+        payload: { entityType: "route", entityId: rtid(3), sharedById: BOB_ID },
+        read: false,
+        createdAt: ago(110),
+      },
+      // routes/fileSends.ts
+      {
+        userId: ALICE_ID,
+        type: "file_sent",
+        payload: { fileSendId: bobSend, sentById: BOB_ID },
+        read: false,
+        createdAt: ago(25),
+      },
+      // topo/worker.py
+      {
+        userId: ALICE_ID,
+        type: "topo_complete",
+        payload: {
+          jobId: aliceTopo,
+          jobName: "Grand Canyon LiDAR",
+          footprint: TOPO_FOOTPRINT,
+          osmFailed: false,
+        },
+        read: true,
+        createdAt: ago(285),
+      },
+      // topo/worker.py's failure path
+      {
+        userId: ALICE_ID,
+        type: "topo_failed",
+        payload: { jobId: fid(2), jobName: "Wollangambe LiDAR" },
+        read: false,
+        createdAt: ago(188),
+      },
+      // topo/export_worker.py
+      {
+        userId: ALICE_ID,
+        type: "topo_export_complete",
+        payload: {
+          exportJobId: exportDone,
+          format: "geojson",
+          jobName: "Grand Canyon LiDAR",
+          status: "completed",
+          errorMessage: null,
+        },
+        read: false,
+        createdAt: ago(98),
+      },
+      // lib/topoJobReaper.ts, auto-export pass
+      {
+        userId: ALICE_ID,
+        type: "topo_export_skipped",
+        payload: {
+          topoJobId: aliceTopo,
+          reason: "none of the chosen layers were produced by this job",
+        },
+        read: false,
+        createdAt: ago(280),
+      },
+      // api/src/worker/geoPdfWorker.ts: both outcomes use this type
+      {
+        userId: ALICE_ID,
+        type: "geo_pdf_complete",
+        payload: {
+          geoPdfJobId: geoPdfDone,
+          status: "completed",
+          errorMessage: null,
+        },
+        read: false,
+        createdAt: ago(58),
+      },
+      {
+        userId: ALICE_ID,
+        type: "geo_pdf_complete",
+        payload: {
+          geoPdfJobId: fid(8),
+          status: "failed",
+          errorMessage: GEO_PDF_FAILURE_MESSAGE,
+        },
+        read: false,
+        createdAt: ago(48),
+      },
+      // lib/egressMeter.ts: the two numbers, stringified
+      {
+        userId: ALICE_ID,
+        type: "egress_quota_warning",
+        payload: {
+          usedBytes: ((egressQuota * 85n) / 100n).toString(),
+          quotaBytes: egressQuota.toString(),
+        },
+        read: true,
+        createdAt: ago(1500),
+      },
+      {
+        userId: ALICE_ID,
+        type: "egress_quota_exceeded",
+        payload: {
+          usedBytes: egressQuota.toString(),
+          quotaBytes: egressQuota.toString(),
+        },
+        read: true,
+        createdAt: ago(1400),
       },
     ],
   });
-
-  // Topo jobs are intentionally not seeded: a "complete" job with no S3 tiles
-  // behind it renders nothing / breaks the map UI. Submit a real LiDAR ZIP in
-  // dev to exercise the topo flow end-to-end instead.
 
   // Last: the integration suite refuses to run on a database that differs
   // from this (src/__tests__/_seedBaseline.ts).
   await saveSeedSnapshot(prisma);
 
-  const placeCount = ALL_PLACES.length;
   console.log(
-    `Seed complete: 3 users, ${placeCount} places (1 fork), 5 place shares ` +
-      `(1 incoming to alice), 2 direct route shares (1 each way), ` +
-      `${trips.length} trip logs, ` +
-      `5 marker places, 3 place links, 7 routes, 6 media, 3 notifications, 0 topo jobs`,
+    `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
+      `(1 incoming to alice), 4 direct shares (3 incoming to alice), ` +
+      `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
+      `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 4 templates, ` +
+      `2 file sends, 1 invite, 4 tombstones, ` +
+      `${NOTIFICATION_TYPES.length} notification types`,
+  );
+  console.log(
+    `Alice's invite link, for another user: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
   );
 }
 
