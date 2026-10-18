@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -34,6 +36,20 @@ describe("slopeDegrees", () => {
     expect(slopeDegrees(plane(0, -10), 10)).toBeCloseTo(45, 6);
     expect(slopeDegrees(plane(3, 4), 5)).toBeCloseTo(45, 6);
     expect(slopeDegrees(plane(0, 0), 10)).toBe(0);
+  });
+
+  it("reads the bumpy window of the shared fixture as the slope archive does", () => {
+    // Planes cannot tell 1-2-1 weights over 8 from 1-1-1 over 6. Turns red if a
+    // weight or divisor drifts here, or if the fixture's figure is edited alone:
+    // topo/tests/test_nsw_dem.py reads the same file, so the archive's slope and
+    // the tap's cannot drift apart without one of the two turning red.
+    const { heights, cellM, degrees } = JSON.parse(
+      readFileSync(
+        new URL("./__fixtures__/horn-window.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    expect(slopeDegrees(heights, cellM)).toBeCloseTo(degrees, 6);
   });
 
   it("scales with the cell size, so the same heights are gentler when further apart", () => {
