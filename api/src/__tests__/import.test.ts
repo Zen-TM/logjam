@@ -417,19 +417,14 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
     }
   });
 
-  it("restores a trip a re-import changed, links included", async () => {
+  // Mutations that turn it red: moving restoreBatch after the deletes in
+  // routes/imports.ts (deleting N renames the trip after it, which Undo then
+  // keeps as an edit); dropping the updatedAt touch from a links-only restore
+  // (the phone never pulls it); leaving placeIds out of tripFields.
+  it("restores a trip a re-import re-linked to a place it created, and a phone pulls it", async () => {
     const run = Date.now();
     const sourcePlaceName = `IMP undo trip ${run}`;
     const trip = { sourcePlaceName, date: "2024-06-01", notes: "lap" };
-    const first = await request(API_URL)
-      .post("/trips/bulk")
-      .set(AUTH)
-      .send({
-        importBatchId: newBatch(),
-        trips: [{ ...trip, placeId: null, displayName: sourcePlaceName }],
-      });
-    expect(first.body.imported).toBe(1);
-
     const place = await request(API_URL)
       .post("/places")
       .set(AUTH)
@@ -441,30 +436,67 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
       });
     const placeId = place.body.id as string;
     try {
+      const first = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({ importBatchId: newBatch(), trips: [{ ...trip, placeId }] });
+      expect(first.body.imported).toBe(1);
+      const tripRow = await prisma.tripLog.findFirstOrThrow({
+        where: { userId: ALICE_ID, places: { some: { placeId } } },
+      });
+
+      // One batch creates a place, then re-links the trip to it: only the
+      // links change (both are canyons, so the types stay ["canyoning"]).
       const batchId = newBatch();
+      const created = await request(API_URL)
+        .post("/places/bulk")
+        .set(AUTH)
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: batchId,
+          rows: [placeRow(`IMP undo trip new place ${run}`, -33.54, 150.14)],
+        });
+      expect(created.body.created).toBe(1);
+      const newPlace = await prisma.place.findFirstOrThrow({
+        where: { ownerId: ALICE_ID, importBatchId: batchId },
+      });
       const reimport = await request(API_URL)
         .post("/trips/bulk")
         .set(AUTH)
-        .send({ importBatchId: batchId, trips: [{ ...trip, placeId }] });
+        .send({
+          importBatchId: batchId,
+          trips: [{ ...trip, placeId: newPlace.id }],
+        });
       expect(reimport.body.updated).toBe(1);
-      const linked = await prisma.tripLog.findFirst({
-        where: { userId: ALICE_ID, places: { some: { placeId } } },
-      });
-      expect(linked?.displayName).toBeNull();
+      const cursor = await deltaCursor(ALICE_SUB);
 
       const undo = await request(API_URL)
         .delete(`/imports/${batchId}`)
         .set(AUTH);
       expect(undo.status).toBe(200);
+      expect(undo.body.deletedPlaces).toBe(1);
       expect(undo.body.restoredTrips).toBe(1);
+      expect(undo.body.keptFields).toBe(0);
 
       const restored = await prisma.tripLog.findUnique({
-        where: { id: linked!.id },
+        where: { id: tripRow.id },
         include: { places: true },
       });
-      expect(restored?.displayName).toBe(sourcePlaceName);
-      expect(restored?.places).toEqual([]);
-      expect(restored?.types).toEqual([]);
+      expect(restored?.displayName).toBeNull();
+      expect(restored?.places.map((link) => link.placeId)).toEqual([placeId]);
+
+      const res = await request(API_URL)
+        .get("/sync/delta")
+        .query({ cursor })
+        .set(as(ALICE_SUB))
+        .set(CLIENT);
+      const pulled = (
+        res.body.changes.tripLogs as {
+          id: string;
+          places: { id: string }[];
+        }[]
+      ).find((t) => t.id === tripRow.id);
+      expect(pulled?.places.map((p) => p.id)).toEqual([placeId]);
     } finally {
       await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
     }

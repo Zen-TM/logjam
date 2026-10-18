@@ -28,6 +28,8 @@ describe("diffFields", () => {
     });
   });
 
+  // Mutation that turns it red: treating a missing map key as different from
+  // a null one, or returning an empty change instead of null.
   it("is null when nothing changed, a missing key being a null one", () => {
     expect(
       diffFields(stored, {
@@ -52,6 +54,8 @@ describe("combineChanges", () => {
     });
   });
 
+  // Mutation that turns it red: keeping a fold whose before equals its after,
+  // so Undo would write a no-op and count the row as restored.
   it("is null when the later change undoes the earlier", () => {
     expect(
       combineChanges(
@@ -68,6 +72,8 @@ describe("restoreFields", () => {
     after: { notes: "from file", fieldValues: { aca: "b", time: 4 } },
   };
 
+  // Mutation that turns it red: restoring a map field wholesale from before
+  // (drops v_grade), or writing time: null instead of removing the key.
   it("puts back every field still as the import left it", () => {
     expect(
       restoreFields(

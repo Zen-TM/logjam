@@ -469,7 +469,7 @@ router.post(
 
       // One update per place. Two rows merging into one place both merged
       // into its stored values, so the later row's values are the ones that
-      // land, as when each row was its own update.
+      // land.
       const updateByPlace = new Map<
         string,
         { target: MergeOp["target"]; data: Record<string, unknown> }

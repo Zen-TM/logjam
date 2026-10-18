@@ -9,7 +9,11 @@
 // keeps that attribute and nothing else. Guards: importSnapshot.unit.test.ts,
 // src/__tests__/import.test.ts.
 import { isDeepStrictEqual } from "node:util";
-import { setFieldValues } from "@logjam/shared";
+import {
+  enforceCanyoningTag,
+  linksCanyon,
+  setFieldValues,
+} from "@logjam/shared";
 import prisma from "../services/prisma";
 
 export type RowFields = Record<string, unknown>;
@@ -204,14 +208,20 @@ export async function restoreBatch(ownerId: string, batchId: string) {
           date: true,
           notes: true,
           customFields: true,
-          places: { select: { placeId: true, position: true } },
+          places: {
+            select: {
+              placeId: true,
+              position: true,
+              place: { select: { placeTypeId: true } },
+            },
+          },
         },
       },
     },
   });
 
   // A trip goes back to the places it was linked to, less any deleted since.
-  const linkable = new Set(
+  const linkable = new Map(
     (
       await prisma.place.findMany({
         where: {
@@ -222,9 +232,9 @@ export async function restoreBatch(ownerId: string, batchId: string) {
             ),
           },
         },
-        select: { id: true },
+        select: { id: true, placeTypeId: true },
       })
-    ).map((p) => p.id),
+    ).map((p) => [p.id, p.placeTypeId]),
   );
 
   // Read, then written without a lock: an edit landing in between these two
@@ -261,18 +271,38 @@ export async function restoreBatch(ownerId: string, batchId: string) {
       if (Object.keys(restore).length === 0) continue;
       restoredTrips++;
       const { placeIds, ...data } = restore;
+      const links = Array.isArray(placeIds)
+        ? (placeIds as string[]).filter((id) => linkable.has(id))
+        : null;
+      // The canyoning tag follows the links the trip ends with, as on every
+      // trip write (tripName.ts).
+      if (links || data.types) {
+        data.types = enforceCanyoningTag(
+          (data.types ?? snapshot.tripLog.types) as string[],
+          linksCanyon(
+            links
+              ? links.map((id) => linkable.get(id)!)
+              : snapshot.tripLog.places.map((link) => link.place.placeTypeId),
+          ),
+        );
+      }
       writes.push(
         prisma.tripLog.update({
           where: { id: snapshot.tripLogId!, userId: ownerId },
           data: {
             ...data,
-            ...(Array.isArray(placeIds)
+            // A write of links alone does not move @updatedAt, which is what
+            // phones pull by (tripLogsGlobal.ts does the same). Guard: the
+            // re-linked trip test in src/__tests__/import.test.ts.
+            ...(links
               ? {
+                  updatedAt: new Date(),
                   places: {
                     deleteMany: {},
-                    create: (placeIds as string[])
-                      .filter((id) => linkable.has(id))
-                      .map((placeId, position) => ({ placeId, position })),
+                    create: links.map((placeId, position) => ({
+                      placeId,
+                      position,
+                    })),
                   },
                 }
               : {}),
