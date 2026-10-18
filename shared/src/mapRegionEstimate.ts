@@ -102,9 +102,9 @@ export const MAX_REGION_EDGE_KM = 50;
 const EARTH_RADIUS_KM = 6371;
 
 /** Great-circle-ish edge lengths of the bbox (km): [widthAtCenterLat, height]. */
-/** Area cap for every save, set by the server-side clip. The API enforces the same
- * number (api/src/lib/regionClip.ts imports it) — one source, so the client
- * can never offer a region the server will refuse. */
+/** Area cap for every save, which bounds what the clips cut on the phone cost.
+ * The API's region clip, kept for older Logjam GPS builds, imports the same
+ * number (api/src/lib/regionClip.ts). */
 export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
 
 export function regionEdgesKm(bbox: RegionBbox): [number, number] {
@@ -135,10 +135,10 @@ export function checkRegionCaps(
   if (w > MAX_REGION_EDGE_KM || h > MAX_REGION_EDGE_KM) {
     return { ok: false, reason: "edge-too-long" };
   }
-  // One area for every save, whatever is in it (docs/decisions/0029). The
-  // clip endpoint refuses anything larger, and every signed-in save asks it
-  // for the vector map, the contours and a DEM archive: a larger area could
-  // only be saved without them, which is the save that breaks in the field.
+  // One area for every save, whatever is in it
+  // (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md): every save
+  // cuts the vector map, the contours and a DEM archive, and the cap bounds
+  // what that costs a phone in requests, bytes and time.
   if (w * h > MAX_REGION_AREA_KM2) {
     return { ok: false, reason: "area-too-large" };
   }
@@ -368,10 +368,10 @@ export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
 }
 
 export interface MultiSourceRegionPlan {
-  /** The contour clip, when the user is saving one: bytes only, like a DEM. */
-  contours: RegionSizeEstimate | null;
+  /** The contour clip: bytes only, like a DEM archive's. */
+  contours: RegionSizeEstimate;
   /**
-   * DEM archive clips: one request each to our own API, so they count toward
+   * DEM archive clips: cut by byte range from our own CDN, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
    * fetched one by one from a provider.
    */
@@ -402,33 +402,29 @@ export interface MultiSourceRegionPlan {
  * elevation profiles, point heights and route gain/loss the moment the phone
  * goes offline — which is the trip the download exists for. Costing it into
  * these totals (rather than adding it silently later) is what keeps the size
- * estimate, the tile cap and the free-space check honest.
+ * estimate, the tile cap and the free-space check honest. So are the clips
+ * of each DEM archive the area touches and of the statewide contours, which
+ * every area saves too.
  */
 export function planRegionForBasemaps(
   bbox: RegionBbox,
   basemapIds: OfflineBasemapId[],
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
-  /** False for a guest: the clip endpoint needs a signed-in user. */
-  includeDemArchives = false,
-  /** True when a clip of the statewide contours is saved with the area. */
-  includeContours = false,
 ): MultiSourceRegionPlan {
-  const contours = includeContours ? estimateContourClip(bbox) : null;
+  const contours = estimateContourClip(bbox);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
-  const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
-    (source) => {
-      const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
-      const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
-      return {
-        sourceId: source.id,
-        size: {
-          meanBytes: tiles.totalTiles * perTile.meanBytes,
-          p90Bytes: tiles.totalTiles * perTile.p90Bytes,
-        },
-      };
-    },
-  );
+  const demArchives = planDemDownload(bbox).map((source) => {
+    const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
+    const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+    return {
+      sourceId: source.id,
+      size: {
+        meanBytes: tiles.totalTiles * perTile.meanBytes,
+        p90Bytes: tiles.totalTiles * perTile.p90Bytes,
+      },
+    };
+  });
 
   const perSource = [
     ...basemapIds.map((basemapId) => {
@@ -453,7 +449,7 @@ export function planRegionForBasemaps(
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>
     [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
-    (contours?.[key] ?? 0);
+    contours[key];
   return {
     contours,
     perSource,
