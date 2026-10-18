@@ -92,7 +92,6 @@ const MISMATCH_EXPLANATIONS: Record<
       : "is above the accepted range — the file may use a different scale",
   unparsableJson: () => "isn't valid JSON",
   unparsableArray: () => "isn't a valid list",
-  coordFormat: () => "isn't in decimal degrees (e.g. -33.6042)",
   mixedTypes: () => "doesn't match the other values in this column",
   emptyDominant: () => "couldn't be read",
 };
