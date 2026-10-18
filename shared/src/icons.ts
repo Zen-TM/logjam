@@ -77,6 +77,9 @@ export const ICONS = {
   addFriend: { web: "user-plus", gps: "user-plus" },
   loading: { web: "loader", gps: "loader" },
   dragHandle: { web: "grip-vertical", gps: "mci:drag-vertical" },
+  archive: { web: "box", gps: "mci:archive-outline" }, // archive a plan, bring it back
+  leave: { web: "door-open", gps: "mci:exit-run" }, // leave a plan
+  print: { web: "printer", gps: "printer" },
 
   // — structure: where the user is, and how it opens —
   disclosure: { web: "chevron-right", gps: "chevron-right" }, // opens a sub-view
@@ -103,6 +106,8 @@ export const ICONS = {
   map: { web: "map", gps: "map" }, // a map, the Maps tab, show on map
   place: { web: "map-pin", gps: "map-pin" },
   trip: { web: "book-open", gps: "book-open" },
+  plan: { web: "clipboard-list", gps: "clipboard" }, // a trip plan, the Plans page
+  form: { web: "list-todo", gps: "mci:clipboard-text-outline" }, // a plan's form
   saved: { web: "folder", gps: "folder" }, // Saved: everything kept on this phone
   route: { web: "route", gps: "mci:map-marker-path" },
   track: { web: "activity", gps: "activity" },
