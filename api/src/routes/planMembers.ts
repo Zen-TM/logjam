@@ -9,10 +9,10 @@
 // what they added stays in the plan.
 //
 // Every write starts with touchPlan (lib/planAccess.ts), so writes in one
-// plan run one at a time, and the rows a write changes (the person invited,
-// joining, asking or leaving) are read again behind it. The caller's own role
-// is checked before, as in planSections.ts: a write that races a change to it
-// lands as if it had run just before that change.
+// plan run one at a time, and behind it each reads again the rows it decides
+// on: the person invited, joining, asking or leaving, and a leader's own
+// role (requireStillLeader), so no two leaders acting at once can leave the
+// plan without one.
 // Guard: __tests__/planMembers.test.ts.
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
@@ -32,6 +32,7 @@ import {
   planMembershipAnyStatus,
   planNotFound,
   requirePlanMember,
+  requireStillLeader,
   requirePlanRole,
   requirePlanWrite,
   touchPlan,
@@ -54,6 +55,7 @@ import {
 
 const router = Router({ mergeParams: true });
 
+const REMOVE = say`Only a leader can remove someone.`;
 const NEEDS_A_LEADER = say`A plan needs a leader. Make someone else a leader first.`;
 
 function memberNotFound(): AppError {
@@ -64,7 +66,7 @@ async function leader(req: AuthenticatedRequest, forbidden: UserSentence) {
   const user = await resolveUser(req.user!.sub);
   const access = await requirePlanWrite(user.id, getParam(req.params.planId));
   requirePlanRole(access, ["leader"], forbidden);
-  return { userId: user.id, access };
+  return { userId: user.id, access, forbidden };
 }
 
 /** `:userId`, with `me` for the caller. */
@@ -90,7 +92,7 @@ router.post(
   "/members",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { userId, access } = await leader(
+    const { userId, access, forbidden } = await leader(
       req,
       say`Only a leader can invite people.`,
     );
@@ -113,6 +115,7 @@ router.post(
 
     const push = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
+      await requireStillLeader(tx, planId, userId, forbidden);
       const existing = await tx.tripPlanMember.findUnique({
         where: { planId_userId: { planId, userId: invitee.id } },
         select: { status: true },
@@ -253,7 +256,7 @@ router.patch(
   "/members/:userId",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { userId, access } = await leader(
+    const { userId, access, forbidden } = await leader(
       req,
       say`Only a leader can change roles.`,
     );
@@ -263,6 +266,7 @@ router.patch(
     if (!isTripPlanRole(role)) throw malformed("role must be a plan role");
     await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
+      await requireStillLeader(tx, planId, userId, forbidden);
       const member = await tx.tripPlanMember.findUnique({
         where: { planId_userId: { planId, userId: memberId } },
         select: { status: true, role: true },
@@ -299,7 +303,7 @@ router.post(
   "/members/:userId/approve",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { userId, access } = await leader(
+    const { userId, access, forbidden } = await leader(
       req,
       say`Only a leader can let people in.`,
     );
@@ -307,6 +311,7 @@ router.post(
     const requesterId = getParam(req.params.userId);
     const push = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
+      await requireStillLeader(tx, planId, userId, forbidden);
       const { count } = await tx.tripPlanMember.updateMany({
         where: { planId, userId: requesterId, status: "requested" },
         data: { status: "active", role: "member" },
@@ -363,11 +368,12 @@ router.delete(
       requirePlanRole(
         await requirePlanMember(user.id, planId),
         ["leader"],
-        say`Only a leader can remove someone.`,
+        REMOVE,
       );
 
     const push = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
+      if (!self) await requireStillLeader(tx, planId, user.id, REMOVE);
       // Read again behind the plan row: a leader may have answered since.
       const [member, plan] = await Promise.all([
         tx.tripPlanMember.findUnique({
@@ -380,19 +386,21 @@ router.delete(
         }),
       ]);
       if (!member) throw self ? planNotFound() : memberNotFound();
-      if (self && member.status === "active") {
-        const others = await activeMemberIds(tx, planId, [memberId]);
-        if (others.length === 0)
-          throw new AppError(
-            409,
-            say`You're the only one in this plan. Delete it instead.`,
-          );
-        if (
-          member.role === "leader" &&
-          (await otherLeaders(tx, planId, memberId)) === 0
-        )
-          throw new AppError(409, NEEDS_A_LEADER);
-      }
+      if (
+        self &&
+        member.status === "active" &&
+        (await activeMemberIds(tx, planId, [memberId])).length === 0
+      )
+        throw new AppError(
+          409,
+          say`You're the only one in this plan. Delete it instead.`,
+        );
+      if (
+        member.status === "active" &&
+        member.role === "leader" &&
+        (await otherLeaders(tx, planId, memberId)) === 0
+      )
+        throw new AppError(409, NEEDS_A_LEADER);
       await tx.tripPlanAnswer.deleteMany({
         where: { userId: memberId, form: { planId } },
       });

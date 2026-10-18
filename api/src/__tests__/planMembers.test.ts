@@ -300,6 +300,63 @@ describe("who reaches a plan", () => {
   );
 });
 
+// Two leaders acting at once. alice's request reads her role, then waits
+// behind the plan row (touchPlan); this test holds that row, demotes alice
+// in the same transaction, and lets go, as bob's PATCH would.
+// Mutation: drop requireStillLeader from DELETE, PATCH or approve in
+// routes/planMembers.ts (that row then gets 409, or bob is removed).
+describe("a plan keeps a leader", () => {
+  async function whileDemoted(
+    act: () => PromiseLike<{ status: number }>,
+  ): Promise<{ status: number }> {
+    let pending!: Promise<{ status: number }>;
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.tripPlan.update({
+          where: { id: planId },
+          data: { updatedAt: new Date() },
+        });
+        pending = new Promise((resolve, reject) => {
+          act().then(resolve, reject);
+        });
+        // Long enough for the request to pass its checks and reach touchPlan.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await tx.tripPlanMember.update({
+          where: { planId_userId: { planId, userId: ALICE_ID } },
+          data: { role: "member" },
+        });
+      },
+      { timeout: 10_000 },
+    );
+    return pending;
+  }
+
+  it.each([
+    ["removing the other leader", () => remove(ALICE_SUB, BOB_ID)],
+    ["demoting the other leader", () => setRole(ALICE_SUB, BOB_ID, "member")],
+    [
+      "letting someone in",
+      () =>
+        request(API_URL)
+          .post(`/plans/${planId}/members/${CAROL_ID}/approve`)
+          .set(as(ALICE_SUB)),
+    ],
+  ] as const)("refuses a leader demoted while %s", async (_what, act) => {
+    await membership(BOB_ID, "active", "leader");
+    await membership(CAROL_ID, "requested");
+    const res = await whileDemoted(act);
+    expect(res.status).toBe(403);
+    const bob = await prisma.tripPlanMember.findUniqueOrThrow({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+    });
+    expect(bob).toMatchObject({ status: "active", role: "leader" });
+    const carol = await prisma.tripPlanMember.findUniqueOrThrow({
+      where: { planId_userId: { planId, userId: CAROL_ID } },
+    });
+    expect(carol.status).toBe("requested");
+  });
+});
+
 describe("roles", () => {
   // Mutation: drop the otherLeaders check in PATCH /members/:userId.
   it("a leader changes roles, but never leaves the plan without one", async () => {

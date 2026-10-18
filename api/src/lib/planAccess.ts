@@ -4,11 +4,12 @@
 // never in it gets the same 404 a missing plan gets (ADR 0002's rule), and a
 // member without the role gets a 403 naming who can. The one thing short of
 // that is `planMembershipAnyStatus`, for the routes about a person's own
-// membership: the invited preview, joining, declining and withdrawing. Plan rows reach no one
-// through the owner routes (`placeAccess.getPlaceRole` returns "none" for a
-// plan place), so this file is the only way in.
+// membership: the invited preview, declining and withdrawing (joining
+// re-checks "invited" inside its transaction, behind the plan row). Plan rows
+// reach no one through the owner routes (`placeAccess.getPlaceRole` returns
+// "none" for a plan place), so this file is the only way in.
 // Guard: planAccess.unit.test.ts, __tests__/plans.test.ts,
-// __tests__/tripPlanRows.test.ts.
+// __tests__/tripPlanRows.test.ts, __tests__/planMembers.test.ts.
 import { Prisma } from "@prisma/client";
 import {
   isTripPlanRole,
@@ -85,6 +86,27 @@ export function requirePlanRole(
   forbidden: UserSentence,
 ): void {
   if (!roles.includes(access.role)) throw new AppError(403, forbidden);
+}
+
+/**
+ * For a leader's write to who is in the plan, after touchPlan: the caller
+ * still leads, or 403. A check made before the lock can be stale by the time
+ * it is held, and two leaders demoting or removing each other would then
+ * leave the plan with none.
+ * Guard: __tests__/planMembers.test.ts ("a plan keeps a leader").
+ */
+export async function requireStillLeader(
+  tx: Prisma.TransactionClient,
+  planId: string,
+  userId: string,
+  forbidden: UserSentence,
+): Promise<void> {
+  const caller = await tx.tripPlanMember.findUnique({
+    where: { planId_userId: { planId, userId } },
+    select: { status: true, role: true },
+  });
+  if (caller?.status !== "active" || caller.role !== "leader")
+    throw new AppError(403, forbidden);
 }
 
 /** For a write to the plan's content: an active member, and not archived. */
