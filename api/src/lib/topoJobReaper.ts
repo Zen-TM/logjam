@@ -6,7 +6,7 @@ import { sendPushToUser, type PushData } from "../services/push";
 import { sendEmail } from "../services/email";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
-import { abortS3MultipartUploads } from "./s3Cleanup";
+import { deleteTopoJobObjects } from "./topoUpload";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
 import { sweepExpiredImportSnapshots } from "./importSnapshot";
@@ -361,13 +361,7 @@ export async function sweepAbandonedTopoUploads(
   let swept = 0;
   for (const { id } of rows) {
     try {
-      await s3.send(
-        new DeleteObjectCommand({
-          Bucket: bucket,
-          Key: `inputs/${id}/upload.zip`,
-        }),
-      );
-      await abortS3MultipartUploads(bucket, `inputs/${id}/`);
+      await deleteTopoJobObjects(bucket, id);
       // Guarded: a /start that landed since the read keeps its row.
       const gone = await prisma.topoJob.deleteMany({
         where: { id, status: "uploading" },

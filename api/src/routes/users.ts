@@ -22,11 +22,8 @@ import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
-import {
-  abortS3MultipartUploads,
-  deleteS3Keys,
-  deleteS3Prefix,
-} from "../lib/s3Cleanup";
+import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+import { deleteTopoJobObjects } from "../lib/topoUpload";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
@@ -606,12 +603,7 @@ router.delete(
     await Promise.all([
       deleteS3Keys(MEDIA_BUCKET, mediaKeys),
       deleteS3Keys(TOPO_BUCKET, exportResultKeys),
-      ...topoJobs.flatMap(({ id }) => [
-        deleteS3Prefix(TOPO_BUCKET, `inputs/${id}/`),
-        abortS3MultipartUploads(TOPO_BUCKET, `inputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `outputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `jobs/${id}/`),
-      ]),
+      ...topoJobs.map(({ id }) => deleteTopoJobObjects(TOPO_BUCKET, id)),
       ...topoExportJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
       ),
