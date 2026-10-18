@@ -2093,6 +2093,17 @@ async function main() {
   const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
   const fid = (n: number) => seedId("f", n);
 
+  // A made-up token: CI points EXPO_PUSH_URL at a stub and local dev reaches
+  // Expo, which refuses it and lets the API prune the row (services/push.ts).
+  await prisma.deviceToken.create({
+    data: {
+      id: fid(19),
+      userId: ALICE_ID,
+      token: "ExponentPushToken[seed-alice-device]",
+      platform: "android",
+    },
+  });
+
   const aliceTopo = fid(1);
   const bobTopo = fid(4);
   const aliceTopoOutputs = topoOutputs(aliceTopo);
