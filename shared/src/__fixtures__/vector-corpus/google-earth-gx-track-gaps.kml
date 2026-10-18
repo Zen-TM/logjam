@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"
+ xmlns:gx="http://www.google.com/kml/ext/2.2">
+<Placemark>
+  <name>Made up: attributes on when and coord, one lost fix</name>
+  <gx:Track>
+    <when id="t1">2026-01-01T00:00:00Z</when>
+    <when>2026-01-01T00:00:10Z</when>
+    <when>2026-01-01T00:00:20Z</when>
+    <gx:coord id="c1">150.30 -33.60 800</gx:coord>
+    <gx:coord/>
+    <gx:coord>150.32 -33.62 790</gx:coord>
+  </gx:Track>
+</Placemark>
+</kml>

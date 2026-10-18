@@ -70,6 +70,7 @@ registerAliases("name", [
   "location",
   "place",
   "site",
+  "canyon",
 ]);
 registerAliases("latitude", ["lat", "latitude", "y", "lat_dd", "latitude_dd"]);
 registerAliases("longitude", [

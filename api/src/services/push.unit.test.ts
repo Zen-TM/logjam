@@ -1,6 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
 
 const { findMany } = vi.hoisted(() => ({ findMany: vi.fn() }));
+const { pushUrl } = vi.hoisted(() => ({
+  pushUrl: { value: undefined as string | undefined },
+}));
+vi.mock("../lib/env", async (orig) => {
+  const real = await orig<typeof import("../lib/env")>();
+  return {
+    ...real,
+    getEnv: () => ({
+      ...real.getEnv(),
+      ...(pushUrl.value ? { EXPO_PUSH_URL: pushUrl.value } : {}),
+    }),
+  };
+});
 vi.mock("./prisma", () => ({ default: { deviceToken: { findMany } } }));
 
 import {
@@ -117,5 +130,23 @@ describe("sendPushToUser", () => {
     ).resolves.toBeUndefined();
     expect(fetchSpy).toHaveBeenCalledOnce();
     fetchSpy.mockRestore();
+  });
+});
+
+// Mutation: hard-code Expo's URL in sendPushToUser again.
+describe("sendPushToUser — EXPO_PUSH_URL", () => {
+  it("posts to the configured URL, so CI can point it at a stub", async () => {
+    pushUrl.value = "http://localhost:9099";
+    findMany.mockResolvedValueOnce([{ token: "ExponentPushToken[a]" }]);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+    await sendPushToUser("u1", {
+      type: "friend_request",
+      notificationId: "n1",
+    });
+    expect(fetchSpy.mock.calls[0][0]).toBe("http://localhost:9099");
+    fetchSpy.mockRestore();
+    pushUrl.value = undefined;
   });
 });

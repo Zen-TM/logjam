@@ -33,10 +33,18 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
  * on its own — anything translucent over a card's caption is under AA.
  */
 async function settled(page: Page) {
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll("dialog[open]")].every(
-      (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
-    ),
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("dialog[open]")].every(
+        (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
+      ) &&
+      // A button's 150 ms background-color transition otherwise lets axe read
+      // a half-way colour (the flaky "Make a LiDAR topo" case).
+      document
+        .getAnimations()
+        .every(
+          (a) => !(a instanceof CSSTransition) || a.playState !== "running",
+        ),
   );
 }
 
@@ -1149,6 +1157,17 @@ test.describe("surfaces fake auth never shows", () => {
     await page.goto(SIGN_IN_URL);
     const signIn = page.getByRole("button", { name: "Sign in", exact: true });
     await expect(signIn).toBeVisible({ timeout: 15_000 });
+    // The terrain behind the card is drawn from the NSW DEM, whose licence
+    // wants its credit shown with it, naming the area once that has loaded
+    // (ADR 0031): in the corner when wide, in the card's footer (hidden here)
+    // when narrow. Mutation that turns it red: drop the corner credit.
+    await expect(
+      page
+        .getByText(
+          /(Blue Mountains|Kanangra-Boyd)\. Elevation: derived from the NSW 5 m/,
+        )
+        .filter({ visible: true }),
+    ).toBeVisible();
     await expectNoViolations(page);
 
     // Sign-up is where the two ticks live, and where the Terms and Privacy
