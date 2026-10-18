@@ -2408,8 +2408,9 @@ async function main() {
     },
   });
 
-  // A made-up plan: alice leads, bob is in it, carol is not. It holds
-  // one place and one route of its own, which belong to no user.
+  // A made-up plan: alice leads, bob is in it, carol used alice's link and
+  // waits to be let in. It holds one place and one route of its own, which
+  // belong to no user.
   const planId = fid(100);
   const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
   await prisma.tripPlan.create({
@@ -2439,7 +2440,39 @@ async function main() {
         status: "active",
         invitedById: ALICE_ID,
       },
+      {
+        id: fid(106),
+        planId,
+        userId: CAROL_ID,
+        role: "member",
+        status: "requested",
+        invitedById: ALICE_ID,
+      },
     ],
+  });
+  // carol's plan, which she has invited alice to by username.
+  const carolPlanId = fid(110);
+  await prisma.tripPlan.create({
+    data: {
+      id: carolPlanId,
+      createdById: CAROL_ID,
+      name: "Kanangra Walls loop",
+      startDate: inDays(35),
+      endDate: inDays(36),
+      tripTypes: ["bushwalking"],
+      members: {
+        create: [
+          { id: fid(111), userId: CAROL_ID, role: "leader", status: "active" },
+          {
+            id: fid(112),
+            userId: ALICE_ID,
+            role: "member",
+            status: "invited",
+            invitedById: CAROL_ID,
+          },
+        ],
+      },
+    },
   });
   await prisma.tripPlanSection.create({
     data: {
@@ -2470,13 +2503,21 @@ async function main() {
       position: 0,
     },
   });
-  await prisma.tripPlanAnswer.create({
-    data: {
-      id: fid(105),
-      formId: fid(104),
-      userId: BOB_ID,
-      answers: { name: "Sam Example", phone: "0400 000 000" },
-    },
+  await prisma.tripPlanAnswer.createMany({
+    data: [
+      {
+        id: fid(105),
+        formId: fid(104),
+        userId: BOB_ID,
+        answers: { name: "Sam Example", phone: "0400 000 000" },
+      },
+      {
+        id: fid(108),
+        formId: fid(104),
+        userId: CAROL_ID,
+        answers: { name: "Jo Example", phone: "0400 000 001" },
+      },
+    ],
   });
   await prisma.place.create({
     data: {
@@ -2670,6 +2711,46 @@ async function main() {
         },
         read: false,
         createdAt: ago(48),
+      },
+      // lib/planMembership.ts, called by routes/planMembers.ts,
+      // planInvites.ts and plans.ts
+      {
+        userId: ALICE_ID,
+        type: "plan_invited",
+        payload: { planId: carolPlanId, invitedById: CAROL_ID },
+        read: false,
+        createdAt: ago(15),
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_join_request",
+        payload: { planId, requesterId: CAROL_ID },
+        read: false,
+        createdAt: ago(10),
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_member_joined",
+        payload: { planId, memberId: BOB_ID },
+        read: true,
+        createdAt: ago(700),
+      },
+      {
+        userId: BOB_ID,
+        type: "plan_join_approved",
+        payload: { planId, approvedById: ALICE_ID },
+        read: false,
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_access_ended",
+        payload: {
+          planId: fid(120),
+          reason: "deleted",
+          planName: "Mount Solitary loop",
+        },
+        read: true,
+        createdAt: ago(2000),
       },
       // lib/egressMeter.ts: the two numbers, stringified
       {

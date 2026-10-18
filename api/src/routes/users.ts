@@ -32,6 +32,7 @@ import {
   AdminGetUserCommand,
   UserNotFoundException,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { PLAN_PERSON_KEY } from "../lib/planMembership";
 
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
@@ -734,6 +735,16 @@ router.delete(
               payload: { path: ["sentById"], equals: user.id },
             },
           ],
+        },
+      }),
+      // Plan rows other members hold that name this user. Read time would
+      // drop them too, once the memberships are gone (routes/notifications.ts).
+      prisma.notification.deleteMany({
+        where: {
+          OR: Object.entries(PLAN_PERSON_KEY).map(([type, key]) => ({
+            type,
+            payload: { path: [key], equals: user.id },
+          })),
         },
       }),
       prisma.placeShare.deleteMany({

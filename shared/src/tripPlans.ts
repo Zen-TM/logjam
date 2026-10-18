@@ -292,6 +292,75 @@ export type TripPlanAnswerPut = {
   formUpdatedAt: string;
 };
 
+// ── Members, invites and joining ────────────────────────────────────
+
+/** How long a plan invite link works, in days. */
+export const TRIP_PLAN_INVITE_TTL_DAYS = 7;
+
+/** A leader's view of one of the plan's links: never the link itself. */
+export type TripPlanInviteView = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  createdBy: TripPlanUserRef | null;
+};
+
+/** A form required to join, as a joiner sees it: never anyone's answers.
+ *  The joiner echoes `visibleTo` and `updatedAt` (as `formUpdatedAt`). */
+export type TripPlanJoinForm = Pick<
+  TripPlanFormView,
+  "id" | "title" | "questions" | "visibleTo" | "updatedAt"
+>;
+
+/** GET /plans/:id/preview: someone a leader invited by username. */
+export type TripPlanInvitedPreview = {
+  id: string;
+  name: string;
+  startDate: DateOnly | null;
+  endDate: DateOnly | null;
+  tripTypes: string[];
+  invitedBy: TripPlanUserRef | null;
+  sections: TripPlanSectionView[];
+  /** Active members only. */
+  members: TripPlanUserRef[];
+  requiredForms: TripPlanJoinForm[];
+};
+
+/** POST /plan-invites/preview: someone holding a link. No members, no content. */
+export type TripPlanLinkPreview = {
+  planId: string;
+  name: string;
+  startDate: DateOnly | null;
+  endDate: DateOnly | null;
+  /** Who a request would wait for. */
+  leader: TripPlanUserRef;
+  requiredForms: TripPlanJoinForm[];
+  /** The caller's membership already, if any. */
+  membership: TripPlanMemberStatus | null;
+};
+
+/**
+ * POST /plans/:id/join and /plan-invites/redeem: formId → the answers, and
+ * the form as shown, checked as the answer PUT checks it. Covers every form
+ * required to join.
+ */
+export type TripPlanJoinAnswers = Record<
+  string,
+  {
+    answers: TripPlanAnswers;
+    visibleTo: TripPlanFormVisibility;
+    formUpdatedAt: string;
+  }
+>;
+
+/** POST /plan-invites/redeem. */
+export type TripPlanRedeemResult =
+  | { planId: string; status: "requested"; waitingFor: TripPlanUserRef }
+  | { planId: string; status: "active" };
+
+/** An answer's visibility changed since the form was shown (answer PUT, join). */
+export const TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE = say`Who sees the answers to this form has changed. Check it, then answer again.`;
+
 export const TRIP_PLAN_FORM_PRESET_IDS = [
   "gear",
   "carpool",

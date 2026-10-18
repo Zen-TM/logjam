@@ -53,6 +53,7 @@ ALLOWED_DATA_KEYS = {
     "entityId",
     "fileSendId",
     "batchId",
+    "planId",
 }
 
 
