@@ -86,6 +86,7 @@ import {
   type TrackPass,
   drawsNswContours,
   slopeReliefColor,
+  TERRAIN_LAYER_KEYS,
   type TerrainLayerKey,
   nswContourStyle,
   MAP_INK,
@@ -349,6 +350,7 @@ import {
   type TapSample,
 } from "./doubleTap";
 import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import { mapDataAttribution } from "./mapDataCredits";
 import {
   TopoIconImages,
   TopoVectorOverlay,
@@ -4379,14 +4381,11 @@ export function MapScreen({
     viewportBbox,
   );
 
-  // Once each: offline, every saved clip of a source carries the same credit.
-  const attributionText = [
-    ...new Set(
-      [...basemapResolved, ...contoursResolved]
-        .map((r) => (r.status === "ok" ? r.attribution : null))
-        .filter(Boolean),
-    ),
-  ].join(" · ");
+  const attributionText = mapDataAttribution(basemapResolved, {
+    contours: contoursResolved,
+    slope: slopeResolved,
+    hillshade: hillshadeResolved,
+  });
 
   const nswContoursStyle = useMemo(
     () => nswContourStyle(renderedBasemapId),
@@ -4410,12 +4409,15 @@ export function MapScreen({
       ctx,
     ).filter((r) => r.status === "ok"),
   }));
-  const groundIds = [
-    ...hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
-    ...slopeResolved.map((r) => `nsw-slope-${r.key}`),
-    ...contoursResolved.flatMap((r) =>
+  const terrainLayerIds: Record<TerrainLayerKey, string[]> = {
+    contours: contoursResolved.flatMap((r) =>
       topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
     ),
+    slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
+    hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
+  };
+  const groundIds = [
+    ...[...TERRAIN_LAYER_KEYS].reverse().flatMap((key) => terrainLayerIds[key]),
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),

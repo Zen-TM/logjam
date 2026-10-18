@@ -1,5 +1,5 @@
-// "Map layers" — everything that decides what the map draws, in one sheet with
-// three tabs.
+// "Map layers" — everything that decides what the map draws, in one sheet of
+// tabs.
 //
 // The tabs answer distinct questions without scrolling through a
 // stack of unrelated sections:
