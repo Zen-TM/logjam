@@ -345,6 +345,13 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/a11y.spec.ts --workers=1
+      # Writes to the seeded account and Undoes it, so it runs after the
+      # integration suite and leaves the DB as seeded.
+      - name: Playwright CSV import
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/csv-import.spec.ts --workers=1
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
