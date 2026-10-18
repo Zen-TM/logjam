@@ -36,18 +36,14 @@ export const NSW_HILLSHADE = {
   creditHtml: NSW_5M.creditHtml.replace(/^Elevation/, "Hillshade"),
 } as const;
 
-export type TerrainLayerKey = "contours" | "slope" | "hillshade";
-
 /**
  * The group's layers, top of the map first: contour lines over the slope
  * colours over the shading. Both clients list them in this order and stack
  * them in it.
  */
-export const TERRAIN_LAYER_KEYS: readonly TerrainLayerKey[] = [
-  "contours",
-  "slope",
-  "hillshade",
-];
+export const TERRAIN_LAYER_KEYS = ["contours", "slope", "hillshade"] as const;
+
+export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
 
 /** What a map shows before the user touches a switch: the contours it always had. */
 export const TERRAIN_LAYER_DEFAULTS: Readonly<
