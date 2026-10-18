@@ -40,6 +40,7 @@ import { AppError, fault } from "../middleware/errorHandler";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { touchPlan } from "./planAccess";
+import { dropPlanNotifications } from "./planMembership";
 import { reconcileCopiedPlace } from "./placeCopy";
 import {
   copyMediaObjects,
@@ -616,6 +617,70 @@ export async function deletePlanItem(
 }
 
 /**
+ * Which of a plan's files go: a WHERE over `media` or `geo_pdf_jobs`, which
+ * share plan_id, added_by_id and charged_to_id. A place's photos carry its
+ * adder, so `addedBy` takes them with the place.
+ */
+type PlanFiles = Prisma.Sql;
+const planFiles = {
+  all: (planId: string) => Prisma.sql`plan_id = ${planId}`,
+  addedBy: (planId: string, userId: string) =>
+    Prisma.sql`plan_id = ${planId} AND added_by_id = ${userId}`,
+  chargedTo: (planId: string, userId: string) =>
+    Prisma.sql`plan_id = ${planId} AND charged_to_id = ${userId}`,
+};
+
+type Objects = { keys: string[]; jobs: string[] };
+
+/**
+ * Before the transaction: delete the objects of the files `which` names. S3
+ * goes first, so a failure leaves the rows and their keys for a retry.
+ */
+async function deletePlanFileObjects(which: PlanFiles): Promise<Objects> {
+  const [media, jobs] = await Promise.all([
+    prisma.$queryRaw<MediaKeys[]>`
+      SELECT s3_key_display AS "s3KeyDisplay", s3_key_thumbnail AS "s3KeyThumbnail"
+      FROM media WHERE ${which}
+    `,
+    prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM geo_pdf_jobs WHERE ${which}
+    `,
+  ]);
+  const objects = { keys: mediaKeysOf(media), jobs: jobs.map((j) => j.id) };
+  await Promise.all([
+    deleteS3Keys(MEDIA_BUCKET, objects.keys),
+    deleteS3Keys(TOPO_BUCKET, objects.jobs.map(planResultKeyFor)),
+  ]);
+  return objects;
+}
+
+/**
+ * In the plan's transaction, after touchPlan: delete the rows `which` names
+ * and refund each payer. Returns what to run after commit: it deletes the
+ * objects of the files that are not in `gone`, what deletePlanFileObjects
+ * deleted before.
+ */
+async function dropPlanFiles(
+  tx: Prisma.TransactionClient,
+  which: PlanFiles,
+  gone: Objects,
+): Promise<() => Promise<void>> {
+  const files = await deleteMediaReturning(tx, which);
+  const pdfs = await deleteGeoPdfsReturning(tx, which);
+  await refund(tx, [...files, ...pdfs]);
+  const keys = new Set(gone.keys);
+  const jobs = new Set(gone.jobs);
+  const lateKeys = mediaKeysOf(files).filter((key) => !keys.has(key));
+  const lateJobs = pdfs
+    .filter((pdf) => !jobs.has(pdf.id))
+    .map((pdf) => planResultKeyFor(pdf.id));
+  return async () => {
+    await deleteS3KeysBestEffort(MEDIA_BUCKET, lateKeys);
+    await deleteS3KeysBestEffort(TOPO_BUCKET, lateJobs);
+  };
+}
+
+/**
  * Delete a whole plan with its files: S3 first, then in one transaction the
  * file rows (refunding each payer) and the plan, whose cascade takes the
  * rest. The plan row is taken first, so an Add a copy either committed
@@ -628,41 +693,162 @@ export async function deletePlanWithFiles<T>(
   planId: string,
   beforeDelete: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  const [media, jobs] = await Promise.all([
-    prisma.media.findMany({
-      where: { planId },
-      select: mediaKeySelect,
-    }),
-    prisma.geoPdfJob.findMany({ where: { planId }, select: { id: true } }),
-  ]);
-  const knownKeys = mediaKeysOf(media);
-  const knownJobs = new Set(jobs.map((j) => j.id));
-  await Promise.all([
-    deleteS3Keys(MEDIA_BUCKET, knownKeys),
-    deleteS3Keys(TOPO_BUCKET, [...knownJobs].map(planResultKeyFor)),
-  ]);
-
-  const late = await prisma.$transaction(async (tx) => {
+  const which = planFiles.all(planId);
+  const gone = await deletePlanFileObjects(which);
+  const { late, result } = await prisma.$transaction(async (tx) => {
     await touchPlan(tx, planId);
-    const files = await deleteMediaReturning(
-      tx,
-      Prisma.sql`plan_id = ${planId}`,
-    );
-    const pdfs = await deleteGeoPdfsReturning(
-      tx,
-      Prisma.sql`plan_id = ${planId}`,
-    );
-    await refund(tx, [...files, ...pdfs]);
+    const late = await dropPlanFiles(tx, which, gone);
     const result = await beforeDelete(tx);
     await tx.tripPlan.delete({ where: { id: planId } });
-    const known = new Set(knownKeys);
-    return {
-      result,
-      keys: mediaKeysOf(files).filter((key) => !known.has(key)),
-      jobs: pdfs.filter((pdf) => !knownJobs.has(pdf.id)).map((pdf) => pdf.id),
-    };
+    return { late, result };
   });
-  await deleteS3KeysBestEffort(MEDIA_BUCKET, late.keys);
-  await deleteS3KeysBestEffort(TOPO_BUCKET, late.jobs.map(planResultKeyFor));
-  return late.result;
+  await late();
+  return result;
+}
+
+// ── Someone going ──────────────────────────────────────────────
+
+/**
+ * Move the plan's files charged to `fromId` onto `toId`, usage with them.
+ * Never refused for quota: a leader removing someone takes on their files,
+ * or deletes them instead (design §2.2).
+ */
+export async function moveCharges(
+  tx: Prisma.TransactionClient,
+  planId: string,
+  fromId: string,
+  toId: string,
+): Promise<void> {
+  const moved = [
+    ...(await tx.$queryRaw<{ bytes: bigint | null }[]>`
+      UPDATE media SET charged_to_id = ${toId}
+      WHERE plan_id = ${planId} AND charged_to_id = ${fromId}
+      RETURNING file_size_bytes AS bytes
+    `),
+    ...(await tx.$queryRaw<{ bytes: bigint | null }[]>`
+      UPDATE geo_pdf_jobs SET charged_to_id = ${toId}
+      WHERE plan_id = ${planId} AND charged_to_id = ${fromId}
+      RETURNING result_bytes AS bytes
+    `),
+  ];
+  const bytes = moved.reduce((sum, row) => sum + (row.bytes ?? 0n), 0n);
+  await decrementStorageUsed(fromId, bytes, tx);
+  await incrementStorageUsed(toId, bytes, tx);
+}
+
+/**
+ * An active member leaving or removed (DELETE /plans/:planId/members/:userId).
+ * Leave keeps what they added and what it counts against; `deleteAdded`
+ * deletes everything they added. Remove is as leave, but the files charged
+ * to them move to the leader removing them, or go with `deleteFiles`.
+ */
+export type MemberGoing = {
+  planId: string;
+  memberId: string;
+  removedBy: string | null;
+  deleteAdded: boolean;
+  deleteFiles: boolean;
+};
+
+function goingFiles(going: MemberGoing): PlanFiles | null {
+  if (going.deleteAdded) return planFiles.addedBy(going.planId, going.memberId);
+  if (going.removedBy && going.deleteFiles)
+    return planFiles.chargedTo(going.planId, going.memberId);
+  return null;
+}
+
+/**
+ * In the members route's transaction, after touchPlan and its re-read, for a
+ * member who was active. Returns what to run after commit: it deletes the
+ * objects of the files that went. After, not before as everywhere else here:
+ * the route's 409s run inside the transaction, and an S3 pass they abort
+ * would leave rows whose files are gone.
+ * ponytail: a failed S3 delete orphans the object. The media sweeper
+ * (lib/mediaOrphanSweeper.ts) takes a file's; a GeoPDF's stays until a sweep
+ * of `plans/geo-pdf/` exists.
+ * Guard: __tests__/planItems.test.ts ("storage when someone goes").
+ */
+export async function memberGone(
+  tx: Prisma.TransactionClient,
+  going: MemberGoing,
+): Promise<() => Promise<void>> {
+  const { planId, memberId, removedBy } = going;
+  const which = goingFiles(going);
+  const late = which
+    ? await dropPlanFiles(tx, which, { keys: [], jobs: [] })
+    : async () => {};
+  if (going.deleteAdded) {
+    await tx.route.deleteMany({ where: { planId, addedById: memberId } });
+    await tx.place.deleteMany({ where: { planId, addedById: memberId } });
+  }
+  if (removedBy) await moveCharges(tx, planId, memberId, removedBy);
+  return late;
+}
+
+/**
+ * Account delete, before the account's own transaction (design O-12). Each
+ * plan the user is active in or pays for, one transaction per plan, so no
+ * transaction here holds two plan rows:
+ * - with no one else active, the plan is deleted, files and all;
+ * - with no other leader, the earliest member (by row) becomes one;
+ * - the files charged to the user move to the plan's creator while they are
+ *   in it, else to the earliest leader.
+ * A retry after a later failure finds nothing left to move.
+ * Guard: __tests__/planItems.test.ts ("storage when someone goes").
+ */
+export async function handOverPlans(userId: string): Promise<void> {
+  const plans = await prisma.tripPlan.findMany({
+    where: {
+      OR: [
+        { members: { some: { userId, status: "active" } } },
+        { media: { some: { chargedToId: userId } } },
+        { geoPdfJobs: { some: { chargedToId: userId } } },
+      ],
+    },
+    select: {
+      id: true,
+      createdById: true,
+      members: {
+        where: { status: "active", userId: { not: userId } },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  for (const plan of plans) {
+    try {
+      if (plan.members.length === 0) {
+        await deletePlanWithFiles(plan.id, (tx) =>
+          dropPlanNotifications(tx, plan.id),
+        );
+        continue;
+      }
+      await prisma.$transaction(async (tx) => {
+        await touchPlan(tx, plan.id);
+        const others = await tx.tripPlanMember.findMany({
+          where: { planId: plan.id, status: "active", userId: { not: userId } },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true, userId: true, role: true },
+        });
+        // Everyone else left since the read above: the account delete takes
+        // the last membership, and the plan stays for no one to open.
+        if (others.length === 0) return;
+        let leader = others.find((member) => member.role === "leader");
+        if (!leader) {
+          leader = others[0];
+          await tx.tripPlanMember.update({
+            where: { id: leader.id },
+            data: { role: "leader" },
+          });
+        }
+        const heir = others.some((member) => member.userId === plan.createdById)
+          ? plan.createdById!
+          : leader.userId;
+        await moveCharges(tx, plan.id, userId, heir);
+      });
+    } catch (err) {
+      // Deleted by someone else meanwhile: nothing of theirs to hand over.
+      if (!(err instanceof AppError && err.statusCode === 404)) throw err;
+    }
+  }
 }

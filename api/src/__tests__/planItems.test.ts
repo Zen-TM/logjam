@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
+import { randomUUID } from "crypto";
 import { planResultKeyFor, resultKeyFor } from "../lib/geoPdfResult";
 import {
   API_URL,
@@ -15,6 +16,7 @@ import {
   BOB_ID,
   BOB_SUB,
   CANYON_TYPE_ID,
+  CAROL_ID,
   CAROL_SUB,
   MARKER_TYPE_ID,
   SHARED_PLACE_ID,
@@ -29,6 +31,7 @@ import {
 // file here is the test's own; the sweep removes them.
 
 const TOPO_BUCKET = process.env.S3_BUCKET_TOPO ?? "";
+const MEDIA_BUCKET = process.env.S3_BUCKET_MEDIA ?? "";
 const GPX = Buffer.from(
   `<?xml version="1.0"?><gpx version="1.1" creator="test"><trk><trkseg>
   <trkpt lat="-33.5" lon="150.4"/><trkpt lat="-33.51" lon="150.41"/>
@@ -989,5 +992,189 @@ describe("compare-and-set", () => {
       (await patch(ALICE_SUB, "place", id, { notes: { from: null, to: "x" } }))
         .status,
     ).toBe(409);
+  });
+});
+
+describe("storage when someone goes", () => {
+  const SIZE = BigInt(GPX.length);
+
+  /** A file of `sub`'s added to `plan`; returns the plan's copy's row id. */
+  async function planFile(sub: string, plan = planId): Promise<string> {
+    const fileId = await ownFile(sub);
+    const res = await request(API_URL)
+      .post(`/plans/${plan}/items`)
+      .set(as(sub))
+      .send({ kind: "media", id: fileId });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    await request(API_URL).delete(`/media/${fileId}`).set(as(sub));
+    return res.body.item.id;
+  }
+
+  const exists = (key: string) =>
+    s3
+      .send(new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: key }))
+      .then(() => true)
+      .catch(() => false);
+
+  // DELETE /plans/:id/members/:userId: bob leaves, or alice removes him.
+  async function leave(query = "") {
+    const res = await request(API_URL)
+      .delete(`/plans/${planId}/members/me${query}`)
+      .set(as(BOB_SUB));
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  }
+  async function remove(query = "") {
+    const res = await request(API_URL)
+      .delete(`/plans/${planId}/members/${BOB_ID}${query}`)
+      .set(as(ALICE_SUB));
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  }
+
+  /** A user no seed knows, signed in through fake auth's unknown-sub path. */
+  async function throwaway() {
+    const tag = randomUUID();
+    return prisma.user.create({
+      data: {
+        cognitoId: `plan-items-${tag}`,
+        username: `pi-${tag.slice(0, 8)}`,
+        email: `pi-${tag}@example.invalid`,
+      },
+    });
+  }
+
+  it("leaves a leaver's files charged to them", async () => {
+    const id = await planFile(BOB_SUB);
+    const before = await used(BOB_ID);
+    // Mutation: pass `removedBy: user.id` on a leave in planMembers.ts.
+    await leave();
+    expect(await used(BOB_ID)).toBe(before);
+    const row = await prisma.media.findUniqueOrThrow({ where: { id } });
+    expect(row.chargedToId).toBe(BOB_ID);
+  });
+
+  it("moves a removed member's files to the leader removing them", async () => {
+    const id = await planFile(BOB_SUB);
+    const [bob, alice] = [await used(BOB_ID), await used(ALICE_ID)];
+    // Mutation: drop moveCharges from memberGone.
+    await remove();
+    expect(await used(BOB_ID)).toBe(bob - SIZE);
+    expect(await used(ALICE_ID)).toBe(alice + SIZE);
+    const row = await prisma.media.findUniqueOrThrow({ where: { id } });
+    expect(row.chargedToId).toBe(ALICE_ID);
+  });
+
+  it("deletes a removed member's files instead with deleteFiles", async () => {
+    const id = await planFile(BOB_SUB);
+    const row = await prisma.media.findUniqueOrThrow({ where: { id } });
+    const [bob, alice] = [await used(BOB_ID), await used(ALICE_ID)];
+    // Mutation: ignore deleteFiles (they move to alice instead).
+    await remove("?deleteFiles=true");
+    expect(await prisma.media.findUnique({ where: { id } })).toBeNull();
+    expect(await exists(row.s3KeyDisplay)).toBe(false);
+    expect(await used(BOB_ID)).toBe(bob - SIZE);
+    expect(await used(ALICE_ID)).toBe(alice);
+  });
+
+  it("deletes what a leaver added with deleteAdded, and nothing else", async () => {
+    const id = await planFile(BOB_SUB);
+    const source = await ownPlace(BOB_SUB);
+    const place = await add(BOB_SUB, { kind: "place", id: source });
+    expect(place.status).toBe(201);
+    const alices = await planFile(ALICE_SUB);
+    const before = await used(BOB_ID);
+    // Mutation: drop the place deleteMany from memberGone.
+    await leave("?deleteAdded=true");
+    expect(await prisma.media.findUnique({ where: { id } })).toBeNull();
+    expect(
+      await prisma.place.findUnique({ where: { id: place.body.item.id } }),
+    ).toBeNull();
+    expect(await prisma.media.findUnique({ where: { id: alices } })).not.toBe(
+      null,
+    );
+    expect(await used(BOB_ID)).toBe(before - SIZE);
+    await request(API_URL).delete(`/places/${source}`).set(as(BOB_SUB));
+  });
+
+  it("moves an account's charges to the plan's creator, keeping the file", async () => {
+    const dave = await throwaway();
+    try {
+      await membership(dave.id);
+      const id = await planFile(dave.cognitoId);
+      const before = await used(ALICE_ID);
+      const del = await request(API_URL)
+        .delete("/users/me")
+        .set(as(dave.cognitoId));
+      expect(del.status).toBe(204);
+      // Mutation: drop handOverPlans from DELETE /users/me (the charge
+      // falls to SetNull and no one pays).
+      const row = await prisma.media.findUniqueOrThrow({ where: { id } });
+      expect(row).toMatchObject({
+        planId,
+        chargedToId: ALICE_ID,
+        addedById: null,
+      });
+      expect(await exists(row.s3KeyDisplay)).toBe(true);
+      expect(await used(ALICE_ID)).toBe(before + SIZE);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: dave.id } });
+    }
+  });
+
+  it("makes the earliest member leader when the last leader's account goes, and deletes a plan left empty", async () => {
+    const dave = await throwaway();
+    const plans: string[] = [];
+    try {
+      for (const name of ["Test kept plan", "Test empty plan"]) {
+        const res = await request(API_URL)
+          .post("/plans")
+          .set(as(dave.cognitoId))
+          .send({ name });
+        expect(res.status).toBe(201);
+        plans.push(res.body.id);
+      }
+      const [kept, empty] = plans;
+      for (const userId of [BOB_ID, CAROL_ID])
+        await prisma.tripPlanMember.create({
+          data: { planId: kept, userId, status: "active", role: "member" },
+        });
+      const keptFile = await planFile(dave.cognitoId, kept);
+      const emptyFile = await planFile(dave.cognitoId, empty);
+      const emptyKey = (
+        await prisma.media.findUniqueOrThrow({ where: { id: emptyFile } })
+      ).s3KeyDisplay;
+      const before = await used(BOB_ID);
+
+      const del = await request(API_URL)
+        .delete("/users/me")
+        .set(as(dave.cognitoId));
+      expect(del.status).toBe(204);
+
+      // Mutation: drop the promotion in handOverPlans.
+      const roles = await prisma.tripPlanMember.findMany({
+        where: { planId: kept },
+        select: { userId: true, role: true },
+      });
+      expect(roles).toEqual(
+        expect.arrayContaining([
+          { userId: BOB_ID, role: "leader" },
+          { userId: CAROL_ID, role: "member" },
+        ]),
+      );
+      // The creator is gone, so the new leader pays.
+      const row = await prisma.media.findUniqueOrThrow({
+        where: { id: keptFile },
+      });
+      expect(row.chargedToId).toBe(BOB_ID);
+      expect(await used(BOB_ID)).toBe(before + SIZE);
+      // Mutation: skip deletePlanWithFiles for a plan with no one left.
+      expect(await prisma.tripPlan.findUnique({ where: { id: empty } })).toBe(
+        null,
+      );
+      expect(await exists(emptyKey)).toBe(false);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: dave.id } });
+      if (plans[0])
+        await request(API_URL).delete(`/plans/${plans[0]}`).set(as(BOB_SUB));
+    }
   });
 });

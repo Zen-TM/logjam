@@ -23,6 +23,7 @@ import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+import { handOverPlans } from "../lib/planItems";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
@@ -494,6 +495,10 @@ router.delete(
     const { sub } = req.user!;
 
     const user = await resolveUser(sub);
+
+    // First the plans let go of the user: what they added stays, and what it
+    // counts against moves on (lib/planItems.ts handOverPlans).
+    await handOverPlans(user.id);
 
     // Pre-fetch every S3 pointer the user owns BEFORE touching the DB. Once the
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
