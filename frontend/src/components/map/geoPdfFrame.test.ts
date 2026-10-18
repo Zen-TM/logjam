@@ -161,9 +161,11 @@ describe("keptFrameSizePx", () => {
 });
 
 // The opening ease ends in a `moveend`, which marks the frame measured so a
-// kept scale may size it. Mutation: always wait for `moveend` (under reduced
+// kept scale may size it. Mutations: always wait for `moveend` (under reduced
 // motion it already fired inside easeTo, so the kept frame stays unsized
-// until the user's first move).
+// until the user's first move); attach something other than `done` (an
+// animated arrival never marks the frame measured); undo does nothing (a pick
+// left mid-ease marks the next visit measured early).
 describe("afterEase", () => {
   function camera(moving: boolean) {
     const listeners = new Set<() => void>();
@@ -191,5 +193,13 @@ describe("afterEase", () => {
     expect(listeners.size).toBe(1);
     stop();
     expect(listeners.size).toBe(0);
+  });
+
+  it("runs on the animated ease's moveend", () => {
+    const { map, listeners } = camera(true);
+    const done = vi.fn();
+    afterEase(map, done);
+    for (const fn of listeners) fn();
+    expect(done).toHaveBeenCalledOnce();
   });
 });

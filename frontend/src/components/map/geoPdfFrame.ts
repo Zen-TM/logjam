@@ -94,8 +94,9 @@ export type EasingCamera = {
  * Runs `done` once the ease just started has ended, and returns what undoes
  * the wait. Under prefers-reduced-motion MapLibre skips the ease and fires
  * `moveend` inside `easeTo`, before a listener could be attached, so a camera
- * already still runs `done` at once. Never attach before `easeTo`: it ends a
- * running ease with that ease's `moveend`.
+ * already still runs `done` at once. Called after `easeTo`: `easeTo` ends a
+ * running ease with that ease's `moveend`, which a listener attached first
+ * would take for this one.
  */
 export function afterEase(map: EasingCamera, done: () => void): () => void {
   if (!map.isMoving()) {
