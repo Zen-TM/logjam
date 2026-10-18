@@ -1,5 +1,10 @@
 import { INK } from "./designTokens.js";
 import {
+  parseSlopeBands,
+  RASTER_TEMPLATE_DEFAULTS,
+  type SlopeBand,
+} from "./topoSettings.js";
+import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
@@ -110,6 +115,11 @@ export type UserUiPreferences = {
    * still honours the user's choice instead of quietly doing the other thing.
    */
   copyPlaceMedia: boolean;
+  /**
+   * The bands the Terrain group's statewide slope is coloured in, on both
+   * clients (shared/src/terrain.ts). Edited on Logjam Web.
+   */
+  slopeBands: SlopeBand[];
 };
 
 export function isNotificationPreferences(
@@ -383,6 +393,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       notifications,
       autoDownloadGeoPdfs,
       copyPlaceMedia,
+      slopeBands: parseSlopeBands(prefs.slopeBands) ?? defaultSlopeBands(),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
@@ -395,5 +406,11 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
     autoDownloadGeoPdfs: true,
     copyPlaceMedia: true,
+    slopeBands: defaultSlopeBands(),
   };
+}
+
+/** A fresh copy: a caller that edits it must not edit the template default. */
+function defaultSlopeBands(): SlopeBand[] {
+  return RASTER_TEMPLATE_DEFAULTS.slope.bands.map((band) => ({ ...band }));
 }

@@ -124,11 +124,13 @@ import {
   contourWidthStops,
   featureLineWidthStops,
   TERRARIUM,
+  slopeReliefColor,
   isValidLatitude,
   isValidLongitude,
   type OsmFeatureKey,
   type OsmPointFeatureKey,
   type OsmFeatureStyle,
+  type SlopeBand,
   type VectorStyleSettings,
   metersPerPixel,
 } from "@logjam/shared";
@@ -266,6 +268,9 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * its first dash and styles an entry as contours by that word.
  */
 export const NSW_CONTOURS_ENTRY_ID = "nswcontours";
+/** The Terrain group's slope and hillshade, entries of `topoLayers` too. */
+export const NSW_SLOPE_ENTRY_ID = "nswslope";
+export const NSW_HILLSHADE_ENTRY_ID = "nswhillshade";
 
 /** The statewide contours have their own fixed look (shared nswContours.ts). */
 function paintStyleFor(
@@ -634,6 +639,7 @@ function Map({
   selectingFilterArea,
   onFilterAreaSelected,
   topoLayers,
+  slopeBands,
   vectorStyle,
   activeLayerId,
   selectingGeoPdfExtent,
@@ -732,9 +738,12 @@ function Map({
   topoLayers?: {
     id: string;
     pmtilesUrl: string;
-    format?: "raster" | "vector";
+    /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
+    format?: "raster" | "vector" | "slope" | "hillshade";
     attribution?: string;
   }[];
+  /** The bands every `slope` entry is coloured in. */
+  slopeBands?: SlopeBand[];
   vectorStyle?: VectorStyleSettings | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
@@ -826,6 +835,7 @@ function Map({
   // (so colour/width edits don't recreate layers — the paint effect handles
   // those). The structural effect re-runs only when `enabledKey` flips.
   const vectorStyleRef = useRef(vectorStyle);
+  const slopeBandsRef = useRef(slopeBands);
   const enabledKey = vectorStyle
     ? Object.values(vectorStyle.features)
         .map((f) => (f.enabled ? "1" : "0"))
@@ -1004,6 +1014,9 @@ function Map({
   useEffect(() => {
     vectorStyleRef.current = vectorStyle;
   }, [vectorStyle]);
+  useEffect(() => {
+    slopeBandsRef.current = slopeBands;
+  }, [slopeBands]);
 
   // Initialise map once
   useEffect(() => {
@@ -2585,7 +2598,8 @@ function Map({
         lid.endsWith("-minor") ||
         lid.endsWith("-major") ||
         lid.endsWith("-labels");
-      const isFeatureChild = !lid.endsWith("-raster") && !isContourChild;
+      const isFeatureChild =
+        !lid.endsWith("-raster") && !lid.endsWith("-dem") && !isContourChild;
       const drop =
         !activeIds.has(entryId) || (structureChanged && isFeatureChild);
       if (drop && map.getLayer(lid)) map.removeLayer(lid);
@@ -2609,6 +2623,36 @@ function Map({
       if (failedTopoSourcesRef.current.has(id)) return;
       const srcId = `topo-src-${id}`;
       const fmt = format ?? "raster";
+
+      if (fmt === "slope" || fmt === "hillshade") {
+        if (!map.getSource(srcId)) {
+          map.addSource(srcId, {
+            type: "raster-dem",
+            url: `pmtiles://${pmtilesUrl}`,
+            tileSize: 256,
+            encoding: "terrarium",
+            attribution,
+          });
+        }
+        const layerId = `topo-${id}-dem`;
+        if (!map.getLayer(layerId)) {
+          map.addLayer(
+            fmt === "slope"
+              ? {
+                  id: layerId,
+                  type: "color-relief",
+                  source: srcId,
+                  paint: {
+                    "color-relief-color": slopeReliefColor(
+                      slopeBandsRef.current ?? [],
+                    ) as maplibregl.ExpressionSpecification,
+                  },
+                }
+              : { id: layerId, type: "hillshade", source: srcId },
+          );
+        }
+        return;
+      }
 
       if (!map.getSource(srcId)) {
         if (fmt === "raster") {
@@ -2959,6 +3003,23 @@ function Map({
       );
     }
   }, [topoLayers, vectorStyle, mapLoaded, activeLayerId]);
+
+  // The slope bands, live, the same way: a paint change, never a new layer.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    for (const { id, format } of topoLayers ?? []) {
+      const layerId = `topo-${id}-dem`;
+      if (format === "slope" && map.getLayer(layerId))
+        map.setPaintProperty(
+          layerId,
+          "color-relief-color",
+          slopeReliefColor(
+            slopeBands ?? [],
+          ) as maplibregl.ExpressionSpecification,
+        );
+    }
+  }, [topoLayers, slopeBands, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);

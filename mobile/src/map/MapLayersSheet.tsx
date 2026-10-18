@@ -1,10 +1,11 @@
 // "Map layers" — everything that decides what the map draws, in one sheet with
 // three tabs.
 //
-// The three tabs answer three distinct questions without scrolling through a
+// The tabs answer distinct questions without scrolling through a
 // stack of unrelated sections:
 //
 //   Basemap  — what is the map made of?
+//   Terrain  — what shape is the ground?
 //   Layers   — what is drawn on top of it?
 //   Offline  — what works with no signal?
 //
@@ -39,7 +40,10 @@ import {
   contractSectionKeys,
   MAP_LAYERS,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
+  takesNswContours,
   type SectionKeysOn,
+  type TerrainLayerKey,
 } from "@logjam/shared";
 
 import {
@@ -63,11 +67,7 @@ import {
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import {
-  hasSavedImageryContours,
-  type BasemapId,
-  type MapArtifact,
-} from "./sourceResolver";
+import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -75,6 +75,7 @@ const copy = MAP_LAYERS.copy;
 
 const TAB_LABEL: Record<Tab, string> = {
   basemap: copy.tabBasemap,
+  terrain: copy.tabTerrain,
   overlays: copy.tabOverlays,
   offline: copy.tabOffline,
 };
@@ -139,8 +140,8 @@ export function MapLayersSheet({
   connectivity,
   basemapId,
   onBasemapChange,
-  contoursOverImagery,
-  onContoursOverImageryChange,
+  terrainLayers,
+  onTerrainLayerChange,
   artifacts,
   layers,
   overlays,
@@ -161,8 +162,8 @@ export function MapLayersSheet({
   connectivity: Connectivity;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
-  contoursOverImagery: boolean;
-  onContoursOverImageryChange: (on: boolean) => void;
+  terrainLayers: Readonly<Record<TerrainLayerKey, boolean>>;
+  onTerrainLayerChange: (key: TerrainLayerKey, on: boolean) => void;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -195,12 +196,14 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={onContoursOverImageryChange}
-        // Offline they come only from saved clips, so the switch is offered
-        // only when some saved area has them with imagery.
-        offersContours={online || hasSavedImageryContours(artifacts)}
         online={online}
+      />
+    ),
+    terrain: () => (
+      <TerrainTab
+        layers={terrainLayers}
+        onChange={onTerrainLayerChange}
+        basemapId={basemapId}
       />
     ),
     overlays: () => (
@@ -250,16 +253,10 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
-  contoursOverImagery,
-  onContoursOverImageryChange,
-  offersContours,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
-  contoursOverImagery: boolean;
-  onContoursOverImageryChange: (on: boolean) => void;
-  offersContours: boolean;
   online: boolean;
 }) {
   const theme = useTheme();
@@ -302,22 +299,64 @@ function BasemapTab({
               }
               selected={active}
             />
-            {/* Imagery has no contours of its own; the vector basemap always
-              draws them (shared nswContours.ts). */}
-            {active && id === "six-imagery" && offersContours ? (
-              <SwitchRow
-                title="Contours"
-                description={
-                  online ? undefined : "Only in saved areas that include them"
-                }
-                style={styles.itemRow}
-                checked={contoursOverImagery}
-                onChange={onContoursOverImageryChange}
-              />
-            ) : null}
           </Fragment>
         );
       })}
+    </View>
+  );
+}
+
+/**
+ * The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. The
+ * slope's bands are the account's, chosen on Logjam Web.
+ */
+function TerrainTab({
+  layers,
+  onChange,
+  basemapId,
+}: {
+  layers: Readonly<Record<TerrainLayerKey, boolean>>;
+  onChange: (key: TerrainLayerKey, on: boolean) => void;
+  basemapId: BasemapId;
+}) {
+  const styles = useStyles();
+  const terrain = MAP_TERRAIN.copy;
+  // A sheet that prints its own contours has no room for a second set.
+  const printed = !takesNswContours(basemapId);
+  const rows: Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode> = {
+    contours: (
+      <SwitchRow
+        key="contours"
+        title={terrain.contours}
+        description={printed ? terrain.contoursPrinted : undefined}
+        disabled={printed}
+        style={styles.itemRow}
+        checked={layers.contours}
+        onChange={(on) => onChange("contours", on)}
+      />
+    ),
+    slope: (
+      <SwitchRow
+        key="slope"
+        title={terrain.slope}
+        style={styles.itemRow}
+        checked={layers.slope}
+        onChange={(on) => onChange("slope", on)}
+      />
+    ),
+    hillshade: (
+      <SwitchRow
+        key="hillshade"
+        title={terrain.hillshade}
+        style={styles.itemRow}
+        checked={layers.hillshade}
+        onChange={(on) => onChange("hillshade", on)}
+      />
+    ),
+  };
+  return (
+    <View style={styles.body}>
+      {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
     </View>
   );
 }

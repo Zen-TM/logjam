@@ -5,6 +5,8 @@
 // tiny synchronous store, for the same reason — the map's FIRST frame has to be
 // the right one, and a basemap that swaps a beat after the screen appears
 // re-fetches every tile it just drew.
+import { normalizeTerrainLayers, type TerrainLayerKey } from "@logjam/shared";
+
 import { readPref, writePref } from "../prefsDb";
 import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
@@ -19,15 +21,23 @@ export function readBasemapPreference(): BasemapId {
   return MOBILE_BASEMAPS.find((id) => id === stored) ?? DEFAULT_BASEMAP;
 }
 
-const CONTOURS_OVER_IMAGERY_PREF_KEY = "mapContoursOverImagery";
+const TERRAIN_LAYERS_PREF_KEY = "mapTerrainLayers";
 
-/** Whether the statewide contours are drawn over imagery. Off until asked. */
-export function readContoursOverImagery(): boolean {
-  return readPref(CONTOURS_OVER_IMAGERY_PREF_KEY) === "1";
+/** The Terrain group's switches (shared terrain.ts), defaults where unset. */
+export function readTerrainLayers(): Record<TerrainLayerKey, boolean> {
+  try {
+    return normalizeTerrainLayers(
+      JSON.parse(readPref(TERRAIN_LAYERS_PREF_KEY) ?? "null"),
+    );
+  } catch {
+    return normalizeTerrainLayers(null);
+  }
 }
 
-export function setContoursOverImagery(on: boolean): boolean {
-  return writePref(CONTOURS_OVER_IMAGERY_PREF_KEY, on ? "1" : "0");
+export function setTerrainLayers(
+  layers: Record<TerrainLayerKey, boolean>,
+): boolean {
+  return writePref(TERRAIN_LAYERS_PREF_KEY, JSON.stringify(layers));
 }
 
 /** False when the device refused to store it, so the caller can say so. */

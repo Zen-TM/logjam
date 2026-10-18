@@ -18,7 +18,12 @@ import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import { NSW_CONTOURS_ENTRY_ID, type TBbox } from "./map/Map";
+import {
+  NSW_CONTOURS_ENTRY_ID,
+  NSW_HILLSHADE_ENTRY_ID,
+  NSW_SLOPE_ENTRY_ID,
+  type TBbox,
+} from "./map/Map";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -100,13 +105,20 @@ import {
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
   NSW_CONTOURS,
+  NSW_HILLSHADE,
+  NSW_SLOPE,
+  TERRAIN_LAYER_DEFAULTS,
+  TERRAIN_LAYER_KEYS,
   drawsNswContours,
+  normalizeTerrainLayers,
+  type TerrainLayerKey,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
@@ -118,16 +130,33 @@ const defaultLayerToggles = Object.fromEntries(
 );
 
 /**
- * The statewide contours as one entry of the Map's topo layer list.
+ * The Terrain group's layers as entries of the Map's topo layer list.
  * Same origin, like the vector basemap: `/master/*` is served by the web
  * distribution and proxied in dev.
  */
-const NSW_CONTOURS_ENTRY = {
-  id: NSW_CONTOURS_ENTRY_ID,
-  pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
-  format: "vector" as const,
-  attribution: NSW_CONTOURS.creditHtml,
+const TERRAIN_ENTRIES = {
+  contours: {
+    id: NSW_CONTOURS_ENTRY_ID,
+    pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
+    format: "vector" as const,
+    attribution: NSW_CONTOURS.creditHtml,
+  },
+  slope: {
+    id: NSW_SLOPE_ENTRY_ID,
+    pmtilesUrl: `${window.location.origin}/${NSW_SLOPE.archivePath}`,
+    format: "slope" as const,
+    attribution: NSW_SLOPE.creditHtml,
+  },
+  hillshade: {
+    id: NSW_HILLSHADE_ENTRY_ID,
+    pmtilesUrl: `${window.location.origin}/${NSW_HILLSHADE.archivePath}`,
+    format: "hillshade" as const,
+    attribution: NSW_HILLSHADE.creditHtml,
+  },
 };
+const TERRAIN_ENTRY_IDS = new Set(
+  Object.values(TERRAIN_ENTRIES).map((entry) => entry.id),
+);
 
 function App() {
   const toast = useToast();
@@ -203,10 +232,17 @@ function App() {
     ? storedLayerId
     : "protomaps";
 
-  const [contoursOverImagery, setContoursOverImagery] = useStoredState(
-    "logjam.contoursOverImagery",
-    false,
+  // On the device, like the basemap choice; the slope bands are the account's.
+  const [storedTerrainLayers, setStoredTerrainLayers] = useStoredState<unknown>(
+    "logjam.terrainLayers",
+    TERRAIN_LAYER_DEFAULTS,
   );
+  const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
+  const setTerrainLayer = (key: TerrainLayerKey, on: boolean) =>
+    setStoredTerrainLayers((prev: unknown) => ({
+      ...normalizeTerrainLayers(prev),
+      [key]: on,
+    }));
 
   const [showAdd, setShowAdd] = useState(false);
   // "Add a place here" from the map: the form opens on this spot.
@@ -498,24 +534,31 @@ function App() {
     completedTopoJobs,
   ]);
 
-  // The statewide contours ride the same list, underneath every topo area's
-  // own layers, so the Map draws and styles them with the code it has.
-  const mapTopoLayers = useMemo(
-    () =>
-      drawsNswContours(activeLayerId, contoursOverImagery)
-        ? [NSW_CONTOURS_ENTRY, ...combinedTopoLayers]
-        : combinedTopoLayers,
-    [activeLayerId, contoursOverImagery, combinedTopoLayers],
-  );
+  // The Terrain group rides the same list, bottom first and underneath every
+  // topo area's own layers, so the Map draws and styles it with the code it has.
+  const { contours, slope, hillshade } = terrainLayers;
+  const mapTopoLayers = useMemo(() => {
+    const shown = {
+      contours: drawsNswContours(activeLayerId, contours),
+      slope,
+      hillshade,
+    };
+    return [
+      ...[...TERRAIN_LAYER_KEYS]
+        .reverse()
+        .filter((key) => shown[key])
+        .map((key) => TERRAIN_ENTRIES[key]),
+      ...combinedTopoLayers,
+    ];
+  }, [activeLayerId, contours, slope, hillshade, combinedTopoLayers]);
 
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
   // user once.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
-      // Not a topo area's layer, and nothing the user switched on: the map is
-      // simply drawn without contours.
-      if (entryId === NSW_CONTOURS_ENTRY.id) return;
+      // Not a topo area's layer: the map is simply drawn without it.
+      if (TERRAIN_ENTRY_IDS.has(entryId)) return;
       setUnavailableTopoEntryIds((prev) => {
         if (prev.has(entryId)) return prev;
         const next = new Set(prev);
@@ -623,6 +666,7 @@ function App() {
     refetchCurrentUser,
     applyCurrentUser,
   } = useCurrentUser(authenticated);
+  const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
   // `authenticated` is NOT enough to start fetching the user's data: a user
   // whose recorded consent is stale gets ConsentGate rendered instead of
   // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
@@ -1889,6 +1933,7 @@ function App() {
             setShowTopo(true);
           }}
           topoLayers={mapTopoLayers}
+          slopeBands={slopeBands.drawn}
           vectorStyle={vectorStyle}
           activeLayerId={mapLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
@@ -1958,8 +2003,10 @@ function App() {
         baseLayers={BASE_LAYERS}
         activeLayerId={activeLayerId}
         onActiveLayerChange={setActiveLayerId}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={setContoursOverImagery}
+        terrainLayers={terrainLayers}
+        onTerrainLayerChange={setTerrainLayer}
+        slopeBands={slopeBands.bands}
+        onSlopeBandsChange={slopeBands.setBands}
         mapView={mapCenter}
       />
 

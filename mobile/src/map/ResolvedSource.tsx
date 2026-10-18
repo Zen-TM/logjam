@@ -1,9 +1,13 @@
-// The single place that branches on url-vs-tiles / vector-vs-raster.
+// The single place that branches on url-vs-tiles / vector-vs-raster-vs-DEM.
 // Consumers hand it a ResolvedTileSource (status "ok") plus the Layer
 // components; layer ids must be suffixed with resolved.key so two
 // generations can coexist during a swap.
 import type { ReactNode } from "react";
-import { RasterSource, VectorSource } from "@maplibre/maplibre-react-native";
+import {
+  RasterDEMSource,
+  RasterSource,
+  VectorSource,
+} from "@maplibre/maplibre-react-native";
 
 import type { ResolvedTileSource } from "./sourceResolver";
 
@@ -26,6 +30,18 @@ export function ResolvedSource({
     ...(resolved.maxZoom != null && { maxzoom: resolved.maxZoom }),
     ...(resolved.attribution != null && { attribution: resolved.attribution }),
   };
+  // Every DEM Logjam draws is a terrarium archive (ADR 0030).
+  if (resolved.sourceType === "raster-dem")
+    return (
+      <RasterDEMSource
+        key={resolved.key}
+        {...common}
+        tileSize={256}
+        encoding="terrarium"
+      >
+        {children}
+      </RasterDEMSource>
+    );
   return resolved.sourceType === "vector" ? (
     <VectorSource key={resolved.key} {...common}>
       {children}

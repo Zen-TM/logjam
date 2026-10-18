@@ -11,6 +11,7 @@ import type {
   MediaMetadata,
   MediaOrigin,
   PlaceMergePolicy,
+  SlopeBand,
   ElevationPoint,
   ElevationProfile,
   TrackClimb,
@@ -852,6 +853,7 @@ export function updateUserPreferences(
     notifications: Partial<NotificationPreferences>;
     autoDownloadGeoPdfs: boolean;
     importMergePolicy: PlaceMergePolicy;
+    slopeBands: SlopeBand[];
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
