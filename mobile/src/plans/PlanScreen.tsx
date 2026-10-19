@@ -64,6 +64,7 @@ import {
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
 import { PlanDownload } from "./PlanDownload";
+import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { patchPlan } from "./plansApi";
@@ -554,6 +555,7 @@ function WriteUp({
 function Items({ plan }: { plan: TripPlanView }) {
   const theme = useTheme();
   const { assetHue } = useHues();
+  const [placeId, setPlaceId] = useState<string | null>(null);
   const { ways } = tripPlanCounts(plan);
   if (plan.places.length + ways + plan.geoPdfs.length === 0)
     return <EmptyState icon="place" title={copy.itemsEmpty} />;
@@ -573,8 +575,13 @@ function Items({ plan }: { plan: TripPlanView }) {
           hue={theme.accent}
           title={place.name}
           subtitle={tripPlanAddedByLine(place.addedBy)}
+          onPress={() => setPlaceId(place.id)}
         />
       ))}
+      <PlanPlaceSheet
+        place={plan.places.find((place) => place.id === placeId) ?? null}
+        onClose={() => setPlaceId(null)}
+      />
       {headed && ways > 0 ? (
         <SectionHeader title={copy.itemsWays} count={ways} />
       ) : null}

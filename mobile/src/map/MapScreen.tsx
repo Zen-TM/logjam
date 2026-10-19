@@ -92,6 +92,7 @@ import {
 } from "@logjam/shared";
 import { planModeMine, planModeReducer, planModeStart } from "../plans/planMap";
 import { readCachedPlan } from "../plans/plansCache";
+import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
 import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
@@ -995,6 +996,7 @@ export function MapScreen({
   if (planMode !== planState.arrivedFor)
     planDispatch({ type: "arrive", planMode });
   const { shownPlanId, plan: planOnMap, showMine } = planState;
+  const [planPlaceId, setPlanPlaceId] = useState<string | null>(null);
   const leavePlan = () => planDispatch({ type: "leave" });
   // Re-read whenever the cache changes: a plan the user lost leaves the map,
   // one that gained items draws them.
@@ -2113,9 +2115,14 @@ export function MapScreen({
       // Places list offers, with "Open place" first (DESIGN.md). Held as an id
       // so an edit made from inside the sheet re-renders it rather than showing
       // a stale copy.
-      if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
+      const id = props?.id;
+      if (typeof id !== "string") return;
+      // A plan's pin opens the plan place, never a sheet of the user's.
+      if (planOnMap?.places.some((place) => place.id === id))
+        setPlanPlaceId(id);
+      else setOptionsPlaceId(id);
     },
-    [addToolPoint, collectingPoints],
+    [addToolPoint, collectingPoints, planOnMap],
   );
 
   const optionsPlace =
@@ -5480,6 +5487,12 @@ export function MapScreen({
         onSaved={(text) => notify(text, "info")}
       />
 
+      <PlanPlaceSheet
+        place={
+          planOnMap?.places.find((place) => place.id === planPlaceId) ?? null
+        }
+        onClose={() => setPlanPlaceId(null)}
+      />
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
           in (DESIGN.md). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
