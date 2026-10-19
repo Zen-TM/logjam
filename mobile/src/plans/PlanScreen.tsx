@@ -517,7 +517,7 @@ function WriteUp({
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const add = canWrite ? (
+  const addButton = (
     <Button
       label={planAddVerbLabel("section")}
       icon="add"
@@ -526,6 +526,13 @@ function WriteUp({
       disabledReason={OFFLINE}
       onPress={() => onSection({ mode: "add" })}
     />
+  );
+  // The button only dims: the words go under it (ui/Button.tsx).
+  const add = canWrite ? (
+    <>
+      {addButton}
+      {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+    </>
   ) : null;
   if (plan.sections.length === 0)
     return (
@@ -675,6 +682,7 @@ function Forms({ plan }: { plan: TripPlanView }) {
 const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   age: { ...muted(theme, textRole.detail) },
+  offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",
