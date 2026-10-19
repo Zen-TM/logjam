@@ -4,6 +4,8 @@
 // AppShell pulls in the RN runtime and vitest cannot parse React Native's Flow
 // sources. Same split, and the same reason, as `sharing/shareRowSubtitle.ts`.
 
+import type { NOTIFICATION_TYPES } from "@logjam/shared";
+
 /** Where a tapped notification sends the user — or that it sends them nowhere. */
 export type NotificationTapTarget =
   | { kind: "blocked" }
@@ -13,11 +15,9 @@ export type NotificationTapTarget =
   | { kind: "inbox" };
 
 /** The plan pushes about a plan the recipient is in, so it opens. */
-const PLAN_OPENING_TYPES = new Set([
-  "plan_join_request",
-  "plan_join_approved",
-  "plan_member_joined",
-]);
+const PLAN_OPENING_TYPES: ReadonlySet<string> = new Set<
+  (typeof NOTIFICATION_TYPES)[number]
+>(["plan_join_request", "plan_join_approved", "plan_member_joined"]);
 
 /**
  * ORDER IS THE POINT. Guard: `src/notifications/tapTarget.test.ts`. A route

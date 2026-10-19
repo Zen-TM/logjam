@@ -2,17 +2,20 @@
 // (`TRIP_PLAN_PAGE`). Reads the cached GET /plans/:id, so a plan opened once
 // with signal reads in a canyon; it is fetched again when it opens and the
 // poll says it changed, or there is no copy yet, and on pull to refresh
-// (design §2.7).
+// (`plansCache.ts`). Which state draws is `planPageView`'s.
 import {
   Fragment,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import {
+  ApiError,
   contractSectionKeys,
+  mediaDisplayName,
   messageFromError,
   tripPlanAddedByLine,
   tripPlanDatesLine,
@@ -23,11 +26,17 @@ import {
   weatherAge as updatedAgo,
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
+  TRIP_PLANS_LIST,
   type SectionKeysOn,
   type TripPlanPageView,
   type TripPlanView,
 } from "@logjam/shared";
 
+import { useAccountState } from "../auth/AccountStateContext";
+import {
+  capabilityScreenBlock,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { onMirrorChanged } from "../sync/syncDb";
 import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
@@ -42,6 +51,7 @@ import {
   Row,
   SectionHeader,
   StatusPill,
+  SyncStatusPills,
   todayDateKey,
   type ChipOption,
 } from "../ui";
@@ -52,15 +62,19 @@ import {
   readPlansList,
   type CachedPlan,
 } from "./plansCache";
+import { planPageView } from "./planViews";
 
 const copy = TRIP_PLAN_PAGE.copy;
 
-function usePlan(planId: string, online: boolean) {
+function usePlan(planId: string, online: boolean, blocked: boolean) {
   const [cached, setCached] = useState<CachedPlan | null | undefined>(
     undefined,
   );
   const [changed, setChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lost while this page had it, or a 404 on opening: no Try again helps.
+  const [gone, setGone] = useState(false);
+  const held = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   // When the cache was last read: "Updated 3 days ago" is relative to it.
   const [now, setNow] = useState(0);
@@ -78,6 +92,8 @@ function usePlan(planId: string, online: boolean) {
         updatedAt: plan.plan.updatedAt,
         downloadedAt: null,
       });
+    if (plan) held.current = true;
+    else if (held.current) setGone(true);
     setCached(plan);
     setChanged(moved);
     setNow(Date.now());
@@ -90,13 +106,15 @@ function usePlan(planId: string, online: boolean) {
       await fetchPlan(planId);
       setError(null);
     } catch (err) {
-      setError(messageFromError(err, copy.loadFailed));
+      if (err instanceof ApiError && err.status === 404) setGone(true);
+      else setError(messageFromError(err, copy.loadFailed));
     } finally {
       setRefreshing(false);
     }
   }, [planId]);
 
   useEffect(() => {
+    if (blocked) return;
     let cancelled = false;
     void (async () => {
       const state = await reread();
@@ -111,9 +129,9 @@ function usePlan(planId: string, online: boolean) {
     };
     // Opening is the moment that fetches; coming back online is not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planId, reread, refresh]);
+  }, [planId, reread, refresh, blocked]);
 
-  return { cached, changed, error, refreshing, refresh, now };
+  return { cached, changed, error, gone, refreshing, refresh, now };
 }
 
 export function PlanScreen({
@@ -128,29 +146,43 @@ export function PlanScreen({
 }) {
   const online = useConnectivity() === "online";
   const styles = useStyles();
-  const { cached, changed, error, refreshing, refresh, now } = usePlan(
+  // A plan push tapped after sign-out can open this for a guest: no read, no
+  // fetch, as on Plans.
+  const { accountState } = useAccountState();
+  const block = capabilityScreenBlock("plans", accountState);
+  const { cached, changed, error, gone, refreshing, refresh, now } = usePlan(
     planId,
     online,
+    block !== null,
   );
   const [view, setView] = useState<TripPlanPageView>("writeUp");
 
-  if (cached === undefined)
+  if (block)
     return (
       <View style={styles.screen}>
-        <Hero title={name} onBack={onBack} />
-        <LoadingState label={copy.loading} />
+        <Hero title={block.title} onBack={onBack} />
+        <EmptyState title={block.title} hint={block.hint} icon="plan" />
       </View>
     );
-  if (cached === null)
+  const shown = planPageView({
+    cached,
+    gone,
+    refreshing,
+    failure: error,
+    online,
+  });
+  if (shown.kind !== "page" || !cached)
     return (
       <View style={styles.screen}>
         <Hero title={name} onBack={onBack} />
-        {refreshing ? (
-          <LoadingState label={copy.loading} />
-        ) : error && online ? (
-          <ErrorState message={error} onRetry={() => void refresh()} />
-        ) : (
+        {shown.kind === "gone" ? (
+          <EmptyState icon="plan" title={TRIP_PLAN_OFFLINE.gone} />
+        ) : shown.kind === "failed" ? (
+          <ErrorState message={shown.message} onRetry={() => void refresh()} />
+        ) : shown.kind === "notDownloaded" ? (
           <EmptyState icon="offline" title={TRIP_PLAN_OFFLINE.notDownloaded} />
+        ) : (
+          <LoadingState label={copy.loading} />
         )}
       </View>
     );
@@ -209,9 +241,18 @@ function PlanPage({
     plan.geoPdfs.length;
   const views: ChipOption<TripPlanPageView>[] = [
     { value: "writeUp", label: copy.viewWriteUp },
-    { value: "items", label: copy.viewItems, count: itemCount },
-    { value: "forms", label: copy.viewForms, count: plan.forms.length },
-    { value: "people", label: copy.viewPeople, count: going.length },
+    // A zero is left out (shared/DESIGN.md §11).
+    { value: "items", label: copy.viewItems, count: itemCount || undefined },
+    {
+      value: "forms",
+      label: copy.viewForms,
+      count: plan.forms.length || undefined,
+    },
+    {
+      value: "people",
+      label: copy.viewPeople,
+      count: going.length || undefined,
+    },
   ];
 
   const sections: Record<
@@ -225,9 +266,7 @@ function PlanPage({
         </Text>
         {changed || !online ? (
           <View style={styles.pills}>
-            {online ? null : (
-              <StatusPill label="Offline" tone="muted" icon="offline" />
-            )}
+            <SyncStatusPills online={online} pendingCount={0} />
             {changed ? (
               <StatusPill label={TRIP_PLAN_OFFLINE.changed} tone="warning" />
             ) : null}
@@ -238,6 +277,7 @@ function PlanPage({
                 compact
                 variant="outlineAccent"
                 disabled={!online}
+                disabledReason={unavailableReasonText("needs-connection")}
                 loading={refreshing}
                 onPress={onRefresh}
               />
@@ -267,7 +307,6 @@ function PlanPage({
     people:
       view === "people" ? (
         <>
-          <SectionHeader title={copy.peopleGoing} count={going.length} />
           {going.map((member) => (
             <Row
               key={member.user.id}
@@ -276,7 +315,11 @@ function PlanPage({
               right={
                 member.role === "member" ? undefined : (
                   <StatusPill
-                    label={member.role === "leader" ? "Leader" : "Editor"}
+                    label={
+                      member.role === "leader"
+                        ? TRIP_PLANS_LIST.copy.pillLeader
+                        : TRIP_PLANS_LIST.copy.pillEditor
+                    }
                     tone="outline"
                   />
                 )
@@ -287,15 +330,11 @@ function PlanPage({
       ) : null,
   };
 
-  const [pinned, body] = [
-    ["hero", "notices", "dates", "views"],
-    ["writeUp", "items", "forms", "people"],
-  ];
   const keys = contractSectionKeys(TRIP_PLAN_PAGE, "gps");
   return (
     <View style={styles.screen}>
       {keys
-        .filter((key) => pinned.includes(key))
+        .filter((key) => PINNED.includes(key))
         .map((key) => (
           <Fragment key={key}>{sections[key]}</Fragment>
         ))}
@@ -312,7 +351,7 @@ function PlanPage({
         }
       >
         {keys
-          .filter((key) => body.includes(key))
+          .filter((key) => !PINNED.includes(key))
           .map((key) => (
             <Fragment key={key}>{sections[key]}</Fragment>
           ))}
@@ -320,6 +359,14 @@ function PlanPage({
     </View>
   );
 }
+
+/** Above the scroll; every other section scrolls under them. */
+const PINNED: readonly SectionKeysOn<typeof TRIP_PLAN_PAGE, "gps">[] = [
+  "hero",
+  "notices",
+  "dates",
+  "views",
+];
 
 function WriteUp({ plan }: { plan: TripPlanView }) {
   const styles = useStyles();
@@ -341,9 +388,13 @@ function Items({ plan }: { plan: TripPlanView }) {
   const ways = plan.routes.length + plan.files.length;
   if (plan.places.length + ways + plan.geoPdfs.length === 0)
     return <EmptyState icon="place" title={copy.itemsEmpty} />;
+  // A heading needs a second group to divide from (shared/DESIGN.md §2).
+  const headed =
+    [plan.places.length, ways, plan.geoPdfs.length].filter((n) => n > 0)
+      .length > 1;
   return (
     <>
-      {plan.places.length > 0 ? (
+      {headed && plan.places.length > 0 ? (
         <SectionHeader title={copy.itemsPlaces} count={plan.places.length} />
       ) : null}
       {plan.places.map((place) => (
@@ -355,7 +406,9 @@ function Items({ plan }: { plan: TripPlanView }) {
           subtitle={tripPlanAddedByLine(place.addedBy)}
         />
       ))}
-      {ways > 0 ? <SectionHeader title={copy.itemsWays} count={ways} /> : null}
+      {headed && ways > 0 ? (
+        <SectionHeader title={copy.itemsWays} count={ways} />
+      ) : null}
       {plan.routes.map((route) => (
         <Row
           key={route.id}
@@ -370,11 +423,11 @@ function Items({ plan }: { plan: TripPlanView }) {
           key={file.id}
           icon="importedFile"
           hue={assetHue.import}
-          title={file.item.displayName ?? file.item.filename}
+          title={mediaDisplayName(file.item)}
           subtitle={tripPlanAddedByLine(file.addedBy)}
         />
       ))}
-      {plan.geoPdfs.length > 0 ? (
+      {headed && plan.geoPdfs.length > 0 ? (
         <SectionHeader title={copy.itemsMaps} count={plan.geoPdfs.length} />
       ) : null}
       {plan.geoPdfs.map((pdf) => (
