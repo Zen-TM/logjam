@@ -582,6 +582,7 @@ describe("Save a copy", () => {
 
   // Mutation: drop planId from one of the Save route's findFirst calls.
   it("404s an item that isn't in this plan", async () => {
+    const bobsPlaces = await prisma.place.count({ where: { ownerId: BOB_ID } });
     const owned = {
       place: await ownPlace(ALICE_SUB),
       route: await ownRoute(ALICE_SUB),
@@ -612,11 +613,9 @@ describe("Save a copy", () => {
       .set(as(BOB_SUB))
       .send({});
     expect(res.status).toBe(404);
-    expect(
-      await prisma.place.count({
-        where: { ownerId: BOB_ID, name: "Test gully" },
-      }),
-    ).toBe(0);
+    expect(await prisma.place.count({ where: { ownerId: BOB_ID } })).toBe(
+      bobsPlaces,
+    );
 
     await request(API_URL).delete(`/plans/${other.body.id}`).set(as(ALICE_SUB));
     await request(API_URL).delete(`/routes/${owned.route}`).set(as(ALICE_SUB));
