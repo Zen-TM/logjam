@@ -476,15 +476,16 @@ export default function PlanDetailPanel({
                   : copy.seenByMembers
               }
               leading={<IconTile icon="form" hue="var(--hue-plan)" />}
-              trailing={
-                <>
-                  {form.requiredToJoin && (
+              // Under the text: beside it, two pills squeeze the title.
+              footer={
+                form.requiredToJoin ? (
+                  <>
                     <StatusPill label={copy.pillRequired} tone="outline" />
-                  )}
-                  {form.requiredToJoin && !form.myAnswer && (
-                    <StatusPill label={copy.pillNotAnswered} tone="warning" />
-                  )}
-                </>
+                    {!form.myAnswer && (
+                      <StatusPill label={copy.pillNotAnswered} tone="warning" />
+                    )}
+                  </>
+                ) : undefined
               }
             />
           ))
