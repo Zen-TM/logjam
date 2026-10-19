@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { planResultKeyFor, resultKeyFor } from "../lib/geoPdfResult";
@@ -494,6 +498,23 @@ describe("plan files and storage", () => {
         new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: copy.resultKey! }),
       ),
     ).rejects.toThrow();
+    await prisma.geoPdfJob.delete({ where: { id: jobId } });
+  });
+
+  // Mutation: rethrow the CopyObject error in copyGeoPdf (a 500).
+  it("answers 502 when S3 won't copy a GeoPDF, leaving nothing behind", async () => {
+    const jobId = await ownGeoPdf();
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: TOPO_BUCKET,
+        Key: resultKeyFor(jobId),
+      }),
+    );
+    const before = await used(ALICE_ID);
+    const res = await add(ALICE_SUB, { kind: "geoPdf", id: jobId });
+    expect(res.status, JSON.stringify(res.body)).toBe(502);
+    expect(await prisma.geoPdfJob.count({ where: { planId } })).toBe(0);
+    expect(await used(ALICE_ID)).toBe(before);
     await prisma.geoPdfJob.delete({ where: { id: jobId } });
   });
 
