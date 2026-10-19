@@ -17,6 +17,8 @@ export const TRIP_PLAN_OFFLINE = {
   downloading: "Downloading the plan's files…",
   downloadFailed: "Couldn't download the plan's files.",
   downloadDone: "Downloaded for the trip.",
+  // It runs only while Logjam GPS is on screen (ADR 0013).
+  downloadKeepOpen: "Keep Logjam GPS open until it finishes.",
 } as const;
 
 /**
