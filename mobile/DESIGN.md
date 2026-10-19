@@ -174,8 +174,9 @@ Reads come from the on-device mirror and writes queue in the outbox.
   subtitle.** These need a connection: downloading regions, topos and
   GeoPDFs; sharing and reading who a place is shared with; adopting or
   discarding a value from a copy; full-resolution media not yet on the
-  phone; notification preferences; username, email, deleting the account.
-  Everything else works offline.
+  phone; notification preferences; username, email, deleting the account;
+  creating or changing a plan, its sections or its people (a plan is
+  fetched and cached, not synced). Everything else works offline.
 - **`src/auth/capabilities.ts` owns the guest matrix and both strings.** A
   screen whose data needs an account gates itself with
   `capabilityScreenBlock`: hero and back arrow over an `EmptyState`, no

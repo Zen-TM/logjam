@@ -91,6 +91,7 @@ const view = (id: string, updatedAt = "2026-10-01T00:00:00.000Z") => ({
 });
 
 beforeEach(async () => {
+  await stopPlansForWipe();
   await wipeAllSyncData();
   vi.clearAllMocks();
 });
@@ -260,6 +261,19 @@ describe("after a write", () => {
     await afterPlanWrite("a", true);
     expect(await readCachedPlan("a")).toBeNull();
     expect(api.getPlan).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutation: drop the `dropped` check in fetchPlan. A fetch begun before a
+  // Leave would put the plan back after it.
+  it("keeps a left plan off the phone when an older fetch lands", async () => {
+    const get = held<ReturnType<typeof view>>();
+    api.getPlan.mockReturnValueOnce(get.promise);
+    const fetch = fetchPlan("a");
+    api.getPlans.mockResolvedValue({ plans: [] });
+    await afterPlanWrite("a", true);
+    get.land(view("a"));
+    await fetch;
+    expect(await readCachedPlan("a")).toBeNull();
   });
 
   it("fetches the plan again otherwise", async () => {

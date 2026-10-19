@@ -1,17 +1,20 @@
 // A plan's ⋯ on its page. WHICH verbs, in what order and under what words is
 // `planVerbs` in `@logjam/shared`, the declaration Logjam Web's menu renders
 // from too; this sheet only says how each runs here. Every one of them writes,
-// so offline each is drawn disabled with its reason (design §8). Edit is the
-// caller's: this sheet closes and the caller opens the form.
+// so offline each is drawn disabled with its reason (mobile/DESIGN.md §8).
+// Edit is the caller's: this sheet closes and the caller opens the form.
 import { Fragment } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import {
+  ApiError,
   messageFromError,
   planDeleteConfirm,
   planLeaveConfirm,
   planVerbs,
+  tripPlanCounts,
   tripPlanIsOver,
   tripPlanLeaveState,
+  TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
   type PlanVerbId,
   type TripPlanView,
@@ -34,6 +37,7 @@ export function PlanOptionsSheet({
   onInfo,
   onError,
   onGone,
+  onLeaving,
 }: {
   /** The plan whose verbs these are; null while the sheet is closed. */
   plan: TripPlanView | null;
@@ -44,53 +48,86 @@ export function PlanOptionsSheet({
   onError: (message: string) => void;
   /** The caller left or deleted the plan: its page must go, saying so. */
   onGone: (message: string) => void;
+  /** A Leave or Delete is under way (true) or failed (false): the page
+   *  keeps drawing the plan while it goes. */
+  onLeaving: (leaving: boolean) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
 
   const confirm = (
     words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
+    // Leaving a shared plan is not deleting it (shared/DESIGN.md §9).
+    destructive: boolean,
     action: () => void,
   ) =>
     Alert.alert(words.confirmTitle, words.confirmBody, [
       { text: "Cancel", style: "cancel" },
-      { text: words.confirmLabel, style: "destructive", onPress: action },
+      {
+        text: words.confirmLabel,
+        style: destructive ? "destructive" : "default",
+        onPress: action,
+      },
     ]);
+
+  // A plan that is gone for the caller (404) is dropped and its page goes;
+  // any other refusal refetches, so the page shows the plan as it is.
+  const write = (
+    target: TripPlanView,
+    call: Promise<unknown>,
+    gone: boolean,
+    done: () => void,
+    failed: string,
+  ) =>
+    call
+      .then(() => afterPlanWrite(target.id, gone))
+      .then(done)
+      .catch(async (err: unknown) => {
+        const lost = err instanceof ApiError && err.status === 404;
+        if (err instanceof ApiError) await afterPlanWrite(target.id, lost);
+        if (lost) return onGone(TRIP_PLAN_OFFLINE.gone);
+        if (gone) onLeaving(false);
+        onError(messageFromError(err, failed));
+      });
 
   const run = (id: PlanVerbId, target: TripPlanView) => {
     onClose();
     if (id === "edit") return onEdit();
     if (id === "archive" || id === "unarchive") {
       const archived = id === "archive";
-      archivePlan(target.id, archived)
-        .then(() => afterPlanWrite(target.id))
-        .then(() => onInfo(archived ? copy.archived : copy.unarchived))
-        .catch((err: unknown) =>
-          onError(messageFromError(err, copy.archiveFailed)),
-        );
+      void write(
+        target,
+        archivePlan(target.id, archived),
+        false,
+        () => onInfo(archived ? copy.archived : copy.unarchived),
+        copy.archiveFailed,
+      );
     } else if (id === "leave") {
-      confirm(planLeaveConfirm(target.name), () => {
-        leavePlan(target.id)
-          .then(() => afterPlanWrite(target.id, true))
-          .then(() => onGone(copy.left))
-          .catch((err: unknown) =>
-            onError(messageFromError(err, copy.leaveFailed)),
-          );
+      confirm(planLeaveConfirm(target.name), false, () => {
+        onLeaving(true);
+        void write(
+          target,
+          leavePlan(target.id),
+          true,
+          () => onGone(copy.left),
+          copy.leaveFailed,
+        );
       });
     } else if (id === "delete") {
-      const counts = {
-        places: target.places.length,
-        ways: target.routes.length + target.files.length,
-        maps: target.geoPdfs.length,
-      };
-      confirm(planDeleteConfirm(target.name, counts), () => {
-        deletePlan(target.id)
-          .then(() => afterPlanWrite(target.id, true))
-          .then(() => onGone(copy.deleted))
-          .catch((err: unknown) =>
-            onError(messageFromError(err, copy.deleteFailed)),
+      confirm(
+        planDeleteConfirm(target.name, tripPlanCounts(target)),
+        true,
+        () => {
+          onLeaving(true);
+          void write(
+            target,
+            deletePlan(target.id),
+            true,
+            () => onGone(copy.deleted),
+            copy.deleteFailed,
           );
-      });
+        },
+      );
     }
   };
 
@@ -100,6 +137,7 @@ export function PlanOptionsSheet({
   const verbs = plan
     ? planVerbs("gps", plan.myRole, {
         archived: plan.archivedAt != null,
+        dated: plan.startDate != null || plan.endDate != null,
         over: tripPlanIsOver(plan, todayDateKey()),
         ...tripPlanLeaveState(plan),
       }).filter((verb) => verb.id !== "tripLog")

@@ -18,6 +18,7 @@ import {
   mediaDisplayName,
   messageFromError,
   tripPlanAddedByLine,
+  tripPlanCounts,
   tripPlanDatesLine,
   tripPlanGoing,
   tripPlanIsOver,
@@ -82,6 +83,8 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
   // Lost while this page had it, or a 404 on opening: no Try again helps.
   const [gone, setGone] = useState(false);
   const held = useRef(false);
+  // A Leave or Delete under way: the plan stays drawn while the page goes.
+  const leaving = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   // When the cache was last read: "Updated 3 days ago" is relative to it.
   const [now, setNow] = useState(0);
@@ -99,6 +102,7 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
         updatedAt: plan.plan.updatedAt,
         downloadedAt: null,
       });
+    if (!plan && leaving.current) return { stale: false };
     if (plan) held.current = true;
     else if (held.current) setGone(true);
     setCached(plan);
@@ -138,7 +142,20 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planId, reread, refresh, blocked]);
 
-  return { cached, changed, error, gone, refreshing, refresh, now };
+  const setLeaving = useCallback((next: boolean) => {
+    leaving.current = next;
+  }, []);
+
+  return {
+    cached,
+    changed,
+    error,
+    gone,
+    refreshing,
+    refresh,
+    now,
+    setLeaving,
+  };
 }
 
 export function PlanScreen({
@@ -160,11 +177,8 @@ export function PlanScreen({
   // fetch, as on Plans.
   const { accountState } = useAccountState();
   const block = capabilityScreenBlock("plans", accountState);
-  const { cached, changed, error, gone, refreshing, refresh, now } = usePlan(
-    planId,
-    online,
-    block !== null,
-  );
+  const { cached, changed, error, gone, refreshing, refresh, now, setLeaving } =
+    usePlan(planId, online, block !== null);
   const [view, setView] = useState<TripPlanPageView>("writeUp");
 
   if (block)
@@ -209,6 +223,7 @@ export function PlanScreen({
       onRefresh={() => void refresh()}
       onBack={onBack}
       onGone={onGone}
+      onLeaving={setLeaving}
     />
   );
 }
@@ -224,6 +239,7 @@ function PlanPage({
   onRefresh,
   onBack,
   onGone,
+  onLeaving,
 }: {
   cached: CachedPlan;
   now: number;
@@ -235,6 +251,7 @@ function PlanPage({
   onRefresh: () => void;
   onBack: () => void;
   onGone: (message: string) => void;
+  onLeaving: (leaving: boolean) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -252,11 +269,8 @@ function PlanPage({
     over: tripPlanIsOver(plan, today),
   });
   const going = tripPlanGoing(plan.members);
-  const itemCount =
-    plan.places.length +
-    plan.routes.length +
-    plan.files.length +
-    plan.geoPdfs.length;
+  const counts = tripPlanCounts(plan);
+  const itemCount = counts.places + counts.ways + counts.maps;
   const views: ChipOption<TripPlanPageView>[] = [
     { value: "writeUp", label: copy.viewWriteUp },
     // A zero is left out (shared/DESIGN.md §11).
@@ -396,6 +410,7 @@ function PlanPage({
         onInfo={notify}
         onError={(text) => notify(text, "error")}
         onGone={onGone}
+        onLeaving={onLeaving}
       />
       <PlanDetailsSheet
         visible={editOpen}
@@ -405,9 +420,16 @@ function PlanPage({
           try {
             await patchPlan(plan.id, patch);
           } catch (err) {
-            // Someone else's change: fetch it, so the form shows theirs.
-            if (err instanceof ApiError && err.status === 409)
-              await afterPlanWrite(plan.id);
+            // Someone else's change, or the plan gone: fetch it, so the form
+            // shows theirs, or the page goes.
+            if (err instanceof ApiError) {
+              const lost = err.status === 404;
+              await afterPlanWrite(plan.id, lost);
+              if (lost) {
+                setEditOpen(false);
+                return onGone(TRIP_PLAN_OFFLINE.gone);
+              }
+            }
             throw err;
           }
           await afterPlanWrite(plan.id);

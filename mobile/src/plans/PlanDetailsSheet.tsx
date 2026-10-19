@@ -2,15 +2,21 @@
 // one form (shared/DESIGN.md §10). An edit sends only what changed, each as
 // the value last seen and the new one, so a save over someone else's change
 // is refused, not lost; when the plan is fetched again under the open sheet,
-// every field the user has not touched follows it (`tripPlanAdoptTheirs`).
-// The dates are a mode of this sheet, never a second sheet.
+// every field the user has not touched follows it (`tripPlanAdoptTheirs`),
+// and an edited field the plan changed shows the plan's value under it. The
+// dates are a sub-mode of this sheet (mobile/DESIGN.md §4).
 import { useMemo, useState } from "react";
+import { Text } from "react-native";
 import {
   formatDateKey,
   messageFromError,
   parseTripPlanCreate,
   tripPlanAdoptTheirs,
+  tripPlanDatesLabel,
+  tripPlanInPlanNow,
   tripPlanPatch,
+  tripPlanSame,
+  TRIP_PLAN_FIELD_GROUPS,
   TRIP_PLAN_NAME_MAX_LENGTH,
   TRIP_PLANS_LIST,
   TRIP_TYPE_SUGGESTIONS,
@@ -20,7 +26,7 @@ import {
 } from "@logjam/shared";
 
 import { tripTypeLabel, tripTypeMeta } from "../logs/tripTypeMeta";
-import { useTheme } from "../theme";
+import { makeStyles, muted, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -37,6 +43,13 @@ import {
 const copy = TRIP_PLANS_LIST.copy;
 type Mode = "form" | "startDate" | "endDate";
 
+const valuesOf = (plan?: TripPlanView): TripPlanValues => ({
+  name: plan?.name ?? "",
+  startDate: plan?.startDate ?? null,
+  endDate: plan?.endDate ?? null,
+  tripTypes: plan?.tripTypes ?? [],
+});
+
 export function PlanDetailsSheet({
   visible,
   plan,
@@ -49,39 +62,12 @@ export function PlanDetailsSheet({
   onSubmit: (values: TripPlanValues, patch: TripPlanPatch) => Promise<void>;
   onClose: () => void;
 }) {
-  return (
-    <BottomSheet
-      visible={visible}
-      onClose={onClose}
-      title={plan ? copy.editTitle : copy.newTitle}
-    >
-      {/* Mounted on open, so a reopened form starts from the plan as it is. */}
-      {visible ? (
-        <DetailsForm plan={plan} onSubmit={onSubmit} onClose={onClose} />
-      ) : null}
-    </BottomSheet>
-  );
-}
-
-function DetailsForm({
-  plan,
-  onSubmit,
-  onClose,
-}: {
-  plan?: TripPlanView;
-  onSubmit: (values: TripPlanValues, patch: TripPlanPatch) => Promise<void>;
-  onClose: () => void;
-}) {
   const theme = useTheme();
-  const current: TripPlanValues = useMemo(
-    () => ({
-      name: plan?.name ?? "",
-      startDate: plan?.startDate ?? null,
-      endDate: plan?.endDate ?? null,
-      tripTypes: plan?.tripTypes ?? [],
-    }),
-    [plan],
-  );
+  const styles = useStyles();
+  const current = useMemo(() => valuesOf(plan), [plan]);
+  // Each opening starts from the plan as it is.
+  const [wasVisible, setWasVisible] = useState(false);
+  const [opened, setOpened] = useState(current);
   const [seen, setSeen] = useState(current);
   const [values, setValues] = useState(current);
   const [mode, setMode] = useState<Mode>("form");
@@ -89,11 +75,37 @@ function DetailsForm({
   const [nameError, setNameError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (JSON.stringify(current) !== JSON.stringify(seen)) {
-    const next = tripPlanAdoptTheirs(seen, values, current);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setOpened(current);
+      setSeen(current);
+      setValues(current);
+      setMode("form");
+      setError(null);
+      setNameError(null);
+    }
+  } else if (!tripPlanSame(current, seen)) {
+    const next = tripPlanAdoptTheirs(
+      seen,
+      values,
+      current,
+      TRIP_PLAN_FIELD_GROUPS,
+    );
     setSeen(next.seen);
     setValues(next.values);
   }
+  /** The plan's value, under a field the user edited and the plan changed
+   *  since the form opened. */
+  const theirs = (fields: (keyof TripPlanValues)[], words: string) =>
+    fields.some(
+      (field) =>
+        !tripPlanSame(values[field], current[field]) &&
+        !tripPlanSame(current[field], opened[field]),
+    ) ? (
+      <Text style={styles.theirs}>{tripPlanInPlanNow(words)}</Text>
+    ) : null;
+
   const set = (next: Partial<TripPlanValues>) => {
     setValues((was) => ({ ...was, ...next }));
     setError(null);
@@ -139,35 +151,12 @@ function DetailsForm({
     }
   }
 
-  if (mode !== "form") {
-    const key = mode;
-    return (
-      <FormStack>
-        <DatePicker
-          value={values[key]}
-          onChange={(day) => set({ [key]: day })}
-        />
-        {values[key] ? (
-          <Button
-            label="Clear date"
-            icon="close"
-            variant="ghost"
-            onPress={() => {
-              set({ [key]: null });
-              setMode("form");
-            }}
-          />
-        ) : null}
-        <Button label="Done" icon="done" onPress={() => setMode("form")} />
-      </FormStack>
-    );
-  }
-
+  const toForm = () => setMode("form");
   const day = (key: "startDate" | "endDate", label: string) => (
     <Row
       icon="date"
       title={
-        values[key] ? formatDateKey(`${values[key]}T00:00:00.000Z`) : "None"
+        values[key] ? formatDateKey(`${values[key]}T00:00:00.000Z`) : "Not set"
       }
       subtitle={label}
       right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
@@ -176,37 +165,96 @@ function DetailsForm({
   );
 
   return (
-    <FormStack>
-      <TextField
-        label={copy.name}
-        value={values.name}
-        maxLength={TRIP_PLAN_NAME_MAX_LENGTH}
-        autoCapitalize="sentences"
-        error={nameError}
-        onChangeText={(name) => {
-          set({ name });
-          setNameError(null);
-        }}
-      />
-      {day("startDate", copy.startDate)}
-      {day("endDate", copy.endDate)}
-      <ChipPicker
-        label={copy.tripTypes}
-        options={typeOptions}
-        selected={values.tripTypes}
-        onToggle={toggleType}
-        onAdd={(label) =>
-          values.tripTypes.includes(label) ? undefined : toggleType(label)
-        }
-        addPlaceholder={copy.addTripType}
-      />
-      {error ? <ErrorBanner message={error} /> : null}
-      <Button
-        label={plan ? copy.save : copy.make}
-        icon="done"
-        loading={busy}
-        onPress={() => void submit()}
-      />
-    </FormStack>
+    <BottomSheet
+      visible={visible}
+      // Inside the date sub-mode, a drag or × is back to the form, not away
+      // with everything typed.
+      onClose={mode === "form" ? onClose : toForm}
+      onBack={mode === "form" ? undefined : toForm}
+      title={
+        mode === "form"
+          ? plan
+            ? copy.editTitle
+            : copy.newTitle
+          : mode === "startDate"
+            ? copy.startDate
+            : copy.endDate
+      }
+      // Pinned: with the keyboard up the form outgrows the sheet.
+      footer={
+        mode === "form" ? (
+          <FormStack>
+            {error ? <ErrorBanner message={error} /> : null}
+            <Button
+              label={plan ? copy.save : copy.make}
+              icon="done"
+              loading={busy}
+              onPress={() => void submit()}
+            />
+          </FormStack>
+        ) : (
+          <Button label="Done" icon="done" onPress={toForm} />
+        )
+      }
+    >
+      {!visible ? null : mode !== "form" ? (
+        <FormStack>
+          <DatePicker
+            value={values[mode]}
+            onChange={(next) => set({ [mode]: next })}
+          />
+          {values[mode] ? (
+            <Button
+              label="Clear date"
+              icon="close"
+              variant="ghost"
+              onPress={() => {
+                set({ [mode]: null });
+                toForm();
+              }}
+            />
+          ) : null}
+        </FormStack>
+      ) : (
+        <FormStack>
+          <TextField
+            label={copy.name}
+            value={values.name}
+            maxLength={TRIP_PLAN_NAME_MAX_LENGTH}
+            autoCapitalize="sentences"
+            error={nameError}
+            onChangeText={(name) => {
+              set({ name });
+              setNameError(null);
+            }}
+          />
+          {theirs(["name"], current.name)}
+          {day("startDate", copy.startDate)}
+          {day("endDate", copy.endDate)}
+          {theirs(
+            ["startDate", "endDate"],
+            tripPlanDatesLabel(current.startDate, current.endDate),
+          )}
+          <ChipPicker
+            label={copy.tripTypes}
+            options={typeOptions}
+            selected={values.tripTypes}
+            onToggle={toggleType}
+            onAdd={(label) =>
+              values.tripTypes.includes(label) ? undefined : toggleType(label)
+            }
+            addPlaceholder={copy.addTripType}
+          />
+          {theirs(
+            ["tripTypes"],
+            current.tripTypes.map(tripTypeLabel).join(", "),
+          )}
+        </FormStack>
+      )}
+    </BottomSheet>
   );
 }
+
+const useStyles = makeStyles((theme, textRole) => ({
+  theirs: { ...muted(theme, textRole.detail) },
+}));

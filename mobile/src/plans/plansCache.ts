@@ -109,10 +109,15 @@ export function planChanged(
 // producers before it deletes). Read before the GET, checked inside the
 // write's transaction, which the wipe's shares.
 let epoch = 0;
+// Plans this phone just left or deleted: a fetch begun before the write can
+// land after it, and must not put the plan back. A poll that lists one as
+// active again (rejoined) takes it off.
+const dropped = new Set<string>();
 
 /** Called by the sign-out wipe (`offline/wipeLocalData.ts`). */
 export function stopPlansForWipe(): Promise<void> {
   epoch += 1;
+  dropped.clear();
   return Promise.resolve();
 }
 
@@ -134,6 +139,7 @@ export async function pollPlans(): Promise<PlansList> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     if (began !== epoch) return;
+    for (const id of active) dropped.delete(id);
     await db.runAsync("DELETE FROM plans_list_cache");
     await db.runAsync(
       "INSERT INTO plans_list_cache (fetched_at, payload_json) VALUES (?, ?)",
@@ -178,7 +184,7 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
   const downloadedAt = await withSyncTransaction(db, async () => {
     // Signed out meanwhile: the caller still gets what it asked for, the
     // phone keeps none of it.
-    if (began !== epoch) return null;
+    if (began !== epoch || dropped.has(planId)) return null;
     await db.runAsync(
       `INSERT INTO plans_cache (plan_id, fetched_at, plan_updated_at, payload_json)
        VALUES (?, ?, ?, ?)
@@ -233,8 +239,11 @@ export async function afterPlanWrite(
   gone = false,
 ): Promise<void> {
   if (gone) {
+    dropped.add(planId);
     const db = await getSyncDb();
     await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", planId);
+    // Told now: the poll below may fail, and the list must not keep its mark.
+    notifyMirrorChanged();
   }
   await Promise.all([pollPlans(), gone ? undefined : fetchPlan(planId)]).catch(
     console.error,

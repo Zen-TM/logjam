@@ -43,6 +43,7 @@ import {
   EmptyState,
   ErrorState,
   Hero,
+  ListEnd,
   LoadingState,
   Row,
   StatusPill,
@@ -216,6 +217,14 @@ export function PlansScreen({
     );
   }
 
+  const newPlan = {
+    label: copy.add,
+    icon: "add" as const,
+    onPress: () => setNewOpen(true),
+    disabledReason: online
+      ? undefined
+      : unavailableReasonText("needs-connection"),
+  };
   const empty = tripPlansEmpty(plans?.length ?? 0, bucket);
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLANS_LIST, "gps">,
@@ -284,7 +293,21 @@ export function PlansScreen({
               icon={empty.icon}
               title={empty.title}
               hint={empty.body}
+              // The way in, where a new plan would land.
+              action={bucket === "upcoming" ? newPlan : undefined}
             />
+          }
+          // The list ends with the button its empty state offers.
+          ListFooterComponent={
+            bucket === "upcoming" && rows.length > 0 ? (
+              <ListEnd>
+                <Button
+                  {...newPlan}
+                  variant="outlineAccent"
+                  disabled={!online}
+                />
+              </ListEnd>
+            ) : undefined
           }
         />
       ),

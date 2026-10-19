@@ -591,3 +591,20 @@ export function tripPlanTripLogPrefill(plan: {
       .join("\n\n"),
   };
 }
+
+/**
+ * What a plan holds, as its delete confirm and its On the map view count it:
+ * a way is a route or a standalone file (an import or a recording).
+ */
+export function tripPlanCounts(plan: {
+  places: readonly unknown[];
+  routes: readonly unknown[];
+  files: readonly unknown[];
+  geoPdfs: readonly unknown[];
+}): { places: number; ways: number; maps: number } {
+  return {
+    places: plan.places.length,
+    ways: plan.routes.length + plan.files.length,
+    maps: plan.geoPdfs.length,
+  };
+}

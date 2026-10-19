@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  TRIP_PLAN_FIELD_GROUPS,
   tripPlanAdoptTheirs,
   tripPlanPatch,
   tripPlanSectionPatch,
@@ -58,5 +59,39 @@ describe("a form refetched under the user", () => {
     expect(tripPlanPatch(seen, values)).toEqual({
       name: { from: "Wolly", to: "Wollangambe" },
     });
+  });
+
+  // Mutation: adopt each date on its own, and the untouched start takes
+  // theirs while the end keeps mine: 14 Nov to 9 Nov, which nobody chose.
+  it("keeps both of the user's dates when they changed one", () => {
+    const opened = { ...plan };
+    const mine = { ...opened, endDate: "2026-11-09" };
+    const theirs = {
+      ...opened,
+      startDate: "2026-11-14",
+      endDate: "2026-11-15",
+    };
+    const { seen, values } = tripPlanAdoptTheirs(
+      opened,
+      mine,
+      theirs,
+      TRIP_PLAN_FIELD_GROUPS,
+    );
+    expect([values.startDate, values.endDate]).toEqual([
+      "2026-11-07",
+      "2026-11-09",
+    ]);
+    expect(tripPlanPatch(seen, values).dates).toEqual({
+      from: { startDate: "2026-11-14", endDate: "2026-11-15" },
+      to: { startDate: "2026-11-07", endDate: "2026-11-09" },
+    });
+    // Untouched, both follow the plan.
+    const both = tripPlanAdoptTheirs(
+      opened,
+      opened,
+      theirs,
+      TRIP_PLAN_FIELD_GROUPS,
+    );
+    expect(both.values).toEqual(theirs);
   });
 });
