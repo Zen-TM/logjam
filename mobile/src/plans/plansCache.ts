@@ -221,3 +221,22 @@ export function registerPlansPoll(): () => void {
   run();
   return () => subscription.remove();
 }
+
+/**
+ * After a write: the list and, unless the plan is gone for the caller (left,
+ * deleted), the plan itself are fetched again, so the page and the list read
+ * what the API now holds. A failed refetch is logged, not thrown: the write
+ * itself succeeded.
+ */
+export async function afterPlanWrite(
+  planId: string,
+  gone = false,
+): Promise<void> {
+  if (gone) {
+    const db = await getSyncDb();
+    await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", planId);
+  }
+  await Promise.all([pollPlans(), gone ? undefined : fetchPlan(planId)]).catch(
+    console.error,
+  );
+}

@@ -46,16 +46,23 @@ import {
   EmptyState,
   ErrorState,
   Hero,
+  IconButton,
   LoadingState,
   Notice,
   Row,
   SectionHeader,
   StatusPill,
   SyncStatusPills,
+  Toast,
   todayDateKey,
   type ChipOption,
+  type ToastMessage,
 } from "../ui";
+import { PlanDetailsSheet } from "./PlanDetailsSheet";
+import { PlanOptionsSheet } from "./PlanOptionsSheet";
+import { patchPlan } from "./plansApi";
 import {
+  afterPlanWrite,
   fetchPlan,
   planChanged,
   readCachedPlan,
@@ -139,6 +146,7 @@ export function PlanScreen({
   name,
   initialView,
   onBack,
+  onGone,
 }: {
   planId: string;
   /** The list row's name, for the hero before the cache is read. */
@@ -146,6 +154,8 @@ export function PlanScreen({
   /** The tab it opens on; the write-up when absent. */
   initialView?: TripPlanPageView;
   onBack: () => void;
+  /** The caller left or deleted the plan: back to Plans, saying so. */
+  onGone: (message: string) => void;
 }) {
   const online = useConnectivity() === "online";
   const styles = useStyles();
@@ -201,6 +211,7 @@ export function PlanScreen({
       onView={setView}
       onRefresh={() => void refresh()}
       onBack={onBack}
+      onGone={onGone}
     />
   );
 }
@@ -215,6 +226,7 @@ function PlanPage({
   onView,
   onRefresh,
   onBack,
+  onGone,
 }: {
   cached: CachedPlan;
   now: number;
@@ -225,10 +237,16 @@ function PlanPage({
   onView: (view: TripPlanPageView) => void;
   onRefresh: () => void;
   onBack: () => void;
+  onGone: (message: string) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   const { plan } = cached;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
+    setToast({ text, tone, nonce: Date.now() });
   const today = todayDateKey();
   const notice = tripPlanNotice({
     archived: plan.archivedAt != null,
@@ -263,7 +281,20 @@ function PlanPage({
     ReactNode
   > = {
     hero: (
-      <Hero title={plan.name} titleNumberOfLines={2} onBack={onBack}>
+      <Hero
+        title={plan.name}
+        titleNumberOfLines={2}
+        onBack={onBack}
+        actions={
+          <IconButton
+            icon="overflow"
+            accessibilityLabel={copy.actions}
+            color={theme.accent}
+            filled
+            onPress={() => setMenuOpen(true)}
+          />
+        }
+      >
         <Text style={styles.age}>
           {updatedAgo(Date.parse(cached.fetchedAt), now)}
         </Text>
@@ -359,6 +390,34 @@ function PlanPage({
             <Fragment key={key}>{sections[key]}</Fragment>
           ))}
       </ScrollView>
+
+      <PlanOptionsSheet
+        plan={menuOpen ? plan : null}
+        online={online}
+        onClose={() => setMenuOpen(false)}
+        onEdit={() => setEditOpen(true)}
+        onInfo={notify}
+        onError={(text) => notify(text, "error")}
+        onGone={onGone}
+      />
+      <PlanDetailsSheet
+        visible={editOpen}
+        plan={plan}
+        onClose={() => setEditOpen(false)}
+        onSubmit={async (_values, patch) => {
+          try {
+            await patchPlan(plan.id, patch);
+          } catch (err) {
+            // Someone else's change: fetch it, so the form shows theirs.
+            if (err instanceof ApiError && err.status === 409)
+              await afterPlanWrite(plan.id);
+            throw err;
+          }
+          await afterPlanWrite(plan.id);
+          setEditOpen(false);
+        }}
+      />
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }
