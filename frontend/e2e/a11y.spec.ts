@@ -186,6 +186,13 @@ test.describe("desktop", () => {
       await aside.getByRole("radio", { name: view }).click();
       await expectNoViolations(page, "aside");
     }
+
+    // Invite people: the search and the link, before anything is sent.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Invite people" }).click();
+    await expect(aside.getByRole("searchbox")).toBeFocused();
+    await expectNoViolations(page, "aside");
+    await aside.getByRole("button", { name: "Back to people" }).click();
     await aside.getByRole("button", { name: "Plan actions" }).click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");

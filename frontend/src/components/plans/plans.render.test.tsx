@@ -185,6 +185,7 @@ describe("the plan's page after a failed write", () => {
         onBack={() => {}}
         onPlansChanged={onPlansChanged}
         onStartTripLog={() => {}}
+        myUserId="u1"
       />,
     );
     fireEvent.click(

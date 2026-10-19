@@ -37,6 +37,8 @@ import {
   tripPlanVisibilityLine,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
+  planMemberVerbs,
+  planRemoveConfirm,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -534,5 +536,41 @@ describe("who sees a form's answers, as its filler reads it", () => {
     expect(tripPlanVisibilityLine("members", "gear")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("members")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("leaders", "carpool")).not.toMatch(printed);
+  });
+});
+
+describe("a plan's people", () => {
+  it("gives a leader no verb on themselves, and no Make for the role someone has", () => {
+    const live = { archived: false };
+    expect(
+      planMemberVerbs("leader", { role: "editor", self: true }, live),
+    ).toEqual([]);
+    expect(
+      planMemberVerbs("leader", { role: "editor", self: false }, live).map(
+        (v) => v.id,
+      ),
+    ).toEqual(["makeLeader", "makeMember", "remove"]);
+    expect(
+      planMemberVerbs("editor", { role: "member", self: false }, live),
+    ).toEqual([]);
+    expect(
+      planMemberVerbs(
+        "leader",
+        { role: "editor", self: false },
+        { archived: true },
+      ),
+    ).toEqual([]);
+  });
+
+  it("prices a removal only when the person has files", () => {
+    expect(planRemoveConfirm("tom", "Wollangambe trip", null)).toMatchObject({
+      confirmBody:
+        "They lose access at once and their answers go. What they added stays.",
+      deleteFilesLabel: null,
+    });
+    expect(
+      planRemoveConfirm("tom", "Wollangambe trip", { count: 2, size: "340 MB" })
+        .deleteFilesLabel,
+    ).toBe("Delete their files instead (2 files, 340 MB)");
   });
 });

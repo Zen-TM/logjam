@@ -389,6 +389,15 @@ export const TRIP_PLAN_PAGE = {
     letIn: "Let in",
     turnDown: "Turn down",
     seeAnswers: "See answers",
+    roleFailed: "Couldn't change their role.",
+    letInFailed: "Couldn't let them in.",
+    turnDownFailed: "Couldn't turn them down.",
+    turnedDown: "Request turned down.",
+    removeFailed: "Couldn't remove them.",
+    cancelInvite: "Cancel invite",
+    cancelInviteFailed: "Couldn't cancel the invite.",
+    inviteCancelled: "Invite cancelled.",
+    deleteAdded: "Also delete what I added",
 
     archived: "Archived. It's under Archived in Plans.",
     unarchived: "Brought back.",
@@ -758,4 +767,12 @@ export function tripPlanSeesAnswers(
   visibleTo: TripPlanFormVisibility,
 ): boolean {
   return role === "leader" || visibleTo === "members";
+}
+
+export function tripPlanLetInMessage(username: string): string {
+  return `${username} is in.`;
+}
+
+export function tripPlanRemovedMessage(username: string): string {
+  return `${username} removed.`;
 }

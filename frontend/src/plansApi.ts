@@ -10,6 +10,13 @@ import {
   type TripPlanFormCreate,
   type TripPlanFormPatch,
   type TripPlanFormView,
+  type TripPlanInvitedPreview,
+  type TripPlanInviteView,
+  type TripPlanJoinAnswers,
+  type TripPlanLinkPreview,
+  type TripPlanMemberView,
+  type TripPlanRedeemResult,
+  type TripPlanRole,
   type TripPlanPatch,
   type TripPlanSectionCreate,
   type TripPlanSectionPatch,
@@ -88,6 +95,73 @@ export const putAnswer = (
   apiFetch<TripPlanAnswerView>(`${form(planId, formId)}/answers/me`, {
     method: "PUT",
     body,
+  });
+
+const member = (planId: string, userId: string) =>
+  `${plan(planId)}/members/${encodeURIComponent(userId)}`;
+
+export const inviteMember = (
+  planId: string,
+  username: string,
+  role: TripPlanRole,
+) =>
+  apiFetch<TripPlanMemberView>(`${plan(planId)}/members`, {
+    method: "POST",
+    body: { username, role },
+  });
+export const setMemberRole = (
+  planId: string,
+  userId: string,
+  role: TripPlanRole,
+) =>
+  apiFetch<TripPlanMemberView>(member(planId, userId), {
+    method: "PATCH",
+    body: { role },
+  });
+export const approveMember = (planId: string, userId: string) =>
+  apiFetch<TripPlanMemberView>(`${member(planId, userId)}/approve`, {
+    method: "POST",
+  });
+/** Remove someone, turn down a request or cancel an invite: one call, by status. */
+export const removeMember = (
+  planId: string,
+  userId: string,
+  deleteFiles = false,
+) =>
+  apiFetch<void>(
+    `${member(planId, userId)}${deleteFiles ? "?deleteFiles=true" : ""}`,
+    { method: "DELETE" },
+  );
+export const getInvitedPreview = (planId: string) =>
+  apiFetch<TripPlanInvitedPreview>(`${plan(planId)}/preview`);
+export const joinPlan = (planId: string, answers: TripPlanJoinAnswers) =>
+  apiFetch<TripPlanView>(`${plan(planId)}/join`, {
+    method: "POST",
+    body: { answers },
+  });
+
+export const createInviteLink = (planId: string) =>
+  apiFetch<{ token: string; expiresAt: string }>(`${plan(planId)}/invites`, {
+    method: "POST",
+  });
+export const getInviteLinks = (planId: string) =>
+  apiFetch<{ invites: TripPlanInviteView[] }>(`${plan(planId)}/invites`).then(
+    (body) => body.invites,
+  );
+export const revokeInviteLink = (planId: string, inviteId: string) =>
+  apiFetch<void>(`${plan(planId)}/invites/${encodeURIComponent(inviteId)}`, {
+    method: "DELETE",
+  });
+/** The token only ever travels in a POST body (design §2.3). */
+export const previewInviteLink = (token: string) =>
+  apiFetch<TripPlanLinkPreview>("/plan-invites/preview", {
+    method: "POST",
+    body: { token },
+  });
+export const redeemInviteLink = (token: string, answers: TripPlanJoinAnswers) =>
+  apiFetch<TripPlanRedeemResult>("/plan-invites/redeem", {
+    method: "POST",
+    body: { token, answers },
   });
 
 /** GET /plans: the cheap list, for the Plans page and the nav badge. */

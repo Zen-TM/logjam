@@ -8,8 +8,10 @@ import {
   untitledJobTitle,
   PLAN_FORM_VERBS,
   planDeleteConfirm,
+  formatBytes,
   planLeaveConfirm,
   planAddVerbLabel,
+  planLeaveDeleteAddedLabel,
   planFormDeleteConfirm,
   planSectionDeleteConfirm,
   planVerbs,
@@ -20,7 +22,6 @@ import {
   todayDateKey,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_PAGE,
-  tripPlanRoleWord,
   tripPlanAddedByLine,
   tripPlanGoing,
   tripPlanLeaveState,
@@ -41,6 +42,7 @@ import {
 } from "@logjam/shared";
 import {
   Button,
+  Checkbox,
   ChipRail,
   EmptyState,
   ErrorState,
@@ -79,6 +81,9 @@ import PlanAnswerDialog from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanPrintDialog from "./PlanPrintDialog";
+import PlanPeople from "./PlanPeople";
+import PlanInvitePage from "./PlanInvitePage";
+import { addedBy } from "./plansModel";
 import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
@@ -90,12 +95,14 @@ export default function PlanDetailPanel({
   onBack,
   onPlansChanged,
   onStartTripLog,
+  myUserId,
 }: {
   planId: string;
   onBack: () => void;
   /** Something the list shows changed (name, dates, archive, membership). */
   onPlansChanged: () => void;
   onStartTripLog: (plan: TripPlanView) => void;
+  myUserId: string | null;
 }) {
   const toast = useToast();
   const { view, error, refetch } = usePlan(planId, toast.error);
@@ -112,6 +119,8 @@ export default function PlanDetailPanel({
   >(null);
   const [busy, setBusy] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [deleteAdded, setDeleteAdded] = useState(false);
   // A form's page, one step inside the Forms view; and its two dialogs.
   const [openFormId, setOpenFormId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -195,7 +204,10 @@ export default function PlanDetailPanel({
         copy.archiveFailed,
         copy.unarchived,
       ).then((ok) => ok && onPlansChanged()),
-    leave: () => setConfirm({ kind: "leave" }),
+    leave: () => {
+      setDeleteAdded(false);
+      setConfirm({ kind: "leave" });
+    },
     delete: () => setConfirm({ kind: "delete" }),
   };
 
@@ -206,7 +218,10 @@ export default function PlanDetailPanel({
       setTab("forms");
       setBuilding({ id: null });
     },
-    invite: () => setTab("people"),
+    invite: () => {
+      setTab("people");
+      setInviting(true);
+    },
   };
 
   const moveSection = (index: number, by: -1 | 1) => {
@@ -556,22 +571,13 @@ export default function PlanDetailPanel({
       </div>
     ),
     people: tab === "people" && (
-      <div className={classes.list}>
-        {going.map((member) => (
-          <Row
-            key={member.user.id}
-            title={member.user.username}
-            trailing={
-              member.role !== "member" && (
-                <StatusPill
-                  label={tripPlanRoleWord(member.role)}
-                  tone="outline"
-                />
-              )
-            }
-          />
-        ))}
-      </div>
+      <PlanPeople
+        plan={plan}
+        myUserId={myUserId}
+        onChanged={refetch}
+        onInvite={() => setInviting(true)}
+        onSeeAnswers={() => setTab("forms")}
+      />
     ),
   };
 
@@ -581,6 +587,9 @@ export default function PlanDetailPanel({
       : undefined;
   const deleteCopy = planDeleteConfirm(plan.name, counts);
   const leaveCopy = planLeaveConfirm(plan.name);
+  const mineCount = myUserId
+    ? addedBy(plan, myUserId)
+    : { places: 0, ways: 0, maps: 0, bytes: 0 };
   const sectionCopy =
     confirm?.kind === "section"
       ? planSectionDeleteConfirm(confirm.section.title)
@@ -597,7 +606,13 @@ export default function PlanDetailPanel({
 
   return (
     <div ref={rootRef} className={classes.root}>
-      {openForm ? (
+      {inviting ? (
+        <PlanInvitePage
+          plan={plan}
+          onBack={() => setInviting(false)}
+          onInvited={refetch}
+        />
+      ) : openForm ? (
         <PlanFormPage
           form={openForm}
           role={role}
@@ -725,15 +740,31 @@ export default function PlanDetailPanel({
       <ConfirmDialog
         open={confirm?.kind === "leave"}
         title={leaveCopy.confirmTitle}
-        message={leaveCopy.confirmBody}
+        message={
+          <>
+            <p>{leaveCopy.confirmBody}</p>
+            {mineCount.places + mineCount.ways + mineCount.maps > 0 && (
+              <Checkbox
+                label={planLeaveDeleteAddedLabel(
+                  mineCount,
+                  mineCount.bytes > 0
+                    ? formatBytes(mineCount.bytes)
+                    : undefined,
+                )}
+                checked={deleteAdded}
+                onChange={setDeleteAdded}
+              />
+            )}
+          </>
+        }
         confirmLabel={leaveCopy.confirmLabel}
-        confirmColor="primary"
+        confirmColor={deleteAdded ? "error" : "primary"}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
           try {
             setBusy(true);
-            await leavePlan(plan.id);
+            await leavePlan(plan.id, deleteAdded);
             toast.success(copy.left);
             setConfirm(null);
             onPlansChanged();

@@ -307,3 +307,74 @@ export function planFormDeleteConfirm(form: {
     confirmLabel: "Delete form",
   };
 }
+
+// ── People ──────────────────────────────────────────────────────────
+
+/** A leader's verbs on someone going, in menu order. A leader never acts on
+ *  themselves here: they leave from the plan's ⋯. */
+export const PLAN_MEMBER_VERBS = [
+  { id: "makeLeader", icon: "account", label: "Make leader", roles: LEADERS },
+  { id: "makeEditor", icon: "account", label: "Make editor", roles: LEADERS },
+  { id: "makeMember", icon: "account", label: "Make member", roles: LEADERS },
+  {
+    id: "remove",
+    icon: "unshare",
+    label: "Remove from plan",
+    roles: LEADERS,
+    danger: true,
+    separated: true,
+  },
+] as const satisfies readonly PlanVerbDeclaration[];
+
+export type PlanMemberVerbId = (typeof PLAN_MEMBER_VERBS)[number]["id"];
+
+const ROLE_VERB: Record<TripPlanRole, PlanMemberVerbId> = {
+  leader: "makeLeader",
+  editor: "makeEditor",
+  member: "makeMember",
+};
+
+/** The verbs a caller has on one person going: none on themselves, none on
+ *  an archived plan, and no "Make" for the role they already have. */
+export function planMemberVerbs(
+  callerRole: TripPlanRole,
+  target: { role: TripPlanRole; self: boolean },
+  state: { archived: boolean },
+): PlanVerb<PlanMemberVerbId>[] {
+  if (target.self) return [];
+  return planVerbsFor(PLAN_MEMBER_VERBS, "web", callerRole, state).filter(
+    (verb) => verb.id !== ROLE_VERB[target.role],
+  );
+}
+
+/** The role a "Make …" verb gives. */
+export const PLAN_ROLE_OF_VERB: Partial<
+  Record<PlanMemberVerbId, TripPlanRole>
+> = { makeLeader: "leader", makeEditor: "editor", makeMember: "member" };
+
+export function planRemoveConfirm(
+  username: string,
+  planName: string,
+  files: { count: number; size: string } | null,
+): PlanConfirmCopy & { deleteFilesLabel: string | null } {
+  const counted = files ? `${plural(files.count, "file")}, ${files.size}` : "";
+  return {
+    confirmTitle: `Remove ${username} from ${planName}?`,
+    confirmBody: `They lose access at once and their answers go. What they added stays.${
+      files
+        ? ` Their files (${counted}) will count against your storage instead.`
+        : ""
+    }`,
+    confirmLabel: "Remove",
+    deleteFilesLabel: files ? `Delete their files instead (${counted})` : null,
+  };
+}
+
+export function planTurnDownConfirm(username: string): PlanConfirmCopy {
+  return {
+    confirmTitle: `Turn down ${username}?`,
+    confirmBody:
+      "They're told their request was turned down. They can ask again with the link.",
+    confirmLabel: "Turn down",
+  };
+}
