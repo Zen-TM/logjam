@@ -4,7 +4,7 @@
 // join and a leader lets each one in. The token is in the mint's answer and
 // the shared message, nowhere else: the list shows when each link ends.
 import { Fragment, useEffect, useState } from "react";
-import { ActivityIndicator, Share, Text } from "react-native";
+import { ActivityIndicator, Clipboard, Share, Text } from "react-native";
 import {
   contractSectionKeys,
   formatDateKey,
@@ -79,7 +79,8 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
   // A row's or a link button's failure: not the search field's, so a banner.
   const [error, setError] = useState<string | null>(null);
   const [links, setLinks] = useState<PlanInviteLink[]>([]);
-  const [sharing, setSharing] = useState(false);
+  const [making, setMaking] = useState<"copy" | "share" | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,23 +138,29 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
       );
   };
 
-  const shareLink = async () => {
+  // Each press mints a new link: the token is never kept to hand out twice.
+  const makeLink = async (how: "copy" | "share") => {
     setError(null);
-    setSharing(true);
+    setCopied(false);
+    setMaking(how);
     try {
       const { token } = await createInviteLink(plan.id);
-      await Share.share({
-        message: tripPlanInviteMessage(
-          plan.name,
-          planInviteUrl(config.webUrl, token),
-        ),
-      });
+      const message = tripPlanInviteMessage(
+        plan.name,
+        planInviteUrl(config.webUrl, token),
+      );
+      if (how === "share") await Share.share({ message });
+      else {
+        // RN core Clipboard, as the place page's copy: no native module.
+        Clipboard.setString(message);
+        setCopied(true);
+      }
       const { invites } = await getInviteLinks(plan.id);
       setLinks(invites);
     } catch (err) {
       setError(messageFromError(err, copy.linkMakeFailed));
     } finally {
-      setSharing(false);
+      setMaking(null);
     }
   };
 
@@ -221,17 +228,25 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
     link: (
       <>
         <Text style={styles.hint}>{copy.linkHint}</Text>
-        {/* ponytail: no Copy invite link; Logjam GPS has no clipboard
-            module, and the share sheet offers Copy itself. */}
+        <Button
+          label={copy.linkCopy}
+          icon="copy"
+          variant="outlineAccent"
+          loading={making === "copy"}
+          disabled={!online || making !== null}
+          disabledReason={OFFLINE}
+          onPress={() => void makeLink("copy")}
+        />
         <Button
           label={copy.linkShare}
           icon="link"
           variant="outlineAccent"
-          loading={sharing}
-          disabled={!online}
+          loading={making === "share"}
+          disabled={!online || making !== null}
           disabledReason={OFFLINE}
-          onPress={() => void shareLink()}
+          onPress={() => void makeLink("share")}
         />
+        {copied ? <Text style={styles.hint}>{copy.linkCopied}</Text> : null}
         {links.length > 0 ? (
           <SectionHeader title={copy.linksLive} count={links.length} />
         ) : null}
