@@ -22,6 +22,13 @@ import {
   notifyMirrorChanged,
   withSyncTransaction,
 } from "../sync/syncDb";
+import {
+  deletePlanFolder,
+  downloadPlanFiles,
+  missingPlanFiles,
+  planFiles,
+  sweepPlanFolders,
+} from "./planFiles";
 import { getPlan, getPlans } from "./plansApi";
 
 export type PlansList = { plans: TripPlanSummary[]; fetchedAt: string };
@@ -158,6 +165,8 @@ export async function pollPlans(): Promise<PlansList> {
         );
     }
   });
+  // A dropped plan's files go with it.
+  await sweepPlanFolders(new Set((await readCachedPlanStamps()).keys()));
   notifyMirrorChanged();
   return { plans, fetchedAt };
 }
@@ -175,6 +184,7 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
     if (err instanceof ApiError && err.status === 404) {
       const db = await getSyncDb();
       await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", planId);
+      await deletePlanFolder(planId);
       notifyMirrorChanged();
     }
     throw err;
@@ -242,10 +252,34 @@ export async function afterPlanWrite(
     dropped.add(planId);
     const db = await getSyncDb();
     await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", planId);
+    await deletePlanFolder(planId);
     // Told now: the poll below may fail, and the list must not keep its mark.
     notifyMirrorChanged();
   }
   await Promise.all([pollPlans(), gone ? undefined : fetchPlan(planId)]).catch(
     console.error,
   );
+}
+
+/**
+ * Download for the trip: the plan fetched again (fresh presigned URLs), then
+ * every file it points at that is not on the phone yet, then stamped
+ * downloaded. A failure leaves what was fetched and no stamp.
+ */
+export async function downloadPlan(
+  planId: string,
+  onProgress: (doneBytes: number, totalBytes: number) => void,
+): Promise<void> {
+  const { plan } = await fetchPlan(planId);
+  const missing = await missingPlanFiles(planId, planFiles(plan));
+  const total = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
+  onProgress(0, total);
+  await downloadPlanFiles(planId, missing, (done) => onProgress(done, total));
+  const db = await getSyncDb();
+  await db.runAsync(
+    "UPDATE plans_cache SET downloaded_at = ? WHERE plan_id = ?",
+    new Date().toISOString(),
+    planId,
+  );
+  notifyMirrorChanged();
 }
