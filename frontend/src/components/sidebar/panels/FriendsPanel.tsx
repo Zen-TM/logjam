@@ -18,11 +18,16 @@
 // send writes the recipient a notification and both verbs resolve it,
 // avoiding a second, separately-fetched copy of a list the Inbox draws better.
 //
+// The leaderboard row is drawn only for someone who has joined it: for anyone
+// else nothing here mentions it, and the way in is the switch in Settings
+// (contracts/leaderboard.ts; FriendsPanel.render.test.tsx).
+//
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (api/src/__tests__/friends.test.ts), and nothing here
 // would have somewhere to put one.
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -45,10 +50,15 @@ import {
   type FriendsBucket,
   type SectionKeysOn,
   friendSearchHint,
+  LEADERBOARD,
+  leaderboardRowSubtitle,
+  selfStanding,
+  type LeaderboardResponse,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
+import LeaderboardPage from "./LeaderboardPage";
 import { useRowSelection } from "./useRowSelection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -59,7 +69,9 @@ import {
   Dialog,
   EmptyState,
   Hero,
+  Icon,
   IconButton,
+  IconTile,
   ListEnd,
   Menu,
   Row,
@@ -79,6 +91,7 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  getLeaderboard,
 } from "../../../placeUtils";
 
 /** Shorter than this and the server has nothing useful to match on. */
@@ -89,12 +102,14 @@ type Bucket = FriendsBucket;
 const copy = FRIENDS.copy;
 
 function FriendsPanel({
+  leaderboardOptIn,
   friends,
   friendRequests,
   onRefetchFriends,
   onRefetchShared,
   onRefetchNotifications,
 }: {
+  leaderboardOptIn: boolean;
   friends: TFriend[];
   friendRequests: TFriendRequest[];
   onRefetchFriends: () => void;
@@ -110,6 +125,33 @@ function FriendsPanel({
   // Non-null = the sharing audit for that friend replaces the list: at 380px
   // there is no room for both, and the audit is a page you go and read.
   const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
+  // The same, for the leaderboard. Its board is fetched here, so the row's
+  // subtitle and the page read one answer.
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [board, setBoard] = useState<LeaderboardResponse | null>(null);
+  const [boardError, setBoardError] = useState<string | null>(null);
+
+  const fetchBoard = useCallback(() => {
+    getLeaderboard()
+      .then((next) => {
+        setBoard(next);
+        setBoardError(null);
+      })
+      .catch((err) => {
+        console.error(err);
+        setBoardError(messageFromError(err, LEADERBOARD.copy.loadFailed));
+      });
+  }, []);
+
+  useEffect(() => {
+    if (leaderboardOptIn) fetchBoard();
+  }, [leaderboardOptIn, fetchBoard]);
+
+  /** A reload the user asked for: Try again, or opening the page. */
+  const loadBoard = () => {
+    setBoardError(null);
+    fetchBoard();
+  };
 
   // Refetch on every panel open — friends and requests are otherwise fetched
   // once at app boot, so a request that arrives mid-session stays
@@ -185,6 +227,17 @@ function FriendsPanel({
     onRefetchShared();
   }
 
+  if (leaderboardOpen && leaderboardOptIn) {
+    return (
+      <LeaderboardPage
+        board={board}
+        error={boardError}
+        onRetry={loadBoard}
+        onBack={() => setLeaderboardOpen(false)}
+      />
+    );
+  }
+
   if (openFriend) {
     return (
       <FriendSharingSection
@@ -251,6 +304,30 @@ function FriendsPanel({
         }
       />
     ),
+    leaderboard: () => {
+      // `false` from the server outranks the cached preference: the user left
+      // on another device since this session fetched it.
+      if (!leaderboardOptIn || board?.joined === false) return null;
+      const standing = board?.joined ? selfStanding(board) : null;
+      return (
+        <div className={classes.leaderboard}>
+          <Row
+            leading={<IconTile icon="leaderboard" hue="var(--color-accent)" />}
+            title={LEADERBOARD.title}
+            subtitle={
+              standing
+                ? leaderboardRowSubtitle(standing.rank, standing.size)
+                : undefined
+            }
+            trailing={<Icon idea="disclosure" size={18} aria-hidden />}
+            onOpen={() => {
+              loadBoard();
+              setLeaderboardOpen(true);
+            }}
+          />
+        </div>
+      );
+    },
     buckets: () => (
       // The selection bar takes the rail's slot at the rail's height, so the
       // list does not move when a selection starts (DESIGN.md).

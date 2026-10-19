@@ -32,6 +32,7 @@ import type {
   BulkShareItem,
   FriendShareRow,
   FriendShares,
+  LeaderboardResponse,
 } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -852,6 +853,7 @@ export function updateUserPreferences(
     notifications: Partial<NotificationPreferences>;
     autoDownloadGeoPdfs: boolean;
     importMergePolicy: PlaceMergePolicy;
+    leaderboardOptIn: boolean;
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
@@ -1606,6 +1608,10 @@ export function declineFriendRequest(friendshipId: string): Promise<void> {
 
 export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
+}
+
+export function getLeaderboard(): Promise<LeaderboardResponse> {
+  return apiFetch<LeaderboardResponse>("/friends/leaderboard");
 }
 
 // Invite links (api/src/routes/friendInvites.ts). The token only ever travels

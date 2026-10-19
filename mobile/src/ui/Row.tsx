@@ -105,14 +105,9 @@ export function Row({
   const theme = useTheme();
   const styles = useStyles();
 
-  const tint = hue ?? theme.accent;
   const lead =
     leading ??
-    (icon ? (
-      <View style={[styles.iconTile, { backgroundColor: tint }]}>
-        <Icon idea={icon} size={20} color={theme.onFill} />
-      </View>
-    ) : null);
+    (icon ? <IconTile icon={icon} hue={hue ?? theme.accent} /> : null);
 
   // The card is a COLUMN so a footer can sit under the line; the line keeps the
   // horizontal layout every row has always had. `progress` stays a direct child
@@ -154,6 +149,10 @@ export function Row({
   if (!onPress && !onLongPress) {
     return (
       <View
+        // A read-only row is one stop for a screen reader only when the screen
+        // composed a label for it; otherwise its parts read separately.
+        accessible={accessibilityLabel != null}
+        accessibilityLabel={accessibilityLabel}
         style={[
           styles.row,
           styles.readOnly,
@@ -186,6 +185,35 @@ export function Row({
     >
       {body}
     </Pressable>
+  );
+}
+
+/**
+ * The identity tile: a square filled with the hue, the glyph in `onFill`. What
+ * Row draws from `icon` and `hue`, and what a row shows elsewhere (a medal on
+ * the right). `label` names it for a screen reader when the glyph carries
+ * meaning the row's text does not.
+ */
+export function IconTile({
+  icon,
+  hue,
+  label,
+}: {
+  icon: Glyph;
+  hue: string;
+  label?: string;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <View
+      style={[styles.iconTile, { backgroundColor: hue }]}
+      accessible={label != null}
+      accessibilityRole={label != null ? "image" : undefined}
+      accessibilityLabel={label}
+    >
+      <Icon idea={icon} size={20} color={theme.onFill} />
+    </View>
   );
 }
 

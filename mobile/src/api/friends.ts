@@ -6,7 +6,11 @@
 //
 // PRIVACY: every response here is username-only (server-enforced — no email on
 // friends joins). Search is capped server-side (min 3 chars, ≤10 results).
-import type { BulkShareItem, FriendShares } from "@logjam/shared";
+import type {
+  BulkShareItem,
+  FriendShares,
+  LeaderboardResponse,
+} from "@logjam/shared";
 
 import { apiFetch, apiFetchWithTotal } from "./apiFetch";
 
@@ -42,6 +46,11 @@ export function searchUsers(
   return apiFetchWithTotal<UserSearchResult[]>(
     `/friends/search?q=${encodeURIComponent(query)}`,
   );
+}
+
+/** The season board; `{ joined: false }` for someone who has not opted in. */
+export function getLeaderboard(): Promise<LeaderboardResponse> {
+  return apiFetch<LeaderboardResponse>("/friends/leaderboard");
 }
 
 export function sendFriendRequest(addresseeId: string): Promise<unknown> {

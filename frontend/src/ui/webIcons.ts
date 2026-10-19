@@ -1,5 +1,6 @@
 import {
   Activity,
+  Award,
   CloudDrizzle,
   CloudFog,
   CloudLightning,
@@ -210,6 +211,7 @@ export const WEB_ICONS = {
   notes: AlignLeft,
   stats: ChartColumn,
   friends: Users,
+  leaderboard: Award,
   account: CircleUser,
   notifications: Bell,
   settings: Settings,

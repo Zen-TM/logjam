@@ -6,6 +6,7 @@ import {
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
+  MEDAL_HUES,
   MOTION,
   OPACITY,
   PLACE_STATUS_HUES,
@@ -82,6 +83,7 @@ describe("tokens.generated.css", () => {
       ...Object.keys({ ...ASSET_HUES, ...PLACE_STATUS_HUES }).map(
         (n) => `--hue-${kebab(n)}`,
       ),
+      ...Object.keys(MEDAL_HUES).map((n) => `--hue-medal-${n}`),
       ...Object.keys(SPACE).map((n) => `--space-${kebab(n)}`),
       ...Object.keys(FORM_RHYTHM).map((n) => `--form-${n}`),
       ...Object.keys(RADIUS).map((n) => `--radius-${n}`),

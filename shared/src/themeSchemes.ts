@@ -110,6 +110,12 @@ export type UserUiPreferences = {
    * still honours the user's choice instead of quietly doing the other thing.
    */
   copyPlaceMedia: boolean;
+  /**
+   * Whether the user is on the friends leaderboard. FALSE by default: joining
+   * shares a count of trip data with friends, and no default widens who sees
+   * something (root AGENTS.md). See shared/src/leaderboard.ts.
+   */
+  leaderboardOptIn: boolean;
 };
 
 export function isNotificationPreferences(
@@ -383,6 +389,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       notifications,
       autoDownloadGeoPdfs,
       copyPlaceMedia,
+      leaderboardOptIn: prefs.leaderboardOptIn === true,
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
@@ -395,5 +402,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
     autoDownloadGeoPdfs: true,
     copyPlaceMedia: true,
+    leaderboardOptIn: false,
   };
 }

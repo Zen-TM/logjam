@@ -7,6 +7,11 @@
   flex-direction: column;
 }
 
+.leaderboard {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--gutter) 0;
+}
+
 .rails {
   flex-shrink: 0;
   padding: 10px var(--gutter) 8px;

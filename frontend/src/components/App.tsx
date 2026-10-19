@@ -1767,6 +1767,7 @@ function App() {
           currentUser={currentUser}
           currentUserError={currentUserError}
           onRetryCurrentUser={refetchCurrentUser}
+          onCurrentUserChange={applyCurrentUser}
           onOpenTopoWithTemplate={(templateId) => {
             setInitialTopoTemplateId(templateId);
             setShowTopo(true);

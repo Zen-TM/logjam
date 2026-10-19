@@ -44,6 +44,17 @@ recipients:
   (see `placeListInclude` in `api/src/routes/places.ts`,
   `api/src/routes/placesList.unit.test.ts`). A test that asserts the *list* is withheld will
   pass while its count leaks — assert the aggregate's absence too.
+- **Update 2026-10-18: the friends leaderboard is an opt-in exception to
+  derived cardinality.** `GET /friends/leaderboard` (`api/src/routes/friends.ts`)
+  shows a friend one count over owner-private trips: the distinct built-in
+  Canyon places linked to trips dated in the season (`computeLeaderboard`,
+  `shared/src/leaderboard.ts`). It does so only between accepted friends who
+  have both set `uiPreferences.leaderboardOptIn` (default false;
+  `collectLeaderboardParticipants`), and never says which places. Consent is
+  what holds the exception up, so the rule above still binds every payload a
+  user has not opted into, sharee-reachable ones included. Guard:
+  `api/src/routes/leaderboard.unit.test.ts`, `api/src/__tests__/leaderboard.test.ts`.
+  Everything else above stands.
 - **What a sharee may see is a DENYLIST plus a completeness guard, not a hand-kept `select`:**
   `OWNER_PRIVATE_PLACE_FIELDS` / `SHAREE_VISIBLE_PLACE_FIELDS` in `api/src/lib/placeVisibility.ts`
   name every column and why; `serializeSharedPlace` is the one filter and BOTH the REST and the
@@ -70,3 +81,7 @@ recipients:
   silently when new columns are added.
 - Stripping by name only on the delta path: rejected after `importKey` and `importBatchId`
   leaked while `foreignFields` did not.
+- A leaderboard on by default, left from Settings (opt-out): built in July 2026 and never
+  merged. Rejected on 2026-10-18 because the deploy would have shown every existing friend a
+  count nobody had agreed to share, against root `AGENTS.md`'s "no default widens who sees
+  something".

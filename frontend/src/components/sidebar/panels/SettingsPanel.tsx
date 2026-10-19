@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  LEADERBOARD_SETTING,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
   ownAttributeCountLabel,
@@ -59,8 +60,12 @@ function SettingsPanel({
   onPlaceCustomFieldDefsChange,
   placeTypes,
   onPlaceTypesChange,
+  onCurrentUserChange,
 }: {
   currentUser: TUser | null;
+  /** The saved user, so what reads it elsewhere (Friends' leaderboard row)
+   *  follows a switch here without a reload. */
+  onCurrentUserChange: (user: TUser) => void;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
   customFieldDefs: ScopedCustomFieldDef[];
@@ -88,6 +93,10 @@ function SettingsPanel({
     boolean | null
   >(null);
   const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState<boolean | null>(
+    null,
+  );
+  const [leaderboardSaving, setLeaderboardSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -103,6 +112,7 @@ function SettingsPanel({
       setAutoDownloadGeoPdfs(
         currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true,
       );
+      setLeaderboardOptIn(currentUser.uiPreferences?.leaderboardOptIn ?? false);
     }
   }
 
@@ -148,6 +158,28 @@ function SettingsPanel({
       );
     } finally {
       setAutoDownloadSaving(false);
+    }
+  }
+
+  async function handleToggleLeaderboard() {
+    if (leaderboardOptIn === null) return;
+    const previous = leaderboardOptIn;
+    const next = !leaderboardOptIn;
+    setLeaderboardOptIn(next);
+    setLeaderboardSaving(true);
+    try {
+      onCurrentUserChange(
+        await updateUserPreferences({ leaderboardOptIn: next }),
+      );
+      toast.success(
+        next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left,
+      );
+    } catch (err) {
+      console.error(err);
+      setLeaderboardOptIn(previous);
+      toast.error(messageFromError(err, LEADERBOARD_SETTING.saveFailed));
+    } finally {
+      setLeaderboardSaving(false);
     }
   }
 
@@ -218,6 +250,20 @@ function SettingsPanel({
             disabled={autoDownloadSaving}
             disabledReason="Saving…"
             onChange={handleToggleAutoDownload}
+          />
+        )}
+
+        <SectionHeader title="Friends" />
+        {leaderboardOptIn === null ? (
+          <LoadingState />
+        ) : (
+          <SwitchRow
+            title={LEADERBOARD_SETTING.label}
+            description={LEADERBOARD_SETTING.hint}
+            checked={leaderboardOptIn}
+            disabled={leaderboardSaving}
+            disabledReason="Saving…"
+            onChange={handleToggleLeaderboard}
           />
         )}
       </>

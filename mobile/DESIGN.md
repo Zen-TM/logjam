@@ -64,7 +64,9 @@ BottomSheet     acquisition, per-item verbs, forms
   callbacks.
 - **A preference goes on the Settings page its storage lives on**: device
   (Display, Map, Offline and storage, Privacy and security) or account
-  (Notifications).
+  (Notifications). An account switch about a device page's subject goes on
+  that page, which says so in its header, and needs a connection there:
+  photos with copied places, the friends leaderboard.
 
 ## 3. The map
 
