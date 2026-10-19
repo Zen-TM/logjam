@@ -78,8 +78,13 @@ async function notices(userId: string, type: string) {
 
 const invite = (sub: string, body: object) =>
   request(API_URL).post(`/plans/${planId}/members`).set(as(sub)).send(body);
-const remove = (sub: string, userId: string) =>
-  request(API_URL).delete(`/plans/${planId}/members/${userId}`).set(as(sub));
+/** `seen`: the status the caller saw, which a leader removing someone must send. */
+const remove = (sub: string, userId: string, seen?: string) =>
+  request(API_URL)
+    .delete(
+      `/plans/${planId}/members/${userId}${seen ? `?status=${seen}` : ""}`,
+    )
+    .set(as(sub));
 const setRole = (sub: string, userId: string, role: string) =>
   request(API_URL)
     .patch(`/plans/${planId}/members/${userId}`)
@@ -280,7 +285,7 @@ describe("who reaches a plan", () => {
     request(API_URL)
       .patch(`/plans/${planId}/members/${BOB_ID}`)
       .send({ role: "editor" }),
-    request(API_URL).delete(`/plans/${planId}/members/${BOB_ID}`),
+    request(API_URL).delete(`/plans/${planId}/members/${BOB_ID}?status=active`),
   ];
 
   it.each([
@@ -293,7 +298,7 @@ describe("who reaches a plan", () => {
     async (_who, state) => {
       if (state === "removed") {
         await membership(CAROL_ID, "active");
-        expect((await remove(ALICE_SUB, CAROL_ID)).status).toBe(204);
+        expect((await remove(ALICE_SUB, CAROL_ID, "active")).status).toBe(204);
       } else if (state) await membership(CAROL_ID, state);
       const invite = await prisma.tripPlanInvite.create({
         data: {
@@ -352,7 +357,7 @@ describe("a plan keeps a leader", () => {
       "demoted",
       "removing the other leader",
       403,
-      () => remove(ALICE_SUB, BOB_ID),
+      () => remove(ALICE_SUB, BOB_ID, "active"),
     ],
     [
       "demoted",
@@ -379,7 +384,7 @@ describe("a plan keeps a leader", () => {
       "removed",
       "removing the other leader",
       404,
-      () => remove(ALICE_SUB, BOB_ID),
+      () => remove(ALICE_SUB, BOB_ID, "active"),
     ],
   ] as const)(
     "refuses a leader %s while %s",
@@ -511,7 +516,7 @@ describe("leaving and removing", () => {
     expect(lastLeader.body.error).toBe(
       "A plan needs a leader. Make someone else a leader first.",
     );
-    expect((await remove(ALICE_SUB, BOB_ID)).status).toBe(204);
+    expect((await remove(ALICE_SUB, BOB_ID, "active")).status).toBe(204);
     const alone = await remove(ALICE_SUB, "me");
     expect(alone.status).toBe(409);
     expect(alone.body.error).toBe(
@@ -524,8 +529,8 @@ describe("leaving and removing", () => {
     await prisma.tripPlanAnswer.create({
       data: { formId, userId: BOB_ID, answers: { agree: true, notes: SECRET } },
     });
-    expect((await remove(BOB_SUB, ALICE_ID)).status).toBe(403);
-    await touches(() => remove(ALICE_SUB, BOB_ID));
+    expect((await remove(BOB_SUB, ALICE_ID, "active")).status).toBe(403);
+    await touches(() => remove(ALICE_SUB, BOB_ID, "active"));
     const [row] = await notices(BOB_ID, "plan_access_ended");
     expect(row.payload).toEqual({
       planId,
@@ -538,7 +543,7 @@ describe("leaving and removing", () => {
 
   it("turning down a request tells them; cancelling an invite doesn't", async () => {
     await membership(CAROL_ID, "requested");
-    await touches(() => remove(ALICE_SUB, CAROL_ID));
+    await touches(() => remove(ALICE_SUB, CAROL_ID, "requested"));
     const [declined] = await notices(CAROL_ID, "plan_access_ended");
     expect(declined.payload).toMatchObject({ reason: "declined" });
 
@@ -550,8 +555,37 @@ describe("leaving and removing", () => {
       },
     });
     await invite(ALICE_SUB, { username: "carol" });
-    expect((await remove(ALICE_SUB, CAROL_ID)).status).toBe(204);
+    expect((await remove(ALICE_SUB, CAROL_ID, "invited")).status).toBe(204);
     expect(await notices(CAROL_ID, "plan_invited")).toEqual([]);
+    expect(await notices(CAROL_ID, "plan_access_ended")).toEqual([]);
+  });
+
+  // Mutation: drop the `member.status !== seen` comparison in DELETE
+  // /members/:userId (carol is removed, 204), or the required-status check (400 → 204).
+  it("removes someone only as the caller saw them", async () => {
+    await invite(ALICE_SUB, { username: "carol" });
+    await prisma.tripPlanMember.update({
+      where: { planId_userId: { planId, userId: CAROL_ID } },
+      data: { status: "active" },
+    });
+    await prisma.tripPlanAnswer.create({
+      data: { formId, userId: CAROL_ID, answers: { agree: true } },
+    });
+
+    expect((await remove(ALICE_SUB, CAROL_ID)).status).toBe(400);
+    const stale = await remove(ALICE_SUB, CAROL_ID, "invited");
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toBe(
+      "Not done: this changed since you looked. Check who's in the plan, then try again.",
+    );
+    expect((await remove(CAROL_SUB, "me", "requested")).status).toBe(409);
+    expect(
+      await prisma.tripPlanMember.findUnique({
+        where: { planId_userId: { planId, userId: CAROL_ID } },
+        select: { status: true },
+      }),
+    ).toEqual({ status: "active" });
+    expect(await prisma.tripPlanAnswer.count({ where: { formId } })).toBe(1);
     expect(await notices(CAROL_ID, "plan_access_ended")).toEqual([]);
   });
 
