@@ -15,11 +15,7 @@ import {
   requirePlanRole,
   requirePlanWrite,
 } from "../lib/planAccess";
-import {
-  dropPlanNotifications,
-  notifyPlan,
-  waitingFor,
-} from "../lib/planMembership";
+import { endPlanForOthers, waitingFor } from "../lib/planMembership";
 import { deletePlanWithFiles } from "../lib/planItems";
 import { dateColumn, loadPlanView, planSummary } from "../lib/tripPlanView";
 
@@ -203,29 +199,9 @@ router.delete(
     // Files first: S3, then refunds in the delete's transaction
     // (lib/planItems.ts).
     const planId = access.plan.id;
-    const push = await deletePlanWithFiles(planId, async (tx) => {
-      const [plan, others] = await Promise.all([
-        tx.tripPlan.findUniqueOrThrow({
-          where: { id: planId },
-          select: { name: true },
-        }),
-        // Everyone else with a row: members, and anyone invited or asking,
-        // who would otherwise find the plan gone from their list unexplained.
-        tx.tripPlanMember.findMany({
-          where: { planId, userId: { not: user.id } },
-          select: { userId: true },
-        }),
-      ]);
-      await dropPlanNotifications(tx, planId);
-      return notifyPlan(
-        tx,
-        others.map((row) => row.userId),
-        {
-          type: "plan_access_ended",
-          payload: { planId, reason: "deleted", planName: plan.name },
-        },
-      );
-    });
+    const push = await deletePlanWithFiles(planId, (tx) =>
+      endPlanForOthers(tx, planId, user.id),
+    );
     push();
     res.status(204).send();
   },

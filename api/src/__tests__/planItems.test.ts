@@ -1044,10 +1044,12 @@ describe("storage when someone goes", () => {
 
   it("leaves a leaver's files charged to them", async () => {
     const id = await planFile(BOB_SUB);
-    const before = await used(BOB_ID);
-    // Mutation: pass `removedBy: user.id` on a leave in planMembers.ts.
+    const [bob, alice] = [await used(BOB_ID), await used(ALICE_ID)];
+    // Mutation: a leave passes the plan's leader as removedBy in
+    // planMembers.ts (the leaver's files then move to alice).
     await leave();
-    expect(await used(BOB_ID)).toBe(before);
+    expect(await used(BOB_ID)).toBe(bob);
+    expect(await used(ALICE_ID)).toBe(alice);
     const row = await prisma.media.findUniqueOrThrow({ where: { id } });
     expect(row.chargedToId).toBe(BOB_ID);
   });
@@ -1061,6 +1063,29 @@ describe("storage when someone goes", () => {
     expect(await used(ALICE_ID)).toBe(alice + SIZE);
     const row = await prisma.media.findUniqueOrThrow({ where: { id } });
     expect(row.chargedToId).toBe(ALICE_ID);
+  });
+
+  // Mutation: refuse the move in moveCharges when it takes alice past quota.
+  it("takes on the files past the leader's quota", async () => {
+    const id = await planFile(BOB_SUB);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: ALICE_ID },
+    });
+    await prisma.user.update({
+      where: { id: ALICE_ID },
+      data: { storageQuotaBytes: user.storageUsedBytes },
+    });
+    try {
+      await remove();
+      const row = await prisma.media.findUniqueOrThrow({ where: { id } });
+      expect(row.chargedToId).toBe(ALICE_ID);
+      expect(await used(ALICE_ID)).toBe(user.storageUsedBytes + SIZE);
+    } finally {
+      await prisma.user.update({
+        where: { id: ALICE_ID },
+        data: { storageQuotaBytes: user.storageQuotaBytes },
+      });
+    }
   });
 
   it("deletes a removed member's files instead with deleteFiles", async () => {
@@ -1120,6 +1145,77 @@ describe("storage when someone goes", () => {
     }
   });
 
+  // Mutation: heir = leader.userId in handOverPlans.
+  it("moves an account's charges to the creator when someone else leads", async () => {
+    const dave = await throwaway();
+    try {
+      await membership(dave.id);
+      await membership(BOB_ID, "leader");
+      await membership(ALICE_ID, "member");
+      const id = await planFile(dave.cognitoId);
+      const [alice, bob] = [await used(ALICE_ID), await used(BOB_ID)];
+      const del = await request(API_URL)
+        .delete("/users/me")
+        .set(as(dave.cognitoId));
+      expect(del.status).toBe(204);
+      const row = await prisma.media.findUniqueOrThrow({ where: { id } });
+      expect(row.chargedToId).toBe(ALICE_ID);
+      expect(await used(ALICE_ID)).toBe(alice + SIZE);
+      expect(await used(BOB_ID)).toBe(bob);
+    } finally {
+      await membership(ALICE_ID, "leader");
+      await prisma.user.deleteMany({ where: { id: dave.id } });
+    }
+  });
+
+  // Each hand-over takes its user out of the plan under the plan's lock, so
+  // the second sees the first gone whichever runs first. Mutation: drop the
+  // member delete from handOverPlans; red when the two hand-overs run before
+  // either account's own transaction, which this race doesn't always stage.
+  it("leaves a leader and a payer when two accounts go at once", async () => {
+    const [dave, erin] = [await throwaway(), await throwaway()];
+    let plan: string | undefined;
+    try {
+      const res = await request(API_URL)
+        .post("/plans")
+        .set(as(dave.cognitoId))
+        .send({ name: "Test two departures" });
+      expect(res.status).toBe(201);
+      plan = res.body.id as string;
+      for (const userId of [erin.id, BOB_ID])
+        await prisma.tripPlanMember.create({
+          data: { planId: plan, userId, status: "active", role: "member" },
+        });
+      const files = [
+        await planFile(dave.cognitoId, plan),
+        await planFile(erin.cognitoId, plan),
+      ];
+      const before = await used(BOB_ID);
+      const results = await Promise.all(
+        [dave, erin].map((user) =>
+          request(API_URL).delete("/users/me").set(as(user.cognitoId)),
+        ),
+      );
+      expect(results.map((r) => r.status)).toEqual([204, 204]);
+      const left = await prisma.tripPlanMember.findMany({
+        where: { planId: plan },
+        select: { userId: true, role: true },
+      });
+      expect(left).toEqual([{ userId: BOB_ID, role: "leader" }]);
+      const rows = await prisma.media.findMany({
+        where: { id: { in: files } },
+      });
+      expect(rows.map((row) => row.chargedToId)).toEqual([BOB_ID, BOB_ID]);
+      expect(await used(BOB_ID)).toBe(before + 2n * SIZE);
+    } finally {
+      await prisma.user.deleteMany({
+        where: { id: { in: [dave.id, erin.id] } },
+      });
+      if (plan)
+        await request(API_URL).delete(`/plans/${plan}`).set(as(BOB_SUB));
+    }
+  });
+
   it("makes the earliest member leader when the last leader's account goes, and deletes a plan left empty", async () => {
     const dave = await throwaway();
     const plans: string[] = [];
@@ -1137,6 +1233,15 @@ describe("storage when someone goes", () => {
         await prisma.tripPlanMember.create({
           data: { planId: kept, userId, status: "active", role: "member" },
         });
+      await prisma.tripPlanMember.create({
+        data: {
+          planId: empty,
+          userId: CAROL_ID,
+          status: "invited",
+          role: "member",
+          invitedById: dave.id,
+        },
+      });
       const keptFile = await planFile(dave.cognitoId, kept);
       const emptyFile = await planFile(dave.cognitoId, empty);
       const emptyKey = (
@@ -1166,11 +1271,22 @@ describe("storage when someone goes", () => {
       });
       expect(row.chargedToId).toBe(BOB_ID);
       expect(await used(BOB_ID)).toBe(before + SIZE);
-      // Mutation: skip deletePlanWithFiles for a plan with no one left.
+      // Mutation: skip the delete for a plan with no one left.
       expect(await prisma.tripPlan.findUnique({ where: { id: empty } })).toBe(
         null,
       );
       expect(await exists(emptyKey)).toBe(false);
+      // Mutation: drop endPlanForOthers from handOverPlans' delete; carol,
+      // invited, would find the plan gone from her list unexplained.
+      const notice = await prisma.notification.findFirst({
+        where: {
+          userId: CAROL_ID,
+          type: "plan_access_ended",
+          payload: { path: ["planId"], equals: empty },
+        },
+      });
+      expect(notice?.payload).toMatchObject({ reason: "deleted" });
+      await prisma.notification.deleteMany({ where: { id: notice?.id } });
     } finally {
       await prisma.user.deleteMany({ where: { id: dave.id } });
       if (plans[0])

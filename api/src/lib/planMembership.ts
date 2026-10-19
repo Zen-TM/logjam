@@ -130,6 +130,39 @@ export async function dropPlanNotifications(
   });
 }
 
+/**
+ * The plan is about to be deleted: drop its notifications and tell everyone
+ * else with a row (members, and anyone invited or asking, who would otherwise
+ * find the plan gone from their list unexplained). In the delete's
+ * transaction; returns the push to send after commit.
+ * Guard: __tests__/planItems.test.ts ("deletes a plan left empty").
+ */
+export async function endPlanForOthers(
+  tx: Db,
+  planId: string,
+  exceptUserId: string,
+): Promise<() => void> {
+  const [plan, others] = await Promise.all([
+    tx.tripPlan.findUniqueOrThrow({
+      where: { id: planId },
+      select: { name: true },
+    }),
+    tx.tripPlanMember.findMany({
+      where: { planId, userId: { not: exceptUserId } },
+      select: { userId: true },
+    }),
+  ]);
+  await dropPlanNotifications(tx, planId);
+  return notifyPlan(
+    tx,
+    others.map((row) => row.userId),
+    {
+      type: "plan_access_ended",
+      payload: { planId, reason: "deleted", planName: plan.name },
+    },
+  );
+}
+
 /** Whether `userId` and any of `otherIds` have blocked each other, either
  *  way. A block is answered as if there were no one there. */
 export async function blockedWithAny(

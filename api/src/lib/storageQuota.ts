@@ -72,3 +72,20 @@ export async function incrementStorageUsed(
     WHERE id = ${userId}
   `;
 }
+
+/**
+ * Apply several users' storage changes (bytes, plus or minus) in user id
+ * order. Two transactions that lock the same users' rows in opposite orders
+ * deadlock, so a transaction that changes more than one user's storage
+ * collects its changes and applies them once, here.
+ * Guard: storageQuota.unit.test.ts ("in user id order").
+ */
+export async function applyStorageChanges(
+  changes: Map<string, bigint>,
+  db: DbClient = prisma,
+): Promise<void> {
+  const ordered = [...changes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const [userId, bytes] of ordered)
+    if (bytes < 0n) await decrementStorageUsed(userId, -bytes, db);
+    else await incrementStorageUsed(userId, bytes, db);
+}
