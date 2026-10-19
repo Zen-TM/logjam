@@ -11,6 +11,7 @@ import { MAX_TRIP_TYPES_PER_TRIP, TRIP_TYPE_MAX_LENGTH } from "./tripName.js";
 import { PLACE_MAX_ALT_NAMES } from "./placeValidation.js";
 import {
   MAX_ROUTE_POINTS,
+  MIN_ROUTE_POINTS,
   parseRouteAnchors,
   parseRoutePoints,
   ROUTE_ERRORS,
@@ -1245,6 +1246,7 @@ function position(value: unknown, what: string) {
 function seenGeometry(value: unknown) {
   const geometry = record(value, "geometry.from");
   if (!Array.isArray(geometry.points)) bad(ROUTE_ERRORS.pointsShape);
+  if (geometry.points.length < MIN_ROUTE_POINTS) bad(ROUTE_ERRORS.tooFewPoints);
   if (geometry.points.length > MAX_ROUTE_POINTS)
     bad("geometry.from.points is over the cap", 413);
   for (const point of geometry.points)
@@ -1256,7 +1258,11 @@ function seenGeometry(value: unknown) {
       bad(ROUTE_ERRORS.pointsShape);
   const anchors = geometry.anchors ?? null;
   if (anchors !== null) {
-    if (!Array.isArray(anchors) || anchors.some((n) => typeof n !== "number"))
+    if (
+      !Array.isArray(anchors) ||
+      anchors.length < 2 ||
+      anchors.some((n) => typeof n !== "number")
+    )
       bad(ROUTE_ERRORS.anchorsShape);
     if (anchors.length > MAX_ROUTE_POINTS)
       bad("geometry.from.anchors is over the cap", 413);

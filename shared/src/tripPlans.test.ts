@@ -239,6 +239,18 @@ describe("item edits", () => {
       parseTripPlanFilePatch({ displayName: { from: 1, to: "x" } }),
     ])
       expect(parsed).toEqual({ malformed: expect.any(String) });
+    // No stored route has fewer than two points, or one anchor: a from like
+    // that can only be a broken client's. Mutation: drop either lower bound
+    // in seenGeometry.
+    for (const from of [
+      { points: [] },
+      { points: [line[0]] },
+      { points: line, anchors: [] },
+      { points: line, anchors: [0] },
+    ])
+      expect(
+        parseTripPlanRoutePatch({ geometry: { from, to: { points: line } } }),
+      ).toEqual({ malformed: expect.any(String) });
     for (const parsed of [
       parseTripPlanPlacePatch({
         altNames: { from: Array(51).fill("a"), to: [] },
