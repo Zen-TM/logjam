@@ -217,6 +217,12 @@ test.describe("desktop", () => {
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("#root")).toBeVisible();
     await page.emulateMedia({ media: "screen" });
+
+    // A plan carol invited alice to: its preview, before Join or Decline.
+    await aside.getByRole("button", { name: "Back to plans" }).click();
+    await aside.getByRole("button", { name: "Kanangra Walls loop" }).click();
+    await expect(aside.getByRole("button", { name: "Decline" })).toBeVisible();
+    await expectNoViolations(page, "aside");
   });
 
   test("Plans forms: a form's page, answering it, and the builder", async ({

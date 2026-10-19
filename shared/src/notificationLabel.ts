@@ -214,6 +214,7 @@ export type NotificationKind =
   | "topo"
   | "export"
   | "geoPdf"
+  | "plan"
   | "problem";
 
 /**
@@ -249,6 +250,12 @@ export function notificationKind(n: TNotification): NotificationKind {
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";
+    case "plan_invited":
+    case "plan_join_request":
+    case "plan_join_approved":
+    case "plan_member_joined":
+    case "plan_access_ended":
+      return "plan";
     default:
       return "people";
   }
@@ -262,6 +269,19 @@ export function notificationKind(n: TNotification): NotificationKind {
  * PRIVACY: an id, resolved against the authed API by the screen it opens. The
  * 404-not-403 rule covers a share revoked between the notification and the tap.
  */
+/** The plan this notification is about, if any: tapping it opens the plan
+ *  (a request opens its People, where it is answered). An id only, resolved
+ *  against the authed API, which 404s a plan the reader is no longer in. */
+export function notificationPlanId(n: TNotification): string | null {
+  const planId = n.payload.planId;
+  return n.type.startsWith("plan_") &&
+    n.type !== "plan_access_ended" &&
+    typeof planId === "string" &&
+    planId.length > 0
+    ? planId
+    : null;
+}
+
 export function notificationPlaceId(n: TNotification): string | null {
   const placeId = n.payload.placeId;
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;

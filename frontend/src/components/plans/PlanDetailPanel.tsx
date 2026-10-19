@@ -96,6 +96,7 @@ export default function PlanDetailPanel({
   onPlansChanged,
   onStartTripLog,
   myUserId,
+  initialView = "writeUp",
 }: {
   planId: string;
   onBack: () => void;
@@ -103,10 +104,11 @@ export default function PlanDetailPanel({
   onPlansChanged: () => void;
   onStartTripLog: (plan: TripPlanView) => void;
   myUserId: string | null;
+  initialView?: TripPlanPageView;
 }) {
   const toast = useToast();
   const { view, error, refetch } = usePlan(planId, toast.error);
-  const [tab, setTab] = useState<TripPlanPageView>("writeUp");
+  const [tab, setTab] = useState<TripPlanPageView>(initialView);
   const [editing, setEditing] = useState(false);
   const [sectionOpen, setSectionOpen] = useState<{ id: string | null } | null>(
     null,

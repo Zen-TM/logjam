@@ -31,6 +31,7 @@ import type {
 } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
+import type { TripPlanPageView } from "@logjam/shared";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
 import { PanelCloseContext } from "../../ui/Hero";
@@ -141,6 +142,7 @@ function SidebarPanel({
   wayDetail,
   plansPanel,
   planDetail,
+  onOpenPlan,
   drawPanel,
   measurePanel,
   currentUserId,
@@ -269,6 +271,7 @@ function SidebarPanel({
    *  badge reads it) and the open plan (the map will draw it). */
   plansPanel: ReactNode;
   planDetail: ReactNode;
+  onOpenPlan: (planId: string, view?: TripPlanPageView) => void;
   drawPanel: ReactNode;
   measurePanel: ReactNode;
   currentUserId: string | null;
@@ -486,6 +489,7 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
+            onOpenPlan={onOpenPlan}
           />
         )}
         {activePanel === "logs" && logsView === "stats" && (

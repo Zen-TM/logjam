@@ -19,8 +19,9 @@ import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
 import SignInTerrain from "./SignInTerrain";
 import useSignInArea from "./useSignInArea";
-import { FRIENDS, NSW_5M } from "@logjam/shared";
+import { FRIENDS, NSW_5M, TRIP_PLAN_JOIN } from "@logjam/shared";
 import { pendingFriendInvite } from "../pendingFriendInvite";
+import { pendingPlanInvite } from "../pendingPlanInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import {
@@ -400,6 +401,11 @@ function SignIn({
               {FRIENDS.copy.inviteSignIn}
             </p>
           )}
+          {pendingPlanInvite() && (
+            <p className={classes.successBanner} role="status">
+              {TRIP_PLAN_JOIN.copy.signIn}
+            </p>
+          )}
           <TextField
             label="Name"
             value={name}
@@ -498,6 +504,11 @@ function SignIn({
         {pendingFriendInvite() && (
           <p className={classes.successBanner} role="status">
             {FRIENDS.copy.inviteSignIn}
+          </p>
+        )}
+        {pendingPlanInvite() && (
+          <p className={classes.successBanner} role="status">
+            {TRIP_PLAN_JOIN.copy.signIn}
           </p>
         )}
         {resetSuccess && (

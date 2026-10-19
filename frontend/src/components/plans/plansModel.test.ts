@@ -12,6 +12,7 @@ import {
   addedBy,
   answeredForm,
   filesChargedTo,
+  joinAnswers,
   PLAN_FIELD_GROUPS,
   planPatch,
   planSummary,
@@ -407,5 +408,35 @@ describe("a request's answers", () => {
     } as unknown as TripPlanView;
     expect(answeredForm(plan, "carol")).toBe("contacts");
     expect(answeredForm(plan, "sue")).toBeNull();
+  });
+});
+
+describe("joining", () => {
+  const rules = {
+    id: "rules",
+    title: "Trip rules",
+    questions: TRIP_PLAN_FORM_PRESETS.rules.questions,
+    visibleTo: "leaders" as const,
+    updatedAt: "2026-10-19T00:00:00.000Z",
+  };
+
+  // Mutation: drop visibleTo or formUpdatedAt from the echo, and an answer
+  // follows a form that widened after it was shown.
+  it("echoes each form as it was shown", () => {
+    expect(joinAnswers([rules], { rules: { agree: true } })).toEqual({
+      value: {
+        rules: {
+          answers: { agree: true },
+          visibleTo: "leaders",
+          formUpdatedAt: "2026-10-19T00:00:00.000Z",
+        },
+      },
+    });
+  });
+
+  it("refuses with the parser's sentence when a required answer is missing", () => {
+    expect(joinAnswers([rules], {})).toEqual({
+      sentence: "Answer every question marked required.",
+    });
   });
 });

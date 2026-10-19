@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   NOTIFICATION_TYPES,
   notificationHaystack,
+  notificationKind,
   notificationLabel,
+  notificationPlanId,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -273,5 +275,28 @@ describe("plan notifications", () => {
       "Your request to join Wollangambe trip was turned down",
     );
     expect(ended("deleted")).toBe("Wollangambe trip was deleted");
+  });
+});
+
+describe("a plan notification", () => {
+  it("is a plan, wearing the plan's glyph and hue", () => {
+    for (const type of NOTIFICATION_TYPES.filter((t) => t.startsWith("plan_")))
+      expect(notificationKind(notification(type))).toBe("plan");
+  });
+
+  // Mutation: return the planId for plan_access_ended, and opening it lands
+  // on a 404 for a plan the reader is no longer in.
+  it("opens its plan, unless the plan is gone for its reader", () => {
+    expect(
+      notificationPlanId(notification("plan_join_request", { planId: "p" })),
+    ).toBe("p");
+    expect(
+      notificationPlanId(
+        notification("plan_access_ended", { planId: "p", reason: "removed" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationPlanId(notification("place_shared", { planId: "p" })),
+    ).toBeNull();
   });
 });

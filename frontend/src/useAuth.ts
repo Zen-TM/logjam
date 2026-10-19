@@ -9,6 +9,7 @@ import {
   resetPassword as amplifyResetPassword,
   confirmResetPassword as amplifyConfirmResetPassword,
 } from "aws-amplify/auth";
+import { pendingPlanInvite } from "./pendingPlanInvite";
 import { apiFetch, setSessionExpiredHandler } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
@@ -20,6 +21,11 @@ import { clearTripDraft } from "./tripDraft";
 async function ensureUserExists() {
   await apiFetch("/users/me");
 }
+
+/** Someone opening a plan invite has usually never signed up: the screen
+ *  opens on sign up for them (design §7.6), sign in for everyone else. */
+const firstScreen = (): AuthState =>
+  pendingPlanInvite() ? "signUp" : "signIn";
 
 export type AuthState =
   | "loading"
@@ -48,10 +54,10 @@ export function useAuth() {
         if (session.tokens?.idToken) {
           setState("authenticated");
         } else {
-          setState("signIn");
+          setState(firstScreen());
         }
       })
-      .catch(() => setState("signIn"));
+      .catch(() => setState(firstScreen()));
   }, []);
 
   // Listen for mid-session token-refresh failures from apiFetch. When the

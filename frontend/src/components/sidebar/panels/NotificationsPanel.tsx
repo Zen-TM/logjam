@@ -32,6 +32,7 @@ import {
   notificationKind,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanId,
   notificationsTruncated,
   notificationVerb,
   selectionCountLabel,
@@ -91,6 +92,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   topo: "lidar",
   export: "export",
   geoPdf: "geoPdf",
+  plan: "plan",
   problem: "warning",
 };
 
@@ -104,6 +106,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
   geoPdf: "var(--hue-geo-pdf)",
+  plan: "var(--hue-plan)",
   problem: "var(--color-warning)",
 };
 
@@ -152,6 +155,7 @@ function NotificationsPanel({
   setActivePanel,
   onMapsViewChange,
   onTopoFlyTarget,
+  onOpenPlan,
 }: {
   notifications: TNotification[];
   notificationsLoaded: boolean;
@@ -166,6 +170,7 @@ function NotificationsPanel({
   setActivePanel: (panel: PanelId | null) => void;
   onMapsViewChange: (view: MapsView) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  onOpenPlan: (planId: string, view?: "people") => void;
 }) {
   const toast = useToast();
   const dayIdPrefix = useId();
@@ -356,6 +361,10 @@ function NotificationsPanel({
       setSelectedPlaceID(placeId);
       setActivePanel("place-detail");
     }
+    // A plan opens; a request opens it where it is answered.
+    const planId = notificationPlanId(n);
+    if (planId)
+      onOpenPlan(planId, n.type === "plan_join_request" ? "people" : undefined);
   };
 
   // Following a notification through to its subject reads it, as opening does.

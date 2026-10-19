@@ -7,9 +7,11 @@ import { ThemePreferencesProvider } from "./themePreferences";
 import { ToastProvider } from "./components/feedback/ToastProvider";
 import { RootErrorBoundary } from "./components/feedback/RootErrorBoundary";
 import { captureFriendInvite } from "./pendingFriendInvite";
+import { capturePlanInvite } from "./pendingPlanInvite";
 
 // Before anything renders or signs in: see pendingFriendInvite.ts.
 captureFriendInvite();
+capturePlanInvite();
 
 if (import.meta.env.VITE_AUTH_MODE !== "fake") {
   Amplify.configure({

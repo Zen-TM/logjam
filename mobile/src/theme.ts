@@ -397,6 +397,8 @@ const notificationHues = (
     export: assetHue.import,
     /** GeoPDFs — as in Saved. */
     geoPdf: assetHue.geoPdf,
+    /** Trip plans — the plan's own hue, as on the Plans list. */
+    plan: assetHue.plan,
     /** A file a friend sent you — the waterhole blue an accepted copy wears in
      *  Saved's Imports, because that is where accepting it puts it. */
     file: assetHue.import,

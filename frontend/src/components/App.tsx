@@ -98,6 +98,8 @@ import type { WayVerbId } from "./sidebar/panels/wayActions";
 import FriendInviteDialog from "./dialogs/FriendInviteDialog";
 import PlansPanel from "./plans/PlansPanel";
 import PlanDetailPanel from "./plans/PlanDetailPanel";
+import PlanInvitedPage from "./plans/PlanInvitedPage";
+import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
 import { usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -111,6 +113,7 @@ import {
   MAP_MEASURE_ICON,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
+  type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -633,6 +636,18 @@ function App() {
     }
     setActivePanel(null);
   }, [activePanel]);
+
+  // The view a plan opens on: a join request opens on People, where it is
+  // answered.
+  const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
+  const openPlan = useCallback(
+    (planId: string, view: TripPlanPageView = "writeUp") => {
+      setSelectedPlanId(planId);
+      setPlanView(view);
+      setActivePanel("plan-detail");
+    },
+    [],
+  );
 
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
@@ -1703,16 +1718,36 @@ function App() {
               loaded={plansLoaded}
               error={plansError}
               onRefetch={refetchPlans}
-              onOpenPlan={(id) => {
-                setSelectedPlanId(id);
-                setActivePanel("plan-detail");
-              }}
+              onOpenPlan={openPlan}
             />
           }
+          onOpenPlan={(id, view) => {
+            refetchPlans();
+            openPlan(id, view);
+          }}
           planDetail={
-            selectedPlanId ? (
+            selectedPlanId &&
+            plans.find((plan) => plan.id === selectedPlanId)?.status ===
+              "invited" ? (
+              <PlanInvitedPage
+                key={selectedPlanId}
+                planId={selectedPlanId}
+                onBack={() => {
+                  setSelectedPlanId(null);
+                  setActivePanel("plans");
+                }}
+                // Now a member: the list's refetch turns this into the plan.
+                onJoined={refetchPlans}
+                onDeclined={() => {
+                  refetchPlans();
+                  setSelectedPlanId(null);
+                  setActivePanel("plans");
+                }}
+              />
+            ) : selectedPlanId ? (
               <PlanDetailPanel
                 myUserId={currentUser?.id ?? null}
+                initialView={planView}
                 key={selectedPlanId}
                 planId={selectedPlanId}
                 onBack={() => {
@@ -2023,6 +2058,17 @@ function App() {
         mapView={mapCenter}
       />
 
+      <PlanInviteLinkDialog
+        enabled={loadsUserData}
+        onOpenPlan={(id) => {
+          refetchPlans();
+          openPlan(id);
+        }}
+        onShowPlans={() => {
+          refetchPlans();
+          handlePanelChange("plans");
+        }}
+      />
       <FriendInviteDialog
         enabled={loadsUserData}
         onFriended={() => {
