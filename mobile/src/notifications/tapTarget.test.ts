@@ -12,14 +12,22 @@ describe("notificationTapTarget", () => {
     ).toEqual({ kind: "place", placeId: "c-1" });
   });
 
-  // Mutation: drop the plan branch, and every plan push lands on the inbox.
-  it("opens the plan a plan push names, and the list for an invite", () => {
-    expect(
-      notificationTapTarget({
-        data: { type: "plan_join_request", planId: "p-1" },
-        routeEditing: false,
-      }),
-    ).toEqual({ kind: "plan", planId: "p-1" });
+  // Mutation: drop or misspell a type in PLAN_OPENING_TYPES, and that push
+  // lands on the inbox.
+  it.each(["plan_join_request", "plan_join_approved", "plan_member_joined"])(
+    "opens the plan a %s push names",
+    (type) => {
+      expect(
+        notificationTapTarget({
+          data: { type, planId: "p-1" },
+          routeEditing: false,
+        }),
+      ).toEqual({ kind: "plan", planId: "p-1" });
+    },
+  );
+
+  // Mutation: drop the invite branch.
+  it("opens the list for an invite", () => {
     expect(
       notificationTapTarget({
         data: { type: "plan_invited", planId: "p-1" },

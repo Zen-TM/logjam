@@ -1,5 +1,5 @@
-// Logjam GPS only: a plan kept on the phone and read without signal (design
-// §8). Logjam Web is used at home and reads a plan live, so it has no copy to
+// Logjam GPS only: a plan kept on the phone and read without signal
+// (mobile/DESIGN.md §8). Logjam Web is used at home and reads a plan live, so it has no copy to
 // age, mark changed or download (shared/DESIGN.md §14).
 import type { DateOnly, TripPlanSummary } from "../tripPlans.js";
 import { tripPlanBucket, tripPlansBadgeCount } from "./plans.js";
@@ -10,6 +10,8 @@ export const TRIP_PLAN_OFFLINE = {
   refresh: "Refresh",
   notDownloaded:
     "Not downloaded yet. Open it once with signal to read it here.",
+  // The plan went while this phone held it, or a stale row or push opened it.
+  gone: "You're no longer in this plan, or it was deleted.",
   noPlansOffline: "Open Plans once with signal to read them here.",
 } as const;
 

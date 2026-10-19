@@ -1,8 +1,9 @@
 // Plans: "what trips am I getting ready for?" (`TRIP_PLANS_LIST`).
 //
 // Cache-first, like the inbox: the last GET /plans renders at once, and the
-// screen polls on opening and on pull to refresh (design §2.7). A failed poll
-// with a cached list is silent; offline is the hero's pill.
+// screen polls on opening and on pull to refresh (`plansCache.ts`). A failed
+// poll with a cached list is silent; offline is the hero's pill. Which state
+// draws is `plansListView`'s.
 import {
   Fragment,
   useCallback,
@@ -41,6 +42,7 @@ import {
   LoadingState,
   Row,
   StatusPill,
+  SyncStatusPills,
   todayDateKey,
   type ChipOption,
 } from "../ui";
@@ -51,6 +53,7 @@ import {
   readPlansList,
   type CachedPlanStamp,
 } from "./plansCache";
+import { plansListView } from "./planViews";
 
 const copy = TRIP_PLANS_LIST.copy;
 const BUCKETS: TripPlanBucket[] = ["upcoming", "past", "archived"];
@@ -64,7 +67,8 @@ const BUCKET_LABEL: Record<TripPlanBucket, string> = {
 export function usePlansList(blocked: boolean) {
   const [plans, setPlans] = useState<TripPlanSummary[] | null>(null);
   const [stamps, setStamps] = useState<Map<string, CachedPlanStamp>>(new Map());
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [settled, setSettled] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const reread = useCallback(async () => {
@@ -73,7 +77,9 @@ export function usePlansList(blocked: boolean) {
       readCachedPlanStamps(),
     ]);
     setStamps(nextStamps);
-    if (list) setPlans(list.plans);
+    // An emptied cache (a wipe) takes the list off screen with it.
+    setPlans(list ? list.plans : null);
+    if (list) setFailure(null);
     return list;
   }, []);
 
@@ -81,17 +87,14 @@ export function usePlansList(blocked: boolean) {
     setRefreshing(true);
     try {
       await pollPlans();
-      setError(null);
+      setFailure(null);
     } catch (err) {
-      const cached = await reread().catch(() => null);
-      if (!cached) {
-        setError(messageFromError(err, copy.loadFailed));
-        setPlans([]);
-      }
+      setFailure(messageFromError(err, copy.loadFailed));
     } finally {
       setRefreshing(false);
+      setSettled(true);
     }
-  }, [reread]);
+  }, []);
 
   useEffect(() => {
     if (blocked) return;
@@ -102,7 +105,7 @@ export function usePlansList(blocked: boolean) {
     return onMirrorChanged(() => void reread().catch(console.error));
   }, [blocked, poll, reread]);
 
-  return { plans, stamps, error, refreshing, poll };
+  return { plans, stamps, failure, settled, refreshing, poll };
 }
 
 export function PlansScreen({
@@ -118,9 +121,10 @@ export function PlansScreen({
   const { accountState } = useAccountState();
   const block = capabilityScreenBlock("plans", accountState);
   const online = useConnectivity() === "online";
-  const { plans, stamps, error, refreshing, poll } = usePlansList(
+  const { plans, stamps, failure, settled, refreshing, poll } = usePlansList(
     block !== null,
   );
+  const shown = plansListView({ plans, failure, settled, online });
   const [bucket, setBucket] = useState<TripPlanBucket>("upcoming");
   const today = todayDateKey();
 
@@ -156,7 +160,7 @@ export function PlansScreen({
           titleNumberOfLines={2}
           subtitle={tripPlanRowSubtitle(item)}
           // ponytail: an invite or a request opens nothing yet; the join
-          // screen comes with the plan's writes.
+          // screen needs the plan forms (TRIP_PLAN_FORMS, #548).
           onPress={
             item.status === "active" ? () => onOpenPlan(item) : undefined
           }
@@ -201,15 +205,17 @@ export function PlansScreen({
     hero: (
       <Hero
         eyebrow={TRIP_PLANS_LIST.title}
-        title={plans ? tripPlansHeroTitle(plans, today) : copy.loading}
+        title={
+          shown.kind === "list"
+            ? tripPlansHeroTitle(shown.plans, today)
+            : shown.kind === "loading"
+              ? copy.loading
+              : TRIP_PLANS_LIST.title
+        }
         titleNumberOfLines={2}
         onBack={onBack}
       >
-        {online ? null : (
-          <View style={styles.pills}>
-            <StatusPill label="Offline" tone="muted" icon="offline" />
-          </View>
-        )}
+        <SyncStatusPills online={online} pendingCount={0} />
       </Hero>
     ),
     buckets: (
@@ -223,10 +229,12 @@ export function PlansScreen({
       </View>
     ),
     list:
-      plans === null ? (
+      shown.kind === "loading" ? (
         <LoadingState label={copy.loading} />
-      ) : error ? (
-        <ErrorState message={error} onRetry={() => void poll()} />
+      ) : shown.kind === "neverFetched" ? (
+        <EmptyState icon="offline" title={TRIP_PLAN_OFFLINE.noPlansOffline} />
+      ) : shown.kind === "failed" ? (
+        <ErrorState message={shown.message} onRetry={() => void poll()} />
       ) : (
         <FlatList
           style={styles.list}
@@ -245,7 +253,7 @@ export function PlansScreen({
             <EmptyState
               icon={empty.icon}
               title={empty.title}
-              hint={online ? empty.body : TRIP_PLAN_OFFLINE.noPlansOffline}
+              hint={empty.body}
             />
           }
         />
