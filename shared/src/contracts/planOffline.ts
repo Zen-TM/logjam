@@ -23,6 +23,8 @@ export const TRIP_PLAN_OFFLINE = {
   downloadDone: "Downloaded for the trip.",
   // It runs only while Logjam GPS is on screen (ADR 0013).
   downloadKeepOpen: "Keep Logjam GPS open until it finishes.",
+  // Map data is the existing region download, framed on the plan's items.
+  downloadMap: "Download the map for this area too",
 } as const;
 
 /**
