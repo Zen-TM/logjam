@@ -8,7 +8,16 @@
 export type NotificationTapTarget =
   | { kind: "blocked" }
   | { kind: "place"; placeId: string }
+  | { kind: "plan"; planId: string }
+  | { kind: "plans" }
   | { kind: "inbox" };
+
+/** The plan pushes about a plan the recipient is in, so it opens. */
+const PLAN_OPENING_TYPES = new Set([
+  "plan_join_request",
+  "plan_join_approved",
+  "plan_member_joined",
+]);
 
 /**
  * ORDER IS THE POINT. Guard: `src/notifications/tapTarget.test.ts`. A route
@@ -35,5 +44,18 @@ export function notificationTapTarget(args: {
   const placeId = (args.data as { placeId?: unknown } | null | undefined)
     ?.placeId;
   if (typeof placeId === "string") return { kind: "place", placeId };
+  // A plan push opens that plan, except an invite, which waits on the Plans
+  // list, and a plan the recipient lost, which only the inbox still names.
+  const { type, planId } = (args.data ?? {}) as {
+    type?: unknown;
+    planId?: unknown;
+  };
+  if (type === "plan_invited") return { kind: "plans" };
+  if (
+    typeof type === "string" &&
+    PLAN_OPENING_TYPES.has(type) &&
+    typeof planId === "string"
+  )
+    return { kind: "plan", planId };
   return { kind: "inbox" };
 }

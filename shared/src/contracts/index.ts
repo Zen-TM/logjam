@@ -44,6 +44,7 @@ export * from "./wayVerbs.js";
 export * from "./weather.js";
 export * from "./plans.js";
 export * from "./planVerbs.js";
+export * from "./planOffline.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */
 export const SCREEN_CONTRACTS: readonly ScreenContract[] = [

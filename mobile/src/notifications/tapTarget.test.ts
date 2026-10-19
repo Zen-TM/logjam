@@ -12,7 +12,24 @@ describe("notificationTapTarget", () => {
     ).toEqual({ kind: "place", placeId: "c-1" });
   });
 
+  // Mutation: drop the plan branch, and every plan push lands on the inbox.
+  it("opens the plan a plan push names, and the list for an invite", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_join_request", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "plan", planId: "p-1" });
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_invited", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "plans" });
+  });
+
   it.each([
+    ["a plan the recipient lost", { type: "plan_access_ended", planId: "p-1" }],
     ["no id at all", { type: "friendRequest" }],
     ["an id that is not a string", { placeId: 7 }],
     ["a null id", { placeId: null }],
