@@ -32,7 +32,8 @@ import {
   notificationKind,
   notificationLabel,
   notificationPlaceId,
-  notificationPlanId,
+  notificationPlanTarget,
+  type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
   selectionCountLabel,
@@ -170,7 +171,7 @@ function NotificationsPanel({
   setActivePanel: (panel: PanelId | null) => void;
   onMapsViewChange: (view: MapsView) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
-  onOpenPlan: (planId: string, view?: "people") => void;
+  onOpenPlan: (target: NotificationPlanTarget) => void;
 }) {
   const toast = useToast();
   const dayIdPrefix = useId();
@@ -361,10 +362,8 @@ function NotificationsPanel({
       setSelectedPlaceID(placeId);
       setActivePanel("place-detail");
     }
-    // A plan opens; a request opens it where it is answered.
-    const planId = notificationPlanId(n);
-    if (planId)
-      onOpenPlan(planId, n.type === "plan_join_request" ? "people" : undefined);
+    const plan = notificationPlanTarget(n);
+    if (plan) onOpenPlan(plan);
   };
 
   // Following a notification through to its subject reads it, as opening does.
@@ -375,6 +374,7 @@ function NotificationsPanel({
       setActivePanel("place-detail");
       return;
     }
+    if (destination.kind === "plan") return onOpenPlan(destination.target);
     if (destination.mapsView) onMapsViewChange(destination.mapsView);
     setActivePanel(destination.panel);
     // Opening a topo fits the map to it, from here as from its own row: the map

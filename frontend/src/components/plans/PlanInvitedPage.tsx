@@ -1,6 +1,6 @@
-// A plan a leader invited the user to by username (design §7.6): what they
+// A plan a leader invited the user to by username: what they
 // would join (the write-up, who's going, the forms they answer first) with
-// Join and Decline. Joining is theirs to choose (O-14), so nothing happens
+// Join and Decline. Joining is theirs to choose, so nothing happens
 // until they press Join.
 import { useEffect, useState } from "react";
 import {
@@ -8,6 +8,7 @@ import {
   TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
   tripPlanDatesLabel,
+  tripPlanVisibilityLine,
   type TripPlanInvitedPreview,
 } from "@logjam/shared";
 import {
@@ -92,6 +93,10 @@ export default function PlanInvitedPage({
       </div>
     );
 
+  // A heading needs a second group to divide from: the write-up or the forms.
+  const headed =
+    preview.sections.length > 0 || preview.requiredForms.length > 0;
+
   return (
     <div className={classes.root}>
       <Hero
@@ -128,8 +133,18 @@ export default function PlanInvitedPage({
             {section.body && <p className={classes.body}>{section.body}</p>}
           </section>
         ))}
-        {/* A heading needs a second group to divide from: the write-up. */}
-        {preview.sections.length > 0 && (
+        {/* What the notice's "Answer these" means, before Join asks. */}
+        {preview.requiredForms.length > 0 && headed && (
+          <SectionHeader title={TRIP_PLAN_PAGE.copy.viewForms} />
+        )}
+        {preview.requiredForms.map((form) => (
+          <Row
+            key={form.id}
+            title={form.title}
+            subtitle={tripPlanVisibilityLine(form.visibleTo)}
+          />
+        ))}
+        {headed && (
           <SectionHeader
             title={TRIP_PLAN_PAGE.copy.peopleGoing}
             count={preview.members.length}

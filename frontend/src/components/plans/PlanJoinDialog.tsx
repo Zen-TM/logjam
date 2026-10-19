@@ -1,14 +1,17 @@
-// Joining a plan (design §7.6), from a link or a leader's username invite:
+// Joining a plan, from a link or a leader's username invite:
 // the name, the dates and who leads it, then the forms required to join, each
 // with who sees its answers. No forms, and it is just the confirm: joining is
 // the user's choice, so it still takes the one press. A 409 means a form
 // moved since it was shown: the forms are fetched again and what was typed
-// stays. Drawn from `TRIP_PLAN_JOIN`.
+// is fitted to them as they now are (`fitAnswerDraft`). Drawn from
+// `TRIP_PLAN_JOIN`.
 import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
+  fitAnswerDraft,
   TRIP_PLAN_JOIN,
   tripPlanDatesLabel,
+  tripPlanJoinTitle,
   type DateOnly,
   type SectionKeysOn,
   type TripPlanAnswerDraft as AnswerDraft,
@@ -46,6 +49,20 @@ export default function PlanJoinDialog({
 }) {
   const formId = useId();
   const [drafts, setDrafts] = useState<Record<string, AnswerDraft>>({});
+  // The forms as the drafts were last fitted to them.
+  const shownAs = plan.requiredForms.map((form) => form.updatedAt).join();
+  const [fittedTo, setFittedTo] = useState(shownAs);
+  if (shownAs !== fittedTo) {
+    setFittedTo(shownAs);
+    setDrafts(
+      Object.fromEntries(
+        plan.requiredForms.map((form) => [
+          form.id,
+          fitAnswerDraft(form.questions, drafts[form.id] ?? {}),
+        ]),
+      ),
+    );
+  }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -109,7 +126,7 @@ export default function PlanJoinDialog({
     <Dialog
       open
       size={plan.requiredForms.length > 0 ? "large" : "small"}
-      title={`Join ${plan.name}`}
+      title={tripPlanJoinTitle(plan.name)}
       onClose={onClose}
       dismissible={!busy}
       footer={

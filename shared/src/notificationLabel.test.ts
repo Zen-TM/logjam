@@ -4,7 +4,7 @@ import {
   notificationHaystack,
   notificationKind,
   notificationLabel,
-  notificationPlanId,
+  notificationPlanTarget,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -284,19 +284,31 @@ describe("a plan notification", () => {
       expect(notificationKind(notification(type))).toBe("plan");
   });
 
-  // Mutation: return the planId for plan_access_ended, and opening it lands
-  // on a 404 for a plan the reader is no longer in.
-  it("opens its plan, unless the plan is gone for its reader", () => {
+  // Mutations: return a target for plan_access_ended, and opening it lands
+  // on a 404 for a plan the reader is no longer in; drop the view, and a
+  // request opens away from where it is answered; drop `invited`, and an
+  // invite opens the member's page, which 404s for someone invited.
+  it("opens its plan where the reader acts on it, unless the plan is gone for them", () => {
     expect(
-      notificationPlanId(notification("plan_join_request", { planId: "p" })),
-    ).toBe("p");
+      notificationPlanTarget(
+        notification("plan_join_request", { planId: "p" }),
+      ),
+    ).toEqual({ planId: "p", view: "people", invited: false });
     expect(
-      notificationPlanId(
+      notificationPlanTarget(notification("plan_invited", { planId: "p" })),
+    ).toEqual({ planId: "p", invited: true });
+    expect(
+      notificationPlanTarget(
+        notification("plan_join_approved", { planId: "p" }),
+      ),
+    ).toEqual({ planId: "p", invited: false });
+    expect(
+      notificationPlanTarget(
         notification("plan_access_ended", { planId: "p", reason: "removed" }),
       ),
     ).toBeNull();
     expect(
-      notificationPlanId(notification("place_shared", { planId: "p" })),
+      notificationPlanTarget(notification("place_shared", { planId: "p" })),
     ).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import {
   answeredForm,
   filesChargedTo,
   joinAnswers,
+  opensPreview,
   PLAN_FIELD_GROUPS,
   planPatch,
   planSummary,
@@ -438,5 +439,16 @@ describe("joining", () => {
     expect(joinAnswers([rules], {})).toEqual({
       sentence: "Answer every question marked required.",
     });
+  });
+});
+
+describe("which page a plan opens on", () => {
+  // Mutation: decide from the list alone, and an invite that arrived while
+  // Logjam Web was open opens the member's page, which 404s.
+  it("opens an invite's preview though the list has not heard of it", () => {
+    expect(opensPreview(true, undefined)).toBe(true);
+    expect(opensPreview(true, "invited")).toBe(true);
+    expect(opensPreview(true, "active")).toBe(false);
+    expect(opensPreview(false, "invited")).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   TRIP_PLAN_FORMS,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   tripPlanInPlanNow,
   TRIP_PLANS_LIST,
@@ -16,9 +17,16 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
-import { archivePlan, inviteMember, setMemberRole } from "../../plansApi";
+import {
+  archivePlan,
+  inviteMember,
+  previewInviteLink,
+  setMemberRole,
+} from "../../plansApi";
+import { planInvite } from "../../pendingInvite";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
+import PlanInviteLinkDialog from "./PlanInviteLinkDialog";
 import PlanInvitePage from "./PlanInvitePage";
 import PlanPeople from "./PlanPeople";
 import PlanSectionDialog from "./PlanSectionDialog";
@@ -71,6 +79,7 @@ vi.mock("../../plansApi", async (importOriginal) => ({
   inviteMember: vi.fn(),
   setMemberRole: vi.fn(async () => {}),
   getInviteLinks: vi.fn(async () => []),
+  previewInviteLink: vi.fn(),
 }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
@@ -391,5 +400,33 @@ describe("a leader stepping down on their own row", () => {
     await waitFor(() =>
       expect(setMemberRole).toHaveBeenCalledWith("p1", "u1", "member"),
     );
+  });
+});
+
+describe("a plan link opened by someone already invited", () => {
+  // Mutation: send an invited preview on to the join dialog, and they are
+  // told "Ask to join" but redeeming joins them at once, with no Decline.
+  it("opens the plan's preview, with no Ask to join", async () => {
+    vi.mocked(previewInviteLink).mockResolvedValue({
+      planId: "p1",
+      name: "Wollangambe trip",
+      startDate: null,
+      endDate: null,
+      leader: { id: "u1", username: "alice" },
+      requiredForms: [],
+      membership: "invited",
+    } as never);
+    window.history.replaceState({}, "", `/#plan-invite=${"c".repeat(43)}`);
+    planInvite.capture();
+    const onOpenPlan = vi.fn();
+    render(
+      <PlanInviteLinkDialog
+        enabled
+        onOpenPlan={onOpenPlan}
+        onShowPlans={() => {}}
+      />,
+    );
+    await waitFor(() => expect(onOpenPlan).toHaveBeenCalledWith("p1", true));
+    expect(screen.queryByText(TRIP_PLAN_JOIN.copy.askToJoin)).toBeNull();
   });
 });

@@ -1,8 +1,10 @@
-// Answers a plan invite link once its opener is signed in (design §7.6), the
+// Answers a plan invite link once its opener is signed in, the
 // `FriendInviteDialog` pattern: the pending token is cleared first, then
-// previewed. Already in: the plan opens. Already asked: the list opens on the
-// waiting row. Otherwise the join dialog asks, and nothing is spent until
-// they press Ask to join.
+// previewed. Already in: the plan opens. Invited by username: its preview
+// opens, with Join and Decline (redeeming the link would join them at once,
+// though the dialog says "Ask to join"). Already asked: the list opens on
+// the waiting row. Otherwise the join dialog asks, and nothing is spent
+// until they press Ask to join.
 import { useEffect, useState } from "react";
 import {
   TRIP_PLAN_JOIN,
@@ -12,10 +14,7 @@ import {
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { previewInviteLink, redeemInviteLink } from "../../plansApi";
-import {
-  clearPendingPlanInvite,
-  pendingPlanInvite,
-} from "../../pendingPlanInvite";
+import { planInvite } from "../../pendingInvite";
 import PlanJoinDialog from "./PlanJoinDialog";
 
 export default function PlanInviteLinkDialog({
@@ -24,7 +23,7 @@ export default function PlanInviteLinkDialog({
   onShowPlans,
 }: {
   enabled: boolean;
-  onOpenPlan: (planId: string) => void;
+  onOpenPlan: (planId: string, invited: boolean) => void;
   onShowPlans: () => void;
 }) {
   const toast = useToast();
@@ -36,7 +35,9 @@ export default function PlanInviteLinkDialog({
   const ask = (token: string) =>
     previewInviteLink(token)
       .then((preview) => {
-        if (preview.membership === "active") onOpenPlan(preview.planId);
+        if (preview.membership === "active") onOpenPlan(preview.planId, false);
+        else if (preview.membership === "invited")
+          onOpenPlan(preview.planId, true);
         else if (preview.membership === "requested") onShowPlans();
         else setInvite({ token, preview });
       })
@@ -47,11 +48,11 @@ export default function PlanInviteLinkDialog({
 
   useEffect(() => {
     if (!enabled) return;
-    const token = pendingPlanInvite();
+    const token = planInvite.pending();
     if (!token) return;
     // Cleared before the answer, so a link that fails is not asked about
     // again on every reload.
-    clearPendingPlanInvite();
+    planInvite.clear();
     void ask(token);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
@@ -67,7 +68,7 @@ export default function PlanInviteLinkDialog({
       onJoin={async (answers) => {
         const result = await redeemInviteLink(token, answers);
         setInvite(null);
-        if (result.status === "active") onOpenPlan(result.planId);
+        if (result.status === "active") onOpenPlan(result.planId, false);
         else {
           toast.success(tripPlanAskedMessage(result.waitingFor.username));
           onShowPlans();

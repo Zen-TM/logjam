@@ -20,6 +20,7 @@ import type {
   TripPlanFormView,
   TripPlanJoinAnswers,
   TripPlanJoinForm,
+  TripPlanMemberStatus,
   TripPlanPatch,
   TripPlanSectionPatch,
   TripPlanView,
@@ -237,6 +238,17 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
       .filter((form) => parts.presets.includes(form.preset))
       .flatMap((form) => answerTable(form, going)),
   };
+}
+
+/** Whether a plan opens as an invite's preview: as its opener said, unless
+ *  the plans list since has the reader in it (they joined meanwhile). Not
+ *  from the list alone: an invite that arrived while Logjam Web was open is
+ *  not in it yet, and the member's page 404s for someone invited. */
+export function opensPreview(
+  invited: boolean,
+  listed: TripPlanMemberStatus | undefined,
+): boolean {
+  return invited && listed !== "active";
 }
 
 /** The first form a person answered, for a leader reading their request. */

@@ -51,6 +51,23 @@ describe("inboxDestination", () => {
     ).toBeNull();
   });
 
+  // Mutation: drop the plan case, and a plan notification's ⋯ has nowhere
+  // to go though its row opens the plan.
+  it("opens a plan where its notification is acted on", () => {
+    expect(
+      inboxDestination(notification("plan_join_request", { planId: "p" })),
+    ).toEqual({
+      kind: "plan",
+      label: "Open plan",
+      target: { planId: "p", view: "people", invited: false },
+    });
+    expect(
+      inboxDestination(
+        notification("plan_access_ended", { planId: "p", reason: "left" }),
+      ),
+    ).toBeNull();
+  });
+
   it("goes nowhere for a file send, which the row itself answers", () => {
     expect(
       inboxDestination(notification("file_sent", { fileSendId: "f1" })),

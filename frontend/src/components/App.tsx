@@ -100,6 +100,7 @@ import PlansPanel from "./plans/PlansPanel";
 import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
+import { opensPreview } from "./plans/plansModel";
 import { usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -637,13 +638,16 @@ function App() {
     setActivePanel(null);
   }, [activePanel]);
 
-  // The view a plan opens on: a join request opens on People, where it is
-  // answered.
+  // The view a plan opens on (a join request opens on People, where it is
+  // answered), and whether it opens as an invite's preview: said by whoever
+  // opens it, since the plans list may not know of an invite yet.
   const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
+  const [planInvited, setPlanInvited] = useState(false);
   const openPlan = useCallback(
-    (planId: string, view: TripPlanPageView = "writeUp") => {
+    (planId: string, view: TripPlanPageView = "writeUp", invited = false) => {
       setSelectedPlanId(planId);
       setPlanView(view);
+      setPlanInvited(invited);
       setActivePanel("plan-detail");
     },
     [],
@@ -1718,17 +1722,19 @@ function App() {
               loaded={plansLoaded}
               error={plansError}
               onRefetch={refetchPlans}
-              onOpenPlan={openPlan}
+              onOpenPlan={(id, invited) => openPlan(id, "writeUp", invited)}
             />
           }
-          onOpenPlan={(id, view) => {
+          onOpenPlan={(target) => {
             refetchPlans();
-            openPlan(id, view);
+            openPlan(target.planId, target.view, target.invited);
           }}
           planDetail={
             selectedPlanId &&
-            plans.find((plan) => plan.id === selectedPlanId)?.status ===
-              "invited" ? (
+            opensPreview(
+              planInvited,
+              plans.find((plan) => plan.id === selectedPlanId)?.status,
+            ) ? (
               <PlanInvitedPage
                 key={selectedPlanId}
                 planId={selectedPlanId}
@@ -1736,8 +1742,10 @@ function App() {
                   setSelectedPlanId(null);
                   setActivePanel("plans");
                 }}
-                // Now a member: the list's refetch turns this into the plan.
-                onJoined={refetchPlans}
+                onJoined={() => {
+                  refetchPlans();
+                  setPlanInvited(false);
+                }}
                 onDeclined={() => {
                   refetchPlans();
                   setSelectedPlanId(null);
@@ -2060,9 +2068,9 @@ function App() {
 
       <PlanInviteLinkDialog
         enabled={loadsUserData}
-        onOpenPlan={(id) => {
+        onOpenPlan={(id, invited) => {
           refetchPlans();
-          openPlan(id);
+          openPlan(id, "writeUp", invited);
         }}
         onShowPlans={() => {
           refetchPlans();

@@ -269,22 +269,36 @@ export function notificationKind(n: TNotification): NotificationKind {
  * PRIVACY: an id, resolved against the authed API by the screen it opens. The
  * 404-not-403 rule covers a share revoked between the notification and the tap.
  */
-/** The plan this notification is about, if any: tapping it opens the plan
- *  (a request opens its People, where it is answered). An id only, resolved
- *  against the authed API, which 404s a plan the reader is no longer in. */
-export function notificationPlanId(n: TNotification): string | null {
-  const planId = n.payload.planId;
-  return n.type.startsWith("plan_") &&
-    n.type !== "plan_access_ended" &&
-    typeof planId === "string" &&
-    planId.length > 0
-    ? planId
-    : null;
-}
-
 export function notificationPlaceId(n: TNotification): string | null {
   const placeId = n.payload.placeId;
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
+}
+
+/** Where a plan notification opens: its plan, on People for a join request
+ *  (where it is answered), and as a preview for an invite (the reader is not
+ *  in the plan yet). */
+export type NotificationPlanTarget = {
+  planId: string;
+  view?: "people";
+  invited: boolean;
+};
+
+/** The plan this notification is about, if any. An id only, resolved
+ *  against the authed API, which 404s a plan the reader is no longer in. */
+export function notificationPlanTarget(
+  n: TNotification,
+): NotificationPlanTarget | null {
+  const planId = n.payload.planId;
+  if (
+    !n.type.startsWith("plan_") ||
+    n.type === "plan_access_ended" ||
+    typeof planId !== "string" ||
+    planId.length === 0
+  )
+    return null;
+  return n.type === "plan_join_request"
+    ? { planId, view: "people", invited: false }
+    : { planId, invited: n.type === "plan_invited" };
 }
 
 // ── The list: its cap, order and day grouping ────────────────────────────────

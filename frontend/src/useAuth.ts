@@ -9,7 +9,7 @@ import {
   resetPassword as amplifyResetPassword,
   confirmResetPassword as amplifyConfirmResetPassword,
 } from "aws-amplify/auth";
-import { pendingPlanInvite } from "./pendingPlanInvite";
+import { friendInvite, planInvite } from "./pendingInvite";
 import { apiFetch, setSessionExpiredHandler } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
@@ -23,9 +23,9 @@ async function ensureUserExists() {
 }
 
 /** Someone opening a plan invite has usually never signed up: the screen
- *  opens on sign up for them (design §7.6), sign in for everyone else. */
+ *  opens on sign up for them, sign in for everyone else. */
 const firstScreen = (): AuthState =>
-  pendingPlanInvite() ? "signUp" : "signIn";
+  planInvite.pending() ? "signUp" : "signIn";
 
 export type AuthState =
   | "loading"
@@ -219,6 +219,10 @@ export function useAuth() {
     // root AGENTS.md). Cleared before the network call so a signOut failure
     // can't strand it.
     clearTripDraft();
+    // An invite waiting in this tab was for whoever opened its link; the
+    // next account to sign in here must not be handed it.
+    friendInvite.clear();
+    planInvite.clear();
     // amplifySignOut can reject (storage error, network hiccup during global
     // revoke, an Amplify internal error) — without the try/catch, the
     // rejection propagates into an onClick handler that ignores promises, so
