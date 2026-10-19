@@ -84,6 +84,7 @@ export default function PlansPanel({
     try {
       await leavePlan(plan.id);
       toast.success(declining ? copy.declined : copy.withdrawn);
+      onRefetch();
     } catch (err) {
       console.error(err);
       toast.error(
@@ -94,7 +95,6 @@ export default function PlansPanel({
       );
     } finally {
       setBusyId(null);
-      onRefetch();
     }
   }
 

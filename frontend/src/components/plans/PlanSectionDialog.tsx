@@ -2,7 +2,9 @@
 // An edit sends each changed field as the value last seen and the new one; on
 // a 409 the form stays open with the API's sentence, keeps what was typed and
 // shows what the plan now says, so the next Save compares against that. A
-// field the user never touched follows the plan (`adoptTheirs`).
+// field the user never touched follows the plan (`adoptTheirs`). Add or edit
+// is decided by the id it opened with, so a section deleted meanwhile is
+// refused, never made again.
 import { useId, useState } from "react";
 import {
   TRIP_PLAN_PAGE,
@@ -11,6 +13,7 @@ import {
   TRIP_PLAN_SECTION_TITLE_MAX_LENGTH,
   parseTripPlanSectionCreate,
   planAddVerbLabel,
+  tripPlanInPlanNow,
   type TripPlanSectionPatch,
   type TripPlanSectionView,
 } from "@logjam/shared";
@@ -28,6 +31,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import {
   adoptTheirs,
+  same,
   sectionPatch,
   type SectionValues as Values,
 } from "./plansModel";
@@ -37,7 +41,9 @@ const copy = TRIP_PLAN_PAGE.copy;
 
 export default function PlanSectionDialog(props: {
   open: boolean;
-  /** Absent: a new section. Updated in place after a refetch. */
+  /** The section being edited, or null for a new one. */
+  sectionId: string | null;
+  /** That section as the plan now has it: absent once it is deleted. */
   section?: TripPlanSectionView;
   onSubmit: (values: Values, patch: TripPlanSectionPatch) => Promise<void>;
   /** A 409 came back: fetch the plan again so `section` is the current one. */
@@ -48,21 +54,24 @@ export default function PlanSectionDialog(props: {
 }
 
 function SectionForm({
+  sectionId,
   section,
   onSubmit,
   onStale,
   onClose,
 }: {
+  sectionId: string | null;
   section?: TripPlanSectionView;
   onSubmit: (values: Values, patch: TripPlanSectionPatch) => Promise<void>;
   onStale: () => void;
   onClose: () => void;
 }) {
   const formId = useId();
-  const opened: Values = {
+  const editing = sectionId != null;
+  const [opened] = useState<Values>(() => ({
     title: section?.title ?? "",
     body: section?.body ?? "",
-  };
+  }));
   // What the form compares against: the section as opened, then as the plan
   // was fetched again. Never moves on its own while the user types.
   const [seen, setSeen] = useState<Values>(opened);
@@ -83,7 +92,16 @@ function SectionForm({
     setMoved(true);
   }
 
-  const dirty = values.title !== opened.title || values.body !== opened.body;
+  // Against what a Save would compare: after a refetch, the section as it is.
+  const dirty = !same(values, seen);
+  /** The plan's words under a field the user edited and the plan changed. */
+  const theirs = (field: keyof Values) =>
+    moved &&
+    current &&
+    current[field] !== values[field] &&
+    current[field] !== opened[field]
+      ? current[field]
+      : null;
   const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Partial<Values>) => {
     setValues((was) => ({ ...was, ...next }));
@@ -91,6 +109,7 @@ function SectionForm({
   };
 
   async function submit() {
+    if (editing && !section) return setError(copy.sectionGone);
     const parsed = parseTripPlanSectionCreate(values);
     if (!("value" in parsed)) {
       const sentence = "sentence" in parsed ? parsed.sentence : null;
@@ -100,7 +119,7 @@ function SectionForm({
       return;
     }
     const patch = sectionPatch(seen, parsed.value);
-    if (section && Object.keys(patch).length === 0) return onClose();
+    if (editing && Object.keys(patch).length === 0) return onClose();
     setBusy(true);
     try {
       await onSubmit(parsed.value, patch);
@@ -112,9 +131,6 @@ function SectionForm({
       setBusy(false);
     }
   }
-
-  const theirs =
-    moved && current && current.body !== values.body ? current.body : null;
 
   return (
     <>
@@ -134,7 +150,7 @@ function SectionForm({
               Cancel
             </Button>
             <Button type="submit" form={formId} variant="filled" busy={busy}>
-              {section ? copy.sectionSave : planAddVerbLabel("section")}
+              {editing ? copy.sectionSave : planAddVerbLabel("section")}
             </Button>
           </>
         }
@@ -142,6 +158,7 @@ function SectionForm({
         <form
           id={formId}
           className={classes.form}
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!busy) void submit();
@@ -159,12 +176,12 @@ function SectionForm({
             }}
             error={titleError}
             hint={
-              moved && current && current.title !== values.title
-                ? `In the plan now: ${current.title}`
+              theirs("title") != null
+                ? tripPlanInPlanNow(theirs("title")!)
                 : undefined
             }
           />
-          {!section && (
+          {!editing && (
             <div
               className={classes.suggestions}
               role="group"
@@ -196,10 +213,12 @@ function SectionForm({
                 : undefined
             }
           />
-          {theirs != null && (
+          {theirs("body") != null && (
             <div className={classes.theirs}>
-              <p className={classes.note}>In the plan now:</p>
-              <p className={classes.body}>{theirs || copy.writeUpEmpty}</p>
+              <p className={classes.note}>{copy.inPlanNow}</p>
+              <p className={classes.body}>
+                {theirs("body") || copy.writeUpEmpty}
+              </p>
             </div>
           )}
           {error && <ErrorBanner message={error} />}
@@ -207,9 +226,9 @@ function SectionForm({
       </Dialog>
       <ConfirmDialog
         open={guard.guardOpen}
-        title={section ? "Discard unsaved changes?" : "Discard this section?"}
+        title={editing ? "Discard unsaved changes?" : "Discard this section?"}
         message={
-          section
+          editing
             ? "Your changes will be lost."
             : "What you typed will be lost."
         }

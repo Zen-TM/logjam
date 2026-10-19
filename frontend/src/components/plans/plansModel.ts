@@ -36,22 +36,37 @@ export function sectionPatch(
   return patch;
 }
 
+export const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/** A plan's dates are one compare-and-set pair (`planPatch`), so they are
+ *  adopted together: one edited date keeps both of the user's. */
+export const PLAN_FIELD_GROUPS = [["startDate", "endDate"]] as const;
+
 /**
  * A form's fields after the plan was fetched again (a 409, or a failed save
  * followed by someone else's change): every field the user has not touched
  * takes the plan's current value, and the new baseline is the plan's. A
  * field they did edit keeps their words, and a save compares it with what
  * the plan now holds, so nothing of anyone else's is sent back unseen.
+ * Fields in one of `groups` go together, as the API compares them.
  */
 export function adoptTheirs<T extends Record<string, unknown>>(
   seen: T,
   values: T,
   current: T,
+  groups: readonly (readonly (keyof T)[])[] = [],
 ): { seen: T; values: T } {
-  const same = (a: unknown, b: unknown) =>
-    JSON.stringify(a) === JSON.stringify(b);
   const merged = { ...values };
-  for (const key of Object.keys(current) as (keyof T)[])
-    if (same(values[key], seen[key])) merged[key] = current[key];
+  const grouped = new Set(groups.flat());
+  const units = [
+    ...groups,
+    ...(Object.keys(current) as (keyof T)[])
+      .filter((key) => !grouped.has(key))
+      .map((key) => [key]),
+  ];
+  for (const unit of units)
+    if (unit.every((key) => same(values[key], seen[key])))
+      for (const key of unit) merged[key] = current[key];
   return { seen: current, values: merged };
 }

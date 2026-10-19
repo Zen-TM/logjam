@@ -21,7 +21,7 @@ export type NavItem = {
   id: NavItemId;
   label: string;
   icon: Glyph;
-  /** What its badge counts, in its accessible name: "Plans, 1 waiting". */
+  /** What its badge counts, in its accessible name: "Plans, 1 invited". */
   badgeNoun?: string;
 };
 

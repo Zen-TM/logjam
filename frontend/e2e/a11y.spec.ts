@@ -182,7 +182,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(section).toHaveCount(0);
-    for (const view of [/^On the map/, /^Forms/, /^People/]) {
+    for (const view of [/^Map/, /^Forms/, /^People/]) {
       await aside.getByRole("radio", { name: view }).click();
       await expectNoViolations(page, "aside");
     }

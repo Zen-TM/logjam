@@ -12,6 +12,8 @@ import {
   TRIP_PLANS_LIST,
   TRIP_TYPE_SUGGESTIONS,
   tripPlanDatesLabel,
+  tripPlanInPlanNow,
+  tripTypeLabel,
   type TripPlanPatch,
   type TripPlanView,
 } from "@logjam/shared";
@@ -22,7 +24,9 @@ import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   adoptTheirs,
+  PLAN_FIELD_GROUPS,
   planPatch,
+  same,
   type PlanValues as Values,
 } from "./plansModel";
 import classes from "./plans.module.css";
@@ -69,18 +73,25 @@ function PlanDetailsForm({
   const [busy, setBusy] = useState(false);
 
   if (JSON.stringify(current) !== JSON.stringify(seen)) {
-    const next = adoptTheirs(seen, values, current);
+    const next = adoptTheirs(seen, values, current, PLAN_FIELD_GROUPS);
     setSeen(next.seen);
     setValues(next.values);
     setMoved(true);
   }
-  /** What the plan now says, under a field the user edited and it changed. */
-  const theirs = (field: keyof Values, words: string) =>
-    moved && JSON.stringify(values[field]) !== JSON.stringify(current[field])
-      ? `In the plan now: ${words}`
+  /** What the plan now says, under a field the user edited and the plan
+   *  also changed since the form opened. */
+  const theirs = (fields: (keyof Values)[], words: string) =>
+    moved &&
+    fields.some(
+      (field) =>
+        !same(values[field], current[field]) &&
+        !same(current[field], opened[field]),
+    )
+      ? tripPlanInPlanNow(words)
       : undefined;
 
-  const dirty = JSON.stringify(values) !== JSON.stringify(opened);
+  // Against what a Save would compare: after a refetch, the plan as it is.
+  const dirty = !same(values, seen);
   const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Partial<Values>) => {
     setValues((current) => ({ ...current, ...next }));
@@ -147,6 +158,7 @@ function PlanDetailsForm({
         <form
           id={formId}
           className={classes.form}
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!busy) void submit();
@@ -163,7 +175,7 @@ function PlanDetailsForm({
               setNameError(null);
             }}
             error={nameError}
-            hint={theirs("name", current.name)}
+            hint={theirs(["name"], current.name)}
           />
           <div className={classes.pair}>
             <TextField
@@ -180,13 +192,13 @@ function PlanDetailsForm({
               value={values.endDate ?? ""}
               min={values.startDate ?? undefined}
               onChange={(event) => set({ endDate: event.target.value || null })}
+              // One note for the pair, as they are saved together.
+              hint={theirs(
+                ["startDate", "endDate"],
+                tripPlanDatesLabel(current.startDate, current.endDate),
+              )}
             />
           </div>
-          {(theirs("startDate", "") || theirs("endDate", "")) && (
-            <p className={classes.note}>
-              {`In the plan now: ${tripPlanDatesLabel(current.startDate, current.endDate)}`}
-            </p>
-          )}
           <ChipPicker
             label={copy.tripTypes}
             options={typeOptions}
@@ -203,7 +215,10 @@ function PlanDetailsForm({
                 set({ tripTypes: [...values.tripTypes, trimmed] });
             }}
             addLabel={copy.addTripType}
-            hint={theirs("tripTypes", current.tripTypes.join(", ") || "—")}
+            hint={theirs(
+              ["tripTypes"],
+              current.tripTypes.map(tripTypeLabel).join(", "),
+            )}
           />
           {error && <ErrorBanner message={error} />}
         </form>

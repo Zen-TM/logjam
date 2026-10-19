@@ -837,9 +837,12 @@ function App() {
   useEffect(() => {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
+  // A first load that fails is said by Plans itself (its ErrorState); only
+  // a later refetch's failure, under a list already shown, is a toast.
+  const plansBackgroundError = plans.length > 0 ? plansError : null;
   useEffect(() => {
-    if (plansError) toast.error(plansError);
-  }, [plansError, toast]);
+    if (plansBackgroundError) toast.error(plansBackgroundError);
+  }, [plansBackgroundError, toast]);
   useEffect(() => {
     if (vectorStyleSaveError) toast.error(vectorStyleSaveError);
   }, [vectorStyleSaveError, toast]);

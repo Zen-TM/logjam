@@ -349,6 +349,7 @@ export const TRIP_PLAN_PAGE = {
     sectionSaveFailed: "Couldn't save the section.",
     sectionGone: "This section was deleted.",
     // After the plan changed under an open form: under the field it changed.
+    inPlanNow: "In the plan now:",
     inPlanNowEmpty: "nothing",
     sectionMoveFailed: "Couldn't move the section.",
     sectionDeleteFailed: "Couldn't delete the section.",
@@ -558,7 +559,8 @@ export const TRIP_PLAN_INVITE = {
 
 /** What an open edit form says under a field the plan changed meanwhile. */
 export function tripPlanInPlanNow(words: string): string {
-  return `In the plan now: ${words || TRIP_PLAN_PAGE.copy.inPlanNowEmpty}`;
+  const copy = TRIP_PLAN_PAGE.copy;
+  return `${copy.inPlanNow} ${words || copy.inPlanNowEmpty}`;
 }
 
 /** The toast after asking to join through a link. */

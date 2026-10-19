@@ -16,7 +16,7 @@ import {
   PLAN_SECTION_VERBS,
   todayDateKey,
   TRIP_PLAN_PAGE,
-  TRIP_PLANS_LIST,
+  tripPlanRoleWord,
   tripPlanAddedByLine,
   tripPlanGoing,
   tripPlanLeaveState,
@@ -87,12 +87,7 @@ function menuEntries<Id extends string>(
       icon: verb.icon,
       danger: verb.danger,
       onSelect: () => run(verb.id),
-      // Offered but not yet: the reason is on the item and in its name.
-      ...(verb.disabledReason && {
-        disabled: true,
-        hint: verb.disabledReason,
-        accessibleLabel: `${verb.label}, ${verb.disabledReason}`,
-      }),
+      disabledReason: verb.disabledReason,
     });
   }
   return entries;
@@ -179,13 +174,13 @@ export default function PlanDetailPanel({
         () => archivePlan(plan.id, true),
         copy.archiveFailed,
         copy.archived,
-      ).then(onPlansChanged),
+      ).then((ok) => ok && onPlansChanged()),
     unarchive: () =>
       void run(
         () => archivePlan(plan.id, false),
         copy.archiveFailed,
         copy.unarchived,
-      ).then(onPlansChanged),
+      ).then((ok) => ok && onPlansChanged()),
     leave: () => setConfirm({ kind: "leave" }),
     delete: () => setConfirm({ kind: "delete" }),
   };
@@ -223,6 +218,7 @@ export default function PlanDetailPanel({
   const canAddSection = addVerbs.some((verb) => verb.id === "section");
   const heroVerbs = planVerbs("web", role, {
     archived,
+    dated: plan.startDate != null || plan.endDate != null,
     over,
     ...tripPlanLeaveState(plan),
   });
@@ -282,17 +278,18 @@ export default function PlanDetailPanel({
     {
       value: "items" as const,
       label: copy.viewItems,
-      count: counts.places + counts.ways + counts.maps,
+      // A zero is left out (shared/DESIGN.md §11).
+      count: counts.places + counts.ways + counts.maps || undefined,
     },
     {
       value: "forms" as const,
       label: copy.viewForms,
-      count: plan.forms.length,
+      count: plan.forms.length || undefined,
     },
     {
       value: "people" as const,
       label: copy.viewPeople,
-      count: going.length,
+      count: going.length || undefined,
     },
   ];
 
@@ -441,7 +438,6 @@ export default function PlanDetailPanel({
         ) : (
           itemGroups.map((group) => (
             <Fragment key={group.title}>
-              {/* A heading needs a second group to divide from. */}
               {itemGroups.length > 1 && (
                 <SectionHeader title={group.title} count={group.rows.length} />
               )}
@@ -476,16 +472,14 @@ export default function PlanDetailPanel({
                   : copy.seenByMembers
               }
               leading={<IconTile icon="form" hue="var(--hue-plan)" />}
-              // Under the text: beside it, two pills squeeze the title.
-              footer={
-                form.requiredToJoin ? (
-                  <>
-                    <StatusPill label={copy.pillRequired} tone="outline" />
-                    {!form.myAnswer && (
-                      <StatusPill label={copy.pillNotAnswered} tone="warning" />
-                    )}
-                  </>
-                ) : undefined
+              // One status: what the caller owes, else what the form asks.
+              trailing={
+                form.requiredToJoin &&
+                (form.myAnswer ? (
+                  <StatusPill label={copy.pillRequired} tone="outline" />
+                ) : (
+                  <StatusPill label={copy.pillNotAnswered} tone="warning" />
+                ))
               }
             />
           ))
@@ -501,11 +495,7 @@ export default function PlanDetailPanel({
             trailing={
               member.role !== "member" && (
                 <StatusPill
-                  label={
-                    member.role === "leader"
-                      ? TRIP_PLANS_LIST.copy.pillLeader
-                      : TRIP_PLANS_LIST.copy.pillEditor
-                  }
+                  label={tripPlanRoleWord(member.role)}
                   tone="outline"
                 />
               )
@@ -552,12 +542,13 @@ export default function PlanDetailPanel({
       />
       <PlanSectionDialog
         open={sectionOpen != null}
+        sectionId={sectionOpen?.id ?? null}
         section={editingSection}
         onStale={() => refetch({ quiet: true })}
         onClose={() => setSectionOpen(null)}
         onSubmit={async (values, patch) => {
-          if (editingSection)
-            await patchSection(plan.id, editingSection.id, patch);
+          if (sectionOpen?.id)
+            await patchSection(plan.id, sectionOpen.id, patch);
           else await createSection(plan.id, values);
           setSectionOpen(null);
           refetch();
