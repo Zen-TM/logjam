@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TripPlanSummary } from "../tripPlans.js";
 import {
   planCountsLabel,
@@ -14,6 +14,7 @@ import {
   tripPlanAddedByLine,
   tripPlanBucket,
   tripPlanCounts,
+  tripPlanFilesChargedTo,
   tripPlanDatesLabel,
   tripPlanDatesLine,
   tripPlanGoing,
@@ -28,6 +29,10 @@ import {
   tripPlansEmpty,
   tripPlansHeroTitle,
   tripPlanTripLogPrefill,
+  planMemberVerbs,
+  planRemoveConfirm,
+  tripPlanInviteePill,
+  tripPlanInviteLinkLine,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -469,5 +474,120 @@ describe("tripPlanCounts", () => {
         geoPdfs: [],
       }),
     ).toEqual({ places: 2, ways: 3, maps: 0 });
+  });
+});
+
+describe("a plan's people", () => {
+  it("gives no Make for the role someone has, and nothing to a non-leader or on an archived plan", () => {
+    const live = { archived: false, leaders: 1 };
+    expect(
+      planMemberVerbs("leader", { role: "editor", self: false }, live).map(
+        (v) => v.id,
+      ),
+    ).toEqual(["makeLeader", "makeMember", "remove"]);
+    expect(
+      planMemberVerbs("editor", { role: "member", self: false }, live),
+    ).toEqual([]);
+    expect(
+      planMemberVerbs(
+        "leader",
+        { role: "editor", self: false },
+        { archived: true, leaders: 1 },
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: drop the leaders count, and the last leader can step down and
+  // leave the plan with none (the API's 409); offer Remove on yourself, and
+  // a leader removes themselves past Leave's confirm.
+  it("lets a leader step down only while another leader remains, never remove themselves", () => {
+    const self = { role: "leader", self: true } as const;
+    expect(
+      planMemberVerbs("leader", self, { archived: false, leaders: 2 }).map(
+        (v) => v.id,
+      ),
+    ).toEqual(["makeEditor", "makeMember"]);
+    expect(
+      planMemberVerbs("leader", self, { archived: false, leaders: 1 }),
+    ).toEqual([]);
+    expect(
+      planMemberVerbs(
+        "leader",
+        { role: "editor", self: true },
+        { archived: false, leaders: 2 },
+      ),
+    ).toEqual([]);
+  });
+
+  it("prices a removal only when the person has files", () => {
+    expect(planRemoveConfirm("tom", "Wollangambe trip", null)).toMatchObject({
+      confirmBody:
+        "They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.",
+      deleteFilesLabel: null,
+    });
+    expect(
+      planRemoveConfirm("tom", "Wollangambe trip", {
+        count: 2,
+        size: "340 MB",
+      }),
+    ).toMatchObject({
+      confirmBody: expect.stringContaining(
+        "Their files (2 files, 340 MB) will count against your storage instead.",
+      ),
+      deleteFilesLabel: "Delete their files instead (2 files, 340 MB)",
+    });
+  });
+});
+
+describe("Invite people", () => {
+  // Mutation: format the instants as UTC days, and a link made before about
+  // 10 am in Sydney reads as made the day before.
+  it("says a link's days where the reader is, without this year", () => {
+    vi.stubEnv("TZ", "Australia/Sydney");
+    try {
+      expect(
+        tripPlanInviteLinkLine(
+          {
+            createdAt: "2026-10-18T22:30:00.000Z",
+            expiresAt: "2026-10-25T22:30:00.000Z",
+          },
+          2026,
+        ),
+      ).toBe("Made Mon 19 Oct, works until Mon 26 Oct");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  // Mutation: pill everyone with a plan row "In this plan", and someone only
+  // invited or asking to join is said to be in it.
+  it("pills a person found by what the plan has them as", () => {
+    expect(tripPlanInviteePill("active")).toBe("In this plan");
+    expect(tripPlanInviteePill("invited")).toBe("Invited");
+    expect(tripPlanInviteePill("requested")).toBe("Asking to join");
+    expect(tripPlanInviteePill(undefined)).toBeNull();
+  });
+});
+
+describe("tripPlanFilesChargedTo", () => {
+  // Mutation: leave out place photos. A removal would move storage the
+  // confirm never named.
+  it("counts every file charged to them, photos included", () => {
+    const tom = { id: "tom", username: "tom" };
+    const ann = { id: "ann", username: "ann" };
+    const file = (chargedTo: typeof tom, sizeBytes: string) => ({
+      chargedTo,
+      sizeBytes,
+    });
+    expect(
+      tripPlanFilesChargedTo(
+        {
+          files: [file(tom, "100")],
+          geoPdfs: [file(ann, "50")],
+          places: [{ media: [file(tom, "20"), file(ann, "5")] }],
+        } as never,
+        "tom",
+      ),
+    ).toEqual({ count: 2, bytes: 120 });
   });
 });

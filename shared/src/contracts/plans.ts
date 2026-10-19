@@ -12,8 +12,10 @@ import {
   type TripPlanMemberStatus,
   type TripPlanRole,
   type TripPlanSummary,
+  type TripPlanView,
 } from "../tripPlans.js";
 import type { ScreenContract } from "./types.js";
+import { todayDateKey } from "../logbook.js";
 
 export const TRIP_PLANS_LIST = {
   id: "plans.list",
@@ -374,6 +376,14 @@ export const TRIP_PLAN_PAGE = {
     letIn: "Let in",
     turnDown: "Turn down",
     seeAnswers: "See answers",
+    roleFailed: "Couldn't change their role.",
+    letInFailed: "Couldn't let them in.",
+    turnDownFailed: "Couldn't turn them down.",
+    turnedDown: "Request turned down.",
+    removeFailed: "Couldn't remove them.",
+    cancelInvite: "Cancel invite",
+    cancelInviteFailed: "Couldn't cancel the invite.",
+    inviteCancelled: "Invite cancelled.",
 
     archived: "Archived. It's under Archived in Plans.",
     unarchived: "Brought back.",
@@ -527,6 +537,7 @@ export const TRIP_PLAN_INVITE = {
     { key: "link" },
   ],
   copy: {
+    back: "Back to people",
     searchField: "Search by username",
     role: "Role",
     inviteSend: "Invite",
@@ -546,6 +557,27 @@ export const TRIP_PLAN_INVITE = {
     searchFailed: "Couldn't search users.",
   },
 } as const satisfies ScreenContract;
+
+/** A live invite link's row: "Made Mon 19 Oct, works until Mon 26 Oct",
+ *  each the day it is where the reader is. */
+export function tripPlanInviteLinkLine(
+  link: { createdAt: string; expiresAt: string },
+  thisYear?: number,
+): string {
+  const day = (instant: string) =>
+    tripPlanDayLabel(todayDateKey(new Date(instant)), thisYear);
+  return `Made ${day(link.createdAt)}, works until ${day(link.expiresAt)}`;
+}
+
+/** A person found in Invite people's search, as the plan has them now. */
+export function tripPlanInviteePill(
+  status: TripPlanMemberStatus | undefined,
+): string | null {
+  if (status === "active") return TRIP_PLAN_INVITE.copy.inPlan;
+  if (status === "invited") return TRIP_PLAN_PAGE.copy.peopleInvited;
+  if (status === "requested") return TRIP_PLAN_PAGE.copy.peopleAsking;
+  return null;
+}
 
 /** What an open edit form says under a field the plan changed meanwhile. */
 export function tripPlanInPlanNow(words: string): string {
@@ -606,5 +638,32 @@ export function tripPlanCounts(plan: {
     places: plan.places.length,
     ways: plan.routes.length + plan.files.length,
     maps: plan.geoPdfs.length,
+  };
+}
+
+export function tripPlanLetInMessage(username: string): string {
+  return `${username} is in.`;
+}
+
+export function tripPlanRemovedMessage(username: string): string {
+  return `${username} removed.`;
+}
+
+/**
+ * The files a person's storage pays for in a plan: what removing them moves
+ * to the leader's storage, or deletes (planMembers.ts, `deleteFiles`).
+ */
+export function tripPlanFilesChargedTo(
+  plan: Pick<TripPlanView, "files" | "geoPdfs" | "places">,
+  userId: string,
+): { count: number; bytes: number } {
+  const files = [
+    ...plan.files,
+    ...plan.geoPdfs,
+    ...plan.places.flatMap((place) => place.media),
+  ].filter((file) => file.chargedTo?.id === userId);
+  return {
+    count: files.length,
+    bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
 }
