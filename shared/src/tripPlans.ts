@@ -8,6 +8,13 @@ import { say, type UserSentence } from "./userSentence.js";
 import type { MediaItem } from "./media.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import { MAX_TRIP_TYPES_PER_TRIP, TRIP_TYPE_MAX_LENGTH } from "./tripName.js";
+import { PLACE_MAX_ALT_NAMES } from "./placeValidation.js";
+import {
+  MAX_ROUTE_POINTS,
+  parseRouteAnchors,
+  parseRoutePoints,
+  ROUTE_ERRORS,
+} from "./routeValidation.js";
 
 /** What a member may do in a plan. A plan can have more than one leader. */
 export const TRIP_PLAN_ROLES = ["leader", "editor", "member"] as const;
@@ -1150,7 +1157,7 @@ export function currentTripPlanAnswers(
 
 /**
  * PATCH /plans/:id/items/place/:itemId. Each field sent is compared with
- * what is stored and saves only if it still matches (§4); fields not sent
+ * what is stored and saves only if it still matches; fields not sent
  * aren't compared. `to` is checked as the place form checks it, against the
  * place's system type.
  */
@@ -1198,5 +1205,183 @@ export function parseTripPlanItemAdd(
       id,
       ...(input.copyMedia !== undefined && { copyMedia: input.copyMedia }),
     };
+  });
+}
+
+// ── Plan item edits ──
+// Each parser checks every pair's shape and caps a `from`'s arrays as its
+// `to`'s; what needs the database or the owner's own rules (a place's values
+// against its type, a name's length, a colour) is the API's.
+
+function onlyFields(input: Record<string, unknown>, fields: readonly string[]) {
+  for (const field of Object.keys(input))
+    if (!fields.includes(field)) bad("a field can't be edited");
+}
+
+function textOrNull(value: unknown, what: string): string | null {
+  return value === null ? null : text(value, what);
+}
+
+function numberOrNull(value: unknown, what: string): number | null {
+  if (value !== null && typeof value !== "number")
+    bad(`${what} must be a number or null`);
+  return value;
+}
+
+function cappedStrings(value: unknown, what: string, max: number): string[] {
+  const list = stringList(value, what);
+  if (list.length > max) bad(`${what} is over the cap`, 413);
+  return list;
+}
+
+function position(value: unknown, what: string) {
+  const at = record(value, what);
+  if (typeof at.latitude !== "number" || typeof at.longitude !== "number")
+    bad(`${what} needs a latitude and a longitude`);
+  return { latitude: at.latitude, longitude: at.longitude };
+}
+
+/** A route's stored points as a client last saw them: not re-rounded. */
+function seenGeometry(value: unknown) {
+  const geometry = record(value, "geometry.from");
+  if (!Array.isArray(geometry.points)) bad(ROUTE_ERRORS.pointsShape);
+  if (geometry.points.length > MAX_ROUTE_POINTS)
+    bad("geometry.from.points is over the cap", 413);
+  for (const point of geometry.points)
+    if (
+      !Array.isArray(point) ||
+      point.length !== 2 ||
+      point.some((n) => typeof n !== "number")
+    )
+      bad(ROUTE_ERRORS.pointsShape);
+  const anchors = geometry.anchors ?? null;
+  if (anchors !== null) {
+    if (!Array.isArray(anchors) || anchors.some((n) => typeof n !== "number"))
+      bad(ROUTE_ERRORS.anchorsShape);
+    if (anchors.length > MAX_ROUTE_POINTS)
+      bad("geometry.from.anchors is over the cap", 413);
+  }
+  return {
+    points: geometry.points as [number, number][],
+    anchors: anchors as number[] | null,
+  };
+}
+
+/** PATCH /plans/:id/items/place/:itemId. */
+export function parseTripPlanPlacePatch(
+  body: unknown,
+): TripPlanParsed<TripPlanPlacePatch> {
+  return checked(() => {
+    const input = record(body, "body");
+    onlyFields(input, [
+      "name",
+      "altNames",
+      "position",
+      "elevation",
+      "notes",
+      "fieldValues",
+    ]);
+    const patch: TripPlanPlacePatch = {};
+    if (input.name !== undefined) {
+      const { from, to } = cas(input.name, "name");
+      patch.name = { from: text(from, "name.from"), to: text(to, "name.to") };
+    }
+    if (input.altNames !== undefined) {
+      const { from, to } = cas(input.altNames, "altNames");
+      patch.altNames = {
+        from: cappedStrings(from, "altNames.from", PLACE_MAX_ALT_NAMES),
+        to: to === null ? [] : stringList(to, "altNames.to"),
+      };
+    }
+    if (input.position !== undefined) {
+      const { from, to } = cas(input.position, "position");
+      patch.position = {
+        from: position(from, "position.from"),
+        to: position(to, "position.to"),
+      };
+    }
+    if (input.elevation !== undefined) {
+      const { from, to } = cas(input.elevation, "elevation");
+      patch.elevation = {
+        from: numberOrNull(from, "elevation.from"),
+        to: numberOrNull(to, "elevation.to"),
+      };
+    }
+    if (input.notes !== undefined) {
+      const { from, to } = cas(input.notes, "notes");
+      patch.notes = {
+        from: textOrNull(from, "notes.from"),
+        to: textOrNull(to, "notes.to"),
+      };
+    }
+    if (input.fieldValues !== undefined) {
+      const values = record(input.fieldValues, "fieldValues");
+      nothingToChange(values);
+      patch.fieldValues = Object.fromEntries(
+        Object.entries(values).map(([key, pair]) => [
+          key,
+          cas(pair, "a field value"),
+        ]),
+      );
+    }
+    nothingToChange(patch);
+    return patch;
+  });
+}
+
+/** PATCH /plans/:id/items/route/:itemId. `to`'s points are rounded as stored. */
+export function parseTripPlanRoutePatch(
+  body: unknown,
+): TripPlanParsed<TripPlanRoutePatch> {
+  return checked(() => {
+    const input = record(body, "body");
+    onlyFields(input, ["name", "color", "geometry"]);
+    const patch: TripPlanRoutePatch = {};
+    if (input.name !== undefined) {
+      const { from, to } = cas(input.name, "name");
+      patch.name = { from: text(from, "name.from"), to: text(to, "name.to") };
+    }
+    if (input.color !== undefined) {
+      const { from, to } = cas(input.color, "color");
+      patch.color = {
+        from: text(from, "color.from"),
+        to: text(to, "color.to"),
+      };
+    }
+    if (input.geometry !== undefined) {
+      const { from, to } = cas(input.geometry, "geometry");
+      const next = record(to, "geometry.to");
+      if (next.points === undefined) bad(ROUTE_ERRORS.pointsRequired);
+      const points = parseRoutePoints(next.points);
+      if ("error" in points) bad(points.error);
+      const anchors = parseRouteAnchors(next.anchors, points.points.length);
+      if ("error" in anchors) bad(anchors.error);
+      patch.geometry = {
+        from: seenGeometry(from),
+        to: { points: points.points, anchors: anchors.anchors },
+      };
+    }
+    nothingToChange(patch);
+    return patch;
+  });
+}
+
+/** PATCH /plans/:id/items/media/:itemId. */
+export function parseTripPlanFilePatch(
+  body: unknown,
+): TripPlanParsed<TripPlanFilePatch> {
+  return checked(() => {
+    const input = record(body, "body");
+    onlyFields(input, ["displayName"]);
+    const patch: TripPlanFilePatch = {};
+    if (input.displayName !== undefined) {
+      const { from, to } = cas(input.displayName, "displayName");
+      patch.displayName = {
+        from: textOrNull(from, "displayName.from"),
+        to: textOrNull(to, "displayName.to"),
+      };
+    }
+    nothingToChange(patch);
+    return patch;
   });
 }

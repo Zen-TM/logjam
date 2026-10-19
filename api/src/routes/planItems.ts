@@ -2,13 +2,16 @@
 // yours, Save a copy of something in the plan, delete. Copy and storage
 // rules are lib/planItems.ts's; access is lib/planAccess.ts's.
 import { Router, Response } from "express";
+import { isDeepStrictEqual } from "node:util";
 import { Prisma } from "@prisma/client";
 import {
   asFieldValues,
   isTripPlanItemKind,
   parseRouteColor,
-  parseRoutePoints,
+  parseTripPlanFilePatch,
   parseTripPlanItemAdd,
+  parseTripPlanPlacePatch,
+  parseTripPlanRoutePatch,
   say,
   TRIP_PLAN_CHANGED_SENTENCE,
   validateRoutePayload,
@@ -36,7 +39,6 @@ import {
 import { toMediaItem } from "../lib/mediaPresign";
 import { geoPdfDownloadFilename, presignResult } from "../lib/geoPdfResult";
 import { defsForPlaceType } from "../lib/placeTypes";
-import { parseAnchorsOrNull } from "../lib/routeLink";
 import {
   copyPlaceFor,
   placePayloadRefusal,
@@ -200,10 +202,16 @@ router.patch(
     if (!canChangeItem(access, row, user.id))
       throw new AppError(403, NOT_YOURS);
     await editPlanItem(access.plan.id, kind, row, req.body);
+    // A delete can land between the edit's commit and this read.
     const items = await loadPlanItems(access.plan.id, { kind, id });
-    res.json(
-      [...items.places, ...items.routes, ...items.files, ...items.geoPdfs][0],
-    );
+    const item = [
+      ...items.places,
+      ...items.routes,
+      ...items.files,
+      ...items.geoPdfs,
+    ][0];
+    if (!item) throw itemNotFound();
+    res.json(item);
   },
 );
 
@@ -219,64 +227,11 @@ router.patch(
 // write to a plan item takes it first (lib/planItems.ts). Comparing in code
 // under that lock lets a value be compared as JSON, key order aside, where
 // the column holds jsonb.
-// Guard: __tests__/planItems.test.ts ("compare-and-set").
+// Guard: api/src/__tests__/planItems.test.ts ("two saves from the same value").
 //
-// `to` is validated as the owner's own routes validate it, a place's values
+// Each kind's patch is parsed in shared (parseTripPlanPlacePatch …); `to` is
+// then validated as the owner's own routes validate it, a place's values
 // against its system type's definitions.
-type Pair = { from: unknown; to: unknown };
-
-/** JSON equality, object key order aside (jsonb reorders keys). */
-function sameJson(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (Array.isArray(a) || Array.isArray(b))
-    return (
-      Array.isArray(a) &&
-      Array.isArray(b) &&
-      a.length === b.length &&
-      a.every((item, i) => sameJson(item, b[i]))
-    );
-  if (a && b && typeof a === "object" && typeof b === "object") {
-    const keys = Object.keys(a);
-    return (
-      keys.length === Object.keys(b).length &&
-      keys.every((key) =>
-        sameJson(
-          (a as Record<string, unknown>)[key],
-          (b as Record<string, unknown>)[key],
-        ),
-      )
-    );
-  }
-  return false;
-}
-
-/**
- * The body's pairs, by field: only `fields`, each `{from, to}`, and at least
- * one unless `optional`.
- */
-function pairs(
-  body: unknown,
-  fields: readonly string[],
-  optional = false,
-): Map<string, Pair> {
-  if (!body || typeof body !== "object" || Array.isArray(body))
-    throw malformed("body must be an object");
-  const out = new Map<string, Pair>();
-  for (const [field, value] of Object.entries(body)) {
-    if (!fields.includes(field)) throw malformed("a field can't be edited");
-    if (
-      !value ||
-      typeof value !== "object" ||
-      !("from" in value) ||
-      !("to" in value)
-    )
-      throw malformed("a field needs from and to");
-    out.set(field, { from: value.from, to: value.to });
-  }
-  if (out.size === 0 && !optional) throw malformed("the patch changes nothing");
-  return out;
-}
-
 function changed(): AppError {
   return new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
 }
@@ -295,43 +250,28 @@ async function underLock<Row>(
   });
 }
 
-const PLACE_FIELDS = ["name", "altNames", "position", "elevation", "notes"];
-
 async function editPlace(
   planId: string,
   id: string,
   placeTypeId: string,
   body: unknown,
 ): Promise<void> {
-  if (!body || typeof body !== "object" || Array.isArray(body))
-    throw malformed("body must be an object");
-  // fieldValues is { key: {from, to} }: a pair per attribute written, each
-  // compared on its own.
-  const { fieldValues: rawValues, ...rest } = body as Record<string, unknown>;
-  const edit = pairs(rest, PLACE_FIELDS, rawValues !== undefined);
+  const edit = accepted(parseTripPlanPlacePatch(body));
   const defs = await defsForPlaceType(null, placeTypeId);
-  const valuePairs =
-    rawValues === undefined
-      ? new Map<string, Pair>()
-      : pairs(
-          rawValues,
-          defs.map((def) => def.key),
-        );
-  const to = (field: string) => edit.get(field)?.to;
-  const position = to("position") as
-    | { latitude?: unknown; longitude?: unknown }
-    | undefined;
-  if (edit.has("position") && (!position || typeof position !== "object"))
-    throw malformed("position.to must be an object");
+  // fieldValues is a pair per attribute written, each compared on its own.
+  const valuePairs = Object.entries(edit.fieldValues ?? {});
+  if (valuePairs.some(([key]) => !defs.some((def) => def.key === key)))
+    throw malformed("a field can't be edited");
+  const position = edit.position?.to;
   const payload = {
-    name: to("name"),
-    altNames: to("altNames"),
-    notes: to("notes"),
-    elevation: to("elevation"),
+    name: edit.name?.to,
+    altNames: edit.altNames?.to,
+    notes: edit.notes?.to,
+    elevation: edit.elevation?.to,
     latitude: position?.latitude,
     longitude: position?.longitude,
     fieldValues: Object.fromEntries(
-      [...valuePairs].flatMap(([key, pair]) =>
+      valuePairs.flatMap(([key, pair]) =>
         pair.to === null ? [] : [[key, pair.to]],
       ),
     ),
@@ -345,19 +285,22 @@ async function editPlace(
     planId,
     (tx) => tx.place.findFirst({ where: { id, planId } }),
     async (tx, row) => {
-      const stored = asFieldValues(row.fieldValues);
-      const now: Record<string, unknown> = {
+      const stored: Record<string, unknown> = asFieldValues(row.fieldValues);
+      const now = {
         name: row.name,
         altNames: row.altNames,
         position: { latitude: row.latitude, longitude: row.longitude },
         elevation: row.elevation,
         notes: row.notes,
       };
-      for (const [field, pair] of edit)
-        if (!sameJson(now[field], pair.from)) throw changed();
+      for (const field of Object.keys(now) as (keyof typeof now)[]) {
+        const pair = edit[field];
+        if (pair && !isDeepStrictEqual(now[field], pair.from)) throw changed();
+      }
       // An absent key and a null one are the same value.
       for (const [key, pair] of valuePairs)
-        if (!sameJson(stored[key] ?? null, pair.from ?? null)) throw changed();
+        if (!isDeepStrictEqual(stored[key] ?? null, pair.from ?? null))
+          throw changed();
       const fieldValues = { ...stored };
       for (const [key, pair] of valuePairs)
         if (pair.to === null) delete fieldValues[key];
@@ -365,19 +308,12 @@ async function editPlace(
       await tx.place.update({
         where: { id },
         data: {
-          ...(edit.has("name") && { name: payload.name as string }),
-          ...(edit.has("altNames") && {
-            altNames: (payload.altNames as string[] | null) ?? [],
-          }),
-          ...(edit.has("notes") && { notes: payload.notes as string | null }),
-          ...(edit.has("elevation") && {
-            elevation: payload.elevation as number | null,
-          }),
-          ...(position && {
-            latitude: payload.latitude as number,
-            longitude: payload.longitude as number,
-          }),
-          ...(valuePairs.size > 0 && {
+          ...(edit.name && { name: edit.name.to }),
+          ...(edit.altNames && { altNames: edit.altNames.to }),
+          ...(edit.notes && { notes: edit.notes.to }),
+          ...(edit.elevation && { elevation: edit.elevation.to }),
+          ...position,
+          ...(valuePairs.length > 0 && {
             fieldValues: fieldValues as Prisma.InputJsonValue,
           }),
         },
@@ -391,55 +327,40 @@ async function editRoute(
   id: string,
   body: unknown,
 ): Promise<void> {
-  const edit = pairs(body, ["name", "color", "geometry"]);
-  const geometry = edit.get("geometry")?.to as
-    | { points?: unknown; anchors?: unknown }
-    | undefined;
-  if (edit.has("geometry") && (!geometry || typeof geometry !== "object"))
-    throw malformed("geometry.to must be an object");
+  const edit = accepted(parseTripPlanRoutePatch(body));
   const error = validateRoutePayload(
-    {
-      name: edit.get("name")?.to,
-      points: geometry?.points,
-      anchors: geometry?.anchors,
-    },
+    { name: edit.name?.to },
     { requireCore: false },
   );
   if (error) throw malformed(error);
-  const color = edit.has("color")
-    ? parseRouteColor(edit.get("color")!.to)
-    : null;
-  if (edit.has("color") && color === null)
+  const color = edit.color ? parseRouteColor(edit.color.to) : null;
+  if (edit.color && color === null)
     throw malformed("color must be a palette colour");
-  const parsed = geometry ? parseRoutePoints(geometry.points) : null;
-  const points = parsed && "points" in parsed ? parsed.points : undefined;
+  const geometry = edit.geometry;
 
   await underLock(
     planId,
     (tx) => tx.route.findFirst({ where: { id, planId } }),
     async (tx, row) => {
-      const now: Record<string, unknown> = { name: row.name, color: row.color };
-      for (const [field, pair] of edit) {
-        // Geometry is its points and their anchors, null and absent alike.
-        const from = pair.from as { points?: unknown; anchors?: unknown };
-        const same =
-          field === "geometry"
-            ? !!from &&
-              sameJson(row.points, from.points) &&
-              sameJson(row.anchors ?? null, from.anchors ?? null)
-            : sameJson(now[field], pair.from);
-        if (!same) throw changed();
-      }
+      if (edit.name && row.name !== edit.name.from) throw changed();
+      if (edit.color && row.color !== edit.color.from) throw changed();
+      // Geometry is its points and their anchors, null and absent alike.
+      if (
+        geometry &&
+        !(
+          isDeepStrictEqual(row.points, geometry.from.points) &&
+          isDeepStrictEqual(row.anchors ?? null, geometry.from.anchors)
+        )
+      )
+        throw changed();
       await tx.route.update({
         where: { id },
         data: {
-          ...(edit.has("name") && {
-            name: (edit.get("name")!.to as string).trim(),
-          }),
+          ...(edit.name && { name: edit.name.to.trim() }),
           ...(color && { color }),
-          ...(points && {
-            points,
-            anchors: parseAnchorsOrNull(geometry!.anchors, points.length),
+          ...(geometry && {
+            points: geometry.to.points,
+            anchors: geometry.to.anchors ?? Prisma.DbNull,
           }),
         },
       });
@@ -448,16 +369,13 @@ async function editRoute(
 }
 
 async function editFile(planId: string, id: string, body: unknown) {
-  const edit = pairs(body, ["displayName"]);
-  const pair = edit.get("displayName")!;
-  const displayName = parseMediaDisplayName(pair.to);
-  if (pair.from !== null && typeof pair.from !== "string")
-    throw malformed("displayName.from must be a string or null");
+  const { from, to } = accepted(parseTripPlanFilePatch(body)).displayName!;
+  const displayName = parseMediaDisplayName(to);
   await underLock(
     planId,
     (tx) => tx.media.findFirst({ where: { id, planId, linkedType: "none" } }),
     async (tx, row) => {
-      if (row.displayName !== pair.from) throw changed();
+      if (row.displayName !== from) throw changed();
       await tx.media.update({ where: { id }, data: { displayName } });
     },
   );

@@ -791,6 +791,34 @@ describe("compare-and-set", () => {
     expect(row).toMatchObject({ name: "Test gully north", notes: null });
   });
 
+  // Mutation: read the row before touchPlan in underLock; both racing saves
+  // then compare against the same old value and land.
+  it("lets one of two saves from the same value land, and refuses the other", async () => {
+    const id = await planPlace();
+    const results = await Promise.all(
+      ["Test gully east", "Test gully west", "Test gully south"].map((to) =>
+        patch(ALICE_SUB, "place", id, { name: { from: "Test gully", to } }),
+      ),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409, 409]);
+    const winner = results.find((r) => r.status === 200)!;
+    const row = await prisma.place.findUniqueOrThrow({ where: { id } });
+    expect(row.name).toBe(winner.body.name);
+  });
+
+  // Mutation: requirePlanWrite → a plan-exists check in the PATCH.
+  it("404s someone not in the plan and a removed member", async () => {
+    const id = await planPlace(BOB_SUB);
+    const body = { notes: { from: null, to: "Test notes" } };
+    expect((await patch(CAROL_SUB, "place", id, body)).status).toBe(404);
+    await prisma.tripPlanMember.delete({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+    });
+    expect((await patch(BOB_SUB, "place", id, body)).status).toBe(404);
+    const row = await prisma.place.findUniqueOrThrow({ where: { id } });
+    expect(row.notes).toBeNull();
+  });
+
   // Mutation: compare fieldValues as a whole instead of per key.
   it("lets two members write different attributes, and refuses a stale one", async () => {
     const id = await planPlace();
@@ -834,6 +862,27 @@ describe("compare-and-set", () => {
       [{ ownerId: { from: null, to: ALICE_ID } }, 400],
       [{ name: "Test gully" }, 400],
       [{}, 400],
+      // A malformed `from` is the client's bug, not someone else's change.
+      // Mutation: drop the from checks in parseTripPlanPlacePatch.
+      [{ name: { from: 3, to: "Test gully north" } }, 400],
+      [
+        {
+          position: {
+            from: "x",
+            to: { latitude: -33.61, longitude: 150.31 },
+          },
+        },
+        400,
+      ],
+      [
+        {
+          altNames: {
+            from: Array.from({ length: 51 }, () => "a"),
+            to: [],
+          },
+        },
+        413,
+      ],
     ];
     for (const [body, status] of cases) {
       const res = await patch(ALICE_SUB, "place", id, body);
@@ -877,6 +926,26 @@ describe("compare-and-set", () => {
     expect(
       (await patch(ALICE_SUB, "route", id, { geometry: { from, to } })).status,
     ).toBe(409);
+    // Mutation: let geometry.to go without points in parseTripPlanRoutePatch.
+    for (const [body, status] of [
+      [{ geometry: { from: to, to: {} } }, 400],
+      [{ geometry: { from: to, to: { anchors: null } } }, 400],
+      [{ geometry: { from: 5, to } }, 400],
+      [
+        {
+          geometry: {
+            from: { points: Array(1001).fill([150.3, -33.6]), anchors: null },
+            to,
+          },
+        },
+        413,
+      ],
+    ] as const) {
+      const refused = await patch(ALICE_SUB, "route", id, body);
+      expect(refused.status, JSON.stringify(body).slice(0, 80)).toBe(status);
+    }
+    const stored = await prisma.route.findUniqueOrThrow({ where: { id } });
+    expect(stored.points).toEqual(to.points);
     await request(API_URL)
       .delete(`/routes/${route.body.id}`)
       .set(as(ALICE_SUB));

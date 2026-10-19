@@ -35,21 +35,22 @@ import {
   invalidFieldValueKeys,
   asFieldValues,
   normalizeUserUiPreferences,
+  PLACE_MAX_ALT_NAMES,
+  PLACE_NAME_MAX_LENGTH,
   TRACK_MIME_TYPES,
   validatePlacePayload,
   type UserSentence,
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
-// Bounds for the free-text place fields. `validatePlacePayload` (shared)
+// Bounds for the free-text place fields (shared, with the plan item patch
+// parsers that cap a compare-and-set `from`). `validatePlacePayload` (shared)
 // covers coordinates + numerics only; without text field bounds, a mistyped
 // `name`/`altNames`/`notes`/`attributes` would pass validation and die inside
 // Prisma as a raw 500 — and on the sync push path, one such op would poison
 // every subsequent flush of that batch (the per-op catch re-throws
 // non-AppErrors). Bad input is a 400.
 // Sibling values: TRIP_NAME_MAX_LENGTH / ROUTE_NAME_MAX_LENGTH = 200.
-export const PLACE_NAME_MAX_LENGTH = 200;
-export const PLACE_MAX_ALT_NAMES = 50;
 
 /**
  * Type/shape check for the place fields `validatePlacePayload` does not
