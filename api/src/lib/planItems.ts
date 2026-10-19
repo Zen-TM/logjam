@@ -39,8 +39,8 @@ import { s3 } from "../services/awsClients";
 import { AppError, fault } from "../middleware/errorHandler";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
-import { touchPlan } from "./planAccess";
-import { dropStalePlanNotifications, endPlanForOthers } from "./planMembership";
+import { requireStillMember, touchPlan } from "./planAccess";
+import { dropMembership, endPlanForOthers } from "./planMembership";
 import { reconcileCopiedPlace } from "./placeCopy";
 import {
   copyMediaObjects,
@@ -240,7 +240,11 @@ function ownerColumns(owner: FileOwner, recipientId: string) {
  * Charge `recipientId` for `bytes` and write the row, in one transaction
  * whose first statement touches the plan (if it is one). The authoritative
  * quota check runs after the charge, under the user row's lock; whatever the
- * caller copied in S3 is removed again if the transaction fails.
+ * caller copied in S3 is removed again if the transaction fails. A plan's
+ * adder must still be in it once the lock is held: a leave, a remove or an
+ * account's hand-over can commit during the copy, and the file would then
+ * be charged to someone the plan no longer has. Guard:
+ * __tests__/planItems.test.ts ("charges no one who left during the copy").
  */
 async function chargeAndWrite<T>(
   owner: FileOwner,
@@ -251,7 +255,10 @@ async function chargeAndWrite<T>(
 ): Promise<T> {
   try {
     return await prisma.$transaction(async (tx) => {
-      if ("planId" in owner) await touchPlan(tx, owner.planId);
+      if ("planId" in owner) {
+        await touchPlan(tx, owner.planId);
+        await requireStillMember(tx, owner.planId, recipientId);
+      }
       await incrementStorageUsed(recipientId, bytes, tx);
       const { used, quota } = await getStorageUsage(recipientId, tx);
       if (used > quota) throw storageFull(used - bytes, quota);
@@ -858,13 +865,7 @@ export async function handOverPlans(userId: string): Promise<void> {
           : leader.userId;
         await moveCharges(tx, plan.id, userId, heir, usage);
         await applyStorageChanges(usage, tx);
-        await tx.tripPlanAnswer.deleteMany({
-          where: { userId, form: { planId: plan.id } },
-        });
-        await tx.tripPlanMember.deleteMany({
-          where: { planId: plan.id, userId },
-        });
-        await dropStalePlanNotifications(tx, plan.id, userId);
+        await dropMembership(tx, plan.id, userId);
         return { late: async () => {}, push: () => {} };
       });
       push();

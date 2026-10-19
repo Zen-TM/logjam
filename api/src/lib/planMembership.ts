@@ -117,6 +117,21 @@ export async function dropStalePlanNotifications(
   });
 }
 
+/**
+ * Someone out of the plan, in its transaction: their answers, their member
+ * row and the notifications that named them. A leave, a remove and an
+ * account's hand-over (lib/planItems.ts handOverPlans) all end this way.
+ */
+export async function dropMembership(
+  tx: Db,
+  planId: string,
+  userId: string,
+): Promise<void> {
+  await tx.tripPlanAnswer.deleteMany({ where: { userId, form: { planId } } });
+  await tx.tripPlanMember.deleteMany({ where: { planId, userId } });
+  await dropStalePlanNotifications(tx, planId, userId);
+}
+
 /** Every row about the plan but the ones saying it ended. */
 export async function dropPlanNotifications(
   tx: Db,

@@ -9,6 +9,7 @@ import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { randomUUID } from "crypto";
 import { planResultKeyFor, resultKeyFor } from "../lib/geoPdfResult";
+import { copyStandaloneFile, handOverPlans } from "../lib/planItems";
 import {
   API_URL,
   ALICE_ID,
@@ -1168,11 +1169,11 @@ describe("storage when someone goes", () => {
     }
   });
 
-  // Each hand-over takes its user out of the plan under the plan's lock, so
-  // the second sees the first gone whichever runs first. Mutation: drop the
-  // member delete from handOverPlans; red when the two hand-overs run before
-  // either account's own transaction, which this race doesn't always stage.
-  it("leaves a leader and a payer when two accounts go at once", async () => {
+  // Called straight, as the account route does before its own transaction:
+  // between the two, each hand-over must already have taken its user out of
+  // the plan, or the second still sees the first as leader and creator.
+  // Mutation: drop dropMembership from handOverPlans.
+  it("leaves a leader and a payer when two hand-overs run back to back", async () => {
     const [dave, erin] = [await throwaway(), await throwaway()];
     let plan: string | undefined;
     try {
@@ -1191,12 +1192,8 @@ describe("storage when someone goes", () => {
         await planFile(erin.cognitoId, plan),
       ];
       const before = await used(BOB_ID);
-      const results = await Promise.all(
-        [dave, erin].map((user) =>
-          request(API_URL).delete("/users/me").set(as(user.cognitoId)),
-        ),
-      );
-      expect(results.map((r) => r.status)).toEqual([204, 204]);
+      await handOverPlans(dave.id);
+      await handOverPlans(erin.id);
       const left = await prisma.tripPlanMember.findMany({
         where: { planId: plan },
         select: { userId: true, role: true },
@@ -1213,6 +1210,26 @@ describe("storage when someone goes", () => {
       });
       if (plan)
         await request(API_URL).delete(`/plans/${plan}`).set(as(BOB_SUB));
+    }
+  });
+
+  // Called straight for carol, who isn't in the plan: what an add in flight
+  // meets when a leave, remove or hand-over commits during its S3 copy.
+  // Mutation: drop requireStillMember from chargeAndWrite.
+  it("charges no one who left during the copy", async () => {
+    const fileId = await ownFile(CAROL_SUB);
+    const source = await prisma.media.findUniqueOrThrow({
+      where: { id: fileId },
+    });
+    const before = await used(CAROL_ID);
+    try {
+      await expect(
+        copyStandaloneFile(source, CAROL_ID, { planId }),
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(await prisma.media.count({ where: { planId } })).toBe(0);
+      expect(await used(CAROL_ID)).toBe(before);
+    } finally {
+      await request(API_URL).delete(`/media/${fileId}`).set(as(CAROL_SUB));
     }
   });
 

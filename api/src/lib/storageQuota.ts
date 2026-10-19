@@ -75,9 +75,8 @@ export async function incrementStorageUsed(
 
 /**
  * Apply several users' storage changes (bytes, plus or minus) in user id
- * order. Two transactions that lock the same users' rows in opposite orders
- * deadlock, so a transaction that changes more than one user's storage
- * collects its changes and applies them once, here.
+ * order, so two transactions changing the same users' storage lock their
+ * rows in the same order and can't deadlock.
  * Guard: storageQuota.unit.test.ts ("in user id order").
  */
 export async function applyStorageChanges(

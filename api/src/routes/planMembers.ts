@@ -48,6 +48,7 @@ import {
 import {
   activeMemberIds,
   blockedWithAny,
+  dropMembership,
   dropStalePlanNotifications,
   joinForms,
   notifyPlan,
@@ -414,13 +415,7 @@ router.delete(
               deleteFiles: !self && req.query.deleteFiles === "true",
             })
           : async () => {};
-      await tx.tripPlanAnswer.deleteMany({
-        where: { userId: memberId, form: { planId } },
-      });
-      await tx.tripPlanMember.delete({
-        where: { planId_userId: { planId, userId: memberId } },
-      });
-      await dropStalePlanNotifications(tx, planId, memberId);
+      await dropMembership(tx, planId, memberId);
       if (self || member.status === "invited") return { late, push: () => {} };
       const push = await notifyPlan(tx, [memberId], {
         type: "plan_access_ended",
