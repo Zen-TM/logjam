@@ -55,6 +55,7 @@ import {
   type FriendsBucket,
   type SectionKeysOn,
   friendSearchHint,
+  USER_SEARCH_MIN_CHARS as SEARCH_MIN_CHARS,
 } from "@logjam/shared";
 
 import {
@@ -94,8 +95,6 @@ import {
   type ChipOption,
   type ToastMessage,
 } from "../ui";
-
-const SEARCH_MIN_CHARS = 3;
 
 type Bucket = FriendsBucket;
 

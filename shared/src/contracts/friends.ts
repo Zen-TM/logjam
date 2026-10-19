@@ -9,6 +9,9 @@ import { FRIEND_INVITE_TTL_DAYS } from "../friendInvite.js";
 import type { IconIdea } from "../icons.js";
 import type { ScreenContract } from "./types.js";
 
+/** The shortest username search the API answers (GET /friends/search). */
+export const USER_SEARCH_MIN_CHARS = 3;
+
 export const FRIENDS = {
   id: "friends.list",
   question: "Who can I share a place with, and who is waiting on me?",
@@ -23,7 +26,7 @@ export const FRIENDS = {
     add: "Add",
     addTitle: "Add a friend",
     searchField: "Search by username",
-    searchHint: "Keep typing — at least 3 characters.",
+    searchHint: `Keep typing — at least ${USER_SEARCH_MIN_CHARS} characters.`,
     searchEmpty: "No one by that name.",
 
     bucketAll: "All",

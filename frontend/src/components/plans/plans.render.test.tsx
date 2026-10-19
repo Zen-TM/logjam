@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   TRIP_PLAN_FORMS,
+  TRIP_PLAN_INVITE,
   TRIP_PLAN_PAGE,
   tripPlanInPlanNow,
   TRIP_PLANS_LIST,
@@ -15,9 +16,10 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
-import { archivePlan } from "../../plansApi";
+import { archivePlan, inviteMember } from "../../plansApi";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
+import PlanInvitePage from "./PlanInvitePage";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
@@ -65,6 +67,15 @@ vi.mock("../../plansApi", async (importOriginal) => ({
     setView: vi.fn(),
   }),
   archivePlan: vi.fn(),
+  inviteMember: vi.fn(),
+  getInviteLinks: vi.fn(async () => []),
+}));
+vi.mock("../../placeUtils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../placeUtils")>()),
+  searchUsers: async () => ({
+    data: [{ id: "u3", username: "carol" }],
+    total: 1,
+  }),
 }));
 
 // jsdom has no modal dialogs.
@@ -285,5 +296,33 @@ describe("Edit form over another leader's save", () => {
     expect(
       screen.getByText(TRIP_PLAN_FORMS.copy.questionsChanged),
     ).toBeTruthy();
+  });
+});
+
+describe("Invite people after a refused invite", () => {
+  // Mutation: drop the quiet refetch in the catch, and a person someone
+  // else just invited keeps an Invite button that fails on every press.
+  it("fetches the plan again, quietly", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(inviteMember).mockRejectedValue(new Error("409"));
+    const onInvited = vi.fn();
+    render(
+      <PlanInvitePage plan={plan} onBack={() => {}} onInvited={onInvited} />,
+    );
+    fireEvent.change(
+      screen.getByRole("searchbox", {
+        name: TRIP_PLAN_INVITE.copy.searchField,
+      }),
+      { target: { value: "car" } },
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: TRIP_PLAN_INVITE.copy.inviteSend,
+      }),
+    );
+    await waitFor(() =>
+      expect(onInvited).toHaveBeenCalledWith({ quiet: true }),
+    );
+    expect(toast.error).toHaveBeenCalled();
   });
 });

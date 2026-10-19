@@ -234,6 +234,18 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
   };
 }
 
+/** The first form a person answered, for a leader reading their request. */
+export function answeredForm(
+  plan: Pick<TripPlanView, "forms">,
+  userId: string,
+): string | null {
+  return (
+    plan.forms.find((form) =>
+      form.answers.some((answer) => answer.user.id === userId),
+    )?.id ?? null
+  );
+}
+
 type ChargedFile = { sizeBytes: string; chargedTo: { id: string } | null };
 
 /** Every file in a plan that counts against someone's storage. */

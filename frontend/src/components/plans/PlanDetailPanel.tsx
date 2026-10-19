@@ -124,8 +124,9 @@ export default function PlanDetailPanel({
   // A form's page, one step inside the Forms view; and its two dialogs.
   const [openFormId, setOpenFormId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  // Focus follows the form's page: in, onto its back arrow; out, onto the
-  // row that was opened. Both are gone from the page otherwise.
+  // Focus follows a step inside the plan (a form's page, Invite people): in,
+  // onto its back arrow; out, onto what opened it. Both are gone from the
+  // page otherwise.
   const lastOpenedForm = useRef<string | null>(null);
   const focusSoon = (selector: string) =>
     requestAnimationFrame(() =>
@@ -139,6 +140,15 @@ export default function PlanDetailPanel({
   const closeFormPage = () => {
     setOpenFormId(null);
     focusSoon(`[data-form-id="${lastOpenedForm.current}"] button`);
+  };
+  const openInvite = () => {
+    setTab("people");
+    setInviting(true);
+    focusSoon("header button");
+  };
+  const closeInvite = () => {
+    setInviting(false);
+    focusSoon("[data-invite-people]");
   };
   const [answering, setAnswering] = useState<string | null>(null);
   const [building, setBuilding] = useState<{ id: string | null } | null>(null);
@@ -218,10 +228,7 @@ export default function PlanDetailPanel({
       setTab("forms");
       setBuilding({ id: null });
     },
-    invite: () => {
-      setTab("people");
-      setInviting(true);
-    },
+    invite: () => openInvite(),
   };
 
   const moveSection = (index: number, by: -1 | 1) => {
@@ -575,8 +582,11 @@ export default function PlanDetailPanel({
         plan={plan}
         myUserId={myUserId}
         onChanged={refetch}
-        onInvite={() => setInviting(true)}
-        onSeeAnswers={() => setTab("forms")}
+        onInvite={openInvite}
+        onSeeAnswers={(formId) => {
+          setTab("forms");
+          openFormPage(formId);
+        }}
       />
     ),
   };
@@ -607,11 +617,7 @@ export default function PlanDetailPanel({
   return (
     <div ref={rootRef} className={classes.root}>
       {inviting ? (
-        <PlanInvitePage
-          plan={plan}
-          onBack={() => setInviting(false)}
-          onInvited={refetch}
-        />
+        <PlanInvitePage plan={plan} onBack={closeInvite} onInvited={refetch} />
       ) : openForm ? (
         <PlanFormPage
           form={openForm}

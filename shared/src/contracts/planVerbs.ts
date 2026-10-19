@@ -310,12 +310,11 @@ export function planFormDeleteConfirm(form: {
 
 // ── People ──────────────────────────────────────────────────────────
 
-/** A leader's verbs on someone going, in menu order. A leader never acts on
- *  themselves here: they leave from the plan's ⋯. */
+/** A leader's verbs on someone going, in menu order. */
 export const PLAN_MEMBER_VERBS = [
-  { id: "makeLeader", icon: "account", label: "Make leader", roles: LEADERS },
-  { id: "makeEditor", icon: "account", label: "Make editor", roles: LEADERS },
-  { id: "makeMember", icon: "account", label: "Make member", roles: LEADERS },
+  { id: "makeLeader", icon: "flag", label: "Make a leader", roles: LEADERS },
+  { id: "makeEditor", icon: "edit", label: "Make an editor", roles: LEADERS },
+  { id: "makeMember", icon: "account", label: "Make a member", roles: LEADERS },
   {
     id: "remove",
     icon: "unshare",
@@ -334,16 +333,20 @@ const ROLE_VERB: Record<TripPlanRole, PlanMemberVerbId> = {
   member: "makeMember",
 };
 
-/** The verbs a caller has on one person going: none on themselves, none on
- *  an archived plan, and no "Make" for the role they already have. */
+/** The verbs a caller has on one person going: none on an archived plan,
+ *  and no "Make" for the role they already have. On their own row a leader
+ *  may step down while another leader remains, as planMembers.ts's PATCH
+ *  allows; they never remove themselves (they leave from the plan's ⋯). */
 export function planMemberVerbs(
   callerRole: TripPlanRole,
   target: { role: TripPlanRole; self: boolean },
-  state: { archived: boolean },
+  state: { archived: boolean; leaders: number },
 ): PlanVerb<PlanMemberVerbId>[] {
-  if (target.self) return [];
+  if (target.self && (target.role !== "leader" || state.leaders < 2)) return [];
   return planVerbsFor(PLAN_MEMBER_VERBS, "web", callerRole, state).filter(
-    (verb) => verb.id !== ROLE_VERB[target.role],
+    (verb) =>
+      verb.id !== ROLE_VERB[target.role] &&
+      !(target.self && verb.id === "remove"),
   );
 }
 
@@ -360,7 +363,7 @@ export function planRemoveConfirm(
   const counted = files ? `${plural(files.count, "file")}, ${files.size}` : "";
   return {
     confirmTitle: `Remove ${username} from ${planName}?`,
-    confirmBody: `They lose access at once and their answers go. What they added stays.${
+    confirmBody: `They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.${
       files
         ? ` Their files (${counted}) will count against your storage instead.`
         : ""

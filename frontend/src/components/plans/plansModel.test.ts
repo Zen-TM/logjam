@@ -9,6 +9,9 @@ import {
   adoptTheirs,
   formPatch,
   type FormValues,
+  addedBy,
+  answeredForm,
+  filesChargedTo,
   PLAN_FIELD_GROUPS,
   planPatch,
   planSummary,
@@ -342,5 +345,67 @@ describe("the print summary", () => {
     expect(table(summary, "carpool")).toBeUndefined();
     expect(table(summary, "safetyContacts")).toBeDefined();
     expect(summary.sections).toEqual([]);
+  });
+});
+
+describe("what someone going takes or leaves", () => {
+  const ref = (id: string) => ({ id, username: id });
+  const file = (sizeBytes: string, charged: string, added = charged) => ({
+    sizeBytes,
+    chargedTo: ref(charged),
+    addedBy: ref(added),
+  });
+  // tom added a place with a photo, a route, a GPX file and a GeoPDF; mira
+  // added a place and a file, and pays for tom's photo after taking it on.
+  const plan = {
+    places: [
+      { addedBy: ref("tom"), media: [file("1000", "tom")] },
+      { addedBy: ref("mira"), media: [file("20", "mira")] },
+      { addedBy: ref("tom"), media: [file("300", "mira", "tom")] },
+    ],
+    routes: [{ addedBy: ref("tom") }],
+    files: [file("4000", "tom"), file("50", "mira")],
+    geoPdfs: [file("60000", "tom")],
+    forms: [],
+  } as unknown as TripPlanView;
+
+  // Mutation: drop the place media from `planFiles`, and Remove's "Delete
+  // their files instead" leaves tom's photo charged to the leader.
+  it("prices a person's files, place photos included", () => {
+    expect(filesChargedTo(plan, "tom")).toEqual({ count: 3, bytes: 65000 });
+    expect(filesChargedTo(plan, "mira")).toEqual({ count: 3, bytes: 370 });
+  });
+
+  // Mutations: drop `+ mine(plan.files).length` from `ways`, or the media
+  // from the bytes, and Leave's "Also delete what I added" undercounts.
+  it("counts what a person added, as Leave prices it", () => {
+    expect(addedBy(plan, "tom")).toEqual({
+      places: 2,
+      ways: 2,
+      maps: 1,
+      bytes: 65300,
+    });
+    expect(addedBy(plan, "mira")).toEqual({
+      places: 1,
+      ways: 1,
+      maps: 0,
+      bytes: 70,
+    });
+  });
+});
+
+describe("a request's answers", () => {
+  const answer = (id: string) => ({ user: { id, username: id } });
+  // Mutation: ignore the user, and See answers opens a form carol never
+  // answered, or shows on a request with no answers at all.
+  it("opens the first form the person answered, or none", () => {
+    const plan = {
+      forms: [
+        { id: "carpool", answers: [answer("tom")] },
+        { id: "contacts", answers: [answer("tom"), answer("carol")] },
+      ],
+    } as unknown as TripPlanView;
+    expect(answeredForm(plan, "carol")).toBe("contacts");
+    expect(answeredForm(plan, "sue")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-// A plan's People view (design §7.2): people asking to join first (leaders
+// A plan's People view: people asking to join first (leaders
 // only), answered in the row's footer with their answers one press away; then
 // who's going, leaders first; then who's invited (leaders only). A leader's ⋯
 // on someone going changes their role or removes them.
@@ -36,7 +36,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { approveMember, removeMember, setMemberRole } from "../../plansApi";
 import { menuEntries } from "./planMenu";
-import { filesChargedTo } from "./plansModel";
+import { answeredForm, filesChargedTo } from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -53,8 +53,8 @@ export default function PlanPeople({
   /** Fetch the plan again; `quiet` after a write whose failure was just said. */
   onChanged: (options?: { quiet: boolean }) => void;
   onInvite: () => void;
-  /** Open the forms, where a request's answers are (leaders see them). */
-  onSeeAnswers: () => void;
+  /** Open a form a request answered (leaders see its answers). */
+  onSeeAnswers: (formId: string) => void;
 }) {
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -91,6 +91,7 @@ export default function PlanPeople({
   const asking = byStatus("requested");
   const invited = byStatus("invited");
   const going = tripPlanGoing(plan.members);
+  const leaders = going.filter((member) => member.role === "leader").length;
   const asked = leader && asking.length > 0;
   const invitedShown = leader && invited.length > 0;
   // A heading needs a second group to divide from.
@@ -141,56 +142,63 @@ export default function PlanPeople({
       {asked && (
         <>
           <SectionHeader title={copy.peopleAsking} count={asking.length} />
-          {asking.map((member) => (
-            <Row
-              key={member.user.id}
-              title={member.user.username}
-              leading={<Avatar username={member.user.username} />}
-              footer={
-                !archived && (
-                  <>
-                    <Button
-                      compact
-                      variant="filled"
-                      icon="accept"
-                      busy={busyId === member.user.id}
-                      onClick={() =>
-                        void run(
-                          member.user.id,
-                          () => approveMember(plan.id, member.user.id),
-                          copy.letInFailed,
-                          tripPlanLetInMessage(member.user.username),
-                        )
-                      }
-                    >
-                      {copy.letIn}
-                    </Button>
-                    <Button
-                      compact
-                      variant="outline"
-                      icon="ignore"
-                      onClick={() => setTurningDown(member)}
-                    >
-                      {copy.turnDown}
-                    </Button>
-                    <Button compact variant="outline" onClick={onSeeAnswers}>
-                      {copy.seeAnswers}
-                    </Button>
-                  </>
-                )
-              }
-            />
-          ))}
+          {asking.map((member) => {
+            const answered = answeredForm(plan, member.user.id);
+            return (
+              <Row
+                key={member.user.id}
+                title={member.user.username}
+                leading={<Avatar username={member.user.username} />}
+                footer={
+                  !archived && (
+                    <>
+                      <Button
+                        compact
+                        variant="filled"
+                        icon="accept"
+                        busy={busyId === member.user.id}
+                        onClick={() =>
+                          void run(
+                            member.user.id,
+                            () => approveMember(plan.id, member.user.id),
+                            copy.letInFailed,
+                            tripPlanLetInMessage(member.user.username),
+                          )
+                        }
+                      >
+                        {copy.letIn}
+                      </Button>
+                      <Button
+                        compact
+                        variant="outline"
+                        icon="ignore"
+                        onClick={() => setTurningDown(member)}
+                      >
+                        {copy.turnDown}
+                      </Button>
+                      {answered && (
+                        <Button
+                          compact
+                          variant="outline"
+                          onClick={() => onSeeAnswers(answered)}
+                        >
+                          {copy.seeAnswers}
+                        </Button>
+                      )}
+                    </>
+                  )
+                }
+              />
+            );
+          })}
         </>
       )}
-      {headed && (
-        <SectionHeader title={copy.peopleGoing} count={going.length} />
-      )}
+      {headed && <SectionHeader title={copy.peopleGoing} />}
       {going.map((member) => {
         const verbs = planMemberVerbs(
           plan.myRole,
           { role: member.role, self: member.user.id === myUserId },
-          { archived },
+          { archived, leaders },
         );
         const word = roleWord(member);
         return (
@@ -242,7 +250,7 @@ export default function PlanPeople({
                     onClick={() =>
                       void run(
                         member.user.id,
-                        () => removeMember(plan.id, member.user.id),
+                        () => removeMember(plan.id, member.user.id, "invited"),
                         copy.cancelInviteFailed,
                         copy.inviteCancelled,
                       )
@@ -256,7 +264,12 @@ export default function PlanPeople({
       )}
       {leader && !archived && (
         <ListEnd>
-          <Button variant="filled" icon="addFriend" onClick={onInvite}>
+          <Button
+            variant="filled"
+            icon="addFriend"
+            data-invite-people
+            onClick={onInvite}
+          >
             {planAddVerbLabel("invite")}
           </Button>
         </ListEnd>
@@ -285,7 +298,7 @@ export default function PlanPeople({
           const who = removing;
           void run(
             who.user.id,
-            () => removeMember(plan.id, who.user.id, deleteFiles),
+            () => removeMember(plan.id, who.user.id, "active", deleteFiles),
             copy.removeFailed,
             tripPlanRemovedMessage(who.user.username),
           ).then(() => setRemoving(null));
@@ -304,7 +317,7 @@ export default function PlanPeople({
           const who = turningDown;
           void run(
             who.user.id,
-            () => removeMember(plan.id, who.user.id),
+            () => removeMember(plan.id, who.user.id, "requested"),
             copy.turnDownFailed,
             copy.turnedDown,
           ).then(() => setTurningDown(null));

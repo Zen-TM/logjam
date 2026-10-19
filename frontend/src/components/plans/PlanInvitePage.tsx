@@ -1,14 +1,18 @@
-// Invite people, one step inside a plan's People view (design §7.6): find
+// Invite people, one step inside a plan's People view: find
 // someone by username and pick their role, or send a link. A link is shown
 // only when the clipboard refuses it, as Friends' is: it exists only in the
 // reply that made it. Live links are listed, each with Turn off.
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
-  formatDateKey,
+  FRIENDS,
   planInviteUrl,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_ROLES,
+  tripPlanInviteLinkLine,
+  tripPlanInviteePill,
   tripPlanInviteMessage,
+  tripPlanRoleWord,
   type SectionKeysOn,
   type TripPlanInviteView,
   type TripPlanRole,
@@ -26,7 +30,8 @@ import {
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import { searchUsers, type TSearchUser } from "../../placeUtils";
+import type { TSearchUser } from "../../placeUtils";
+import { useUserSearch } from "../../useUserSearch";
 import {
   createInviteLink,
   getInviteLinks,
@@ -36,8 +41,6 @@ import {
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_INVITE.copy;
-/** Shorter than this and the search has nothing useful to match on. */
-const SEARCH_MIN_CHARS = 3;
 
 export default function PlanInvitePage({
   plan,
@@ -46,42 +49,22 @@ export default function PlanInvitePage({
 }: {
   plan: TripPlanView;
   onBack: () => void;
-  onInvited: () => void;
+  /** Fetch the plan again; `quiet` after a write whose failure was just said. */
+  onInvited: (options?: { quiet: boolean }) => void;
 }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<TSearchUser[]>([]);
+  const { short, results } = useUserSearch(query, true, copy.searchFailed);
   const [role, setRole] = useState<TripPlanRole>("member");
-  const [sendingId, setSendingId] = useState<string | null>(null);
   const [links, setLinks] = useState<TripPlanInviteView[]>([]);
   const [shown, setShown] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The control that is working: "copy", "share", a link's or a person's id.
+  // It disables itself, never its neighbours.
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const already = new Set(plan.members.map((member) => member.user.id));
-  const typed = query.trim();
-  const searches = typed.length >= SEARCH_MIN_CHARS;
-  if (!searches && results.length > 0) setResults([]);
-
-  useEffect(() => {
-    if (!searches) return;
-    let cancelled = false;
-    timer.current = setTimeout(() => {
-      searchUsers(typed)
-        .then(({ data }) => {
-          if (!cancelled) setResults(data);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          console.error(err);
-          toast.error(messageFromError(err, copy.searchFailed));
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [searches, typed, toast]);
+  const statusOf = new Map(
+    plan.members.map((member) => [member.user.id, member.status]),
+  );
 
   const loadLinks = () =>
     getInviteLinks(plan.id)
@@ -94,7 +77,7 @@ export default function PlanInvitePage({
   }, [plan.id]);
 
   async function invite(user: TSearchUser) {
-    setSendingId(user.id);
+    setBusyId(user.id);
     try {
       await inviteMember(plan.id, user.username, role);
       toast.success(copy.invited);
@@ -102,14 +85,16 @@ export default function PlanInvitePage({
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.inviteFailed));
+      // Someone else may have invited them first: the row then says so.
+      onInvited({ quiet: true });
     } finally {
-      setSendingId(null);
+      setBusyId(null);
     }
   }
 
   /** Make a link, then hand it on: to the share sheet, else the clipboard. */
   async function sendLink(share: boolean) {
-    setBusy(true);
+    setBusyId(share ? "share" : "copy");
     let url: string;
     try {
       const { token } = await createInviteLink(plan.id);
@@ -119,7 +104,7 @@ export default function PlanInvitePage({
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.linkMakeFailed));
-      setBusy(false);
+      setBusyId(null);
       return;
     }
     try {
@@ -136,21 +121,24 @@ export default function PlanInvitePage({
       setShown(url);
       if (!share) toast.error(copy.linkCopyFailed);
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   }
 
   async function revoke(id: string) {
-    setBusy(true);
+    setBusyId(id);
+    // A link shown because the clipboard refused it may be this one.
+    setShown(null);
     try {
       await revokeInviteLink(plan.id, id);
       toast.success(copy.linkRevoked);
-      void loadLinks();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.linkRevokeFailed));
     } finally {
-      setBusy(false);
+      setBusyId(null);
+      // After a failure too: another leader may have turned it off first.
+      void loadLinks();
     }
   }
 
@@ -166,7 +154,6 @@ export default function PlanInvitePage({
             label={copy.searchField}
             placeholder={copy.searchField}
             value={query}
-            autoFocus
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
@@ -178,37 +165,42 @@ export default function PlanInvitePage({
             label={copy.role}
             value={role}
             onChange={setRole}
-            options={[
-              { value: "member", label: "Member" },
-              { value: "editor", label: "Editor" },
-              { value: "leader", label: "Leader" },
-            ]}
+            options={[...TRIP_PLAN_ROLES].reverse().map((value) => ({
+              value,
+              label: tripPlanRoleWord(value),
+            }))}
           />
         </div>
-        {searches &&
-          results.map((user) => (
-            <Row
-              key={user.id}
-              leading={<Avatar username={user.username} />}
-              title={user.username}
-              trailing={
-                already.has(user.id) ? (
-                  <StatusPill label={copy.inPlan} tone="muted" />
-                ) : (
-                  <Button
-                    compact
-                    variant="outline"
-                    busy={sendingId === user.id}
-                    disabled={sendingId !== null}
-                    disabledReason="Inviting…"
-                    onClick={() => void invite(user)}
-                  >
-                    {copy.inviteSend}
-                  </Button>
-                )
-              }
-            />
-          ))}
+        {query.trim() !== "" && short ? (
+          <p className={classes.note}>{FRIENDS.copy.searchHint}</p>
+        ) : !short && results.length === 0 ? (
+          <p className={classes.note}>{FRIENDS.copy.searchEmpty}</p>
+        ) : (
+          results.map((user) => {
+            const pill = tripPlanInviteePill(statusOf.get(user.id));
+            return (
+              <Row
+                key={user.id}
+                leading={<Avatar username={user.username} />}
+                title={user.username}
+                trailing={
+                  pill ? (
+                    <StatusPill label={pill} tone="muted" />
+                  ) : (
+                    <Button
+                      compact
+                      variant="outline"
+                      busy={busyId === user.id}
+                      onClick={() => void invite(user)}
+                    >
+                      {copy.inviteSend}
+                    </Button>
+                  )
+                }
+              />
+            );
+          })
+        )}
       </>
     ),
     link: (
@@ -219,7 +211,7 @@ export default function PlanInvitePage({
             <Button
               variant="outline"
               icon="link"
-              busy={busy}
+              busy={busyId === "copy"}
               onClick={() => void sendLink(false)}
             >
               {copy.linkCopy}
@@ -228,8 +220,7 @@ export default function PlanInvitePage({
               <Button
                 variant="outline"
                 icon="shareFriend"
-                disabled={busy}
-                disabledReason="Working…"
+                busy={busyId === "share"}
                 onClick={() => void sendLink(true)}
               >
                 {copy.linkShare}
@@ -244,13 +235,11 @@ export default function PlanInvitePage({
         {links.map((link) => (
           <Row
             key={link.id}
-            title={`Made ${formatDateKey(link.createdAt)}, works until ${formatDateKey(link.expiresAt)}`}
-            leading={undefined}
+            title={tripPlanInviteLinkLine(link)}
             trailing={
               <Button
                 compact
-                disabled={busy}
-                disabledReason="Working…"
+                busy={busyId === link.id}
                 onClick={() => void revoke(link.id)}
               >
                 {copy.linkRevoke}
@@ -267,7 +256,7 @@ export default function PlanInvitePage({
       <Hero
         title={TRIP_PLAN_INVITE.title}
         onBack={onBack}
-        backLabel="Back to people"
+        backLabel={copy.back}
       />
       <div className={classes.list}>
         {contractSectionKeys(TRIP_PLAN_INVITE, "web").map((key) => (
