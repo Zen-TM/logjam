@@ -1,8 +1,9 @@
-// Trip plans on this phone: fetched and cached, not synced (design §2.7, the
+// Trip plans on this phone: fetched and cached, not synced (ADR 0017, the
 // inbox's pattern in `sync/notificationsCache.ts`). The last GET /plans is
 // the list; each plan opened keeps its last GET /plans/:id verbatim, so it
-// reads offline. Both tables are mirror tables (`sync/mirrorSchema.ts`), so
-// sign-out and a user change wipe them with the mirror.
+// reads offline. Both tables are mirror tables kept through a mirror reset
+// (`keepOnReset` in `sync/mirrorSchema.ts`): sign-out and a user change wipe
+// them, a resync or a schema bump does not.
 //
 // PRIVACY: a cached plan holds names, coordinates, write-ups and people's
 // answers (phone numbers among them). App-private, behind the app lock, and
@@ -103,12 +104,28 @@ export function planChanged(
   );
 }
 
+// The sign-out wipe bumps this, so a GET in flight across it cannot write the
+// departing user's plans back after the wipe (ADR 0006: the wipe stops the
+// producers before it deletes). Read before the GET, checked inside the
+// write's transaction, which the wipe's shares.
+let epoch = 0;
+
+/** Called by the sign-out wipe (`offline/wipeLocalData.ts`). */
+export function stopPlansForWipe(): Promise<void> {
+  epoch += 1;
+  return Promise.resolve();
+}
+
 /**
  * GET /plans, and the cache follows: the list is replaced, and a cached plan
  * the caller is no longer an active member of (missing from the poll, or back
- * to invited) is dropped. Throws on failure and leaves the cache alone.
+ * to invited) is dropped, unless it was fetched after this poll began: that
+ * fetch is newer news than this list. Throws on failure and leaves the cache
+ * alone.
  */
 export async function pollPlans(): Promise<PlansList> {
+  const began = epoch;
+  const startedAt = new Date().toISOString();
   const { plans } = await getPlans();
   const fetchedAt = new Date().toISOString();
   const active = new Set(
@@ -116,6 +133,7 @@ export async function pollPlans(): Promise<PlansList> {
   );
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
+    if (began !== epoch) return;
     await db.runAsync("DELETE FROM plans_list_cache");
     await db.runAsync(
       "INSERT INTO plans_list_cache (fetched_at, payload_json) VALUES (?, ?)",
@@ -127,7 +145,11 @@ export async function pollPlans(): Promise<PlansList> {
     );
     for (const { plan_id } of cached) {
       if (!active.has(plan_id))
-        await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", plan_id);
+        await db.runAsync(
+          "DELETE FROM plans_cache WHERE plan_id = ? AND fetched_at <= ?",
+          plan_id,
+          startedAt,
+        );
     }
   });
   notifyMirrorChanged();
@@ -139,6 +161,7 @@ export async function pollPlans(): Promise<PlansList> {
  * the caller can no longer see it, so the cached copy goes too.
  */
 export async function fetchPlan(planId: string): Promise<CachedPlan> {
+  const began = epoch;
   let plan: TripPlanView;
   try {
     plan = await getPlan(planId);
@@ -152,22 +175,28 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
   }
   const fetchedAt = new Date().toISOString();
   const db = await getSyncDb();
-  await db.runAsync(
-    `INSERT INTO plans_cache (plan_id, fetched_at, plan_updated_at, payload_json)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(plan_id) DO UPDATE SET fetched_at = excluded.fetched_at,
-       plan_updated_at = excluded.plan_updated_at, payload_json = excluded.payload_json`,
-    planId,
-    fetchedAt,
-    plan.updatedAt,
-    JSON.stringify(plan),
-  );
-  const stamp = await db.getFirstAsync<{ downloaded_at: string | null }>(
-    "SELECT downloaded_at FROM plans_cache WHERE plan_id = ?",
-    planId,
-  );
+  const downloadedAt = await withSyncTransaction(db, async () => {
+    // Signed out meanwhile: the caller still gets what it asked for, the
+    // phone keeps none of it.
+    if (began !== epoch) return null;
+    await db.runAsync(
+      `INSERT INTO plans_cache (plan_id, fetched_at, plan_updated_at, payload_json)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(plan_id) DO UPDATE SET fetched_at = excluded.fetched_at,
+         plan_updated_at = excluded.plan_updated_at, payload_json = excluded.payload_json`,
+      planId,
+      fetchedAt,
+      plan.updatedAt,
+      JSON.stringify(plan),
+    );
+    const stamp = await db.getFirstAsync<{ downloaded_at: string | null }>(
+      "SELECT downloaded_at FROM plans_cache WHERE plan_id = ?",
+      planId,
+    );
+    return stamp?.downloaded_at ?? null;
+  });
   notifyMirrorChanged();
-  return { plan, fetchedAt, downloadedAt: stamp?.downloaded_at ?? null };
+  return { plan, fetchedAt, downloadedAt };
 }
 
 /** Refetch a plan only if this phone already holds it: a push about it. */
@@ -178,8 +207,8 @@ export async function refreshCachedPlan(planId: string): Promise<void> {
 
 /**
  * The poll on return to the foreground, and once at sign-in, through the
- * sync job's connection rule: a few kilobytes of JSON (design §8, ADR 0013:
- * never a timer). The Plans screen polls on its own when it opens.
+ * sync job's connection rule: a few kilobytes of JSON (ADR 0013: never a
+ * timer). The Plans screen polls on its own when it opens.
  */
 export function registerPlansPoll(): () => void {
   const run = () =>

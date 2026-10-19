@@ -78,6 +78,12 @@ vi.mock("../weather/weatherStorage", () => ({
     return Promise.resolve();
   },
 }));
+vi.mock("../plans/plansCache", () => ({
+  stopPlansForWipe: () => {
+    record("stop:plans");
+    return Promise.resolve();
+  },
+}));
 const resetDatabase = vi.hoisted(() => vi.fn());
 vi.mock("@maplibre/maplibre-react-native", () => ({
   OfflineManager: { resetDatabase: () => resetDatabase() },
@@ -144,6 +150,7 @@ describe("wipeAllLocalData", () => {
       "stop:geopdf",
       "stop:track",
       "stop:weather",
+      "stop:plans",
     ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);

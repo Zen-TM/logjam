@@ -1,6 +1,6 @@
-// Trip plans over the authed API (api/src/routes/plans.ts and its siblings,
-// design §2). Online only: a plan is fetched and cached (`plansCache.ts`),
-// never synced, and a write waits for a connection.
+// Trip plans over the authed API (api/src/routes/plans.ts and its siblings).
+// Online only: a plan is fetched and cached (`plansCache.ts`), never synced,
+// and a write waits for a connection.
 import type { TripPlanSummary, TripPlanView } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
