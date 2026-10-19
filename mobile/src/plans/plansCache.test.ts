@@ -39,7 +39,9 @@ vi.mock("../offline/networkPolicy", () => ({ canRunNow: async () => true }));
 const api = vi.hoisted(() => ({ getPlans: vi.fn(), getPlan: vi.fn() }));
 vi.mock("./plansApi", () => api);
 
-const { wipeAllSyncData } = await import("../sync/syncDb");
+const { clearMirror, wipeAllSyncData, wipeMirror } = await import(
+  "../sync/syncDb"
+);
 const {
   fetchPlan,
   planChanged,
@@ -47,7 +49,17 @@ const {
   readCachedPlan,
   readCachedPlanStamps,
   readPlansList,
+  stopPlansForWipe,
 } = await import("./plansCache");
+
+/** A GET held open until the test lets it land. */
+function held<T>() {
+  let land!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => {
+    land = resolve;
+  });
+  return { promise, land };
+}
 
 const summary = (
   id: string,
@@ -137,18 +149,109 @@ describe("fetching one plan", () => {
     await expect(fetchPlan("a")).rejects.toThrow();
     expect(await readCachedPlan("a")).toBeNull();
   });
+});
 
-  // Mutation: list plans_cache as `local` in mirrorSchema.ts.
-  it("goes with the account on sign-out", async () => {
+describe("the account's plans leave with it", () => {
+  // Mutation: wipeAllSyncData deletes only the `local` tables.
+  it("on sign-out", async () => {
     api.getPlan.mockResolvedValue(view("a"));
+    api.getPlans.mockResolvedValue({ plans: [summary("a")] });
     await fetchPlan("a");
+    await pollPlans();
     await wipeAllSyncData();
     expect(await readCachedPlan("a")).toBeNull();
+    expect(await readPlansList()).toBeNull();
+  });
+
+  // Mutation: list the plans tables as `local` in mirrorSchema.ts, or have
+  // clearMirror skip `keepOnReset` tables.
+  it("on a user change (clearMirror)", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    api.getPlans.mockResolvedValue({ plans: [summary("a")] });
+    await fetchPlan("a");
+    await pollPlans();
+    await clearMirror();
+    expect(await readCachedPlan("a")).toBeNull();
+    expect(await readPlansList()).toBeNull();
+  });
+
+  // Mutation: drop the epoch check in pollPlans. A poll in flight at sign-out
+  // would write the departing user's list back after the wipe.
+  it("even when a poll lands after the wipe", async () => {
+    const get = held<{ plans: ReturnType<typeof summary>[] }>();
+    api.getPlans.mockReturnValueOnce(get.promise);
+    const poll = pollPlans();
+    await stopPlansForWipe();
+    await wipeAllSyncData();
+    get.land({ plans: [summary("a")] });
+    await poll;
+    expect(await readPlansList()).toBeNull();
+  });
+
+  // Mutation: drop the epoch check in fetchPlan.
+  it("even when a plan's fetch lands after the wipe", async () => {
+    const get = held<ReturnType<typeof view>>();
+    api.getPlan.mockReturnValueOnce(get.promise);
+    const fetch = fetchPlan("a");
+    await stopPlansForWipe();
+    await wipeAllSyncData();
+    get.land(view("a"));
+    await fetch;
+    expect(await readCachedPlan("a")).toBeNull();
+  });
+});
+
+describe("a mirror reset keeps the plans", () => {
+  // Mutation: wipeMirror stops skipping `keepOnReset` tables. Resync from
+  // scratch would delete every plan downloaded for the trip.
+  it("through wipeMirror, with when it was downloaded", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    api.getPlans.mockResolvedValue({ plans: [summary("a")] });
+    await fetchPlan("a");
+    await pollPlans();
+    sqlite.exec(
+      "UPDATE plans_cache SET downloaded_at = '2026-10-02T00:00:00.000Z'",
+    );
+    await wipeMirror();
+    expect((await readCachedPlan("a"))?.downloadedAt).toBe(
+      "2026-10-02T00:00:00.000Z",
+    );
+    expect(await readPlansList()).not.toBeNull();
+  });
+
+  // Mutation: dropStaleMirror stops skipping `keepOnReset` tables. An app
+  // update that bumps the mirror schema would drop every cached plan.
+  it("through a schema-version bump", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    await fetchPlan("a");
+    sqlite.exec(
+      "UPDATE sync_state SET value = '0' WHERE key = 'schemaVersion'",
+    );
+    vi.resetModules();
+    const reopened = await import("./plansCache");
+    expect(await reopened.readCachedPlan("a")).not.toBeNull();
+  });
+});
+
+describe("an older poll and a newer fetch", () => {
+  // Mutation: drop `fetched_at <= ?` from the poll's DELETE. A poll answered
+  // before the caller was let in would delete the plan they just opened.
+  it("keeps a plan fetched after the poll began", async () => {
+    const get = held<{ plans: ReturnType<typeof summary>[] }>();
+    api.getPlans.mockReturnValueOnce(get.promise);
+    const poll = pollPlans();
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    api.getPlan.mockResolvedValueOnce(view("p"));
+    await fetchPlan("p");
+    get.land({ plans: [summary("p", "requested")] });
+    await poll;
+    expect(await readCachedPlan("p")).not.toBeNull();
   });
 });
 
 describe("planChanged", () => {
   const stamp = { updatedAt: "2026-10-01T00:00:00.000Z", downloadedAt: null };
+  // Mutation: compare with `>=`, or treat a missing cached stamp as changed.
   it("is true only when the poll's plan is newer than the cached copy", () => {
     expect(planChanged({ updatedAt: "2026-10-02T00:00:00.000Z" }, stamp)).toBe(
       true,

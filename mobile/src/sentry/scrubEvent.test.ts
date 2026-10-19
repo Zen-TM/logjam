@@ -121,10 +121,13 @@ describe("scrubStructure", () => {
     });
   });
 
-  // Every user-written value in a cached plan (GET /plans/:id, made up here)
-  // leaves as "[redacted]". Mutation that turns this red: delete `body`,
-  // `questions`, `answers` or `points` from SENSITIVE_KEYS.
-  it("censors everything a trip plan holds", () => {
+  // The user-written values of a cached plan's write-up, places, ways, forms
+  // and answers (GET /plans/:id, made up here) leave as "[redacted]". Not
+  // covered: a media item's `filename` and `metadata.bbox` (a plan's photos
+  // and files), which no key catches anywhere in mobile, plan or not.
+  // Mutation that turns this red: delete `body`, `questions`, `answers` or
+  // `points` from SENSITIVE_KEYS.
+  it("censors a trip plan's write-up, places, ways, forms and answers", () => {
     const secrets = [
       "Wollemi slot trip",
       "Meet at the locked gate",
