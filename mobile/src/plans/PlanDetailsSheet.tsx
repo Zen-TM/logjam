@@ -16,6 +16,7 @@ import {
   tripPlanInPlanNow,
   tripPlanPatch,
   tripPlanSame,
+  tripPlanTheirsChanged,
   TRIP_PLAN_FIELD_GROUPS,
   TRIP_PLAN_NAME_MAX_LENGTH,
   TRIP_PLANS_LIST,
@@ -98,11 +99,7 @@ export function PlanDetailsSheet({
   /** The plan's value, under a field the user edited and the plan changed
    *  since the form opened. */
   const theirs = (fields: (keyof TripPlanValues)[], words: string) =>
-    fields.some(
-      (field) =>
-        !tripPlanSame(values[field], current[field]) &&
-        !tripPlanSame(current[field], opened[field]),
-    ) ? (
+    tripPlanTheirsChanged(fields, values, current, opened) ? (
       <Text style={styles.theirs}>{tripPlanInPlanNow(words)}</Text>
     ) : null;
 

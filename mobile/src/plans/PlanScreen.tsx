@@ -461,7 +461,8 @@ function PlanPage({
         }}
       />
       <SectionSheet
-        state={sectionSheet}
+        // Closed when the caller can no longer write (archived, demoted).
+        state={adds.has("section") ? sectionSheet : null}
         planId={plan.id}
         role={plan.myRole}
         sections={plan.sections}

@@ -74,3 +74,21 @@ export function tripPlanAdoptTheirs<T extends Record<string, unknown>>(
       for (const key of unit) merged[key] = current[key];
   return { seen: current, values: merged };
 }
+
+/**
+ * Whether a form shows the plan's value ("In the plan now: …") under these
+ * fields: the user edited one of them, and the plan changed it since the
+ * form opened. An untouched field already shows the plan's value.
+ */
+export function tripPlanTheirsChanged<T extends Record<string, unknown>>(
+  fields: readonly (keyof T)[],
+  values: T,
+  current: T,
+  opened: T,
+): boolean {
+  return fields.some(
+    (field) =>
+      !tripPlanSame(values[field], current[field]) &&
+      !tripPlanSame(current[field], opened[field]),
+  );
+}
