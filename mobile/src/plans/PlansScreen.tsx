@@ -30,11 +30,15 @@ import {
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityScreenBlock } from "../auth/capabilities";
+import {
+  capabilityScreenBlock,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { onMirrorChanged } from "../sync/syncDb";
 import { makeStyles, spacing, useHues, useTheme } from "../theme";
 import {
+  Button,
   ChipRail,
   EmptyState,
   ErrorState,
@@ -43,9 +47,13 @@ import {
   Row,
   StatusPill,
   SyncStatusPills,
+  Toast,
   todayDateKey,
   type ChipOption,
+  type ToastMessage,
 } from "../ui";
+import { PlanDetailsSheet } from "./PlanDetailsSheet";
+import { createPlan } from "./plansApi";
 import {
   planChanged,
   pollPlans,
@@ -109,11 +117,15 @@ export function usePlansList(blocked: boolean) {
 }
 
 export function PlansScreen({
+  message,
   onBack,
   onOpenPlan,
 }: {
+  /** What just happened elsewhere (a plan left or deleted), as a toast;
+   *  `at` tells one from the next with the same words. */
+  message?: { text: string; at: number };
   onBack: () => void;
-  onOpenPlan: (plan: TripPlanSummary) => void;
+  onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name">) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -126,6 +138,13 @@ export function PlansScreen({
   );
   const shown = plansListView({ plans, failure, settled, online });
   const [bucket, setBucket] = useState<TripPlanBucket>("upcoming");
+  const [newOpen, setNewOpen] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [toastAt, setToastAt] = useState<number | undefined>(undefined);
+  if (message && message.at !== toastAt) {
+    setToastAt(message.at);
+    setToast({ text: message.text, tone: "info", nonce: message.at });
+  }
   const today = todayDateKey();
 
   const byBucket = useMemo(() => {
@@ -215,7 +234,18 @@ export function PlansScreen({
         titleNumberOfLines={2}
         onBack={onBack}
       >
-        <SyncStatusPills online={online} pendingCount={0} />
+        <View style={styles.pills}>
+          <Button
+            label={copy.add}
+            icon="add"
+            compact
+            variant="outlineAccent"
+            disabled={!online}
+            disabledReason={unavailableReasonText("needs-connection")}
+            onPress={() => setNewOpen(true)}
+          />
+          <SyncStatusPills online={online} pendingCount={0} />
+        </View>
       </Hero>
     ),
     buckets: (
@@ -265,6 +295,17 @@ export function PlansScreen({
       {contractSectionKeys(TRIP_PLANS_LIST, "gps").map((key) => (
         <Fragment key={key}>{sections[key]}</Fragment>
       ))}
+      <PlanDetailsSheet
+        visible={newOpen}
+        onClose={() => setNewOpen(false)}
+        onSubmit={async (values) => {
+          const made = await createPlan(values);
+          setNewOpen(false);
+          void poll();
+          onOpenPlan(made);
+        }}
+      />
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }

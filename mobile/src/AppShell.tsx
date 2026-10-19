@@ -246,7 +246,8 @@ type MoreStackParams = {
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
   MoreTripDetail: { trip: MirrorTrip };
-  Plans: undefined;
+  // A plan left or deleted comes back here with what happened.
+  Plans: { message?: { text: string; at: number } } | undefined;
   // The name rides along for the hero while the cached plan is read.
   Plan: { planId: string; name: string };
   Account: undefined;
@@ -1221,8 +1222,9 @@ export function AppShell({
                     name="Plans"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <PlansScreen
+                        message={route.params?.message}
                         onBack={() => navigation.goBack()}
                         onOpenPlan={(plan) =>
                           navigation.navigate("Plan", {
@@ -1242,6 +1244,11 @@ export function AppShell({
                         planId={route.params.planId}
                         name={route.params.name}
                         onBack={() => navigation.goBack()}
+                        onGone={(text) =>
+                          navigation.popTo("Plans", {
+                            message: { text, at: Date.now() },
+                          })
+                        }
                       />
                     )}
                   </MoreStack.Screen>
