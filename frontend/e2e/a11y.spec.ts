@@ -200,7 +200,9 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
     await aside.getByRole("radio", { name: /^Forms/ }).click();
     // The seeded Safety contacts form: who sees answers first, then the table.
-    await aside.getByRole("button", { name: "Safety contacts" }).click();
+    await aside
+      .getByRole("button", { name: "Safety contacts", exact: true })
+      .click();
     await expect(aside.getByRole("table")).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
@@ -214,7 +216,7 @@ test.describe("desktop", () => {
 
     // The builder starts from a preset.
     await aside.getByRole("button", { name: "Back to the plan" }).click();
-    await aside.getByRole("button", { name: "Add" }).click();
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
     await page.getByRole("menuitem", { name: "Add a form" }).click();
     const builder = page.locator("dialog[open]");
     await expectNoViolations(page, "dialog");
@@ -1022,6 +1024,14 @@ test.describe("narrow web", () => {
     });
     await page.getByRole("button", { name: "Wollangambe weekend" }).click();
     await expect(page.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
+    await expectNoViolations(page);
+
+    // A form's page: its answers table scrolls sideways on its own.
+    await page.getByRole("radio", { name: /^Forms/ }).click();
+    await page
+      .getByRole("button", { name: "Safety contacts", exact: true })
+      .click();
+    await expect(page.getByRole("table")).toBeVisible();
     await expectNoViolations(page);
   });
 

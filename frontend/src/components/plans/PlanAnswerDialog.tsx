@@ -1,13 +1,19 @@
-// Answering a form: who sees the answers comes first, before any field
-// (design §5.3), and the answer echoes the form as it was shown (its
-// visibility and its updatedAt). A 409 means the form moved meanwhile: the
-// dialog keeps what was typed, the plan is fetched again, and the person
-// sends it against the form as it now is.
+// Answering a form: who sees the answers comes first, before any field, and
+// the answer echoes the form as it was shown (its visibility and its
+// updatedAt). A 409 means the form moved meanwhile: the plan is fetched
+// again, and what was typed is fitted to the form as it now is
+// (`fitAnswerDraft`), so the person sends it against that.
 import { useId, useState } from "react";
 import {
+  answersFromDraft,
+  draftFromAnswers,
+  fitAnswerDraft,
   parseTripPlanAnswers,
   TRIP_PLAN_FORMS,
+  TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH,
+  TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH,
   tripPlanVisibilityLine,
+  type TripPlanAnswerDraft as AnswerDraft,
   type TripPlanAnswers,
   type TripPlanFormView,
   type TripPlanQuestion,
@@ -18,6 +24,7 @@ import {
   ChipRail,
   Dialog,
   ErrorBanner,
+  NumberField,
   TextArea,
   TextField,
 } from "../../ui";
@@ -25,11 +32,6 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
-import {
-  answersFromDraft,
-  draftFromAnswers,
-  type AnswerDraft,
-} from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
@@ -56,6 +58,7 @@ function QuestionField({
           required={question.required}
           type={question.kind === "phone" ? "tel" : "text"}
           autoComplete={question.kind === "phone" ? "tel" : "off"}
+          maxLength={TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
         />
@@ -66,28 +69,28 @@ function QuestionField({
           label={label}
           hint={help}
           required={question.required}
+          maxLength={TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
         />
       );
     case "number":
       return (
-        <TextField
+        <NumberField
           label={label}
           hint={help}
           required={question.required}
-          type="number"
-          inputMode="numeric"
-          min={0}
-          step={1}
+          constraints={{ integer: true, min: 0 }}
           value={typeof value === "string" ? value : ""}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={onChange}
         />
       );
     case "choice":
     case "yesNo": {
-      const options =
-        question.kind === "yesNo"
+      const options = [
+        // An optional pick can be taken back (shared/DESIGN.md §10).
+        ...(question.required ? [] : [{ value: "", label: "—" }]),
+        ...(question.kind === "yesNo"
           ? [
               { value: "true", label: copy.yes },
               { value: "false", label: copy.no },
@@ -95,7 +98,8 @@ function QuestionField({
           : (question.options ?? []).map((option) => ({
               value: option.id,
               label: option.label,
-            }));
+            }))),
+      ];
       return (
         <div className={classes.question}>
           <span className={classes.questionLabel} aria-hidden>
@@ -198,6 +202,12 @@ function AnswerForm({
     draftFromAnswers(form.questions, form.myAnswer?.answers ?? {}),
   );
   const [opened] = useState(draft);
+  // The form as the draft was last fitted to it.
+  const [fittedTo, setFittedTo] = useState(form.updatedAt);
+  if (form.updatedAt !== fittedTo) {
+    setFittedTo(form.updatedAt);
+    setDraft(fitAnswerDraft(form.questions, draft));
+  }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const guard = useUnsavedChangesGuard(
@@ -252,6 +262,7 @@ function AnswerForm({
         <form
           id={formId}
           className={classes.form}
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!busy) void submit();

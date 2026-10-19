@@ -1,11 +1,19 @@
 // A leader's form builder (Logjam Web only, `PLAN_FORM_VERBS`): a new form
 // starts from a preset or blank, then every part can change. One form for
 // making and editing (shared/DESIGN.md §10); an edit sends each changed part
-// as the value last seen and the new one, and a 409 re-bases on the form as
-// the plan now has it while keeping the leader's changes.
-import { useId, useState } from "react";
+// as the value last seen and the new one. When the plan is fetched again
+// under it, every part the leader has not touched follows the form as it now
+// is (`adoptTheirs`), so a save never sends another leader's change back.
+import { useEffect, useId, useRef, useState } from "react";
 import {
   parseTripPlanFormCreate,
+  pluralCount,
+  TRIP_PLAN_FORM_TITLE_MAX_LENGTH,
+  TRIP_PLAN_MAX_OPTIONS,
+  TRIP_PLAN_MAX_QUESTIONS,
+  TRIP_PLAN_OPTION_LABEL_MAX_LENGTH,
+  TRIP_PLAN_QUESTION_HELP_MAX_LENGTH,
+  TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH,
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_FORM_PRESET_IDS,
   TRIP_PLAN_FORMS,
@@ -33,13 +41,16 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
-import { formPatch, mintSlug, type FormValues } from "./plansModel";
+import {
+  adoptTheirs,
+  formPatch,
+  mintSlug,
+  same,
+  type FormValues,
+} from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
-
-const questionCount = (count: number) =>
-  `${count} ${count === 1 ? "question" : "questions"}`;
 
 const hasOptions = (kind: TripPlanQuestionKind) =>
   kind === "choice" || kind === "multiChoice";
@@ -81,18 +92,30 @@ function Builder({
   const [values, setValues] = useState<FormValues | null>(
     form ? valuesOf(form) : null,
   );
-  const [opened] = useState(values);
   const [seen, setSeen] = useState(values);
-  const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
 
-  if (stale && form && JSON.stringify(valuesOf(form)) !== JSON.stringify(seen))
-    setSeen(valuesOf(form));
+  const current = form ? valuesOf(form) : null;
+  if (current && seen && values && !same(current, seen)) {
+    const next = adoptTheirs(seen, values, current);
+    setSeen(next.seen);
+    setValues(next.values);
+  }
 
-  const dirty =
-    values != null && JSON.stringify(values) !== JSON.stringify(opened);
+  // The Dialog focuses only on open; a preset picked swaps the step in place.
+  const picked = values != null;
+  useEffect(() => {
+    if (picked && !form) titleRef.current?.focus();
+  }, [picked, form]);
+
+  // Against what a Save would compare: a new form against nothing at all.
+  const dirty = values != null && (!seen || !same(values, seen));
   const guard = useUnsavedChangesGuard(dirty, onClose);
+  // The API refuses widening a form others answered for leaders only.
+  const widenLocked =
+    form != null && form.visibleTo === "leaders" && form.answers.length > 0;
 
   const set = (next: Partial<FormValues>) => {
     setValues((was) => (was ? { ...was, ...next } : was));
@@ -130,10 +153,7 @@ function Builder({
     } catch (err) {
       console.error(err);
       setError(messageFromError(err, copy.formSaveFailed));
-      if (err instanceof ApiError && err.status === 409) {
-        setStale(true);
-        onStale();
-      }
+      if (err instanceof ApiError && err.status === 409) onStale();
     } finally {
       setBusy(false);
     }
@@ -173,8 +193,9 @@ function Builder({
               <Row
                 key={id}
                 title={TRIP_PLAN_FORM_PRESETS[id].title}
-                subtitle={questionCount(
+                subtitle={pluralCount(
                   TRIP_PLAN_FORM_PRESETS[id].questions.length,
+                  "question",
                 )}
                 onOpen={() =>
                   setValues({ ...TRIP_PLAN_FORM_PRESETS[id], preset: id })
@@ -205,6 +226,7 @@ function Builder({
           <form
             id={formId}
             className={classes.form}
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
               if (!busy) void submit();
@@ -213,7 +235,9 @@ function Builder({
             <TextField
               label={copy.title}
               required
+              ref={titleRef}
               value={values.title}
+              maxLength={TRIP_PLAN_FORM_TITLE_MAX_LENGTH}
               data-autofocus
               onChange={(event) => set({ title: event.target.value })}
             />
@@ -227,9 +251,16 @@ function Builder({
                 onChange={(visibleTo) => set({ visibleTo })}
                 options={[
                   { value: "leaders", label: copy.visibleToLeaders },
-                  { value: "members", label: copy.visibleToMembers },
+                  {
+                    value: "members",
+                    label: copy.visibleToMembers,
+                    disabled: widenLocked,
+                  },
                 ]}
               />
+              {widenLocked && (
+                <p className={classes.note}>{copy.visibleToLocked}</p>
+              )}
             </div>
             <SwitchRow
               title={copy.requiredToJoin}
@@ -251,6 +282,7 @@ function Builder({
                     className={classes.grow}
                     label={`${copy.questionLabel} ${index + 1}`}
                     value={question.label}
+                    maxLength={TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH}
                     onChange={(event) =>
                       setQuestion(index, { label: event.target.value })
                     }
@@ -308,6 +340,7 @@ function Builder({
                 <TextField
                   label={copy.questionHelp}
                   value={question.help ?? ""}
+                  maxLength={TRIP_PLAN_QUESTION_HELP_MAX_LENGTH}
                   onChange={(event) =>
                     setQuestion(index, { help: event.target.value })
                   }
@@ -324,6 +357,7 @@ function Builder({
                           label={`${copy.optionLabel} ${at + 1}`}
                           hideLabel
                           value={option.label}
+                          maxLength={TRIP_PLAN_OPTION_LABEL_MAX_LENGTH}
                           onChange={(event) =>
                             setQuestion(index, {
                               options: question.options!.map((each) =>
@@ -352,6 +386,11 @@ function Builder({
                         compact
                         variant="outline"
                         icon="add"
+                        disabled={
+                          (question.options?.length ?? 0) >=
+                          TRIP_PLAN_MAX_OPTIONS
+                        }
+                        disabledReason={`${TRIP_PLAN_MAX_OPTIONS} options at most`}
                         onClick={() =>
                           setQuestion(index, {
                             options: [
@@ -377,6 +416,8 @@ function Builder({
               <Button
                 variant="outline"
                 icon="add"
+                disabled={values.questions.length >= TRIP_PLAN_MAX_QUESTIONS}
+                disabledReason={`${TRIP_PLAN_MAX_QUESTIONS} questions at most`}
                 onClick={() =>
                   set({
                     questions: [

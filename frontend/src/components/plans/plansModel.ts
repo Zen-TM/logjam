@@ -2,11 +2,9 @@
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
 // the value last seen and the new one (shared/DESIGN.md §10).
 import type {
-  TripPlanAnswers,
   TripPlanCreate,
   TripPlanFormCreate,
   TripPlanFormPatch,
-  TripPlanQuestion,
   TripPlanPatch,
   TripPlanSectionPatch,
 } from "@logjam/shared";
@@ -41,8 +39,21 @@ export function sectionPatch(
   return patch;
 }
 
+/** Key order aside: a form's questions come back from a JSONB column in
+ *  Postgres's key order, not the order the shared parser builds them in. */
+const sorted = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(sorted)
+    : value !== null && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value)
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([key, each]) => [key, sorted(each)]),
+        )
+      : value;
+
 export const same = (a: unknown, b: unknown) =>
-  JSON.stringify(a) === JSON.stringify(b);
+  JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
 /**
  * Whether "In the plan now" shows under `fields`: the user's value differs
@@ -94,51 +105,8 @@ export function adoptTheirs<T extends Record<string, unknown>>(
   return { seen: current, values: merged };
 }
 
-/** A form being filled in: what each control holds. A number is the text in
- *  its field, a yes or no the chip's "true" or "false", an agree box a
- *  boolean. */
-export type AnswerDraft = Record<string, string | string[] | boolean>;
-
-export function draftFromAnswers(
-  questions: readonly TripPlanQuestion[],
-  answers: TripPlanAnswers,
-): AnswerDraft {
-  const draft: AnswerDraft = {};
-  for (const question of questions) {
-    const value = answers[question.id];
-    if (value === undefined) continue;
-    draft[question.id] =
-      question.kind === "agree"
-        ? value === true
-        : typeof value === "number" || typeof value === "boolean"
-          ? String(value)
-          : value;
-  }
-  return draft;
-}
-
-/** The draft as the wire takes it; an empty control says nothing. The shared
- *  parser then trims, caps and checks what is required. */
-export function answersFromDraft(
-  questions: readonly TripPlanQuestion[],
-  draft: AnswerDraft,
-): Record<string, unknown> {
-  const answers: Record<string, unknown> = {};
-  for (const question of questions) {
-    const value = draft[question.id];
-    if (value === undefined || value === "" || value === false) continue;
-    if (Array.isArray(value) && value.length === 0) continue;
-    answers[question.id] =
-      question.kind === "number"
-        ? Number(value)
-        : question.kind === "yesNo"
-          ? value === "true"
-          : value;
-  }
-  return answers;
-}
-
-/** A form's changed parts; the questions compare as one list (design §4). */
+/** A form's changed parts; the questions compare as one list, as the API
+ *  compares them. */
 export function formPatch(
   seen: FormValues,
   now: FormValues,
@@ -146,7 +114,7 @@ export function formPatch(
   const patch: TripPlanFormPatch = {};
   if (now.title !== seen.title)
     patch.title = { from: seen.title, to: now.title };
-  if (JSON.stringify(now.questions) !== JSON.stringify(seen.questions))
+  if (!same(now.questions, seen.questions))
     patch.questions = { from: seen.questions, to: now.questions };
   if (now.visibleTo !== seen.visibleTo)
     patch.visibleTo = { from: seen.visibleTo, to: now.visibleTo };

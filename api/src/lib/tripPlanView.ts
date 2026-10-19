@@ -16,6 +16,7 @@ import {
   type TripPlanSectionView,
   type TripPlanSummary,
   type TripPlanView,
+  tripPlanSeesAnswers,
 } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { fault } from "../middleware/errorHandler";
@@ -163,6 +164,7 @@ export function formView(
 ): TripPlanFormView {
   if (!isTripPlanFormVisibility(form.visibleTo))
     throw fault("a form row has no known visibility");
+  const visibleTo = form.visibleTo;
   const questions = (
     Array.isArray(form.questions) ? form.questions : []
   ) as TripPlanQuestion[];
@@ -174,9 +176,12 @@ export function formView(
   const mine = form.answers.find((row) => row.user.id === viewer.userId);
   const others = form.answers.filter((row) => {
     if (row.user.id === viewer.userId) return false;
+    if (!tripPlanSeesAnswers(viewer.role, visibleTo)) return false;
+    // A leader also reads a joiner's answers; anyone else, members' only.
     const author = statuses.get(row.user.id);
-    if (viewer.role === "leader") return author !== undefined;
-    return form.visibleTo === "members" && author === "active";
+    return viewer.role === "leader"
+      ? author !== undefined
+      : author === "active";
   });
   return {
     id: form.id,
@@ -184,7 +189,7 @@ export function formView(
     preset:
       form.preset && isTripPlanFormPresetId(form.preset) ? form.preset : null,
     questions,
-    visibleTo: form.visibleTo,
+    visibleTo,
     requiredToJoin: form.requiredToJoin,
     position: form.position,
     updatedAt: form.updatedAt.toISOString(),

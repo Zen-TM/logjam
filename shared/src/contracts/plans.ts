@@ -658,7 +658,10 @@ export const TRIP_PLAN_FORMS = {
     visibleToMembers: "Everyone in the plan",
     requiredToJoin: "Required to join",
     requiredToJoinHint:
-      "People answer this before they can join. Existing members are asked next time they open the plan.",
+      "Joiners answer it before they join, and members are asked the next time they open the plan.",
+    // The API's refusal, said before Save (planForms.ts).
+    visibleToLocked:
+      "People answered this form for leaders only. Make a new form to share answers with everyone.",
     questions: "Questions",
     questionLabel: "Question",
     questionKind: "Kind",
@@ -721,7 +724,9 @@ export function tripPlanAnswerText(
 }
 
 /** Whether the caller sees other people's answers to a form: leaders always,
- *  everyone else when the form says so (the API filters the same way). */
+ *  everyone else when the form says so. The API's `formView` filters with it.
+ *  Guard: api/src/__tests__/planForms.test.ts ("leaders-only answers reach
+ *  the leaders and their author, no one else"). */
 export function tripPlanSeesAnswers(
   role: TripPlanRole,
   visibleTo: TripPlanFormVisibility,

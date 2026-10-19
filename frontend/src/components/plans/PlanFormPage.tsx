@@ -45,24 +45,21 @@ export default function PlanFormPage({
   const mine = form.myAnswer
     ? currentTripPlanAnswers(form.questions, form.myAnswer.answers)
     : null;
-  // Active members first, each with their answer or none; answers from
-  // people asking to join (leaders see those) after.
+  // Who's going, each with their answer or none. People asking to join are
+  // left out: a leader reads their answers from People, before letting
+  // them in.
   const answerBy = new Map(
     [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])].map(
       (answer) => [answer.user.id, answer],
     ),
   );
-  const rows = [
-    ...members.filter((member) => member.status === "active"),
-    ...members.filter(
-      (member) => member.status !== "active" && answerBy.has(member.user.id),
-    ),
-  ]
+  const rows = members
+    .filter((member) => member.status === "active")
     .map((member) => ({
       user: member.user,
       answer: answerBy.get(member.user.id),
     }))
-    // Members without an answer are listed last (design §5.3).
+    // Those without an answer last.
     .sort((a, b) => Number(!a.answer) - Number(!b.answer));
 
   const sections: Record<
@@ -90,9 +87,7 @@ export default function PlanFormPage({
       />
     ),
     visibility: (
-      <p className={classes.datesLine}>
-        {tripPlanVisibilityLine(form.visibleTo)}
-      </p>
+      <p className={classes.note}>{tripPlanVisibilityLine(form.visibleTo)}</p>
     ),
     mine: (
       <div className={classes.block}>
@@ -128,7 +123,14 @@ export default function PlanFormPage({
     table: tripPlanSeesAnswers(role, form.visibleTo) && (
       <div className={classes.block}>
         <SectionHeader title={copy.answers} />
-        <div className={classes.tableScroll}>
+        {/* Scrolled sideways on its own, so a keyboard can reach it. */}
+        <div
+          className={classes.tableScroll}
+          role="region"
+          aria-label={copy.answers}
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt
+          tabIndex={0}
+        >
           <table className={classes.table}>
             <thead>
               <tr>

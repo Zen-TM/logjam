@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { TripPlanQuestion } from "@logjam/shared";
+import { parseTripPlanFormCreate } from "@logjam/shared";
 import {
   adoptTheirs,
-  answersFromDraft,
-  draftFromAnswers,
+  formPatch,
+  type FormValues,
   PLAN_FIELD_GROUPS,
   planPatch,
   sectionPatch,
@@ -107,31 +107,57 @@ describe("a form refetched under the user", () => {
   });
 });
 
-describe("a form being filled in", () => {
-  const questions: TripPlanQuestion[] = [
-    { id: "seats", kind: "number", label: "Seats", required: false },
-    { id: "swim", kind: "yesNo", label: "Swim", required: true },
-    { id: "rules", kind: "agree", label: "Rules", required: false },
-    { id: "notes", kind: "text", label: "Notes", required: false },
-  ];
+describe("a form edit", () => {
+  // As Postgres serves a JSONB column: keys sorted by length, then bytes.
+  const served: FormValues = {
+    title: "Carpooling",
+    preset: "carpool",
+    visibleTo: "members",
+    requiredToJoin: false,
+    questions: [
+      {
+        id: "how",
+        help: "Pick one.",
+        kind: "choice",
+        label: "How are you getting there?",
+        options: [
+          { id: "drive", label: "Driving" },
+          { id: "lift", label: "Need a lift" },
+        ],
+        required: true,
+      },
+    ],
+  };
+  const parsed = (values: FormValues) => {
+    const result = parseTripPlanFormCreate(values);
+    if (!("value" in result)) throw new Error("the fixture must parse");
+    return { ...values, ...result.value } as FormValues;
+  };
 
-  it("round-trips an answer through the controls", () => {
-    const answers = { seats: 3, swim: false, rules: true, notes: "Late" };
-    const draft = draftFromAnswers(questions, answers);
-    expect(draft).toEqual({
-      seats: "3",
-      swim: "false",
-      rules: true,
-      notes: "Late",
+  // Mutation: compare the questions with a raw `JSON.stringify`, and Save
+  // with nothing changed writes them, so everyone's answer dialog gets a 409.
+  it("sends nothing for a served form saved unchanged, and only the title for a title edit", () => {
+    expect(formPatch(served, parsed(served))).toEqual({});
+    expect(formPatch(served, parsed({ ...served, title: "Lifts" }))).toEqual({
+      title: { from: "Carpooling", to: "Lifts" },
     });
-    expect(answersFromDraft(questions, draft)).toEqual(answers);
   });
 
-  // Mutation: send `false` for an unticked agree box, and a required one
-  // passes the parser unticked.
-  it("sends nothing for an empty control", () => {
-    expect(
-      answersFromDraft(questions, { seats: "", rules: false, notes: "" }),
-    ).toEqual({});
+  // Mutation: re-base `seen` on theirs but keep every value as it was, and
+  // the save sends the old title and questions back over the other leader's.
+  it("takes another leader's rename and question when the leader changed only who sees answers", () => {
+    const mine = { ...served, visibleTo: "leaders" as const };
+    const theirs: FormValues = {
+      ...served,
+      title: "Lifts",
+      questions: [
+        ...served.questions,
+        { id: "seats", kind: "number", label: "Spare seats", required: false },
+      ],
+    };
+    const { seen, values } = adoptTheirs(served, mine, theirs);
+    expect(formPatch(seen, values)).toEqual({
+      visibleTo: { from: "members", to: "leaders" },
+    });
   });
 });
