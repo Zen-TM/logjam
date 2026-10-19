@@ -1,8 +1,10 @@
 // A PLAN'S VERBS, declared once for both clients: the plan's own (its page's
-// ⋯), the ways in (Add ▾), and a section's and a form's verbs. A verb the
-// caller's role, or the plan's state, cannot run is absent (shared/DESIGN.md
-// §5, §9); the API refuses the same (`requirePlanRole`, `requirePlanWrite`).
-// Guard: plans.test.ts ("a plan's verbs").
+// ⋯), the ways in (Add ▾), and a section's and a form's verbs. A verb the API
+// refuses the caller is absent (shared/DESIGN.md §9): by role and archive
+// (`requirePlanRole`, `requirePlanWrite`), and Leave by planMembers.ts's
+// DELETE checks. A verb that applies but not yet is disabled with its reason
+// (§5): Start a trip log before the trip ends. Guard: plans.test.ts ("a
+// plan's verbs").
 import type { IconIdea } from "../icons.js";
 import type { TripPlanRole } from "../tripPlans.js";
 import type { ContractPlatform } from "./types.js";
@@ -13,8 +15,9 @@ type PlanVerbDeclaration = {
   label: string;
   /** The roles that may run it. */
   roles: readonly TripPlanRole[];
-  /** Still offered on an archived plan: it changes nothing in it. Every
-   *  other verb writes, and the API refuses it while archived. */
+  /** Still offered on an archived plan: the API serves it to any member
+   *  (`requirePlanMember`), where every other verb goes through
+   *  `requirePlanWrite`, which refuses an archived plan. */
   whenArchived?: true;
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
@@ -192,15 +195,17 @@ export const PLAN_TRIP_LOG_WAITS = "After the trip";
 
 /**
  * The plan's ⋯ for one caller: Archive or Bring back by its state; Start a
- * trip log disabled until the trip is over; Leave absent for the only person
- * in the plan and for its only leader, whom the API refuses (they delete it,
- * or make someone else a leader first).
+ * trip log absent while the plan has no dates (there is no trip to wait for)
+ * and disabled until the trip is over; Leave absent for the only person in
+ * the plan and for its only leader, whom the API refuses (they delete it, or
+ * make someone else a leader first).
  */
 export function planVerbs(
   platform: ContractPlatform,
   role: TripPlanRole,
   state: {
     archived: boolean;
+    dated: boolean;
     over: boolean;
     alone: boolean;
     soleLeader: boolean;
@@ -210,6 +215,7 @@ export function planVerbs(
     .filter(
       (verb) =>
         verb.id !== (state.archived ? "archive" : "unarchive") &&
+        (verb.id !== "tripLog" || state.dated) &&
         (verb.id !== "leave" || (!state.alone && !state.soleLeader)),
     )
     .map((verb) =>
@@ -284,10 +290,15 @@ export function planSectionDeleteConfirm(title: string): PlanConfirmCopy {
   };
 }
 
-export function planFormDeleteConfirm(
-  title: string,
-  answers: number,
-): PlanConfirmCopy {
+/** Counts every answer that goes: everyone else's, and the caller's own,
+ *  which a form view carries apart (`myAnswer`). */
+export function planFormDeleteConfirm(form: {
+  title: string;
+  answers: readonly unknown[];
+  myAnswer: unknown | null;
+}): PlanConfirmCopy {
+  const title = form.title;
+  const answers = form.answers.length + (form.myAnswer ? 1 : 0);
   return {
     confirmTitle: `Delete ${title}?`,
     confirmBody:

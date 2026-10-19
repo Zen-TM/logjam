@@ -44,6 +44,9 @@ export const TRIP_PLANS_LIST = {
     noDates: "No dates yet",
     pillLeader: "Leader",
     pillEditor: "Editor",
+    // Never a pill on a row (a member's own role says nothing); a word where
+    // every role is named, such as the invite's role picker and a printout.
+    roleMember: "Member",
     pillInvited: "Invited",
     pillWaiting: "Waiting",
     open: "Open",
@@ -214,11 +217,17 @@ export function tripPlanRowPill(
   const copy = TRIP_PLANS_LIST.copy;
   if (plan.status === "invited") return copy.pillInvited;
   if (plan.status === "requested") return copy.pillWaiting;
-  return plan.role === "leader"
+  return plan.role === "member" ? null : tripPlanRoleWord(plan.role);
+}
+
+/** A role, as a word: "Leader", "Editor", "Member". */
+export function tripPlanRoleWord(role: TripPlanRole): string {
+  const copy = TRIP_PLANS_LIST.copy;
+  return role === "leader"
     ? copy.pillLeader
-    : plan.role === "editor"
+    : role === "editor"
       ? copy.pillEditor
-      : null;
+      : copy.roleMember;
 }
 
 /** A list row's subtitle: who a request waits on, else the dates. */
@@ -314,7 +323,7 @@ export const TRIP_PLAN_PAGE = {
 
     views: "Plan view",
     viewWriteUp: "Write-up",
-    viewItems: "On the map",
+    viewItems: "Map",
     viewForms: "Forms",
     viewPeople: "People",
 
@@ -329,6 +338,9 @@ export const TRIP_PLAN_PAGE = {
     sectionSuggestions: "Suggestions",
     sectionSave: "Save",
     sectionSaveFailed: "Couldn't save the section.",
+    sectionGone: "This section was deleted.",
+    // After the plan changed under an open form: under the field it changed.
+    inPlanNowEmpty: "nothing",
     sectionMoveFailed: "Couldn't move the section.",
     sectionDeleteFailed: "Couldn't delete the section.",
     sectionDeleted: "Section deleted.",
@@ -401,7 +413,8 @@ export function tripPlanNotice(args: {
     return {
       kind: "answer",
       icon: "form",
-      text: `Answer "${args.unansweredRequired.title}" for the leaders.`,
+      // No audience: the form's visibility line says who sees answers.
+      text: `Answer "${args.unansweredRequired.title}".`,
       formId: args.unansweredRequired.id,
     };
   if (args.over) return { kind: "over", icon: "trip", text: copy.noticeOver };
@@ -505,6 +518,7 @@ export const TRIP_PLAN_JOIN = {
  *  off. A step inside the plan page's People. */
 export const TRIP_PLAN_INVITE = {
   id: "plans.invite",
+  title: "Invite people",
   question: "Who else should come, and how do they get in?",
   sections: [
     // The username search and the role they will get.
@@ -513,7 +527,6 @@ export const TRIP_PLAN_INVITE = {
     { key: "link" },
   ],
   copy: {
-    title: "Invite people",
     searchField: "Search by username",
     role: "Role",
     inviteSend: "Invite",
@@ -533,6 +546,11 @@ export const TRIP_PLAN_INVITE = {
     searchFailed: "Couldn't search users.",
   },
 } as const satisfies ScreenContract;
+
+/** What an open edit form says under a field the plan changed meanwhile. */
+export function tripPlanInPlanNow(words: string): string {
+  return `In the plan now: ${words || TRIP_PLAN_PAGE.copy.inPlanNowEmpty}`;
+}
 
 /** The toast after asking to join through a link. */
 export function tripPlanAskedMessage(leader: string): string {
@@ -563,7 +581,7 @@ export function tripPlanTripLogPrefill(plan: {
   notes: string;
 } {
   return {
-    date: plan.startDate ?? plan.endDate,
+    date: firstDay(plan),
     displayName: plan.name,
     types: [...plan.tripTypes],
     // An empty section (every plan starts with Overview) says nothing.
