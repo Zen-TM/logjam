@@ -3,6 +3,7 @@ import type { TripPlanSummary } from "../tripPlans.js";
 import {
   planCountsLabel,
   planDeleteConfirm,
+  planFormDeleteConfirm,
   planVerbs,
   planVerbsFor,
   PLAN_ADD_VERBS,
@@ -15,9 +16,11 @@ import {
   tripPlanDatesLabel,
   tripPlanDatesLine,
   tripPlanGoing,
+  tripPlanInPlanNow,
   tripPlanIsOver,
   tripPlanLeaveState,
   tripPlanNotice,
+  tripPlanRoleWord,
   tripPlanRowPill,
   tripPlanRowSubtitle,
   tripPlansBadgeCount,
@@ -51,6 +54,9 @@ describe("the plans list", () => {
     expect(tripPlanBucket(running, TODAY)).toBe("upcoming");
     expect(tripPlanIsOver(running, TODAY)).toBe(false);
     expect(tripPlanBucket(summary({ endDate: TODAY }), TODAY)).toBe("upcoming");
+    // Mutation: `last <= today`, and on the trip's last day it is called
+    // over and Start a trip log enables.
+    expect(tripPlanIsOver(summary({ endDate: TODAY }), TODAY)).toBe(false);
     expect(tripPlanBucket(summary({}), TODAY)).toBe("upcoming");
     expect(tripPlanBucket(summary({ endDate: "2026-10-18" }), TODAY)).toBe(
       "past",
@@ -193,7 +199,7 @@ describe("a plan's page", () => {
     ).toEqual({
       kind: "answer",
       icon: "form",
-      text: 'Answer "Safety contacts" for the leaders.',
+      text: 'Answer "Safety contacts".',
       formId: "f",
     });
     expect(
@@ -229,15 +235,35 @@ describe("a plan's page", () => {
       role: "leader" | "editor" | "member",
       status: "active" | "invited" | "requested" = "active",
     ) => ({ username, role, status });
+    // Mutation: filter out only `requested`, and the invited leader is
+    // listed as going.
     expect(
       tripPlanGoing([
         member("tom", "member"),
         member("sue", "editor"),
         member("ann", "member", "requested"),
+        member("lee", "leader", "invited"),
         member("mira", "leader"),
         member("bo", "member"),
       ]).map((m) => m.username),
     ).toEqual(["mira", "sue", "tom", "bo"]);
+  });
+
+  it("names every role in one word, and a member's row says nothing", () => {
+    expect(
+      ["leader", "editor", "member"].map((role) =>
+        tripPlanRoleWord(role as "leader"),
+      ),
+    ).toEqual(["Leader", "Editor", "Member"]);
+    expect(tripPlanRowPill({ status: "active", role: "member" })).toBeNull();
+    expect(tripPlanRowPill({ status: "active", role: "editor" })).toBe(
+      "Editor",
+    );
+  });
+
+  it("says what the plan holds now under a changed field, and an empty one as nothing", () => {
+    expect(tripPlanInPlanNow("Sat 7 Nov")).toBe("In the plan now: Sat 7 Nov");
+    expect(tripPlanInPlanNow("")).toBe("In the plan now: nothing");
   });
 
   it("says who added an item, and nothing once their account is gone", () => {
@@ -249,6 +275,7 @@ describe("a plan's page", () => {
 describe("a plan's verbs", () => {
   const state = {
     archived: false,
+    dated: true,
     over: false,
     alone: false,
     soleLeader: false,
@@ -276,6 +303,14 @@ describe("a plan's verbs", () => {
     expect(after?.disabledReason).toBeUndefined();
   });
 
+  // Mutation: drop the `dated` check, and an undated plan waits "After the
+  // trip" for a trip nobody can date (members cannot edit dates).
+  it("leaves Start a trip log out while the plan has no dates", () => {
+    expect(
+      ids(planVerbs("web", "member", { ...state, dated: false })),
+    ).not.toContain("tripLog");
+  });
+
   it("leaves Leave out for the only person and the only leader, whom the API refuses", () => {
     expect(
       ids(planVerbs("web", "leader", { ...state, alone: true })),
@@ -299,9 +334,20 @@ describe("a plan's verbs", () => {
         members: [{ role: "member", status: "active" }],
       }),
     ).toEqual({ alone: true, soleLeader: false });
+    // Mutation: count every member row, not the active ones, and someone
+    // alone with an invite out is offered a Leave the API refuses.
+    expect(
+      tripPlanLeaveState({
+        myRole: "member",
+        members: [
+          { role: "member", status: "active" },
+          { role: "leader", status: "invited" },
+        ],
+      }),
+    ).toEqual({ alone: true, soleLeader: false });
   });
 
-  it("offers Archive or Bring back by the plan's state, and only what changes nothing on an archived plan", () => {
+  it("offers Archive or Bring back by the plan's state, and only what the API serves on an archived plan", () => {
     expect(ids(planVerbs("web", "leader", { ...state, over: true }))).toEqual([
       "edit",
       "print",
@@ -356,6 +402,21 @@ describe("a plan's verbs", () => {
         .confirmBody,
     ).toBe(
       "Its write-up, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
+    );
+  });
+
+  // Mutation: count `answers` alone, and a form only its leader answered
+  // goes with "Its questions go", its answer unmentioned.
+  it("counts the caller's own answer among those a form delete takes", () => {
+    const form = { title: "Carpooling", answers: [], myAnswer: { seats: 2 } };
+    expect(planFormDeleteConfirm(form).confirmBody).toBe(
+      "Its questions and 1 answer go, for everyone in the plan.",
+    );
+    expect(
+      planFormDeleteConfirm({ ...form, answers: [{}, {}] }).confirmBody,
+    ).toBe("Its questions and 3 answers go, for everyone in the plan.");
+    expect(planFormDeleteConfirm({ ...form, myAnswer: null }).confirmBody).toBe(
+      "Its questions go, for everyone in the plan.",
     );
   });
 });
