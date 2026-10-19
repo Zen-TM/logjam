@@ -265,6 +265,8 @@ describe("submitFailureMessage", () => {
     );
   });
 
+  // Mutation: drop the ApiError check at the top of submitFailureMessage, and
+  // a refusal before the upload ends reads as "The upload stopped".
   it("keeps the server's sentence when the API answered", () => {
     const refused = new ApiError(
       402,

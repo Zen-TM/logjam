@@ -437,6 +437,9 @@ export default function TopoDialog({
       setValidationError("Please select a .zip file.");
       return;
     }
+    // A new ZIP is a new job: the stopped one is let go, and with it the lock
+    // on its name and settings.
+    upload.discard();
     setFile(picked);
     setError(null);
   }

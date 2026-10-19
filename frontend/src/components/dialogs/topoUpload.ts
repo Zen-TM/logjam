@@ -211,7 +211,7 @@ export function useTopoUpload() {
         } catch (e) {
           // The job is gone (deleted, or swept after 24 h) or has left
           // `uploading`: carrying on can't succeed, so the next submit makes
-          // a new one. Not on 401, so signing in again carries on.
+          // a new one.
           if (e instanceof ApiError && (e.status === 404 || e.status === 400))
             hold(null);
           throw e;
