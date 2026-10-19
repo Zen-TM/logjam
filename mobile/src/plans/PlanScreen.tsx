@@ -30,7 +30,6 @@ import {
   weatherAge as updatedAgo,
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
-  TRIP_PLANS_LIST,
   type SectionKeysOn,
   type TripPlanPageView,
   type TripPlanView,
@@ -63,6 +62,7 @@ import {
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
+import { PeopleView } from "./PeopleView";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
@@ -372,27 +372,13 @@ function PlanPage({
     forms: view === "forms" ? <Forms plan={plan} /> : null,
     people:
       view === "people" ? (
-        <>
-          {going.map((member) => (
-            <Row
-              key={member.user.id}
-              icon="account"
-              title={member.user.username}
-              right={
-                member.role === "member" ? undefined : (
-                  <StatusPill
-                    label={
-                      member.role === "leader"
-                        ? TRIP_PLANS_LIST.copy.pillLeader
-                        : TRIP_PLANS_LIST.copy.pillEditor
-                    }
-                    tone="outline"
-                  />
-                )
-              }
-            />
-          ))}
-        </>
+        <PeopleView
+          plan={plan}
+          canInvite={adds.has("invite")}
+          online={online}
+          onInfo={notify}
+          onError={(text) => notify(text, "error")}
+        />
       ) : null,
   };
 
