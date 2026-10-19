@@ -90,7 +90,12 @@ import {
   MAP_MEASURE,
   TRIP_PLAN_PAGE,
 } from "@logjam/shared";
-import { planModeMine, planModeReducer, planModeStart } from "../plans/planMap";
+import {
+  isPlanPin,
+  planModeMine,
+  planModeReducer,
+  planModeStart,
+} from "../plans/planMap";
 import { readCachedPlan } from "../plans/plansCache";
 import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
@@ -2110,16 +2115,22 @@ export function MapScreen({
         void addToolPoint(lon, lat);
         return;
       }
-      const props = event.nativeEvent.features[0]?.properties;
+      // Two pins on one spot (a copy beside its original): the plan's wins
+      // while a plan is shown, so it can be opened from the map at all.
+      const features = event.nativeEvent.features;
+      const props = (
+        features.find((feature) => {
+          const id = feature.properties?.id;
+          return typeof id === "string" && isPlanPin(planOnMap, id);
+        }) ?? features[0]
+      )?.properties;
       // The OPTIONS sheet, not the detail screen: the same verbs the
       // Places list offers, with "Open place" first (DESIGN.md). Held as an id
       // so an edit made from inside the sheet re-renders it rather than showing
       // a stale copy.
       const id = props?.id;
       if (typeof id !== "string") return;
-      // A plan's pin opens the plan place, never a sheet of the user's.
-      if (planOnMap?.places.some((place) => place.id === id))
-        setPlanPlaceId(id);
+      if (isPlanPin(planOnMap, id)) setPlanPlaceId(id);
       else setOptionsPlaceId(id);
     },
     [addToolPoint, collectingPoints, planOnMap],
@@ -5492,6 +5503,7 @@ export function MapScreen({
           planOnMap?.places.find((place) => place.id === planPlaceId) ?? null
         }
         onClose={() => setPlanPlaceId(null)}
+        onInfo={(text) => notify(text, "info")}
       />
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
           in (DESIGN.md). No "Show on map" row here — the user is looking at

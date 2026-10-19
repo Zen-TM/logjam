@@ -393,7 +393,7 @@ function PlanPage({
           onPress={onShowOnMap}
         />
       ) : null,
-    items: view === "items" ? <Items plan={plan} /> : null,
+    items: view === "items" ? <Items plan={plan} onInfo={notify} /> : null,
     forms: view === "forms" ? <Forms plan={plan} /> : null,
     people:
       view === "people" ? (
@@ -552,7 +552,13 @@ function WriteUp({
   );
 }
 
-function Items({ plan }: { plan: TripPlanView }) {
+function Items({
+  plan,
+  onInfo,
+}: {
+  plan: TripPlanView;
+  onInfo: (message: string) => void;
+}) {
   const theme = useTheme();
   const { assetHue } = useHues();
   const [placeId, setPlaceId] = useState<string | null>(null);
@@ -581,6 +587,7 @@ function Items({ plan }: { plan: TripPlanView }) {
       <PlanPlaceSheet
         place={plan.places.find((place) => place.id === placeId) ?? null}
         onClose={() => setPlaceId(null)}
+        onInfo={onInfo}
       />
       {headed && ways > 0 ? (
         <SectionHeader title={copy.itemsWays} count={ways} />
