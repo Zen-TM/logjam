@@ -26,6 +26,7 @@ import { generateGeoPdf } from "../services/generateGeoPdf";
 import { sendEmail } from "../services/email";
 import type { GeoPdfConfig, VectorStyleSettings } from "@logjam/shared";
 import { GEO_PDF_FAILURE_MESSAGE } from "../lib/failureCopy";
+import { resultKeyFor } from "../lib/geoPdfResult";
 import {
   validateGeoPdfConfig,
   validateVectorStyleSettings,
@@ -35,10 +36,7 @@ import {
 
 const GENERIC_FAILURE_MESSAGE = GEO_PDF_FAILURE_MESSAGE;
 
-/** Build the S3 key for a job's rendered PDF. Pure (unit-test target). */
-export function resultKeyFor(jobId: string): string {
-  return `exports/geo-pdf/${jobId}/logjam-export.pdf`;
-}
+export { resultKeyFor };
 
 /**
  * Parse and validate a stored GeoPdfJob.config blob. Throws if the stored

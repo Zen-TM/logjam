@@ -34,16 +34,17 @@ export async function assertHasStorageQuota(
   db: DbClient = prisma,
 ) {
   const { used, quota } = await getStorageUsage(userId, db);
-  if (used >= quota || used + pendingBytes > quota) {
-    throw new AppError(
-      507,
-      say`Your storage is full. Delete something to make room.`,
-      {
-        used: used.toString(),
-        quota: quota.toString(),
-      },
-    );
-  }
+  if (used >= quota || used + pendingBytes > quota)
+    throw storageFull(used, quota);
+}
+
+/** The 507 a write past the storage quota answers with. */
+export function storageFull(used: bigint, quota: bigint): AppError {
+  return new AppError(
+    507,
+    say`Your storage is full. Delete something to make room.`,
+    { used: used.toString(), quota: quota.toString() },
+  );
 }
 
 export async function decrementStorageUsed(

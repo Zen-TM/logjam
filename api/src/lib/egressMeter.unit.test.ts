@@ -12,20 +12,23 @@ vi.mock("../services/prisma", () => ({
 
 import prisma from "../services/prisma";
 import { tallyLogContents } from "./egressMeter";
+import { planResultKeyFor, resultKeyFor } from "./geoPdfResult";
 
 const geoPdfFindMany = (prisma as unknown as { geoPdfJob: { findMany: Mock } })
   .geoPdfJob.findMany;
 
-// One presigned download from the real-shape fixture, re-pointed at a GeoPDF.
+// One presigned download from the real-shape fixture, re-pointed at an owned
+// GeoPDF and at a plan's.
 const EXPORT_KEY =
   "exports/c9bf9e57-1685-4c89-bafb-ff5af830be8a/logjam-export.mbtiles";
-const line = readFileSync(
+const download = readFileSync(
   join(import.meta.dirname, "__fixtures__/s3-access-log-sample.log"),
   "utf8",
 )
   .split("\n")
-  .find((l) => l.includes(EXPORT_KEY))!
-  .replaceAll(EXPORT_KEY, "exports/geo-pdf/pdf-1/logjam-export.pdf");
+  .find((l) => l.includes(EXPORT_KEY))!;
+const line = download.replaceAll(EXPORT_KEY, resultKeyFor("pdf-1"));
+const planLine = download.replaceAll(EXPORT_KEY, planResultKeyFor("pdf-1"));
 
 describe("tallyLogContents: GeoPDF downloads", () => {
   beforeEach(() => geoPdfFindMany.mockReset());
@@ -42,7 +45,7 @@ describe("tallyLogContents: GeoPDF downloads", () => {
     geoPdfFindMany.mockResolvedValue([
       { id: "pdf-1", userId: null, chargedToId: "payer" },
     ]);
-    expect([...(await tallyLogContents([line])).keys()]).toEqual(["payer"]);
+    expect([...(await tallyLogContents([planLine])).keys()]).toEqual(["payer"]);
   });
 
   // Mutation: drop the `if (payer)` check in resolveOwners.
@@ -50,6 +53,6 @@ describe("tallyLogContents: GeoPDF downloads", () => {
     geoPdfFindMany.mockResolvedValue([
       { id: "pdf-1", userId: null, chargedToId: null },
     ]);
-    expect((await tallyLogContents([line])).size).toBe(0);
+    expect((await tallyLogContents([planLine])).size).toBe(0);
   });
 });

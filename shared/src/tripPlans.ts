@@ -48,6 +48,7 @@ export const TRIP_PLAN_ITEM_KINDS = [
   "geoPdf",
 ] as const;
 export type TripPlanItemKind = (typeof TRIP_PLAN_ITEM_KINDS)[number];
+export const isTripPlanItemKind = oneOf(TRIP_PLAN_ITEM_KINDS);
 
 /** "YYYY-MM-DD": a calendar day with no time zone. */
 export type DateOnly = string;
@@ -175,7 +176,8 @@ export type TripPlanFile = TripPlanItemBase &
 export type TripPlanGeoPdf = TripPlanItemBase &
   TripPlanFileCharge & {
     kind: "geoPdf";
-    title: string;
+    /** The map title from its config; null when it had none. */
+    title: string | null;
     downloadUrl: string | null;
     downloadExpiresAt: string | null;
   };
@@ -1144,4 +1146,31 @@ export function currentTripPlanAnswers(
       answers[question.id] = parsed.value;
   }
   return answers;
+}
+
+/** POST /plans/:id/items: a copy of one of the caller's own things. */
+export type TripPlanItemAdd = {
+  kind: TripPlanItemKind;
+  id: string;
+  /** A place's photos come too. Absent: the caller's remembered preference. */
+  copyMedia?: boolean;
+};
+
+/** POST /plans/:id/items. */
+export function parseTripPlanItemAdd(
+  body: unknown,
+): TripPlanParsed<TripPlanItemAdd> {
+  return checked(() => {
+    const input = record(body, "body");
+    if (!isTripPlanItemKind(input.kind)) bad("kind is not an item kind");
+    const id = text(input.id, "id");
+    if (!id) bad("id is empty");
+    if (input.copyMedia !== undefined && typeof input.copyMedia !== "boolean")
+      bad("copyMedia must be a boolean");
+    return {
+      kind: input.kind,
+      id,
+      ...(input.copyMedia !== undefined && { copyMedia: input.copyMedia }),
+    };
+  });
 }

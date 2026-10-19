@@ -20,8 +20,7 @@ import {
 import prisma from "../services/prisma";
 import { fault } from "../middleware/errorHandler";
 import { planNotFound, type PlanAccess } from "./planAccess";
-
-const userRef = { select: { id: true, username: true } } as const;
+import { loadPlanItems, userRef } from "./planItems";
 
 export function dateOnly(date: Date | null): string | null {
   return date ? date.toISOString().slice(0, 10) : null;
@@ -235,11 +234,7 @@ export async function loadPlanView(
     myRole: access.role,
     sections: plan.sections.map(sectionView),
     members,
-    // Empty until items can be added to a plan (#439).
-    places: [],
-    routes: [],
-    files: [],
-    geoPdfs: [],
+    ...(await loadPlanItems(plan.id)),
     forms: plan.forms.map((form) => formView(form, viewer, statuses)),
   };
 }

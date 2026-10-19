@@ -8,6 +8,7 @@ import {
   isBillableEgress,
   attributeKey,
 } from "./s3AccessLog";
+import { planResultKeyFor, resultKeyFor } from "./geoPdfResult";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, "__fixtures__/s3-access-log-sample.log");
@@ -173,6 +174,17 @@ describe("attributeKey", () => {
       table: "topoExportJob",
       jobId: "exp-1",
     });
+  });
+
+  // Mutation: drop the `plans` case from attributeKey.
+  it("attributes the keys the GeoPDF key builders make", () => {
+    for (const key of [resultKeyFor("pdf-1"), planResultKeyFor("pdf-1")]) {
+      expect(attributeKey(key)).toEqual({
+        kind: "job",
+        table: "geoPdfJob",
+        jobId: "pdf-1",
+      });
+    }
   });
 
   it("attributes shared basemap tiles to nobody", () => {
