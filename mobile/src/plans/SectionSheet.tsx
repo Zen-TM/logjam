@@ -1,21 +1,27 @@
-// A write-up section's sheet: its ⋯ (`PLAN_SECTION_VERBS`), and the form
-// that adds or edits it, as two modes of one sheet (never a second sheet). An
-// edit sends each changed field as the value last seen and the new one; on a
-// 409 the form stays open with the API's sentence and keeps what was typed,
-// the plan is fetched again, and every field the user has not touched
-// follows it (`tripPlanAdoptTheirs`), so the next Save compares against that.
+// A write-up section's sheet: its ⋯ (`planSectionVerbs`), and the form that
+// adds or edits it, as modes of one sheet (mobile/DESIGN.md §4). An edit
+// sends each changed field as the value last seen and the new one. Any
+// refused write fetches the plan again: on a 409 the form stays open with
+// the API's sentence and what was typed, every field the user has not
+// touched follows the plan (`tripPlanAdoptTheirs`), and an edited field the
+// plan changed shows the plan's value under it; a section deleted elsewhere
+// closes the sheet.
 import { Fragment, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   ApiError,
+  limitHint,
   messageFromError,
   parseTripPlanSectionCreate,
   planAddVerbLabel,
   planSectionDeleteConfirm,
-  planVerbsFor,
+  planSectionsMoved,
+  planSectionVerbs,
   tripPlanAdoptTheirs,
+  tripPlanInPlanNow,
+  tripPlanSame,
   tripPlanSectionPatch,
-  PLAN_SECTION_VERBS,
+  tripPlanTheirsChanged,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
   TRIP_PLAN_SECTION_SUGGESTIONS,
@@ -26,7 +32,7 @@ import {
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import { makeStyles, spacing, useTheme } from "../theme";
+import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -54,6 +60,8 @@ export type SectionSheetState =
   | { mode: "add" }
   | null;
 
+type Values = { title: string; body: string };
+
 export function SectionSheet({
   state,
   planId,
@@ -64,6 +72,7 @@ export function SectionSheet({
   onInfo,
   onError,
 }: {
+  /** null also when the caller can no longer write (archived, demoted). */
   state: SectionSheetState;
   planId: string;
   role: TripPlanRole;
@@ -83,18 +92,70 @@ export function SectionSheet({
       : undefined;
   // A section deleted under an open sheet: nothing left to act on.
   const open = state !== null && (state.mode === "add" || section != null);
+  // A move until its refetch lands: a second one would start from the old
+  // order and undo the first.
+  const [moving, setMoving] = useState(false);
 
-  const move = (id: string, by: -1 | 1) => {
-    const ids = sections.map((each) => each.id);
-    const from = ids.indexOf(id);
-    const to = from + by;
-    if (to < 0 || to >= ids.length) return;
-    [ids[from], ids[to]] = [ids[to], ids[from]];
+  // The form's state lives here, so its Save can sit in the sheet's footer.
+  const formKey =
+    state?.mode === "edit" && section
+      ? `edit:${section.id}`
+      : state?.mode === "add"
+        ? "add"
+        : null;
+  const current: Values = {
+    title: formKey === "add" ? "" : (section?.title ?? ""),
+    body: formKey === "add" ? "" : (section?.body ?? ""),
+  };
+  const [formFor, setFormFor] = useState<string | null>(null);
+  const [opened, setOpened] = useState(current);
+  const [seen, setSeen] = useState(current);
+  const [values, setValues] = useState(current);
+  const [error, setError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (formKey !== formFor) {
+    setFormFor(formKey);
+    setOpened(current);
+    setSeen(current);
+    setValues(current);
+    setError(null);
+    setTitleError(null);
+    setBodyError(null);
+  } else if (formKey && !tripPlanSame(current, seen)) {
+    const next = tripPlanAdoptTheirs(seen, values, current);
+    setSeen(next.seen);
+    setValues(next.values);
+  }
+  /** The plan's value, under a field the user edited and the plan changed
+   *  since the form opened. */
+  const theirs = (field: keyof Values) =>
+    formKey !== "add" && tripPlanTheirsChanged([field], values, current, opened)
+      ? tripPlanInPlanNow(current[field])
+      : undefined;
+  const set = (next: Partial<Values>) => {
+    setValues((was) => ({ ...was, ...next }));
+    setError(null);
+  };
+
+  const refused = (err: unknown, failed: string) => {
+    if (err instanceof ApiError) void afterPlanWrite(planId);
+    onError(messageFromError(err, failed));
+  };
+
+  const move = (index: number, by: -1 | 1) => {
+    const ids = planSectionsMoved(
+      sections.map((each) => each.id),
+      index,
+      by,
+    );
+    if (!ids) return;
+    setMoving(true);
     reorderSections(planId, ids)
       .then(() => afterPlanWrite(planId))
-      .catch((err: unknown) =>
-        onError(messageFromError(err, copy.sectionMoveFailed)),
-      );
+      .catch((err: unknown) => refused(err, copy.sectionMoveFailed))
+      .finally(() => setMoving(false));
   };
 
   const confirmDelete = (target: TripPlanSectionView) => {
@@ -108,42 +169,91 @@ export function SectionSheet({
           deleteSection(planId, target.id)
             .then(() => afterPlanWrite(planId))
             .then(() => onInfo(copy.sectionDeleted))
-            .catch((err: unknown) =>
-              onError(messageFromError(err, copy.sectionDeleteFailed)),
-            );
+            .catch((err: unknown) => refused(err, copy.sectionDeleteFailed));
         },
       },
     ]);
   };
 
+  const index = section ? sections.indexOf(section) : -1;
   const run = (id: PlanSectionVerbId, target: TripPlanSectionView) => {
     if (id === "edit") return onState({ mode: "edit", sectionId: target.id });
     close();
-    if (id === "moveUp") move(target.id, -1);
-    else if (id === "moveDown") move(target.id, 1);
+    if (id === "moveUp") move(index, -1);
+    else if (id === "moveDown") move(index, 1);
     else confirmDelete(target);
   };
-
-  const index = section ? sections.indexOf(section) : -1;
-  const verbs = planVerbsFor(PLAN_SECTION_VERBS, "gps", role, {
+  const verbs = planSectionVerbs("gps", role, {
     archived: false,
-  }).filter(
-    (verb) =>
-      !(verb.id === "moveUp" && index === 0) &&
-      !(verb.id === "moveDown" && index === sections.length - 1),
-  );
+    index,
+    count: sections.length,
+  });
+
+  async function submit() {
+    const parsed = parseTripPlanSectionCreate(values);
+    if (!("value" in parsed)) {
+      const sentence = "sentence" in parsed ? parsed.sentence : null;
+      // The title's refusals are caught by its own rules first; what is left
+      // is the body's length.
+      if (!values.title.trim())
+        setTitleError(sentence ?? copy.sectionSaveFailed);
+      else setBodyError(sentence ?? copy.sectionSaveFailed);
+      return;
+    }
+    const patch = tripPlanSectionPatch(seen, parsed.value);
+    if (section && Object.keys(patch).length === 0) return close();
+    setBusy(true);
+    try {
+      if (formKey !== "add" && section)
+        await patchSection(planId, section.id, patch);
+      else await createSection(planId, parsed.value);
+      await afterPlanWrite(planId);
+      close();
+    } catch (err) {
+      setError(messageFromError(err, copy.sectionSaveFailed));
+      if (err instanceof ApiError) await afterPlanWrite(planId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Inside edit, every way out is back to the section's ⋯, not away with
+  // what was typed.
+  const back =
+    state?.mode === "edit"
+      ? () => onState({ mode: "verbs", sectionId: state.sectionId })
+      : undefined;
+  const editing = formKey !== null;
 
   return (
     <BottomSheet
       visible={open}
-      onClose={close}
+      onClose={back ?? close}
+      onBack={back}
       title={
         state?.mode === "verbs" && section ? section.title : copy.sectionTitle
       }
-      onBack={
-        state?.mode === "edit"
-          ? () => onState({ mode: "verbs", sectionId: state.sectionId })
-          : undefined
+      // Pinned: a long body outgrows the sheet.
+      footer={
+        editing ? (
+          <FormStack>
+            {error ? <ErrorBanner message={error} /> : null}
+            <Button
+              label={
+                formKey === "add"
+                  ? planAddVerbLabel("section")
+                  : copy.sectionSave
+              }
+              icon="done"
+              loading={busy}
+              disabled={!online}
+              disabledReason={OFFLINE}
+              onPress={() => void submit()}
+            />
+            {/* The button only dims: the words go under it (ui/Button.tsx). */}
+            {online ? null : <Text style={styles.note}>{OFFLINE}</Text>}
+          </FormStack>
+        ) : undefined
       }
     >
       {state?.mode === "verbs" && section ? (
@@ -158,143 +268,70 @@ export function SectionSheet({
                 hue={verb.danger ? theme.warning : undefined}
                 title={verb.label}
                 subtitle={online ? undefined : OFFLINE}
-                disabled={!online}
+                disabled={
+                  !online ||
+                  (moving && (verb.id === "moveUp" || verb.id === "moveDown"))
+                }
                 onPress={() => run(verb.id, section)}
               />
             </Fragment>
           ))}
         </View>
       ) : null}
-      {state?.mode === "edit" && section ? (
-        <SectionForm
-          key={section.id}
-          planId={planId}
-          section={section}
-          online={online}
-          onDone={close}
-        />
-      ) : null}
-      {state?.mode === "add" ? (
-        <SectionForm planId={planId} online={online} onDone={close} />
+      {editing ? (
+        <FormStack>
+          {formKey === "add" ? (
+            <ChipRail
+              scroll
+              options={TRIP_PLAN_SECTION_SUGGESTIONS.map((title) => ({
+                value: title,
+                label: title,
+              }))}
+              value={values.title}
+              onChange={(title) => {
+                set({ title });
+                setTitleError(null);
+              }}
+            />
+          ) : null}
+          <TextField
+            label={copy.sectionTitleField}
+            value={values.title}
+            maxLength={TRIP_PLAN_SECTION_TITLE_MAX_LENGTH}
+            autoCapitalize="sentences"
+            error={titleError}
+            hint={theirs("title")}
+            onChangeText={(title) => {
+              set({ title });
+              setTitleError(null);
+            }}
+          />
+          <TextField
+            label={copy.sectionBody}
+            value={values.body}
+            multiline
+            autoCapitalize="sentences"
+            error={bodyError}
+            hint={limitHint(
+              values.body.length,
+              TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
+            )}
+            onChangeText={(body) => {
+              set({ body });
+              setBodyError(null);
+            }}
+          />
+          {theirs("body") ? (
+            <Text style={styles.note}>{theirs("body")}</Text>
+          ) : null}
+        </FormStack>
       ) : null}
     </BottomSheet>
   );
 }
 
-type Values = { title: string; body: string };
-
-function SectionForm({
-  planId,
-  section,
-  online,
-  onDone,
-}: {
-  planId: string;
-  /** Absent: a new section. Updated in place after a refetch. */
-  section?: TripPlanSectionView;
-  online: boolean;
-  onDone: () => void;
-}) {
-  const current: Values = {
-    title: section?.title ?? "",
-    body: section?.body ?? "",
-  };
-  const [seen, setSeen] = useState(current);
-  const [values, setValues] = useState(current);
-  const [error, setError] = useState<string | null>(null);
-  const [titleError, setTitleError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  if (current.title !== seen.title || current.body !== seen.body) {
-    const next = tripPlanAdoptTheirs(seen, values, current);
-    setSeen(next.seen);
-    setValues(next.values);
-  }
-  const set = (next: Partial<Values>) => {
-    setValues((was) => ({ ...was, ...next }));
-    setError(null);
-  };
-
-  async function submit() {
-    const parsed = parseTripPlanSectionCreate(values);
-    if (!("value" in parsed)) {
-      const sentence = "sentence" in parsed ? parsed.sentence : null;
-      if (!values.title.trim())
-        setTitleError(sentence ?? copy.sectionSaveFailed);
-      else setError(sentence ?? copy.sectionSaveFailed);
-      return;
-    }
-    const patch = tripPlanSectionPatch(seen, parsed.value);
-    if (section && Object.keys(patch).length === 0) return onDone();
-    setBusy(true);
-    try {
-      if (section) await patchSection(planId, section.id, patch);
-      else await createSection(planId, parsed.value);
-      await afterPlanWrite(planId);
-      onDone();
-    } catch (err) {
-      setError(messageFromError(err, copy.sectionSaveFailed));
-      if (err instanceof ApiError && err.status === 409)
-        await afterPlanWrite(planId);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <FormStack>
-      {section ? null : (
-        <ChipRail
-          scroll
-          options={TRIP_PLAN_SECTION_SUGGESTIONS.map((title) => ({
-            value: title,
-            label: title,
-          }))}
-          value={values.title}
-          onChange={(title) => {
-            set({ title });
-            setTitleError(null);
-          }}
-        />
-      )}
-      <TextField
-        label={copy.sectionTitleField}
-        value={values.title}
-        maxLength={TRIP_PLAN_SECTION_TITLE_MAX_LENGTH}
-        autoCapitalize="sentences"
-        error={titleError}
-        onChangeText={(title) => {
-          set({ title });
-          setTitleError(null);
-        }}
-      />
-      <TextField
-        label={copy.sectionBody}
-        value={values.body}
-        multiline
-        autoCapitalize="sentences"
-        // A limit shows live (shared/DESIGN.md §11).
-        hint={
-          values.body.length > TRIP_PLAN_SECTION_BODY_MAX_LENGTH * 0.9
-            ? `${values.body.length} of ${TRIP_PLAN_SECTION_BODY_MAX_LENGTH} characters`
-            : undefined
-        }
-        onChangeText={(body) => set({ body })}
-      />
-      {error ? <ErrorBanner message={error} /> : null}
-      <Button
-        label={section ? copy.sectionSave : planAddVerbLabel("section")}
-        icon="done"
-        loading={busy}
-        disabled={!online}
-        disabledReason={OFFLINE}
-        onPress={() => void submit()}
-      />
-    </FormStack>
-  );
-}
-
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   verbs: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
+  note: { ...muted(theme, textRole.detail) },
 }));
