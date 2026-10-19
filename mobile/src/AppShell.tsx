@@ -65,6 +65,11 @@ import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import {
+  pollPlans,
+  refreshCachedPlan,
+  registerPlansPoll,
+} from "./plans/plansCache";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
 import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen";
 import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
@@ -838,6 +843,7 @@ export function AppShell({
         geoPdfAutoDownload: registerGeoPdfAutoDownload,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
+        plansPoll: registerPlansPoll,
       }),
     [accountState],
   );
@@ -897,7 +903,29 @@ export function AppShell({
         }
       },
     );
-    return () => subscription.remove();
+    // A plan push while Logjam GPS is open: the list and that plan are
+    // fetched again, so neither reads stale (design §2.7). A guest gets none.
+    const received = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const data = notification.request.content.data as {
+          type?: unknown;
+          planId?: unknown;
+        } | null;
+        if (isGuest || typeof data?.type !== "string") return;
+        if (!data.type.startsWith("plan_")) return;
+        void pollPlans()
+          .then(() =>
+            typeof data.planId === "string"
+              ? refreshCachedPlan(data.planId)
+              : undefined,
+          )
+          .catch(console.error);
+      },
+    );
+    return () => {
+      subscription.remove();
+      received.remove();
+    };
   }, [isGuest]);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
