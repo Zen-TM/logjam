@@ -30,6 +30,7 @@ import {
   tripPlanTripLogPrefill,
   tripPlanAnswerText,
   tripPlanSeesAnswers,
+  tripPlanVisibilityLine,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -499,5 +500,21 @@ describe("a form's answers", () => {
     expect(tripPlanSeesAnswers("leader", "leaders")).toBe(true);
     expect(tripPlanSeesAnswers("editor", "leaders")).toBe(false);
     expect(tripPlanSeesAnswers("member", "members")).toBe(true);
+  });
+});
+
+describe("who sees a form's answers, as its filler reads it", () => {
+  // Mutation: drop the preset check, and a gear list says it may be printed;
+  // drop the line, and a safety contact goes on paper its author was never
+  // told about.
+  it("says a members form the print summary carries may be printed", () => {
+    const printed = /may print them for someone not on the trip/;
+    expect(tripPlanVisibilityLine("members", "safetyContacts")).toMatch(
+      printed,
+    );
+    expect(tripPlanVisibilityLine("members", "carpool")).toMatch(printed);
+    expect(tripPlanVisibilityLine("members", "gear")).not.toMatch(printed);
+    expect(tripPlanVisibilityLine("members")).not.toMatch(printed);
+    expect(tripPlanVisibilityLine("leaders", "carpool")).not.toMatch(printed);
   });
 });

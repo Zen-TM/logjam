@@ -4,7 +4,7 @@
  * api rejects any other version and the frontend blocks behind ConsentGate
  * until the recorded version matches.
  */
-export const CURRENT_CONSENT_VERSION = "2026-09-28";
+export const CURRENT_CONSENT_VERSION = "2026-10-19";
 
 /**
  * True when the user must (re-)consent before proceeding: they have never

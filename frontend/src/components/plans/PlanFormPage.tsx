@@ -151,7 +151,9 @@ export default function PlanFormPage({
       />
     ),
     visibility: (
-      <p className={classes.note}>{tripPlanVisibilityLine(form.visibleTo)}</p>
+      <p className={classes.note}>
+        {tripPlanVisibilityLine(form.visibleTo, form.preset)}
+      </p>
     ),
     mine: (
       <div className={classes.block}>

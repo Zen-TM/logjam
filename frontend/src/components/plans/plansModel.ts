@@ -3,8 +3,9 @@
 // the value last seen and the new one (shared/DESIGN.md §10).
 import {
   currentTripPlanAnswers,
+  TRIP_PLAN_FORM_PRESETS,
   tripPlanAnswerText,
-  tripPlanSeesAnswers,
+  tripPlanRoleWord,
 } from "@logjam/shared";
 import type {
   TripPlanCreate,
@@ -146,48 +147,63 @@ export type SummaryParts = {
   contacts: boolean;
 };
 
-/** A preset's form whose answers the caller sees, if the plan has one. */
+/** A preset's form the summary may print: one everyone in the plan sees,
+ *  whose fillers were told members may print it (`tripPlanVisibilityLine`). */
 export function summaryForm(
-  plan: Pick<TripPlanView, "forms" | "myRole">,
+  plan: Pick<TripPlanView, "forms">,
   preset: "carpool" | "safetyContacts",
 ): TripPlanFormView | null {
   return (
     plan.forms.find(
-      (form) =>
-        form.preset === preset &&
-        tripPlanSeesAnswers(plan.myRole, form.visibleTo),
+      (form) => form.preset === preset && form.visibleTo === "members",
     ) ?? null
   );
 }
 
-/** One table of a preset form's answers: a row per person who answered, a
- *  cell per named question (blank where a leader removed it). */
-function answerTable(form: TripPlanFormView, questionIds: readonly string[]) {
+/** One table of a preset form's answers: a row per person going who
+ *  answered, a column per question the preset names that is still its kind,
+ *  headed by its label now. A question a leader removed, or turned into
+ *  something else ("Medications"), is not printed. */
+function answerTable(
+  form: TripPlanFormView,
+  questionIds: readonly string[],
+  going: ReadonlySet<string>,
+) {
+  const preset = form.preset ? TRIP_PLAN_FORM_PRESETS[form.preset] : null;
+  const columns = questionIds.flatMap((id) => {
+    const question = form.questions.find((each) => each.id === id);
+    const was = preset?.questions.find((each) => each.id === id);
+    return question && question.kind === was?.kind ? [question] : [];
+  });
+  if (columns.length === 0) return null;
   const answers = [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])];
-  return answers
+  const rows = answers
+    .filter((answer) => going.has(answer.user.id))
     .map((answer) => {
       const values = currentTripPlanAnswers(form.questions, answer.answers);
       return [
         answer.user.username,
-        ...questionIds.map((id) => {
-          const question = form.questions.find((each) => each.id === id);
-          return question ? tripPlanAnswerText(question, values[id]) : "";
-        }),
+        ...columns.map((question) =>
+          tripPlanAnswerText(question, values[question.id]),
+        ),
       ];
     })
     .sort((a, b) => a[0].localeCompare(b[0]));
+  return { head: ["Name", ...columns.map((each) => each.label)], rows };
 }
 
 /**
- * What the print summary holds, for someone not on the trip (design §7.7).
- * PRIVACY: never a place, a coordinate, a way, a map, another form or anyone's
- * medical answers: only the write-up, who's going, and the carpool and
- * safety-contact presets' named questions. Guard: plansModel.test.ts.
+ * What the print summary holds, for someone not on the trip.
+ * PRIVACY: never a place, a coordinate, a way, a map, another form, anyone's
+ * medical answers or anyone not going: only the write-up, who's going, and
+ * the carpool and safety-contact presets' named questions, from forms
+ * everyone in the plan sees. Guard: plansModel.test.ts.
  */
 export function planSummary(plan: TripPlanView, parts: SummaryParts) {
   const carpool = parts.carpool ? summaryForm(plan, "carpool") : null;
   const contacts = parts.contacts ? summaryForm(plan, "safetyContacts") : null;
   const active = plan.members.filter((member) => member.status === "active");
+  const going = new Set(active.map((member) => member.user.id));
   return {
     name: plan.name,
     leaders: active
@@ -199,16 +215,12 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
     going: parts.going
       ? active.map((member) => [
           member.user.username,
-          member.role === "leader"
-            ? "Leader"
-            : member.role === "editor"
-              ? "Editor"
-              : "Member",
+          tripPlanRoleWord(member.role),
         ])
       : [],
-    carpool: carpool ? answerTable(carpool, ["mode", "seats", "from"]) : [],
-    contacts: contacts
-      ? answerTable(contacts, ["name", "phone", "name2", "phone2"])
-      : [],
+    carpool: carpool && answerTable(carpool, ["mode", "seats", "from"], going),
+    contacts:
+      contacts &&
+      answerTable(contacts, ["name", "phone", "name2", "phone2"], going),
   };
 }

@@ -1,4 +1,4 @@
-/* The print summary (design §7.7). Paper is not a scheme: black on white,
+/* The print summary. Paper is not a scheme: black on white,
    whatever the screen's scheme, a deliberate exception to colours being
    roles. The page is A4 whatever prints it, a phone included. */
 .choices {
@@ -29,9 +29,17 @@
     margin: 15mm;
   }
 
-  /* No app chrome, no map: only the summary prints. */
-  :global(body > *:not(#plan-print)) {
+  /* While the summary is mounted, only it prints: no app chrome, no map.
+     Any other print of Logjam Web is left alone. Guard: e2e/a11y.spec.ts,
+     the Plans case. */
+  :global(body:has(> #plan-print) > *:not(#plan-print)) {
     display: none !important;
+  }
+
+  /* Paper, with "Background graphics" ticked in a dark scheme too. */
+  :global(body:has(> #plan-print)) {
+    --color-page: #fff;
+    color-scheme: light;
   }
 
   .summary {

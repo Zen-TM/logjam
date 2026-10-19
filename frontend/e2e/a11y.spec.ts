@@ -194,7 +194,18 @@ test.describe("desktop", () => {
     await page.getByRole("menuitem", { name: "Print a summary" }).click();
     await expect(page.locator("dialog[open]")).toBeVisible();
     await expectNoViolations(page, "dialog");
+    // While it is open, only the summary prints; once it closes, Logjam Web
+    // prints as it did. Mutation: drop the `:has(> #plan-print)` scope in
+    // PlanSummary.module.css, and every other print is a blank sheet.
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("#plan-print")).toBeVisible();
+    await expect(page.locator("#root")).toBeHidden();
+    await page.emulateMedia({ media: "screen" });
     await page.keyboard.press("Escape");
+    await expect(page.locator("#plan-print")).toHaveCount(0);
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("#root")).toBeVisible();
+    await page.emulateMedia({ media: "screen" });
   });
 
   test("Plans forms: a form's page, answering it, and the builder", async ({

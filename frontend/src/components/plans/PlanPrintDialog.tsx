@@ -1,9 +1,9 @@
 // Print a summary (Logjam Web only, `PLAN_VERBS`): a page for someone not on
-// the trip, printed or saved as a PDF by the browser (design §7.7). The
-// summary is rendered into `#plan-print`, a child of <body>, only while
-// printing; the print stylesheet hides everything else, map and app chrome
-// included. It goes on `afterprint`, never when print() returns: Firefox
-// returns at once, Chrome only once the dialog closes.
+// the trip, printed or saved as a PDF by the browser. The summary sits in
+// `#plan-print`, a child of <body>, while the dialog is open; the print
+// stylesheet hides everything else then, the dialog, map and app chrome
+// included. `afterprint` closes the dialog where it fires, never print()'s
+// return: Firefox returns at once, Chrome once its dialog closes.
 import { useEffect, useEffectEvent, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -31,19 +31,13 @@ export default function PlanPrintDialog({
     carpool: carpool != null,
     contacts: contacts != null,
   });
-  const [printing, setPrinting] = useState(false);
 
-  // An effect event, so a new `onClose` each render never prints again.
-  const done = useEffectEvent(() => {
-    setPrinting(false);
-    onClose();
-  });
+  // An effect event, so a new `onClose` each render never re-subscribes.
+  const done = useEffectEvent(onClose);
   useEffect(() => {
-    if (!printing) return;
     window.addEventListener("afterprint", done);
-    window.print();
     return () => window.removeEventListener("afterprint", done);
-  }, [printing]);
+  }, []);
 
   const set = (key: keyof SummaryParts) => (next: boolean) =>
     setParts((was) => ({ ...was, [key]: next }));
@@ -51,7 +45,7 @@ export default function PlanPrintDialog({
   return (
     <>
       <Dialog
-        open={!printing}
+        open
         title="Print a summary"
         onClose={onClose}
         footer={
@@ -68,7 +62,7 @@ export default function PlanPrintDialog({
           className={classes.choices}
           onSubmit={(event) => {
             event.preventDefault();
-            setPrinting(true);
+            window.print();
           }}
         >
           <p className={classes.line}>
@@ -101,7 +95,7 @@ export default function PlanPrintDialog({
           )}
         </form>
       </Dialog>
-      {printing && <PlanSummary plan={plan} parts={parts} />}
+      <PlanSummary plan={plan} parts={parts} />
     </>
   );
 }
@@ -122,8 +116,8 @@ function SummaryTable({
       <table>
         <thead>
           <tr>
-            {head.map((cell) => (
-              <th key={cell} scope="col">
+            {head.map((cell, index) => (
+              <th key={index} scope="col">
                 {cell}
               </th>
             ))}
@@ -174,16 +168,12 @@ function PlanSummary({
         head={["Name", "Role"]}
         rows={summary.going}
       />
-      <SummaryTable
-        caption="Carpooling"
-        head={["Name", "How", "Seats", "Leaving from"]}
-        rows={summary.carpool}
-      />
-      <SummaryTable
-        caption="Safety contacts"
-        head={["Member", "Contact", "Phone", "Second contact", "Phone"]}
-        rows={summary.contacts}
-      />
+      {summary.carpool && (
+        <SummaryTable caption="Carpooling" {...summary.carpool} />
+      )}
+      {summary.contacts && (
+        <SummaryTable caption="Safety contacts" {...summary.contacts} />
+      )}
       <footer>
         From Logjam Web, {printed}. Correct when printed; the plan may have
         changed since.

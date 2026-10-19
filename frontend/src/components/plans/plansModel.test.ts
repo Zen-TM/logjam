@@ -170,9 +170,11 @@ describe("a form edit", () => {
 
 describe("the print summary", () => {
   const user = (username: string) => ({ id: username, username });
+  // Answers by username, as a leader is served them: sue's too, though she
+  // has only asked to join.
   const form = (
     preset: TripPlanFormView["preset"],
-    answers: Record<string, unknown>,
+    byUser: Record<string, Record<string, unknown>>,
   ): TripPlanFormView => ({
     id: preset ?? "f",
     title: preset ?? "Other",
@@ -183,7 +185,11 @@ describe("the print summary", () => {
     position: 0,
     updatedAt: "",
     myAnswer: null,
-    answers: [{ user: user("tom"), answers: answers as never, updatedAt: "" }],
+    answers: Object.entries(byUser).map(([username, answers]) => ({
+      user: user(username),
+      answers: answers as never,
+      updatedAt: "",
+    })),
   });
   const plan = {
     id: "p",
@@ -240,9 +246,15 @@ describe("the print summary", () => {
     files: [],
     geoPdfs: [],
     forms: [
-      form("carpool", { mode: "lift", seats: 2, from: "Katoomba" }),
-      form("safetyContacts", { name: "Ann", phone: "0400 000 000" }),
-      form("firstAid", { cert: "no", conditions: "Bee allergy" }),
+      form("carpool", {
+        tom: { mode: "lift", seats: 2, from: "Katoomba" },
+        sue: { mode: "own", from: "Leura" },
+      }),
+      form("safetyContacts", {
+        tom: { name: "Ann", phone: "0400 000 000" },
+        sue: { name: "Sue's dad", phone: "0400 999 999" },
+      }),
+      form("firstAid", { tom: { cert: "no", conditions: "Bee allergy" } }),
     ],
   } as unknown as TripPlanView;
   const all = { writeUp: true, going: true, carpool: true, contacts: true };
@@ -258,6 +270,64 @@ describe("the print summary", () => {
     expect(text).toContain("0400 000 000");
   });
 
+  // Mutation: drop the going filter in `answerTable`, and a stranger asking
+  // by link has their emergency contact printed as one of the group's.
+  it("prints no answer from someone who only asked to join", () => {
+    const text = JSON.stringify(planSummary(plan, all));
+    expect(text).not.toContain("sue");
+    expect(text).not.toContain("Leura");
+    expect(text).not.toContain("0400 999 999");
+  });
+
+  // Mutation: offer any form the caller sees, and a leaders-only form's
+  // answers go on paper though their authors were told only leaders see them.
+  it("prints no form only the leaders see", () => {
+    const leadersOnly = {
+      ...plan,
+      forms: plan.forms.map((each) => ({
+        ...each,
+        visibleTo: "leaders" as const,
+      })),
+    };
+    expect(planSummary(leadersOnly, all)).toMatchObject({
+      carpool: null,
+      contacts: null,
+    });
+  });
+
+  // Mutation: head the columns with the preset's words, or keep a column
+  // whose kind changed, and a "Medications" answer prints as a contact.
+  it("heads its columns with the labels now, and drops a question that became something else", () => {
+    const contacts = plan.forms[1];
+    const edited = {
+      ...plan,
+      forms: [
+        {
+          ...contacts,
+          questions: contacts.questions.map((question) =>
+            question.id === "name"
+              ? { ...question, label: "Who to call" }
+              : question.id === "phone"
+                ? {
+                    ...question,
+                    kind: "longText" as const,
+                    label: "Medications",
+                  }
+                : question,
+          ),
+        },
+      ],
+    };
+    const summary = planSummary(edited, all);
+    expect(summary.contacts?.head).toEqual([
+      "Name",
+      "Who to call",
+      "Second contact's name",
+      "Second contact's phone",
+    ]);
+    expect(JSON.stringify(summary)).not.toContain("0400 000 000");
+  });
+
   it("lists who's going, not who asked to join, and leaves out what was unticked", () => {
     const summary = planSummary(plan, {
       ...all,
@@ -266,7 +336,7 @@ describe("the print summary", () => {
     });
     expect(summary.going.map(([name]) => name)).toEqual(["mira", "tom"]);
     expect(summary.leaders).toEqual(["mira"]);
-    expect(summary.carpool).toEqual([]);
+    expect(summary.carpool).toBeNull();
     expect(summary.sections).toEqual([]);
   });
 });
