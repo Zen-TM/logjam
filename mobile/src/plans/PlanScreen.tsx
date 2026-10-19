@@ -17,6 +17,9 @@ import {
   contractSectionKeys,
   mediaDisplayName,
   messageFromError,
+  planAddVerbLabel,
+  planVerbsFor,
+  PLAN_ADD_VERBS,
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
@@ -62,6 +65,7 @@ import {
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { patchPlan } from "./plansApi";
+import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
   afterPlanWrite,
   fetchPlan,
@@ -73,6 +77,7 @@ import {
 import { planPageView } from "./planViews";
 
 const copy = TRIP_PLAN_PAGE.copy;
+const OFFLINE = unavailableReasonText("needs-connection");
 
 function usePlan(planId: string, online: boolean, blocked: boolean) {
   const [cached, setCached] = useState<CachedPlan | null | undefined>(
@@ -261,9 +266,17 @@ function PlanPage({
   const { plan } = cached;
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
     setToast({ text, tone, nonce: Date.now() });
+  const archived = plan.archivedAt != null;
+  // Add ▾'s verbs this caller may run; the page draws each where it belongs.
+  const adds = new Set(
+    planVerbsFor(PLAN_ADD_VERBS, "gps", plan.myRole, { archived }).map(
+      (verb) => verb.id,
+    ),
+  );
   const today = todayDateKey();
   const notice = tripPlanNotice({
     archived: plan.archivedAt != null,
@@ -349,7 +362,15 @@ function PlanPage({
         <ChipRail scroll options={views} value={view} onChange={onView} />
       </View>
     ),
-    writeUp: view === "writeUp" ? <WriteUp plan={plan} /> : null,
+    writeUp:
+      view === "writeUp" ? (
+        <WriteUp
+          plan={plan}
+          canWrite={adds.has("section")}
+          online={online}
+          onSection={setSectionSheet}
+        />
+      ) : null,
     items: view === "items" ? <Items plan={plan} /> : null,
     forms: view === "forms" ? <Forms plan={plan} /> : null,
     people:
@@ -439,6 +460,16 @@ function PlanPage({
           setEditOpen(false);
         }}
       />
+      <SectionSheet
+        state={sectionSheet}
+        planId={plan.id}
+        role={plan.myRole}
+        sections={plan.sections}
+        online={online}
+        onState={setSectionSheet}
+        onInfo={notify}
+        onError={(text) => notify(text, "error")}
+      />
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
@@ -452,18 +483,64 @@ const PINNED: readonly SectionKeysOn<typeof TRIP_PLAN_PAGE, "gps">[] = [
   "views",
 ];
 
-function WriteUp({ plan }: { plan: TripPlanView }) {
+function WriteUp({
+  plan,
+  canWrite,
+  online,
+  onSection,
+}: {
+  plan: TripPlanView;
+  /** The caller may add, edit, move and delete sections (and it's live). */
+  canWrite: boolean;
+  online: boolean;
+  onSection: (state: SectionSheetState) => void;
+}) {
+  const theme = useTheme();
   const styles = useStyles();
+  const add = canWrite ? (
+    <Button
+      label={planAddVerbLabel("section")}
+      icon="add"
+      variant="outlineAccent"
+      disabled={!online}
+      disabledReason={OFFLINE}
+      onPress={() => onSection({ mode: "add" })}
+    />
+  ) : null;
   if (plan.sections.length === 0)
-    return <EmptyState icon="notes" title={copy.writeUpEmpty} />;
-  return plan.sections.map((section) => (
-    <View key={section.id} style={styles.section}>
-      <SectionHeader title={section.title} />
-      <Text style={styles.sectionBody} selectable>
-        {section.body || copy.writeUpEmpty}
-      </Text>
-    </View>
-  ));
+    return (
+      <>
+        <EmptyState icon="notes" title={copy.writeUpEmpty} />
+        {add}
+      </>
+    );
+  return (
+    <>
+      {plan.sections.map((section) => (
+        <View key={section.id} style={styles.section}>
+          <View style={styles.sectionHead}>
+            <View style={styles.sectionTitle}>
+              <SectionHeader title={section.title} />
+            </View>
+            {canWrite ? (
+              <IconButton
+                icon="overflow"
+                accessibilityLabel={`Actions for ${section.title}`}
+                color={theme.textMuted}
+                onPress={() =>
+                  onSection({ mode: "verbs", sectionId: section.id })
+                }
+              />
+            ) : null}
+          </View>
+          <Text style={styles.sectionBody} selectable>
+            {section.body || copy.writeUpEmpty}
+          </Text>
+        </View>
+      ))}
+      {add}
+    </>
+  );
 }
 
 function Items({ plan }: { plan: TripPlanView }) {
@@ -585,5 +662,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
   },
   section: { gap: spacing(1) },
+  sectionHead: { flexDirection: "row", alignItems: "flex-end" },
+  sectionTitle: { flex: 1 },
   sectionBody: { ...textRole.body, color: theme.text },
 }));

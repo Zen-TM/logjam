@@ -4,6 +4,9 @@
 import type {
   TripPlanCreate,
   TripPlanPatch,
+  TripPlanSectionCreate,
+  TripPlanSectionPatch,
+  TripPlanSectionView,
   TripPlanSummary,
   TripPlanView,
 } from "@logjam/shared";
@@ -11,6 +14,8 @@ import type {
 import { apiFetch } from "../api/apiFetch";
 
 const plan = (id: string) => `/plans/${encodeURIComponent(id)}`;
+const section = (planId: string, id: string) =>
+  `${plan(planId)}/sections/${encodeURIComponent(id)}`;
 
 export function getPlans(): Promise<{ plans: TripPlanSummary[] }> {
   return apiFetch("/plans");
@@ -34,3 +39,25 @@ export const deletePlan = (id: string) =>
 /** Leave, decline an invite or withdraw a request: one call, by status. */
 export const leavePlan = (id: string) =>
   apiFetch<void>(`${plan(id)}/members/me`, { method: "DELETE" });
+
+export const createSection = (planId: string, body: TripPlanSectionCreate) =>
+  apiFetch<TripPlanSectionView>(`${plan(planId)}/sections`, {
+    method: "POST",
+    body,
+  });
+export const patchSection = (
+  planId: string,
+  sectionId: string,
+  body: TripPlanSectionPatch,
+) =>
+  apiFetch<TripPlanSectionView>(section(planId, sectionId), {
+    method: "PATCH",
+    body,
+  });
+export const reorderSections = (planId: string, ids: string[]) =>
+  apiFetch<{ sections: TripPlanSectionView[] }>(
+    `${plan(planId)}/sections/order`,
+    { method: "PUT", body: { ids } },
+  );
+export const deleteSection = (planId: string, sectionId: string) =>
+  apiFetch<void>(section(planId, sectionId), { method: "DELETE" });
