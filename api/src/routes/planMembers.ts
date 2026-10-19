@@ -27,6 +27,7 @@ import prisma from "../services/prisma";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
+import { memberGone } from "../lib/planItems";
 import {
   planArchived,
   planMembershipAnyStatus,
@@ -47,6 +48,7 @@ import {
 import {
   activeMemberIds,
   blockedWithAny,
+  dropMembership,
   dropStalePlanNotifications,
   joinForms,
   notifyPlan,
@@ -353,8 +355,10 @@ router.post(
 //   leader, invited cancel the invite
 //   leader, requested turn it down   they are told
 // Works on an archived plan: leaving one must stay possible.
-// Hold #439: what the person added, and whose storage it counts against, is
-// the plan items' work (leave keeps the charge; a leader's remove takes it).
+// What an active member added stays, charged as before; a leader's remove
+// takes on the files charged to them. `?deleteAdded=true` on a leave and
+// `?deleteFiles=true` on a remove delete those instead (lib/planItems.ts
+// memberGone).
 router.delete(
   "/members/:userId",
   requireAuth,
@@ -371,7 +375,7 @@ router.delete(
         REMOVE,
       );
 
-    const push = await prisma.$transaction(async (tx) => {
+    const { late, push } = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
       if (!self) await requireStillLeader(tx, planId, user.id, REMOVE);
       // Read again behind the plan row: a leader may have answered since.
@@ -401,15 +405,19 @@ router.delete(
         (await otherLeaders(tx, planId, memberId)) === 0
       )
         throw new AppError(409, NEEDS_A_LEADER);
-      await tx.tripPlanAnswer.deleteMany({
-        where: { userId: memberId, form: { planId } },
-      });
-      await tx.tripPlanMember.delete({
-        where: { planId_userId: { planId, userId: memberId } },
-      });
-      await dropStalePlanNotifications(tx, planId, memberId);
-      if (self || member.status === "invited") return () => {};
-      return notifyPlan(tx, [memberId], {
+      const late =
+        member.status === "active"
+          ? await memberGone(tx, {
+              planId,
+              memberId,
+              removedBy: self ? null : user.id,
+              deleteAdded: self && req.query.deleteAdded === "true",
+              deleteFiles: !self && req.query.deleteFiles === "true",
+            })
+          : async () => {};
+      await dropMembership(tx, planId, memberId);
+      if (self || member.status === "invited") return { late, push: () => {} };
+      const push = await notifyPlan(tx, [memberId], {
         type: "plan_access_ended",
         payload: {
           planId,
@@ -417,8 +425,10 @@ router.delete(
           planName: plan.name,
         },
       });
+      return { late, push };
     });
     push();
+    await late();
     res.status(204).send();
   },
 );

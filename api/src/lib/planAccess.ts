@@ -89,11 +89,27 @@ export function requirePlanRole(
 }
 
 /**
+ * After touchPlan: the caller is still an active member (else 404, as for
+ * anyone not in a plan), and their role. A check made before the lock can be
+ * stale by the time it is held.
+ */
+export async function requireStillMember(
+  tx: Prisma.TransactionClient,
+  planId: string,
+  userId: string,
+): Promise<TripPlanRole> {
+  const caller = await tx.tripPlanMember.findUnique({
+    where: { planId_userId: { planId, userId } },
+    select: { status: true, role: true },
+  });
+  if (caller?.status !== "active") throw planNotFound();
+  return caller.role as TripPlanRole;
+}
+
+/**
  * For a leader's write to who is in the plan, after touchPlan: the caller is
- * still in it (else 404, as for anyone not in a plan) and still leads (else
- * 403). A check made before the lock can be stale by the time it is held,
- * and two leaders demoting or removing each other would then leave the plan
- * with none.
+ * still in it (else 404) and still leads (else 403). Two leaders demoting or
+ * removing each other would otherwise leave the plan with none.
  * Guard: __tests__/planMembers.test.ts ("a plan keeps a leader").
  */
 export async function requireStillLeader(
@@ -102,12 +118,8 @@ export async function requireStillLeader(
   userId: string,
   forbidden: UserSentence,
 ): Promise<void> {
-  const caller = await tx.tripPlanMember.findUnique({
-    where: { planId_userId: { planId, userId } },
-    select: { status: true, role: true },
-  });
-  if (caller?.status !== "active") throw planNotFound();
-  if (caller.role !== "leader") throw new AppError(403, forbidden);
+  if ((await requireStillMember(tx, planId, userId)) !== "leader")
+    throw new AppError(403, forbidden);
 }
 
 /** For a write to the plan's content: an active member, and not archived. */

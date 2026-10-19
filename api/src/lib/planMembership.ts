@@ -117,6 +117,21 @@ export async function dropStalePlanNotifications(
   });
 }
 
+/**
+ * Someone out of the plan, in its transaction: their answers, their member
+ * row and the notifications that named them. A leave, a remove and an
+ * account's hand-over (lib/planItems.ts handOverPlans) all end this way.
+ */
+export async function dropMembership(
+  tx: Db,
+  planId: string,
+  userId: string,
+): Promise<void> {
+  await tx.tripPlanAnswer.deleteMany({ where: { userId, form: { planId } } });
+  await tx.tripPlanMember.deleteMany({ where: { planId, userId } });
+  await dropStalePlanNotifications(tx, planId, userId);
+}
+
 /** Every row about the plan but the ones saying it ended. */
 export async function dropPlanNotifications(
   tx: Db,
@@ -128,6 +143,39 @@ export async function dropPlanNotifications(
       payload: { path: ["planId"], equals: planId },
     },
   });
+}
+
+/**
+ * The plan is about to be deleted: drop its notifications and tell everyone
+ * else with a row (members, and anyone invited or asking, who would otherwise
+ * find the plan gone from their list unexplained). In the delete's
+ * transaction; returns the push to send after commit.
+ * Guard: __tests__/planItems.test.ts ("deletes a plan left empty").
+ */
+export async function endPlanForOthers(
+  tx: Db,
+  planId: string,
+  exceptUserId: string,
+): Promise<() => void> {
+  const [plan, others] = await Promise.all([
+    tx.tripPlan.findUniqueOrThrow({
+      where: { id: planId },
+      select: { name: true },
+    }),
+    tx.tripPlanMember.findMany({
+      where: { planId, userId: { not: exceptUserId } },
+      select: { userId: true },
+    }),
+  ]);
+  await dropPlanNotifications(tx, planId);
+  return notifyPlan(
+    tx,
+    others.map((row) => row.userId),
+    {
+      type: "plan_access_ended",
+      payload: { planId, reason: "deleted", planName: plan.name },
+    },
+  );
 }
 
 /** Whether `userId` and any of `otherIds` have blocked each other, either
