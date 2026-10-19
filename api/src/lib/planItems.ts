@@ -38,6 +38,7 @@ import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { AppError, fault } from "../middleware/errorHandler";
 import { getEnv } from "./env";
+import { logger, safeErrorForLog } from "./logger";
 import { touchPlan } from "./planAccess";
 import { reconcileCopiedPlace } from "./placeCopy";
 import {
@@ -66,7 +67,7 @@ import {
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
-const userRef = { select: { id: true, username: true } } as const;
+export const userRef = { select: { id: true, username: true } } as const;
 
 export function itemNotFound(): AppError {
   return new AppError(404, say`Couldn't find that.`);
@@ -316,8 +317,12 @@ export async function copyGeoPdf(
       }),
     );
   } catch (err) {
+    logger.warn(
+      { jobId: source.id, err: safeErrorForLog(err) },
+      "plan_geo_pdf_copy_failed",
+    );
     await deleteS3KeysBestEffort(TOPO_BUCKET, [key]);
-    throw err;
+    throw fault("a GeoPDF's object could not be copied", 502);
   }
   return chargeAndWrite(
     owner,
@@ -429,7 +434,8 @@ async function addPlace(
 
   // A plan holds system types only: a user's own type would make that user's
   // account delete fail (Place.placeTypeId restricts). Anything else lands as
-  // a Marker, its values parked with their labels (ADR 0018).
+  // a Marker, its values parked with their labels (ADR 0018). Guard:
+  // __tests__/planItems.test.ts ("lands a place of the adder's own type as a Marker").
   const placeTypeId = isSystemPlaceTypeId(place.placeTypeId)
     ? place.placeTypeId
     : SYSTEM_PLACE_TYPE_IDS.marker;
@@ -495,7 +501,10 @@ async function addPlace(
 
 type Refund = { charged_to_id: string | null; bytes: bigint | null };
 
-/** Give each payer back what the delete removed. */
+/**
+ * Give each payer back what the delete removed, in user id order: two
+ * deletes locking the same payers in opposite orders would deadlock.
+ */
 async function refund(
   tx: Prisma.TransactionClient,
   rows: Refund[],
@@ -507,15 +516,17 @@ async function refund(
         row.charged_to_id,
         (byPayer.get(row.charged_to_id) ?? 0n) + (row.bytes ?? 0n),
       );
-  for (const [userId, bytes] of byPayer)
+  for (const [userId, bytes] of [...byPayer].sort(([a], [b]) =>
+    a < b ? -1 : 1,
+  ))
     await decrementStorageUsed(userId, bytes, tx);
 }
 
 function deleteMediaReturning(tx: Prisma.TransactionClient, where: Prisma.Sql) {
-  return tx.$queryRaw<(Refund & { display: string; thumb: string | null })[]>`
+  return tx.$queryRaw<(Refund & MediaKeys)[]>`
     DELETE FROM media WHERE ${where}
     RETURNING charged_to_id, file_size_bytes AS bytes,
-      s3_key_display AS display, s3_key_thumbnail AS thumb
+      s3_key_display AS "s3KeyDisplay", s3_key_thumbnail AS "s3KeyThumbnail"
   `;
 }
 
@@ -529,8 +540,15 @@ function deleteGeoPdfsReturning(
   `;
 }
 
-const mediaKeysOf = (rows: { display: string; thumb: string | null }[]) =>
-  rows.flatMap((row) => (row.thumb ? [row.display, row.thumb] : [row.display]));
+type MediaKeys = { s3KeyDisplay: string; s3KeyThumbnail: string | null };
+const mediaKeySelect = { s3KeyDisplay: true, s3KeyThumbnail: true } as const;
+
+const mediaKeysOf = (rows: MediaKeys[]) =>
+  rows.flatMap((row) =>
+    row.s3KeyThumbnail
+      ? [row.s3KeyDisplay, row.s3KeyThumbnail]
+      : [row.s3KeyDisplay],
+  );
 
 /**
  * Delete one item of the plan: S3 objects first (a failure leaves the row and
@@ -549,12 +567,9 @@ export async function deletePlanItem(
         kind === "media"
           ? { planId, id, linkedType: "none" }
           : { planId, linkedType: "place", linkedId: id },
-      select: { s3KeyDisplay: true, s3KeyThumbnail: true },
+      select: mediaKeySelect,
     });
-    await deleteS3Keys(
-      MEDIA_BUCKET,
-      files.flatMap((f) => [f.s3KeyDisplay, f.s3KeyThumbnail ?? ""]),
-    );
+    await deleteS3Keys(MEDIA_BUCKET, mediaKeysOf(files));
   }
   if (kind === "geoPdf")
     await deleteS3Keys(TOPO_BUCKET, [planResultKeyFor(id)]);
@@ -616,13 +631,11 @@ export async function deletePlanWithFiles<T>(
   const [media, jobs] = await Promise.all([
     prisma.media.findMany({
       where: { planId },
-      select: { s3KeyDisplay: true, s3KeyThumbnail: true },
+      select: mediaKeySelect,
     }),
     prisma.geoPdfJob.findMany({ where: { planId }, select: { id: true } }),
   ]);
-  const knownKeys = media.flatMap((m) =>
-    m.s3KeyThumbnail ? [m.s3KeyDisplay, m.s3KeyThumbnail] : [m.s3KeyDisplay],
-  );
+  const knownKeys = mediaKeysOf(media);
   const knownJobs = new Set(jobs.map((j) => j.id));
   await Promise.all([
     deleteS3Keys(MEDIA_BUCKET, knownKeys),

@@ -20,9 +20,7 @@ import {
 import prisma from "../services/prisma";
 import { fault } from "../middleware/errorHandler";
 import { planNotFound, type PlanAccess } from "./planAccess";
-import { loadPlanItems } from "./planItems";
-
-const userRef = { select: { id: true, username: true } } as const;
+import { loadPlanItems, userRef } from "./planItems";
 
 export function dateOnly(date: Date | null): string | null {
   return date ? date.toISOString().slice(0, 10) : null;

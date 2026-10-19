@@ -32,6 +32,12 @@ const GPX = Buffer.from(
   "utf8",
 );
 
+// A 1x1 PNG; the server reads only the object's size.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 let planId: string;
 
 async function membership(
@@ -114,7 +120,54 @@ async function ownFile(sub: string): Promise<string> {
   return presign.body.mediaId as string;
 }
 
-/** A completed GeoPDF of alice's, with an object, charged as the worker does. */
+async function ownRoute(sub: string): Promise<string> {
+  const res = await request(API_URL)
+    .post("/routes")
+    .set(as(sub))
+    .send({
+      name: "Test way",
+      points: [
+        [150.3, -33.6],
+        [150.31, -33.61],
+      ],
+    });
+  expect(res.status, JSON.stringify(res.body)).toBe(201);
+  return res.body.id as string;
+}
+
+/** A photo on `sub`'s place, uploaded through the real presign flow. */
+async function ownPhoto(sub: string, placeId: string): Promise<string> {
+  const body = {
+    linkedType: "place",
+    linkedId: placeId,
+    filename: "test-photo.png",
+    mediaType: "image/png",
+  };
+  const presign = await request(API_URL)
+    .post("/media/presign")
+    .set(as(sub))
+    .send({ ...body, sizeBytes: PNG.length, thumbnailSizeBytes: PNG.length });
+  expect(presign.status, JSON.stringify(presign.body)).toBe(201);
+  for (const [url, type] of [
+    [presign.body.displayUploadUrl, "image/png"],
+    [presign.body.thumbnailUploadUrl, "image/jpeg"],
+  ]) {
+    const put = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": type },
+      body: PNG,
+    });
+    expect(put.ok).toBe(true);
+  }
+  const confirm = await request(API_URL)
+    .post(`/media/${presign.body.mediaId}/confirm`)
+    .set(as(sub))
+    .send(body);
+  expect(confirm.status, JSON.stringify(confirm.body)).toBe(201);
+  return presign.body.mediaId as string;
+}
+
+/** A completed GeoPDF of alice's, with an object, uncharged (the worker would charge it). */
 async function ownGeoPdf(): Promise<string> {
   const bytes = 1234n;
   const job = await prisma.geoPdfJob.create({
@@ -273,11 +326,34 @@ describe("POST /plans/:id/items (Add a copy)", () => {
     expect(await prisma.place.count({ where: { planId } })).toBe(0);
   });
 
+  // Mutation: requirePlanWrite → a plan-exists check.
   it("404s someone not in the plan", async () => {
     const placeId = await ownPlace(CAROL_SUB);
     const res = await add(CAROL_SUB, { kind: "place", id: placeId });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Couldn't find that plan.");
+  });
+
+  // Mutation: drop ownerId (route, media) or userId (geoPdf) from that arm of
+  // addPlanItem.
+  it("404s a route, file or GeoPDF someone else owns", async () => {
+    const routeId = await ownRoute(ALICE_SUB);
+    const fileId = await ownFile(ALICE_SUB);
+    const jobId = await ownGeoPdf();
+    for (const [kind, id] of [
+      ["route", routeId],
+      ["media", fileId],
+      ["geoPdf", jobId],
+    ]) {
+      const res = await add(BOB_SUB, { kind, id });
+      expect(res.status, kind).toBe(404);
+    }
+    expect(await prisma.route.count({ where: { planId } })).toBe(0);
+    expect(await prisma.media.count({ where: { planId } })).toBe(0);
+    expect(await prisma.geoPdfJob.count({ where: { planId } })).toBe(0);
+    await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
+    await request(API_URL).delete(`/media/${fileId}`).set(as(ALICE_SUB));
+    await prisma.geoPdfJob.delete({ where: { id: jobId } });
   });
 
   it("refuses a write to an archived plan", async () => {
@@ -320,6 +396,51 @@ describe("plan files and storage", () => {
     expect(await used(BOB_ID)).toBe(before);
     expect(await used(ALICE_ID)).toBe(aliceBefore);
     await request(API_URL).delete(`/media/${fileId}`).set(as(BOB_SUB));
+  });
+
+  // Mutation: link the copy to the source place (targetPlaceId: place.id) in
+  // addPlace, which would hand plan photos to the place's sharees.
+  it("copies a place's photos onto the plan's place, charged to the adder", async () => {
+    const placeId = await ownPlace(ALICE_SUB);
+    const photoId = await ownPhoto(ALICE_SUB, placeId);
+    const before = await used(ALICE_ID);
+    const res = await add(ALICE_SUB, {
+      kind: "place",
+      id: placeId,
+      copyMedia: true,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.mediaCopied).toBe(1);
+    const planPlaceId = res.body.item.id;
+    const copy = await prisma.media.findFirstOrThrow({ where: { planId } });
+    expect(copy).toMatchObject({
+      ownerId: null,
+      linkedType: "place",
+      linkedId: planPlaceId,
+      addedById: ALICE_ID,
+      chargedToId: ALICE_ID,
+    });
+    expect(copy.id).not.toBe(photoId);
+    expect(await prisma.media.count({ where: { linkedId: placeId } })).toBe(1);
+    expect(await used(ALICE_ID)).toBe(before + copy.fileSizeBytes);
+
+    const view = await request(API_URL)
+      .get(`/plans/${planId}`)
+      .set(as(BOB_SUB));
+    expect(view.status).toBe(200);
+    expect(view.body.places[0].media).toMatchObject([
+      { id: copy.id, chargedTo: { id: ALICE_ID } },
+    ]);
+    expect(view.body.places[0].media[0].displayUrl).toEqual(expect.any(String));
+
+    // Mutation: drop deleteMediaReturning from deletePlanItem's place arm.
+    const del = await request(API_URL)
+      .delete(`/plans/${planId}/items/place/${planPlaceId}`)
+      .set(as(ALICE_SUB));
+    expect(del.status).toBe(204);
+    expect(await prisma.media.count({ where: { id: copy.id } })).toBe(0);
+    expect(await used(ALICE_ID)).toBe(before);
+    await request(API_URL).delete(`/media/${photoId}`).set(as(ALICE_SUB));
   });
 
   it("copies a GeoPDF with its own object, and refunds on plan delete", async () => {
@@ -390,6 +511,9 @@ describe("plan files and storage", () => {
     await prisma.geoPdfJob.delete({ where: { id: job.id } });
   });
 
+  // Mutation: drop assertHasStorageQuota from copyStandaloneFile and the
+  // re-check in chargeAndWrite. The re-check alone matters only when two adds
+  // race past the preflight, which this suite doesn't stage.
   it("refuses a file past the adder's quota and leaves nothing behind", async () => {
     const fileId = await ownFile(BOB_SUB);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: BOB_ID } });
@@ -456,18 +580,53 @@ describe("Save a copy", () => {
     expect(bob.status).toBe(404);
   });
 
-  it("copies a route out unlinked", async () => {
-    const route = await request(API_URL)
-      .post("/routes")
+  // Mutation: drop planId from one of the Save route's findFirst calls.
+  it("404s an item that isn't in this plan", async () => {
+    const owned = {
+      place: await ownPlace(ALICE_SUB),
+      route: await ownRoute(ALICE_SUB),
+      media: await ownFile(ALICE_SUB),
+      geoPdf: await ownGeoPdf(),
+    };
+    for (const [kind, id] of Object.entries(owned)) {
+      const res = await request(API_URL)
+        .post(`/plans/${planId}/items/${kind}/${id}/save`)
+        .set(as(BOB_SUB))
+        .send({});
+      expect(res.status, kind).toBe(404);
+    }
+
+    // An item of a plan bob isn't in, asked for through his own.
+    const other = await request(API_URL)
+      .post("/plans")
       .set(as(ALICE_SUB))
-      .send({
-        name: "Test way",
-        points: [
-          [150.3, -33.6],
-          [150.31, -33.61],
-        ],
-      });
-    const added = await add(ALICE_SUB, { kind: "route", id: route.body.id });
+      .send({ name: "Test other plan" });
+    expect(other.status).toBe(201);
+    const inOther = await request(API_URL)
+      .post(`/plans/${other.body.id}/items`)
+      .set(as(ALICE_SUB))
+      .send({ kind: "place", id: owned.place });
+    expect(inOther.status).toBe(201);
+    const res = await request(API_URL)
+      .post(`/plans/${planId}/items/place/${inOther.body.item.id}/save`)
+      .set(as(BOB_SUB))
+      .send({});
+    expect(res.status).toBe(404);
+    expect(
+      await prisma.place.count({
+        where: { ownerId: BOB_ID, name: "Test gully" },
+      }),
+    ).toBe(0);
+
+    await request(API_URL).delete(`/plans/${other.body.id}`).set(as(ALICE_SUB));
+    await request(API_URL).delete(`/routes/${owned.route}`).set(as(ALICE_SUB));
+    await request(API_URL).delete(`/media/${owned.media}`).set(as(ALICE_SUB));
+    await prisma.geoPdfJob.delete({ where: { id: owned.geoPdf } });
+  });
+
+  it("copies a route out unlinked", async () => {
+    const routeId = await ownRoute(ALICE_SUB);
+    const added = await add(ALICE_SUB, { kind: "route", id: routeId });
     expect(added.status).toBe(201);
     const res = await request(API_URL)
       .post(`/plans/${planId}/items/route/${added.body.item.id}/save`)
@@ -476,9 +635,7 @@ describe("Save a copy", () => {
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ ownerId: BOB_ID, placeId: null });
     await request(API_URL).delete(`/routes/${res.body.id}`).set(as(BOB_SUB));
-    await request(API_URL)
-      .delete(`/routes/${route.body.id}`)
-      .set(as(ALICE_SUB));
+    await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
   });
 });
 
@@ -509,7 +666,8 @@ describe("DELETE /plans/:id/items/:kind/:itemId", () => {
     expect(await prisma.place.count({ where: { planId } })).toBe(0);
   });
 
-  it("404s an item of another kind or plan", async () => {
+  // Mutation: drop planId from planRow's and deletePlanItem's where.
+  it("404s an item of another kind, or not in this plan", async () => {
     const added = await add(ALICE_SUB, {
       kind: "place",
       id: await ownPlace(ALICE_SUB),
@@ -527,17 +685,33 @@ describe("DELETE /plans/:id/items/:kind/:itemId", () => {
   });
 });
 
-// Mutation: drop touchPlan from addPlanItem's or deletePlanItem's transaction.
-it("moves the plan's updatedAt on an add and a delete", async () => {
-  const placeId = await ownPlace(ALICE_SUB);
-  let before = await planUpdatedAt();
-  const added = await add(ALICE_SUB, { kind: "place", id: placeId });
-  expect(added.status).toBe(201);
-  expect(await planUpdatedAt()).toBeGreaterThan(before);
+// Mutation: drop touchPlan from addPlace's or the route arm's transaction,
+// from chargeAndWrite (media, GeoPDF), or from deletePlanItem's.
+it("moves the plan's updatedAt on an add of each kind and a delete", async () => {
+  const sources = {
+    place: await ownPlace(ALICE_SUB),
+    route: await ownRoute(ALICE_SUB),
+    media: await ownFile(ALICE_SUB),
+    geoPdf: await ownGeoPdf(),
+  };
+  let before = 0;
+  let added: request.Response | undefined;
+  for (const [kind, id] of Object.entries(sources)) {
+    before = await planUpdatedAt();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const res = await add(ALICE_SUB, { kind, id });
+    expect(res.status, kind).toBe(201);
+    expect(await planUpdatedAt(), kind).toBeGreaterThan(before);
+    if (kind === "place") added = res;
+  }
+  await request(API_URL).delete(`/routes/${sources.route}`).set(as(ALICE_SUB));
+  await request(API_URL).delete(`/media/${sources.media}`).set(as(ALICE_SUB));
+  await prisma.geoPdfJob.delete({ where: { id: sources.geoPdf } });
+
   before = await planUpdatedAt();
   await new Promise((resolve) => setTimeout(resolve, 5));
   const del = await request(API_URL)
-    .delete(`/plans/${planId}/items/place/${added.body.item.id}`)
+    .delete(`/plans/${planId}/items/place/${added!.body.item.id}`)
     .set(as(ALICE_SUB));
   expect(del.status).toBe(204);
   expect(await planUpdatedAt()).toBeGreaterThan(before);
