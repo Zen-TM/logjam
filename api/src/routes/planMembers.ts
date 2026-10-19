@@ -17,6 +17,7 @@
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  isTripPlanMemberStatus,
   isTripPlanRole,
   say,
   type TripPlanInvitedPreview,
@@ -359,6 +360,10 @@ router.post(
 // takes on the files charged to them. `?deleteAdded=true` on a leave and
 // `?deleteFiles=true` on a remove delete those instead (lib/planItems.ts
 // memberGone).
+// `?status=` is where the caller saw the person stand, required on someone
+// else, optional on yourself: a cancel or turn-down pressed on an old view
+// must not remove someone who has joined since. Another status is 409, and
+// nothing is deleted. Guard: planMembers.test.ts ("as the caller saw them").
 router.delete(
   "/members/:userId",
   requireAuth,
@@ -374,6 +379,11 @@ router.delete(
         ["leader"],
         REMOVE,
       );
+    const seen = req.query.status;
+    if (seen !== undefined && !isTripPlanMemberStatus(seen))
+      throw malformed("status must be invited, requested or active");
+    if (!self && seen === undefined)
+      throw malformed("status is required to remove someone else");
 
     const { late, push } = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
@@ -390,6 +400,11 @@ router.delete(
         }),
       ]);
       if (!member) throw self ? planNotFound() : memberNotFound();
+      if (seen !== undefined && member.status !== seen)
+        throw new AppError(
+          409,
+          say`Not done: this changed since you looked. Check who's in the plan, then try again.`,
+        );
       if (
         self &&
         member.status === "active" &&

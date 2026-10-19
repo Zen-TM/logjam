@@ -1026,7 +1026,7 @@ describe("storage when someone goes", () => {
   }
   async function remove(query = "") {
     const res = await request(API_URL)
-      .delete(`/plans/${planId}/members/${BOB_ID}${query}`)
+      .delete(`/plans/${planId}/members/${BOB_ID}?status=active${query}`)
       .set(as(ALICE_SUB));
     expect(res.status, JSON.stringify(res.body)).toBe(204);
   }
@@ -1094,7 +1094,7 @@ describe("storage when someone goes", () => {
     const row = await prisma.media.findUniqueOrThrow({ where: { id } });
     const [bob, alice] = [await used(BOB_ID), await used(ALICE_ID)];
     // Mutation: ignore deleteFiles (they move to alice instead).
-    await remove("?deleteFiles=true");
+    await remove("&deleteFiles=true");
     expect(await prisma.media.findUnique({ where: { id } })).toBeNull();
     expect(await exists(row.s3KeyDisplay)).toBe(false);
     expect(await used(BOB_ID)).toBe(bob - SIZE);
