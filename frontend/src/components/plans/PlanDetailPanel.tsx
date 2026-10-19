@@ -5,6 +5,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
+  SHARE_KIND_LABEL,
   planDeleteConfirm,
   planLeaveConfirm,
   planAddVerbLabel,
@@ -264,7 +265,7 @@ export default function PlanDetailPanel({
       title: copy.itemsMaps,
       rows: plan.geoPdfs.map((pdf) => ({
         id: pdf.id,
-        title: pdf.title,
+        title: pdf.title ?? `Untitled ${SHARE_KIND_LABEL.geoPdfJob}`,
         addedBy: pdf.addedBy,
         icon: "geoPdf" as const,
         hue: "var(--hue-geo-pdf)",
