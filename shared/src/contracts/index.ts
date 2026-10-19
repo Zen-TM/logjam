@@ -47,7 +47,6 @@ export * from "./plans.js";
 export * from "./planVerbs.js";
 export * from "./planSections.js";
 export * from "./planOffline.js";
-export * from "./planPeople.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */
 export const SCREEN_CONTRACTS: readonly ScreenContract[] = [

@@ -1,29 +1,30 @@
 // Invite people (`TRIP_PLAN_INVITE`): by username, with the role they will
-// get, or by a link handed to the system share sheet. The link opens Logjam
-// Web, so it works for someone with no Logjam GPS; whoever opens it asks to
-// join and a leader lets each one in. The token is in the mint's answer and
-// the shared message, nowhere else: the list shows when each link ends.
+// get, or by a link copied or handed to the system share sheet. The link
+// opens Logjam Web, so it works for someone with no Logjam GPS; whoever opens
+// it asks to join and a leader lets each one in. The list of live links
+// shows when each was made and ends, not the link.
 import { Fragment, useEffect, useState } from "react";
-import { ActivityIndicator, Clipboard, Share, Text } from "react-native";
+import { Clipboard, Share, Text } from "react-native";
 import {
   contractSectionKeys,
-  formatDateKey,
-  FRIENDS,
   messageFromError,
   planInviteUrl,
+  tripPlanInviteLinkLine,
   tripPlanInviteMessage,
+  tripPlanInviteePill,
+  tripPlanRoleWord,
   TRIP_PLAN_INVITE,
-  TRIP_PLAN_ROLE_LABELS,
   TRIP_PLAN_ROLES,
   type SectionKeysOn,
+  type TripPlanInviteView,
   type TripPlanRole,
   type TripPlanView,
 } from "@logjam/shared";
 
-import { searchUsers, type UserSearchResult } from "../api/friends";
 import { unavailableReasonText } from "../auth/capabilities";
 import { config } from "../config";
-import { makeStyles, muted, spacing, useTheme } from "../theme";
+import { UserSearch } from "../screens/UserSearch";
+import { makeStyles, muted, spacing } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -33,19 +34,16 @@ import {
   Row,
   SectionHeader,
   StatusPill,
-  TextField,
 } from "../ui";
 import {
   createInviteLink,
   getInviteLinks,
   inviteMember,
   revokeInviteLink,
-  type PlanInviteLink,
 } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_INVITE.copy;
-const SEARCH_MIN_CHARS = 3;
 const OFFLINE = unavailableReasonText("needs-connection");
 
 export function InviteSheet({
@@ -60,7 +58,11 @@ export function InviteSheet({
   onClose: () => void;
 }) {
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={copy.title}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={TRIP_PLAN_INVITE.title}
+    >
       {/* Mounted on open, so each opening starts a fresh search. */}
       {visible ? <InviteBody plan={plan} online={online} /> : null}
     </BottomSheet>
@@ -68,161 +70,128 @@ export function InviteSheet({
 }
 
 function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
-  const theme = useTheme();
   const styles = useStyles();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<UserSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
   const [role, setRole] = useState<TripPlanRole>("member");
   const [invitedIds, setInvitedIds] = useState<string[]>([]);
   // A row's or a link button's failure: not the search field's, so a banner.
   const [error, setError] = useState<string | null>(null);
-  const [links, setLinks] = useState<PlanInviteLink[]>([]);
+  const [links, setLinks] = useState<TripPlanInviteView[]>([]);
   const [making, setMaking] = useState<"copy" | "share" | null>(null);
   const [copied, setCopied] = useState(false);
+  // The user or link a write is running for: only its button waits.
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const refreshLinks = () =>
     getInviteLinks(plan.id)
-      .then(({ invites }) => {
-        if (!cancelled) setLinks(invites);
-      })
-      // The list is a courtesy; sharing works without it.
+      .then(({ invites }) => setLinks(invites))
+      // The list is a courtesy; inviting works without it.
       .catch(console.error);
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    void refreshLinks();
+    // Once per opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.id]);
 
-  const changeQuery = (next: string) => {
-    setQuery(next);
+  const invite = (userId: string, username: string) => {
     setError(null);
-    setSearchError(null);
-    if (next.trim().length < SEARCH_MIN_CHARS) setResults([]);
-    else setSearching(true);
-  };
-
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < SEARCH_MIN_CHARS) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      searchUsers(trimmed)
-        .then(({ data }) => {
-          if (!cancelled) setResults(data);
-        })
-        .catch((err: unknown) => {
-          if (!cancelled)
-            setSearchError(messageFromError(err, copy.searchFailed));
-        })
-        .finally(() => {
-          if (!cancelled) setSearching(false);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query]);
-
-  const invite = (user: UserSearchResult) => {
-    setError(null);
-    inviteMember(plan.id, user.username, role)
+    setBusyId(userId);
+    inviteMember(plan.id, username, role)
       .then(() => {
-        setInvitedIds((ids) => [...ids, user.id]);
+        setInvitedIds((ids) => [...ids, userId]);
         return afterPlanWrite(plan.id);
       })
       .catch((err: unknown) =>
         setError(messageFromError(err, copy.inviteFailed)),
-      );
+      )
+      .finally(() => setBusyId(null));
   };
 
   // Each press mints a new link: the token is never kept to hand out twice.
+  // The mint, the hand-off and the list each fail on their own: a link made
+  // is never reported as not made.
   const makeLink = async (how: "copy" | "share") => {
+    if (making) return;
     setError(null);
     setCopied(false);
     setMaking(how);
     try {
-      const { token } = await createInviteLink(plan.id);
+      let token: string;
+      try {
+        ({ token } = await createInviteLink(plan.id));
+      } catch (err) {
+        setError(messageFromError(err, copy.linkMakeFailed));
+        return;
+      }
+      void refreshLinks();
       const message = tripPlanInviteMessage(
         plan.name,
         planInviteUrl(config.webUrl, token),
       );
-      if (how === "share") await Share.share({ message });
-      else {
+      if (how === "share") {
+        // A share sheet that won't open leaves the link listed, to turn off.
+        await Share.share({ message }).catch(console.error);
+      } else {
         // RN core Clipboard, as the place page's copy: no native module.
         Clipboard.setString(message);
         setCopied(true);
       }
-      const { invites } = await getInviteLinks(plan.id);
-      setLinks(invites);
-    } catch (err) {
-      setError(messageFromError(err, copy.linkMakeFailed));
     } finally {
       setMaking(null);
     }
   };
 
-  const revoke = (link: PlanInviteLink) => {
+  const revoke = (link: TripPlanInviteView) => {
     setError(null);
+    setBusyId(link.id);
     revokeInviteLink(plan.id, link.id)
       .then(() => setLinks((was) => was.filter((each) => each.id !== link.id)))
       .catch((err: unknown) =>
         setError(messageFromError(err, copy.linkRevokeFailed)),
-      );
+      )
+      .finally(() => setBusyId(null));
   };
 
-  const inPlan = new Set(plan.members.map((member) => member.user.id));
-  const trimmed = query.trim();
+  const statusOf = new Map(
+    plan.members.map((member) => [member.user.id, member.status]),
+  );
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_INVITE, "gps">,
     React.ReactNode
   > = {
     search: (
       <>
-        <TextField
-          label={copy.searchField}
-          value={query}
-          onChangeText={changeQuery}
-          autoCapitalize="none"
-          error={searchError}
-        />
         <Text style={styles.label}>{copy.role}</Text>
         <ChipRail
           options={TRIP_PLAN_ROLES.map((value) => ({
             value,
-            label: TRIP_PLAN_ROLE_LABELS[value],
+            label: tripPlanRoleWord(value),
           }))}
           value={role}
           onChange={setRole}
         />
-        {searching ? <ActivityIndicator color={theme.accent} /> : null}
-        {trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS ? (
-          <Text style={styles.hint}>{FRIENDS.copy.searchHint}</Text>
-        ) : null}
-        {results.map((user) => (
-          <Row
-            key={user.id}
-            icon="account"
-            title={user.username}
-            right={
-              inPlan.has(user.id) ? (
-                <StatusPill label={copy.inPlan} tone="muted" />
-              ) : invitedIds.includes(user.id) ? (
-                <StatusPill label={copy.invited} tone="outline" />
-              ) : (
-                <Button
-                  label={copy.inviteSend}
-                  compact
-                  disabled={!online}
-                  disabledReason={OFFLINE}
-                  onPress={() => invite(user)}
-                />
-              )
-            }
-          />
-        ))}
+        <UserSearch
+          label={copy.searchField}
+          failed={copy.searchFailed}
+          offline={online ? undefined : OFFLINE}
+          onChange={() => setError(null)}
+          right={(user) => {
+            const pill = invitedIds.includes(user.id)
+              ? copy.invited
+              : tripPlanInviteePill(statusOf.get(user.id));
+            return pill ? (
+              <StatusPill label={pill} tone="outline" />
+            ) : (
+              <Button
+                label={copy.inviteSend}
+                compact
+                loading={busyId === user.id}
+                disabled={!online}
+                disabledReason={OFFLINE}
+                onPress={() => invite(user.id, user.username)}
+              />
+            );
+          }}
+        />
       </>
     ),
     link: (
@@ -233,7 +202,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           icon="copy"
           variant="outlineAccent"
           loading={making === "copy"}
-          disabled={!online || making !== null}
+          disabled={!online}
           disabledReason={OFFLINE}
           onPress={() => void makeLink("copy")}
         />
@@ -242,10 +211,12 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           icon="link"
           variant="outlineAccent"
           loading={making === "share"}
-          disabled={!online || making !== null}
+          disabled={!online}
           disabledReason={OFFLINE}
           onPress={() => void makeLink("share")}
         />
+        {/* The buttons only dim: the words go under them (ui/Button.tsx). */}
+        {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
         {copied ? <Text style={styles.hint}>{copy.linkCopied}</Text> : null}
         {links.length > 0 ? (
           <SectionHeader title={copy.linksLive} count={links.length} />
@@ -254,13 +225,14 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           <Row
             key={link.id}
             icon="date"
-            title={`Works until ${formatDateKey(link.expiresAt)}`}
-            subtitle={`Made by ${link.createdBy.username}`}
+            title={tripPlanInviteLinkLine(link)}
+            subtitle={online ? undefined : OFFLINE}
             right={
               <Button
                 label={copy.linkRevoke}
                 compact
                 variant="ghost"
+                loading={busyId === link.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
                 onPress={() => revoke(link)}
