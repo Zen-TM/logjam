@@ -17,6 +17,7 @@ import {
   sortTripPlans,
   tripPlanAddedByLine,
   tripPlanBucket,
+  tripPlanCounts,
   tripPlanDatesLabel,
   tripPlanDatesLine,
   tripPlanGoing,
@@ -640,5 +641,20 @@ describe("Invite people", () => {
     expect(tripPlanInviteePill("invited")).toBe("Invited");
     expect(tripPlanInviteePill("requested")).toBe("Asking to join");
     expect(tripPlanInviteePill(undefined)).toBeNull();
+  });
+});
+
+describe("tripPlanCounts", () => {
+  // Mutation: count only routes as ways. A plan's imported tracks would go
+  // uncounted in the delete confirm.
+  it("counts routes and files as ways", () => {
+    expect(
+      tripPlanCounts({
+        places: [1, 2],
+        routes: [1],
+        files: [1, 2],
+        geoPdfs: [],
+      }),
+    ).toEqual({ places: 2, ways: 3, maps: 0 });
   });
 });
