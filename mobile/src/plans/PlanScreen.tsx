@@ -383,8 +383,16 @@ function PlanPage({
           onSection={setSectionSheet}
         />
       ) : null,
-    items:
-      view === "items" ? <Items plan={plan} onShowOnMap={onShowOnMap} /> : null,
+    showOnMap:
+      view === "items" && plan.places.length + plan.routes.length > 0 ? (
+        <Button
+          label={copy.showOnMap}
+          icon="map"
+          variant="outlineAccent"
+          onPress={onShowOnMap}
+        />
+      ) : null,
+    items: view === "items" ? <Items plan={plan} /> : null,
     forms: view === "forms" ? <Forms plan={plan} /> : null,
     people:
       view === "people" ? (
@@ -543,13 +551,7 @@ function WriteUp({
   );
 }
 
-function Items({
-  plan,
-  onShowOnMap,
-}: {
-  plan: TripPlanView;
-  onShowOnMap: () => void;
-}) {
+function Items({ plan }: { plan: TripPlanView }) {
   const theme = useTheme();
   const { assetHue } = useHues();
   const { ways } = tripPlanCounts(plan);
@@ -561,14 +563,6 @@ function Items({
       .length > 1;
   return (
     <>
-      {plan.places.length + plan.routes.length > 0 ? (
-        <Button
-          label={TRIP_PLAN_OFFLINE.showOnMap}
-          icon="map"
-          variant="outlineAccent"
-          onPress={onShowOnMap}
-        />
-      ) : null}
       {headed && plan.places.length > 0 ? (
         <SectionHeader title={copy.itemsPlaces} count={plan.places.length} />
       ) : null}

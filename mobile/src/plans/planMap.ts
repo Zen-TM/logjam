@@ -1,30 +1,32 @@
-// Plan mode on the map (design §8): what the map frames when a plan opens on
-// it. Built at navigation time and never stored, like a place's focus: a
-// region of interest stays off the server (mobile/AGENTS.md).
+// Plan mode on the map: what the map frames when a plan opens on it. Built at
+// navigation time and never stored, like a place's focus: a region of
+// interest stays off the server (mobile/AGENTS.md).
 import type { TripPlanView } from "@logjam/shared";
 
-/** At least this much on each side, so one place frames ground, not a pixel. */
-const MIN_HALF_SPAN = 0.005;
+import { bboxOfPoints, PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 
-/** The plan's places and ways, as `[west, south, east, north]`, or null. */
+/** The plan's places and ways, as `[west, south, east, north]`, or null. At
+ *  least a place's frame on each axis, so places metres apart frame ground as
+ *  one place's Show on map does. */
 export function planBbox(
   plan: Pick<TripPlanView, "places" | "routes">,
 ): [number, number, number, number] | null {
-  const points: [number, number][] = [
-    ...plan.places.map(
-      (place) => [place.longitude, place.latitude] as [number, number],
+  const box = bboxOfPoints([
+    ...plan.places.map((place) => ({
+      lon: place.longitude,
+      lat: place.latitude,
+    })),
+    ...plan.routes.flatMap((route) =>
+      route.points.map(([lon, lat]) => ({ lon, lat })),
     ),
-    ...plan.routes.flatMap((route) => route.points),
-  ];
-  if (points.length === 0) return null;
-  const lons = points.map((point) => point[0]);
-  const lats = points.map((point) => point[1]);
-  const pad = (low: number, high: number): [number, number] => {
+  ]);
+  if (!box) return null;
+  const widen = (low: number, high: number): [number, number] => {
     const mid = (low + high) / 2;
-    const half = Math.max((high - low) / 2, MIN_HALF_SPAN);
+    const half = Math.max((high - low) / 2, PLACE_FOCUS_DEGREES);
     return [mid - half, mid + half];
   };
-  const [west, east] = pad(Math.min(...lons), Math.max(...lons));
-  const [south, north] = pad(Math.min(...lats), Math.max(...lats));
+  const [west, east] = widen(box[0], box[2]);
+  const [south, north] = widen(box[1], box[3]);
   return [west, south, east, north];
 }

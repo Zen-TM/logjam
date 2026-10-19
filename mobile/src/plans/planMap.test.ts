@@ -15,8 +15,8 @@ describe("what plan mode frames", () => {
     );
   });
 
-  // Mutation: drop MIN_HALF_SPAN. One place gives a zero-span box, which
-  // the camera reads as "fit nothing".
+  // Mutation: drop the widening. One place, or places metres apart, would
+  // frame a street's width instead of the ~1 km a place's Show on map does.
   it("frames ground around a single place", () => {
     const [west, south, east, north] = planBbox({
       places: [place(150.3, -33.5)],

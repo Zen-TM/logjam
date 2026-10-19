@@ -231,6 +231,7 @@ import { RoutesLayer } from "./RoutesLayer";
 import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
+import { onMirrorChanged } from "../sync/syncDb";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import {
   BottomSheet,
@@ -848,7 +849,7 @@ export function MapScreen({
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
   // "Show on map" from a plan: the plan's items only, from the phone's cached
-  // copy, until "Back to my map" (design §8). An id only.
+  // copy, until "Back to my map". An id only.
   planMode?: { planId: string; nonce: number } | null;
 }) {
   const theme = useTheme();
@@ -981,21 +982,46 @@ export function MapScreen({
   // PLAN MODE: the plan's places and ways in place of the user's own, which
   // come back beside them with "Show my things". Read from the plans cache, so
   // it works in a canyon for any plan opened before.
+  // The plan shown: set by arriving for it, cleared by Back to my map or by
+  // arriving for anything else (the params are replaced, not merged), so the
+  // user's own things come back with their own Show on map.
+  const [shownPlanId, setShownPlanId] = useState(planMode?.planId ?? null);
+  const [arrivedFor, setArrivedFor] = useState(planMode);
   const [planOnMap, setPlanOnMap] = useState<TripPlanView | null>(null);
   const [showMine, setShowMine] = useState(false);
+  if (planMode !== arrivedFor) {
+    setArrivedFor(planMode);
+    setShownPlanId(planMode?.planId ?? null);
+    setShowMine(false);
+    if (!planMode) setPlanOnMap(null);
+  }
+  const leavePlan = () => {
+    setShownPlanId(null);
+    setPlanOnMap(null);
+  };
+  // Re-read whenever the cache changes: a plan the user lost leaves the map,
+  // one that gained items draws them.
   useEffect(() => {
-    if (!planMode) return;
+    if (!shownPlanId) return;
     let cancelled = false;
-    void (async () => {
-      const cached = await readCachedPlan(planMode.planId);
-      if (cancelled) return;
-      setPlanOnMap(cached?.plan ?? null);
-      setShowMine(false);
-    })().catch(console.error);
+    const read = () =>
+      void readCachedPlan(shownPlanId)
+        .then((cached) => {
+          if (cancelled) return;
+          if (cached) setPlanOnMap(cached.plan);
+          else {
+            setShownPlanId(null);
+            setPlanOnMap(null);
+          }
+        })
+        .catch(console.error);
+    read();
+    const unsubscribe = onMirrorChanged(read);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [planMode]);
+  }, [shownPlanId]);
   /** The user's own things are drawn: no plan open, or asked for beside it. */
   const mine = planOnMap === null || showMine;
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
@@ -1590,14 +1616,18 @@ export function MapScreen({
     ],
   );
 
-  // A plan's places draw as the user's own pins do; their ids are the plan's,
-  // so a tap finds no place of the user's and opens nothing of theirs.
+  // A plan's places draw on the owned pins' source; their ids are the
+  // plan's, so a tap finds no place of the user's. Beside them, the user's own
+  // are faint (`muted`), so the two can be told apart.
   const pinsOwned = useMemo(() => {
     if (!planOnMap) return ownedFc;
     const plan = toPlaceFeatureCollection(planOnMap.places, placeTypeColors);
-    return mine
-      ? { ...plan, features: [...plan.features, ...ownedFc.features] }
-      : plan;
+    if (!mine) return plan;
+    const own = ownedFc.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, muted: true },
+    }));
+    return { ...plan, features: [...plan.features, ...own] };
   }, [mine, ownedFc, placeTypeColors, planOnMap]);
   const planRoutes = planOnMap?.routes;
 
@@ -2293,9 +2323,8 @@ export function MapScreen({
   // management); this screen keeps only the ready layers it renders.
   const { geoPdfImports } = useGeoPdfImports();
   const readyGeoPdfs = geoPdfImports.filter((gp) => gp.state === "ready");
-  const readyGeoPdfImports = showGeoPdfs
-    ? readyGeoPdfs.filter((gp) => gp.visible)
-    : [];
+  const readyGeoPdfImports =
+    showGeoPdfs && mine ? readyGeoPdfs.filter((gp) => gp.visible) : [];
 
   // Track recording, markers and navigate-to-point. The recorder
   // itself lives in tracks/trackRecorder (background task); this screen only
@@ -2351,6 +2380,26 @@ export function MapScreen({
       ...(showPlaceRoutes ? placeLinkedRoutes : []),
     ],
     [placeLinkedRoutes, showPlaceRoutes, showRoutes, standaloneRoutes],
+  );
+  const routesOnMap = useMemo(
+    () =>
+      planRoutes
+        ? [
+            ...planRoutes,
+            ...(mine
+              ? visibleRoutes.map((route) => ({ ...route, muted: true }))
+              : []),
+          ]
+        : visibleRoutes,
+    [planRoutes, mine, visibleRoutes],
+  );
+  // A plan's way has no options sheet of the user's.
+  const pressRoute = useCallback(
+    (routeId: string) => {
+      if (!planRoutes?.some((route) => route.id === routeId))
+        setOptionsRouteId(routeId);
+    },
+    [planRoutes],
   );
 
   // Locking north-up straightens a map that is already turned. Without this the
@@ -4727,23 +4776,12 @@ export function MapScreen({
             keeps an empty source rather than unmounting) so the 0↔1 route
             transition cannot re-add its layers to the top of the stack. */}
         <RoutesLayer
-          routes={
-            planRoutes
-              ? [...planRoutes, ...(mine ? visibleRoutes : [])]
-              : visibleRoutes
-          }
+          routes={routesOnMap}
           hiddenRouteId={editingRouteId}
           // While a tool is collecting points every tap belongs to the tool —
           // opening an options sheet mid-draw would steal the point being
-          // placed. A plan's way has no options sheet of the user's.
-          onPressRoute={
-            collectingPoints
-              ? undefined
-              : (routeId) => {
-                  if (!planRoutes?.some((route) => route.id === routeId))
-                    setOptionsRouteId(routeId);
-                }
-          }
+          // placed.
+          onPressRoute={collectingPoints ? undefined : pressRoute}
         />
 
         {/* Recorded tracks: unpinned, mounted before the place
@@ -5033,6 +5071,30 @@ export function MapScreen({
           />
         ) : null}
 
+        {planOnMap ? (
+          <Notice
+            icon="plan"
+            numberOfLines={2}
+            controls={
+              <>
+                <Chip
+                  label={TRIP_PLAN_PAGE.copy.showMine}
+                  active={showMine}
+                  onPress={() => setShowMine((was) => !was)}
+                />
+                <Button
+                  label={TRIP_PLAN_PAGE.copy.backToMap}
+                  compact
+                  variant="ghost"
+                  onPress={leavePlan}
+                />
+              </>
+            }
+          >
+            {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
+          </Notice>
+        ) : null}
+
         {/* Offline/unavailable basemap notice (fail visibly, never silently).
 
             Three states, and which one shows is decided by what overlaps the
@@ -5049,28 +5111,6 @@ export function MapScreen({
 
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
-        {planOnMap ? (
-          <Notice
-            icon="plan"
-            action={
-              <View style={styles.planActions}>
-                <Chip
-                  label={TRIP_PLAN_PAGE.copy.showMine}
-                  active={showMine}
-                  onPress={() => setShowMine((was) => !was)}
-                />
-                <Button
-                  label={TRIP_PLAN_PAGE.copy.backToMap}
-                  compact
-                  variant="ghost"
-                  onPress={() => setPlanOnMap(null)}
-                />
-              </View>
-            }
-          >
-            {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
-          </Notice>
-        ) : null}
 
         {offlineOnly ? (
           <Notice icon="offline">Offline mode — using only saved maps</Notice>
@@ -5631,7 +5671,6 @@ function RouteNameForm({
 const EMPTY_PLACES = toPlaceFeatureCollection([]);
 
 const useStyles = makeStyles((theme, textRole) => ({
-  planActions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // The selected point's delete button: circular, warning-coloured, and the
   // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
   // rather than translucent — it sits over the map, which can be any colour

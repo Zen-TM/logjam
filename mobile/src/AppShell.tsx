@@ -59,6 +59,7 @@ import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { planPushRefresh } from "./notifications/planPushRefresh";
 import { notificationTapTarget } from "./notifications/tapTarget";
+import { PLACE_FOCUS_DEGREES } from "./saved/bboxOfPoints";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import type { SavedCategory } from "./saved/savedKeys";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -296,7 +297,6 @@ const TAB_BAR_TOP_PAD = spacing(0.5);
  * is what `MapView`'s `focus` param takes. Built at navigation time and never
  * stored: a region of interest stays off the server (mobile/AGENTS.md, Privacy and battery).
  */
-const PLACE_FOCUS_DEGREES = 0.005;
 function placeFocus(place: { latitude: number; longitude: number }) {
   return {
     bbox: [

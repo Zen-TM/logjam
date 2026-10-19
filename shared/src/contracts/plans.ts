@@ -319,12 +319,21 @@ export const TRIP_PLAN_PAGE = {
     // One rail over the four views below; only the chosen one is drawn.
     { key: "views" },
     { key: "writeUp" },
+    // Above On the map's rows, while that view is chosen and has a place or
+    // a way: the map in plan mode, the plan's items only.
+    {
+      key: "showOnMap",
+      on: "gps",
+      reason:
+        "On Logjam Web the map sits beside the plan's page and already shows only the plan's items while it is open. On Logjam GPS the page covers the map.",
+    },
     { key: "items" },
     { key: "forms" },
     { key: "people" },
   ],
   copy: {
     back: "Back to plans",
+    showOnMap: "Show on map",
     add: "Add",
     addMenu: "Add to this plan",
     actions: "Plan actions",
