@@ -17,6 +17,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "sharing",
   "friends",
   "inbox",
+  "plans",
   "lidarOverlays",
   "accountGeoPdf",
   "placeSearch",
@@ -57,7 +58,9 @@ describe("capabilityStatus", () => {
   });
 
   it("blocks connection-dependent capabilities for a linked user offline", () => {
-    for (const capability of ALL_CAPABILITIES.filter((c) => c !== "inbox")) {
+    for (const capability of ALL_CAPABILITIES.filter(
+      (c) => c !== "inbox" && c !== "plans",
+    )) {
       expect(capabilityStatus(capability, "linked", false)).toEqual({
         status: "unavailable",
         reason: "needs-connection",
@@ -69,6 +72,14 @@ describe("capabilityStatus", () => {
   // offline still gets the last fetched notifications rather than a dead row.
   it("keeps the inbox available for a linked user offline", () => {
     expect(capabilityStatus("inbox", "linked", false)).toEqual({
+      status: "available",
+    });
+  });
+
+  // Plans read from the plans cache (src/plans/plansCache.ts), so a plan
+  // opened before still reads in a canyon. Red if `plans` needs a connection.
+  it("keeps plans available for a linked user offline", () => {
+    expect(capabilityStatus("plans", "linked", false)).toEqual({
       status: "available",
     });
   });

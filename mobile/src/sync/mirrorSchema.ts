@@ -329,6 +329,27 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     kind: "mirror",
     columns: { fetched_at: "TEXT NOT NULL", payload_json: "TEXT NOT NULL" },
   },
+  {
+    // Trip plans, fetched and cached like the inbox (`plans/plansCache.ts`):
+    // the last GET /plans, and the last GET /plans/:id of each plan opened.
+    // `plan_updated_at` is that response's `updatedAt`, compared with the
+    // poll's to mark a plan changed; `downloaded_at` is set by Download for
+    // the trip.
+    name: "plans_list_cache",
+    kind: "mirror",
+    columns: { fetched_at: "TEXT NOT NULL", payload_json: "TEXT NOT NULL" },
+  },
+  {
+    name: "plans_cache",
+    kind: "mirror",
+    columns: {
+      plan_id: "TEXT PRIMARY KEY",
+      fetched_at: "TEXT NOT NULL",
+      plan_updated_at: "TEXT NOT NULL",
+      downloaded_at: "TEXT",
+      payload_json: "TEXT NOT NULL",
+    },
+  },
 ];
 
 export const MIRROR_TABLES: readonly TableSchema[] = SYNC_TABLES.filter(
