@@ -1,39 +1,38 @@
-// Download for the trip, in a plan's hero (design §8): priced before it runs
-// ("14 files, 230 MB"), a progress row while it runs (long work is a progress
-// card), and Downloaded once every file the plan points at is on the phone.
-// A plan that gained files since keeps its stamp but offers the rest.
+// Download for the trip, in a plan's hero: priced before it runs ("14 files,
+// 230 MB"), a progress row while it runs (mobile/DESIGN.md §4: long work is a
+// progress card), and Downloaded, with when, once every file the plan points
+// at is on the phone. A plan that gained files since keeps its stamp but
+// offers the rest. The run is `planDownloads.ts`'s, so it outlives this row.
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import {
   formatBytes,
-  messageFromError,
   planCountsLabel,
   TRIP_PLAN_OFFLINE,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
+import { relativeTime } from "../screens/syncHealth";
 import { spacing } from "../theme";
 import { Row, StatusPill } from "../ui";
+import { startPlanDownload, usePlanDownload } from "./planDownloads";
 import { missingPlanFiles, planFiles, type PlanFile } from "./planFiles";
-import { downloadPlan, type CachedPlan } from "./plansCache";
+import type { CachedPlan } from "./plansCache";
 
 export function PlanDownload({
   cached,
   online,
-  onInfo,
-  onError,
+  now,
 }: {
   cached: CachedPlan;
   online: boolean;
-  onInfo: (message: string) => void;
-  onError: (message: string) => void;
+  /** For "Downloaded 3 days ago". */
+  now: number;
 }) {
   const { plan } = cached;
   const [missing, setMissing] = useState<PlanFile[] | null>(null);
-  const [progress, setProgress] = useState<{
-    done: number;
-    total: number;
-  } | null>(null);
+  const progress = usePlanDownload(plan.id);
+  const running = progress !== null;
 
   useEffect(() => {
     let cancelled = false;
@@ -44,23 +43,23 @@ export function PlanDownload({
     return () => {
       cancelled = true;
     };
-  }, [plan]);
+  }, [plan, running]);
 
-  if (missing === null) return null;
   if (progress)
     return (
       <Row
         icon="saveOffline"
         title={TRIP_PLAN_OFFLINE.downloading}
-        subtitle={`${formatBytes(progress.done)} of ${formatBytes(progress.total)}`}
+        subtitle={`${formatBytes(progress.done)} of ${formatBytes(progress.total)}. ${TRIP_PLAN_OFFLINE.downloadKeepOpen}`}
         progress={progress.total > 0 ? progress.done / progress.total : 0}
       />
     );
+  if (missing === null) return null;
   if (cached.downloadedAt && missing.length === 0)
     return (
       <View style={{ flexDirection: "row" }}>
         <StatusPill
-          label={TRIP_PLAN_OFFLINE.downloaded}
+          label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
           tone="muted"
           icon="saveOffline"
         />
@@ -72,15 +71,6 @@ export function PlanDownload({
     { files: missing.length },
     missing.length > 0 ? formatBytes(bytes) : undefined,
   );
-  const run = () => {
-    setProgress({ done: 0, total: bytes });
-    downloadPlan(plan.id, (done, total) => setProgress({ done, total }))
-      .then(() => onInfo(TRIP_PLAN_OFFLINE.downloadDone))
-      .catch((err: unknown) =>
-        onError(messageFromError(err, TRIP_PLAN_OFFLINE.downloadFailed)),
-      )
-      .finally(() => setProgress(null));
-  };
   return (
     <Row
       icon="saveOffline"
@@ -89,7 +79,7 @@ export function PlanDownload({
         online ? price || undefined : unavailableReasonText("needs-connection")
       }
       disabled={!online}
-      onPress={run}
+      onPress={() => void startPlanDownload(plan.id)}
       style={{ marginTop: spacing(1) }}
     />
   );

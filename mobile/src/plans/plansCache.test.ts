@@ -43,11 +43,14 @@ const files = vi.hoisted(() => ({
     { id: "f", url: "u", filename: "f.jpg", sizeBytes: 5 },
   ]),
   missingPlanFiles: vi.fn(async (_id: string, all: unknown[]) => all),
-  downloadPlanFiles: vi.fn(async () => {}),
+  downloadPlanFiles: vi.fn(async () => true),
+  prunePlanFiles: vi.fn(async () => {}),
   deletePlanFolder: vi.fn(async () => {}),
   sweepPlanFolders: vi.fn(async () => {}),
 }));
 vi.mock("./planFiles", () => files);
+const space = vi.hoisted(() => ({ assertSpaceFor: vi.fn(async () => {}) }));
+vi.mock("../offline/freeSpace", () => space);
 
 const { clearMirror, wipeAllSyncData, wipeMirror } = await import(
   "../sync/syncDb"
@@ -163,6 +166,8 @@ describe("fetching one plan", () => {
     api.getPlan.mockRejectedValueOnce(new ApiError(404, "/plans/a", "GET"));
     await expect(fetchPlan("a")).rejects.toThrow();
     expect(await readCachedPlan("a")).toBeNull();
+    // Mutation: drop deletePlanFolder from the 404 path.
+    expect(files.deletePlanFolder).toHaveBeenCalledWith("a");
   });
 });
 
@@ -274,6 +279,8 @@ describe("after a write", () => {
     await afterPlanWrite("a", true);
     expect(await readCachedPlan("a")).toBeNull();
     expect(api.getPlan).toHaveBeenCalledTimes(1);
+    // Mutation: drop deletePlanFolder from the gone path.
+    expect(files.deletePlanFolder).toHaveBeenCalledWith("a");
   });
 
   // Mutation: drop the `dropped` check in fetchPlan. A fetch begun before a
@@ -302,6 +309,42 @@ describe("after a write", () => {
 });
 
 describe("Download for the trip", () => {
+  // Mutation: drop the epoch check after the fetch. A download running at
+  // sign-out would fetch the departing user's files after the wipe.
+  it("stops when the wipe comes while it fetches the plan", async () => {
+    const get = held<ReturnType<typeof view>>();
+    api.getPlan.mockReturnValueOnce(get.promise);
+    const run = downloadPlan("a", () => {});
+    const stop = stopPlansForWipe();
+    await wipeAllSyncData();
+    get.land(view("a"));
+    await run;
+    await stop;
+    expect(files.downloadPlanFiles).not.toHaveBeenCalled();
+    expect(await readCachedPlan("a")).toBeNull();
+  });
+
+  // Mutation: remove the assertSpaceFor call. A full phone would fail
+  // partway through hundreds of MB.
+  it("asks whether the files fit before writing any", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    space.assertSpaceFor.mockRejectedValueOnce(new Error("full"));
+    await expect(downloadPlan("a", () => {})).rejects.toThrow("full");
+    expect(files.downloadPlanFiles).not.toHaveBeenCalled();
+    expect((await readCachedPlan("a"))?.downloadedAt).toBeNull();
+  });
+
+  // Mutation: back to sweeping by an emptied cache. A Resync from scratch
+  // would delete every downloaded plan's files on the next poll.
+  it("keeps a downloaded plan's files through a mirror reset", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    await downloadPlan("a", () => {});
+    await wipeMirror();
+    api.getPlans.mockResolvedValue({ plans: [summary("a")] });
+    await pollPlans();
+    expect(files.sweepPlanFolders).toHaveBeenLastCalledWith(new Set(["a"]));
+  });
+
   // Mutation: stamp before the files are fetched. A failed download would
   // say Downloaded with photos missing.
   it("stamps the plan downloaded only once its files are on the phone", async () => {

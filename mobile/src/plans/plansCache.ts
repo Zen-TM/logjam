@@ -16,6 +16,7 @@ import {
 } from "@logjam/shared";
 import { AppState } from "react-native";
 
+import { assertSpaceFor } from "../offline/freeSpace";
 import { canRunNow } from "../offline/networkPolicy";
 import {
   getSyncDb,
@@ -27,6 +28,7 @@ import {
   downloadPlanFiles,
   missingPlanFiles,
   planFiles,
+  prunePlanFiles,
   sweepPlanFolders,
 } from "./planFiles";
 import { getPlan, getPlans } from "./plansApi";
@@ -122,11 +124,15 @@ let epoch = 0;
 const dropped = new Set<string>();
 
 /** Called by the sign-out wipe (`offline/wipeLocalData.ts`). */
-export function stopPlansForWipe(): Promise<void> {
+export async function stopPlansForWipe(): Promise<void> {
   epoch += 1;
   dropped.clear();
-  return Promise.resolve();
+  // A download stops before its next file (`downloadPlanFiles`' `alive`).
+  await Promise.allSettled([...downloads]);
 }
+
+// Download for the trip runs, so the wipe can wait for them to stop.
+const downloads = new Set<Promise<unknown>>();
 
 /**
  * GET /plans, and the cache follows: the list is replaced, and a cached plan
@@ -212,6 +218,9 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
     return stamp?.downloaded_at ?? null;
   });
   notifyMirrorChanged();
+  // An item gone from the plan takes its downloaded file with it.
+  if (began === epoch)
+    await prunePlanFiles(planId, planFiles(plan)).catch(console.error);
   return { plan, fetchedAt, downloadedAt };
 }
 
@@ -266,20 +275,44 @@ export async function afterPlanWrite(
  * every file it points at that is not on the phone yet, then stamped
  * downloaded. A failure leaves what was fetched and no stamp.
  */
-export async function downloadPlan(
+export function downloadPlan(
   planId: string,
   onProgress: (doneBytes: number, totalBytes: number) => void,
 ): Promise<void> {
+  const run = runDownload(planId, onProgress);
+  downloads.add(run);
+  void run.catch(() => {}).finally(() => downloads.delete(run));
+  return run;
+}
+
+async function runDownload(
+  planId: string,
+  onProgress: (doneBytes: number, totalBytes: number) => void,
+): Promise<void> {
+  const began = epoch;
+  const alive = () => began === epoch;
   const { plan } = await fetchPlan(planId);
+  if (!alive()) return;
   const missing = await missingPlanFiles(planId, planFiles(plan));
   const total = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
+  // ADR 0005: nothing large is written without asking whether it fits.
+  await assertSpaceFor(total);
   onProgress(0, total);
-  await downloadPlanFiles(planId, missing, (done) => onProgress(done, total));
-  const db = await getSyncDb();
-  await db.runAsync(
-    "UPDATE plans_cache SET downloaded_at = ? WHERE plan_id = ?",
-    new Date().toISOString(),
+  const complete = await downloadPlanFiles(
     planId,
+    missing,
+    (done) => onProgress(done, total),
+    alive,
   );
+  if (!complete) return;
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    if (!alive()) return;
+    await db.runAsync(
+      "UPDATE plans_cache SET downloaded_at = ? WHERE plan_id = ?",
+      new Date().toISOString(),
+      planId,
+    );
+  });
   notifyMirrorChanged();
 }

@@ -346,12 +346,7 @@ function PlanPage({
             ) : null}
           </View>
         ) : null}
-        <PlanDownload
-          cached={cached}
-          online={online}
-          onInfo={notify}
-          onError={(text) => notify(text, "error")}
-        />
+        <PlanDownload cached={cached} online={online} now={now} />
       </Hero>
     ),
     notices: notice ? (
