@@ -38,12 +38,23 @@ vi.mock("react-native", () => ({
 vi.mock("../offline/networkPolicy", () => ({ canRunNow: async () => true }));
 const api = vi.hoisted(() => ({ getPlans: vi.fn(), getPlan: vi.fn() }));
 vi.mock("./plansApi", () => api);
+const files = vi.hoisted(() => ({
+  planFiles: vi.fn(() => [
+    { id: "f", url: "u", filename: "f.jpg", sizeBytes: 5 },
+  ]),
+  missingPlanFiles: vi.fn(async (_id: string, all: unknown[]) => all),
+  downloadPlanFiles: vi.fn(async () => {}),
+  deletePlanFolder: vi.fn(async () => {}),
+  sweepPlanFolders: vi.fn(async () => {}),
+}));
+vi.mock("./planFiles", () => files);
 
 const { clearMirror, wipeAllSyncData, wipeMirror } = await import(
   "../sync/syncDb"
 );
 const {
   afterPlanWrite,
+  downloadPlan,
   fetchPlan,
   planChanged,
   pollPlans,
@@ -109,6 +120,8 @@ describe("the plans poll", () => {
     });
     await pollPlans();
     expect([...(await readCachedPlanStamps()).keys()]).toEqual(["kept"]);
+    // Mutation: drop the sweep. A left plan's photos stay on the phone.
+    expect(files.sweepPlanFolders).toHaveBeenLastCalledWith(new Set(["kept"]));
     expect((await readPlansList())?.plans.map((plan) => plan.id)).toEqual([
       "kept",
       "uninvited",
@@ -285,6 +298,19 @@ describe("after a write", () => {
     expect((await readCachedPlan("a"))?.plan.updatedAt).toBe(
       "2026-10-05T00:00:00.000Z",
     );
+  });
+});
+
+describe("Download for the trip", () => {
+  // Mutation: stamp before the files are fetched. A failed download would
+  // say Downloaded with photos missing.
+  it("stamps the plan downloaded only once its files are on the phone", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    files.downloadPlanFiles.mockRejectedValueOnce(new Error("signal"));
+    await expect(downloadPlan("a", () => {})).rejects.toThrow("signal");
+    expect((await readCachedPlan("a"))?.downloadedAt).toBeNull();
+    await downloadPlan("a", () => {});
+    expect((await readCachedPlan("a"))?.downloadedAt).not.toBeNull();
   });
 });
 

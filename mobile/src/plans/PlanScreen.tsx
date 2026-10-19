@@ -63,6 +63,7 @@ import {
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
+import { PlanDownload } from "./PlanDownload";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
@@ -342,6 +343,12 @@ function PlanPage({
             ) : null}
           </View>
         ) : null}
+        <PlanDownload
+          cached={cached}
+          online={online}
+          onInfo={notify}
+          onError={(text) => notify(text, "error")}
+        />
       </Hero>
     ),
     notices: notice ? (
