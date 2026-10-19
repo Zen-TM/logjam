@@ -7,7 +7,11 @@ import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  GetObjectCommand,
+  CreateMultipartUploadCommand,
+} from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
 import {
   say,
@@ -29,7 +33,14 @@ import {
   assertHasStorageQuota,
   decrementStorageUsed,
 } from "../lib/storageQuota";
-import { deleteS3Prefix } from "../lib/s3Cleanup";
+import {
+  MAX_INPUT_ZIP_COMPRESSED_BYTES,
+  TOPO_UPLOAD_MAX_PARTS,
+  TOPO_UPLOAD_PART_BYTES,
+  deleteTopoJobObjects,
+  joinTopoUpload,
+  signTopoParts,
+} from "../lib/topoUpload";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import {
@@ -99,14 +110,13 @@ export function serializeTopoJobFor<
   };
 }
 
-// Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
-// A legitimate ELVIS export is bounded by the monthly tile quota (default 40
-// tiles, ~17 MB compressed LAZ + ~5 MB DEM each). These caps sit well above
-// any realistic export while rejecting pathological archives before the worker
-// is launched. The uncompressed cap is the real bomb guard; the compressed cap
-// bounds wasted S3 transfer/storage.
-const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
+// Uncompressed input-ZIP cap, the zip-bomb / disk-DoS guard for the Fargate
+// worker. A legitimate ELVIS export is ~17 MB compressed LAZ + ~5 MB DEM per
+// tile; this sits well above any realistic one while rejecting pathological
+// archives before the worker is launched.
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
+/** Part URLs one request may ask for. */
+const TOPO_UPLOAD_SIGN_MAX = 32;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list
@@ -197,6 +207,8 @@ router.post(
       data: { s3InputKey },
     });
 
+    // uploadUrl is the single-PUT path a Logjam Web tab loaded before the
+    // multipart client still takes; it can go once that client is everywhere.
     const uploadUrl = await getSignedUrl(
       s3,
       new PutObjectCommand({
@@ -206,8 +218,87 @@ router.post(
       }),
       { expiresIn: 900 }, // 15 minutes
     );
+    const { UploadId: uploadId } = await s3.send(
+      new CreateMultipartUploadCommand({
+        Bucket: TOPO_BUCKET,
+        Key: s3InputKey,
+        ContentType: "application/zip",
+      }),
+    );
 
-    res.status(201).json({ jobId: job.id, uploadUrl });
+    res.status(201).json({
+      jobId: job.id,
+      uploadUrl,
+      uploadId,
+      partSize: TOPO_UPLOAD_PART_BYTES,
+    });
+  },
+);
+
+/** The owner's job, still waiting for its ZIP; the upload id from the body.
+ *  The id needs no lookup of its own: S3 ties it to the job's key, so an id
+ *  from another job's upload signs nothing here. */
+async function ownUploadingJob(req: AuthenticatedRequest) {
+  const user = await getUser(req.user!.sub);
+  const job = await prisma.topoJob.findUnique({
+    where: { id: getParam(req.params.id) },
+  });
+  if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
+  requireShareOwner(
+    await getJobRole(user.id, "topoJob", job),
+    "topoJob",
+    say`Only the owner can upload to this LiDAR map.`,
+  );
+  if (job.status !== "uploading")
+    throw new AppError(400, say`That upload has already been received.`);
+  const { uploadId } = req.body ?? {};
+  if (typeof uploadId !== "string" || !uploadId || uploadId.length > 1024)
+    throw malformed("uploadId must be a non-empty string");
+  return { key: job.s3InputKey!, uploadId };
+}
+
+// POST /topo-jobs/:id/parts — presigned PUT URLs for parts of the ZIP
+router.post(
+  "/:id/parts",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { key, uploadId } = await ownUploadingJob(req);
+    const { sizeBytes, partNumbers } = req.body;
+    if (!Number.isInteger(sizeBytes) || sizeBytes < 1)
+      throw malformed("sizeBytes must be a positive integer");
+    if (!Array.isArray(partNumbers) || partNumbers.length === 0)
+      throw malformed("partNumbers must be a non-empty array");
+    if (partNumbers.length > TOPO_UPLOAD_SIGN_MAX)
+      throw malformed(
+        `At most ${TOPO_UPLOAD_SIGN_MAX} partNumbers per request`,
+        413,
+      );
+    const parts = await signTopoParts(
+      TOPO_BUCKET,
+      key,
+      uploadId,
+      sizeBytes,
+      partNumbers,
+    );
+    res.json({ parts });
+  },
+);
+
+// POST /topo-jobs/:id/complete — join the uploaded parts into the ZIP
+router.post(
+  "/:id/complete",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { key, uploadId } = await ownUploadingJob(req);
+    const { partCount } = req.body;
+    if (
+      !Number.isInteger(partCount) ||
+      partCount < 1 ||
+      partCount > TOPO_UPLOAD_MAX_PARTS
+    )
+      throw malformed("partCount must be an integer in range");
+    await joinTopoUpload(TOPO_BUCKET, key, uploadId, partCount);
+    res.status(204).send();
   },
 );
 
@@ -572,11 +663,7 @@ router.delete(
     // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
     // — no orphaned objects, and the quota is only decremented once the bytes
     // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
-    await Promise.all(
-      [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map(
-        (prefix) => deleteS3Prefix(TOPO_BUCKET, prefix),
-      ),
-    );
+    await deleteTopoJobObjects(TOPO_BUCKET, jobId);
 
     // One transaction: queued exports referencing this job are
     // force-failed with a clear message (their COG source is about to

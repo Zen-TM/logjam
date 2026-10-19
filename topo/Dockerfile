@@ -115,6 +115,7 @@ COPY export_worker.py /app/export_worker.py
 COPY email_send.py /app/email_send.py
 COPY push_send.py /app/push_send.py
 COPY worker_common.py /app/worker_common.py
+COPY build_nsw_dem.py /app/build_nsw_dem.py
 COPY build_place_registry.py /app/build_place_registry.py
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
@@ -123,9 +124,16 @@ COPY icons/ /app/icons/
 # 5. Entrypoint
 # ------------------------------------------------------------
 # Single image, three ECS task definitions:
-#   - logjam-topo-worker         → command override ["python3", "/app/worker.py"]
-#   - logjam-topo-export-worker  → command override ["python3", "/app/export_worker.py"]
+#   - logjam-topo-worker         → the default command below, python3 /app/worker.py
+#   - logjam-topo-export-worker  → entryPoint ["python3", "/app/export_worker.py"]
 #   - logjam-place-registry      → ["python3", "/app/build_place_registry.py", "publish"], monthly on a schedule; needs only S3_BUCKET_TOPO and AWS_REGION
+# The topo worker's is a CMD, not an ENTRYPOINT, so that a RunTask command
+# override can run another script from this image under the same task role: the
+# slope archive build (topo/README.md, "The statewide slope archive"). A task
+# definition that sets an entryPoint drops this CMD, as the other two do.
+# tests/test_docker_image_files.py `test_the_image_starts_the_worker_as_a_cmd`
+# holds it: with an ENTRYPOINT the slope recipe and `docker compose run topo
+# python3 /app/pipeline.py ...` would pass their command to worker.py as arguments.
 # Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected
@@ -138,4 +146,4 @@ COPY icons/ /app/icons/
 # entirely. If moving to MapLibre Native later, add the GL deps before this
 # line and keep the same entrypoint contract — export_worker.py orchestration
 # stays unchanged.
-ENTRYPOINT ["python3", "/app/worker.py"]
+CMD ["python3", "/app/worker.py"]

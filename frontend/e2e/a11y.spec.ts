@@ -745,10 +745,23 @@ test.describe("desktop", () => {
     await expect(
       dialog.getByRole("heading", { name: "Make a GeoPDF" }),
     ).toBeVisible();
-    // The four edges, the pivot radiogroup and six rails in one scrolling body.
+    // Closed, the Area section is paper, scale and the button to the map.
+    await expect(
+      dialog.getByRole("button", { name: "Pick on the map" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Exact edges opens the four edges, the pivot radiogroup and two more
+    // rails in the same scrolling body.
+    await dialog.getByText("Exact edges").click();
     await expect(
       dialog.getByRole("radiogroup", { name: "Pivot" }),
     ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Other opens the typed scale under the presets.
+    await dialog.getByRole("radio", { name: "Other" }).click();
+    await expect(dialog.getByRole("textbox", { name: "Scale" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
     // Custom paper reveals the ratio and takes orientation away from the user.

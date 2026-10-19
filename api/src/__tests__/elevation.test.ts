@@ -142,3 +142,42 @@ describe("POST /elevation/profile — validation", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("POST /elevation/point", () => {
+  const ask = (body: unknown) =>
+    request(API_URL)
+      .post("/elevation/point")
+      .set(as(ALICE_SUB))
+      .send(body as object);
+
+  it("answers a height and a slope from the NSW archive, and credits it", async () => {
+    const res = await ask({ point: LINE[0] });
+    expect(res.status).toBe(200);
+    expect(res.body.elevationM).toBeCloseTo(983.42, 1);
+    // A hillside on the fixture: steeper than flat, short of a wall.
+    expect(res.body.slopeDegrees).toBeGreaterThan(0);
+    expect(res.body.slopeDegrees).toBeLessThan(90);
+    expect(res.body.demSourceIds).toEqual([NSW_5M.id]);
+    expect(res.body.attribution).toBe(NSW_5M.credit);
+  });
+
+  // No unauthenticated-401 case: fake auth treats a missing header as alice.
+  // routes/elevation.unit.test.ts holds it.
+  // Mutation: drop the route's parseElevationPoint refusal (or parse
+  // req.body, not req.body.point) and a malformed body reaches the DEM reader.
+  it("400s a body that is not one in-range [longitude, latitude] pair", async () => {
+    for (const body of [
+      [150.31, -33.7],
+      {},
+      { point: [] },
+      { point: [150.31] },
+      { point: [150.31, -33.7, 5] },
+      { point: ["150.31", "-33.7"] },
+      { point: [181, -33.7] },
+      { point: [150.31, -91] },
+      { point: { lon: 150.31, lat: -33.7 } },
+    ]) {
+      expect((await ask(body)).status).toBe(400);
+    }
+  });
+});

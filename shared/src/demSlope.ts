@@ -1,10 +1,10 @@
 // Slope of the ground at a point, from the DEM around it.
 //
-// Pure, and split in two so each client keeps its own tile reader: a caller
-// asks `demSlopeWindow` which nine heights it needs, reads them with whatever
-// sampler it already has (they are ordinary sample positions, so a window that
-// straddles a tile edge needs nothing special), and hands them to
-// `slopeDegrees`.
+// Pure, so each client keeps its own tile reader: a caller hands it to
+// `demSlopeReading` / `demSlopeAt`, which picks the finest regional source that
+// covers the whole window and reads each window pixel exactly (a window that
+// straddles a tile edge needs nothing special). `demSlopeWindow` and
+// `slopeDegrees` are the pure parts it is built from.
 //
 // WHAT THE NUMBER MEANS. It is the slope of a plane fitted across three DEM
 // pixels each way, so it is an average over the window and never the steepest
@@ -15,12 +15,19 @@
 // PRIVACY: positions here are precise wilderness coordinates. Nothing logs.
 
 import {
-  NSW_5M,
-  sampleDem,
+  covers,
+  DEM_SOURCES,
+  demTileKey,
   type DemSource,
   type DemTileReader,
 } from "./demSources.js";
-import { DEM_TILE_SIZE, demTileCoordinates } from "./demTiles.js";
+import {
+  DEM_TILE_SIZE,
+  demSampleValue,
+  demTileCoordinates,
+  resolveDemSamples,
+  type DemSampleAddress,
+} from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
 
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
@@ -82,26 +89,63 @@ export function slopeDegrees(
   return (Math.atan(Math.hypot(eastward, southward)) * 180) / Math.PI;
 }
 
+export type DemSlopeReading = {
+  slopeDegrees: number;
+  /** The one source all nine heights were read from. */
+  sourceId: string;
+};
+
 /**
- * The slope at a position, or null where it cannot be told honestly.
+ * The slope at a position and the source it came from, or null where it
+ * cannot be told honestly.
  *
- * Read from ONE source and never down the usual list: all nine heights must
- * come from the same surface, and the worldwide 30 m tiles are too coarse for a
- * point slope (within 5° of a 5 m survey at 57 % of points, a median of 34° on
- * ground of 60° or steeper), where the NSW 5 m source is within 5° at 98 %. So
- * outside NSW, or where a saved area lacks a tile, the answer is null and no
- * slope is shown. `demSlope.test.ts` holds this.
+ * The finest source that has all nine heights answers, and all nine come from
+ * that one surface: a source that lacks a pixel of the window (the edge of a
+ * finer area, a tile not built, one no-data pixel) hands the position to the
+ * next one down. Each window position's own pixel is read, never the blend of
+ * four that `sampleDem` takes for a height, which can let a neighbour stand in
+ * for a missing pixel (at a pixel centre the blend is its own pixel, bar float
+ * noise).
+ * Never the worldwide 30 m tiles (`coverage` null), which are too coarse for
+ * a point slope: within 5° of a 5 m survey at 57 % of points, a median of 34°
+ * on ground of 60° or steeper, where the NSW 5 m source is within 5° at 98 %.
+ * So outside every regional source the answer is null and no slope is shown.
+ * `demSlope.test.ts` holds this.
  *
  * At zoom 15 the window is about 12 m across: a drop or slot narrower than
  * that is averaged away.
  */
+export async function demSlopeReading(
+  lon: number,
+  lat: number,
+  readTiles: DemTileReader,
+  sources: readonly DemSource[] = DEM_SOURCES,
+): Promise<DemSlopeReading | null> {
+  for (const source of sources) {
+    if (source.coverage === null) continue;
+    const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
+    if (!positions.every((position) => covers(source, position))) continue;
+    const addresses = resolveDemSamples(positions, source.sampleZoom);
+    const wanted = new Map<string, DemSampleAddress>();
+    for (const address of addresses) wanted.set(demTileKey(address), address);
+    const tiles = await readTiles(source, [...wanted.values()]);
+    const heights = addresses.map((address) =>
+      demSampleValue(tiles.get(demTileKey(address)), address.index),
+    );
+    const slope = slopeDegrees(heights, cellM);
+    if (slope != null) return { slopeDegrees: slope, sourceId: source.id };
+  }
+  return null;
+}
+
+/** `demSlopeReading`'s number alone. */
 export async function demSlopeAt(
   lon: number,
   lat: number,
   readTiles: DemTileReader,
-  source: DemSource = NSW_5M,
+  sources: readonly DemSource[] = DEM_SOURCES,
 ): Promise<number | null> {
-  const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
-  const { heights } = await sampleDem(positions, readTiles, [source]);
-  return slopeDegrees(heights, cellM);
+  return (
+    (await demSlopeReading(lon, lat, readTiles, sources))?.slopeDegrees ?? null
+  );
 }

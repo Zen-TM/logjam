@@ -23,6 +23,7 @@ import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+import { deleteTopoJobObjects } from "../lib/topoUpload";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
@@ -605,18 +606,16 @@ router.delete(
       .map((e) => e.resultKey)
       .filter((k): k is string => Boolean(k));
 
-    // S3 cleanup first. The helpers throw on failure (see lib/s3Cleanup.ts), so
+    // S3 cleanup first. The deletes throw on failure (see lib/s3Cleanup.ts), so
     // any error here aborts before the DB transaction — the account is not
     // deleted and the user can retry. Belt-and-braces against bucket-lifecycle
-    // drift, not a substitute for it.
+    // drift, not a substitute for it. The multipart abort inside
+    // deleteTopoJobObjects is best-effort; the abort-incomplete-uploads
+    // lifecycle rule clears what it misses.
     await Promise.all([
       deleteS3Keys(MEDIA_BUCKET, mediaKeys),
       deleteS3Keys(TOPO_BUCKET, exportResultKeys),
-      ...topoJobs.flatMap(({ id }) => [
-        deleteS3Prefix(TOPO_BUCKET, `inputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `outputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `jobs/${id}/`),
-      ]),
+      ...topoJobs.map(({ id }) => deleteTopoJobObjects(TOPO_BUCKET, id)),
       ...topoExportJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
       ),
