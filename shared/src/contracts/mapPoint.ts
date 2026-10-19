@@ -36,12 +36,9 @@ export const MAP_POINT = {
     // one to show them.
     { key: "distance" },
     { key: "bearing" },
-    {
-      key: "slope",
-      on: "gps",
-      reason:
-        "A slope needs nine heights from the fine DEM. Logjam GPS reads DEM tiles itself; Logjam Web gets heights from the API's profile route, which answers along a line.",
-    },
+    // From the API's point route on Logjam Web and from the DEM tiles on
+    // Logjam GPS; both say nothing where the fine DEM cannot tell.
+    { key: "slope" },
   ],
   copy: {
     position: "Position",

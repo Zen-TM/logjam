@@ -26,13 +26,15 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
 
-    # ── Command override ─────────────────────────────────────
-    # Default (no override): processes /input/elvis.zip
-    #
-    # To customise, uncomment and edit:
-    # command: [
-    #   "/input/my_lidar.zip",
-    #   "--output", "/output",
-    #   "--workers", "8",
-    #   "--keep-work"
-    # ]
+    # ── Command ──────────────────────────────────────────────
+    # The image starts the job worker by default, which needs a database, so
+    # this runs the pipeline directly on /input/elvis.zip. To customise, edit
+    # it (flags: topo/README.md, "Custom options"), or override at runtime:
+    #   docker compose run topo python3 /app/pipeline.py /input/my_lidar.zip \
+    #     --output /output --workers 8 --keep-work
+    command:
+      - python3
+      - /app/pipeline.py
+      - /input/elvis.zip
+      - --output
+      - /output

@@ -1,5 +1,7 @@
 import {
+  AbortMultipartUploadCommand,
   DeleteObjectsCommand,
+  ListMultipartUploadsCommand,
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
 } from "@aws-sdk/client-s3";
@@ -86,5 +88,34 @@ export async function deleteS3KeysBestEffort(
     await deleteS3Keys(bucket, keys);
   } catch {
     // Already logged inside deleteS3Keys; orphan is acceptable on this path.
+  }
+}
+
+/**
+ * Aborts the multipart uploads still open under a prefix, which a prefix
+ * delete cannot see: their parts are not objects until completed. Best-effort,
+ * since the bucket's lifecycle rule aborts any left over within days
+ * (infra/terraform/envs/prod/s3.tf, "abort-incomplete-uploads").
+ */
+export async function abortS3MultipartUploads(
+  bucket: string,
+  prefix: string,
+): Promise<void> {
+  try {
+    const listed = await s3.send(
+      new ListMultipartUploadsCommand({ Bucket: bucket, Prefix: prefix }),
+    );
+    await Promise.all(
+      (listed.Uploads ?? []).map(({ Key, UploadId }) =>
+        s3.send(
+          new AbortMultipartUploadCommand({ Bucket: bucket, Key, UploadId }),
+        ),
+      ),
+    );
+  } catch (err) {
+    logger.error(
+      { bucket, prefix, err: safeErrorForLog(err) },
+      "s3_abort_multipart_failed",
+    );
   }
 }

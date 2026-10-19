@@ -33,8 +33,9 @@ services:
       SERVICES: s3,ecs,ses,cognito,secretsmanager
       DEFAULT_REGION: ap-southeast-2
       AWS_DEFAULT_REGION: ap-southeast-2
-      # Network that RunTask-launched worker containers join, so they resolve
-      # `postgres` and `ministack` by name. Must match the compose network below.
+      # Not what decides where a RunTask-launched worker runs: MiniStack puts it
+      # on its own container's first network by name (see `networks:` below).
+      # Kept in case a MiniStack version reads it.
       DOCKER_NETWORK: logjam-local
     ports:
       - "127.0.0.1:4566:4566"
@@ -57,8 +58,11 @@ volumes:
   postgres-data:
   ministack-data:
 
-# Fixed network name so MiniStack's DOCKER_NETWORK is deterministic (not derived
-# from the project directory). Worker containers launched via RunTask attach here.
+# Fixed network name (not derived from the project directory). MiniStack runs a
+# RunTask-launched worker on the first of its own container's networks by name;
+# this is its only one, so workers land here and resolve `postgres` and
+# `ministack`. A second network on ministack can move them off it. CI's
+# topo-e2e job (ci.yml) relies on the same rule and checks where workers land.
 networks:
   default:
     name: logjam-local
