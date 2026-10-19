@@ -87,7 +87,10 @@ import {
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  TRIP_PLAN_PAGE,
+  type TripPlanView,
 } from "@logjam/shared";
+import { readCachedPlan } from "../plans/plansCache";
 
 import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
@@ -232,6 +235,7 @@ import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import {
   BottomSheet,
   Button,
+  Chip,
   Icon,
   IconButton,
   Notice,
@@ -780,6 +784,7 @@ export function MapScreen({
   continueTrack,
   startRecording,
   navigatePlace,
+  planMode,
 }: {
   onOpenPlace: (placeId: string, name: string) => void;
   /**
@@ -842,6 +847,9 @@ export function MapScreen({
   // "Navigate to this place". An id only — the point comes from the mirror
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
+  // "Show on map" from a plan: the plan's items only, from the phone's cached
+  // copy, until "Back to my map" (design §8). An id only.
+  planMode?: { planId: string; nonce: number } | null;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -970,6 +978,26 @@ export function MapScreen({
   // rows' `visible`) so it toggles smoothly and stays toggleable with zero
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
+  // PLAN MODE: the plan's places and ways in place of the user's own, which
+  // come back beside them with "Show my things". Read from the plans cache, so
+  // it works in a canyon for any plan opened before.
+  const [planOnMap, setPlanOnMap] = useState<TripPlanView | null>(null);
+  const [showMine, setShowMine] = useState(false);
+  useEffect(() => {
+    if (!planMode) return;
+    let cancelled = false;
+    void (async () => {
+      const cached = await readCachedPlan(planMode.planId);
+      if (cancelled) return;
+      setPlanOnMap(cached?.plan ?? null);
+      setShowMine(false);
+    })().catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [planMode]);
+  /** The user's own things are drawn: no plan open, or asked for beside it. */
+  const mine = planOnMap === null || showMine;
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
   // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
@@ -1561,6 +1589,17 @@ export function MapScreen({
       showSharedPlaces,
     ],
   );
+
+  // A plan's places draw as the user's own pins do; their ids are the plan's,
+  // so a tap finds no place of the user's and opens nothing of theirs.
+  const pinsOwned = useMemo(() => {
+    if (!planOnMap) return ownedFc;
+    const plan = toPlaceFeatureCollection(planOnMap.places, placeTypeColors);
+    return mine
+      ? { ...plan, features: [...plan.features, ...ownedFc.features] }
+      : plan;
+  }, [mine, ownedFc, placeTypeColors, planOnMap]);
+  const planRoutes = planOnMap?.routes;
 
   /** Follow a track between two anchors, if snapping is on and finds one.
    *
@@ -2245,9 +2284,10 @@ export function MapScreen({
   // `path` null means the file synced as a row but its bytes are not on this
   // phone yet — there is nothing to draw. Filtered here rather than guarded at
   // the source below, so the layer indices stay contiguous.
-  const visibleImports = showVectorImports
-    ? imports.filter((imported) => imported.visible && imported.path !== null)
-    : [];
+  const visibleImports =
+    showVectorImports && mine
+      ? imports.filter((imported) => imported.visible && imported.path !== null)
+      : [];
 
   // GeoPDF imports: file management lives in SavedScreen (viewport-independent
   // management); this screen keeps only the ready layers it renders.
@@ -4675,7 +4715,7 @@ export function MapScreen({
             Mirror-backed, so it draws with no signal for any file this phone
             has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
-        {showPlaceRoutes ? (
+        {showPlaceRoutes && mine ? (
           <PlaceRoutesLayer onStatus={setRoutesStatus} />
         ) : null}
 
@@ -4687,12 +4727,23 @@ export function MapScreen({
             keeps an empty source rather than unmounting) so the 0↔1 route
             transition cannot re-add its layers to the top of the stack. */}
         <RoutesLayer
-          routes={visibleRoutes}
+          routes={
+            planRoutes
+              ? [...planRoutes, ...(mine ? visibleRoutes : [])]
+              : visibleRoutes
+          }
           hiddenRouteId={editingRouteId}
           // While a tool is collecting points every tap belongs to the tool —
           // opening an options sheet mid-draw would steal the point being
-          // placed.
-          onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
+          // placed. A plan's way has no options sheet of the user's.
+          onPressRoute={
+            collectingPoints
+              ? undefined
+              : (routeId) => {
+                  if (!planRoutes?.some((route) => route.id === routeId))
+                    setOptionsRouteId(routeId);
+                }
+          }
         />
 
         {/* Recorded tracks: unpinned, mounted before the place
@@ -4701,7 +4752,7 @@ export function MapScreen({
         <TrackMapLayers
           tracks={tracks}
           liveCoord={userCoord}
-          showTracks={showTracks}
+          showTracks={showTracks && mine}
           onTrackPress={handleTrackPress}
         />
 
@@ -4727,8 +4778,8 @@ export function MapScreen({
             (privacy rule). Shared under owned; one definition, also drawn by
             the place point-picker (PlacePinsLayer). */}
         <PlacePinsLayer
-          ownedFc={ownedFc}
-          sharedFc={sharedFc}
+          ownedFc={pinsOwned}
+          sharedFc={mine ? sharedFc : EMPTY_PLACES}
           onPress={handlePlacePress}
         />
 
@@ -4998,6 +5049,29 @@ export function MapScreen({
 
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
+        {planOnMap ? (
+          <Notice
+            icon="plan"
+            action={
+              <View style={styles.planActions}>
+                <Chip
+                  label={TRIP_PLAN_PAGE.copy.showMine}
+                  active={showMine}
+                  onPress={() => setShowMine((was) => !was)}
+                />
+                <Button
+                  label={TRIP_PLAN_PAGE.copy.backToMap}
+                  compact
+                  variant="ghost"
+                  onPress={() => setPlanOnMap(null)}
+                />
+              </View>
+            }
+          >
+            {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
+          </Notice>
+        ) : null}
+
         {offlineOnly ? (
           <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
@@ -5553,7 +5627,11 @@ function RouteNameForm({
   );
 }
 
+/** The user's shared pins, while a plan is on the map without them. */
+const EMPTY_PLACES = toPlaceFeatureCollection([]);
+
 const useStyles = makeStyles((theme, textRole) => ({
+  planActions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // The selected point's delete button: circular, warning-coloured, and the
   // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
   // rather than translucent — it sits over the map, which can be any colour

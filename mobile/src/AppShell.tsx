@@ -155,6 +155,9 @@ type MapStackParams = {
         // never a coordinate: navigation params are persisted and dumped by
         // devtools, and the map reads the point from the mirror it already has.
         navigatePlace?: { placeId: string; nonce: number };
+        // `planMode` = "Show on map" from a plan: its items only, read from
+        // the plans cache. An id, never the plan.
+        planMode?: { planId: string; nonce: number };
       }
     | undefined;
   // Where the place form went to point at a map. A coordinate already in
@@ -350,6 +353,7 @@ function MapStackNav() {
             continueTrack={route.params?.continueTrack ?? null}
             startRecording={route.params?.startRecording ?? null}
             navigatePlace={route.params?.navigatePlace ?? null}
+            planMode={route.params?.planMode ?? null}
             onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "MapPickPoint",
@@ -1254,6 +1258,17 @@ export function AppShell({
                         name={route.params.name}
                         initialView={route.params.view}
                         onBack={() => navigation.goBack()}
+                        onShowOnMap={(planId, bbox) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapView",
+                            params: {
+                              planMode: { planId, nonce: Date.now() },
+                              ...(bbox && {
+                                focus: { bbox, nonce: Date.now() },
+                              }),
+                            },
+                          })
+                        }
                         onGone={(text) =>
                           navigation.popTo("Plans", {
                             message: { text, at: Date.now() },

@@ -33,7 +33,7 @@ export const RoutesLayer = memo(function RoutesLayer({
   hiddenRouteId,
   onPressRoute,
 }: {
-  routes: readonly MirrorRoute[];
+  routes: readonly Pick<MirrorRoute, "id" | "points" | "color">[];
   hiddenRouteId: string | null;
   /** Tapping a line opens its options sheet. Absent while a tool owns the
    *  map's taps. */
