@@ -7,11 +7,14 @@ import {
   isDateOnly,
   parseTripPlanAnswers,
   parseTripPlanCreate,
+  parseTripPlanFilePatch,
   parseTripPlanFormCreate,
   parseTripPlanFormPatch,
   parseTripPlanItemAdd,
   parseTripPlanOrder,
   parseTripPlanPatch,
+  parseTripPlanPlacePatch,
+  parseTripPlanRoutePatch,
   parseTripPlanSectionCreate,
   parseTripPlanSectionPatch,
   parseTripTypeList,
@@ -175,6 +178,103 @@ describe("item add", () => {
       null,
     ])
       expect(isMalformed(parseTripPlanItemAdd(body))).toBe(true);
+  });
+});
+
+describe("item edits", () => {
+  const line = [
+    [150.3, -33.6],
+    [150.31, -33.61],
+  ];
+
+  it("takes each kind's fields as pairs, and only those", () => {
+    expect(
+      value(
+        parseTripPlanPlacePatch({
+          altNames: { from: ["a"], to: null },
+          fieldValues: { v_grade: { from: null, to: 3 } },
+        }),
+      ),
+    ).toEqual({
+      altNames: { from: ["a"], to: [] },
+      fieldValues: { v_grade: { from: null, to: 3 } },
+    });
+    expect(
+      value(
+        parseTripPlanRoutePatch({
+          geometry: {
+            from: { points: line, anchors: null },
+            to: { points: [[150.3000004, -33.6], line[1]] },
+          },
+        }),
+      ),
+    ).toEqual({
+      geometry: {
+        from: { points: line, anchors: null },
+        to: { points: line, anchors: null },
+      },
+    });
+    expect(
+      value(parseTripPlanFilePatch({ displayName: { from: null, to: "x" } })),
+    ).toEqual({ displayName: { from: null, to: "x" } });
+    for (const parsed of [
+      parseTripPlanPlacePatch({ ownerId: { from: null, to: "a" } }),
+      parseTripPlanPlacePatch({ fieldValues: {} }),
+      parseTripPlanRoutePatch({}),
+      parseTripPlanFilePatch({ filename: { from: null, to: "x" } }),
+    ])
+      expect(isMalformed(parsed)).toBe(true);
+  });
+
+  // Mutation: take `from` unchecked, as the compare reads it.
+  it("refuses a malformed from, and caps its arrays as their to", () => {
+    for (const parsed of [
+      parseTripPlanPlacePatch({ name: { from: 3, to: "x" } }),
+      parseTripPlanPlacePatch({ position: { from: "x", to: "y" } }),
+      parseTripPlanPlacePatch({ elevation: { from: "1", to: 1 } }),
+      parseTripPlanRoutePatch({ geometry: { from: 5, to: { points: line } } }),
+      parseTripPlanRoutePatch({
+        geometry: { from: { points: [["a", 1]] }, to: { points: line } },
+      }),
+      parseTripPlanFilePatch({ displayName: { from: 1, to: "x" } }),
+    ])
+      expect(parsed).toEqual({ malformed: expect.any(String) });
+    // No stored route has fewer than two points, or one anchor: a from like
+    // that can only be a broken client's. Mutation: drop either lower bound
+    // in seenGeometry.
+    for (const from of [
+      { points: [] },
+      { points: [line[0]] },
+      { points: line, anchors: [] },
+      { points: line, anchors: [0] },
+    ])
+      expect(
+        parseTripPlanRoutePatch({ geometry: { from, to: { points: line } } }),
+      ).toEqual({ malformed: expect.any(String) });
+    for (const parsed of [
+      parseTripPlanPlacePatch({
+        altNames: { from: Array(51).fill("a"), to: [] },
+      }),
+      parseTripPlanRoutePatch({
+        geometry: {
+          from: { points: Array(1001).fill(line[0]), anchors: null },
+          to: { points: line },
+        },
+      }),
+    ])
+      expect(parsed).toMatchObject({ status: 413 });
+  });
+
+  // Mutation: skip the points check when geometry.to has none.
+  it("refuses a geometry with no points to save", () => {
+    for (const to of [{}, { anchors: null }, { points: [line[0]] }])
+      expect(
+        isMalformed(
+          parseTripPlanRoutePatch({
+            geometry: { from: { points: line }, to },
+          }),
+        ),
+      ).toBe(true);
   });
 });
 
@@ -457,6 +557,10 @@ describe("a refusal never echoes what the person wrote", () => {
     parseTripPlanCreate({ name: secret, tripTypes: [secret, secret] }),
     parseTripPlanPatch({ name: { from: 7, to: secret } }),
     parseTripPlanPatch({ tripTypes: { from: secret, to: [] } }),
+    parseTripPlanPlacePatch({ name: { from: secret, to: 1 } }),
+    parseTripPlanPlacePatch({ position: { from: secret, to: secret } }),
+    parseTripPlanRoutePatch({ geometry: { from: secret, to: secret } }),
+    parseTripPlanFilePatch({ displayName: { from: [secret], to: secret } }),
     parseTripPlanSectionCreate({ title: long }),
     parseTripPlanSectionCreate({ title: secret, body: long.repeat(10) }),
     parseTripPlanSectionPatch({ title: { from: secret, to: 1 } }),
