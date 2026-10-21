@@ -19,6 +19,7 @@ vi.mock("../geopdf/importPipeline", () => ({ deleteGeoPdfImport: vi.fn() }));
 vi.mock("../geopdf/geoPdfImportsDb", () => ({ updateGeoPdfImport: vi.fn() }));
 vi.mock("../imports/importsDb", () => ({}));
 vi.mock("../imports/vectorImports", () => ({ deleteVectorImport: vi.fn() }));
+vi.mock("../tracks/sensorLog", () => ({ deleteSensorLog: vi.fn() }));
 vi.mock("../tracks/tracksDb", () => ({
   deleteTrack: vi.fn(),
   listTrackPoints: vi.fn(),

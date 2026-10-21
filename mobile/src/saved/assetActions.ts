@@ -49,6 +49,7 @@ import {
   type MirrorMedia,
   type MirrorRoute,
 } from "../sync/mirrorStore";
+import { deleteSensorLog } from "../tracks/sensorLog";
 import {
   deleteTrack,
   listTrackPoints,
@@ -584,4 +585,5 @@ async function deleteRecordedTrack(track: Track): Promise<void> {
     if (backup) await deleteMediaLocal(backup);
   }
   await deleteTrack(track.id);
+  await deleteSensorLog(track.id);
 }
