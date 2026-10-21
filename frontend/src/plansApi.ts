@@ -10,9 +10,13 @@ import {
   type TripPlanFormCreate,
   type TripPlanFormPatch,
   type TripPlanFormView,
+  type TripPlanInvitedPreview,
   type TripPlanInviteView,
+  type TripPlanJoinAnswers,
+  type TripPlanLinkPreview,
   type TripPlanMemberStatus,
   type TripPlanMemberView,
+  type TripPlanRedeemResult,
   type TripPlanRole,
   type TripPlanPatch,
   type TripPlanSectionCreate,
@@ -145,6 +149,25 @@ export const revokeInviteLink = (planId: string, inviteId: string) =>
   apiFetch<void>(`${plan(planId)}/invites/${encodeURIComponent(inviteId)}`, {
     method: "DELETE",
   });
+export const getInvitedPreview = (planId: string) =>
+  apiFetch<TripPlanInvitedPreview>(`${plan(planId)}/preview`);
+export const joinPlan = (planId: string, answers: TripPlanJoinAnswers) =>
+  apiFetch<TripPlanView>(`${plan(planId)}/join`, {
+    method: "POST",
+    body: { answers },
+  });
+/** The token travels only in a POST body: a URL ends up in logs. */
+export const previewInviteLink = (token: string) =>
+  apiFetch<TripPlanLinkPreview>("/plan-invites/preview", {
+    method: "POST",
+    body: { token },
+  });
+export const redeemInviteLink = (token: string, answers: TripPlanJoinAnswers) =>
+  apiFetch<TripPlanRedeemResult>("/plan-invites/redeem", {
+    method: "POST",
+    body: { token, answers },
+  });
+
 /** GET /plans: the cheap list, for the Plans page and the nav badge. */
 export function usePlans(enabled: boolean) {
   const [plans, setPlans] = useState<TripPlanSummary[]>([]);

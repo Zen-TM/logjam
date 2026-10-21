@@ -6,10 +6,11 @@ import App from "./components/App.tsx";
 import { ThemePreferencesProvider } from "./themePreferences";
 import { ToastProvider } from "./components/feedback/ToastProvider";
 import { RootErrorBoundary } from "./components/feedback/RootErrorBoundary";
-import { captureFriendInvite } from "./pendingFriendInvite";
+import { friendInvite, planInvite } from "./pendingInvite";
 
-// Before anything renders or signs in: see pendingFriendInvite.ts.
-captureFriendInvite();
+// Before anything renders or signs in: see pendingInvite.ts.
+friendInvite.capture();
+planInvite.capture();
 
 if (import.meta.env.VITE_AUTH_MODE !== "fake") {
   Amplify.configure({

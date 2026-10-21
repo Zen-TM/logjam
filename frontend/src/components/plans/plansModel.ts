@@ -2,10 +2,12 @@
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
 // the value last seen and the new one (shared/DESIGN.md §10).
 import {
+  answersFromDraft,
   currentTripPlanAnswers,
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
+  parseTripPlanAnswers,
   tripPlanAnswerText,
   tripPlanRoleWord,
 } from "@logjam/shared";
@@ -14,7 +16,11 @@ import type {
   TripPlanFormCreate,
   TripPlanFormPatch,
   TripPlanFormPresetId,
+  TripPlanAnswerDraft,
   TripPlanFormView,
+  TripPlanJoinAnswers,
+  TripPlanJoinForm,
+  TripPlanMemberStatus,
   TripPlanPatch,
   TripPlanSectionPatch,
   TripPlanView,
@@ -234,6 +240,17 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
   };
 }
 
+/** Whether a plan opens as an invite's preview: as its opener said, unless
+ *  the plans list since has the reader in it (they joined meanwhile). Not
+ *  from the list alone: an invite that arrived while Logjam Web was open is
+ *  not in it yet, and the member's page 404s for someone invited. */
+export function opensPreview(
+  invited: boolean,
+  listed: TripPlanMemberStatus | undefined,
+): boolean {
+  return invited && listed !== "active";
+}
+
 /** The first form a person answered, for a leader reading their request. */
 export function answeredForm(
   plan: Pick<TripPlanView, "forms">,
@@ -244,6 +261,37 @@ export function answeredForm(
       form.answers.some((answer) => answer.user.id === userId),
     )?.id ?? null
   );
+}
+
+/**
+ * A joiner's answers to the forms required to join, each echoing the form as
+ * shown (`TripPlanJoinAnswers`), or the first sentence the shared
+ * parser refuses with.
+ */
+export function joinAnswers(
+  forms: readonly TripPlanJoinForm[],
+  drafts: Record<string, TripPlanAnswerDraft>,
+): { value: TripPlanJoinAnswers } | { sentence: string } {
+  const value: TripPlanJoinAnswers = {};
+  for (const form of forms) {
+    const parsed = parseTripPlanAnswers(
+      form.questions,
+      answersFromDraft(form.questions, drafts[form.id] ?? {}),
+    );
+    if (!("value" in parsed))
+      return {
+        sentence:
+          "sentence" in parsed
+            ? parsed.sentence
+            : "Answer the forms marked required to join.",
+      };
+    value[form.id] = {
+      answers: parsed.value,
+      visibleTo: form.visibleTo,
+      formUpdatedAt: form.updatedAt,
+    };
+  }
+  return { value };
 }
 
 type ChargedFile = { sizeBytes: string; chargedTo: { id: string } | null };

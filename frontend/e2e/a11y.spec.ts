@@ -217,6 +217,18 @@ test.describe("desktop", () => {
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("#root")).toBeVisible();
     await page.emulateMedia({ media: "screen" });
+
+    // A plan carol invited alice to: its preview, before Join or Decline.
+    await aside.getByRole("button", { name: "Back to plans" }).click();
+    await aside.getByRole("button", { name: "Kanangra Walls loop" }).click();
+    await expect(aside.getByRole("button", { name: "Decline" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+    // Its Join dialog, seen and never sent.
+    await aside.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(page.locator("dialog[open]")).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog[open]")).toHaveCount(0);
   });
 
   test("Plans forms: a form's page, answering it, and the builder", async ({
@@ -1074,6 +1086,13 @@ test.describe("narrow web", () => {
       page.getByRole("button", { name: "Back to people" }),
     ).toBeFocused();
     await expectNoViolations(page);
+
+    // A plan carol invited alice to: its preview, with Join and Decline.
+    await page.getByRole("button", { name: "Back to people" }).click();
+    await page.getByRole("button", { name: "Back to plans" }).click();
+    await page.getByRole("button", { name: "Kanangra Walls loop" }).click();
+    await expect(page.getByRole("button", { name: "Decline" })).toBeVisible();
+    await expectNoViolations(page);
   });
 
   test("the tab bar and its More menu", async ({ page }) => {
@@ -1325,6 +1344,23 @@ test.describe("surfaces fake auth never shows", () => {
     await expect(
       page.getByRole("button", { name: "Send reset code" }),
     ).toBeVisible();
+    await expectNoViolations(page);
+  });
+
+  test("a plan link opened signed out: sign-up first, saying why", async ({
+    page,
+  }) => {
+    // The token is held, never sent, until someone signs in, and someone
+    // with a plan link has usually no account yet. Mutations: open on sign
+    // in whatever is pending (useAuth's `firstScreen`), or drop the line.
+    await page.goto(`${SIGN_IN_URL}/#plan-invite=${"c".repeat(43)}`);
+    await expect(page.getByLabel("Confirm password")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByRole("status").filter({ hasText: "A trip invite is waiting" }),
+    ).toBeVisible();
+    await expect(page).not.toHaveURL(/plan-invite/);
     await expectNoViolations(page);
   });
 

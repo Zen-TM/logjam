@@ -49,9 +49,8 @@ export default function PlansPanel({
   loaded: boolean;
   error: string | null;
   onRefetch: () => void;
-  /** Open a plan's page. An invited row opens it too, which 404s for now:
-   *  its preview page comes with the people PR (interim on feat/plans). */
-  onOpenPlan: (id: string) => void;
+  /** Open a plan's page; an invited row opens its preview. */
+  onOpenPlan: (id: string, invited: boolean) => void;
 }) {
   const toast = useToast();
   const [bucket, setBucket] = useState<TripPlanBucket>("upcoming");
@@ -114,7 +113,9 @@ export default function PlansPanel({
         leading={<IconTile icon="plan" hue="var(--hue-plan)" />}
         // A request has nothing to open yet: the plan is the leaders' to show.
         onOpen={
-          plan.status === "requested" ? undefined : () => onOpenPlan(plan.id)
+          plan.status === "requested"
+            ? undefined
+            : () => onOpenPlan(plan.id, plan.status === "invited")
         }
         trailing={
           <>
@@ -151,7 +152,7 @@ export default function PlansPanel({
         footer={
           plan.status === "invited" ? (
             <>
-              <Button compact onClick={() => onOpenPlan(plan.id)}>
+              <Button compact onClick={() => onOpenPlan(plan.id, true)}>
                 {copy.open}
               </Button>
               <Button
@@ -248,7 +249,7 @@ export default function PlansPanel({
           const made = await createPlan(values);
           setCreating(false);
           onRefetch();
-          onOpenPlan(made.id);
+          onOpenPlan(made.id, false);
         }}
       />
     </div>

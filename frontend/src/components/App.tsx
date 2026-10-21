@@ -98,6 +98,9 @@ import type { WayVerbId } from "./sidebar/panels/wayActions";
 import FriendInviteDialog from "./dialogs/FriendInviteDialog";
 import PlansPanel from "./plans/PlansPanel";
 import PlanDetailPanel from "./plans/PlanDetailPanel";
+import PlanInvitedPage from "./plans/PlanInvitedPage";
+import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
+import { opensPreview } from "./plans/plansModel";
 import { usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -111,6 +114,7 @@ import {
   MAP_MEASURE_ICON,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
+  type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -633,6 +637,21 @@ function App() {
     }
     setActivePanel(null);
   }, [activePanel]);
+
+  // The view a plan opens on (a join request opens on People, where it is
+  // answered), and whether it opens as an invite's preview: said by whoever
+  // opens it, since the plans list may not know of an invite yet.
+  const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
+  const [planInvited, setPlanInvited] = useState(false);
+  const openPlan = useCallback(
+    (planId: string, view: TripPlanPageView = "writeUp", invited = false) => {
+      setSelectedPlanId(planId);
+      setPlanView(view);
+      setPlanInvited(invited);
+      setActivePanel("plan-detail");
+    },
+    [],
+  );
 
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
@@ -1703,16 +1722,40 @@ function App() {
               loaded={plansLoaded}
               error={plansError}
               onRefetch={refetchPlans}
-              onOpenPlan={(id) => {
-                setSelectedPlanId(id);
-                setActivePanel("plan-detail");
-              }}
+              onOpenPlan={(id, invited) => openPlan(id, "writeUp", invited)}
             />
           }
+          onOpenPlan={(target) => {
+            refetchPlans();
+            openPlan(target.planId, target.view, target.invited);
+          }}
           planDetail={
-            selectedPlanId ? (
+            selectedPlanId &&
+            opensPreview(
+              planInvited,
+              plans.find((plan) => plan.id === selectedPlanId)?.status,
+            ) ? (
+              <PlanInvitedPage
+                key={selectedPlanId}
+                planId={selectedPlanId}
+                onBack={() => {
+                  setSelectedPlanId(null);
+                  setActivePanel("plans");
+                }}
+                onJoined={() => {
+                  refetchPlans();
+                  setPlanInvited(false);
+                }}
+                onDeclined={() => {
+                  refetchPlans();
+                  setSelectedPlanId(null);
+                  setActivePanel("plans");
+                }}
+              />
+            ) : selectedPlanId ? (
               <PlanDetailPanel
                 myUserId={currentUser?.id ?? null}
+                initialView={planView}
                 key={selectedPlanId}
                 planId={selectedPlanId}
                 onBack={() => {
@@ -2023,6 +2066,17 @@ function App() {
         mapView={mapCenter}
       />
 
+      <PlanInviteLinkDialog
+        enabled={loadsUserData}
+        onOpenPlan={(id, invited) => {
+          refetchPlans();
+          openPlan(id, "writeUp", invited);
+        }}
+        onShowPlans={() => {
+          refetchPlans();
+          handlePanelChange("plans");
+        }}
+      />
       <FriendInviteDialog
         enabled={loadsUserData}
         onFriended={() => {

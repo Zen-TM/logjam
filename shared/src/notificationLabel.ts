@@ -214,6 +214,7 @@ export type NotificationKind =
   | "topo"
   | "export"
   | "geoPdf"
+  | "plan"
   | "problem";
 
 /**
@@ -249,6 +250,12 @@ export function notificationKind(n: TNotification): NotificationKind {
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";
+    case "plan_invited":
+    case "plan_join_request":
+    case "plan_join_approved":
+    case "plan_member_joined":
+    case "plan_access_ended":
+      return "plan";
     default:
       return "people";
   }
@@ -265,6 +272,33 @@ export function notificationKind(n: TNotification): NotificationKind {
 export function notificationPlaceId(n: TNotification): string | null {
   const placeId = n.payload.placeId;
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
+}
+
+/** Where a plan notification opens: its plan, on People for a join request
+ *  (where it is answered), and as a preview for an invite (the reader is not
+ *  in the plan yet). */
+export type NotificationPlanTarget = {
+  planId: string;
+  view?: "people";
+  invited: boolean;
+};
+
+/** The plan this notification is about, if any. An id only, resolved
+ *  against the authed API, which 404s a plan the reader is no longer in. */
+export function notificationPlanTarget(
+  n: TNotification,
+): NotificationPlanTarget | null {
+  const planId = n.payload.planId;
+  if (
+    !n.type.startsWith("plan_") ||
+    n.type === "plan_access_ended" ||
+    typeof planId !== "string" ||
+    planId.length === 0
+  )
+    return null;
+  return n.type === "plan_join_request"
+    ? { planId, view: "people", invited: false }
+    : { planId, invited: n.type === "plan_invited" };
 }
 
 // ── The list: its cap, order and day grouping ────────────────────────────────

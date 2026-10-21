@@ -19,8 +19,8 @@ import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
 import SignInTerrain from "./SignInTerrain";
 import useSignInArea from "./useSignInArea";
-import { FRIENDS, NSW_5M } from "@logjam/shared";
-import { pendingFriendInvite } from "../pendingFriendInvite";
+import { FRIENDS, NSW_5M, TRIP_PLAN_JOIN } from "@logjam/shared";
+import { friendInvite, planInvite } from "../pendingInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import {
@@ -395,9 +395,14 @@ function SignIn({
         <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
           <Intro />
-          {pendingFriendInvite() && (
+          {friendInvite.pending() && (
             <p className={classes.successBanner} role="status">
               {FRIENDS.copy.inviteSignIn}
+            </p>
+          )}
+          {planInvite.pending() && (
+            <p className={classes.successBanner} role="status">
+              {TRIP_PLAN_JOIN.copy.signIn}
             </p>
           )}
           <TextField
@@ -495,9 +500,14 @@ function SignIn({
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
         <Intro />
-        {pendingFriendInvite() && (
+        {friendInvite.pending() && (
           <p className={classes.successBanner} role="status">
             {FRIENDS.copy.inviteSignIn}
+          </p>
+        )}
+        {planInvite.pending() && (
+          <p className={classes.successBanner} role="status">
+            {TRIP_PLAN_JOIN.copy.signIn}
           </p>
         )}
         {resetSuccess && (

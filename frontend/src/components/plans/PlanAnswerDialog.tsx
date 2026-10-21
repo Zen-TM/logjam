@@ -156,8 +156,7 @@ export function PlanFormFields({
   draft,
   onChange,
 }: {
-  form: Pick<TripPlanFormView, "title" | "questions" | "visibleTo"> &
-    Partial<Pick<TripPlanFormView, "preset">>;
+  form: Pick<TripPlanFormView, "title" | "preset" | "questions" | "visibleTo">;
   draft: AnswerDraft;
   onChange: (next: AnswerDraft) => void;
 }) {

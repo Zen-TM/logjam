@@ -558,6 +558,11 @@ export const TRIP_PLAN_JOIN = {
   },
 } as const satisfies ScreenContract;
 
+/** The join dialog's title. */
+export function tripPlanJoinTitle(planName: string): string {
+  return `Join ${planName}`;
+}
+
 /** A leader inviting people: by username, or by a link, which they can turn
  *  off. A step inside the plan page's People. */
 export const TRIP_PLAN_INVITE = {

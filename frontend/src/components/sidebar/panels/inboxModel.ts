@@ -1,4 +1,9 @@
-import { notificationPlaceId, type TNotification } from "@logjam/shared";
+import {
+  notificationPlaceId,
+  notificationPlanTarget,
+  type NotificationPlanTarget,
+  type TNotification,
+} from "@logjam/shared";
 import type { MapsView, PanelId } from "../panels";
 
 /**
@@ -12,6 +17,7 @@ import type { MapsView, PanelId } from "../panels";
  */
 export type InboxDestination =
   | { kind: "place"; label: string; placeId: string }
+  | { kind: "plan"; label: string; target: NotificationPlanTarget }
   | { kind: "page"; label: string; panel: PanelId; mapsView?: MapsView };
 
 const LIDAR: InboxDestination = {
@@ -30,6 +36,8 @@ const GEOPDFS: InboxDestination = {
 export function inboxDestination(n: TNotification): InboxDestination | null {
   const placeId = notificationPlaceId(n);
   if (placeId) return { kind: "place", label: "Open place", placeId };
+  const plan = notificationPlanTarget(n);
+  if (plan) return { kind: "plan", label: "Open plan", target: plan };
   const failed = n.payload.status === "failed";
   switch (n.type) {
     case "friend_request":
