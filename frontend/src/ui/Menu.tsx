@@ -30,6 +30,10 @@ export type MenuItem = {
   /** The item's accessible name when it must say more than `label`. */
   accessibleLabel?: string;
   disabled?: boolean;
+  /** Offered but not yet runnable, and why (shared/DESIGN.md §5): the item
+   *  stays in the arrow keys' path, says the reason beside its label and in
+   *  its name, and selecting it does nothing. */
+  disabledReason?: string;
 };
 
 export type MenuEntry = MenuItem | { id: string; separator: true };
@@ -180,6 +184,7 @@ export function Menu({
               />
             );
           const index = items.indexOf(entry);
+          const reason = entry.disabledReason;
           return (
             <button
               key={entry.id}
@@ -189,12 +194,17 @@ export function Menu({
               type="button"
               role="menuitem"
               tabIndex={-1}
-              aria-label={entry.accessibleLabel}
+              aria-label={
+                entry.accessibleLabel ??
+                (reason ? `${entry.label}, ${reason}` : undefined)
+              }
               disabled={entry.disabled}
+              aria-disabled={reason ? true : undefined}
               className={[classes.item, entry.danger && classes.danger]
                 .filter(Boolean)
                 .join(" ")}
               onClick={() => {
+                if (reason) return;
                 close();
                 entry.onSelect();
               }}
@@ -203,6 +213,7 @@ export function Menu({
                 <Icon idea={entry.icon} size={16} className={classes.glyph} />
               )}
               <span className={classes.label}>{entry.label}</span>
+              {reason && <span className={classes.hint}>{reason}</span>}
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
               {entry.badge != null && entry.badge > 0 && (
                 <span className={classes.badge} aria-hidden>

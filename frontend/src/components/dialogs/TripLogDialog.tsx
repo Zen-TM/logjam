@@ -17,8 +17,8 @@ import {
   todayDateKey,
   tripPrefillFromTrack,
   TRIP_TYPE_SUGGESTIONS,
+  type tripPlanTripLogPrefill,
   tripFieldDefs,
-  tripTypeLabel,
   type MediaItem,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
@@ -49,7 +49,7 @@ import {
 import MediaUpload from "../media/MediaUpload";
 import { generateThumbnail, resolveMediaType } from "../media/mediaFiles";
 import MediaGallery from "../media/MediaGallery";
-import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
+import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import {
   Button,
   ChipPicker,
@@ -100,18 +100,6 @@ function formatDraftSavedAt(iso: string): string {
   });
 }
 
-// Case-insensitive dedupe that preserves the casing of the first occurrence —
-// used to union the built-in TRIP_TYPE_SUGGESTIONS with whatever casing the
-// user has already typed into their own trip history.
-function dedupeTypesPreserveCase(values: string[]): string[] {
-  const seen = new Map<string, string>();
-  for (const v of values) {
-    const key = v.toLowerCase();
-    if (!seen.has(key)) seen.set(key, v);
-  }
-  return Array.from(seen.values());
-}
-
 /**
  * A recorded track to log a trip FROM: the form opens on the track's day, with
  * its place linked and the track already in the Tracks section.
@@ -124,6 +112,10 @@ export type TripLogTrack = {
   /** The track's place, if it is on one the user owns. */
   placeId: string | null;
 };
+
+/** What a shortcut fills the trip form with ("Start a trip log from this
+ *  plan"); a missing date is today. */
+export type TripLogPrefill = ReturnType<typeof tripPlanTripLogPrefill>;
 
 /**
  * Log or edit a trip — one form for both, because the fields are identical and
@@ -141,6 +133,7 @@ function TripLogDialog({
   places,
   defaultPlaceId = null,
   fromTrack = null,
+  prefill = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -158,6 +151,9 @@ function TripLogDialog({
   defaultPlaceId?: string | null;
   // Create-mode only: log the trip from this track (`TripLogTrack`).
   fromTrack?: TripLogTrack | null;
+  // Create-mode only: a shortcut's values, as "Start a trip log from this
+  // plan" hands them over (shared/DESIGN.md §10: it opens the real form).
+  prefill?: TripLogPrefill | null;
   tripLog?: TTripLog;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -385,8 +381,8 @@ function TripLogDialog({
       const fromTrackPrefill = fromTrack
         ? tripPrefillFromTrack(fromTrack)
         : null;
-      initialDate = fromTrackPrefill?.date ?? todayDateKey();
-      initialNotes = "";
+      initialDate = prefill?.date ?? fromTrackPrefill?.date ?? todayDateKey();
+      initialNotes = prefill?.notes ?? "";
       initialSelectedPlaceIds = fromTrackPrefill
         ? fromTrackPrefill.placeIds.filter((id) =>
             places.some((place) => place.id === id),
@@ -394,9 +390,9 @@ function TripLogDialog({
         : defaultPlaceId
           ? [defaultPlaceId]
           : [];
-      initialDisplayNameInput = "";
+      initialDisplayNameInput = prefill?.displayName ?? "";
       initialSelectedTypes = enforceCanyoningTag(
-        [],
+        prefill?.types ?? [],
         linksCanyon(placeTypeIdsFor(initialSelectedPlaceIds)),
       );
       initialFieldValues = {};
@@ -834,32 +830,14 @@ function TripLogDialog({
   // The vocabulary in a stable order — seeds, then the user's history, then
   // types added here — each shown in the casing the SELECTION uses, so a picked
   // "Canyoning" lights the seeded "canyoning" chip instead of adding a second.
-  const typeOptions = useMemo(() => {
-    const vocabulary = dedupeTypesPreserveCase([
-      ...TRIP_TYPE_SUGGESTIONS,
-      ...existingTripTypes,
-      ...addedTypes,
-    ]);
-    const values = vocabulary.map(
-      (type) =>
-        selectedTypes.find(
-          (picked) => picked.toLowerCase() === type.toLowerCase(),
-        ) ?? type,
-    );
-    for (const picked of selectedTypes) {
-      if (!values.some((value) => value.toLowerCase() === picked.toLowerCase()))
-        values.push(picked);
-    }
-    return values.map((value) => {
-      const look = tripTypeLook(value);
-      return {
-        value,
-        label: tripTypeLabel(value),
-        icon: look.icon,
-        hue: look.hue,
-      };
-    });
-  }, [existingTripTypes, addedTypes, selectedTypes]);
+  const typeOptions = useMemo(
+    () =>
+      tripTypeOptions(
+        [...TRIP_TYPE_SUGGESTIONS, ...existingTripTypes, ...addedTypes],
+        selectedTypes,
+      ),
+    [existingTripTypes, addedTypes, selectedTypes],
+  );
 
   // The canyoning tag is locked (shown, not removable) while a place is linked
   // — the API re-adds it on save, so offering to remove it would be a lie.

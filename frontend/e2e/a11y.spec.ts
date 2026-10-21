@@ -152,6 +152,45 @@ test.describe("desktop", () => {
     );
   });
 
+  test("Plans: the list, a plan's page and its views", async ({ page }) => {
+    await openApp(page);
+    const aside = page.locator("aside");
+    await page.getByRole("button", { name: /^Plans/ }).click();
+    await expect(aside.getByRole("radio", { name: /^Upcoming/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
+
+    // The one form for a plan's name, dates and types. Seen, never sent.
+    await aside.getByRole("button", { name: "New plan" }).first().click();
+    const newPlan = page.locator("dialog[open]");
+    await expect(newPlan.getByRole("textbox", { name: "Name" })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(newPlan).toHaveCount(0);
+
+    // The seeded plan alice leads: hero verbs by role, then four views.
+    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await expect(aside.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    // A section's form: its title takes focus; seen, never sent.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add a section" }).click();
+    const section = page.locator("dialog[open]");
+    await expect(section.getByRole("textbox", { name: "Title" })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(section).toHaveCount(0);
+    for (const view of [/^Map/, /^Forms/, /^People/]) {
+      await aside.getByRole("radio", { name: view }).click();
+      await expectNoViolations(page, "aside");
+    }
+    await aside.getByRole("button", { name: "Plan actions" }).click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+  });
+
   test("Account, Settings and the three lists it keeps", async ({ page }) => {
     await openApp(page);
     const aside = page.locator("aside");
@@ -941,6 +980,18 @@ test.describe("ghost gum", () => {
 
 test.describe("narrow web", () => {
   test.use({ viewport: { width: 390, height: 844 } });
+
+  test("Plans at phone width: the list and a plan's page", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: /^More/ }).click();
+    await page.getByRole("menuitem", { name: /^Plans/ }).click();
+    await expect(page.getByRole("radio", { name: /^Upcoming/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await expect(page.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
+    await expectNoViolations(page);
+  });
 
   test("the tab bar and its More menu", async ({ page }) => {
     await openApp(page);

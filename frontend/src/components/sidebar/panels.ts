@@ -1,9 +1,9 @@
-import { MAP_MEASURE } from "@logjam/shared";
+import { MAP_MEASURE, TRIP_PLANS_LIST } from "@logjam/shared";
 
 /**
  * The pages of Logjam Web. One per question a user arrives with:
  * Places · Logs (and Stats) · Ways (routes, tracks, imports) · Maps (GeoPDFs,
- * LiDAR topos) · Friends, then Inbox · Account · Settings. What is on the map
+ * LiDAR topos) · Plans · Friends, then Inbox · Account · Settings. What is on the map
  * is not a page: it is the Layers control over the map.
  */
 export type PanelId =
@@ -11,6 +11,7 @@ export type PanelId =
   | "logs"
   | "ways"
   | "maps"
+  | "plans"
   | "friends"
   | "inbox"
   | "account"
@@ -19,6 +20,7 @@ export type PanelId =
   | "place-detail"
   | "trip-detail"
   | "way-detail"
+  | "plan-detail"
   // The route tool, as a page rather than a card over the map: the map is the
   // canvas and nothing should float on it while a line is being drawn.
   | "way-draw"
@@ -43,6 +45,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   logs: "Logs",
   ways: "Ways",
   maps: "Maps",
+  plans: TRIP_PLANS_LIST.title,
   friends: "Friends",
   inbox: "Inbox",
   account: "Account",
@@ -50,6 +53,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   "place-detail": "Place",
   "trip-detail": "Trip",
   "way-detail": "Way",
+  "plan-detail": "Plan",
   "way-draw": "Draw a route",
   measure: MAP_MEASURE.title,
 };

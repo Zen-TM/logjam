@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { FriendShareRow } from "./sharing.js";
+import { type FriendShareRow, untitledJobTitle } from "./sharing.js";
 
 import {
   buildShareCards,
@@ -53,6 +53,8 @@ describe("buildShareCards", () => {
       friendName: FRIEND,
     });
     expect(card.title).toBe("Untitled topo");
+    // A plan's list names an untitled GeoPDF the same way.
+    expect(untitledJobTitle("geoPdfJob")).toBe("Untitled GeoPDF");
   });
 
   // My own grants: there is nothing to copy (it is already mine) and nothing to
