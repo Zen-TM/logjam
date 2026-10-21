@@ -187,7 +187,8 @@ renumber.
 
 - **`Row` is the only list row.** The body opens; the ⋯ acts. Trailing
   order: metric, status, ⋯. A row that asks a question (accept or decline)
-  answers it in its footer.
+  answers it in its footer. A maintainer message's footer says Read
+  message, since nothing else says its row opens one.
 - **What a press does follows from what the thing is.** A thing with a page
   opens it. A thing whose only home is the map (a way, a GeoPDF, a saved map,
   a LiDAR topo) opens on the map. A thing with nowhere to open does its one
@@ -229,7 +230,8 @@ renumber.
 ## 10. Surfaces
 
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
-  for looking.** Never the only way to read something.
+  for looking.** Never the only way to read something, except a maintainer
+  message, which has no page.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title
