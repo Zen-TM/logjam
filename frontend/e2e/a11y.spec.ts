@@ -203,7 +203,9 @@ test.describe("desktop", () => {
     await aside
       .getByRole("button", { name: "Safety contacts", exact: true })
       .click();
-    await expect(aside.getByRole("table")).toBeVisible({ timeout: 15_000 });
+    await expect(
+      aside.getByRole("region", { name: "Answers" }).getByRole("table"),
+    ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
     // Answering, seen and never sent.
@@ -1031,7 +1033,9 @@ test.describe("narrow web", () => {
     await page
       .getByRole("button", { name: "Safety contacts", exact: true })
       .click();
-    await expect(page.getByRole("table")).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Answers" }).getByRole("table"),
+    ).toBeVisible();
     await expectNoViolations(page);
   });
 
