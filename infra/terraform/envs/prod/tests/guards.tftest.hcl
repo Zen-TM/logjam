@@ -299,3 +299,22 @@ run "api_rate_limit_is_one_plain_ip_rule" {
     error_message = "The API web ACL's rate limit must stay one plain 300 per 5 min per-IP block rule, with no rule scoped down: the CloudFront pricing plan refuses scoped rules."
   }
 }
+
+run "postgres_errors_log_no_row_values" {
+  command = plan
+  plan_options {
+    target = [aws_db_parameter_group.pgaudit]
+  }
+
+  # At the default verbosity, a constraint violation logs a DETAIL line with
+  # the failing row's values ("Failing row contains (...)"), which can carry a
+  # place's name or coordinates into the postgresql log and its WORM sink.
+  # Mutation: drop the log_error_verbosity parameter, or set it to "default"
+  # or "verbose", and this turns red.
+  assert {
+    condition = contains([
+      for p in aws_db_parameter_group.pgaudit.parameter : p.value if p.name == "log_error_verbosity"
+    ], "terse")
+    error_message = "The RDS parameter group must set log_error_verbosity = terse, so Postgres errors never log row values."
+  }
+}
