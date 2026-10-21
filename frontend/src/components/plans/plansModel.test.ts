@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseTripPlanFormCreate,
   TRIP_PLAN_FORM_PRESETS,
+  tripPlanFilesChargedTo,
   type TripPlanFormView,
   type TripPlanItem,
   type TripPlanView,
@@ -12,7 +13,6 @@ import {
   type FormValues,
   addedBy,
   answeredForm,
-  filesChargedTo,
   itemPatch,
   joinAnswers,
   opensPreview,
@@ -373,11 +373,18 @@ describe("what someone going takes or leaves", () => {
     forms: [],
   } as unknown as TripPlanView;
 
-  // Mutation: drop the place media from `planFiles`, and Remove's "Delete
-  // their files instead" leaves tom's photo charged to the leader.
+  // Mutation: drop the place media from shared's `tripPlanFilesChargedTo`,
+  // and Remove's "Delete their files instead" leaves tom's photo charged to
+  // the leader.
   it("prices a person's files, place photos included", () => {
-    expect(filesChargedTo(plan, "tom")).toEqual({ count: 3, bytes: 65000 });
-    expect(filesChargedTo(plan, "mira")).toEqual({ count: 3, bytes: 370 });
+    expect(tripPlanFilesChargedTo(plan, "tom")).toEqual({
+      count: 3,
+      bytes: 65000,
+    });
+    expect(tripPlanFilesChargedTo(plan, "mira")).toEqual({
+      count: 3,
+      bytes: 370,
+    });
   });
 
   // Mutations: drop `+ mine(plan.files).length` from `ways`, or the media

@@ -14,6 +14,7 @@ import {
   TRIP_PLAN_PAGE,
   TRIP_PLAN_JOIN,
   TRIP_PLANS_LIST,
+  tripPlanFilesChargedTo,
   tripPlanGoing,
   tripPlanLetInMessage,
   tripPlanRemovedMessage,
@@ -38,7 +39,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import { approveMember, removeMember, setMemberRole } from "../../plansApi";
 import { useBusyIds } from "../../useBusyIds";
 import { menuEntries } from "./planMenu";
-import { answeredForm, filesChargedTo } from "./plansModel";
+import { answeredForm } from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -125,7 +126,7 @@ export default function PlanPeople({
         : null;
 
   const removingFiles = removing
-    ? filesChargedTo(plan, removing.user.id)
+    ? tripPlanFilesChargedTo(plan, removing.user.id)
     : null;
   const removeCopy = removing
     ? planRemoveConfirm(

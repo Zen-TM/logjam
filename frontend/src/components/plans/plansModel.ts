@@ -298,26 +298,6 @@ export function joinAnswers(
   return { value };
 }
 
-type ChargedFile = { sizeBytes: string; chargedTo: { id: string } | null };
-
-/** Every file in a plan that counts against someone's storage. */
-function planFiles(plan: TripPlanView): ChargedFile[] {
-  return [
-    ...plan.files,
-    ...plan.geoPdfs,
-    ...plan.places.flatMap((place) => place.media),
-  ];
-}
-
-/** The files a person's storage pays for: what a removal moves or deletes. */
-export function filesChargedTo(plan: TripPlanView, userId: string) {
-  const files = planFiles(plan).filter((file) => file.chargedTo?.id === userId);
-  return {
-    count: files.length,
-    bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
-  };
-}
-
 /** What a person added, counted as the leave dialog prices it. */
 export function addedBy(plan: TripPlanView, userId: string) {
   const mine = <T extends { addedBy: { id: string } | null }>(items: T[]) =>

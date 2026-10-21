@@ -7,6 +7,7 @@
 // refused, never made again.
 import { useId, useState } from "react";
 import {
+  limitHint,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
   TRIP_PLAN_SECTION_SUGGESTIONS,
@@ -205,11 +206,10 @@ function SectionForm({
             minRows={8}
             onChange={(event) => set({ body: event.target.value })}
             // A limit shows live (shared/DESIGN.md §11).
-            hint={
-              values.body.length > TRIP_PLAN_SECTION_BODY_MAX_LENGTH * 0.9
-                ? `${values.body.length} of ${TRIP_PLAN_SECTION_BODY_MAX_LENGTH} characters`
-                : undefined
-            }
+            hint={limitHint(
+              values.body.length,
+              TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
+            )}
           />
           {theirs("body") != null && (
             <div className={classes.theirs}>

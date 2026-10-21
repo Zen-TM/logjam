@@ -17,10 +17,12 @@ import {
   planVerbsFor,
   PLAN_ADD_VERBS,
   PLAN_VERBS,
-  PLAN_SECTION_VERBS,
+  planSectionsMoved,
+  planSectionVerbs,
   todayDateKey,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_PAGE,
+  tripPlanCounts,
   tripPlanGoing,
   tripPlanLeaveState,
   tripPlanDatesLine,
@@ -246,17 +248,21 @@ export default function PlanDetailPanel({
   };
 
   const moveSection = (index: number, by: -1 | 1) => {
-    const ids = plan.sections.map((section) => section.id);
-    [ids[index], ids[index + by]] = [ids[index + by], ids[index]];
-    void run(() => reorderSections(plan.id, ids), copy.sectionMoveFailed);
+    const ids = planSectionsMoved(
+      plan.sections.map((section) => section.id),
+      index,
+      by,
+    );
+    if (ids)
+      void run(() => reorderSections(plan.id, ids), copy.sectionMoveFailed);
   };
 
   const sectionVerbs = (index: number) =>
-    planVerbsFor(PLAN_SECTION_VERBS, "web", role, { archived }).filter(
-      (verb) =>
-        (verb.id !== "moveUp" || index > 0) &&
-        (verb.id !== "moveDown" || index < plan.sections.length - 1),
-    );
+    planSectionVerbs("web", role, {
+      archived,
+      index,
+      count: plan.sections.length,
+    });
   const sectionRunners = (
     section: TripPlanSectionView,
     index: number,
@@ -277,11 +283,7 @@ export default function PlanDetailPanel({
   });
   const canBuildForms = addVerbs.some((verb) => verb.id === "form");
 
-  const counts = {
-    places: plan.places.length,
-    ways: plan.routes.length + plan.files.length,
-    maps: plan.geoPdfs.length,
-  };
+  const counts = tripPlanCounts(plan);
 
   const going = tripPlanGoing(plan.members);
   const viewOptions = [
