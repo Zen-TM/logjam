@@ -2,7 +2,11 @@
 // (mobile/DESIGN.md §8). Logjam Web is used at home and reads a plan live, so it has no copy to
 // age, mark changed or download (shared/DESIGN.md §14).
 import type { DateOnly, TripPlanSummary } from "../tripPlans.js";
-import { tripPlanBucket, tripPlansBadgeCount } from "./plans.js";
+import {
+  tripPlanBucket,
+  tripPlansBadgeCount,
+  TRIP_PLANS_LIST,
+} from "./plans.js";
 
 export const TRIP_PLAN_OFFLINE = {
   downloaded: "Downloaded",
@@ -29,5 +33,7 @@ export function tripPlansMoreSubtitle(
     (plan) =>
       plan.status === "active" && tripPlanBucket(plan, today) === "upcoming",
   ).length;
-  return upcoming > 0 ? `${upcoming} upcoming` : "Nothing planned";
+  return upcoming > 0
+    ? `${upcoming} upcoming`
+    : TRIP_PLANS_LIST.copy.nothingPlanned;
 }

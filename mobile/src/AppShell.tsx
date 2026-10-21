@@ -1236,6 +1236,10 @@ export function AppShell({
                   <MoreStack.Screen
                     name="Plan"
                     options={{ headerShown: false }}
+                    // Each plan its own route: a push for plan B tapped on
+                    // plan A's page opens B over A, rather than swapping A's
+                    // params under a screen that still holds A's state.
+                    getId={({ params }) => params.planId}
                   >
                     {({ navigation, route }) => (
                       <PlanScreen
