@@ -42,6 +42,7 @@ import {
   planRemoveConfirm,
   planSelfRoleConfirm,
   tripPlanInviteePill,
+  tripPlanFilesChargedTo,
   tripPlanInviteLinkLine,
 } from "./index.js";
 
@@ -656,5 +657,28 @@ describe("tripPlanCounts", () => {
         geoPdfs: [],
       }),
     ).toEqual({ places: 2, ways: 3, maps: 0 });
+  });
+});
+
+describe("tripPlanFilesChargedTo", () => {
+  // Mutation: leave out place photos. A removal would move storage the
+  // confirm never named.
+  it("counts every file charged to them, photos included", () => {
+    const tom = { id: "tom", username: "tom" };
+    const ann = { id: "ann", username: "ann" };
+    const file = (chargedTo: typeof tom, sizeBytes: string) => ({
+      chargedTo,
+      sizeBytes,
+    });
+    expect(
+      tripPlanFilesChargedTo(
+        {
+          files: [file(tom, "100")],
+          geoPdfs: [file(ann, "50")],
+          places: [{ media: [file(tom, "20"), file(ann, "5")] }],
+        } as never,
+        "tom",
+      ),
+    ).toEqual({ count: 2, bytes: 120 });
   });
 });

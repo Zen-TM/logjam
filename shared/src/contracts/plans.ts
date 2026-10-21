@@ -17,6 +17,7 @@ import {
   type TripPlanMemberStatus,
   type TripPlanRole,
   type TripPlanSummary,
+  type TripPlanView,
 } from "../tripPlans.js";
 import type { ScreenContract } from "./types.js";
 import { todayDateKey } from "../logbook.js";
@@ -820,5 +821,24 @@ export function tripPlanCounts(plan: {
     places: plan.places.length,
     ways: plan.routes.length + plan.files.length,
     maps: plan.geoPdfs.length,
+  };
+}
+
+/**
+ * The files a person's storage pays for in a plan: what removing them moves
+ * to the leader's storage, or deletes (planMembers.ts, `deleteFiles`).
+ */
+export function tripPlanFilesChargedTo(
+  plan: Pick<TripPlanView, "files" | "geoPdfs" | "places">,
+  userId: string,
+): { count: number; bytes: number } {
+  const files = [
+    ...plan.files,
+    ...plan.geoPdfs,
+    ...plan.places.flatMap((place) => place.media),
+  ].filter((file) => file.chargedTo?.id === userId);
+  return {
+    count: files.length,
+    bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
 }

@@ -3,6 +3,10 @@
 // and a write waits for a connection.
 import type {
   TripPlanCreate,
+  TripPlanMemberView,
+  TripPlanRole,
+  TripPlanInviteView,
+  TripPlanMemberStatus,
   TripPlanPatch,
   TripPlanSectionCreate,
   TripPlanSectionPatch,
@@ -61,3 +65,61 @@ export const reorderSections = (planId: string, ids: string[]) =>
   );
 export const deleteSection = (planId: string, sectionId: string) =>
   apiFetch<void>(section(planId, sectionId), { method: "DELETE" });
+
+const member = (planId: string, userId: string) =>
+  `${plan(planId)}/members/${encodeURIComponent(userId)}`;
+
+/** Invite by username: they are invited, and join when they answer. */
+export const inviteMember = (
+  planId: string,
+  username: string,
+  role: TripPlanRole,
+) =>
+  apiFetch<TripPlanMemberView>(`${plan(planId)}/members`, {
+    method: "POST",
+    body: { username, role },
+  });
+export const setMemberRole = (
+  planId: string,
+  userId: string,
+  role: TripPlanRole,
+) =>
+  apiFetch<TripPlanMemberView>(member(planId, userId), {
+    method: "PATCH",
+    body: { role },
+  });
+/** Let in someone who asked with a link. */
+export const approveMember = (planId: string, userId: string) =>
+  apiFetch<TripPlanMemberView>(`${member(planId, userId)}/approve`, {
+    method: "POST",
+  });
+/**
+ * Remove someone going, cancel an invite or turn down a request. `status` is
+ * the one the leader saw: if it has changed since (an invite accepted, a
+ * request let in by another leader), the API answers 409 and removes nobody.
+ * `deleteFiles` deletes the files their storage pays for instead of moving
+ * them to the leader's.
+ */
+export const removeMember = (
+  planId: string,
+  userId: string,
+  status: TripPlanMemberStatus,
+  deleteFiles = false,
+) =>
+  apiFetch<void>(
+    `${member(planId, userId)}?status=${status}${deleteFiles ? "&deleteFiles=true" : ""}`,
+    { method: "DELETE" },
+  );
+
+/** Mint a link. Only this answer carries its token; the list never does
+ *  (api/src/__tests__/planInvites.test.ts). */
+export const createInviteLink = (planId: string) =>
+  apiFetch<{ token: string; expiresAt: string }>(`${plan(planId)}/invites`, {
+    method: "POST",
+  });
+export const getInviteLinks = (planId: string) =>
+  apiFetch<{ invites: TripPlanInviteView[] }>(`${plan(planId)}/invites`);
+export const revokeInviteLink = (planId: string, inviteId: string) =>
+  apiFetch<void>(`${plan(planId)}/invites/${encodeURIComponent(inviteId)}`, {
+    method: "DELETE",
+  });
