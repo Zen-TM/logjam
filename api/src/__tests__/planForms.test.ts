@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { TRIP_PLAN_FORM_PRESETS, TRIP_PLAN_MAX_FORMS } from "@logjam/shared";
+import {
+  TRIP_PLAN_FORM_PRESETS,
+  TRIP_PLAN_MAX_FORMS,
+  TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
+} from "@logjam/shared";
 import prisma from "../services/prisma";
 import {
   API_URL,
@@ -366,6 +370,8 @@ describe("never widening who sees an answer", () => {
       .set(as(ALICE_SUB))
       .send({ visibleTo: { from: "leaders", to: "members" } });
     expect(widen.status).toBe(409);
+    // The sentence Logjam Web's builder shows before Save.
+    expect(widen.body.error).toBe(TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE);
     expect(JSON.stringify((await view(CAROL_SUB)).body)).not.toContain(
       "Bad knee",
     );

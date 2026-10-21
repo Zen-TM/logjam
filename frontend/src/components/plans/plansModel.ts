@@ -3,12 +3,15 @@
 // the value last seen and the new one (shared/DESIGN.md §10).
 import type {
   TripPlanCreate,
+  TripPlanFormCreate,
+  TripPlanFormPatch,
   TripPlanPatch,
   TripPlanSectionPatch,
 } from "@logjam/shared";
 
 export type PlanValues = Required<TripPlanCreate>;
 export type SectionValues = { title: string; body: string };
+export type FormValues = Required<TripPlanFormCreate>;
 
 /** Only the fields that changed, each as a compare-and-set pair. */
 export function planPatch(was: PlanValues, now: PlanValues): TripPlanPatch {
@@ -36,8 +39,21 @@ export function sectionPatch(
   return patch;
 }
 
+/** Key order aside: a form's questions come back from a JSONB column in
+ *  Postgres's key order, not the order the shared parser builds them in. */
+const sorted = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(sorted)
+    : value !== null && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value)
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([key, each]) => [key, sorted(each)]),
+        )
+      : value;
+
 export const same = (a: unknown, b: unknown) =>
-  JSON.stringify(a) === JSON.stringify(b);
+  JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
 /**
  * Whether "In the plan now" shows under `fields`: the user's value differs
@@ -87,4 +103,31 @@ export function adoptTheirs<T extends Record<string, unknown>>(
     if (unit.every((key) => same(values[key], seen[key])))
       for (const key of unit) merged[key] = current[key];
   return { seen: current, values: merged };
+}
+
+/** A form's changed parts; the questions compare as one list, as the API
+ *  compares them. */
+export function formPatch(
+  seen: FormValues,
+  now: FormValues,
+): TripPlanFormPatch {
+  const patch: TripPlanFormPatch = {};
+  if (now.title !== seen.title)
+    patch.title = { from: seen.title, to: now.title };
+  if (!same(now.questions, seen.questions))
+    patch.questions = { from: seen.questions, to: now.questions };
+  if (now.visibleTo !== seen.visibleTo)
+    patch.visibleTo = { from: seen.visibleTo, to: now.visibleTo };
+  if (now.requiredToJoin !== seen.requiredToJoin)
+    patch.requiredToJoin = {
+      from: seen.requiredToJoin,
+      to: now.requiredToJoin,
+    };
+  return patch;
+}
+
+/** A new question's or option's id: stable across edits, unique in its form,
+ *  a slug no plain object already has as a key (`q3f9a…`). */
+export function mintSlug(prefix: "q" | "o"): string {
+  return `${prefix}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }

@@ -2,13 +2,15 @@
 // `TRIP_PLAN_PAGE` and rendered from the one full fetch (GET /plans/:id).
 // Every write refetches it: the plan is shared, and what someone else changed
 // meanwhile is part of the answer. Verbs are `planVerbs.ts`, by role.
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   untitledJobTitle,
+  PLAN_FORM_VERBS,
   planDeleteConfirm,
   planLeaveConfirm,
   planAddVerbLabel,
+  planFormDeleteConfirm,
   planSectionDeleteConfirm,
   planVerbs,
   planVerbsFor,
@@ -16,6 +18,7 @@ import {
   PLAN_VERBS,
   PLAN_SECTION_VERBS,
   todayDateKey,
+  TRIP_PLAN_FORMS,
   TRIP_PLAN_PAGE,
   tripPlanRoleWord,
   tripPlanAddedByLine,
@@ -27,11 +30,12 @@ import {
   tripPlanNotice,
   tripTypeLabel,
   type PlanAddVerbId,
+  type PlanFormVerbId,
   type PlanSectionVerbId,
-  type PlanVerb,
   type PlanVerbId,
   type SectionKeysOn,
   type TripPlanPageView,
+  type TripPlanFormView,
   type TripPlanSectionView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -44,56 +48,41 @@ import {
   IconButton,
   IconTile,
   LoadingState,
+  ListEnd,
   Menu,
   Icon,
   Row,
   SectionHeader,
   StatusPill,
-  type MenuEntry,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import {
   archivePlan,
+  createForm,
   createSection,
+  deleteForm,
   deletePlan,
   deleteSection,
   leavePlan,
+  patchForm,
   patchPlan,
   patchSection,
+  putAnswer,
   reorderSections,
   usePlan,
 } from "../../plansApi";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanSectionDialog from "./PlanSectionDialog";
+import PlanAnswerDialog from "./PlanAnswerDialog";
+import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
+import PlanFormPage from "./PlanFormPage";
+import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
-
-/** A verb list as menu entries, a rule above the first separated one. */
-function menuEntries<Id extends string>(
-  verbs: PlanVerb<Id>[],
-  run: (id: Id) => void,
-): MenuEntry[] {
-  const entries: MenuEntry[] = [];
-  let ruled = false;
-  for (const verb of verbs) {
-    if (verb.separated && !ruled && entries.length > 0) {
-      entries.push({ id: `rule-${verb.id}`, separator: true });
-      ruled = true;
-    }
-    entries.push({
-      id: verb.id,
-      label: verb.label,
-      icon: verb.icon,
-      danger: verb.danger,
-      onSelect: () => run(verb.id),
-      disabledReason: verb.disabledReason,
-    });
-  }
-  return entries;
-}
+const formsCopy = TRIP_PLAN_FORMS.copy;
 
 export default function PlanDetailPanel({
   planId,
@@ -117,9 +106,31 @@ export default function PlanDetailPanel({
   const [confirm, setConfirm] = useState<
     | { kind: "delete" | "leave" }
     | { kind: "section"; section: TripPlanSectionView }
+    | { kind: "form"; form: TripPlanFormView }
     | null
   >(null);
   const [busy, setBusy] = useState(false);
+  // A form's page, one step inside the Forms view; and its two dialogs.
+  const [openFormId, setOpenFormId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Focus follows the form's page: in, onto its back arrow; out, onto the
+  // row that was opened. Both are gone from the page otherwise.
+  const lastOpenedForm = useRef<string | null>(null);
+  const focusSoon = (selector: string) =>
+    requestAnimationFrame(() =>
+      rootRef.current?.querySelector<HTMLElement>(selector)?.focus(),
+    );
+  const openFormPage = (id: string) => {
+    lastOpenedForm.current = id;
+    setOpenFormId(id);
+    focusSoon("header button");
+  };
+  const closeFormPage = () => {
+    setOpenFormId(null);
+    focusSoon(`[data-form-id="${lastOpenedForm.current}"] button`);
+  };
+  const [answering, setAnswering] = useState<string | null>(null);
+  const [building, setBuilding] = useState<{ id: string | null } | null>(null);
 
   if (!view) {
     return (
@@ -190,7 +201,10 @@ export default function PlanDetailPanel({
   const addRunners: Record<PlanAddVerbId, () => void> = {
     section: () => setSectionOpen({ id: null }),
     copy: () => setTab("items"),
-    form: () => setTab("forms"),
+    form: () => {
+      setTab("forms");
+      setBuilding({ id: null });
+    },
     invite: () => setTab("people"),
   };
 
@@ -224,6 +238,7 @@ export default function PlanDetailPanel({
     over,
     ...tripPlanLeaveState(plan),
   });
+  const canBuildForms = addVerbs.some((verb) => verb.id === "form");
 
   const counts = {
     places: plan.places.length,
@@ -295,6 +310,13 @@ export default function PlanDetailPanel({
     },
   ];
 
+  const formVerbs = planVerbsFor(PLAN_FORM_VERBS, "web", role, { archived });
+  const formRunners = (
+    form: TripPlanFormView,
+  ): Record<PlanFormVerbId, () => void> => ({
+    edit: () => setBuilding({ id: form.id }),
+    delete: () => setConfirm({ kind: "form", form }),
+  });
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_PAGE, "web">,
     ReactNode
@@ -352,7 +374,7 @@ export default function PlanDetailPanel({
           </Button>
         )}
         {notice.kind === "answer" && (
-          <Button compact onClick={() => setTab("forms")}>
+          <Button compact onClick={() => setAnswering(notice.formId)}>
             {copy.answer}
           </Button>
         )}
@@ -462,6 +484,17 @@ export default function PlanDetailPanel({
           <EmptyState
             icon="form"
             title={role === "leader" ? copy.formsEmptyLeader : copy.formsEmpty}
+            actions={
+              canBuildForms && (
+                <Button
+                  variant="filled"
+                  icon="add"
+                  onClick={() => setBuilding({ id: null })}
+                >
+                  {planAddVerbLabel("form")}
+                </Button>
+              )
+            }
           />
         ) : (
           plan.forms.map((form) => (
@@ -474,17 +507,50 @@ export default function PlanDetailPanel({
                   : copy.seenByMembers
               }
               leading={<IconTile icon="form" hue="var(--hue-plan)" />}
-              // One status: what the caller owes, else what the form asks.
+              data-form-id={form.id}
+              onOpen={() => openFormPage(form.id)}
+              // One status: what the caller owes, else what the form asks;
+              // then the form's own verbs, as on its page.
               trailing={
-                form.requiredToJoin &&
-                (form.myAnswer ? (
-                  <StatusPill label={copy.pillRequired} tone="outline" />
-                ) : (
-                  <StatusPill label={copy.pillNotAnswered} tone="warning" />
-                ))
+                <>
+                  {form.requiredToJoin &&
+                    (form.myAnswer ? (
+                      <StatusPill label={copy.pillRequired} tone="outline" />
+                    ) : (
+                      <StatusPill label={copy.pillNotAnswered} tone="warning" />
+                    ))}
+                  {formVerbs.length > 0 && (
+                    <Menu
+                      label={`${formsCopy.actions}: ${form.title}`}
+                      title={form.title}
+                      placement="right-start"
+                      entries={menuEntries(formVerbs, (id) =>
+                        formRunners(form)[id](),
+                      )}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon="overflow"
+                          label={`${formsCopy.actions}: ${form.title}`}
+                        />
+                      )}
+                    />
+                  )}
+                </>
               }
             />
           ))
+        )}
+        {plan.forms.length > 0 && canBuildForms && (
+          <ListEnd>
+            <Button
+              variant="filled"
+              icon="add"
+              onClick={() => setBuilding({ id: null })}
+            >
+              {planAddVerbLabel("form")}
+            </Button>
+          </ListEnd>
         )}
       </div>
     ),
@@ -519,11 +585,84 @@ export default function PlanDetailPanel({
       ? planSectionDeleteConfirm(confirm.section.title)
       : null;
 
+  const openForm = plan.forms.find((form) => form.id === openFormId);
+  const answeringForm = plan.forms.find((form) => form.id === answering);
+  const buildingForm =
+    building?.id != null
+      ? plan.forms.find((form) => form.id === building.id)
+      : undefined;
+  const formCopy =
+    confirm?.kind === "form" ? planFormDeleteConfirm(confirm.form) : null;
+
   return (
-    <div className={classes.root}>
-      {contractSectionKeys(TRIP_PLAN_PAGE, "web").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+    <div ref={rootRef} className={classes.root}>
+      {openForm ? (
+        <PlanFormPage
+          form={openForm}
+          role={role}
+          archived={archived}
+          members={plan.members}
+          onBack={closeFormPage}
+          onAnswer={() => setAnswering(openForm.id)}
+          onVerb={(id) => formRunners(openForm)[id]()}
+        />
+      ) : (
+        contractSectionKeys(TRIP_PLAN_PAGE, "web").map((key) => (
+          <Fragment key={key}>{sections[key]}</Fragment>
+        ))
+      )}
+
+      {answeringForm && (
+        <PlanAnswerDialog
+          open
+          form={answeringForm}
+          // Quiet: the dialog has said the 409 above its submit.
+          onStale={() => refetch({ quiet: true })}
+          onClose={() => setAnswering(null)}
+          onSubmit={async (answers) => {
+            await putAnswer(plan.id, answeringForm.id, {
+              answers,
+              visibleTo: answeringForm.visibleTo,
+              formUpdatedAt: answeringForm.updatedAt,
+            });
+            setAnswering(null);
+            toast.success(formsCopy.saved);
+            refetch();
+          }}
+        />
+      )}
+      <PlanFormBuilderDialog
+        open={building != null}
+        form={buildingForm}
+        onStale={() => refetch({ quiet: true })}
+        onClose={() => setBuilding(null)}
+        onSubmit={async (values, patch) => {
+          if (buildingForm) await patchForm(plan.id, buildingForm.id, patch);
+          else await createForm(plan.id, values);
+          setBuilding(null);
+          refetch();
+        }}
+      />
+      <ConfirmDialog
+        open={formCopy != null}
+        title={formCopy?.confirmTitle}
+        message={formCopy?.confirmBody}
+        confirmLabel={formCopy?.confirmLabel}
+        busy={busy}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => {
+          if (confirm?.kind !== "form") return;
+          const id = confirm.form.id;
+          void run(
+            () => deleteForm(plan.id, id),
+            formsCopy.deleteFailed,
+            formsCopy.deleted,
+          ).then((done) => {
+            setConfirm(null);
+            if (done) closeFormPage();
+          });
+        }}
+      />
 
       <PlanDetailsDialog
         open={editing}

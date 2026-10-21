@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
+  type TripPlanAnswerPut,
+  type TripPlanAnswerView,
   type TripPlanCreate,
+  type TripPlanFormCreate,
+  type TripPlanFormPatch,
+  type TripPlanFormView,
   type TripPlanPatch,
   type TripPlanSectionCreate,
   type TripPlanSectionPatch,
@@ -60,6 +65,29 @@ export const reorderSections = (planId: string, ids: string[]) =>
 export const deleteSection = (planId: string, sectionId: string) =>
   apiFetch<void>(`${plan(planId)}/sections/${encodeURIComponent(sectionId)}`, {
     method: "DELETE",
+  });
+
+const form = (planId: string, formId: string) =>
+  `${plan(planId)}/forms/${encodeURIComponent(formId)}`;
+
+export const createForm = (planId: string, body: TripPlanFormCreate) =>
+  apiFetch<TripPlanFormView>(`${plan(planId)}/forms`, { method: "POST", body });
+export const patchForm = (
+  planId: string,
+  formId: string,
+  body: TripPlanFormPatch,
+) =>
+  apiFetch<TripPlanFormView>(form(planId, formId), { method: "PATCH", body });
+export const deleteForm = (planId: string, formId: string) =>
+  apiFetch<void>(form(planId, formId), { method: "DELETE" });
+export const putAnswer = (
+  planId: string,
+  formId: string,
+  body: TripPlanAnswerPut,
+) =>
+  apiFetch<TripPlanAnswerView>(`${form(planId, formId)}/answers/me`, {
+    method: "PUT",
+    body,
   });
 
 /** GET /plans: the cheap list, for the Plans page and the nav badge. */

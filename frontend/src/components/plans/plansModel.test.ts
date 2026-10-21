@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { parseTripPlanFormCreate } from "@logjam/shared";
 import {
   adoptTheirs,
+  formPatch,
+  type FormValues,
   PLAN_FIELD_GROUPS,
   planPatch,
   sectionPatch,
@@ -101,5 +104,60 @@ describe("a form refetched under the user", () => {
     // Untouched by the user, the field took theirs: nothing to show.
     const untouched = adoptTheirs(opened, opened, theirs).values;
     expect(theirsChanged(opened, theirs, untouched, ["name"])).toBe(false);
+  });
+});
+
+describe("a form edit", () => {
+  // As Postgres serves a JSONB column: keys sorted by length, then bytes.
+  const served: FormValues = {
+    title: "Carpooling",
+    preset: "carpool",
+    visibleTo: "members",
+    requiredToJoin: false,
+    questions: [
+      {
+        id: "how",
+        help: "Pick one.",
+        kind: "choice",
+        label: "How are you getting there?",
+        options: [
+          { id: "drive", label: "Driving" },
+          { id: "lift", label: "Need a lift" },
+        ],
+        required: true,
+      },
+    ],
+  };
+  const parsed = (values: FormValues) => {
+    const result = parseTripPlanFormCreate(values);
+    if (!("value" in result)) throw new Error("the fixture must parse");
+    return { ...values, ...result.value } as FormValues;
+  };
+
+  // Mutation: compare the questions with a raw `JSON.stringify`, and Save
+  // with nothing changed writes them, so everyone's answer dialog gets a 409.
+  it("sends nothing for a served form saved unchanged, and only the title for a title edit", () => {
+    expect(formPatch(served, parsed(served))).toEqual({});
+    expect(formPatch(served, parsed({ ...served, title: "Lifts" }))).toEqual({
+      title: { from: "Carpooling", to: "Lifts" },
+    });
+  });
+
+  // Mutation: re-base `seen` on theirs but keep every value as it was, and
+  // the save sends the old title and questions back over the other leader's.
+  it("takes another leader's rename and question when the leader changed only who sees answers", () => {
+    const mine = { ...served, visibleTo: "leaders" as const };
+    const theirs: FormValues = {
+      ...served,
+      title: "Lifts",
+      questions: [
+        ...served.questions,
+        { id: "seats", kind: "number", label: "Spare seats", required: false },
+      ],
+    };
+    const { seen, values } = adoptTheirs(served, mine, theirs);
+    expect(formPatch(seen, values)).toEqual({
+      visibleTo: { from: "members", to: "leaders" },
+    });
   });
 });
