@@ -16,10 +16,11 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
-import { archivePlan, inviteMember } from "../../plansApi";
+import { archivePlan, inviteMember, setMemberRole } from "../../plansApi";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanInvitePage from "./PlanInvitePage";
+import PlanPeople from "./PlanPeople";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
@@ -68,13 +69,17 @@ vi.mock("../../plansApi", async (importOriginal) => ({
   }),
   archivePlan: vi.fn(),
   inviteMember: vi.fn(),
+  setMemberRole: vi.fn(async () => {}),
   getInviteLinks: vi.fn(async () => []),
 }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   searchUsers: async () => ({
-    data: [{ id: "u3", username: "carol" }],
-    total: 1,
+    data: [
+      { id: "u3", username: "carol" },
+      { id: "u4", username: "dave" },
+    ],
+    total: 2,
   }),
 }));
 
@@ -315,14 +320,76 @@ describe("Invite people after a refused invite", () => {
       }),
       { target: { value: "car" } },
     );
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: TRIP_PLAN_INVITE.copy.inviteSend,
-      }),
-    );
+    const [carol] = await screen.findAllByRole("button", {
+      name: TRIP_PLAN_INVITE.copy.inviteSend,
+    });
+    fireEvent.click(carol);
     await waitFor(() =>
       expect(onInvited).toHaveBeenCalledWith({ quiet: true }),
     );
     expect(toast.error).toHaveBeenCalled();
+  });
+
+  // Mutation: one busy slot cleared by whichever write ends first, and
+  // carol's Invite is live again while hers is still on its way.
+  it("keeps one invite busy while another finishes", async () => {
+    let send!: () => void;
+    vi.mocked(inviteMember)
+      .mockImplementationOnce(
+        () => new Promise((done) => (send = () => done(undefined as never))),
+      )
+      .mockResolvedValueOnce(undefined as never);
+    render(
+      <PlanInvitePage plan={plan} onBack={() => {}} onInvited={() => {}} />,
+    );
+    fireEvent.change(
+      screen.getByRole("searchbox", {
+        name: TRIP_PLAN_INVITE.copy.searchField,
+      }),
+      { target: { value: "car" } },
+    );
+    const [carol, dave] = await screen.findAllByRole("button", {
+      name: TRIP_PLAN_INVITE.copy.inviteSend,
+    });
+    fireEvent.click(carol);
+    fireEvent.click(dave);
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    await waitFor(() => expect(dave.getAttribute("aria-busy")).toBeNull());
+    expect(carol.getAttribute("aria-busy")).toBe("true");
+    send();
+    await waitFor(() => expect(carol.getAttribute("aria-busy")).toBeNull());
+  });
+});
+
+describe("a leader stepping down on their own row", () => {
+  // Mutation: run a self role change at once in PlanPeople, and one tap
+  // makes alice a member with no way back by herself.
+  it("asks first, naming who can make them a leader again", async () => {
+    const twoLeaders = {
+      ...plan,
+      members: plan.members.map((member) => ({
+        ...member,
+        role: "leader" as const,
+      })),
+    };
+    render(
+      <PlanPeople
+        plan={twoLeaders}
+        myUserId="u1"
+        onChanged={() => {}}
+        onInvite={() => {}}
+        onSeeAnswers={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Actions for alice" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Make a member/ }));
+    expect(setMemberRole).not.toHaveBeenCalled();
+    expect(screen.getByText(/The leader bob can\./)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make yourself a member" }),
+    );
+    await waitFor(() =>
+      expect(setMemberRole).toHaveBeenCalledWith("p1", "u1", "member"),
+    );
   });
 });

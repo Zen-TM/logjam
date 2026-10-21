@@ -8,6 +8,7 @@ import {
   planAddVerbLabel,
   planMemberVerbs,
   planRemoveConfirm,
+  planSelfRoleConfirm,
   planTurnDownConfirm,
   PLAN_ROLE_OF_VERB,
   TRIP_PLAN_PAGE,
@@ -35,6 +36,7 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { approveMember, removeMember, setMemberRole } from "../../plansApi";
+import { useBusyIds } from "../../useBusyIds";
 import { menuEntries } from "./planMenu";
 import { answeredForm, filesChargedTo } from "./plansModel";
 import classes from "./plans.module.css";
@@ -57,8 +59,10 @@ export default function PlanPeople({
   onSeeAnswers: (formId: string) => void;
 }) {
   const toast = useToast();
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const busy = useBusyIds();
   const [removing, setRemoving] = useState<TripPlanMemberView | null>(null);
+  // Leading no more, chosen on the caller's own row: confirmed first.
+  const [stepping, setStepping] = useState<"editor" | "member" | null>(null);
   const [turningDown, setTurningDown] = useState<TripPlanMemberView | null>(
     null,
   );
@@ -72,7 +76,7 @@ export default function PlanPeople({
     failure: string,
     success?: string,
   ) {
-    setBusyId(id);
+    busy.start(id);
     try {
       await action();
       if (success) toast.success(success);
@@ -82,7 +86,7 @@ export default function PlanPeople({
       toast.error(messageFromError(err, failure));
       onChanged({ quiet: true });
     } finally {
-      setBusyId(null);
+      busy.stop(id);
     }
   }
 
@@ -99,7 +103,9 @@ export default function PlanPeople({
 
   const runVerb = (member: TripPlanMemberView, id: PlanMemberVerbId) => {
     const role = PLAN_ROLE_OF_VERB[id];
-    if (role)
+    if (role && role !== "leader" && member.user.id === myUserId)
+      setStepping(role);
+    else if (role)
       void run(
         member.user.id,
         () => setMemberRole(plan.id, member.user.id, role),
@@ -133,6 +139,16 @@ export default function PlanPeople({
           : null,
       )
     : null;
+  const steppingCopy = stepping
+    ? planSelfRoleConfirm(
+        stepping,
+        going
+          .filter(
+            (member) => member.role === "leader" && member.user.id !== myUserId,
+          )
+          .map((member) => member.user.username),
+      )
+    : null;
   const turnDownCopy = turningDown
     ? planTurnDownConfirm(turningDown.user.username)
     : null;
@@ -156,7 +172,7 @@ export default function PlanPeople({
                         compact
                         variant="filled"
                         icon="accept"
-                        busy={busyId === member.user.id}
+                        busy={busy.isBusy(member.user.id)}
                         onClick={() =>
                           void run(
                             member.user.id,
@@ -291,7 +307,7 @@ export default function PlanPeople({
           </>
         }
         confirmLabel={removeCopy?.confirmLabel}
-        busy={busyId === removing?.user.id}
+        busy={busy.isBusy(removing?.user.id)}
         onClose={() => setRemoving(null)}
         onConfirm={() => {
           if (!removing) return;
@@ -305,12 +321,29 @@ export default function PlanPeople({
         }}
       />
       <ConfirmDialog
+        open={steppingCopy != null}
+        title={steppingCopy?.confirmTitle}
+        message={steppingCopy?.confirmBody}
+        confirmLabel={steppingCopy?.confirmLabel}
+        busy={busy.isBusy(myUserId)}
+        onClose={() => setStepping(null)}
+        onConfirm={() => {
+          if (!stepping || !myUserId) return;
+          const role = stepping;
+          void run(
+            myUserId,
+            () => setMemberRole(plan.id, myUserId, role),
+            copy.roleFailed,
+          ).then(() => setStepping(null));
+        }}
+      />
+      <ConfirmDialog
         open={turnDownCopy != null}
         title={turnDownCopy?.confirmTitle}
         message={turnDownCopy?.confirmBody}
         confirmLabel={turnDownCopy?.confirmLabel}
         confirmColor="primary"
-        busy={busyId === turningDown?.user.id}
+        busy={busy.isBusy(turningDown?.user.id)}
         onClose={() => setTurningDown(null)}
         onConfirm={() => {
           if (!turningDown) return;

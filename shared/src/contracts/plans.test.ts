@@ -39,6 +39,7 @@ import {
   TRIP_PLAN_PRINTED_PRESETS,
   planMemberVerbs,
   planRemoveConfirm,
+  planSelfRoleConfirm,
   tripPlanInviteePill,
   tripPlanInviteLinkLine,
 } from "./index.js";
@@ -584,6 +585,15 @@ describe("a plan's people", () => {
   });
 
   it("prices a removal only when the person has files", () => {
+    expect(planSelfRoleConfirm("member", ["mira", "tom", "sue"])).toEqual({
+      confirmTitle: "Make yourself a member?",
+      confirmBody:
+        "You won't be able to make yourself a leader again. The leaders mira, tom and sue can.",
+      confirmLabel: "Make yourself a member",
+    });
+    expect(planSelfRoleConfirm("editor", ["mira"]).confirmBody).toBe(
+      "You won't be able to make yourself a leader again. The leader mira can.",
+    );
     expect(planRemoveConfirm("tom", "Wollangambe trip", null)).toMatchObject({
       confirmBody:
         "They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.",

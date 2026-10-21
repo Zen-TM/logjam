@@ -31,6 +31,7 @@ import {
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TSearchUser } from "../../placeUtils";
+import { useBusyIds } from "../../useBusyIds";
 import { useUserSearch } from "../../useUserSearch";
 import {
   createInviteLink,
@@ -58,9 +59,8 @@ export default function PlanInvitePage({
   const [role, setRole] = useState<TripPlanRole>("member");
   const [links, setLinks] = useState<TripPlanInviteView[]>([]);
   const [shown, setShown] = useState<string | null>(null);
-  // The control that is working: "copy", "share", a link's or a person's id.
-  // It disables itself, never its neighbours.
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // Each control working: "copy", "share", a link's or a person's id.
+  const busy = useBusyIds();
 
   const statusOf = new Map(
     plan.members.map((member) => [member.user.id, member.status]),
@@ -77,7 +77,7 @@ export default function PlanInvitePage({
   }, [plan.id]);
 
   async function invite(user: TSearchUser) {
-    setBusyId(user.id);
+    busy.start(user.id);
     try {
       await inviteMember(plan.id, user.username, role);
       toast.success(copy.invited);
@@ -88,13 +88,14 @@ export default function PlanInvitePage({
       // Someone else may have invited them first: the row then says so.
       onInvited({ quiet: true });
     } finally {
-      setBusyId(null);
+      busy.stop(user.id);
     }
   }
 
   /** Make a link, then hand it on: to the share sheet, else the clipboard. */
   async function sendLink(share: boolean) {
-    setBusyId(share ? "share" : "copy");
+    const control = share ? "share" : "copy";
+    busy.start(control);
     let url: string;
     try {
       const { token } = await createInviteLink(plan.id);
@@ -104,7 +105,7 @@ export default function PlanInvitePage({
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.linkMakeFailed));
-      setBusyId(null);
+      busy.stop(control);
       return;
     }
     try {
@@ -121,12 +122,12 @@ export default function PlanInvitePage({
       setShown(url);
       if (!share) toast.error(copy.linkCopyFailed);
     } finally {
-      setBusyId(null);
+      busy.stop(control);
     }
   }
 
   async function revoke(id: string) {
-    setBusyId(id);
+    busy.start(id);
     // A link shown because the clipboard refused it may be this one.
     setShown(null);
     try {
@@ -136,7 +137,7 @@ export default function PlanInvitePage({
       console.error(err);
       toast.error(messageFromError(err, copy.linkRevokeFailed));
     } finally {
-      setBusyId(null);
+      busy.stop(id);
       // After a failure too: another leader may have turned it off first.
       void loadLinks();
     }
@@ -190,7 +191,7 @@ export default function PlanInvitePage({
                     <Button
                       compact
                       variant="outline"
-                      busy={busyId === user.id}
+                      busy={busy.isBusy(user.id)}
                       onClick={() => void invite(user)}
                     >
                       {copy.inviteSend}
@@ -211,7 +212,7 @@ export default function PlanInvitePage({
             <Button
               variant="outline"
               icon="link"
-              busy={busyId === "copy"}
+              busy={busy.isBusy("copy")}
               onClick={() => void sendLink(false)}
             >
               {copy.linkCopy}
@@ -220,7 +221,7 @@ export default function PlanInvitePage({
               <Button
                 variant="outline"
                 icon="shareFriend"
-                busy={busyId === "share"}
+                busy={busy.isBusy("share")}
                 onClick={() => void sendLink(true)}
               >
                 {copy.linkShare}
@@ -239,7 +240,7 @@ export default function PlanInvitePage({
             trailing={
               <Button
                 compact
-                busy={busyId === link.id}
+                busy={busy.isBusy(link.id)}
                 onClick={() => void revoke(link.id)}
               >
                 {copy.linkRevoke}

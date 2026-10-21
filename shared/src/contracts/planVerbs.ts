@@ -373,6 +373,26 @@ export function planRemoveConfirm(
   };
 }
 
+/** A leader making themselves an editor or a member: the one role change
+ *  they can't undo themselves, so it is confirmed, naming who still can. */
+export function planSelfRoleConfirm(
+  role: "editor" | "member",
+  otherLeaders: readonly string[],
+): PlanConfirmCopy {
+  const becoming = `Make yourself ${role === "editor" ? "an editor" : "a member"}`;
+  const names =
+    otherLeaders.length > 1
+      ? `${otherLeaders.slice(0, -1).join(", ")} and ${otherLeaders[otherLeaders.length - 1]}`
+      : otherLeaders[0];
+  return {
+    confirmTitle: `${becoming}?`,
+    confirmBody: `You won't be able to make yourself a leader again. ${
+      otherLeaders.length > 1 ? "The leaders" : "The leader"
+    } ${names} can.`,
+    confirmLabel: becoming,
+  };
+}
+
 export function planTurnDownConfirm(username: string): PlanConfirmCopy {
   return {
     confirmTitle: `Turn down ${username}?`,
