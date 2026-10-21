@@ -77,6 +77,41 @@ async function openApp(page: Page) {
   });
 }
 
+/** The seed's announcement (api/prisma/seed.ts), marked read here so opening it
+ *  writes nothing to the account. */
+const SEEDED_ANNOUNCEMENT = "Logjam is moving to a new server";
+
+async function withAnnouncementRead(page: Page) {
+  await page.route("**/notifications", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const rows: { type: string }[] = await response.json();
+    await route.fulfill({
+      response,
+      json: rows.map((row) =>
+        row.type === "announcement" ? { ...row, read: true } : row,
+      ),
+    });
+  });
+}
+
+async function openAnnouncement(page: Page, narrow = false) {
+  if (narrow) {
+    // Narrow web keeps the Inbox in the tab bar's More menu.
+    await page.getByRole("button", { name: /^More/ }).click();
+    await page.getByRole("menuitem", { name: /^Inbox/ }).click();
+  } else {
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+  }
+  await page
+    .locator("aside")
+    .getByRole("button", { name: SEEDED_ANNOUNCEMENT, exact: true })
+    .click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog", { name: SEEDED_ANNOUNCEMENT });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 test.describe("desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -376,6 +411,23 @@ test.describe("desktop", () => {
     await expect(inbox.getByRole("radiogroup", { name: "Show" })).toBeVisible();
   });
 
+  test("a maintainer announcement opened from its row", async ({ page }) => {
+    await withAnnouncementRead(page);
+    await openApp(page);
+    const dialog = await openAnnouncement(page);
+    await expect(dialog.getByRole("heading", { level: 2 })).toBeFocused();
+    // The seed's #, ## and ### sit under the dialog's title, none skipped.
+    for (const [level, name] of [
+      [3, "What to expect"],
+      [4, "If something looks wrong"],
+      [5, "On Logjam GPS"],
+    ] as const)
+      await expect(dialog.getByRole("heading", { level, name })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  });
+
   test("a confirm dialog", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: /^Inbox/ }).click();
@@ -671,10 +723,23 @@ test.describe("desktop", () => {
     await expect(
       dialog.getByRole("heading", { name: "Make a GeoPDF" }),
     ).toBeVisible();
-    // The four edges, the pivot radiogroup and six rails in one scrolling body.
+    // Closed, the Area section is paper, scale and the button to the map.
+    await expect(
+      dialog.getByRole("button", { name: "Pick on the map" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Exact edges opens the four edges, the pivot radiogroup and two more
+    // rails in the same scrolling body.
+    await dialog.getByText("Exact edges").click();
     await expect(
       dialog.getByRole("radiogroup", { name: "Pivot" }),
     ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Other opens the typed scale under the presets.
+    await dialog.getByRole("radio", { name: "Other" }).click();
+    await expect(dialog.getByRole("textbox", { name: "Scale" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
     // Custom paper reveals the ratio and takes orientation away from the user.
@@ -941,6 +1006,14 @@ test.describe("ghost gum", () => {
 
 test.describe("narrow web", () => {
   test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a maintainer announcement inside the phone", async ({ page }) => {
+    await withAnnouncementRead(page);
+    await openApp(page);
+    const dialog = await openAnnouncement(page, true);
+    await expectNoViolations(page, "dialog");
+    expect((await dialog.boundingBox())!.width).toBe(390);
+  });
 
   test("the tab bar and its More menu", async ({ page }) => {
     await openApp(page);

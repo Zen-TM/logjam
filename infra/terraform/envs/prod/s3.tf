@@ -111,11 +111,22 @@ module "topo_jobs" {
     expose_headers  = ["ETag", "Content-Range", "Accept-Ranges", "Content-Length"]
   }]
 
-  lifecycle_rules = [{
-    id              = "expire-exports"
-    prefix          = "exports/"
-    expiration_days = 7
-  }]
+  # A LiDAR ZIP arrives as a multipart upload; one that never completes keeps
+  # its parts (billed, invisible to a prefix delete) until aborted. The API
+  # aborts it with its job (lib/topoJobReaper.ts sweeps an abandoned one after
+  # a day); this rule, a day later, catches an abort that failed.
+  lifecycle_rules = [
+    {
+      id              = "expire-exports"
+      prefix          = "exports/"
+      expiration_days = 7
+    },
+    {
+      id                              = "abort-incomplete-uploads"
+      prefix                          = "inputs/"
+      abort_incomplete_multipart_days = 2
+    },
+  ]
 }
 
 # Frontend SPA bundle, served via CloudFront OAC. Private bucket; the OAC

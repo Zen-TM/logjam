@@ -95,7 +95,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   `large` for a long one. Footer: Cancel, then the one primary action. Save
   is `type="submit"` tied by `form={formId}` and wears `busy`; pass
   `dismissible={false}` while a request runs. First focus is the element
-  marked `data-autofocus`.
+  marked `data-autofocus`. A dialog for reading (a maintainer message) has no
+  footer; its × closes it.
 - **`ConfirmDialog`**: `destructive` when something is lost, `filled` when
   nothing is. The menu item that leads to it is `danger`, without the fill.
 - **`Popover`** is non-modal. Whether an outside press closes it is the
@@ -104,7 +105,9 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   or an accordion.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
-  current answer as the subtitle.
+  current answer as the subtitle; or, inside a `Dialog`, a native `<details>`
+  under the setting it refines, when the two change each other and both must
+  stay in view (the GeoPDF dialog's Exact edges).
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
   field) or `useToast().error` (background).
@@ -131,7 +134,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 |---|---|
 | One choice from a few | `ChipRail` |
 | Several from a vocabulary the user extends | `ChipPicker` |
-| An item in a set / a setting that applies at once | `Checkbox` / `SwitchRow` |
+| An item in a set / a setting that applies at once / one that applies at once over the map | `Checkbox` / `SwitchRow` / `Checkbox card` |
 | A colour | `ColourField`: `palette` for an identity hue, free only for a topo style |
 | A bounded multiplier | `RangeField` |
 | A field that points at a place | `PlacePicker`, never a `<select>` or the network |

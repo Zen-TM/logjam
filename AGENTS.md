@@ -41,6 +41,9 @@ platform: privacy constrains every feature. Each package has its own
   the `pr-closes` check.
 - Logic both clients need lives in `shared/`, with a parity test; look for it
   there before writing it in a client. [0020](docs/decisions/0020-share-the-decision-not-the-drawing.md)
+- Format with `make format` (Biome and Ruff), never Prettier: it also
+  rewrites Markdown and YAML, which nothing formats back. The pre-commit hook
+  formats what you stage.
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
   app" or "the web app" where either could be meant.
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`
