@@ -40,7 +40,6 @@ import {
   TRIP_PLAN_PRINTED_PRESETS,
   planItemDeleteConfirm,
   planItemVerbs,
-  tripPlanPhotosSkipped,
   planMemberVerbs,
   planRemoveConfirm,
   planSelfRoleConfirm,
@@ -580,19 +579,38 @@ describe("a plan's items", () => {
     ).toEqual(["save"]);
     expect(
       ids(planItemVerbs("leader", { kind: "geoPdf", mine: true }, live)),
-    ).toEqual(["save", "delete"]);
-    expect(planItemDeleteConfirm("Wollangambe").confirmTitle).toBe(
-      "Delete Wollangambe from the plan?",
-    );
+    ).toEqual(["download", "save", "delete"]);
   });
 
-  it("says when a saved copy came without some of its photos", () => {
-    expect(tripPlanPhotosSkipped(0, false)).toBeNull();
-    expect(tripPlanPhotosSkipped(2, true)).toBe(
-      "Your storage is full, so 2 photos and files weren't copied.",
+  // Mutation: offer Download on every kind, and a place's ⋯ has a verb with
+  // nothing to fetch; drop its `whenArchived`, and an archived plan's
+  // files can't be had.
+  it("puts Download first on a file or a map, archived plans too", () => {
+    expect(
+      ids(planItemVerbs("member", { kind: "media", mine: false }, live)),
+    ).toEqual(["download", "save"]);
+    expect(
+      ids(
+        planItemVerbs(
+          "member",
+          { kind: "geoPdf", mine: false },
+          { archived: true },
+        ),
+      ),
+    ).toEqual(["download", "save"]);
+  });
+
+  // Mutation: leave the count out, and a place's photos go unannounced
+  // (shared/DESIGN.md §9: a destructive confirm counts what goes).
+  it("counts a deleted place's photos", () => {
+    expect(planItemDeleteConfirm("Wollangambe").confirmBody).toBe(
+      "It goes for everyone in the plan. Copies people saved stay.",
     );
-    expect(tripPlanPhotosSkipped(1, false)).toBe(
-      "1 photo or file couldn't be copied.",
+    expect(planItemDeleteConfirm("Wollangambe", 1).confirmBody).toBe(
+      "It goes for everyone in the plan. Its photo goes too. Copies people saved stay.",
+    );
+    expect(planItemDeleteConfirm("Wollangambe", 3).confirmBody).toContain(
+      "Its 3 photos go too.",
     );
   });
 });

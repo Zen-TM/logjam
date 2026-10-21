@@ -1,15 +1,16 @@
 // A plan's "On the map" view: its places, ways and maps in the rows and hues
 // their own pages use, each saying who added it. Opening a place or a route
-// fits the map to it; a file's row downloads it. The ⋯ is `planItemVerbs`.
+// fits the map to it; a file's row downloads it, which is also first in its ⋯
+// (`planItemVerbs`).
 import { useState } from "react";
 import {
   formatBytes,
+  mediaSkippedSentence,
   planItemDeleteConfirm,
   planItemVerbs,
   PLAN_ITEM_VERBS,
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
-  tripPlanPhotosSkipped,
   tripPlanSavedMessage,
   untitledJobTitle,
   type PlanItemVerbId,
@@ -30,6 +31,7 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { deletePlanItem, savePlanItem } from "../../plansApi";
+import { downloadFile } from "../sidebar/panels/mapsModel";
 import { menuEntries } from "./planMenu";
 import PlanItemEditDialog from "./PlanItemEditDialog";
 import classes from "./plans.module.css";
@@ -77,19 +79,23 @@ export default function PlanItems({
   onChanged,
   onSaved,
   onOpen,
+  copyPlaceMedia,
 }: {
   plan: TripPlanView;
   myUserId: string | null;
   /** Fetch the plan again; `quiet` after a write whose failure was just said. */
   onChanged: (options?: { quiet: boolean }) => void;
-  /** The caller's own lists changed: a copy landed in them. */
+  /** The caller's own lists or storage changed: a copy landed, or a thing
+   *  they were charged for went. */
   onSaved: () => void;
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
+  /** The caller's remembered Bring its photos (`uiPreferences`). */
+  copyPlaceMedia: boolean;
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState<TripPlanItem | null>(null);
-  const [bringPhotos, setBringPhotos] = useState(true);
+  const [bringPhotos, setBringPhotos] = useState(copyPlaceMedia);
   const [deleting, setDeleting] = useState<TripPlanItem | null>(null);
   const [editing, setEditing] = useState<TripPlanItem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -126,30 +132,31 @@ export default function PlanItems({
   }
 
   const runners = (item: TripPlanItem): Record<PlanItemVerbId, () => void> => ({
+    download: () => downloadFile(fileUrl(item)!),
     save: () => {
-      setBringPhotos(true);
+      setBringPhotos(copyPlaceMedia);
       setSaving(item);
     },
     edit: () => setEditing(item),
     delete: () => setDeleting(item),
   });
 
-  if (shown.length === 0)
-    return (
-      <div className={classes.list}>
-        <EmptyState icon="place" title={copy.itemsEmpty} />
-      </div>
-    );
-
   const photoBytes =
     saving?.kind === "place"
       ? saving.media.reduce((sum, photo) => sum + Number(photo.sizeBytes), 0)
       : 0;
   const deleteCopy = deleting
-    ? planItemDeleteConfirm(look(deleting).title)
+    ? planItemDeleteConfirm(
+        look(deleting).title,
+        deleting.kind === "place" ? deleting.media.length : 0,
+      )
     : null;
   return (
     <div className={classes.list}>
+      {/* The dialogs stay mounted when a refetch empties the plan. */}
+      {shown.length === 0 && (
+        <EmptyState icon="place" title={copy.itemsEmpty} />
+      )}
       {shown.map(([heading, items]) => (
         <div key={heading} className={classes.block}>
           {/* A heading needs a second group to divide from (shared/DESIGN.md §2). */}
@@ -169,11 +176,16 @@ export default function PlanItems({
               <Row
                 key={`${item.kind}:${item.id}`}
                 title={title}
-                subtitle={tripPlanAddedByLine(item.addedBy)}
+                subtitle={[
+                  tripPlanAddedByLine(item.addedBy),
+                  url && copy.itemDownloadHint,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 leading={<IconTile icon={icon} hue={hue} />}
-                {...(url
-                  ? { href: url, download: title }
-                  : { onOpen: () => onOpen(item) })}
+                // A presigned link is another origin, so the row's own
+                // `download` would be ignored: it goes through downloadFile.
+                onOpen={() => (url ? downloadFile(url) : onOpen(item))}
                 trailing={
                   <Menu
                     label={`Actions for ${title}`}
@@ -229,9 +241,10 @@ export default function PlanItems({
             copy.saveCopyFailed,
           ).then((done) => {
             setSaving(null);
-            if (!done) return;
+            // Gone or no longer theirs: the plan as it now is says why.
+            if (!done) return onChanged({ quiet: true });
             const { mediaSkipped = 0, mediaOutOfSpace } = done.reply;
-            const skipped = tripPlanPhotosSkipped(
+            const skipped = mediaSkippedSentence(
               mediaSkipped,
               mediaOutOfSpace === true,
             );
@@ -257,7 +270,10 @@ export default function PlanItems({
             copy.itemDeleteFailed,
           ).then((done) => {
             setDeleting(null);
-            if (done) toast.success(copy.itemDeleted);
+            if (done) {
+              toast.success(copy.itemDeleted);
+              onSaved();
+            }
             onChanged(done ? undefined : { quiet: true });
           });
         }}

@@ -28,6 +28,7 @@ import {
   setMemberRole,
 } from "../../plansApi";
 import { planInvite } from "../../pendingInvite";
+import { ApiError } from "../../errors/ApiError";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanInviteLinkDialog from "./PlanInviteLinkDialog";
@@ -215,6 +216,7 @@ function renderPanel(
       refetch={() => {}}
       onOwnChanged={() => {}}
       onOpenItem={() => {}}
+      copyPlaceMedia
       onBack={() => {}}
       onPlansChanged={() => {}}
       onStartTripLog={() => {}}
@@ -519,5 +521,56 @@ describe("an item's edit over someone else's change", () => {
     expect(patchPlanItem).toHaveBeenCalledWith("p1", "place", "pl1", {
       notes: { from: "", to: "Exit left." },
     });
+  });
+});
+describe("an item's edit refused", () => {
+  const way = {
+    kind: "route",
+    id: "r1",
+    name: "Walk in",
+  } as TripPlanItem;
+  const view = (onStale = () => {}) => (
+    <PlanItemEditDialog
+      planId="p1"
+      opened={way}
+      item={way}
+      onSaved={() => {}}
+      onStale={onStale}
+      onClose={() => {}}
+    />
+  );
+
+  // Mutation: drop the route check, and a blank way name reaches the API,
+  // which answers with a fault the user didn't make.
+  it("checks a way's name before it is sent", () => {
+    render(view());
+    fireEvent.change(
+      screen.getByRole("textbox", { name: TRIP_PLAN_PAGE.copy.itemName }),
+      { target: { value: "  " } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.sectionSave }),
+    );
+    expect(screen.getByText("Name is required")).toBeTruthy();
+    expect(patchPlanItem).not.toHaveBeenCalled();
+  });
+
+  // Mutation: refetch on a 409 only, and an item deleted meanwhile says
+  // "Couldn't find that." on every Save, never that it went.
+  it("fetches the plan again when the item went", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(patchPlanItem).mockRejectedValueOnce(
+      new ApiError(404, "/plans/p1/items/route/r1", "PATCH"),
+    );
+    const onStale = vi.fn();
+    render(view(onStale));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: TRIP_PLAN_PAGE.copy.itemName }),
+      { target: { value: "Walk out" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.sectionSave }),
+    );
+    await waitFor(() => expect(onStale).toHaveBeenCalled());
   });
 });

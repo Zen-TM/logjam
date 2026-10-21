@@ -699,7 +699,9 @@ function App() {
     );
   // The open plan's full fetch: its page renders from it.
   const planFetch = usePlan(
-    activePanel === "plan-detail" && !planPreviewed ? selectedPlanId : null,
+    loadsUserData && activePanel === "plan-detail" && !planPreviewed
+      ? selectedPlanId
+      : null,
     toast.error,
   );
   const {
@@ -1775,6 +1777,9 @@ function App() {
                   refetchGeoPdfJobs();
                   refetchCurrentUser();
                 }}
+                copyPlaceMedia={
+                  currentUser?.uiPreferences?.copyPlaceMedia ?? true
+                }
                 onOpenItem={(item) => {
                   if (item.kind === "place")
                     setFlyToPlace({ lat: item.latitude, lng: item.longitude });

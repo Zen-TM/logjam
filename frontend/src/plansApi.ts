@@ -247,12 +247,24 @@ export function usePlan(
   const [view, setView] = useState<TripPlanView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [request, setRequest] = useState({ count: 0, quiet: false });
+  // Everything here is one plan's: another id, or the same one opened again
+  // after none, starts from nothing. Guard: plansApi.test.tsx.
+  const [current, setCurrent] = useState(id);
+  if (current !== id) {
+    setCurrent(id);
+    setView(null);
+    setError(null);
+    setRequest({ count: 0, quiet: false });
+  }
   const report = useRef(onBackgroundError);
   // Which plan a view has loaded for: a failure before then is the page's.
   const loaded = useRef<string | null>(null);
   useEffect(() => {
     report.current = onBackgroundError;
   });
+  useEffect(() => {
+    loaded.current = null;
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -284,6 +296,11 @@ export function usePlan(
       })),
     [],
   );
-  // A view of another plan is never shown while this one loads.
-  return { view: view?.id === id ? view : null, error, refetch, setView };
+  // Another plan's view or error is never shown while this one loads.
+  return {
+    view: view?.id === id ? view : null,
+    error,
+    refetch,
+    setView,
+  };
 }

@@ -6,6 +6,7 @@ import {
   copyAndRemoveOutcomeMessage,
   copyConfirm,
   copyOutcomeMessage,
+  mediaSkippedSentence,
   removeAllConfirm,
   removeOutcomeMessage,
   removeRowSubtitle,
@@ -412,5 +413,22 @@ describe("removeRowSubtitle", () => {
       "Takes it off your account. bob keeps the original place.",
     );
     expect(subtitle).not.toContain("?");
+  });
+});
+
+describe("mediaSkippedSentence", () => {
+  // Mutation: drop the outOfSpace branch, and a full account reads as a
+  // fault; drop the singular, and one photo "weren't copied".
+  it("says how many didn't come, and why when storage stopped them", () => {
+    expect(mediaSkippedSentence(0, true)).toBeNull();
+    expect(mediaSkippedSentence(2, true)).toBe(
+      "Your storage is full, so 2 photos and files weren't copied.",
+    );
+    expect(mediaSkippedSentence(1, true)).toBe(
+      "Your storage is full, so 1 photo or file wasn't copied.",
+    );
+    expect(mediaSkippedSentence(1, false)).toBe(
+      "1 photo or file couldn't be copied.",
+    );
   });
 });

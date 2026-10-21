@@ -16,6 +16,7 @@ import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { patchPlanItem } from "../../plansApi";
+import { wayNameError } from "../sidebar/panels/waysModel";
 import {
   adoptTheirs,
   itemPatch,
@@ -42,7 +43,8 @@ export default function PlanItemEditDialog({
   /** That item as the plan now has it: absent once it is deleted. */
   item?: TripPlanItem;
   onSaved: () => void;
-  /** A 409 came back: fetch the plan again so `item` is the current one. */
+  /** A 409, 404 or 403 came back: fetch the plan again so `item` is the
+   *  current one, or absent. */
   onStale: () => void;
   onClose: () => void;
 }) {
@@ -55,6 +57,11 @@ export default function PlanItemEditDialog({
   const [moved, setMoved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A way's name is checked here, as its own form does; the API answers a
+  // place's with its own sentences.
+  const [asked, setAsked] = useState(false);
+  const nameError =
+    openedItem.kind === "route" ? wayNameError(values.name, asked) : null;
 
   const current = item ? itemWords(item) : null;
   if (item && current && !same(item, seen)) {
@@ -73,10 +80,13 @@ export default function PlanItemEditDialog({
   const set = (next: Partial<ItemWords>) => {
     setValues((was) => ({ ...was, ...next }));
     setError(null);
+    setAsked(false);
   };
 
   async function submit() {
     if (!item) return setError(copy.itemGone);
+    setAsked(true);
+    if (openedItem.kind === "route" && wayNameError(values.name, true)) return;
     const patch = itemPatch(seen, values);
     if (!patch) return onClose();
     setBusy(true);
@@ -86,7 +96,10 @@ export default function PlanItemEditDialog({
     } catch (err) {
       console.error(err);
       setError(messageFromError(err, copy.itemSaveFailed));
-      if (err instanceof ApiError && err.status === 409) onStale();
+      // Changed, gone, or no longer theirs to change: the plan as it now is
+      // says which, and a deleted item turns the next Save into `itemGone`.
+      if (err instanceof ApiError && [403, 404, 409].includes(err.status))
+        onStale();
     } finally {
       setBusy(false);
     }
@@ -127,6 +140,7 @@ export default function PlanItemEditDialog({
             value={values.name}
             data-autofocus
             onChange={(event) => set({ name: event.target.value })}
+            error={nameError}
             hint={
               theirs("name") != null
                 ? tripPlanInPlanNow(theirs("name")!)

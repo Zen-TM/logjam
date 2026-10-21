@@ -469,6 +469,8 @@ describe("an item edit", () => {
     item: { displayName: null, filename: "day1.gpx" },
   } as TripPlanItem;
 
+  // Mutation: drop the `!== was` checks, and an unchanged note is sent and
+  // 409s on another member's edit of it.
   it("sends only the changed words, a file's blank name as none", () => {
     expect(itemPatch(place, { name: "Wollangambe", notes: "" })).toBeNull();
     expect(

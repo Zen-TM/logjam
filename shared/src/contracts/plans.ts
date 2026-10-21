@@ -382,6 +382,7 @@ export const TRIP_PLAN_PAGE = {
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
+    itemDownloadHint: "Click to download",
 
     // Forms.
     formsEmptyLeader:
@@ -857,18 +858,4 @@ export function tripPlanFilesChargedTo(
 /** Where Save a copy put it. */
 export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
   return `Saved a copy to your ${kind === "place" ? "places" : kind === "geoPdf" ? "maps" : "ways"}.`;
-}
-
-/** Said after a copy whose photos and files didn't all come, or null when
- *  they did: the API says how many and whether storage stopped them. */
-export function tripPlanPhotosSkipped(
-  skipped: number,
-  outOfSpace: boolean,
-): string | null {
-  if (skipped === 0) return null;
-  const what =
-    skipped === 1 ? "1 photo or file" : `${skipped} photos and files`;
-  return outOfSpace
-    ? `Your storage is full, so ${what} weren't copied.`
-    : `${what[0].toUpperCase()}${what.slice(1)} couldn't be copied.`;
 }

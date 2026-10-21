@@ -281,12 +281,11 @@ export function copyOutcomeMessage(outcome: {
 }): { text: string; tone: "info" | "error" } {
   const { copied, failed } = outcome;
   const skipped = outcome.mediaSkipped ?? 0;
-  const media =
-    skipped === 0
-      ? ""
-      : outcome.mediaOutOfSpace
-        ? ` Your storage is full, so ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} weren't copied.`
-        : ` ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`;
+  const sentence = mediaSkippedSentence(
+    skipped,
+    outcome.mediaOutOfSpace === true,
+  );
+  const media = sentence ? ` ${sentence}` : "";
   const saved = copied === 1 ? "Saved 1 copy" : `Saved ${copied} copies`;
   if (failed.length === 0) {
     return {
@@ -360,13 +359,8 @@ export function copyAndRemoveOutcomeMessage(outcome: {
         : `Couldn't copy ${failed.join(", ")} — they're still shared with you.`,
     );
   }
-  if (mediaSkipped > 0) {
-    parts.push(
-      mediaOutOfSpace
-        ? `Your storage is full, so ${mediaSkipped === 1 ? "1 photo or file" : `${mediaSkipped} photos and files`} weren't copied.`
-        : `${mediaSkipped === 1 ? "1 photo or file" : `${mediaSkipped} photos and files`} couldn't be copied.`,
-    );
-  }
+  const media = mediaSkippedSentence(mediaSkipped, mediaOutOfSpace === true);
+  if (media) parts.push(media);
 
   return {
     text: parts.join(" "),
@@ -408,4 +402,21 @@ export function removeOutcomeMessage(outcome: {
     text: `${gone}. Couldn't remove ${failed.join(", ")}.`,
     tone: "error",
   };
+}
+
+/**
+ * Said after a copy whose photos and files didn't all come, or null when
+ * they did: the API says how many and whether storage stopped them. Every
+ * copy that brings media says it this way (friend shares, Plans).
+ */
+export function mediaSkippedSentence(
+  skipped: number,
+  outOfSpace: boolean,
+): string | null {
+  if (skipped === 0) return null;
+  const what =
+    skipped === 1 ? "1 photo or file" : `${skipped} photos and files`;
+  return outOfSpace
+    ? `Your storage is full, so ${what} ${skipped === 1 ? "wasn't" : "weren't"} copied.`
+    : `${what[0].toUpperCase()}${what.slice(1)} couldn't be copied.`;
 }

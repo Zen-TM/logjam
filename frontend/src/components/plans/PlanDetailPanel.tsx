@@ -94,6 +94,7 @@ export default function PlanDetailPanel({
   refetch,
   onOwnChanged,
   onOpenItem,
+  copyPlaceMedia,
   onBack,
   onPlansChanged,
   onStartTripLog,
@@ -109,6 +110,8 @@ export default function PlanDetailPanel({
   onOwnChanged: () => void;
   /** Fit the map to a plan item. */
   onOpenItem: (item: TripPlanItem) => void;
+  /** The caller's remembered Bring its photos. */
+  copyPlaceMedia: boolean;
   onBack: () => void;
   /** Something the list shows changed (name, dates, archive, membership). */
   onPlansChanged: () => void;
@@ -453,6 +456,7 @@ export default function PlanDetailPanel({
         onChanged={refetch}
         onSaved={onOwnChanged}
         onOpen={onOpenItem}
+        copyPlaceMedia={copyPlaceMedia}
       />
     ),
     forms: tab === "forms" && (
