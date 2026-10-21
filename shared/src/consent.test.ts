@@ -24,6 +24,12 @@ describe("needsReconsent", () => {
     );
   });
 
+  // `<` in needsReconsent is a date compare only for zero-padded YYYY-MM-DD.
+  // Mutation: set CURRENT_CONSENT_VERSION to "2026-9-28" and this turns red.
+  it("keeps the version in zero-padded YYYY-MM-DD, which the compare needs", () => {
+    expect(CURRENT_CONSENT_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   // The server names the version; the build's constant is only the fallback.
   // Mutation: compare against CURRENT_CONSENT_VERSION in needsReconsent (or
   // return it from currentConsentVersionOf) and this turns red: a bump would
