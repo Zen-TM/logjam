@@ -4,6 +4,8 @@
 import {
   currentTripPlanAnswers,
   TRIP_PLAN_FORM_PRESETS,
+  TRIP_PLAN_PRINTED_COLUMNS,
+  TRIP_PLAN_PRINTED_PRESETS,
   tripPlanAnswerText,
   tripPlanRoleWord,
 } from "@logjam/shared";
@@ -11,6 +13,7 @@ import type {
   TripPlanCreate,
   TripPlanFormCreate,
   TripPlanFormPatch,
+  TripPlanFormPresetId,
   TripPlanFormView,
   TripPlanPatch,
   TripPlanSectionPatch,
@@ -143,39 +146,41 @@ export function mintSlug(prefix: "q" | "o"): string {
 export type SummaryParts = {
   writeUp: boolean;
   going: boolean;
-  carpool: boolean;
-  contacts: boolean;
+  /** The printable forms ticked, by preset. */
+  presets: readonly TripPlanFormPresetId[];
 };
 
-/** A preset's form the summary may print: one everyone in the plan sees,
- *  whose fillers were told members may print it (`tripPlanVisibilityLine`). */
-export function summaryForm(
+/** The preset forms the summary may print: those everyone in the plan
+ *  sees, whose fillers were told members may print them
+ *  (`tripPlanVisibilityLine`), one per printed preset. */
+export function summaryForms(
   plan: Pick<TripPlanView, "forms">,
-  preset: "carpool" | "safetyContacts",
-): TripPlanFormView | null {
-  return (
-    plan.forms.find(
-      (form) => form.preset === preset && form.visibleTo === "members",
-    ) ?? null
-  );
+): (TripPlanFormView & { preset: TripPlanFormPresetId })[] {
+  return TRIP_PLAN_PRINTED_PRESETS.flatMap((preset) => {
+    const form = plan.forms.find(
+      (each) => each.preset === preset && each.visibleTo === "members",
+    );
+    return form ? [{ ...form, preset }] : [];
+  });
 }
 
 /** One table of a preset form's answers: a row per person going who
- *  answered, a column per question the preset names that is still its kind,
- *  headed by its label now. A question a leader removed, or turned into
- *  something else ("Medications"), is not printed. */
+ *  answered, a column per question the preset prints that is still its
+ *  kind, headed by its label now. A question a leader removed, or turned
+ *  into something else ("Medications"), is not printed. */
 function answerTable(
-  form: TripPlanFormView,
-  questionIds: readonly string[],
+  form: TripPlanFormView & { preset: TripPlanFormPresetId },
   going: ReadonlySet<string>,
 ) {
-  const preset = form.preset ? TRIP_PLAN_FORM_PRESETS[form.preset] : null;
-  const columns = questionIds.flatMap((id) => {
-    const question = form.questions.find((each) => each.id === id);
-    const was = preset?.questions.find((each) => each.id === id);
-    return question && question.kind === was?.kind ? [question] : [];
-  });
-  if (columns.length === 0) return null;
+  const preset = TRIP_PLAN_FORM_PRESETS[form.preset];
+  const columns = (TRIP_PLAN_PRINTED_COLUMNS[form.preset] ?? []).flatMap(
+    (id) => {
+      const question = form.questions.find((each) => each.id === id);
+      const was = preset.questions.find((each) => each.id === id);
+      return question && question.kind === was?.kind ? [question] : [];
+    },
+  );
+  if (columns.length === 0) return [];
   const answers = [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])];
   const rows = answers
     .filter((answer) => going.has(answer.user.id))
@@ -189,19 +194,24 @@ function answerTable(
       ];
     })
     .sort((a, b) => a[0].localeCompare(b[0]));
-  return { head: ["Name", ...columns.map((each) => each.label)], rows };
+  return [
+    {
+      preset: form.preset,
+      caption: preset.title,
+      head: ["Name", ...columns.map((each) => each.label)],
+      rows,
+    },
+  ];
 }
 
 /**
  * What the print summary holds, for someone not on the trip.
  * PRIVACY: never a place, a coordinate, a way, a map, another form, anyone's
  * medical answers or anyone not going: only the write-up, who's going, and
- * the carpool and safety-contact presets' named questions, from forms
- * everyone in the plan sees. Guard: plansModel.test.ts.
+ * the printed presets' named questions (`TRIP_PLAN_PRINTED_COLUMNS`), from
+ * forms everyone in the plan sees. Guard: plansModel.test.ts.
  */
 export function planSummary(plan: TripPlanView, parts: SummaryParts) {
-  const carpool = parts.carpool ? summaryForm(plan, "carpool") : null;
-  const contacts = parts.contacts ? summaryForm(plan, "safetyContacts") : null;
   const active = plan.members.filter((member) => member.status === "active");
   const going = new Set(active.map((member) => member.user.id));
   return {
@@ -218,9 +228,8 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
           tripPlanRoleWord(member.role),
         ])
       : [],
-    carpool: carpool && answerTable(carpool, ["mode", "seats", "from"], going),
-    contacts:
-      contacts &&
-      answerTable(contacts, ["name", "phone", "name2", "phone2"], going),
+    tables: summaryForms(plan)
+      .filter((form) => parts.presets.includes(form.preset))
+      .flatMap((form) => answerTable(form, going)),
   };
 }

@@ -7,12 +7,14 @@
 import { useEffect, useEffectEvent, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  TRIP_PLAN_FORM_PRESETS,
   tripPlanDatesLine,
   tripTypeLabel,
+  type TripPlanFormPresetId,
   type TripPlanView,
 } from "@logjam/shared";
 import { Button, Checkbox, Dialog } from "../../ui";
-import { planSummary, summaryForm, type SummaryParts } from "./plansModel";
+import { planSummary, summaryForms, type SummaryParts } from "./plansModel";
 import classes from "./PlanSummary.module.css";
 
 export default function PlanPrintDialog({
@@ -23,13 +25,11 @@ export default function PlanPrintDialog({
   onClose: () => void;
 }) {
   const formId = useId();
-  const carpool = summaryForm(plan, "carpool");
-  const contacts = summaryForm(plan, "safetyContacts");
+  const printable = summaryForms(plan);
   const [parts, setParts] = useState<SummaryParts>({
     writeUp: true,
     going: true,
-    carpool: carpool != null,
-    contacts: contacts != null,
+    presets: printable.map((form) => form.preset),
   });
 
   // An effect event, so a new `onClose` each render never re-subscribes.
@@ -39,8 +39,15 @@ export default function PlanPrintDialog({
     return () => window.removeEventListener("afterprint", done);
   }, []);
 
-  const set = (key: keyof SummaryParts) => (next: boolean) =>
+  const set = (key: "writeUp" | "going") => (next: boolean) =>
     setParts((was) => ({ ...was, [key]: next }));
+  const tick = (preset: TripPlanFormPresetId) => (next: boolean) =>
+    setParts((was) => ({
+      ...was,
+      presets: next
+        ? [...was.presets, preset]
+        : was.presets.filter((each) => each !== preset),
+    }));
 
   return (
     <>
@@ -79,20 +86,14 @@ export default function PlanPrintDialog({
             checked={parts.going}
             onChange={set("going")}
           />
-          {carpool && (
+          {printable.map((form) => (
             <Checkbox
-              label="Carpooling"
-              checked={parts.carpool}
-              onChange={set("carpool")}
+              key={form.preset}
+              label={TRIP_PLAN_FORM_PRESETS[form.preset].title}
+              checked={parts.presets.includes(form.preset)}
+              onChange={tick(form.preset)}
             />
-          )}
-          {contacts && (
-            <Checkbox
-              label="Safety contacts"
-              checked={parts.contacts}
-              onChange={set("contacts")}
-            />
-          )}
+          ))}
         </form>
       </Dialog>
       <PlanSummary plan={plan} parts={parts} />
@@ -168,12 +169,9 @@ function PlanSummary({
         head={["Name", "Role"]}
         rows={summary.going}
       />
-      {summary.carpool && (
-        <SummaryTable caption="Carpooling" {...summary.carpool} />
-      )}
-      {summary.contacts && (
-        <SummaryTable caption="Safety contacts" {...summary.contacts} />
-      )}
+      {summary.tables.map(({ preset, ...table }) => (
+        <SummaryTable key={preset} {...table} />
+      ))}
       <footer>
         From Logjam Web, {printed}. Correct when printed; the plan may have
         changed since.

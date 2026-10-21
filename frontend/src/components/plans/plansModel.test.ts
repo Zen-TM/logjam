@@ -257,7 +257,13 @@ describe("the print summary", () => {
       form("firstAid", { tom: { cert: "no", conditions: "Bee allergy" } }),
     ],
   } as unknown as TripPlanView;
-  const all = { writeUp: true, going: true, carpool: true, contacts: true };
+  const all = {
+    writeUp: true,
+    going: true,
+    presets: ["carpool", "safetyContacts"] as const,
+  };
+  const table = (summary: ReturnType<typeof planSummary>, preset: string) =>
+    summary.tables.find((each) => each.preset === preset);
 
   // Mutation: list every form's answers, or the places, and the bee allergy
   // or the pool's position reaches paper a parent keeps.
@@ -289,10 +295,7 @@ describe("the print summary", () => {
         visibleTo: "leaders" as const,
       })),
     };
-    expect(planSummary(leadersOnly, all)).toMatchObject({
-      carpool: null,
-      contacts: null,
-    });
+    expect(planSummary(leadersOnly, all).tables).toEqual([]);
   });
 
   // Mutation: head the columns with the preset's words, or keep a column
@@ -319,7 +322,7 @@ describe("the print summary", () => {
       ],
     };
     const summary = planSummary(edited, all);
-    expect(summary.contacts?.head).toEqual([
+    expect(table(summary, "safetyContacts")?.head).toEqual([
       "Name",
       "Who to call",
       "Second contact's name",
@@ -331,12 +334,13 @@ describe("the print summary", () => {
   it("lists who's going, not who asked to join, and leaves out what was unticked", () => {
     const summary = planSummary(plan, {
       ...all,
-      carpool: false,
+      presets: ["safetyContacts"],
       writeUp: false,
     });
     expect(summary.going.map(([name]) => name)).toEqual(["mira", "tom"]);
     expect(summary.leaders).toEqual(["mira"]);
-    expect(summary.carpool).toBeNull();
+    expect(table(summary, "carpool")).toBeUndefined();
+    expect(table(summary, "safetyContacts")).toBeDefined();
     expect(summary.sections).toEqual([]);
   });
 });

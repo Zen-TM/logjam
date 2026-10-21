@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { TripPlanQuestion, TripPlanSummary } from "../tripPlans.js";
+import {
+  TRIP_PLAN_FORM_PRESETS,
+  type TripPlanQuestion,
+  type TripPlanSummary,
+} from "../tripPlans.js";
 import {
   planCountsLabel,
   planDeleteConfirm,
@@ -31,6 +35,8 @@ import {
   tripPlanAnswerText,
   tripPlanSeesAnswers,
   tripPlanVisibilityLine,
+  TRIP_PLAN_PRINTED_COLUMNS,
+  TRIP_PLAN_PRINTED_PRESETS,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -500,6 +506,18 @@ describe("a form's answers", () => {
     expect(tripPlanSeesAnswers("leader", "leaders")).toBe(true);
     expect(tripPlanSeesAnswers("editor", "leaders")).toBe(false);
     expect(tripPlanSeesAnswers("member", "members")).toBe(true);
+  });
+});
+
+describe("the printed columns", () => {
+  // Mutation: name a question the preset doesn't have, and its column
+  // never prints.
+  it("are each a question of the preset they print", () => {
+    for (const preset of TRIP_PLAN_PRINTED_PRESETS) {
+      const ids = TRIP_PLAN_FORM_PRESETS[preset].questions.map((q) => q.id);
+      for (const column of TRIP_PLAN_PRINTED_COLUMNS[preset] ?? [])
+        expect(ids).toContain(column);
+    }
   });
 });
 

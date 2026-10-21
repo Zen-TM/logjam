@@ -403,11 +403,18 @@ export const TRIP_PLAN_PAGE = {
 export type TripPlanPageView = "writeUp" | "items" | "forms" | "people";
 
 /** The presets Logjam Web's print summary carries, when everyone in the
- *  plan sees their answers. */
-export const TRIP_PLAN_PRINTED_PRESETS: readonly TripPlanFormPresetId[] = [
-  "carpool",
-  "safetyContacts",
-];
+ *  plan sees their answers, and the questions of each it prints, in order.
+ *  The one list the summary prints from and `tripPlanVisibilityLine` warns
+ *  from. Guard: plans.test.ts (the printed columns). */
+export const TRIP_PLAN_PRINTED_COLUMNS: Partial<
+  Record<TripPlanFormPresetId, readonly string[]>
+> = {
+  carpool: ["mode", "seats", "from"],
+  safetyContacts: ["name", "phone", "name2", "phone2"],
+};
+export const TRIP_PLAN_PRINTED_PRESETS = Object.keys(
+  TRIP_PLAN_PRINTED_COLUMNS,
+) as TripPlanFormPresetId[];
 
 /** Who sees the answers, shown above a form being filled: one plain
  *  sentence, and a second for a form a member may print. */
