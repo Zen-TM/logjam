@@ -43,6 +43,7 @@ const { clearMirror, wipeAllSyncData, wipeMirror } = await import(
   "../sync/syncDb"
 );
 const {
+  afterPlanWrite,
   fetchPlan,
   planChanged,
   pollPlans,
@@ -90,6 +91,7 @@ const view = (id: string, updatedAt = "2026-10-01T00:00:00.000Z") => ({
 });
 
 beforeEach(async () => {
+  await stopPlansForWipe();
   await wipeAllSyncData();
   vi.clearAllMocks();
 });
@@ -246,6 +248,43 @@ describe("an older poll and a newer fetch", () => {
     get.land({ plans: [summary("p", "requested")] });
     await poll;
     expect(await readCachedPlan("p")).not.toBeNull();
+  });
+});
+
+describe("after a write", () => {
+  // Mutation: drop the DELETE in afterPlanWrite's `gone` branch. A plan the
+  // caller just left would stay readable until the next poll.
+  it("drops the plan the caller left, before the list says so", async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    await fetchPlan("a");
+    api.getPlans.mockResolvedValue({ plans: [summary("a")] });
+    await afterPlanWrite("a", true);
+    expect(await readCachedPlan("a")).toBeNull();
+    expect(api.getPlan).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutation: drop the `dropped` check in fetchPlan. A fetch begun before a
+  // Leave would put the plan back after it.
+  it("keeps a left plan off the phone when an older fetch lands", async () => {
+    const get = held<ReturnType<typeof view>>();
+    api.getPlan.mockReturnValueOnce(get.promise);
+    const fetch = fetchPlan("a");
+    api.getPlans.mockResolvedValue({ plans: [] });
+    await afterPlanWrite("a", true);
+    get.land(view("a"));
+    await fetch;
+    expect(await readCachedPlan("a")).toBeNull();
+  });
+
+  it("fetches the plan again otherwise", async () => {
+    api.getPlan.mockResolvedValueOnce(view("a"));
+    await fetchPlan("a");
+    api.getPlans.mockResolvedValue({ plans: [summary("a")] });
+    api.getPlan.mockResolvedValueOnce(view("a", "2026-10-05T00:00:00.000Z"));
+    await afterPlanWrite("a");
+    expect((await readCachedPlan("a"))?.plan.updatedAt).toBe(
+      "2026-10-05T00:00:00.000Z",
+    );
   });
 });
 

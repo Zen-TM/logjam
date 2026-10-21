@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import {
   contractSectionKeys,
   messageFromError,
@@ -30,22 +30,31 @@ import {
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityScreenBlock } from "../auth/capabilities";
+import {
+  capabilityScreenBlock,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { onMirrorChanged } from "../sync/syncDb";
-import { makeStyles, spacing, useHues, useTheme } from "../theme";
+import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
+  Button,
   ChipRail,
   EmptyState,
   ErrorState,
   Hero,
+  ListEnd,
   LoadingState,
   Row,
   StatusPill,
   SyncStatusPills,
+  Toast,
   todayDateKey,
   type ChipOption,
+  type ToastMessage,
 } from "../ui";
+import { PlanDetailsSheet } from "./PlanDetailsSheet";
+import { createPlan } from "./plansApi";
 import {
   planChanged,
   pollPlans,
@@ -109,11 +118,15 @@ export function usePlansList(blocked: boolean) {
 }
 
 export function PlansScreen({
+  message,
   onBack,
   onOpenPlan,
 }: {
+  /** What just happened elsewhere (a plan left or deleted), as a toast;
+   *  `at` tells one from the next with the same words. */
+  message?: { text: string; at: number };
   onBack: () => void;
-  onOpenPlan: (plan: TripPlanSummary) => void;
+  onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name">) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -126,6 +139,13 @@ export function PlansScreen({
   );
   const shown = plansListView({ plans, failure, settled, online });
   const [bucket, setBucket] = useState<TripPlanBucket>("upcoming");
+  const [newOpen, setNewOpen] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [toastAt, setToastAt] = useState<number | undefined>(undefined);
+  if (message && message.at !== toastAt) {
+    setToastAt(message.at);
+    setToast({ text: message.text, tone: "info", nonce: message.at });
+  }
   const today = todayDateKey();
 
   const byBucket = useMemo(() => {
@@ -197,6 +217,14 @@ export function PlansScreen({
     );
   }
 
+  const newPlan = {
+    label: copy.add,
+    icon: "add" as const,
+    onPress: () => setNewOpen(true),
+    disabledReason: online
+      ? undefined
+      : unavailableReasonText("needs-connection"),
+  };
   const empty = tripPlansEmpty(plans?.length ?? 0, bucket);
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLANS_LIST, "gps">,
@@ -215,7 +243,18 @@ export function PlansScreen({
         titleNumberOfLines={2}
         onBack={onBack}
       >
-        <SyncStatusPills online={online} pendingCount={0} />
+        <View style={styles.pills}>
+          <Button
+            label={copy.add}
+            icon="add"
+            compact
+            variant="outlineAccent"
+            disabled={!online}
+            disabledReason={unavailableReasonText("needs-connection")}
+            onPress={() => setNewOpen(true)}
+          />
+          <SyncStatusPills online={online} pendingCount={0} />
+        </View>
       </Hero>
     ),
     buckets: (
@@ -254,7 +293,26 @@ export function PlansScreen({
               icon={empty.icon}
               title={empty.title}
               hint={empty.body}
+              // The way in, where a new plan would land.
+              action={bucket === "upcoming" ? newPlan : undefined}
             />
+          }
+          // The list ends with the button its empty state offers.
+          ListFooterComponent={
+            bucket === "upcoming" && rows.length > 0 ? (
+              <ListEnd>
+                <Button
+                  {...newPlan}
+                  variant="outlineAccent"
+                  disabled={!online}
+                />
+                {/* Away from the hero's Offline pill, so the words go under
+                    it (ui/Button.tsx). */}
+                {newPlan.disabledReason ? (
+                  <Text style={styles.offline}>{newPlan.disabledReason}</Text>
+                ) : null}
+              </ListEnd>
+            ) : undefined
           }
         />
       ),
@@ -265,14 +323,26 @@ export function PlansScreen({
       {contractSectionKeys(TRIP_PLANS_LIST, "gps").map((key) => (
         <Fragment key={key}>{sections[key]}</Fragment>
       ))}
+      <PlanDetailsSheet
+        visible={newOpen}
+        onClose={() => setNewOpen(false)}
+        onSubmit={async (values) => {
+          const made = await createPlan(values);
+          setNewOpen(false);
+          void poll();
+          onOpenPlan(made);
+        }}
+      />
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }
 
 const planKey = (plan: TripPlanSummary) => plan.id;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
+  offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   rail: { paddingHorizontal: spacing(2), paddingVertical: spacing(1) },
   list: { flex: 1 },
   listContent: {
