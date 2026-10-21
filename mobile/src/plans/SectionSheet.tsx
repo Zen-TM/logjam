@@ -6,7 +6,7 @@
 // touched follows the plan (`tripPlanAdoptTheirs`), and an edited field the
 // plan changed shows the plan's value under it; a section deleted elsewhere
 // closes the sheet.
-import { Fragment, useState } from "react";
+import { Fragment, useState, type Dispatch, type SetStateAction } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   ApiError,
@@ -79,7 +79,7 @@ export function SectionSheet({
   /** The plan's sections as cached, in order. */
   sections: readonly TripPlanSectionView[];
   online: boolean;
-  onState: (next: SectionSheetState) => void;
+  onState: Dispatch<SetStateAction<SectionSheetState>>;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -202,13 +202,16 @@ export function SectionSheet({
     }
     const patch = tripPlanSectionPatch(seen, parsed.value);
     if (section && Object.keys(patch).length === 0) return close();
+    // A save that lands after the sheet was swiped away and another
+    // section's ⋯ opened leaves that one open.
+    const saving = state;
     setBusy(true);
     try {
       if (formKey !== "add" && section)
         await patchSection(planId, section.id, patch);
       else await createSection(planId, parsed.value);
       await afterPlanWrite(planId);
-      close();
+      onState((now) => (now === saving ? null : now));
     } catch (err) {
       setError(messageFromError(err, copy.sectionSaveFailed));
       if (err instanceof ApiError) await afterPlanWrite(planId);
