@@ -11,6 +11,7 @@ import {
   type TripPlanAnswerValue,
   type TripPlanQuestion,
   type TripPlanQuestionKind,
+  type TripPlanFormPresetId,
   type TripPlanFormView,
   type TripPlanFormVisibility,
   type TripPlanMemberStatus,
@@ -401,13 +402,33 @@ export const TRIP_PLAN_PAGE = {
 
 export type TripPlanPageView = "writeUp" | "items" | "forms" | "people";
 
-/** One plain sentence per form visibility, shown above a form being filled. */
+/** The presets Logjam Web's print summary carries, when everyone in the
+ *  plan sees their answers, and the questions of each it prints, in order.
+ *  The one list the summary prints from and `tripPlanVisibilityLine` warns
+ *  from. Guard: plans.test.ts (the printed columns). */
+export const TRIP_PLAN_PRINTED_COLUMNS: Partial<
+  Record<TripPlanFormPresetId, readonly string[]>
+> = {
+  carpool: ["mode", "seats", "from"],
+  safetyContacts: ["name", "phone", "name2", "phone2"],
+};
+export const TRIP_PLAN_PRINTED_PRESETS = Object.keys(
+  TRIP_PLAN_PRINTED_COLUMNS,
+) as TripPlanFormPresetId[];
+
+/** Who sees the answers, shown above a form being filled: one plain
+ *  sentence, and a second for a form a member may print. */
 export function tripPlanVisibilityLine(
   visibleTo: TripPlanFormVisibility,
+  preset: TripPlanFormPresetId | null = null,
 ): string {
-  return visibleTo === "leaders"
-    ? "Only the plan's leaders see your answers."
-    : "Everyone in this plan sees your answers, including people who join later.";
+  if (visibleTo === "leaders")
+    return "Only the plan's leaders see your answers.";
+  const line =
+    "Everyone in this plan sees your answers, including people who join later.";
+  return preset && TRIP_PLAN_PRINTED_PRESETS.includes(preset)
+    ? `${line} Members may print them for someone not on the trip, such as a parent.`
+    : line;
 }
 
 /** The plan page's one notice, by priority, or none. */

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { parseTripPlanFormCreate } from "@logjam/shared";
+import {
+  parseTripPlanFormCreate,
+  TRIP_PLAN_FORM_PRESETS,
+  type TripPlanFormView,
+  type TripPlanView,
+} from "@logjam/shared";
 import {
   adoptTheirs,
   formPatch,
   type FormValues,
   PLAN_FIELD_GROUPS,
   planPatch,
+  planSummary,
   sectionPatch,
   theirsChanged,
 } from "./plansModel";
@@ -159,5 +165,182 @@ describe("a form edit", () => {
     expect(formPatch(seen, values)).toEqual({
       visibleTo: { from: "members", to: "leaders" },
     });
+  });
+});
+
+describe("the print summary", () => {
+  const user = (username: string) => ({ id: username, username });
+  // Answers by username, as a leader is served them: sue's too, though she
+  // has only asked to join.
+  const form = (
+    preset: TripPlanFormView["preset"],
+    byUser: Record<string, Record<string, unknown>>,
+  ): TripPlanFormView => ({
+    id: preset ?? "f",
+    title: preset ?? "Other",
+    preset,
+    questions: preset ? TRIP_PLAN_FORM_PRESETS[preset].questions : [],
+    visibleTo: "members",
+    requiredToJoin: false,
+    position: 0,
+    updatedAt: "",
+    myAnswer: null,
+    answers: Object.entries(byUser).map(([username, answers]) => ({
+      user: user(username),
+      answers: answers as never,
+      updatedAt: "",
+    })),
+  });
+  const plan = {
+    id: "p",
+    name: "Wollangambe trip",
+    startDate: null,
+    endDate: null,
+    tripTypes: [],
+    archivedAt: null,
+    createdAt: "",
+    updatedAt: "",
+    createdBy: null,
+    myRole: "leader",
+    sections: [
+      {
+        id: "s",
+        title: "Overview",
+        body: "Two days.",
+        position: 0,
+        updatedAt: "",
+      },
+    ],
+    members: [
+      {
+        user: user("mira"),
+        role: "leader",
+        status: "active",
+        invitedBy: null,
+        createdAt: "",
+      },
+      {
+        user: user("tom"),
+        role: "member",
+        status: "active",
+        invitedBy: null,
+        createdAt: "",
+      },
+      {
+        user: user("sue"),
+        role: "member",
+        status: "requested",
+        invitedBy: null,
+        createdAt: "",
+      },
+    ],
+    places: [
+      {
+        kind: "place",
+        name: "Secret pool",
+        latitude: -33.51234,
+        longitude: 150.41234,
+      },
+    ],
+    routes: [],
+    files: [],
+    geoPdfs: [],
+    forms: [
+      form("carpool", {
+        tom: { mode: "lift", seats: 2, from: "Katoomba" },
+        sue: { mode: "own", from: "Leura" },
+      }),
+      form("safetyContacts", {
+        tom: { name: "Ann", phone: "0400 000 000" },
+        sue: { name: "Sue's dad", phone: "0400 999 999" },
+      }),
+      form("firstAid", { tom: { cert: "no", conditions: "Bee allergy" } }),
+    ],
+  } as unknown as TripPlanView;
+  const all = {
+    writeUp: true,
+    going: true,
+    presets: ["carpool", "safetyContacts"] as const,
+  };
+  const table = (summary: ReturnType<typeof planSummary>, preset: string) =>
+    summary.tables.find((each) => each.preset === preset);
+
+  // Mutation: list every form's answers, or the places, and the bee allergy
+  // or the pool's position reaches paper a parent keeps.
+  it("never carries a place, a coordinate or another form's answers", () => {
+    const text = JSON.stringify(planSummary(plan, all));
+    expect(text).not.toContain("Secret pool");
+    expect(text).not.toContain("-33.5");
+    expect(text).not.toContain("Bee allergy");
+    expect(text).toContain("Katoomba");
+    expect(text).toContain("0400 000 000");
+  });
+
+  // Mutation: drop the going filter in `answerTable`, and a stranger asking
+  // by link has their emergency contact printed as one of the group's.
+  it("prints no answer from someone who only asked to join", () => {
+    const text = JSON.stringify(planSummary(plan, all));
+    expect(text).not.toContain("sue");
+    expect(text).not.toContain("Leura");
+    expect(text).not.toContain("0400 999 999");
+  });
+
+  // Mutation: offer any form the caller sees, and a leaders-only form's
+  // answers go on paper though their authors were told only leaders see them.
+  it("prints no form only the leaders see", () => {
+    const leadersOnly = {
+      ...plan,
+      forms: plan.forms.map((each) => ({
+        ...each,
+        visibleTo: "leaders" as const,
+      })),
+    };
+    expect(planSummary(leadersOnly, all).tables).toEqual([]);
+  });
+
+  // Mutation: head the columns with the preset's words, or keep a column
+  // whose kind changed, and a "Medications" answer prints as a contact.
+  it("heads its columns with the labels now, and drops a question that became something else", () => {
+    const contacts = plan.forms[1];
+    const edited = {
+      ...plan,
+      forms: [
+        {
+          ...contacts,
+          questions: contacts.questions.map((question) =>
+            question.id === "name"
+              ? { ...question, label: "Who to call" }
+              : question.id === "phone"
+                ? {
+                    ...question,
+                    kind: "longText" as const,
+                    label: "Medications",
+                  }
+                : question,
+          ),
+        },
+      ],
+    };
+    const summary = planSummary(edited, all);
+    expect(table(summary, "safetyContacts")?.head).toEqual([
+      "Name",
+      "Who to call",
+      "Second contact's name",
+      "Second contact's phone",
+    ]);
+    expect(JSON.stringify(summary)).not.toContain("0400 000 000");
+  });
+
+  it("lists who's going, not who asked to join, and leaves out what was unticked", () => {
+    const summary = planSummary(plan, {
+      ...all,
+      presets: ["safetyContacts"],
+      writeUp: false,
+    });
+    expect(summary.going.map(([name]) => name)).toEqual(["mira", "tom"]);
+    expect(summary.leaders).toEqual(["mira"]);
+    expect(table(summary, "carpool")).toBeUndefined();
+    expect(table(summary, "safetyContacts")).toBeDefined();
+    expect(summary.sections).toEqual([]);
   });
 });

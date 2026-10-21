@@ -156,13 +156,16 @@ export function PlanFormFields({
   draft,
   onChange,
 }: {
-  form: Pick<TripPlanFormView, "title" | "questions" | "visibleTo">;
+  form: Pick<TripPlanFormView, "title" | "questions" | "visibleTo"> &
+    Partial<Pick<TripPlanFormView, "preset">>;
   draft: AnswerDraft;
   onChange: (next: AnswerDraft) => void;
 }) {
   return (
     <>
-      <p className={classes.note}>{tripPlanVisibilityLine(form.visibleTo)}</p>
+      <p className={classes.note}>
+        {tripPlanVisibilityLine(form.visibleTo, form.preset)}
+      </p>
       {form.questions.map((question) => (
         <QuestionField
           key={question.id}

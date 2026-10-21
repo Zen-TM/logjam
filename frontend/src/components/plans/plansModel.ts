@@ -1,12 +1,23 @@
 // The pure decisions of Plans' forms, out of the components so a test can
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
 // the value last seen and the new one (shared/DESIGN.md §10).
+import {
+  currentTripPlanAnswers,
+  TRIP_PLAN_FORM_PRESETS,
+  TRIP_PLAN_PRINTED_COLUMNS,
+  TRIP_PLAN_PRINTED_PRESETS,
+  tripPlanAnswerText,
+  tripPlanRoleWord,
+} from "@logjam/shared";
 import type {
   TripPlanCreate,
   TripPlanFormCreate,
   TripPlanFormPatch,
+  TripPlanFormPresetId,
+  TripPlanFormView,
   TripPlanPatch,
   TripPlanSectionPatch,
+  TripPlanView,
 } from "@logjam/shared";
 
 export type PlanValues = Required<TripPlanCreate>;
@@ -130,4 +141,95 @@ export function formPatch(
  *  a slug no plain object already has as a key (`q3f9a…`). */
 export function mintSlug(prefix: "q" | "o"): string {
   return `${prefix}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+}
+
+export type SummaryParts = {
+  writeUp: boolean;
+  going: boolean;
+  /** The printable forms ticked, by preset. */
+  presets: readonly TripPlanFormPresetId[];
+};
+
+/** The preset forms the summary may print: those everyone in the plan
+ *  sees, whose fillers were told members may print them
+ *  (`tripPlanVisibilityLine`), one per printed preset. */
+export function summaryForms(
+  plan: Pick<TripPlanView, "forms">,
+): (TripPlanFormView & { preset: TripPlanFormPresetId })[] {
+  return TRIP_PLAN_PRINTED_PRESETS.flatMap((preset) => {
+    const form = plan.forms.find(
+      (each) => each.preset === preset && each.visibleTo === "members",
+    );
+    return form ? [{ ...form, preset }] : [];
+  });
+}
+
+/** One table of a preset form's answers: a row per person going who
+ *  answered, a column per question the preset prints that is still its
+ *  kind, headed by its label now. A question a leader removed, or turned
+ *  into something else ("Medications"), is not printed. */
+function answerTable(
+  form: TripPlanFormView & { preset: TripPlanFormPresetId },
+  going: ReadonlySet<string>,
+) {
+  const preset = TRIP_PLAN_FORM_PRESETS[form.preset];
+  const columns = (TRIP_PLAN_PRINTED_COLUMNS[form.preset] ?? []).flatMap(
+    (id) => {
+      const question = form.questions.find((each) => each.id === id);
+      const was = preset.questions.find((each) => each.id === id);
+      return question && question.kind === was?.kind ? [question] : [];
+    },
+  );
+  if (columns.length === 0) return [];
+  const answers = [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])];
+  const rows = answers
+    .filter((answer) => going.has(answer.user.id))
+    .map((answer) => {
+      const values = currentTripPlanAnswers(form.questions, answer.answers);
+      return [
+        answer.user.username,
+        ...columns.map((question) =>
+          tripPlanAnswerText(question, values[question.id]),
+        ),
+      ];
+    })
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  return [
+    {
+      preset: form.preset,
+      caption: preset.title,
+      head: ["Name", ...columns.map((each) => each.label)],
+      rows,
+    },
+  ];
+}
+
+/**
+ * What the print summary holds, for someone not on the trip.
+ * PRIVACY: never a place, a coordinate, a way, a map, another form, anyone's
+ * medical answers or anyone not going: only the write-up, who's going, and
+ * the printed presets' named questions (`TRIP_PLAN_PRINTED_COLUMNS`), from
+ * forms everyone in the plan sees. Guard: plansModel.test.ts.
+ */
+export function planSummary(plan: TripPlanView, parts: SummaryParts) {
+  const active = plan.members.filter((member) => member.status === "active");
+  const going = new Set(active.map((member) => member.user.id));
+  return {
+    name: plan.name,
+    leaders: active
+      .filter((member) => member.role === "leader")
+      .map((member) => member.user.username),
+    sections: parts.writeUp
+      ? plan.sections.map(({ title, body }) => ({ title, body }))
+      : [],
+    going: parts.going
+      ? active.map((member) => [
+          member.user.username,
+          tripPlanRoleWord(member.role),
+        ])
+      : [],
+    tables: summaryForms(plan)
+      .filter((form) => parts.presets.includes(form.preset))
+      .flatMap((form) => answerTable(form, going)),
+  };
 }
