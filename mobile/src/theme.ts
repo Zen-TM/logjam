@@ -302,6 +302,20 @@ export const textRoles = Object.fromEntries(
   }),
 ) as TextRoles;
 
+/**
+ * Inline emphasis inside a role's text (a maintainer announcement's **bold**
+ * and `code`): a weight and a face, never a size, so the run keeps its role's.
+ */
+export const inlineText = {
+  strong: { fontWeight: fontWeight.bold },
+  // Per platform, for `Platform.select` (this module stays free of React
+  // Native values so vitest can load it): iOS has no family named monospace.
+  code: {
+    ios: { fontFamily: "Menlo" },
+    default: { fontFamily: "monospace" },
+  },
+} as const;
+
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
 export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";
 
@@ -397,6 +411,8 @@ const notificationHues = (
     export: assetHue.import,
     /** GeoPDFs — as in Saved. */
     geoPdf: assetHue.geoPdf,
+    /** A maintainer message: about Logjam itself, so the scheme accent. */
+    message: theme.accent,
     /** A file a friend sent you — the waterhole blue an accepted copy wears in
      *  Saved's Imports, because that is where accepting it puts it. */
     file: assetHue.import,

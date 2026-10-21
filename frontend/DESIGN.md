@@ -95,7 +95,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   `large` for a long one. Footer: Cancel, then the one primary action. Save
   is `type="submit"` tied by `form={formId}` and wears `busy`; pass
   `dismissible={false}` while a request runs. First focus is the element
-  marked `data-autofocus`.
+  marked `data-autofocus`. A dialog for reading (a maintainer message) has no
+  footer; its × closes it.
 - **`ConfirmDialog`**: `destructive` when something is lost, `filled` when
   nothing is. The menu item that leads to it is `danger`, without the fill.
 - **`Popover`** is non-modal. Whether an outside press closes it is the
