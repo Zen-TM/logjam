@@ -10,7 +10,7 @@ import {
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
-import { useElevationProfile } from "../../placeUtils";
+import { useElevationPoint } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
 import { WeatherView } from "../weather/WeatherView";
@@ -76,14 +76,12 @@ export default function MapPointPopover({
     };
   }, [map, point, anchorEl, onClose]);
 
-  // The elevation endpoint profiles a LINE, and the shortest legal one is two
-  // points: the second is nudged east by ~1 m, inside the DEM's own cell size
-  // (Logjam GPS does the same).
-  const profile = useElevationProfile([
-    [point.longitude, point.latitude],
-    [point.longitude + 0.00001, point.latitude],
-  ]);
-  const metres = profile.profile?.samples[0]?.elevationM ?? null;
+  // One request for the height and the slope.
+  const { reading, loading } = useElevationPoint(
+    point.longitude,
+    point.latitude,
+  );
+  const metres = reading?.elevationM ?? null;
 
   // "Show the weather here" swaps the body for the forecast in place and backs
   // out to the facts (shared/DESIGN.md §10). The press is what fetches.
@@ -106,19 +104,18 @@ export default function MapPointPopover({
 
   // Pressed too soon, the weather would be asked without a height and answer
   // for the cell's own DEM, which in canyon country can be far from the spot.
-  const checkingHeight =
-    metres == null &&
-    (profile.loading || (!profile.error && profile.profile === null));
+  const checkingHeight = loading;
 
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
       metres != null
         ? { state: "known", metres }
-        : profile.loading || (!profile.error && profile.profile === null)
+        : loading
           ? { state: "checking" }
           : { state: "unavailable" },
     from,
+    slopeDegrees: reading?.slopeDegrees ?? null,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

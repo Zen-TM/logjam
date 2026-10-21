@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 const KIT_DIR = dirname(fileURLToPath(import.meta.url));
 
 const PILL_CONTROLS: [file: string, selector: string][] = [
-  ["Button.module.css", ".button"],
+  ["Button.module.css", ".pressable"],
   ["Button.module.css", ".compact"],
   ["Chip.module.css", ".chip"],
 ];
