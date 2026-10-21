@@ -91,7 +91,9 @@ export function UserSearch({
         error={error}
         hint={offline}
       />
-      {searching ? (
+      {/* A search the drop cancelled never clears `searching`; offline,
+          nothing is working, so no spinner. */}
+      {searching && !offline ? (
         <ActivityIndicator color={theme.accent} style={styles.spinner} />
       ) : null}
       {trimmed.length > 0 && !long ? (
