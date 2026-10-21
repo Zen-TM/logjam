@@ -248,7 +248,8 @@ type MoreStackParams = {
   MoreTripDetail: { trip: MirrorTrip };
   Plans: undefined;
   // The name rides along for the hero while the cached plan is read.
-  Plan: { planId: string; name: string };
+  /** `view`: the tab it opens on, People for a join request. */
+  Plan: { planId: string; name: string; view?: "people" };
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -913,7 +914,11 @@ export function AppShell({
         } else if (target.kind === "plan") {
           nav.navigate("More", {
             screen: "Plan",
-            params: { planId: target.planId, name: TRIP_PLANS_LIST.title },
+            params: {
+              planId: target.planId,
+              name: TRIP_PLANS_LIST.title,
+              view: target.view,
+            },
           });
         } else if (target.kind === "plans") {
           nav.navigate("More", { screen: "Plans" });
@@ -1245,6 +1250,7 @@ export function AppShell({
                       <PlanScreen
                         planId={route.params.planId}
                         name={route.params.name}
+                        initialView={route.params.view}
                         onBack={() => navigation.goBack()}
                       />
                     )}

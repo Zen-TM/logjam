@@ -137,11 +137,14 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
 export function PlanScreen({
   planId,
   name,
+  initialView,
   onBack,
 }: {
   planId: string;
   /** The list row's name, for the hero before the cache is read. */
   name: string;
+  /** The tab it opens on; the write-up when absent. */
+  initialView?: TripPlanPageView;
   onBack: () => void;
 }) {
   const online = useConnectivity() === "online";
@@ -155,7 +158,7 @@ export function PlanScreen({
     online,
     block !== null,
   );
-  const [view, setView] = useState<TripPlanPageView>("writeUp");
+  const [view, setView] = useState<TripPlanPageView>(initialView ?? "writeUp");
 
   if (block)
     return (

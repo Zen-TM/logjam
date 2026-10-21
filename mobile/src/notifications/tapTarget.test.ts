@@ -12,9 +12,20 @@ describe("notificationTapTarget", () => {
     ).toEqual({ kind: "place", placeId: "c-1" });
   });
 
-  // Mutation: drop or misspell a type in PLAN_OPENING_TYPES, and that push
-  // lands on the inbox.
-  it.each(["plan_join_request", "plan_join_approved", "plan_member_joined"])(
+  // Mutation: drop the `view`, and a join request opens on the write-up,
+  // away from where it is answered.
+  it("opens a join request on the plan's People", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_join_request", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "plan", planId: "p-1", view: "people" });
+  });
+
+  // Mutation: send these to the inbox, and a push about a plan the reader is
+  // in doesn't open it.
+  it.each(["plan_join_approved", "plan_member_joined"])(
     "opens the plan a %s push names",
     (type) => {
       expect(
@@ -22,7 +33,7 @@ describe("notificationTapTarget", () => {
           data: { type, planId: "p-1" },
           routeEditing: false,
         }),
-      ).toEqual({ kind: "plan", planId: "p-1" });
+      ).toEqual({ kind: "plan", planId: "p-1", view: undefined });
     },
   );
 
