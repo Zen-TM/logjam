@@ -12,7 +12,43 @@ describe("notificationTapTarget", () => {
     ).toEqual({ kind: "place", placeId: "c-1" });
   });
 
+  // Mutation: drop the `view`, and a join request opens on the write-up,
+  // away from where it is answered.
+  it("opens a join request on the plan's People", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_join_request", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "plan", planId: "p-1", view: "people" });
+  });
+
+  // Mutation: send these to the inbox, and a push about a plan the reader is
+  // in doesn't open it.
+  it.each(["plan_join_approved", "plan_member_joined"])(
+    "opens the plan a %s push names",
+    (type) => {
+      expect(
+        notificationTapTarget({
+          data: { type, planId: "p-1" },
+          routeEditing: false,
+        }),
+      ).toEqual({ kind: "plan", planId: "p-1", view: undefined });
+    },
+  );
+
+  // Mutation: drop the invite branch.
+  it("opens the list for an invite", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_invited", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "plans" });
+  });
+
   it.each([
+    ["a plan the recipient lost", { type: "plan_access_ended", planId: "p-1" }],
     ["no id at all", { type: "friendRequest" }],
     ["an id that is not a string", { placeId: 7 }],
     ["a null id", { placeId: null }],

@@ -1,6 +1,7 @@
 // The app shell: bottom tabs (Map / Places / Logs / Saved / More) with native
 // stacks for detail screens, behind the consent gate. The More tab is a hub
-// folding Inbox, Account, Friends, Sync issues and Settings off the tab bar.
+// folding Inbox, Plans, Account, Friends, Sync issues and Settings off the tab
+// bar.
 //
 // Mounts for a GUEST as well as an authenticated user. Everything that talks to
 // the server is registered conditionally below — a guest starts no sync engine,
@@ -22,7 +23,12 @@ import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isThemeSchemeId, needsReconsent, type IconIdea } from "@logjam/shared";
+import {
+  isThemeSchemeId,
+  needsReconsent,
+  TRIP_PLANS_LIST,
+  type IconIdea,
+} from "@logjam/shared";
 
 import {
   fetchCurrentUser,
@@ -67,6 +73,8 @@ import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { PlanScreen } from "./plans/PlanScreen";
+import { PlansScreen } from "./plans/PlansScreen";
 import {
   pollPlans,
   refreshCachedPlan,
@@ -238,6 +246,10 @@ type MoreStackParams = {
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
   MoreTripDetail: { trip: MirrorTrip };
+  Plans: undefined;
+  // The name rides along for the hero while the cached plan is read.
+  /** `view`: the tab it opens on, People for a join request. */
+  Plan: { planId: string; name: string; view?: "people" };
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -899,6 +911,17 @@ export function AppShell({
             screen: "PlaceDetail",
             params: { placeId: target.placeId, name: "Place" },
           });
+        } else if (target.kind === "plan") {
+          nav.navigate("More", {
+            screen: "Plan",
+            params: {
+              planId: target.planId,
+              name: TRIP_PLANS_LIST.title,
+              view: target.view,
+            },
+          });
+        } else if (target.kind === "plans") {
+          nav.navigate("More", { screen: "Plans" });
         } else {
           // Inbox lives inside the More stack.
           nav.navigate("More", { screen: "Inbox" });
@@ -1093,6 +1116,7 @@ export function AppShell({
                         onOpenInbox={() => navigation.navigate("Inbox")}
                         onOpenAccount={() => navigation.navigate("Account")}
                         onOpenFriends={() => navigation.navigate("Friends")}
+                        onOpenPlans={() => navigation.navigate("Plans")}
                         onOpenSyncIssues={() =>
                           navigation.navigate("SyncIssues")
                         }
@@ -1195,6 +1219,39 @@ export function AppShell({
                             params: { focus: { bbox, nonce: Date.now() } },
                           })
                         }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Plans"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <PlansScreen
+                        onBack={() => navigation.goBack()}
+                        onOpenPlan={(plan) =>
+                          navigation.navigate("Plan", {
+                            planId: plan.id,
+                            name: plan.name,
+                          })
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Plan"
+                    options={{ headerShown: false }}
+                    // Each plan its own route: a push for plan B tapped on
+                    // plan A's page opens B over A, rather than swapping A's
+                    // params under a screen that still holds A's state.
+                    getId={({ params }) => params.planId}
+                  >
+                    {({ navigation, route }) => (
+                      <PlanScreen
+                        planId={route.params.planId}
+                        name={route.params.name}
+                        initialView={route.params.view}
+                        onBack={() => navigation.goBack()}
                       />
                     )}
                   </MoreStack.Screen>

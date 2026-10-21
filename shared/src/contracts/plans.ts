@@ -46,6 +46,8 @@ export const TRIP_PLANS_LIST = {
     noUpcomingTitle: "Nothing coming up",
     noPastTitle: "No past plans",
     noArchivedTitle: "Nothing archived",
+    // The hero's line and Logjam GPS's More row, when nothing is coming up.
+    nothingPlanned: "Nothing planned",
 
     noDates: "No dates yet",
     pillLeader: "Leader",
@@ -293,7 +295,7 @@ export function tripPlansHeroTitle(
   const now = coming.find((plan) => firstDay(plan)! <= today);
   if (now) return `On now: ${now.name}`;
   const next = coming[0];
-  if (!next) return "Nothing planned";
+  if (!next) return TRIP_PLANS_LIST.copy.nothingPlanned;
   return `Next: ${next.name}, ${
     next.startDate
       ? tripPlanDayLabel(next.startDate, thisYear)
