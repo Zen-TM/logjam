@@ -28,8 +28,9 @@ Limits:
   hand, and read the live sha from the Elastic Beanstalk version label
   instead.
 - **Frontend, unhashed files:** see the table. If a rolled-back release
-  changed `privacy.html` or `tos.html` (and the consent version with it),
-  users see the newer text; fix forward instead.
+  changed `privacy.html` or `tos.html`, users see the newer text while the API
+  (rolled back separately) may still name the older consent version; fix
+  forward instead.
 - **Frontend:** a release is kept for 30 days after it was last deployed
   (a rollback to it does not reset that clock), plus always the live release
   and the one before it. Releases deployed before

@@ -154,6 +154,11 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.body).toHaveProperty("consentVersion");
   });
 
+  it("GET /users/me names the current consent version so a build need not bake it", async () => {
+    const res = await request(API_URL).get("/users/me").set(AUTH);
+    expect(res.body.currentConsentVersion).toBe(CURRENT_CONSENT_VERSION);
+  });
+
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);

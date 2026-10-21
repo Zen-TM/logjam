@@ -72,9 +72,9 @@ import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import {
-  CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
   consentGate,
+  currentConsentVersionOf,
   needsReconsent,
 } from "../consent";
 import ConsentGate from "./ConsentGate";
@@ -834,7 +834,7 @@ function App() {
         // this also covers a stale-version user who re-signed-up, which the
         // old `!user.consentedAt` check silently skipped.
         const pending = localStorage.getItem(PENDING_CONSENT_STORAGE_KEY);
-        if (pending === CURRENT_CONSENT_VERSION && needsReconsent(user)) {
+        if (pending === currentConsentVersionOf(user) && needsReconsent(user)) {
           recordConsent(pending)
             .then((updated) => {
               // Sync the cached user before dropping the pending key so the
@@ -1425,9 +1425,13 @@ function App() {
   // whose consent PATCH (recorded by the effect above) is still in flight.
   // Decided once, up beside the data hooks the same answer holds back
   // (`consentGate`), so the gate and the fetches can never disagree.
-  if (consentBlocked) {
+  if (consentBlocked && currentUser) {
     return (
-      <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />
+      <ConsentGate
+        consentVersion={currentConsentVersionOf(currentUser)}
+        onAccepted={applyCurrentUser}
+        onSignOut={auth.signOut}
+      />
     );
   }
 

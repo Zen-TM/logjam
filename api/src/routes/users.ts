@@ -197,6 +197,7 @@ async function serializeUserWithUsage(
   return {
     ...(await serializeUserForResponse(user)),
     monthlyComputeCredits: credits.quota,
+    currentConsentVersion: CURRENT_CONSENT_VERSION,
     monthlyComputeUsage: credits.used,
     monthlyComputeResetAt: credits.resetAt,
     // Egress has no progress bar in the UI — the cap sits far above real use

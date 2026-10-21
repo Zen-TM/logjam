@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { CURRENT_CONSENT_VERSION, needsReconsent } from "./consent.js";
+import {
+  CURRENT_CONSENT_VERSION,
+  currentConsentVersionOf,
+  needsReconsent,
+} from "./consent.js";
 
 // Consent is a privacy/legal boundary (root AGENTS.md): privacy.html and
 // tos.html promise "you will be asked to re-consent on next sign-in" after a
@@ -20,12 +24,38 @@ describe("needsReconsent", () => {
     );
   });
 
-  it("respects an explicit currentVersion argument", () => {
-    expect(needsReconsent({ consentVersion: "2030-01-01" }, "2030-01-01")).toBe(
-      false,
-    );
+  // The server names the version; the build's constant is only the fallback.
+  // Mutation: compare against CURRENT_CONSENT_VERSION again and the first two
+  // turn red (a bump would strand every installed build at a gate whose Agree
+  // the server refuses).
+  it("compares with the server's version, not the build's constant", () => {
     expect(
-      needsReconsent({ consentVersion: CURRENT_CONSENT_VERSION }, "2030-01-01"),
+      needsReconsent({
+        consentVersion: CURRENT_CONSENT_VERSION,
+        currentConsentVersion: "2999-01-01",
+      }),
     ).toBe(true);
+    expect(
+      needsReconsent({
+        consentVersion: "2999-01-01",
+        currentConsentVersion: "2999-01-01",
+      }),
+    ).toBe(false);
+  });
+
+  it("falls back to the build's constant against a server that sends no version", () => {
+    expect(
+      needsReconsent({
+        consentVersion: "2025-01-01",
+        currentConsentVersion: undefined,
+      }),
+    ).toBe(true);
+    expect(currentConsentVersionOf({})).toBe(CURRENT_CONSENT_VERSION);
+  });
+
+  it("names the version a gate must send back", () => {
+    expect(
+      currentConsentVersionOf({ currentConsentVersion: "2999-01-01" }),
+    ).toBe("2999-01-01");
   });
 });

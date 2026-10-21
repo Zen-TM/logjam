@@ -32,6 +32,11 @@
   [0033](../docs/decisions/0033-the-api-writes-the-sentence-a-user-reads.md)
 - **An array in a request body is capped at both ends:** empty is 400 (unless empty is meaningful), over
   its limit 413; the body-size cap is no substitute (`src/__tests__/placesBulk.test.ts`).
+- **A consent bump is `CURRENT_CONSENT_VERSION` (`shared/src/consent.ts`) plus
+  the "Last updated" date in `frontend/public/privacy.html` and `tos.html`.**
+  `GET /users/me` names the version as `currentConsentVersion` and clients gate
+  on it, so a build in the field survives the bump; `PATCH /users/me` still
+  accepts only that version. Guard: `src/constants/consent.unit.test.ts`.
 
 ## Logging and config
 
