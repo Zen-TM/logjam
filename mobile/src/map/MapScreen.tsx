@@ -19,6 +19,7 @@ import {
   useEffectEvent,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
@@ -87,7 +88,10 @@ import {
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  TRIP_PLAN_PAGE,
 } from "@logjam/shared";
+import { planModeMine, planModeReducer, planModeStart } from "../plans/planMap";
+import { readCachedPlan } from "../plans/plansCache";
 
 import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
@@ -228,10 +232,12 @@ import { RoutesLayer } from "./RoutesLayer";
 import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
+import { onMirrorChanged } from "../sync/syncDb";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import {
   BottomSheet,
   Button,
+  Chip,
   Icon,
   IconButton,
   Notice,
@@ -369,6 +375,9 @@ const ANCHOR_DELETE_FLIP_DP = 78;
  *  at one cannot easily hit the other. */
 const ANCHOR_DELETE_GAP_DP = 26;
 
+/** The top padding a plan's fit leaves for the search row, the plan banner
+ *  and an offline notice under it (dp, measured on a Pixel). */
+const PLAN_BANNER_CLEARANCE = 290;
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
@@ -780,6 +789,7 @@ export function MapScreen({
   continueTrack,
   startRecording,
   navigatePlace,
+  planMode,
 }: {
   onOpenPlace: (placeId: string, name: string) => void;
   /**
@@ -842,6 +852,9 @@ export function MapScreen({
   // "Navigate to this place". An id only — the point comes from the mirror
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
+  // "Show on map" from a plan: the plan's items only, from the phone's cached
+  // copy, until "Back to my map". An id only.
+  planMode?: { planId: string; nonce: number } | null;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -970,6 +983,39 @@ export function MapScreen({
   // rows' `visible`) so it toggles smoothly and stays toggleable with zero
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
+  // PLAN MODE: the plan's places and ways in place of the user's own, which
+  // come back beside them with "Show my things". Read from the plans cache, so
+  // it works in a canyon for any plan opened before.
+  // Which plan is shown, and when it goes: `planModeReducer`.
+  const [planState, planDispatch] = useReducer(
+    planModeReducer,
+    planMode,
+    planModeStart,
+  );
+  if (planMode !== planState.arrivedFor)
+    planDispatch({ type: "arrive", planMode });
+  const { shownPlanId, plan: planOnMap, showMine } = planState;
+  const leavePlan = () => planDispatch({ type: "leave" });
+  // Re-read whenever the cache changes: a plan the user lost leaves the map,
+  // one that gained items draws them.
+  useEffect(() => {
+    if (!shownPlanId) return;
+    let cancelled = false;
+    const read = () =>
+      void readCachedPlan(shownPlanId)
+        .then((cached) => {
+          if (!cancelled)
+            planDispatch({ type: "read", plan: cached?.plan ?? null });
+        })
+        .catch(console.error);
+    read();
+    const unsubscribe = onMirrorChanged(read);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [shownPlanId]);
+  const mine = planModeMine(planState);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
   // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
@@ -1234,7 +1280,7 @@ export function MapScreen({
    */
   const acceptSettleCamera = useRef(false);
   const fitCameraToBbox = useCallback(
-    (bbox: [number, number, number, number], padding = 40) => {
+    (bbox: [number, number, number, number], padding = 40, top = padding) => {
       if (!cameraRef.current) return;
       const [west, south, east, north] = bbox;
       stopNeedsReset.current = true;
@@ -1262,7 +1308,7 @@ export function MapScreen({
       // same numbers this function already takes as its bbox.
       cameraRef.current.fitBounds(bbox, {
         padding: {
-          top: padding,
+          top,
           right: padding,
           bottom: padding,
           left: padding,
@@ -1561,6 +1607,21 @@ export function MapScreen({
       showSharedPlaces,
     ],
   );
+
+  // A plan's places draw on the owned pins' source; their ids are the
+  // plan's, so a tap finds no place of the user's. Beside them, the user's own
+  // are faint (`muted`), so the two can be told apart.
+  const pinsOwned = useMemo(() => {
+    if (!planOnMap) return ownedFc;
+    const plan = toPlaceFeatureCollection(planOnMap.places, placeTypeColors);
+    if (!mine) return plan;
+    const own = ownedFc.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, muted: true },
+    }));
+    return { ...plan, features: [...plan.features, ...own] };
+  }, [mine, ownedFc, placeTypeColors, planOnMap]);
+  const planRoutes = planOnMap?.routes;
 
   /** Follow a track between two anchors, if snapping is on and finds one.
    *
@@ -2245,17 +2306,17 @@ export function MapScreen({
   // `path` null means the file synced as a row but its bytes are not on this
   // phone yet — there is nothing to draw. Filtered here rather than guarded at
   // the source below, so the layer indices stay contiguous.
-  const visibleImports = showVectorImports
-    ? imports.filter((imported) => imported.visible && imported.path !== null)
-    : [];
+  const visibleImports =
+    showVectorImports && mine
+      ? imports.filter((imported) => imported.visible && imported.path !== null)
+      : [];
 
   // GeoPDF imports: file management lives in SavedScreen (viewport-independent
   // management); this screen keeps only the ready layers it renders.
   const { geoPdfImports } = useGeoPdfImports();
   const readyGeoPdfs = geoPdfImports.filter((gp) => gp.state === "ready");
-  const readyGeoPdfImports = showGeoPdfs
-    ? readyGeoPdfs.filter((gp) => gp.visible)
-    : [];
+  const readyGeoPdfImports =
+    showGeoPdfs && mine ? readyGeoPdfs.filter((gp) => gp.visible) : [];
 
   // Track recording, markers and navigate-to-point. The recorder
   // itself lives in tracks/trackRecorder (background task); this screen only
@@ -2311,6 +2372,26 @@ export function MapScreen({
       ...(showPlaceRoutes ? placeLinkedRoutes : []),
     ],
     [placeLinkedRoutes, showPlaceRoutes, showRoutes, standaloneRoutes],
+  );
+  const routesOnMap = useMemo(
+    () =>
+      planRoutes
+        ? [
+            ...planRoutes,
+            ...(mine
+              ? visibleRoutes.map((route) => ({ ...route, muted: true }))
+              : []),
+          ]
+        : visibleRoutes,
+    [planRoutes, mine, visibleRoutes],
+  );
+  // A plan's way has no options sheet of the user's.
+  const pressRoute = useCallback(
+    (routeId: string) => {
+      if (!planRoutes?.some((route) => route.id === routeId))
+        setOptionsRouteId(routeId);
+    },
+    [planRoutes],
   );
 
   // Locking north-up straightens a map that is already turned. Without this the
@@ -2661,7 +2742,13 @@ export function MapScreen({
     // writes a camera stop per sample, which would overwrite the camera fit
     // within a frame.
     setFollowMode("off");
-    fitCameraToBbox(focus.bbox);
+    // Plan mode's banner covers the top of the map: its pins go below it.
+    // ponytail: the banner's measured height, if this misses on a small screen.
+    fitCameraToBbox(
+      focus.bbox,
+      undefined,
+      planMode ? PLAN_BANNER_CLEARANCE : undefined,
+    );
     // …and say WHICH rectangle — but only for a saved REGION, the one asset
     // whose extent is a meaningful box. A pulsing rectangle around a pin, a
     // line or a place point is noise (the asset itself is already the shape).
@@ -2673,6 +2760,7 @@ export function MapScreen({
   }, [
     focus?.nonce,
     focus,
+    planMode,
     chooseBasemap,
     fitCameraToBbox,
     mergedOverlays,
@@ -4675,7 +4763,7 @@ export function MapScreen({
             Mirror-backed, so it draws with no signal for any file this phone
             has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
-        {showPlaceRoutes ? (
+        {showPlaceRoutes && mine ? (
           <PlaceRoutesLayer onStatus={setRoutesStatus} />
         ) : null}
 
@@ -4687,12 +4775,12 @@ export function MapScreen({
             keeps an empty source rather than unmounting) so the 0↔1 route
             transition cannot re-add its layers to the top of the stack. */}
         <RoutesLayer
-          routes={visibleRoutes}
+          routes={routesOnMap}
           hiddenRouteId={editingRouteId}
           // While a tool is collecting points every tap belongs to the tool —
           // opening an options sheet mid-draw would steal the point being
           // placed.
-          onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
+          onPressRoute={collectingPoints ? undefined : pressRoute}
         />
 
         {/* Recorded tracks: unpinned, mounted before the place
@@ -4701,7 +4789,7 @@ export function MapScreen({
         <TrackMapLayers
           tracks={tracks}
           liveCoord={userCoord}
-          showTracks={showTracks}
+          showTracks={showTracks && mine}
           onTrackPress={handleTrackPress}
         />
 
@@ -4727,8 +4815,8 @@ export function MapScreen({
             (privacy rule). Shared under owned; one definition, also drawn by
             the place point-picker (PlacePinsLayer). */}
         <PlacePinsLayer
-          ownedFc={ownedFc}
-          sharedFc={sharedFc}
+          ownedFc={pinsOwned}
+          sharedFc={mine ? sharedFc : EMPTY_PLACES}
           onPress={handlePlacePress}
         />
 
@@ -4982,6 +5070,30 @@ export function MapScreen({
           />
         ) : null}
 
+        {planOnMap ? (
+          <Notice
+            icon="plan"
+            numberOfLines={2}
+            controls={
+              <>
+                <Chip
+                  label={TRIP_PLAN_PAGE.copy.showMine}
+                  active={showMine}
+                  onPress={() => planDispatch({ type: "toggleMine" })}
+                />
+                <Button
+                  label={TRIP_PLAN_PAGE.copy.backToMap}
+                  compact
+                  variant="ghost"
+                  onPress={leavePlan}
+                />
+              </>
+            }
+          >
+            {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
+          </Notice>
+        ) : null}
+
         {/* Offline/unavailable basemap notice (fail visibly, never silently).
 
             Three states, and which one shows is decided by what overlaps the
@@ -4998,6 +5110,7 @@ export function MapScreen({
 
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
+
         {offlineOnly ? (
           <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
@@ -5552,6 +5665,9 @@ function RouteNameForm({
     </View>
   );
 }
+
+/** The user's shared pins, while a plan is on the map without them. */
+const EMPTY_PLACES = toPlaceFeatureCollection([]);
 
 const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the

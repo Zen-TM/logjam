@@ -1,0 +1,91 @@
+// Plan mode on the map: what the map frames when a plan opens on it. Built at
+// navigation time and never stored, like a place's focus: a region of
+// interest stays off the server (mobile/AGENTS.md).
+import type { TripPlanView } from "@logjam/shared";
+
+import { bboxOfPoints, PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
+
+/** The plan's places and ways, as `[west, south, east, north]`, or null. At
+ *  least a place's frame on each axis, so places metres apart frame ground as
+ *  one place's Show on map does. */
+export function planBbox(
+  plan: Pick<TripPlanView, "places" | "routes">,
+): [number, number, number, number] | null {
+  const box = bboxOfPoints([
+    ...plan.places.map((place) => ({
+      lon: place.longitude,
+      lat: place.latitude,
+    })),
+    ...plan.routes.flatMap((route) =>
+      route.points.map(([lon, lat]) => ({ lon, lat })),
+    ),
+  ]);
+  if (!box) return null;
+  const widen = (low: number, high: number): [number, number] => {
+    const mid = (low + high) / 2;
+    const half = Math.max((high - low) / 2, PLACE_FOCUS_DEGREES);
+    return [mid - half, mid + half];
+  };
+  const [west, east] = widen(box[0], box[2]);
+  const [south, north] = widen(box[1], box[3]);
+  return [west, south, east, north];
+}
+
+/** What opened plan mode: Show on map's params, replaced on each arrival. */
+export type PlanModeParam =
+  | { planId: string; nonce: number }
+  | null
+  | undefined;
+
+/**
+ * Plan mode on the map. The plan shown is set by arriving for it, and cleared
+ * by Back to my map, by arriving for anything else (the params are replaced,
+ * not merged), or by its cached copy going.
+ */
+export type PlanModeState = {
+  arrivedFor: PlanModeParam;
+  shownPlanId: string | null;
+  /** The plan's cached copy, once read. */
+  plan: TripPlanView | null;
+  /** Show my things: the user's own beside the plan's. */
+  showMine: boolean;
+};
+
+export type PlanModeEvent =
+  | { type: "arrive"; planMode: PlanModeParam }
+  | { type: "read"; plan: TripPlanView | null }
+  | { type: "leave" }
+  | { type: "toggleMine" };
+
+export const planModeStart = (planMode: PlanModeParam): PlanModeState => ({
+  arrivedFor: planMode,
+  shownPlanId: planMode?.planId ?? null,
+  plan: null,
+  showMine: false,
+});
+
+export function planModeReducer(
+  state: PlanModeState,
+  event: PlanModeEvent,
+): PlanModeState {
+  switch (event.type) {
+    case "arrive":
+      return {
+        ...planModeStart(event.planMode),
+        // The old plan stays drawn until the new one is read.
+        plan: event.planMode ? state.plan : null,
+      };
+    case "read":
+      return event.plan
+        ? { ...state, plan: event.plan }
+        : { ...state, shownPlanId: null, plan: null };
+    case "leave":
+      return { ...state, shownPlanId: null, plan: null };
+    case "toggleMine":
+      return { ...state, showMine: !state.showMine };
+  }
+}
+
+/** The user's own things are drawn: no plan open, or asked for beside it. */
+export const planModeMine = (state: PlanModeState) =>
+  state.plan === null || state.showMine;

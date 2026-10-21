@@ -64,6 +64,7 @@ import {
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
 import { PlanDownload } from "./PlanDownload";
+import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
@@ -169,6 +170,7 @@ export function PlanScreen({
   name,
   initialView,
   onBack,
+  onShowOnMap,
   onGone,
 }: {
   planId: string;
@@ -177,6 +179,11 @@ export function PlanScreen({
   /** The tab it opens on; the write-up when absent. */
   initialView?: TripPlanPageView;
   onBack: () => void;
+  /** The map in plan mode, framed on the plan's items when it has any. */
+  onShowOnMap: (
+    planId: string,
+    bbox: [number, number, number, number] | null,
+  ) => void;
   /** The caller left or deleted the plan: back to Plans, saying so. */
   onGone: (message: string) => void;
 }) {
@@ -231,6 +238,7 @@ export function PlanScreen({
       onView={setView}
       onRefresh={() => void refresh()}
       onBack={onBack}
+      onShowOnMap={() => onShowOnMap(planId, planBbox(cached.plan))}
       onGone={onGone}
       onLeaving={setLeaving}
     />
@@ -247,6 +255,7 @@ function PlanPage({
   onView,
   onRefresh,
   onBack,
+  onShowOnMap,
   onGone,
   onLeaving,
 }: {
@@ -259,6 +268,7 @@ function PlanPage({
   onView: (view: TripPlanPageView) => void;
   onRefresh: () => void;
   onBack: () => void;
+  onShowOnMap: () => void;
   onGone: (message: string) => void;
   onLeaving: (leaving: boolean) => void;
 }) {
@@ -371,6 +381,15 @@ function PlanPage({
           canWrite={adds.has("section")}
           online={online}
           onSection={setSectionSheet}
+        />
+      ) : null,
+    showOnMap:
+      view === "items" && plan.places.length + plan.routes.length > 0 ? (
+        <Button
+          label={copy.showOnMap}
+          icon="map"
+          variant="outlineAccent"
+          onPress={onShowOnMap}
         />
       ) : null,
     items: view === "items" ? <Items plan={plan} /> : null,
