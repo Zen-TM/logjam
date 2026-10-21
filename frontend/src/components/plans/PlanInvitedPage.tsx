@@ -141,7 +141,7 @@ export default function PlanInvitedPage({
           <Row
             key={form.id}
             title={form.title}
-            subtitle={tripPlanVisibilityLine(form.visibleTo)}
+            subtitle={tripPlanVisibilityLine(form.visibleTo, form.preset)}
           />
         ))}
         {headed && (

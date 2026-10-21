@@ -51,14 +51,21 @@ export default function PlanJoinDialog({
   const [drafts, setDrafts] = useState<Record<string, AnswerDraft>>({});
   // The forms as the drafts were last fitted to them.
   const shownAs = plan.requiredForms.map((form) => form.updatedAt).join();
-  const [fittedTo, setFittedTo] = useState(shownAs);
-  if (shownAs !== fittedTo) {
-    setFittedTo(shownAs);
+  const [fittedTo, setFittedTo] = useState({
+    shownAs,
+    forms: plan.requiredForms,
+  });
+  if (shownAs !== fittedTo.shownAs) {
+    setFittedTo({ shownAs, forms: plan.requiredForms });
     setDrafts(
       Object.fromEntries(
         plan.requiredForms.map((form) => [
           form.id,
-          fitAnswerDraft(form.questions, drafts[form.id] ?? {}),
+          fitAnswerDraft(
+            fittedTo.forms.find((was) => was.id === form.id)?.questions ?? [],
+            form.questions,
+            drafts[form.id] ?? {},
+          ),
         ]),
       ),
     );
