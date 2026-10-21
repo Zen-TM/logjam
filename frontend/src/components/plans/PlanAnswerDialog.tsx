@@ -203,10 +203,10 @@ function AnswerForm({
   );
   const [opened] = useState(draft);
   // The form as the draft was last fitted to it.
-  const [fittedTo, setFittedTo] = useState(form.updatedAt);
-  if (form.updatedAt !== fittedTo) {
-    setFittedTo(form.updatedAt);
-    setDraft(fitAnswerDraft(form.questions, draft));
+  const [fittedTo, setFittedTo] = useState(form);
+  if (form.updatedAt !== fittedTo.updatedAt) {
+    setFittedTo(form);
+    setDraft(fitAnswerDraft(fittedTo.questions, form.questions, draft));
   }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

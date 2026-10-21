@@ -19,6 +19,7 @@ import {
   TRIP_PLAN_FORMS,
   TRIP_PLAN_QUESTION_KINDS,
   TRIP_PLAN_QUESTION_KIND_LABELS,
+  tripPlanInPlanNow,
   type TripPlanFormPatch,
   type TripPlanFormView,
   type TripPlanQuestion,
@@ -46,6 +47,7 @@ import {
   formPatch,
   mintSlug,
   same,
+  theirsChanged,
   type FormValues,
 } from "./plansModel";
 import classes from "./plans.module.css";
@@ -93,6 +95,7 @@ function Builder({
     form ? valuesOf(form) : null,
   );
   const [seen, setSeen] = useState(values);
+  const [opened] = useState(values);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -103,6 +106,14 @@ function Builder({
     setSeen(next.seen);
     setValues(next.values);
   }
+
+  // After someone else's save: where the leader's own edit stands over
+  // theirs, say what the form now holds (as the plan's dialogs do).
+  const theirs = (field: "title" | "questions") =>
+    current &&
+    opened &&
+    values &&
+    theirsChanged(opened, current, values, [field]);
 
   // The Dialog focuses only on open; a preset picked swaps the step in place.
   const picked = values != null;
@@ -239,6 +250,9 @@ function Builder({
               value={values.title}
               maxLength={TRIP_PLAN_FORM_TITLE_MAX_LENGTH}
               data-autofocus
+              hint={
+                theirs("title") ? tripPlanInPlanNow(current!.title) : undefined
+              }
               onChange={(event) => set({ title: event.target.value })}
             />
             <div className={classes.question}>
@@ -272,6 +286,9 @@ function Builder({
               title={copy.questions}
               count={values.questions.length}
             />
+            {theirs("questions") && (
+              <p className={classes.note}>{copy.questionsChanged}</p>
+            )}
             {values.questions.map((question, index) => (
               <fieldset key={question.id} className={classes.questionEditor}>
                 <legend className="visually-hidden">

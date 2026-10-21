@@ -33,6 +33,7 @@ import {
   TRIP_PLAN_FORM_CHANGED_SENTENCE,
   TRIP_PLAN_MAX_FORMS,
   TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
+  TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
   type TripPlanQuestion,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
@@ -197,10 +198,7 @@ router.patch(
             where: { formId: id, userId: { not: userId } },
           })) > 0;
         if (answeredByOthers)
-          throw new AppError(
-            409,
-            say`People answered this form for leaders only. Make a new form to share answers with everyone.`,
-          );
+          throw new AppError(409, TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE);
       }
       const { count } = await tx.tripPlanForm.updateMany({
         where: {

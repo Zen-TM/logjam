@@ -6,6 +6,7 @@ import type { IconIdea } from "../icons.js";
 import {
   TRIP_PLAN_INVITE_TTL_DAYS,
   TRIP_PLAN_ROLES,
+  TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
   type DateOnly,
   type TripPlanAnswerValue,
   type TripPlanQuestion,
@@ -617,7 +618,8 @@ export const TRIP_PLAN_FORMS = {
     // `tripPlanVisibilityLine`, always before any answer.
     { key: "visibility" },
     { key: "mine" },
-    // Everyone's answers, when the caller may see them: a row per member.
+    // Everyone's answers, when the caller may see them: a row per member,
+    // then, for a leader, the answers of those asking to join, marked so.
     {
       key: "table",
       on: "web",
@@ -641,6 +643,7 @@ export const TRIP_PLAN_FORMS = {
     noAnswer: "You haven't answered yet.",
     noAnswerYet: "No answer yet",
     member: "Member",
+    asking: "Asking to join",
     save: "Send",
     saveFailed: "Couldn't send your answer.",
     saved: "Answer sent.",
@@ -659,10 +662,12 @@ export const TRIP_PLAN_FORMS = {
     requiredToJoin: "Required to join",
     requiredToJoinHint:
       "Joiners answer it before they join, and members are asked the next time they open the plan.",
-    // The API's refusal, said before Save (planForms.ts).
-    visibleToLocked:
-      "People answered this form for leaders only. Make a new form to share answers with everyone.",
+    // The API's refusal, said before Save.
+    visibleToLocked: TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
     questions: "Questions",
+    // After a 409, over questions another leader saved meanwhile.
+    questionsChanged:
+      "Another leader changed these questions since you opened the form. Saving keeps yours.",
     questionLabel: "Question",
     questionKind: "Kind",
     questionHelp: "Hint",

@@ -1,6 +1,7 @@
 // A form's page, one step inside the plan's Forms view: who sees the answers,
 // the caller's own answer (or Answer), then everyone's, when the caller may
-// see them, as a table a row per member. Drawn from `TRIP_PLAN_FORMS`.
+// see them, as a table a row per member, and a leader's table of those asking
+// to join. Drawn from `TRIP_PLAN_FORMS`.
 import { Fragment, type ReactNode } from "react";
 import {
   contractSectionKeys,
@@ -13,9 +14,11 @@ import {
   tripPlanVisibilityLine,
   type PlanFormVerbId,
   type SectionKeysOn,
+  type TripPlanAnswerView,
   type TripPlanFormView,
   type TripPlanMemberView,
   type TripPlanRole,
+  type TripPlanUserRef,
 } from "@logjam/shared";
 import { Button, Hero, IconButton, Menu, SectionHeader } from "../../ui";
 import { menuEntries } from "./planMenu";
@@ -45,9 +48,9 @@ export default function PlanFormPage({
   const mine = form.myAnswer
     ? currentTripPlanAnswers(form.questions, form.myAnswer.answers)
     : null;
-  // Who's going, each with their answer or none. People asking to join are
-  // left out: a leader reads their answers from People, before letting
-  // them in.
+  // Who's going, each with their answer or none, those without last. Under
+  // them, for a leader (the API serves no one else theirs), those asking to
+  // join who answered: what a leader reads before letting them in.
   const answerBy = new Map(
     [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])].map(
       (answer) => [answer.user.id, answer],
@@ -59,8 +62,69 @@ export default function PlanFormPage({
       user: member.user,
       answer: answerBy.get(member.user.id),
     }))
-    // Those without an answer last.
     .sort((a, b) => Number(!a.answer) - Number(!b.answer));
+  const asking = members
+    .filter((member) => member.status === "requested")
+    .flatMap((member) => {
+      const answer = answerBy.get(member.user.id);
+      return answer ? [{ user: member.user, answer }] : [];
+    });
+
+  const table = (
+    title: string,
+    people: { user: TripPlanUserRef; answer?: TripPlanAnswerView }[],
+  ) => (
+    <div className={classes.block}>
+      <SectionHeader title={title} />
+      {/* Scrolled sideways on its own, so a keyboard can reach it. */}
+      <div
+        className={classes.tableScroll}
+        role="region"
+        aria-label={title}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt
+        tabIndex={0}
+      >
+        <table className={classes.table}>
+          <thead>
+            <tr>
+              <th scope="col">{copy.member}</th>
+              {form.questions.map((question) => (
+                <th key={question.id} scope="col">
+                  {question.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {people.map(({ user, answer }) => {
+              const values = answer
+                ? currentTripPlanAnswers(form.questions, answer.answers)
+                : null;
+              return (
+                <tr key={user.id}>
+                  <th scope="row">{user.username}</th>
+                  {values ? (
+                    form.questions.map((question) => (
+                      <td key={question.id}>
+                        {tripPlanAnswerText(question, values[question.id])}
+                      </td>
+                    ))
+                  ) : (
+                    <td
+                      colSpan={form.questions.length}
+                      className={classes.note}
+                    >
+                      {copy.noAnswerYet}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_FORMS, "web">,
@@ -121,56 +185,10 @@ export default function PlanFormPage({
       </div>
     ),
     table: tripPlanSeesAnswers(role, form.visibleTo) && (
-      <div className={classes.block}>
-        <SectionHeader title={copy.answers} />
-        {/* Scrolled sideways on its own, so a keyboard can reach it. */}
-        <div
-          className={classes.tableScroll}
-          role="region"
-          aria-label={copy.answers}
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt
-          tabIndex={0}
-        >
-          <table className={classes.table}>
-            <thead>
-              <tr>
-                <th scope="col">{copy.member}</th>
-                {form.questions.map((question) => (
-                  <th key={question.id} scope="col">
-                    {question.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ user, answer }) => {
-                const values = answer
-                  ? currentTripPlanAnswers(form.questions, answer.answers)
-                  : null;
-                return (
-                  <tr key={user.id}>
-                    <th scope="row">{user.username}</th>
-                    {values ? (
-                      form.questions.map((question) => (
-                        <td key={question.id}>
-                          {tripPlanAnswerText(question, values[question.id])}
-                        </td>
-                      ))
-                    ) : (
-                      <td
-                        colSpan={form.questions.length}
-                        className={classes.note}
-                      >
-                        {copy.noAnswerYet}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <>
+        {table(copy.answers, rows)}
+        {asking.length > 0 && table(copy.asking, asking)}
+      </>
     ),
   };
 

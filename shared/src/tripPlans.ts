@@ -368,6 +368,10 @@ export type TripPlanRedeemResult =
   | { planId: string; status: "requested"; waitingFor: TripPlanUserRef }
   | { planId: string; status: "active" };
 
+/** A leaders-only form someone else answered can't be opened to everyone
+ *  (form PATCH); Logjam Web's builder says it before Save. */
+export const TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE = say`People answered this form for leaders only. Make a new form to share answers with everyone.`;
+
 /** An answer's visibility changed since the form was shown (answer PUT, join). */
 export const TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE = say`Who sees the answers to this form has changed. Check it, then answer again.`;
 

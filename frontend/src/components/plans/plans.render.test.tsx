@@ -7,8 +7,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  TRIP_PLAN_FORMS,
   TRIP_PLAN_PAGE,
+  tripPlanInPlanNow,
   TRIP_PLANS_LIST,
+  type TripPlanFormView,
   type TripPlanView,
 } from "@logjam/shared";
 
@@ -16,6 +19,8 @@ import { archivePlan } from "../../plansApi";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanSectionDialog from "./PlanSectionDialog";
+import PlanFormPage from "./PlanFormPage";
+import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
@@ -188,5 +193,96 @@ describe("the plan's page after a failed write", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(onPlansChanged).not.toHaveBeenCalled();
+  });
+});
+
+const contacts: TripPlanFormView = {
+  id: "f1",
+  title: "Safety contacts",
+  preset: null,
+  questions: [{ id: "name", kind: "text", label: "Name", required: true }],
+  visibleTo: "leaders",
+  requiredToJoin: true,
+  position: 0,
+  updatedAt: "2026-10-01T00:00:00.000Z",
+  myAnswer: null,
+  answers: [
+    {
+      user: { id: "u3", username: "carol" },
+      answers: { name: "Dee" },
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    },
+  ],
+};
+
+describe("a form's page, for a leader", () => {
+  // Mutation: keep active members only in PlanFormPage, and a leader lets
+  // carol in without seeing what she answered.
+  it("shows the answers of someone asking to join, marked so", () => {
+    render(
+      <PlanFormPage
+        form={contacts}
+        role={plan.myRole}
+        archived={false}
+        members={[
+          ...plan.members,
+          {
+            user: { id: "u3", username: "carol" },
+            role: "member",
+            status: "requested",
+          } as TripPlanView["members"][number],
+        ]}
+        onBack={() => {}}
+        onAnswer={() => {}}
+        onVerb={() => {}}
+      />,
+    );
+    const asking = screen.getByRole("region", {
+      name: TRIP_PLAN_FORMS.copy.asking,
+    });
+    expect(asking.textContent).toContain("carol");
+    expect(asking.textContent).toContain("Dee");
+    expect(
+      screen.getByRole("region", { name: TRIP_PLAN_FORMS.copy.answers })
+        .textContent,
+    ).not.toContain("carol");
+  });
+});
+
+describe("Edit form over another leader's save", () => {
+  // Mutation: drop the notes in PlanFormBuilderDialog, and the leader's Save
+  // replaces a change they were never shown.
+  it("says what the form now holds where the leader's edit stands over it", () => {
+    const view = (shown: TripPlanFormView) => (
+      <PlanFormBuilderDialog
+        open
+        form={shown}
+        onSubmit={async () => {}}
+        onStale={() => {}}
+        onClose={() => {}}
+      />
+    );
+    const { rerender } = render(view(contacts));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: TRIP_PLAN_FORMS.copy.title }),
+      { target: { value: "Contacts" } },
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: /Question 1/ }), {
+      target: { value: "Who to call" },
+    });
+    rerender(
+      view({
+        ...contacts,
+        title: "Emergency contacts",
+        questions: [{ ...contacts.questions[0], label: "Contact" }],
+        updatedAt: "2026-10-02T00:00:00.000Z",
+      }),
+    );
+    expect(
+      screen.getByText(tripPlanInPlanNow("Emergency contacts")),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(TRIP_PLAN_FORMS.copy.questionsChanged),
+    ).toBeTruthy();
   });
 });

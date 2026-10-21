@@ -62,15 +62,26 @@ export function answersFromDraft(
 /**
  * A draft fitted to the form as it now is, after it changed under the person
  * (a 409, then the form fetched again): an answer whose question went, whose
- * option went or that no longer fits its question's kind is dropped; the
- * rest, ticks included, stay.
+ * option went or whose question changed kind since `was` (the questions the
+ * draft was made for) is dropped; the rest, ticks included, stay. A kind is
+ * compared, not guessed from the value: a yes or no's "false" and a choice's
+ * option id are both text a text question would take.
  */
 export function fitAnswerDraft(
+  was: readonly TripPlanQuestion[],
   questions: readonly TripPlanQuestion[],
   draft: TripPlanAnswerDraft,
 ): TripPlanAnswerDraft {
+  const kindWas = new Map(was.map((question) => [question.id, question.kind]));
+  const kept = Object.fromEntries(
+    Object.entries(draft).filter(([id]) =>
+      questions.some(
+        (question) => question.id === id && question.kind === kindWas.get(id),
+      ),
+    ),
+  );
   return draftFromAnswers(
     questions,
-    currentTripPlanAnswers(questions, answersFromDraft(questions, draft)),
+    currentTripPlanAnswers(questions, answersFromDraft(questions, kept)),
   );
 }

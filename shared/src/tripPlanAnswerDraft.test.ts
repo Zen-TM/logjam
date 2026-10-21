@@ -49,9 +49,11 @@ describe("a draft after the form changed under it", () => {
 
   it("keeps the ticks whose options are still there", () => {
     const now = { ...gear, options: [{ id: "helmet", label: "Helmet" }] };
-    expect(fitAnswerDraft([now], { gear: ["rope", "helmet"] })).toEqual({
-      gear: ["helmet"],
-    });
+    expect(fitAnswerDraft([gear], [now], { gear: ["rope", "helmet"] })).toEqual(
+      {
+        gear: ["helmet"],
+      },
+    );
   });
 
   // Mutation: coerce by the new kind (`value === "true"`), and "Late" under
@@ -61,14 +63,43 @@ describe("a draft after the form changed under it", () => {
       { id: "notes", kind: "yesNo", label: "Notes", required: false },
       { id: "seats", kind: "number", label: "Seats", required: false },
     ];
-    expect(fitAnswerDraft(now, { notes: "Late", seats: "two" })).toEqual({});
+    expect(
+      fitAnswerDraft(questions, now, { notes: "Late", seats: "two" }),
+    ).toEqual({});
     expect(answersFromDraft(now, { notes: "Late" })).toEqual({
       notes: "Late",
     });
   });
 
+  // Mutation: fit with the new questions only, and the text box holds
+  // "false" or an option's id, stored as an answer nobody gave.
+  it("drops an answer whose question became text", () => {
+    const pick = {
+      id: "car",
+      kind: "choice",
+      label: "Car",
+      required: false,
+      options: [{ id: "o_k3j2", label: "Mine" }],
+    } as TripPlanQuestion;
+    const was = [questions[1], pick];
+    const now = was.map((question) => ({ ...question, kind: "text" as const }));
+    expect(fitAnswerDraft(was, now, { swim: "false", car: "o_k3j2" })).toEqual(
+      {},
+    );
+    // Unchanged, the answers stay.
+    expect(fitAnswerDraft(was, was, { swim: "false", car: "o_k3j2" })).toEqual({
+      swim: "false",
+      car: "o_k3j2",
+    });
+  });
+
   it("drops the answer to a question that went", () => {
-    expect(fitAnswerDraft([questions[0]], { seats: "2", notes: "x" })).toEqual({
+    expect(
+      fitAnswerDraft(questions, [questions[0]], {
+        seats: "2",
+        notes: "x",
+      }),
+    ).toEqual({
       seats: "2",
     });
   });
