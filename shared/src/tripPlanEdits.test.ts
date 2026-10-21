@@ -4,6 +4,7 @@ import {
   tripPlanAdoptTheirs,
   tripPlanPatch,
   tripPlanSectionPatch,
+  tripPlanTheirsChanged,
 } from "./tripPlanEdits.js";
 
 const plan = {
@@ -93,5 +94,23 @@ describe("a form refetched under the user", () => {
       TRIP_PLAN_FIELD_GROUPS,
     );
     expect(both.values).toEqual(theirs);
+  });
+});
+
+describe("tripPlanTheirsChanged", () => {
+  const opened = { title: "Access", body: "Gate" };
+  // Mutation: drop the `opened` comparison. Every edited field would claim
+  // the plan changed it.
+  it("is true only for an edited field the plan changed", () => {
+    const current = { title: "Access", body: "Bob's" };
+    const mine = { title: "Access", body: "Ann's" };
+    expect(tripPlanTheirsChanged(["body"], mine, current, opened)).toBe(true);
+    expect(tripPlanTheirsChanged(["title"], mine, current, opened)).toBe(false);
+    // Edited, but the plan still holds what the form opened with.
+    expect(tripPlanTheirsChanged(["body"], mine, opened, opened)).toBe(false);
+    // The plan changed it, but the user didn't touch it: it follows.
+    expect(tripPlanTheirsChanged(["body"], current, current, opened)).toBe(
+      false,
+    );
   });
 });
