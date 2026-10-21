@@ -12,10 +12,22 @@ describe("notificationTapTarget", () => {
     ).toEqual({ kind: "place", placeId: "c-1" });
   });
 
+  // Mutation: drop the announcementId branch and these land on the bare inbox.
+  it("opens the message an announcement push names", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "announcement", announcementId: "a-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "announcement", announcementId: "a-1" });
+  });
+
   it.each([
     ["no id at all", { type: "friendRequest" }],
     ["an id that is not a string", { placeId: 7 }],
     ["a null id", { placeId: null }],
+    ["an announcement id that is not a string", { announcementId: 7 }],
+    ["an empty announcement id", { announcementId: "" }],
     ["an empty payload", {}],
     ["a payload that is not an object", "placeId=c-1"],
     ["no payload", undefined],
@@ -31,6 +43,7 @@ describe("notificationTapTarget", () => {
   it.each([
     ["a place push", { type: "placeShared", placeId: "c-1" }],
     ["an inbox push", { type: "friendRequest" }],
+    ["an announcement push", { announcementId: "a-1" }],
     ["a malformed push", null],
   ])("refuses to leave a route being drawn, on %s", (_why, data) => {
     expect(notificationTapTarget({ data, routeEditing: true })).toEqual({
