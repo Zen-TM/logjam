@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import {
   contractSectionKeys,
   messageFromError,
@@ -36,7 +36,7 @@ import {
 } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { onMirrorChanged } from "../sync/syncDb";
-import { makeStyles, spacing, useHues, useTheme } from "../theme";
+import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
   Button,
   ChipRail,
@@ -306,6 +306,11 @@ export function PlansScreen({
                   variant="outlineAccent"
                   disabled={!online}
                 />
+                {/* Away from the hero's Offline pill, so the words go under
+                    it (ui/Button.tsx). */}
+                {newPlan.disabledReason ? (
+                  <Text style={styles.offline}>{newPlan.disabledReason}</Text>
+                ) : null}
               </ListEnd>
             ) : undefined
           }
@@ -335,8 +340,9 @@ export function PlansScreen({
 
 const planKey = (plan: TripPlanSummary) => plan.id;
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
+  offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   rail: { paddingHorizontal: spacing(2), paddingVertical: spacing(1) },
   list: { flex: 1 },
   listContent: {

@@ -469,7 +469,7 @@ function WriteUp({ plan }: { plan: TripPlanView }) {
 function Items({ plan }: { plan: TripPlanView }) {
   const theme = useTheme();
   const { assetHue } = useHues();
-  const ways = plan.routes.length + plan.files.length;
+  const { ways } = tripPlanCounts(plan);
   if (plan.places.length + ways + plan.geoPdfs.length === 0)
     return <EmptyState icon="place" title={copy.itemsEmpty} />;
   // A heading needs a second group to divide from (shared/DESIGN.md §2).
