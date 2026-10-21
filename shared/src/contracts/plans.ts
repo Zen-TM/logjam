@@ -327,6 +327,9 @@ export const TRIP_PLAN_PAGE = {
       reason:
         "On Logjam Web the map sits beside the plan's page and already shows only the plan's items while it is open. On Logjam GPS the page covers the map.",
     },
+    // On Logjam GPS a place row, and its pin in plan mode, opens a read-only
+    // sheet; Logjam Web fits its map to the place instead, the map beside
+    // the page.
     { key: "items" },
     { key: "forms" },
     { key: "people" },

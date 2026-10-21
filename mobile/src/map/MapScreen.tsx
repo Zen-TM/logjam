@@ -90,8 +90,14 @@ import {
   MAP_MEASURE,
   TRIP_PLAN_PAGE,
 } from "@logjam/shared";
-import { planModeMine, planModeReducer, planModeStart } from "../plans/planMap";
+import {
+  isPlanPin,
+  planModeMine,
+  planModeReducer,
+  planModeStart,
+} from "../plans/planMap";
 import { readCachedPlan } from "../plans/plansCache";
+import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
 import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
@@ -995,6 +1001,7 @@ export function MapScreen({
   if (planMode !== planState.arrivedFor)
     planDispatch({ type: "arrive", planMode });
   const { shownPlanId, plan: planOnMap, showMine } = planState;
+  const [planPlaceId, setPlanPlaceId] = useState<string | null>(null);
   const leavePlan = () => planDispatch({ type: "leave" });
   // Re-read whenever the cache changes: a plan the user lost leaves the map,
   // one that gained items draws them.
@@ -2108,14 +2115,25 @@ export function MapScreen({
         void addToolPoint(lon, lat);
         return;
       }
-      const props = event.nativeEvent.features[0]?.properties;
+      // Two pins on one spot (a copy beside its original): the plan's wins
+      // while a plan is shown, so it can be opened from the map at all.
+      const features = event.nativeEvent.features;
+      const props = (
+        features.find((feature) => {
+          const id = feature.properties?.id;
+          return typeof id === "string" && isPlanPin(planOnMap, id);
+        }) ?? features[0]
+      )?.properties;
       // The OPTIONS sheet, not the detail screen: the same verbs the
       // Places list offers, with "Open place" first (DESIGN.md). Held as an id
       // so an edit made from inside the sheet re-renders it rather than showing
       // a stale copy.
-      if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
+      const id = props?.id;
+      if (typeof id !== "string") return;
+      if (isPlanPin(planOnMap, id)) setPlanPlaceId(id);
+      else setOptionsPlaceId(id);
     },
-    [addToolPoint, collectingPoints],
+    [addToolPoint, collectingPoints, planOnMap],
   );
 
   const optionsPlace =
@@ -5480,6 +5498,13 @@ export function MapScreen({
         onSaved={(text) => notify(text, "info")}
       />
 
+      <PlanPlaceSheet
+        place={
+          planOnMap?.places.find((place) => place.id === planPlaceId) ?? null
+        }
+        onClose={() => setPlanPlaceId(null)}
+        onInfo={(text) => notify(text, "info")}
+      />
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
           in (DESIGN.md). No "Show on map" row here — the user is looking at
           the line they just tapped. */}

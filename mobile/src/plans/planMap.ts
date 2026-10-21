@@ -89,3 +89,12 @@ export function planModeReducer(
 /** The user's own things are drawn: no plan open, or asked for beside it. */
 export const planModeMine = (state: PlanModeState) =>
   state.plan === null || state.showMine;
+
+/** Whether a pressed pin is one of the plan's places, not one of the user's:
+ *  a plan's pin opens its place sheet, the user's their own options. */
+export function isPlanPin(
+  plan: Pick<TripPlanView, "places"> | null,
+  id: string,
+): boolean {
+  return plan?.places.some((place) => place.id === id) ?? false;
+}

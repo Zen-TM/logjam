@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPlanPin,
   planBbox,
   planModeMine,
   planModeReducer,
@@ -87,5 +88,16 @@ describe("plan mode on the map", () => {
   it("draws the user's own things until the plan is read", () => {
     expect(planModeMine(planModeStart(a))).toBe(true);
     expect(planModeMine(showing)).toBe(false);
+  });
+});
+
+describe("isPlanPin", () => {
+  // Mutation: return true for any id while a plan is shown. The user's own
+  // pins would open the plan's sheet and find nothing.
+  it("is true only for the plan's places, and never with no plan shown", () => {
+    const plan = { places: [{ id: "p1" }] } as never;
+    expect(isPlanPin(plan, "p1")).toBe(true);
+    expect(isPlanPin(plan, "mine")).toBe(false);
+    expect(isPlanPin(null, "p1")).toBe(false);
   });
 });
