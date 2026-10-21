@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { planBbox } from "./planMap";
+import {
+  planBbox,
+  planModeMine,
+  planModeReducer,
+  planModeStart,
+} from "./planMap";
 
 const place = (longitude: number, latitude: number) =>
   ({ longitude, latitude }) as never;
@@ -28,5 +33,59 @@ describe("what plan mode frames", () => {
 
   it("is nothing for a plan with nothing on the map", () => {
     expect(planBbox({ places: [], routes: [] })).toBeNull();
+  });
+});
+
+describe("plan mode on the map", () => {
+  const a = { planId: "a", nonce: 1 };
+  const b = { planId: "b", nonce: 2 };
+  const plan = (id: string) => ({ id, places: [] }) as never;
+  const showing = planModeReducer(planModeStart(a), {
+    type: "read",
+    plan: plan("a"),
+  });
+
+  // Mutation: keep shownPlanId on a new arrival, and Show on map for plan B
+  // re-reads plan A.
+  it("a new Show on map replaces the plan shown", () => {
+    const next = planModeReducer(showing, { type: "arrive", planMode: b });
+    expect(next.shownPlanId).toBe("b");
+    expect(next.arrivedFor).toBe(b);
+  });
+
+  // Mutation: leave `plan` set when the params carry no planMode, and the
+  // user's own Show on map stays in plan A.
+  it("arriving for anything else ends plan mode", () => {
+    const next = planModeReducer(showing, {
+      type: "arrive",
+      planMode: undefined,
+    });
+    expect(next.shownPlanId).toBeNull();
+    expect(next.plan).toBeNull();
+    expect(planModeMine(next)).toBe(true);
+  });
+
+  // Mutation: ignore a read with no cached copy, and a plan the user left
+  // stays drawn on the map.
+  it("a plan gone from the cache ends plan mode", () => {
+    const next = planModeReducer(showing, { type: "read", plan: null });
+    expect(next.shownPlanId).toBeNull();
+    expect(next.plan).toBeNull();
+  });
+
+  // Mutation: carry Show my things into the next plan, and it opens with
+  // the user's own things drawn over it.
+  it("a new plan starts with only its own things", () => {
+    const mineOn = planModeReducer(showing, { type: "toggleMine" });
+    expect(planModeMine(mineOn)).toBe(true);
+    const next = planModeReducer(mineOn, { type: "arrive", planMode: b });
+    expect(next.showMine).toBe(false);
+  });
+
+  // Mutation: make `mine` false whenever a plan id is set, and the map is
+  // empty while the plan is being read.
+  it("draws the user's own things until the plan is read", () => {
+    expect(planModeMine(planModeStart(a))).toBe(true);
+    expect(planModeMine(showing)).toBe(false);
   });
 });

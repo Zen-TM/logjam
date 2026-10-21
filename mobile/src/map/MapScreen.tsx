@@ -19,6 +19,7 @@ import {
   useEffectEvent,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
@@ -88,8 +89,8 @@ import {
   MAP_INK,
   MAP_MEASURE,
   TRIP_PLAN_PAGE,
-  type TripPlanView,
 } from "@logjam/shared";
+import { planModeMine, planModeReducer, planModeStart } from "../plans/planMap";
 import { readCachedPlan } from "../plans/plansCache";
 
 import { apiFetch } from "../api/apiFetch";
@@ -374,6 +375,9 @@ const ANCHOR_DELETE_FLIP_DP = 78;
  *  at one cannot easily hit the other. */
 const ANCHOR_DELETE_GAP_DP = 26;
 
+/** The top padding a plan's fit leaves for the search row, the plan banner
+ *  and an offline notice under it (dp, measured on a Pixel). */
+const PLAN_BANNER_CLEARANCE = 290;
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
@@ -982,23 +986,16 @@ export function MapScreen({
   // PLAN MODE: the plan's places and ways in place of the user's own, which
   // come back beside them with "Show my things". Read from the plans cache, so
   // it works in a canyon for any plan opened before.
-  // The plan shown: set by arriving for it, cleared by Back to my map or by
-  // arriving for anything else (the params are replaced, not merged), so the
-  // user's own things come back with their own Show on map.
-  const [shownPlanId, setShownPlanId] = useState(planMode?.planId ?? null);
-  const [arrivedFor, setArrivedFor] = useState(planMode);
-  const [planOnMap, setPlanOnMap] = useState<TripPlanView | null>(null);
-  const [showMine, setShowMine] = useState(false);
-  if (planMode !== arrivedFor) {
-    setArrivedFor(planMode);
-    setShownPlanId(planMode?.planId ?? null);
-    setShowMine(false);
-    if (!planMode) setPlanOnMap(null);
-  }
-  const leavePlan = () => {
-    setShownPlanId(null);
-    setPlanOnMap(null);
-  };
+  // Which plan is shown, and when it goes: `planModeReducer`.
+  const [planState, planDispatch] = useReducer(
+    planModeReducer,
+    planMode,
+    planModeStart,
+  );
+  if (planMode !== planState.arrivedFor)
+    planDispatch({ type: "arrive", planMode });
+  const { shownPlanId, plan: planOnMap, showMine } = planState;
+  const leavePlan = () => planDispatch({ type: "leave" });
   // Re-read whenever the cache changes: a plan the user lost leaves the map,
   // one that gained items draws them.
   useEffect(() => {
@@ -1007,12 +1004,8 @@ export function MapScreen({
     const read = () =>
       void readCachedPlan(shownPlanId)
         .then((cached) => {
-          if (cancelled) return;
-          if (cached) setPlanOnMap(cached.plan);
-          else {
-            setShownPlanId(null);
-            setPlanOnMap(null);
-          }
+          if (!cancelled)
+            planDispatch({ type: "read", plan: cached?.plan ?? null });
         })
         .catch(console.error);
     read();
@@ -1022,8 +1015,7 @@ export function MapScreen({
       unsubscribe();
     };
   }, [shownPlanId]);
-  /** The user's own things are drawn: no plan open, or asked for beside it. */
-  const mine = planOnMap === null || showMine;
+  const mine = planModeMine(planState);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
   // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
@@ -1288,7 +1280,7 @@ export function MapScreen({
    */
   const acceptSettleCamera = useRef(false);
   const fitCameraToBbox = useCallback(
-    (bbox: [number, number, number, number], padding = 40) => {
+    (bbox: [number, number, number, number], padding = 40, top = padding) => {
       if (!cameraRef.current) return;
       const [west, south, east, north] = bbox;
       stopNeedsReset.current = true;
@@ -1316,7 +1308,7 @@ export function MapScreen({
       // same numbers this function already takes as its bbox.
       cameraRef.current.fitBounds(bbox, {
         padding: {
-          top: padding,
+          top,
           right: padding,
           bottom: padding,
           left: padding,
@@ -2750,7 +2742,13 @@ export function MapScreen({
     // writes a camera stop per sample, which would overwrite the camera fit
     // within a frame.
     setFollowMode("off");
-    fitCameraToBbox(focus.bbox);
+    // Plan mode's banner covers the top of the map: its pins go below it.
+    // ponytail: the banner's measured height, if this misses on a small screen.
+    fitCameraToBbox(
+      focus.bbox,
+      undefined,
+      planMode ? PLAN_BANNER_CLEARANCE : undefined,
+    );
     // …and say WHICH rectangle — but only for a saved REGION, the one asset
     // whose extent is a meaningful box. A pulsing rectangle around a pin, a
     // line or a place point is noise (the asset itself is already the shape).
@@ -2762,6 +2760,7 @@ export function MapScreen({
   }, [
     focus?.nonce,
     focus,
+    planMode,
     chooseBasemap,
     fitCameraToBbox,
     mergedOverlays,
@@ -5080,7 +5079,7 @@ export function MapScreen({
                 <Chip
                   label={TRIP_PLAN_PAGE.copy.showMine}
                   active={showMine}
-                  onPress={() => setShowMine((was) => !was)}
+                  onPress={() => planDispatch({ type: "toggleMine" })}
                 />
                 <Button
                   label={TRIP_PLAN_PAGE.copy.backToMap}

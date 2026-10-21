@@ -30,3 +30,62 @@ export function planBbox(
   const [south, north] = widen(box[1], box[3]);
   return [west, south, east, north];
 }
+
+/** What opened plan mode: Show on map's params, replaced on each arrival. */
+export type PlanModeParam =
+  | { planId: string; nonce: number }
+  | null
+  | undefined;
+
+/**
+ * Plan mode on the map. The plan shown is set by arriving for it, and cleared
+ * by Back to my map, by arriving for anything else (the params are replaced,
+ * not merged), or by its cached copy going.
+ */
+export type PlanModeState = {
+  arrivedFor: PlanModeParam;
+  shownPlanId: string | null;
+  /** The plan's cached copy, once read. */
+  plan: TripPlanView | null;
+  /** Show my things: the user's own beside the plan's. */
+  showMine: boolean;
+};
+
+export type PlanModeEvent =
+  | { type: "arrive"; planMode: PlanModeParam }
+  | { type: "read"; plan: TripPlanView | null }
+  | { type: "leave" }
+  | { type: "toggleMine" };
+
+export const planModeStart = (planMode: PlanModeParam): PlanModeState => ({
+  arrivedFor: planMode,
+  shownPlanId: planMode?.planId ?? null,
+  plan: null,
+  showMine: false,
+});
+
+export function planModeReducer(
+  state: PlanModeState,
+  event: PlanModeEvent,
+): PlanModeState {
+  switch (event.type) {
+    case "arrive":
+      return {
+        ...planModeStart(event.planMode),
+        // The old plan stays drawn until the new one is read.
+        plan: event.planMode ? state.plan : null,
+      };
+    case "read":
+      return event.plan
+        ? { ...state, plan: event.plan }
+        : { ...state, shownPlanId: null, plan: null };
+    case "leave":
+      return { ...state, shownPlanId: null, plan: null };
+    case "toggleMine":
+      return { ...state, showMine: !state.showMine };
+  }
+}
+
+/** The user's own things are drawn: no plan open, or asked for beside it. */
+export const planModeMine = (state: PlanModeState) =>
+  state.plan === null || state.showMine;
