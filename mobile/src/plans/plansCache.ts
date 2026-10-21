@@ -273,12 +273,13 @@ export async function afterPlanWrite(
 /**
  * Download for the trip: the plan fetched again (fresh presigned URLs), then
  * every file it points at that is not on the phone yet, then stamped
- * downloaded. A failure leaves what was fetched and no stamp.
+ * downloaded. A failure leaves what was fetched and no stamp. False when the
+ * sign-out wipe stopped it: nothing was downloaded to report.
  */
 export function downloadPlan(
   planId: string,
   onProgress: (doneBytes: number, totalBytes: number) => void,
-): Promise<void> {
+): Promise<boolean> {
   const run = runDownload(planId, onProgress);
   downloads.add(run);
   void run.catch(() => {}).finally(() => downloads.delete(run));
@@ -288,11 +289,11 @@ export function downloadPlan(
 async function runDownload(
   planId: string,
   onProgress: (doneBytes: number, totalBytes: number) => void,
-): Promise<void> {
+): Promise<boolean> {
   const began = epoch;
   const alive = () => began === epoch;
   const { plan } = await fetchPlan(planId);
-  if (!alive()) return;
+  if (!alive()) return false;
   const missing = await missingPlanFiles(planId, planFiles(plan));
   const total = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
   // ADR 0005: nothing large is written without asking whether it fits.
@@ -304,8 +305,9 @@ async function runDownload(
     (done) => onProgress(done, total),
     alive,
   );
-  if (!complete) return;
+  if (!complete) return false;
   const db = await getSyncDb();
+  let stamped = false;
   await withSyncTransaction(db, async () => {
     if (!alive()) return;
     await db.runAsync(
@@ -313,6 +315,8 @@ async function runDownload(
       new Date().toISOString(),
       planId,
     );
+    stamped = true;
   });
   notifyMirrorChanged();
+  return stamped;
 }

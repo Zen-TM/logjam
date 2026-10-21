@@ -33,7 +33,10 @@ export function startPlanDownload(planId: string): Promise<void> {
     progress.set(planId, { done, total });
     notify();
   })
-    .then(() => toast(TRIP_PLAN_OFFLINE.downloadDone, "info"))
+    // Stopped by the sign-out wipe: nothing to report, to anyone.
+    .then((done) => {
+      if (done) toast(TRIP_PLAN_OFFLINE.downloadDone, "info");
+    })
     .catch((err: unknown) =>
       toast(
         err instanceof NotEnoughSpaceError

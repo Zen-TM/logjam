@@ -15,8 +15,8 @@ describe("startPlanDownload", () => {
   it("joins a plan's running download instead of starting another", async () => {
     let finish!: () => void;
     cache.downloadPlan.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        finish = resolve;
+      new Promise<boolean>((resolve) => {
+        finish = () => resolve(true);
       }),
     );
     const toasts: string[] = [];
@@ -28,6 +28,17 @@ describe("startPlanDownload", () => {
     finish();
     await first;
     expect(toasts).toEqual(["Downloaded for the trip."]);
+    off();
+  });
+
+  // Mutation: toast on any resolve, and a download the sign-out wipe stopped
+  // says "Downloaded for the trip." on the sign-in screen.
+  it("says nothing when the wipe stopped the download", async () => {
+    cache.downloadPlan.mockResolvedValueOnce(false);
+    const toasts: string[] = [];
+    const off = onPlanDownloadToast(({ text }) => toasts.push(text));
+    await startPlanDownload("q");
+    expect(toasts).toEqual([]);
     off();
   });
 });
