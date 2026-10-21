@@ -109,9 +109,14 @@ export function MediaViewer({
         />
 
         <View style={[styles.topBar, { paddingTop: insets.top + spacing(1) }]}>
-          <Text style={styles.counter}>
-            {items.length > 1 ? `${index + 1} / ${items.length}` : ""}
-          </Text>
+          {/* An empty pill still draws its backdrop: one item gets none. */}
+          {items.length > 1 ? (
+            <Text
+              style={styles.counter}
+            >{`${index + 1} / ${items.length}`}</Text>
+          ) : (
+            <View />
+          )}
           <IconButton
             icon="close"
             accessibilityLabel="Close"

@@ -5499,9 +5499,11 @@ export function MapScreen({
       />
 
       <PlanPlaceSheet
+        planId={planOnMap?.id ?? ""}
         place={
           planOnMap?.places.find((place) => place.id === planPlaceId) ?? null
         }
+        online={connectivity === "online"}
         onClose={() => setPlanPlaceId(null)}
         onInfo={(text) => notify(text, "info")}
       />

@@ -10,7 +10,7 @@
 // (`prunePlanFiles`). Nothing here logs a URL or a path: a presigned URL is a
 // bearer credential.
 import * as FileSystem from "expo-file-system/legacy";
-import type { TripPlanView } from "@logjam/shared";
+import type { TripPlanPlace, TripPlanView } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
 import { PLAN_DIR } from "../offline/localStores";
@@ -28,14 +28,7 @@ export type PlanFile = {
  *  GeoPDFs. A GeoPDF with no URL yet (still rendering) is left out. */
 export function planFiles(plan: TripPlanView): PlanFile[] {
   return [
-    ...plan.places.flatMap((place) =>
-      place.media.map((media) => ({
-        id: media.id,
-        url: media.displayUrl,
-        filename: media.filename,
-        sizeBytes: Number(media.sizeBytes),
-      })),
-    ),
+    ...plan.places.flatMap(placeFiles),
     ...plan.files.map((file) => ({
       id: file.item.id,
       url: file.item.displayUrl,
@@ -55,6 +48,16 @@ export function planFiles(plan: TripPlanView): PlanFile[] {
         : [],
     ),
   ];
+}
+
+/** A plan place's photos, as files. */
+export function placeFiles(place: TripPlanPlace): PlanFile[] {
+  return place.media.map((media) => ({
+    id: media.id,
+    url: media.displayUrl,
+    filename: media.filename,
+    sizeBytes: Number(media.sizeBytes),
+  }));
 }
 
 const folder = (planId: string) => `${PLAN_DIR}${encodeURIComponent(planId)}/`;
@@ -83,6 +86,22 @@ export function planFileSource(
   if (!file) return null;
   if (onPhone.has(file.id)) return planFileUri(planId, file);
   return online ? file.url : null;
+}
+
+/** The media that can open now, each given where it opens from as the
+ *  viewer's `localDisplayPath`. */
+export function openablePlanMedia<T extends { id: string }>(
+  planId: string,
+  items: readonly T[],
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+): (T & { localDisplayPath: string })[] {
+  return items.flatMap((item) => {
+    const file = files.find((each) => each.id === item.id);
+    const uri = planFileSource(planId, file, onPhone, online);
+    return uri ? [{ ...item, localDisplayPath: uri }] : [];
+  });
 }
 
 /** The files of a plan not yet on the phone. */

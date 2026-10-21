@@ -32,7 +32,6 @@ import {
   weatherAge as updatedAgo,
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
-  type MediaItem,
   type SectionKeysOn,
   type TripPlanPageView,
   type TripPlanView,
@@ -73,7 +72,7 @@ import {
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
 import { PlanDownload, usePlanFilesOnPhone } from "./PlanDownload";
-import { planFiles, planFileSource } from "./planFiles";
+import { openablePlanMedia, planFiles, planFileSource } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
@@ -598,18 +597,8 @@ function Items({
   const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
   // A downloaded file opens from the phone; one that isn't, from its URL
   // while online (`planFileSource`).
-  const onPhone = usePlanFilesOnPhone(plan);
-  const files = useMemo(
-    () => new Map(planFiles(plan).map((file) => [file.id, file])),
-    [plan],
-  );
-  const source = (id: string) =>
-    planFileSource(plan.id, files.get(id), onPhone, online);
-  const viewable = (items: readonly MediaItem[]): ViewerMedia[] =>
-    items.flatMap((item) => {
-      const uri = source(item.id);
-      return uri ? [{ ...item, localDisplayPath: uri }] : [];
-    });
+  const files = useMemo(() => planFiles(plan), [plan]);
+  const onPhone = usePlanFilesOnPhone(plan.id, files);
   // Offline, what can't open says why under its name.
   const subtitle = (addedBy: string | undefined, opens: boolean) =>
     opens || online ? addedBy : [addedBy, OFFLINE].filter(Boolean).join(" · ");
@@ -620,8 +609,6 @@ function Items({
   const headed =
     [plan.places.length, ways, plan.geoPdfs.length].filter((n) => n > 0)
       .length > 1;
-  const place = plan.places.find((each) => each.id === placeId) ?? null;
-  const placePhotos = place ? viewable(place.media) : [];
   return (
     <>
       {headed && plan.places.length > 0 ? (
@@ -638,12 +625,11 @@ function Items({
         />
       ))}
       <PlanPlaceSheet
-        place={place}
+        planId={plan.id}
+        place={plan.places.find((each) => each.id === placeId) ?? null}
+        online={online}
         onClose={() => setPlaceId(null)}
         onInfo={onInfo}
-        onPhotos={
-          placePhotos.length > 0 ? () => setViewing(placePhotos) : undefined
-        }
       />
       {headed && ways > 0 ? (
         <SectionHeader title={copy.itemsWays} count={ways} />
@@ -663,7 +649,7 @@ function Items({
         // account: importing it is Save a copy.
         const shown =
           category === "image" || category === "video"
-            ? viewable([file.item])
+            ? openablePlanMedia(plan.id, [file.item], files, onPhone, online)
             : null;
         return (
           <Row
@@ -683,7 +669,12 @@ function Items({
         <SectionHeader title={copy.itemsMaps} count={plan.geoPdfs.length} />
       ) : null}
       {plan.geoPdfs.map((pdf) => {
-        const uri = source(pdf.id);
+        const uri = planFileSource(
+          plan.id,
+          files.find((each) => each.id === pdf.id),
+          onPhone,
+          online,
+        );
         const title = pdf.title ?? "GeoPDF";
         return (
           <Row
