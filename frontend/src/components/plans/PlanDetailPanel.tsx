@@ -5,7 +5,6 @@
 import { Fragment, useRef, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
-  untitledJobTitle,
   PLAN_FORM_VERBS,
   planDeleteConfirm,
   formatBytes,
@@ -22,7 +21,6 @@ import {
   todayDateKey,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_PAGE,
-  tripPlanAddedByLine,
   tripPlanGoing,
   tripPlanLeaveState,
   tripPlanDatesLine,
@@ -37,6 +35,7 @@ import {
   type SectionKeysOn,
   type TripPlanPageView,
   type TripPlanFormView,
+  type TripPlanItem,
   type TripPlanSectionView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -54,7 +53,6 @@ import {
   Menu,
   Icon,
   Row,
-  SectionHeader,
   StatusPill,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
@@ -73,7 +71,6 @@ import {
   patchSection,
   putAnswer,
   reorderSections,
-  usePlan,
 } from "../../plansApi";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanSectionDialog from "./PlanSectionDialog";
@@ -83,6 +80,7 @@ import PlanFormPage from "./PlanFormPage";
 import PlanPrintDialog from "./PlanPrintDialog";
 import PlanPeople from "./PlanPeople";
 import PlanInvitePage from "./PlanInvitePage";
+import PlanItems from "./PlanItems";
 import { addedBy } from "./plansModel";
 import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
@@ -91,14 +89,26 @@ const copy = TRIP_PLAN_PAGE.copy;
 const formsCopy = TRIP_PLAN_FORMS.copy;
 
 export default function PlanDetailPanel({
-  planId,
+  view,
+  error,
+  refetch,
+  onOwnChanged,
+  onOpenItem,
   onBack,
   onPlansChanged,
   onStartTripLog,
   myUserId,
   initialView = "writeUp",
 }: {
-  planId: string;
+  /** The full fetch (App holds it: the map draws the plan's items too). */
+  view: TripPlanView | null;
+  error: string | null;
+  /** Fetch the plan again; `quiet` after a write whose failure was just said. */
+  refetch: (options?: { quiet: boolean }) => void;
+  /** A copy saved out of the plan landed in the caller's own lists. */
+  onOwnChanged: () => void;
+  /** Fit the map to a plan item. */
+  onOpenItem: (item: TripPlanItem) => void;
   onBack: () => void;
   /** Something the list shows changed (name, dates, archive, membership). */
   onPlansChanged: () => void;
@@ -107,7 +117,6 @@ export default function PlanDetailPanel({
   initialView?: TripPlanPageView;
 }) {
   const toast = useToast();
-  const { view, error, refetch } = usePlan(planId, toast.error);
   const [tab, setTab] = useState<TripPlanPageView>(initialView);
   const [editing, setEditing] = useState(false);
   const [sectionOpen, setSectionOpen] = useState<{ id: string | null } | null>(
@@ -270,49 +279,6 @@ export default function PlanDetailPanel({
     ways: plan.routes.length + plan.files.length,
     maps: plan.geoPdfs.length,
   };
-
-  // The plan's things, by kind, in the rows and hues their own pages use.
-  const itemGroups = [
-    {
-      title: copy.itemsPlaces,
-      rows: plan.places.map((place) => ({
-        id: place.id,
-        title: place.name,
-        addedBy: place.addedBy,
-        icon: "place" as const,
-        hue: "var(--color-accent)",
-      })),
-    },
-    {
-      title: copy.itemsWays,
-      rows: [
-        ...plan.routes.map((route) => ({
-          id: route.id,
-          title: route.name,
-          addedBy: route.addedBy,
-          icon: "route" as const,
-          hue: "var(--hue-route)",
-        })),
-        ...plan.files.map((file) => ({
-          id: file.id,
-          title: file.item.displayName ?? file.item.filename,
-          addedBy: file.addedBy,
-          icon: "importedFile" as const,
-          hue: "var(--hue-import)",
-        })),
-      ],
-    },
-    {
-      title: copy.itemsMaps,
-      rows: plan.geoPdfs.map((pdf) => ({
-        id: pdf.id,
-        title: pdf.title ?? untitledJobTitle("geoPdfJob"),
-        addedBy: pdf.addedBy,
-        icon: "geoPdf" as const,
-        hue: "var(--hue-geo-pdf)",
-      })),
-    },
-  ].filter((group) => group.rows.length > 0);
 
   const going = tripPlanGoing(plan.members);
   const viewOptions = [
@@ -481,27 +447,13 @@ export default function PlanDetailPanel({
       </div>
     ),
     items: tab === "items" && (
-      <div className={classes.list}>
-        {itemGroups.length === 0 ? (
-          <EmptyState icon="place" title={copy.itemsEmpty} />
-        ) : (
-          itemGroups.map((group) => (
-            <Fragment key={group.title}>
-              {itemGroups.length > 1 && (
-                <SectionHeader title={group.title} count={group.rows.length} />
-              )}
-              {group.rows.map((row) => (
-                <Row
-                  key={row.id}
-                  title={row.title}
-                  subtitle={tripPlanAddedByLine(row.addedBy)}
-                  leading={<IconTile icon={row.icon} hue={row.hue} />}
-                />
-              ))}
-            </Fragment>
-          ))
-        )}
-      </div>
+      <PlanItems
+        plan={plan}
+        myUserId={myUserId}
+        onChanged={refetch}
+        onSaved={onOwnChanged}
+        onOpen={onOpenItem}
+      />
     ),
     forms: tab === "forms" && (
       <div className={classes.list}>

@@ -78,7 +78,7 @@ export type WayItem = {
 };
 
 /** The box around a line. Null for a line with no points to bound. */
-function boundsOfPoints(
+export function boundsOfPoints(
   points: readonly [number, number][],
 ): [number, number, number, number] | null {
   if (points.length === 0) return null;

@@ -267,6 +267,39 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
   });
 
+  test("Plans items: the plan's things and their ⋯", async ({ page }) => {
+    await openApp(page);
+    const aside = page.locator("aside");
+    await page.getByRole("button", { name: /^Plans/ }).click();
+    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await aside.getByRole("radio", { name: /^Map/ }).click();
+    const place = "Wollangambe meeting point";
+    await expect(
+      aside.getByRole("button", { name: place, exact: true }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
+
+    // A place's ⋯, its Edit and its Save a copy: seen, never sent.
+    const actions = aside.getByRole("button", { name: `Actions for ${place}` });
+    await actions.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.getByRole("textbox", { name: "Name" })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await actions.click();
+    await page.getByRole("menuitem", { name: "Save a copy" }).click();
+    await expect(dialog).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("Account, Settings and the three lists it keeps", async ({ page }) => {
     await openApp(page);
     const aside = page.locator("aside");

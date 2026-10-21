@@ -11,6 +11,11 @@ import {
   type TripPlanFormPatch,
   type TripPlanFormView,
   type TripPlanInvitedPreview,
+  type TripPlanItem,
+  type TripPlanItemKind,
+  type TripPlanFilePatch,
+  type TripPlanPlacePatch,
+  type TripPlanRoutePatch,
   type TripPlanInviteView,
   type TripPlanJoinAnswers,
   type TripPlanLinkPreview,
@@ -167,6 +172,33 @@ export const redeemInviteLink = (token: string, answers: TripPlanJoinAnswers) =>
     method: "POST",
     body: { token, answers },
   });
+
+const item = (planId: string, kind: TripPlanItemKind, itemId: string) =>
+  `${plan(planId)}/items/${kind}/${encodeURIComponent(itemId)}`;
+/** Save a copy to the caller's own account; the body is the kind's copy shape. */
+export const savePlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+  copyMedia?: boolean,
+) =>
+  // The copy, as the kind's own copy route answers.
+  apiFetch<{ id: string; mediaSkipped?: number; mediaOutOfSpace?: true }>(
+    `${item(planId, kind, itemId)}/save`,
+    { method: "POST", body: copyMedia === undefined ? {} : { copyMedia } },
+  );
+export const patchPlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+  body: TripPlanPlacePatch | TripPlanRoutePatch | TripPlanFilePatch,
+) =>
+  apiFetch<TripPlanItem>(item(planId, kind, itemId), { method: "PATCH", body });
+export const deletePlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+) => apiFetch<void>(item(planId, kind, itemId), { method: "DELETE" });
 
 /** GET /plans: the cheap list, for the Plans page and the nav badge. */
 export function usePlans(enabled: boolean) {

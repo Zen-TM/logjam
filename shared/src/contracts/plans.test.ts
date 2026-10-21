@@ -38,6 +38,9 @@ import {
   tripPlanVisibilityLine,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
+  planItemDeleteConfirm,
+  planItemVerbs,
+  tripPlanPhotosSkipped,
   planMemberVerbs,
   planRemoveConfirm,
   planSelfRoleConfirm,
@@ -541,6 +544,56 @@ describe("who sees a form's answers, as its filler reads it", () => {
     expect(tripPlanVisibilityLine("members", "gear")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("members")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("leaders", "carpool")).not.toMatch(printed);
+  });
+});
+
+describe("a plan's items", () => {
+  const ids = (verbs: { id: string }[]) => verbs.map((v) => v.id);
+  const live = { archived: false };
+
+  // Mutation: offer Edit and Delete to every member, and a member's press
+  // on someone else's place is the API's 403 (`canChangeItem`).
+  it("lets a member change only what they added, a leader or an editor anything", () => {
+    const theirs = { kind: "place", mine: false };
+    expect(ids(planItemVerbs("member", theirs, live))).toEqual(["save"]);
+    expect(
+      ids(planItemVerbs("member", { kind: "place", mine: true }, live)),
+    ).toEqual(["save", "edit", "delete"]);
+    expect(ids(planItemVerbs("editor", theirs, live))).toEqual([
+      "save",
+      "edit",
+      "delete",
+    ]);
+  });
+
+  // Mutation: drop `whenArchived` from Save a copy, and an archived plan's
+  // things can no longer be kept, which the API allows.
+  it("keeps Save a copy on an archived plan, and gives a map no Edit", () => {
+    expect(
+      ids(
+        planItemVerbs(
+          "leader",
+          { kind: "route", mine: true },
+          { archived: true },
+        ),
+      ),
+    ).toEqual(["save"]);
+    expect(
+      ids(planItemVerbs("leader", { kind: "geoPdf", mine: true }, live)),
+    ).toEqual(["save", "delete"]);
+    expect(planItemDeleteConfirm("Wollangambe").confirmTitle).toBe(
+      "Delete Wollangambe from the plan?",
+    );
+  });
+
+  it("says when a saved copy came without some of its photos", () => {
+    expect(tripPlanPhotosSkipped(0, false)).toBeNull();
+    expect(tripPlanPhotosSkipped(2, true)).toBe(
+      "Your storage is full, so 2 photos and files weren't copied.",
+    );
+    expect(tripPlanPhotosSkipped(1, false)).toBe(
+      "1 photo or file couldn't be copied.",
+    );
   });
 });
 

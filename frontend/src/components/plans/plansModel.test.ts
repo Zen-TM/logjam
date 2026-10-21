@@ -3,6 +3,7 @@ import {
   parseTripPlanFormCreate,
   TRIP_PLAN_FORM_PRESETS,
   type TripPlanFormView,
+  type TripPlanItem,
   type TripPlanView,
 } from "@logjam/shared";
 import {
@@ -12,6 +13,7 @@ import {
   addedBy,
   answeredForm,
   filesChargedTo,
+  itemPatch,
   joinAnswers,
   opensPreview,
   PLAN_FIELD_GROUPS,
@@ -451,5 +453,47 @@ describe("which page a plan opens on", () => {
     expect(opensPreview(true, "invited")).toBe(true);
     expect(opensPreview(true, "active")).toBe(false);
     expect(opensPreview(false, "invited")).toBe(false);
+  });
+});
+
+describe("an item edit", () => {
+  const place = {
+    kind: "place",
+    id: "pl1",
+    name: "Wollangambe",
+    notes: null,
+  } as TripPlanItem;
+  const file = {
+    kind: "media",
+    id: "m1",
+    item: { displayName: null, filename: "day1.gpx" },
+  } as TripPlanItem;
+
+  it("sends only the changed words, a file's blank name as none", () => {
+    expect(itemPatch(place, { name: "Wollangambe", notes: "" })).toBeNull();
+    expect(
+      itemPatch(place, { name: "Wollangambe", notes: "Exit left." }),
+    ).toEqual({ notes: { from: null, to: "Exit left." } });
+    expect(itemPatch(file, { name: "Day 1", notes: "" })).toEqual({
+      displayName: { from: null, to: "Day 1" },
+    });
+  });
+
+  // Mutation: send the form's blanked words as `from`, and every save of an
+  // item stored with "" is refused as changed by someone else.
+  it("compares against what is stored, a blank included", () => {
+    expect(
+      itemPatch({ ...place, notes: "" } as TripPlanItem, {
+        name: "Wollangambe",
+        notes: "Exit left.",
+      }),
+    ).toEqual({ notes: { from: "", to: "Exit left." } });
+    const named = {
+      ...file,
+      item: { displayName: "", filename: "day1.gpx" },
+    } as TripPlanItem;
+    expect(itemPatch(named, { name: "Day 1", notes: "" })).toEqual({
+      displayName: { from: "", to: "Day 1" },
+    });
   });
 });

@@ -89,6 +89,7 @@ import TripLogDialog, {
 import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
 import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import {
+  boundsOfPoints,
   buildWays,
   wayFromRoute,
   type WayItem,
@@ -101,7 +102,7 @@ import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
 import { opensPreview } from "./plans/plansModel";
-import { usePlans } from "../plansApi";
+import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
@@ -690,6 +691,17 @@ function App() {
     error: plansError,
     refetch: refetchPlans,
   } = usePlans(loadsUserData);
+  const planPreviewed =
+    selectedPlanId != null &&
+    opensPreview(
+      planInvited,
+      plans.find((plan) => plan.id === selectedPlanId)?.status,
+    );
+  // The open plan's full fetch: its page renders from it.
+  const planFetch = usePlan(
+    activePanel === "plan-detail" && !planPreviewed ? selectedPlanId : null,
+    toast.error,
+  );
   const {
     places: sharedPlaces,
     error: sharedError,
@@ -1730,11 +1742,7 @@ function App() {
             openPlan(target.planId, target.view, target.invited);
           }}
           planDetail={
-            selectedPlanId &&
-            opensPreview(
-              planInvited,
-              plans.find((plan) => plan.id === selectedPlanId)?.status,
-            ) ? (
+            selectedPlanId && planPreviewed ? (
               <PlanInvitedPage
                 key={selectedPlanId}
                 planId={selectedPlanId}
@@ -1757,7 +1765,24 @@ function App() {
                 myUserId={currentUser?.id ?? null}
                 initialView={planView}
                 key={selectedPlanId}
-                planId={selectedPlanId}
+                view={planFetch.view}
+                error={planFetch.error}
+                refetch={planFetch.refetch}
+                onOwnChanged={() => {
+                  refetch();
+                  refetchRoutes();
+                  refetchStandaloneFiles();
+                  refetchGeoPdfJobs();
+                  refetchCurrentUser();
+                }}
+                onOpenItem={(item) => {
+                  if (item.kind === "place")
+                    setFlyToPlace({ lat: item.latitude, lng: item.longitude });
+                  else if (item.kind === "route") {
+                    const bounds = boundsOfPoints(item.points);
+                    if (bounds) setFlyToBounds(bounds);
+                  }
+                }}
                 onBack={() => {
                   setSelectedPlanId(null);
                   setActivePanel("plans");

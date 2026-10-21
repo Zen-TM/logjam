@@ -14,6 +14,7 @@ import {
   type TripPlanFormPresetId,
   type TripPlanFormView,
   type TripPlanFormVisibility,
+  type TripPlanItemKind,
   type TripPlanMemberStatus,
   type TripPlanRole,
   type TripPlanSummary,
@@ -370,7 +371,17 @@ export const TRIP_PLAN_PAGE = {
     itemsMaps: "Maps",
     itemsEmpty:
       "Nothing here yet. Add a copy of a place, a way or a map of yours.",
-    addCopy: "Add a copy",
+    bringPhotos: "Bring its photos",
+    saveCopyLine:
+      "The copy is yours. Changes to it stay with you, and changes in the plan don't reach it.",
+    saveCopyFailed: "Couldn't save a copy.",
+    itemDeleteFailed: "Couldn't delete that.",
+    itemDeleted: "Deleted from the plan.",
+    itemEdit: "Edit",
+    itemName: "Name",
+    itemNotes: "Notes",
+    itemSaveFailed: "Couldn't save that.",
+    itemGone: "This was deleted from the plan.",
 
     // Forms.
     formsEmptyLeader:
@@ -841,4 +852,23 @@ export function tripPlanFilesChargedTo(
     count: files.length,
     bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
+}
+
+/** Where Save a copy put it. */
+export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
+  return `Saved a copy to your ${kind === "place" ? "places" : kind === "geoPdf" ? "maps" : "ways"}.`;
+}
+
+/** Said after a copy whose photos and files didn't all come, or null when
+ *  they did: the API says how many and whether storage stopped them. */
+export function tripPlanPhotosSkipped(
+  skipped: number,
+  outOfSpace: boolean,
+): string | null {
+  if (skipped === 0) return null;
+  const what =
+    skipped === 1 ? "1 photo or file" : `${skipped} photos and files`;
+  return outOfSpace
+    ? `Your storage is full, so ${what} weren't copied.`
+    : `${what[0].toUpperCase()}${what.slice(1)} couldn't be copied.`;
 }
