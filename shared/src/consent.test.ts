@@ -25,9 +25,9 @@ describe("needsReconsent", () => {
   });
 
   // The server names the version; the build's constant is only the fallback.
-  // Mutation: compare against CURRENT_CONSENT_VERSION again and the first two
-  // turn red (a bump would strand every installed build at a gate whose Agree
-  // the server refuses).
+  // Mutation: compare against CURRENT_CONSENT_VERSION in needsReconsent (or
+  // return it from currentConsentVersionOf) and this turns red: a bump would
+  // strand every installed build at a gate whose Agree the server refuses.
   it("compares with the server's version, not the build's constant", () => {
     expect(
       needsReconsent({
@@ -43,6 +43,7 @@ describe("needsReconsent", () => {
     ).toBe(false);
   });
 
+  // Mutation: drop the `?? CURRENT_CONSENT_VERSION` in currentConsentVersionOf.
   it("falls back to the build's constant against a server that sends no version", () => {
     expect(
       needsReconsent({
@@ -53,6 +54,7 @@ describe("needsReconsent", () => {
     expect(currentConsentVersionOf({})).toBe(CURRENT_CONSENT_VERSION);
   });
 
+  // Mutation: return CURRENT_CONSENT_VERSION from currentConsentVersionOf.
   it("names the version a gate must send back", () => {
     expect(
       currentConsentVersionOf({ currentConsentVersion: "2999-01-01" }),

@@ -28,6 +28,22 @@ describe("pressing a submit with something missing says what", () => {
     expect(recordConsent).not.toHaveBeenCalled();
   });
 
+  // Mutation: send CURRENT_CONSENT_VERSION instead of the consentVersion prop
+  // from Agree: the server refuses any version but its own current one.
+  it("the consent gate records the version the server named", () => {
+    vi.mocked(recordConsent).mockResolvedValue({} as never);
+    render(
+      <ConsentGate
+        consentVersion="2999-01-01"
+        onAccepted={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Agree and continue" }));
+    expect(recordConsent).toHaveBeenCalledWith("2999-01-01");
+  });
+
   it("the route name dialog names the blank field", () => {
     HTMLDialogElement.prototype.showModal ??= function () {
       this.setAttribute("open", "");

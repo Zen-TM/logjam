@@ -41,7 +41,8 @@ describe("consentGate", () => {
     });
   });
 
-  // Mutation: compare with the baked constant again and both turn red.
+  // Mutation: compare with CURRENT_CONSENT_VERSION in needsReconsent (or
+  // return it from currentConsentVersionOf) and this turns red.
   it("blocks on the server's version even when the recorded one matches the build's", () => {
     expect(
       consentGate(
@@ -54,6 +55,8 @@ describe("consentGate", () => {
     ).toBe(true);
   });
 
+  // Mutation: match the pending value against CURRENT_CONSENT_VERSION in
+  // consentGate (or return it from currentConsentVersionOf) and this turns red.
   it("releases a fresh sign-up whose pending version is the server's, not the build's", () => {
     expect(
       consentGate(

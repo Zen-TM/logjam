@@ -1,11 +1,17 @@
 /**
  * The consent version the API accepts and every GET /users/me names as
  * `currentConsentVersion`. A bump is this constant plus the "Last updated"
- * date in frontend/public/privacy.html and tos.html (guard: the consent test
- * in api/src/__tests__/users.test.ts). Clients read the server's answer, not
- * this value, so a build in the field keeps working across a bump; they use it
- * only where no server answer exists yet (the Logjam Web sign-up form) and as
- * the fallback against a server that predates `currentConsentVersion`.
+ * date in frontend/public/privacy.html and tos.html (guard:
+ * api/src/constants/consent.unit.test.ts). Clients read the server's answer,
+ * not this value, so a Logjam GPS build containing that read survives any bump;
+ * they use this value only where no server answer exists yet (the Logjam Web
+ * sign-up form) and as the fallback against a server that predates
+ * `currentConsentVersion`.
+ *
+ * Logjam GPS builds released before that read existed still strand on the
+ * next bump: they gate on their baked constant and send it back, and the API
+ * refuses it. Hold a bump until those builds are outside the ADR 0022 support
+ * window.
  */
 export const CURRENT_CONSENT_VERSION = "2026-09-28";
 
