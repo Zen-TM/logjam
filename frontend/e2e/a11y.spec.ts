@@ -267,7 +267,9 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
   });
 
-  test("Plans items: the plan's things and their ⋯", async ({ page }) => {
+  test("Plans items: the plan's things, their ⋯ and Add a copy", async ({
+    page,
+  }) => {
     await openApp(page);
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
@@ -298,6 +300,62 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+
+    // Add a copy: alice's own places, ways and maps, ticked and priced.
+    await aside.getByRole("button", { name: "Add a copy" }).click();
+    await expect(dialog.getByRole("radio", { name: /^Places/ })).toBeVisible();
+    await dialog.getByRole("checkbox").first().check();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("Plans on the map: the plan bar, and Start a trip log's places", async ({
+    page,
+  }) => {
+    // The plan's trip, already over: Start a trip log then asks which of its
+    // places the trip links. Only the dates are rewritten.
+    await page.route(/\/plans\/[0-9a-f-]{36}$/, async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const plan = await response.json();
+      await route.fulfill({
+        response,
+        json: { ...plan, startDate: "2026-01-03", endDate: "2026-01-04" },
+      });
+    });
+    await openApp(page);
+    const aside = page.locator("aside");
+    await page.getByRole("button", { name: /^Plans/ }).click();
+    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+
+    // While a plan is open the map shows it, and says so.
+    const showMine = page.getByRole("button", {
+      name: "Show my things",
+      pressed: false,
+    });
+    await expect(showMine).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("main")).toContainText(
+      "Plan: Wollangambe weekend",
+    );
+    await expectNoViolations(page, "main");
+
+    // The page's notice asks for Safety contacts first; the verb is in ⋯.
+    await aside.getByRole("button", { name: "Plan actions" }).click();
+    await page
+      .getByRole("menuitem", { name: "Start a trip log from this plan" })
+      .click();
+    const dialog = page.locator("dialog[open]");
+    await expect(
+      dialog.getByRole("checkbox", { name: "Wollangambe meeting point" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+
+    // Back to my map: the plan closes and the user's own map returns.
+    await page.getByRole("button", { name: "Back to my map" }).click();
+    await expect(showMine).toHaveCount(0);
   });
 
   test("Account, Settings and the three lists it keeps", async ({ page }) => {

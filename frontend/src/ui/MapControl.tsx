@@ -69,15 +69,23 @@ export function Notice({
   children,
   action,
   tone = "info",
+  wraps = false,
 }: {
   icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
   tone?: "info" | "warning";
+  /** At a phone's width the action goes beneath the words: for an action
+   *  too wide to share their line. */
+  wraps?: boolean;
 }) {
   return (
     <div
-      className={[classes.notice, action ? classes.withAction : ""].join(" ")}
+      className={[
+        classes.notice,
+        action ? classes.withAction : "",
+        wraps ? classes.wraps : "",
+      ].join(" ")}
       data-tone={tone}
       role={tone === "warning" ? "alert" : undefined}
     >

@@ -12,6 +12,7 @@ import {
   type TripPlanFormView,
   type TripPlanInvitedPreview,
   type TripPlanItem,
+  type TripPlanItemAdd,
   type TripPlanItemKind,
   type TripPlanFilePatch,
   type TripPlanPlacePatch,
@@ -173,6 +174,14 @@ export const redeemInviteLink = (token: string, answers: TripPlanJoinAnswers) =>
     body: { token, answers },
   });
 
+/** Add a copy of one of the caller's own things. */
+export const addPlanItem = (planId: string, body: TripPlanItemAdd) =>
+  apiFetch<{
+    item: TripPlanItem;
+    mediaCopied?: number;
+    mediaSkipped?: number;
+    mediaOutOfSpace?: true;
+  }>(`${plan(planId)}/items`, { method: "POST", body });
 const item = (planId: string, kind: TripPlanItemKind, itemId: string) =>
   `${plan(planId)}/items/${kind}/${encodeURIComponent(itemId)}`;
 /** Save a copy to the caller's own account; the body is the kind's copy shape. */

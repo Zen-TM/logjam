@@ -79,6 +79,17 @@
   padding-right: calc((40px - var(--control-sm)) / 2);
 }
 
+/* A notice whose words and action can't share a phone's line: the action
+   goes beneath the words, and the pill becomes a card. */
+@media (max-width: 767px) {
+  .wraps {
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-block: var(--space-1);
+    border-radius: var(--radius-lg);
+  }
+}
+
 .noticeGlyph {
   flex: none;
   color: var(--color-accent);

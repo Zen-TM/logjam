@@ -70,7 +70,7 @@ import {
 import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
-import { Button, IconButton, MapButton, Notice } from "../ui";
+import { Button, Chip, IconButton, MapButton, Notice } from "../ui";
 import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
@@ -113,8 +113,10 @@ import {
   drawsNswContours,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
+  type TripPlanItemKind,
   type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
@@ -644,11 +646,20 @@ function App() {
   // opens it, since the plans list may not know of an invite yet.
   const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
   const [planInvited, setPlanInvited] = useState(false);
+  // "Show my things" over a plan: off by default, and off again every time a
+  // plan opens.
+  const [planShowMine, setPlanShowMine] = useState(false);
+  const [planAddCopy, setPlanAddCopy] = useState<{
+    kind: TripPlanItemKind;
+    id: string;
+  } | null>(null);
+  const consumePlanAddCopy = useCallback(() => setPlanAddCopy(null), []);
   const openPlan = useCallback(
     (planId: string, view: TripPlanPageView = "writeUp", invited = false) => {
       setSelectedPlanId(planId);
       setPlanView(view);
       setPlanInvited(invited);
+      setPlanShowMine(false);
       setActivePanel("plan-detail");
     },
     [],
@@ -697,12 +708,22 @@ function App() {
       planInvited,
       plans.find((plan) => plan.id === selectedPlanId)?.status,
     );
-  // The open plan's full fetch: its page renders from it.
+  // The open plan's full fetch: its page renders from it, and while it is
+  // open the map draws its places and ways instead of the user's own.
   const planFetch = usePlan(
     loadsUserData && activePanel === "plan-detail" && !planPreviewed
       ? selectedPlanId
       : null,
     toast.error,
+  );
+  const planOnMap = planFetch.view;
+  const planMapPlaces = useMemo<TPlace[]>(
+    () => planOnMap?.places.map((place) => ({ ...place, ownerId: "" })) ?? [],
+    [planOnMap],
+  );
+  const planMapRoutes = useMemo<TRoute[]>(
+    () => planOnMap?.routes.map((route) => ({ ...route, ownerId: "" })) ?? [],
+    [planOnMap],
   );
   const {
     places: sharedPlaces,
@@ -1500,23 +1521,49 @@ function App() {
 
   // A filter changes what the MAP shows too, so the map says so while the
   // Places page is closed or scrolled away.
-  const notices =
-    filtersActive && !dimUI ? (
-      <Notice
-        icon="filter"
-        action={
-          <IconButton
-            icon="close"
-            label="Clear filters"
-            size={14}
-            round
-            onClick={clearFilters}
+  // While a plan is open the map shows it, and says so first.
+  const backToMyMap = () => {
+    setSelectedPlanId(null);
+    setActivePanel(null);
+  };
+  const notices = planOnMap ? (
+    <Notice
+      icon="plan"
+      wraps
+      action={
+        <span className={classes.planBar}>
+          {/* A pressed chip, as Logjam GPS's bar has: a phone's width holds
+              the name, it and Back to my map. */}
+          <Chip
+            label={TRIP_PLAN_PAGE.copy.showMine}
+            active={planShowMine}
+            aria-pressed={planShowMine}
+            onClick={() => setPlanShowMine((was) => !was)}
           />
-        }
-      >
-        Showing {filteredPlaces.length} of {allPlaces.length} places
-      </Notice>
-    ) : null;
+          <Button compact onClick={backToMyMap}>
+            {TRIP_PLAN_PAGE.copy.backToMap}
+          </Button>
+        </span>
+      }
+    >
+      {TRIP_PLAN_PAGE.copy.barPrefix} {planOnMap.name}
+    </Notice>
+  ) : filtersActive && !dimUI ? (
+    <Notice
+      icon="filter"
+      action={
+        <IconButton
+          icon="close"
+          label="Clear filters"
+          size={14}
+          round
+          onClick={clearFilters}
+        />
+      }
+    >
+      Showing {filteredPlaces.length} of {allPlaces.length} places
+    </Notice>
+  ) : null;
 
   // "Make a map" from Places: the selection's bounds prefill the chosen product.
   // A topo goes straight to its dialog with the box; a GeoPDF opens its paper
@@ -1770,6 +1817,18 @@ function App() {
                 view={planFetch.view}
                 error={planFetch.error}
                 refetch={planFetch.refetch}
+                own={{
+                  places,
+                  routes: routes.filter(
+                    (route) => route.ownerId === currentUser?.id,
+                  ),
+                  files: standaloneFiles,
+                  geoPdfs: geoPdfJobs.filter(
+                    (job) =>
+                      job.status === "completed" && job.syncRole === "owner",
+                  ),
+                }}
+                currentUser={currentUser}
                 onOwnChanged={() => {
                   refetch();
                   refetchRoutes();
@@ -1788,13 +1847,18 @@ function App() {
                     if (bounds) setFlyToBounds(bounds);
                   }
                 }}
+                addCopyRequest={planAddCopy}
+                onAddCopyRequestConsumed={consumePlanAddCopy}
                 onBack={() => {
                   setSelectedPlanId(null);
                   setActivePanel("plans");
                 }}
                 onPlansChanged={refetchPlans}
-                onStartTripLog={(plan) =>
-                  setTripLogPrefill(tripPlanTripLogPrefill(plan))
+                onStartTripLog={(plan, placeIds) =>
+                  setTripLogPrefill({
+                    ...tripPlanTripLogPrefill(plan),
+                    placeIds,
+                  })
                 }
               />
             ) : null
@@ -1949,18 +2013,39 @@ function App() {
       <main id="main-content" className={classes.main}>
         <h1 className={classes.visuallyHidden}>Logjam place map</h1>
         <Map
-          filters={filters}
-          places={places}
-          sharedPlaces={sharedPlaces}
+          filters={planOnMap ? emptyFilters : filters}
+          places={
+            planOnMap
+              ? planShowMine
+                ? [...planMapPlaces, ...places]
+                : planMapPlaces
+              : places
+          }
+          sharedPlaces={planOnMap && !planShowMine ? [] : sharedPlaces}
           showPlaces={showPlaces}
           // One overlay for every line, so nothing has to be partitioned by
           // ownership on the way to the map any more.
           showWays={showWays}
-          placeTracks={placeTracks}
-          standaloneTracks={standaloneTracks}
-          routes={routes}
+          placeTracks={planOnMap && !planShowMine ? [] : placeTracks}
+          standaloneTracks={planOnMap && !planShowMine ? [] : standaloneTracks}
+          routes={
+            planOnMap
+              ? planShowMine
+                ? [...planMapRoutes, ...routes]
+                : planMapRoutes
+              : routes
+          }
           routeHover={routeHover}
           selectRoute={(id) => {
+            if (planOnMap) {
+              // The plan's own ways are its items; one of the user's own
+              // offers Add a copy to this plan.
+              if (
+                routes.some((r) => r.id === id && r.ownerId === currentUser?.id)
+              )
+                setPlanAddCopy({ kind: "route", id });
+              return;
+            }
             const route = routes.find((r) => r.id === id);
             if (route)
               openWay(
@@ -1995,6 +2080,11 @@ function App() {
           onDrawPointDelete={routeDraft.deleteAnchorAt}
           onDrawPointInsert={routeDraft.insertAnchorAt}
           selectPlace={(id) => {
+            if (planOnMap) {
+              if (id && places.some((place) => place.id === id))
+                setPlanAddCopy({ kind: "place", id });
+              return;
+            }
             // A pin opens the place, wherever you pressed it from.
             setSelectedPlaceID(id);
             setActivePanel("place-detail");

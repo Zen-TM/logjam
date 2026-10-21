@@ -383,7 +383,12 @@ export const TRIP_PLAN_PAGE = {
     itemsMaps: "Maps",
     itemsEmpty:
       "Nothing here yet. Add a copy of a place, a way or a map of yours.",
+    addCopyLine:
+      "Everyone in this plan, including people who join later, can keep a copy.",
     bringPhotos: "Bring its photos",
+    photosCountToo: "Photos count too.",
+    addCopyFailed: "Couldn't add a copy.",
+    nothingToAdd: "Nothing of yours here yet.",
     saveCopyLine:
       "The copy is yours. Changes to it stay with you, and changes in the plan don't reach it.",
     saveCopyFailed: "Couldn't save a copy.",
@@ -395,6 +400,10 @@ export const TRIP_PLAN_PAGE = {
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
     itemDownloadHint: "Click to download",
+    tripLogPlaces: "Places on this trip",
+    tripLogPlacesLine:
+      "Each place you pick is saved to your places first, then linked.",
+    tripLogNext: "Next",
 
     // Forms.
     formsEmptyLeader:
@@ -865,6 +874,29 @@ export function tripPlanFilesChargedTo(
     count: files.length,
     bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
+}
+
+/** Add a copy's submit: "Add 3 copies". */
+export function tripPlanAddCopiesLabel(count: number): string {
+  return count === 1 ? "Add 1 copy" : `Add ${count} copies`;
+}
+
+/** What landed, said once the loop ends: the API's sentence for a stop. */
+export function tripPlanAddedMessage(added: number, asked: number): string {
+  if (added === asked)
+    return added === 1 ? "Added 1 copy." : `Added ${added} copies.`;
+  return `Added ${added} of ${asked}.`;
+}
+
+/** The price line above Add a copy's submit. */
+export function tripPlanAddCopyPrice(uses: string, left: string): string {
+  return `Uses ${uses} of your storage. You have ${left} left.`;
+}
+
+/** Start a trip log stopped partway: what is in the user's places already. */
+export function tripPlanTripLogStopped(saved: number, why: string): string {
+  if (saved === 0) return why;
+  return `${saved === 1 ? "1 copy" : `${saved} copies`} saved to your places. ${why}`;
 }
 
 /** Where Save a copy put it. */

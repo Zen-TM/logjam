@@ -91,3 +91,10 @@
     bottom: calc(96px + 1rem);
   }
 }
+
+/* The plan bar's controls, beside its words in the map's notice. */
+.planBar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
