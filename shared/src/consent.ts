@@ -34,11 +34,17 @@ export function currentConsentVersionOf(
 /**
  * True when the user must (re-)consent before proceeding: they have never
  * consented (legacy accounts, consentVersion null) or their recorded version
- * is not the server's current one. Backs the blocking ConsentGate that
+ * is older than the server's current one. A newer recorded version is not
+ * stale: it is what an API rolled back past a bump serves, and re-asking
+ * would only record the older version over text the pages no longer show.
+ * Versions are YYYY-MM-DD, so the string compare is the date compare. Backs the blocking ConsentGate that
  * fulfils the privacy.html / tos.html promise of re-consent on next sign-in
  * after a material change. consentedAt needs no separate check — the server
  * sets consentVersion and consentedAt together (api/src/routes/users.ts).
  */
 export function needsReconsent(user: ConsentUser): boolean {
-  return user.consentVersion !== currentConsentVersionOf(user);
+  return (
+    user.consentVersion === null ||
+    user.consentVersion < currentConsentVersionOf(user)
+  );
 }

@@ -43,6 +43,19 @@ describe("needsReconsent", () => {
     ).toBe(false);
   });
 
+  // Mutation: compare with `!==` again (drop the "older than" check) and this
+  // turns red: an API rolled back past a bump would re-gate users who already
+  // agreed to the newer version.
+  it("does not gate a user whose recorded version is newer than the server's", () => {
+    expect(
+      needsReconsent({
+        consentVersion: "2999-01-01",
+        currentConsentVersion: CURRENT_CONSENT_VERSION,
+      }),
+    ).toBe(false);
+    expect(needsReconsent({ consentVersion: "2999-01-01" })).toBe(false);
+  });
+
   // Mutation: drop the `?? CURRENT_CONSENT_VERSION` in currentConsentVersionOf.
   it("falls back to the build's constant against a server that sends no version", () => {
     expect(
