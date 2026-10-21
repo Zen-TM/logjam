@@ -46,6 +46,7 @@ export const TRIP_PLANS_LIST = {
     pillEditor: "Editor",
     // Never a pill on a row (a member's own role says nothing); a word where
     // every role is named, such as the invite's role picker and a printout.
+    // Guard: plans.test.ts (a member's row says nothing).
     roleMember: "Member",
     pillInvited: "Invited",
     pillWaiting: "Waiting",
@@ -97,7 +98,15 @@ export function tripPlanBucket(
   return last != null && last < today ? "past" : "upcoming";
 }
 
-/** True once the trip is over: Start a trip log is offered from then on. */
+/** True once the plan has a day: Start a trip log is offered from then on. */
+export function tripPlanIsDated(plan: {
+  startDate: DateOnly | null;
+  endDate: DateOnly | null;
+}): boolean {
+  return firstDay(plan) != null;
+}
+
+/** True once the trip is over: Start a trip log enables from then on. */
 export function tripPlanIsOver(
   plan: { startDate: DateOnly | null; endDate: DateOnly | null },
   today: DateOnly,

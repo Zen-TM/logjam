@@ -17,6 +17,7 @@ import {
   tripPlanDatesLine,
   tripPlanGoing,
   tripPlanInPlanNow,
+  tripPlanIsDated,
   tripPlanIsOver,
   tripPlanLeaveState,
   tripPlanNotice,
@@ -66,6 +67,10 @@ describe("the plans list", () => {
     expect(tripPlanBucket(startOnly, TODAY)).toBe("past");
     expect(tripPlanIsOver(startOnly, TODAY)).toBe(true);
     expect(tripPlanIsOver(summary({}), TODAY)).toBe(false);
+    // Mutation: test startDate only in tripPlanIsDated.
+    expect(tripPlanIsDated(startOnly)).toBe(true);
+    expect(tripPlanIsDated(summary({ endDate: TODAY }))).toBe(true);
+    expect(tripPlanIsDated(summary({}))).toBe(false);
     expect(
       tripPlanBucket(
         summary({ endDate: "2027-01-01", archivedAt: "2026-10-01" }),
@@ -255,6 +260,7 @@ describe("a plan's page", () => {
         tripPlanRoleWord(role as "leader"),
       ),
     ).toEqual(["Leader", "Editor", "Member"]);
+    // Mutation: give "member" a pill in tripPlanRowPill.
     expect(tripPlanRowPill({ status: "active", role: "member" })).toBeNull();
     expect(tripPlanRowPill({ status: "active", role: "editor" })).toBe(
       "Editor",

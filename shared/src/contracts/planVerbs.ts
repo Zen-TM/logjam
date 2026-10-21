@@ -15,9 +15,8 @@ type PlanVerbDeclaration = {
   label: string;
   /** The roles that may run it. */
   roles: readonly TripPlanRole[];
-  /** Still offered on an archived plan: the API serves it to any member
-   *  (`requirePlanMember`), where every other verb goes through
-   *  `requirePlanWrite`, which refuses an archived plan. */
+  /** Still offered on an archived plan; every other verb goes through
+   *  `requirePlanWrite`, which refuses one. */
   whenArchived?: true;
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
