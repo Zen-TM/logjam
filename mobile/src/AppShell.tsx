@@ -48,8 +48,10 @@ import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
+import { canRunNow } from "./offline/networkPolicy";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
+import { planPushRefresh } from "./notifications/planPushRefresh";
 import { notificationTapTarget } from "./notifications/tapTarget";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import type { SavedCategory } from "./saved/savedKeys";
@@ -65,6 +67,11 @@ import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import {
+  pollPlans,
+  refreshCachedPlan,
+  registerPlansPoll,
+} from "./plans/plansCache";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
 import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen";
 import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
@@ -838,6 +845,7 @@ export function AppShell({
         geoPdfAutoDownload: registerGeoPdfAutoDownload,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
+        plansPoll: registerPlansPoll,
       }),
     [accountState],
   );
@@ -897,8 +905,29 @@ export function AppShell({
         }
       },
     );
-    return () => subscription.remove();
-  }, [isGuest]);
+    // A plan push while Logjam GPS is open: the list and that plan are
+    // fetched again, so neither reads stale, if the connection rule allows.
+    const received = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const refresh = planPushRefresh(
+          notification.request.content.data,
+          accountState,
+        );
+        if (!refresh) return;
+        void canRunNow("sync")
+          .then(async (allowed) => {
+            if (!allowed) return;
+            await pollPlans();
+            if (refresh.planId) await refreshCachedPlan(refresh.planId);
+          })
+          .catch(console.error);
+      },
+    );
+    return () => {
+      subscription.remove();
+      received.remove();
+    };
+  }, [isGuest, accountState]);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
