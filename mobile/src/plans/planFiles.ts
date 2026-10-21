@@ -1,18 +1,22 @@
 // Download for the trip: a plan's photos, files and GeoPDFs into its own
 // app-private folder (`PLAN_DIR/<planId>/`), so they are on the phone in a
 // canyon, where the plan's rows open them (`planFileSource`). The plan's JSON
-// is the cache's (`plansCache.ts`); these are the bytes it points at. A file is named by its item id, so a fresh fetch's
-// new presigned URLs land on the same file.
+// is the cache's (`plansCache.ts`); these are the bytes it points at. A file
+// is named by its item id, so a fresh fetch's new presigned URLs land on the
+// same file.
 //
-// PRIVACY: other people's places and photos. App-private, wiped with the
-// account (`offline/localStores.ts`); a plan dropped from the phone takes its
-// folder (`sweepPlanFolders`), and an item gone from a plan takes its file
-// (`prunePlanFiles`). Nothing here logs a URL or a path: a presigned URL is a
-// bearer credential.
+// PRIVACY: other people's places, photos and maps. App-private, wiped with
+// the account (`offline/localStores.ts`). A plan dropped from the phone (left,
+// removed, deleted) takes its folder, and with it any of its GeoPDFs put on
+// the map (`linkPlanGeoPdfImport`, `sweepPlanFolders`); an item gone from a
+// plan takes its file and its import (`prunePlanFiles`). Keeping one is Save
+// a copy. Nothing here logs a URL or a path: a presigned URL is a bearer
+// credential.
 import * as FileSystem from "expo-file-system/legacy";
 import type { TripPlanPlace, TripPlanView } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
+import { deleteGeoPdfImport } from "../geopdf/importPipeline";
 import { PLAN_DIR } from "../offline/localStores";
 
 /** One file a plan points at, and where it comes from. */
@@ -165,8 +169,44 @@ export async function downloadPlanFiles(
   return true;
 }
 
-/** Delete what the plan no longer points at: a removed item's file, and a
- *  partial left by a failed run of a file that has gone since. */
+/** Which of a plan's GeoPDFs are on the map, as plan item id → GeoPDF
+ *  import id. In the plan's folder, so the imports go with it. */
+const IMPORTS = "geopdf-imports.json";
+
+async function readImports(dir: string): Promise<Record<string, string>> {
+  try {
+    return JSON.parse(await FileSystem.readAsStringAsync(`${dir}${IMPORTS}`));
+  } catch {
+    return {};
+  }
+}
+
+/** A plan's GeoPDF went onto the map as a new import: it is the plan's, and
+ *  goes when the plan leaves the phone or the GeoPDF leaves the plan. */
+export async function linkPlanGeoPdfImport(
+  planId: string,
+  geoPdfId: string,
+  importId: string,
+): Promise<void> {
+  const dir = folder(planId);
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  const imports = await readImports(dir);
+  imports[geoPdfId] = importId;
+  await FileSystem.writeAsStringAsync(
+    `${dir}${IMPORTS}`,
+    JSON.stringify(imports),
+  );
+}
+
+/** A plan's folder goes, with the GeoPDF imports it names. */
+async function dropFolder(dir: string): Promise<void> {
+  for (const importId of Object.values(await readImports(dir)))
+    await deleteGeoPdfImport(importId).catch(console.error);
+  await FileSystem.deleteAsync(dir, { idempotent: true });
+}
+
+/** Delete what the plan no longer points at: a removed item's file and its
+ *  import, and a partial left by a failed run of a file that has gone since. */
 export async function prunePlanFiles(
   planId: string,
   files: readonly PlanFile[],
@@ -174,12 +214,26 @@ export async function prunePlanFiles(
   const dir = folder(planId);
   const info = await FileSystem.getInfoAsync(dir);
   if (!info.exists) return;
-  const keep = new Set(
-    files.flatMap((file) => {
+  const ids = new Set(files.map((file) => file.id));
+  const imports = await readImports(dir);
+  const gone = Object.keys(imports).filter((id) => !ids.has(id));
+  if (gone.length > 0) {
+    for (const id of gone) {
+      await deleteGeoPdfImport(imports[id]).catch(console.error);
+      delete imports[id];
+    }
+    await FileSystem.writeAsStringAsync(
+      `${dir}${IMPORTS}`,
+      JSON.stringify(imports),
+    );
+  }
+  const keep = new Set([
+    IMPORTS,
+    ...files.flatMap((file) => {
       const name = planFileUri(planId, file).slice(dir.length);
       return [name, `${name}.part`];
     }),
-  );
+  ]);
   const names = await FileSystem.readDirectoryAsync(dir);
   await Promise.all(
     names
@@ -192,7 +246,7 @@ export async function prunePlanFiles(
 
 /** A plan's folder goes: it was left, deleted, or dropped from the phone. */
 export async function deletePlanFolder(planId: string): Promise<void> {
-  await FileSystem.deleteAsync(folder(planId), { idempotent: true });
+  await dropFolder(folder(planId));
 }
 
 /** Delete every plan folder whose plan is no longer cached. */
@@ -203,8 +257,6 @@ export async function sweepPlanFolders(keep: ReadonlySet<string>) {
   await Promise.all(
     names
       .filter((name) => !keep.has(decodeURIComponent(name)))
-      .map((name) =>
-        FileSystem.deleteAsync(`${PLAN_DIR}${name}`, { idempotent: true }),
-      ),
+      .map((name) => dropFolder(`${PLAN_DIR}${name}/`)),
   );
 }

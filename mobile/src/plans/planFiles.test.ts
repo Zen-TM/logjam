@@ -7,6 +7,11 @@ const fs = vi.hoisted(() => ({
   deleteAsync: vi.fn(async () => {}),
   makeDirectoryAsync: vi.fn(async () => {}),
   moveAsync: vi.fn(async () => {}),
+  // No imports file until a test gives one.
+  readAsStringAsync: vi.fn(async (_uri: string): Promise<string> => {
+    throw new Error("no file");
+  }),
+  writeAsStringAsync: vi.fn(async () => {}),
 }));
 vi.mock("expo-file-system/legacy", () => fs);
 const transfer = vi.hoisted(() => ({
@@ -14,9 +19,14 @@ const transfer = vi.hoisted(() => ({
 }));
 vi.mock("../api/presignedTransfer", () => transfer);
 vi.mock("../offline/localStores", () => ({ PLAN_DIR: "file:///d/plans/" }));
+const geoPdf = vi.hoisted(() => ({
+  deleteGeoPdfImport: vi.fn(async () => {}),
+}));
+vi.mock("../geopdf/importPipeline", () => geoPdf);
 
 const {
   downloadPlanFiles,
+  linkPlanGeoPdfImport,
   planFileSource,
   planFileUri,
   planFiles,
@@ -107,7 +117,7 @@ describe("a plan's files leave the phone with it", () => {
       "dropped",
     ]);
     await sweepPlanFolders(new Set(["kept", "plan 1"]));
-    expect(deleted()).toEqual(["file:///d/plans/dropped"]);
+    expect(deleted()).toEqual(["file:///d/plans/dropped/"]);
   });
 
   // Mutation: drop the keep check in prunePlanFiles. Every file would go on
@@ -124,6 +134,59 @@ describe("a plan's files leave the phone with it", () => {
       "file:///d/plans/p/gone.jpg",
       "file:///d/plans/p/gone.jpg.part",
     ]);
+  });
+});
+
+describe("a plan's GeoPDFs on the map go with the plan", () => {
+  const imports = (links: Record<string, string>) =>
+    fs.readAsStringAsync.mockResolvedValueOnce(JSON.stringify(links));
+
+  // Mutation: delete only the folder in sweepPlanFolders, and a plan the
+  // caller left, or was removed from, stays on their map.
+  it("deletes the imports a dropped plan's folder names", async () => {
+    fs.readDirectoryAsync.mockResolvedValueOnce(["kept", "dropped"]);
+    fs.readAsStringAsync.mockImplementation(async (uri: string) => {
+      if (uri === "file:///d/plans/dropped/geopdf-imports.json")
+        return JSON.stringify({ g1: "import-1" });
+      throw new Error("no file");
+    });
+    try {
+      await sweepPlanFolders(new Set(["kept"]));
+    } finally {
+      fs.readAsStringAsync.mockReset();
+      fs.readAsStringAsync.mockRejectedValue(new Error("no file"));
+    }
+    expect(geoPdf.deleteGeoPdfImport.mock.calls).toEqual([["import-1"]]);
+    expect(deleted()).toEqual(["file:///d/plans/dropped/"]);
+  });
+
+  // Mutation: leave the imports file out of prune's keep set, or skip the
+  // `gone` check. The links would go on the next refetch, or a GeoPDF taken
+  // out of the plan would stay on the map.
+  it("prunes the import of a GeoPDF gone from the plan, and keeps the links", async () => {
+    imports({ g1: "import-1", gone: "import-2" });
+    fs.readDirectoryAsync.mockResolvedValueOnce([
+      "geopdf-imports.json",
+      "g1.pdf",
+    ]);
+    await prunePlanFiles("p", [{ ...file("g1"), filename: "g1.pdf" }]);
+    expect(geoPdf.deleteGeoPdfImport.mock.calls).toEqual([["import-2"]]);
+    expect(fs.writeAsStringAsync).toHaveBeenCalledWith(
+      "file:///d/plans/p/geopdf-imports.json",
+      JSON.stringify({ g1: "import-1" }),
+    );
+    expect(deleted()).toEqual([]);
+  });
+
+  // Mutation: overwrite the file with only the new link, and a plan's first
+  // GeoPDF outlives the plan once a second is opened.
+  it("adds a link beside the plan's others", async () => {
+    imports({ g1: "import-1" });
+    await linkPlanGeoPdfImport("p", "g2", "import-2");
+    expect(fs.writeAsStringAsync).toHaveBeenCalledWith(
+      "file:///d/plans/p/geopdf-imports.json",
+      JSON.stringify({ g1: "import-1", g2: "import-2" }),
+    );
   });
 });
 

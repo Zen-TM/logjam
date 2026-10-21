@@ -18,10 +18,22 @@ import { relativeTime } from "../screens/syncHealth";
 import { spacing } from "../theme";
 import { Row, StatusPill } from "../ui";
 import { startPlanDownload, usePlanDownload } from "./planDownloads";
-import { missingPlanFiles, planFiles, type PlanFile } from "./planFiles";
+import {
+  importGeoPdfFile,
+  importGeoPdfFromUrl,
+} from "../geopdf/importPipeline";
+import { runGeoPdfImport } from "../geopdf/importRunner";
+import {
+  linkPlanGeoPdfImport,
+  missingPlanFiles,
+  openablePlanMedia,
+  planFiles,
+  planFileSource,
+  type PlanFile,
+} from "./planFiles";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { planBbox, planMapSaved } from "./planMap";
-import type { CachedPlan } from "./plansCache";
+import { planForUrls, type CachedPlan } from "./plansCache";
 
 export function PlanDownload({
   cached,
@@ -142,4 +154,70 @@ export function usePlanFilesOnPhone(
     };
   }, [planId, files, running]);
   return onPhone;
+}
+
+/** The files to open these from. A URL from a copy fetched long ago may have
+ *  expired, so the plan is fetched again first (`planForUrls`); downloaded
+ *  files, or offline, need nothing. */
+async function filesForOpening(
+  planId: string,
+  ids: readonly string[],
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+): Promise<readonly PlanFile[]> {
+  if (!online || ids.every((id) => onPhone.has(id))) return files;
+  return planFiles(await planForUrls(planId));
+}
+
+/** The media that opens now, each with where it opens from. */
+export async function openPlanMedia<T extends { id: string }>(
+  planId: string,
+  items: readonly T[],
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+) {
+  const ids = items.map((item) => item.id);
+  const fresh = await filesForOpening(planId, ids, files, onPhone, online);
+  return openablePlanMedia(planId, items, fresh, onPhone, online);
+}
+
+/**
+ * A plan's GeoPDF onto the map through the GeoPDF import, from the phone's
+ * copy or its URL. A new import is the plan's (`linkPlanGeoPdfImport`) and
+ * leaves the phone with it; one already there (the caller's own, or this
+ * plan's from before) is left as it is. The import's toast says how it went.
+ */
+export async function openPlanGeoPdf(
+  planId: string,
+  geoPdfId: string,
+  title: string,
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+): Promise<void> {
+  const fresh = await filesForOpening(
+    planId,
+    [geoPdfId],
+    files,
+    onPhone,
+    online,
+  );
+  const source = planFileSource(
+    planId,
+    fresh.find((file) => file.id === geoPdfId),
+    onPhone,
+    online,
+  );
+  if (!source) return;
+  const outcome = await runGeoPdfImport(title, (onProgress, token) =>
+    source.startsWith("file:")
+      ? importGeoPdfFile(title, source, onProgress, token)
+      : importGeoPdfFromUrl(title, source, onProgress, token),
+  );
+  if (outcome?.status === "imported" || outcome?.status === "paused")
+    await linkPlanGeoPdfImport(planId, geoPdfId, outcome.record.id).catch(
+      console.error,
+    );
 }

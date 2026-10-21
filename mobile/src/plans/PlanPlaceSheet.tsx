@@ -8,10 +8,12 @@ import {
   attributeRows,
   formatElevationM,
   mapPointPosition,
+  messageFromError,
   pluralCount,
   userFieldValues,
   PLACE_PAGE,
   SYSTEM_FIELD_DEFS,
+  TRIP_PLAN_PAGE,
   SYSTEM_PLACE_TYPES,
   tripPlanAddedByLine,
   type TripPlanPlace,
@@ -19,10 +21,10 @@ import {
 
 import { unavailableReasonText } from "../auth/capabilities";
 import { AttributeTable } from "../customFields/CustomFieldValues";
-import { MediaViewer } from "../media/MediaViewer";
+import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import { BottomSheet, Icon, Row, SectionHeader } from "../ui";
-import { usePlanFilesOnPhone } from "./PlanDownload";
+import { openPlanMedia, usePlanFilesOnPhone } from "./PlanDownload";
 import { openablePlanMedia, placeFiles } from "./planFiles";
 
 export function PlanPlaceSheet({
@@ -41,7 +43,7 @@ export function PlanPlaceSheet({
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const [viewing, setViewing] = useState(false);
+  const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
   // Its photos open from the phone once downloaded, else from their URLs
   // while online (`planFileSource`).
   const files = useMemo(() => (place ? placeFiles(place) : []), [place]);
@@ -100,7 +102,27 @@ export function PlanPlaceSheet({
                     ? undefined
                     : unavailableReasonText("needs-connection")
                 }
-                onPress={photos.length > 0 ? () => setViewing(true) : undefined}
+                onPress={
+                  photos.length > 0
+                    ? () =>
+                        void openPlanMedia(
+                          planId,
+                          place.media,
+                          files,
+                          onPhone,
+                          online,
+                        )
+                          .then(setViewing)
+                          .catch((err: unknown) =>
+                            onInfo(
+                              messageFromError(
+                                err,
+                                TRIP_PLAN_PAGE.copy.loadFailed,
+                              ),
+                            ),
+                          )
+                    : undefined
+                }
               />
             </>
           ) : null}
@@ -111,11 +133,11 @@ export function PlanPlaceSheet({
           ) : null}
         </View>
       ) : null}
-      {viewing && photos.length > 0 ? (
+      {viewing?.length ? (
         <MediaViewer
-          items={photos}
+          items={viewing}
           startIndex={0}
-          onClose={() => setViewing(false)}
+          onClose={() => setViewing(null)}
         />
       ) : null}
     </BottomSheet>

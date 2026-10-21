@@ -42,11 +42,6 @@ import {
   capabilityScreenBlock,
   unavailableReasonText,
 } from "../auth/capabilities";
-import {
-  importGeoPdfFile,
-  importGeoPdfFromUrl,
-} from "../geopdf/importPipeline";
-import { runGeoPdfImport } from "../geopdf/importRunner";
 import { useConnectivity } from "../map/connectivity";
 import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { onMirrorChanged } from "../sync/syncDb";
@@ -71,7 +66,12 @@ import {
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
-import { PlanDownload, usePlanFilesOnPhone } from "./PlanDownload";
+import {
+  openPlanGeoPdf,
+  openPlanMedia,
+  PlanDownload,
+  usePlanFilesOnPhone,
+} from "./PlanDownload";
 import { openablePlanMedia, planFiles, planFileSource } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
@@ -599,6 +599,8 @@ function Items({
   // while online (`planFileSource`).
   const files = useMemo(() => planFiles(plan), [plan]);
   const onPhone = usePlanFilesOnPhone(plan.id, files);
+  const failed = (err: unknown) =>
+    onInfo(messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed));
   // Offline, what can't open says why under its name.
   const subtitle = (addedBy: string | undefined, opens: boolean) =>
     opens || online ? addedBy : [addedBy, OFFLINE].filter(Boolean).join(" · ");
@@ -661,7 +663,20 @@ function Items({
               tripPlanAddedByLine(file.addedBy),
               shown === null || shown.length > 0,
             )}
-            onPress={shown?.length ? () => setViewing(shown) : undefined}
+            onPress={
+              shown?.length
+                ? () =>
+                    void openPlanMedia(
+                      plan.id,
+                      [file.item],
+                      files,
+                      onPhone,
+                      online,
+                    )
+                      .then(setViewing)
+                      .catch(failed)
+                : undefined
+            }
           />
         );
       })}
@@ -683,22 +698,25 @@ function Items({
             hue={assetHue.geoPdf}
             title={title}
             subtitle={subtitle(tripPlanAddedByLine(pdf.addedBy), uri !== null)}
-            // Onto the map as the caller's own GeoPDF overlay: the import is
-            // on this phone only, and its toast says how it went.
+            // Onto the map as a GeoPDF import on this phone, which leaves
+            // with the plan (`openPlanGeoPdf`).
             onPress={
               uri
                 ? () =>
-                    void runGeoPdfImport(title, (onProgress, token) =>
-                      uri.startsWith("file:")
-                        ? importGeoPdfFile(title, uri, onProgress, token)
-                        : importGeoPdfFromUrl(title, uri, onProgress, token),
-                    )
+                    void openPlanGeoPdf(
+                      plan.id,
+                      pdf.id,
+                      title,
+                      files,
+                      onPhone,
+                      online,
+                    ).catch(failed)
                 : undefined
             }
           />
         );
       })}
-      {viewing ? (
+      {viewing?.length ? (
         <MediaViewer
           items={viewing}
           startIndex={0}
