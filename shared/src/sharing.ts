@@ -248,7 +248,12 @@ export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
 
 /** What an audit row is called, untitled jobs included. */
 export function shareRowTitle(row: FriendShareRow): string {
-  return row.name ?? `Untitled ${SHARE_KIND_LABEL[row.entityType]}`;
+  return row.name ?? untitledJobTitle(row.entityType);
+}
+
+/** What a job with no title is called, in a share row or a plan's list. */
+export function untitledJobTitle(kind: BulkShareItemType): string {
+  return `Untitled ${SHARE_KIND_LABEL[kind]}`;
 }
 
 /**

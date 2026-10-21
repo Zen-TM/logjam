@@ -120,6 +120,28 @@ describe("Edit name and dates over someone else's change", () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.anything(), {
       name: { from: "Wolly", to: "Wollangambe" },
     });
+    // The note is under the name only: the dates were theirs alone.
+    expect(
+      screen.getAllByText(TRIP_PLAN_PAGE.copy.inPlanNow, { exact: false }),
+    ).toHaveLength(1);
+  });
+
+  // Mutation: compare `values` with what the form opened with in `dirty`,
+  // and closing a form the user never touched asks to discard changes.
+  it("closes at once when only someone else changed the plan", () => {
+    const onClose = vi.fn();
+    const view = (shown: TripPlanView) => (
+      <PlanDetailsDialog
+        open
+        plan={shown}
+        onSubmit={async () => {}}
+        onClose={onClose}
+      />
+    );
+    const { rerender } = render(view(plan));
+    rerender(view({ ...plan, name: "Wolly" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalled();
   });
 });
 

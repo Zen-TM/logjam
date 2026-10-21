@@ -39,6 +39,24 @@ export function sectionPatch(
 export const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * Whether "In the plan now" shows under `fields`: the user's value differs
+ * from what the plan now holds, and the plan changed it since the form
+ * opened. A field only one of them changed has nothing to show.
+ */
+export function theirsChanged<T extends Record<string, unknown>>(
+  opened: T,
+  current: T,
+  values: T,
+  fields: readonly (keyof T)[],
+): boolean {
+  return fields.some(
+    (field) =>
+      !same(values[field], current[field]) &&
+      !same(current[field], opened[field]),
+  );
+}
+
 /** A plan's dates are one compare-and-set pair (`planPatch`), so they are
  *  adopted together: one edited date keeps both of the user's. */
 export const PLAN_FIELD_GROUPS = [["startDate", "endDate"]] as const;

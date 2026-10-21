@@ -33,6 +33,7 @@ import {
   adoptTheirs,
   same,
   sectionPatch,
+  theirsChanged,
   type SectionValues as Values,
 } from "./plansModel";
 import classes from "./plans.module.css";
@@ -96,10 +97,7 @@ function SectionForm({
   const dirty = !same(values, seen);
   /** The plan's words under a field the user edited and the plan changed. */
   const theirs = (field: keyof Values) =>
-    moved &&
-    current &&
-    current[field] !== values[field] &&
-    current[field] !== opened[field]
+    moved && current && theirsChanged(opened, current, values, [field])
       ? current[field]
       : null;
   const guard = useUnsavedChangesGuard(dirty, onClose);

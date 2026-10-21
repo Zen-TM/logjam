@@ -5,7 +5,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
-  SHARE_KIND_LABEL,
+  untitledJobTitle,
   planDeleteConfirm,
   planLeaveConfirm,
   planAddVerbLabel,
@@ -22,6 +22,7 @@ import {
   tripPlanGoing,
   tripPlanLeaveState,
   tripPlanDatesLine,
+  tripPlanIsDated,
   tripPlanIsOver,
   tripPlanNotice,
   tripTypeLabel,
@@ -219,7 +220,7 @@ export default function PlanDetailPanel({
   const canAddSection = addVerbs.some((verb) => verb.id === "section");
   const heroVerbs = planVerbs("web", role, {
     archived,
-    dated: plan.startDate != null || plan.endDate != null,
+    dated: tripPlanIsDated(plan),
     over,
     ...tripPlanLeaveState(plan),
   });
@@ -265,7 +266,7 @@ export default function PlanDetailPanel({
       title: copy.itemsMaps,
       rows: plan.geoPdfs.map((pdf) => ({
         id: pdf.id,
-        title: pdf.title ?? `Untitled ${SHARE_KIND_LABEL.geoPdfJob}`,
+        title: pdf.title ?? untitledJobTitle("geoPdfJob"),
         addedBy: pdf.addedBy,
         icon: "geoPdf" as const,
         hue: "var(--hue-geo-pdf)",

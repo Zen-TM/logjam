@@ -4,6 +4,7 @@ import {
   PLAN_FIELD_GROUPS,
   planPatch,
   sectionPatch,
+  theirsChanged,
 } from "./plansModel";
 
 const plan = {
@@ -86,5 +87,19 @@ describe("a form refetched under the user", () => {
     // Untouched, both follow the plan.
     const both = adoptTheirs(opened, opened, theirs, PLAN_FIELD_GROUPS);
     expect(both.values).toEqual(theirs);
+  });
+
+  // Mutation: drop the `current` against `opened` check in theirsChanged,
+  // and "In the plan now" shows under a field only the user changed.
+  it("says what the plan now holds only where both the user and the plan changed it", () => {
+    const opened = { name: "Wollangambe trip", body: "Meet at 7." };
+    const mine = { name: "Wollangambe", body: "Meet at 6." };
+    const theirs = { name: "Wolly", body: "Meet at 7." };
+    const { values } = adoptTheirs(opened, mine, theirs);
+    expect(theirsChanged(opened, theirs, values, ["name"])).toBe(true);
+    expect(theirsChanged(opened, theirs, values, ["body"])).toBe(false);
+    // Untouched by the user, the field took theirs: nothing to show.
+    const untouched = adoptTheirs(opened, opened, theirs).values;
+    expect(theirsChanged(opened, theirs, untouched, ["name"])).toBe(false);
   });
 });

@@ -27,6 +27,7 @@ import {
   PLAN_FIELD_GROUPS,
   planPatch,
   same,
+  theirsChanged,
   type PlanValues as Values,
 } from "./plansModel";
 import classes from "./plans.module.css";
@@ -78,15 +79,8 @@ function PlanDetailsForm({
     setValues(next.values);
     setMoved(true);
   }
-  /** What the plan now says, under a field the user edited and the plan
-   *  also changed since the form opened. */
   const theirs = (fields: (keyof Values)[], words: string) =>
-    moved &&
-    fields.some(
-      (field) =>
-        !same(values[field], current[field]) &&
-        !same(current[field], opened[field]),
-    )
+    moved && theirsChanged(opened, current, values, fields)
       ? tripPlanInPlanNow(words)
       : undefined;
 
