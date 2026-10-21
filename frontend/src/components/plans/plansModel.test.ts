@@ -416,6 +416,7 @@ describe("joining", () => {
   const rules = {
     id: "rules",
     title: "Trip rules",
+    preset: "rules" as const,
     questions: TRIP_PLAN_FORM_PRESETS.rules.questions,
     visibleTo: "leaders" as const,
     updatedAt: "2026-10-19T00:00:00.000Z",

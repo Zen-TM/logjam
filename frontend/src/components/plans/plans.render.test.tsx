@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   TRIP_PLAN_FORMS,
+  TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
@@ -27,6 +28,7 @@ import { planInvite } from "../../pendingInvite";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanInviteLinkDialog from "./PlanInviteLinkDialog";
+import PlanJoinDialog from "./PlanJoinDialog";
 import PlanInvitePage from "./PlanInvitePage";
 import PlanPeople from "./PlanPeople";
 import PlanSectionDialog from "./PlanSectionDialog";
@@ -428,5 +430,41 @@ describe("a plan link opened by someone already invited", () => {
     );
     await waitFor(() => expect(onOpenPlan).toHaveBeenCalledWith("p1", true));
     expect(screen.queryByText(TRIP_PLAN_JOIN.copy.askToJoin)).toBeNull();
+  });
+});
+
+describe("joining a plan with Safety contacts to fill in", () => {
+  // Mutation: drop `preset` from the join forms (the API's joinForms or the
+  // type), and a joiner hands over a contact's phone without being told it
+  // may be printed for someone not on the trip.
+  it("says members may print the answers", () => {
+    const contacts = TRIP_PLAN_FORM_PRESETS.safetyContacts;
+    render(
+      <PlanJoinDialog
+        via="link"
+        plan={{
+          name: "Wollangambe trip",
+          startDate: null,
+          endDate: null,
+          person: "alice",
+          requiredForms: [
+            {
+              id: "f1",
+              title: contacts.title,
+              preset: "safetyContacts",
+              questions: contacts.questions,
+              visibleTo: "members",
+              updatedAt: "2026-10-19T00:00:00.000Z",
+            },
+          ],
+        }}
+        onJoin={async () => {}}
+        onStale={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText(/Members may print them for someone not on the trip/),
+    ).toBeTruthy();
   });
 });

@@ -95,6 +95,7 @@ beforeEach(async () => {
       data: {
         planId,
         title: "Trip rules",
+        preset: "rules",
         questions: [
           { id: "agree", kind: "agree", label: "I agree", required: true },
         ],
@@ -159,7 +160,13 @@ describe("holding a link", () => {
       endDate: null,
       leader: { id: ALICE_ID, username: "alice" },
       requiredForms: [
-        expect.objectContaining({ id: formId, visibleTo: "members" }),
+        // The preset, so the joiner is told when members may print it.
+        // Mutation: drop it from joinForms' select.
+        expect.objectContaining({
+          id: formId,
+          preset: "rules",
+          visibleTo: "members",
+        }),
       ],
       membership: null,
     });

@@ -203,7 +203,7 @@ describe("the invited preview and joining", () => {
     });
     expect(res.body.sections[0].title).toBe("Overview");
     expect(res.body.requiredForms).toMatchObject([
-      { id: formId, title: "Trip rules", visibleTo: "leaders" },
+      { id: formId, title: "Trip rules", preset: null, visibleTo: "leaders" },
     ]);
     expect(JSON.stringify(res.body)).not.toContain(SECRET);
     expect(JSON.stringify(res.body)).not.toMatch(/@/);

@@ -8,6 +8,7 @@
 // person which plan, with no answers").
 import { Prisma } from "@prisma/client";
 import {
+  isTripPlanFormPresetId,
   isTripPlanFormVisibility,
   parseTripPlanAnswers,
   say,
@@ -248,6 +249,7 @@ export async function joinForms(
     select: {
       id: true,
       title: true,
+      preset: true,
       questions: true,
       visibleTo: true,
       updatedAt: true,
@@ -259,6 +261,8 @@ export async function joinForms(
     return {
       id: form.id,
       title: form.title,
+      preset:
+        form.preset && isTripPlanFormPresetId(form.preset) ? form.preset : null,
       questions: (Array.isArray(form.questions)
         ? form.questions
         : []) as TripPlanQuestion[],

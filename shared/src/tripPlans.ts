@@ -316,10 +316,12 @@ export type TripPlanInviteView = {
 };
 
 /** A form required to join, as a joiner sees it: never anyone's answers.
- *  The joiner echoes `visibleTo` and `updatedAt` (as `formUpdatedAt`). */
+ *  The joiner echoes `visibleTo` and `updatedAt` (as `formUpdatedAt`);
+ *  `preset` tells them a members form may be printed
+ *  (`tripPlanVisibilityLine`). */
 export type TripPlanJoinForm = Pick<
   TripPlanFormView,
-  "id" | "title" | "questions" | "visibleTo" | "updatedAt"
+  "id" | "title" | "preset" | "questions" | "visibleTo" | "updatedAt"
 >;
 
 /** GET /plans/:id/preview: someone a leader invited by username. */
