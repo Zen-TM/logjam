@@ -186,6 +186,17 @@ test.describe("desktop", () => {
       await aside.getByRole("radio", { name: view }).click();
       await expectNoViolations(page, "aside");
     }
+
+    // Invite people: the search and the link, before anything is sent.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Invite people" }).click();
+    const back = aside.getByRole("button", { name: "Back to people" });
+    await expect(back).toBeFocused();
+    await expectNoViolations(page, "aside");
+    await back.click();
+    await expect(
+      aside.getByRole("button", { name: "Invite people" }),
+    ).toBeFocused();
     await aside.getByRole("button", { name: "Plan actions" }).click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
@@ -1053,6 +1064,15 @@ test.describe("narrow web", () => {
     await expect(
       page.getByRole("region", { name: "Answers" }).getByRole("table"),
     ).toBeVisible();
+    await expectNoViolations(page);
+
+    // Invite people: the search, the role and the link, nothing sent.
+    await page.getByRole("button", { name: "Back to the plan" }).click();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Invite people" }).click();
+    await expect(
+      page.getByRole("button", { name: "Back to people" }),
+    ).toBeFocused();
     await expectNoViolations(page);
   });
 

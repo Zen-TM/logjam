@@ -307,3 +307,97 @@ export function planFormDeleteConfirm(form: {
     confirmLabel: "Delete form",
   };
 }
+
+// ── People ──────────────────────────────────────────────────────────
+
+/** A leader's verbs on someone going, in menu order. */
+export const PLAN_MEMBER_VERBS = [
+  { id: "makeLeader", icon: "flag", label: "Make a leader", roles: LEADERS },
+  { id: "makeEditor", icon: "edit", label: "Make an editor", roles: LEADERS },
+  { id: "makeMember", icon: "account", label: "Make a member", roles: LEADERS },
+  {
+    id: "remove",
+    icon: "unshare",
+    label: "Remove from plan",
+    roles: LEADERS,
+    danger: true,
+    separated: true,
+  },
+] as const satisfies readonly PlanVerbDeclaration[];
+
+export type PlanMemberVerbId = (typeof PLAN_MEMBER_VERBS)[number]["id"];
+
+const ROLE_VERB: Record<TripPlanRole, PlanMemberVerbId> = {
+  leader: "makeLeader",
+  editor: "makeEditor",
+  member: "makeMember",
+};
+
+/** The verbs a caller has on one person going: none on an archived plan,
+ *  and no "Make" for the role they already have. On their own row a leader
+ *  may step down while another leader remains, as planMembers.ts's PATCH
+ *  allows; they never remove themselves (they leave from the plan's ⋯). */
+export function planMemberVerbs(
+  callerRole: TripPlanRole,
+  target: { role: TripPlanRole; self: boolean },
+  state: { archived: boolean; leaders: number },
+): PlanVerb<PlanMemberVerbId>[] {
+  if (target.self && (target.role !== "leader" || state.leaders < 2)) return [];
+  return planVerbsFor(PLAN_MEMBER_VERBS, "web", callerRole, state).filter(
+    (verb) =>
+      verb.id !== ROLE_VERB[target.role] &&
+      !(target.self && verb.id === "remove"),
+  );
+}
+
+/** The role a "Make …" verb gives. */
+export const PLAN_ROLE_OF_VERB: Partial<
+  Record<PlanMemberVerbId, TripPlanRole>
+> = { makeLeader: "leader", makeEditor: "editor", makeMember: "member" };
+
+export function planRemoveConfirm(
+  username: string,
+  planName: string,
+  files: { count: number; size: string } | null,
+): PlanConfirmCopy & { deleteFilesLabel: string | null } {
+  const counted = files ? `${plural(files.count, "file")}, ${files.size}` : "";
+  return {
+    confirmTitle: `Remove ${username} from ${planName}?`,
+    confirmBody: `They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.${
+      files
+        ? ` Their files (${counted}) will count against your storage instead.`
+        : ""
+    }`,
+    confirmLabel: "Remove",
+    deleteFilesLabel: files ? `Delete their files instead (${counted})` : null,
+  };
+}
+
+/** A leader making themselves an editor or a member: the one role change
+ *  they can't undo themselves, so it is confirmed, naming who still can. */
+export function planSelfRoleConfirm(
+  role: "editor" | "member",
+  otherLeaders: readonly string[],
+): PlanConfirmCopy {
+  const becoming = `Make yourself ${role === "editor" ? "an editor" : "a member"}`;
+  const names =
+    otherLeaders.length > 1
+      ? `${otherLeaders.slice(0, -1).join(", ")} and ${otherLeaders[otherLeaders.length - 1]}`
+      : otherLeaders[0];
+  return {
+    confirmTitle: `${becoming}?`,
+    confirmBody: `You won't be able to make yourself a leader again. ${
+      otherLeaders.length > 1 ? "The leaders" : "The leader"
+    } ${names} can.`,
+    confirmLabel: becoming,
+  };
+}
+
+export function planTurnDownConfirm(username: string): PlanConfirmCopy {
+  return {
+    confirmTitle: `Turn down ${username}?`,
+    confirmBody:
+      "They're told their request was turned down. They can ask again with the link.",
+    confirmLabel: "Turn down",
+  };
+}

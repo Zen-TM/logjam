@@ -10,6 +10,10 @@ import {
   type TripPlanFormCreate,
   type TripPlanFormPatch,
   type TripPlanFormView,
+  type TripPlanInviteView,
+  type TripPlanMemberStatus,
+  type TripPlanMemberView,
+  type TripPlanRole,
   type TripPlanPatch,
   type TripPlanSectionCreate,
   type TripPlanSectionPatch,
@@ -90,6 +94,57 @@ export const putAnswer = (
     body,
   });
 
+const member = (planId: string, userId: string) =>
+  `${plan(planId)}/members/${encodeURIComponent(userId)}`;
+
+export const inviteMember = (
+  planId: string,
+  username: string,
+  role: TripPlanRole,
+) =>
+  apiFetch<TripPlanMemberView>(`${plan(planId)}/members`, {
+    method: "POST",
+    body: { username, role },
+  });
+export const setMemberRole = (
+  planId: string,
+  userId: string,
+  role: TripPlanRole,
+) =>
+  apiFetch<TripPlanMemberView>(member(planId, userId), {
+    method: "PATCH",
+    body: { role },
+  });
+export const approveMember = (planId: string, userId: string) =>
+  apiFetch<TripPlanMemberView>(`${member(planId, userId)}/approve`, {
+    method: "POST",
+  });
+/** Remove someone, turn down a request or cancel an invite: one call, told
+ *  the status the leader saw, so it acts on no one who has since moved on
+ *  (a 409 then). */
+export const removeMember = (
+  planId: string,
+  userId: string,
+  status: TripPlanMemberStatus,
+  deleteFiles = false,
+) =>
+  apiFetch<void>(
+    `${member(planId, userId)}?status=${status}${deleteFiles ? "&deleteFiles=true" : ""}`,
+    { method: "DELETE" },
+  );
+
+export const createInviteLink = (planId: string) =>
+  apiFetch<{ token: string; expiresAt: string }>(`${plan(planId)}/invites`, {
+    method: "POST",
+  });
+export const getInviteLinks = (planId: string) =>
+  apiFetch<{ invites: TripPlanInviteView[] }>(`${plan(planId)}/invites`).then(
+    (body) => body.invites,
+  );
+export const revokeInviteLink = (planId: string, inviteId: string) =>
+  apiFetch<void>(`${plan(planId)}/invites/${encodeURIComponent(inviteId)}`, {
+    method: "DELETE",
+  });
 /** GET /plans: the cheap list, for the Plans page and the nav badge. */
 export function usePlans(enabled: boolean) {
   const [plans, setPlans] = useState<TripPlanSummary[]>([]);

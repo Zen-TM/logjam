@@ -233,3 +233,53 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
       .flatMap((form) => answerTable(form, going)),
   };
 }
+
+/** The first form a person answered, for a leader reading their request. */
+export function answeredForm(
+  plan: Pick<TripPlanView, "forms">,
+  userId: string,
+): string | null {
+  return (
+    plan.forms.find((form) =>
+      form.answers.some((answer) => answer.user.id === userId),
+    )?.id ?? null
+  );
+}
+
+type ChargedFile = { sizeBytes: string; chargedTo: { id: string } | null };
+
+/** Every file in a plan that counts against someone's storage. */
+function planFiles(plan: TripPlanView): ChargedFile[] {
+  return [
+    ...plan.files,
+    ...plan.geoPdfs,
+    ...plan.places.flatMap((place) => place.media),
+  ];
+}
+
+/** The files a person's storage pays for: what a removal moves or deletes. */
+export function filesChargedTo(plan: TripPlanView, userId: string) {
+  const files = planFiles(plan).filter((file) => file.chargedTo?.id === userId);
+  return {
+    count: files.length,
+    bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
+  };
+}
+
+/** What a person added, counted as the leave dialog prices it. */
+export function addedBy(plan: TripPlanView, userId: string) {
+  const mine = <T extends { addedBy: { id: string } | null }>(items: T[]) =>
+    items.filter((item) => item.addedBy?.id === userId);
+  const places = mine(plan.places);
+  const files = [
+    ...mine(plan.files),
+    ...mine(plan.geoPdfs),
+    ...places.flatMap((place) => place.media),
+  ];
+  return {
+    places: places.length,
+    ways: mine(plan.routes).length + mine(plan.files).length,
+    maps: mine(plan.geoPdfs).length,
+    bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
+  };
+}

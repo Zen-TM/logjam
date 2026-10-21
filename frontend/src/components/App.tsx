@@ -1712,6 +1712,7 @@ function App() {
           planDetail={
             selectedPlanId ? (
               <PlanDetailPanel
+                myUserId={currentUser?.id ?? null}
                 key={selectedPlanId}
                 planId={selectedPlanId}
                 onBack={() => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   TRIP_PLAN_FORM_PRESETS,
   type TripPlanQuestion,
@@ -37,6 +37,11 @@ import {
   tripPlanVisibilityLine,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
+  planMemberVerbs,
+  planRemoveConfirm,
+  planSelfRoleConfirm,
+  tripPlanInviteePill,
+  tripPlanInviteLinkLine,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -534,5 +539,106 @@ describe("who sees a form's answers, as its filler reads it", () => {
     expect(tripPlanVisibilityLine("members", "gear")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("members")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("leaders", "carpool")).not.toMatch(printed);
+  });
+});
+
+describe("a plan's people", () => {
+  it("gives no Make for the role someone has, and nothing to a non-leader or on an archived plan", () => {
+    const live = { archived: false, leaders: 1 };
+    expect(
+      planMemberVerbs("leader", { role: "editor", self: false }, live).map(
+        (v) => v.id,
+      ),
+    ).toEqual(["makeLeader", "makeMember", "remove"]);
+    expect(
+      planMemberVerbs("editor", { role: "member", self: false }, live),
+    ).toEqual([]);
+    expect(
+      planMemberVerbs(
+        "leader",
+        { role: "editor", self: false },
+        { archived: true, leaders: 1 },
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: drop the leaders count, and the last leader can step down and
+  // leave the plan with none (the API's 409); offer Remove on yourself, and
+  // a leader removes themselves past Leave's confirm.
+  it("lets a leader step down only while another leader remains, never remove themselves", () => {
+    const self = { role: "leader", self: true } as const;
+    expect(
+      planMemberVerbs("leader", self, { archived: false, leaders: 2 }).map(
+        (v) => v.id,
+      ),
+    ).toEqual(["makeEditor", "makeMember"]);
+    expect(
+      planMemberVerbs("leader", self, { archived: false, leaders: 1 }),
+    ).toEqual([]);
+    expect(
+      planMemberVerbs(
+        "leader",
+        { role: "editor", self: true },
+        { archived: false, leaders: 2 },
+      ),
+    ).toEqual([]);
+  });
+
+  it("prices a removal only when the person has files", () => {
+    expect(planSelfRoleConfirm("member", ["mira", "tom", "sue"])).toEqual({
+      confirmTitle: "Make yourself a member?",
+      confirmBody:
+        "You won't be able to make yourself a leader again. The leaders mira, tom and sue can.",
+      confirmLabel: "Make yourself a member",
+    });
+    expect(planSelfRoleConfirm("editor", ["mira"]).confirmBody).toBe(
+      "You won't be able to make yourself a leader again. The leader mira can.",
+    );
+    expect(planRemoveConfirm("tom", "Wollangambe trip", null)).toMatchObject({
+      confirmBody:
+        "They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.",
+      deleteFilesLabel: null,
+    });
+    expect(
+      planRemoveConfirm("tom", "Wollangambe trip", {
+        count: 2,
+        size: "340 MB",
+      }),
+    ).toMatchObject({
+      confirmBody: expect.stringContaining(
+        "Their files (2 files, 340 MB) will count against your storage instead.",
+      ),
+      deleteFilesLabel: "Delete their files instead (2 files, 340 MB)",
+    });
+  });
+});
+
+describe("Invite people", () => {
+  // Mutation: format the instants as UTC days, and a link made before about
+  // 10 am in Sydney reads as made the day before.
+  it("says a link's days where the reader is, without this year", () => {
+    vi.stubEnv("TZ", "Australia/Sydney");
+    try {
+      expect(
+        tripPlanInviteLinkLine(
+          {
+            createdAt: "2026-10-18T22:30:00.000Z",
+            expiresAt: "2026-10-25T22:30:00.000Z",
+          },
+          2026,
+        ),
+      ).toBe("Made Mon 19 Oct, works until Mon 26 Oct");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  // Mutation: pill everyone with a plan row "In this plan", and someone only
+  // invited or asking to join is said to be in it.
+  it("pills a person found by what the plan has them as", () => {
+    expect(tripPlanInviteePill("active")).toBe("In this plan");
+    expect(tripPlanInviteePill("invited")).toBe("Invited");
+    expect(tripPlanInviteePill("requested")).toBe("Asking to join");
+    expect(tripPlanInviteePill(undefined)).toBeNull();
   });
 });
