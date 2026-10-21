@@ -91,6 +91,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   topo: "lidar",
   export: "export",
   geoPdf: "geoPdf",
+  message: "info",
   problem: "warning",
 };
 
@@ -104,6 +105,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
   geoPdf: "var(--hue-geo-pdf)",
+  message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };
 
@@ -689,7 +691,7 @@ function NotificationsPanel({
       const label = notificationLabel(row);
       title = label.text;
       subtitle = [
-        label.warning,
+        label.detail,
         notificationActions(row)?.pill,
         formatTime(row.createdAt),
       ]

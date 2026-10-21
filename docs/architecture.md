@@ -402,4 +402,4 @@ module prod uses. Step-by-step setup is in `docs/dev-setup.md`.
   each package's rules and how its tests run.
 - [`decisions/`](decisions/README.md): why.
 - [`operations/`](operations/): alarms, rollback, drills, saved queries, mobile
-  releases.
+  releases, maintainer announcements.

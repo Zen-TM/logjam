@@ -172,7 +172,8 @@ renumber.
 
 - **Anything with kinds takes a glyph and a hue per kind from one map**, used
   wherever the kind appears: row tile, active chip, map mark, "add" menu,
-  notification. A notification borrows the hue of the thing it is about.
+  notification. A notification borrows the hue of the thing it is about; one
+  about Logjam itself (a maintainer message) has no thing and takes the accent.
 - **A menu of destinations is not a set of kinds**: Inbox, Friends and
   Settings share one look.
 - **An open vocabulary hashes its hue from the label**, so it survives
