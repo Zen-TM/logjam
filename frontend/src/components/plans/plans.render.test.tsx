@@ -634,11 +634,12 @@ describe("Start a trip log after a copy failed", () => {
     const onDone = vi.fn();
     const onCopied = vi.fn();
     const place = (id: string, name: string) =>
-      ({ kind: "place", id, name }) as TripPlanPlace;
+      ({ kind: "place", id, name, placeTypeId: "canyon" }) as TripPlanPlace;
     render(
       <PlanTripLogPlacesDialog
         planId="p1"
         places={[place("a", "Claustral"), place("b", "Ranon")]}
+        copyMedia
         onCopied={onCopied}
         onDone={onDone}
         onClose={() => {}}
@@ -656,7 +657,10 @@ describe("Start a trip log after a copy failed", () => {
     expect(onCopied).toHaveBeenCalledTimes(1);
     fireEvent.click(next);
     await waitFor(() =>
-      expect(onDone).toHaveBeenCalledWith(["copy-a", "copy-b"]),
+      expect(onDone).toHaveBeenCalledWith(
+        ["copy-a", "copy-b"],
+        ["canyon", "canyon"],
+      ),
     );
     expect(savePlanItem).toHaveBeenCalledTimes(3);
   });

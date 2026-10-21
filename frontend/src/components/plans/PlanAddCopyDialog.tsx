@@ -9,7 +9,11 @@ import {
   TRIP_PLAN_PAGE,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPrice,
+  tripPlanAddable,
   tripPlanAddedMessage,
+  TRIP_PLAN_ITEM_GROUP,
+  TRIP_PLAN_ITEM_GROUPS,
+  type TripPlanItemGroup,
   mediaSkippedSentence,
   untitledJobTitle,
   type GeoPdfJobView,
@@ -33,6 +37,7 @@ import classes from "./plans.module.css";
 const copy = TRIP_PLAN_PAGE.copy;
 
 type Pick = { kind: TripPlanItemKind; id: string };
+type Row = Pick & { title: string; bytes: number };
 const key = (pick: Pick) => `${pick.kind}:${pick.id}`;
 
 export default function PlanAddCopyDialog({
@@ -47,7 +52,7 @@ export default function PlanAddCopyDialog({
   onClose,
 }: {
   planId: string;
-  /** The caller's own, as their pages list them: nothing shared with them. */
+  /** The caller's own lists; `tripPlanAddable` decides what is offered. */
   places: TPlace[];
   routes: TRoute[];
   files: StandaloneFile[];
@@ -60,12 +65,8 @@ export default function PlanAddCopyDialog({
 }) {
   const toast = useToast();
   const formId = useId();
-  const [tab, setTab] = useState<"places" | "ways" | "maps">(
-    initial?.kind === "place" || !initial
-      ? "places"
-      : initial.kind === "geoPdf"
-        ? "maps"
-        : "ways",
+  const [tab, setTab] = useState<TripPlanItemGroup>(
+    initial ? TRIP_PLAN_ITEM_GROUP[initial.kind] : "places",
   );
   const [picked, setPicked] = useState<Pick[]>(initial ? [initial] : []);
   const [bringPhotos, setBringPhotos] = useState(
@@ -74,38 +75,46 @@ export default function PlanAddCopyDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const offered = tripPlanAddable(
+    { places, routes, files, geoPdfs },
+    {
+      me: user?.id ?? null,
+      tickedPlaceIds: picked
+        .filter((pick) => pick.kind === "place")
+        .map((pick) => pick.id),
+      copyMedia: bringPhotos,
+    },
+  );
   const ways = [
-    ...routes.map((route) => ({
+    ...offered.routes.map((route) => ({
       kind: "route" as const,
       id: route.id,
       title: route.name,
       bytes: 0,
     })),
-    // A file that is a place's way travels with that place.
-    ...files
-      .filter((file) => file.linkedPlaceId == null)
-      .map((file) => ({
-        kind: "media" as const,
-        id: file.id,
-        title: file.displayName ?? file.filename,
-        bytes: file.fileSizeBytes,
-      })),
+    ...offered.files.map((file) => ({
+      kind: "media" as const,
+      id: file.id,
+      title: file.displayName ?? file.filename,
+      bytes: file.fileSizeBytes,
+    })),
   ];
-  const lists = {
-    places: places.map((place) => ({
+  const lists: Record<TripPlanItemGroup, Row[]> = {
+    places: offered.places.map((place) => ({
       kind: "place" as const,
       id: place.id,
       title: place.name,
       bytes: 0,
     })),
     ways,
-    maps: geoPdfs.map((pdf) => ({
+    maps: offered.geoPdfs.map((pdf) => ({
       kind: "geoPdf" as const,
       id: pdf.id,
       title: pdf.title ?? untitledJobTitle("geoPdfJob"),
       bytes: pdf.resultBytes ?? 0,
     })),
   };
+  // A pick no longer offered (it now comes with a ticked place) is not sent.
   const all = [...lists.places, ...lists.ways, ...lists.maps];
   const chosen = all.filter((row) => picked.some((p) => key(p) === key(row)));
   const bytes = chosen.reduce((sum, row) => sum + row.bytes, 0);
@@ -122,7 +131,7 @@ export default function PlanAddCopyDialog({
     );
 
   async function submit() {
-    if (chosen.length === 0) return setError(copy.nothingToAdd);
+    if (chosen.length === 0) return setError(copy.nothingTicked);
     setBusy(true);
     let added = 0;
     let skipped = 0;
@@ -170,15 +179,11 @@ export default function PlanAddCopyDialog({
           label={planAddVerbLabel("copy")}
           value={tab}
           onChange={setTab}
-          options={[
-            {
-              value: "places",
-              label: copy.itemsPlaces,
-              count: lists.places.length,
-            },
-            { value: "ways", label: copy.itemsWays, count: lists.ways.length },
-            { value: "maps", label: copy.itemsMaps, count: lists.maps.length },
-          ]}
+          options={TRIP_PLAN_ITEM_GROUPS.map(({ group, title }) => ({
+            value: group,
+            label: title,
+            count: lists[group].length || undefined,
+          }))}
         />
       }
       footer={
@@ -225,7 +230,10 @@ export default function PlanAddCopyDialog({
         )}
         {(bytes > 0 || (placesChosen && bringPhotos)) && left != null && (
           <p className={classes.body}>
-            {tripPlanAddCopyPrice(formatBytes(bytes), formatBytes(left))}
+            {tripPlanAddCopyPrice(
+              bytes > 0 ? formatBytes(bytes) : null,
+              formatBytes(left),
+            )}
             {placesChosen && bringPhotos ? ` ${copy.photosCountToo}` : ""}
           </p>
         )}

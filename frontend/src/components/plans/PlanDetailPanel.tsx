@@ -140,8 +140,12 @@ export default function PlanDetailPanel({
   onBack: () => void;
   /** Something the list shows changed (name, dates, archive, membership). */
   onPlansChanged: () => void;
-  /** The real trip form, pre-filled; `placeIds` are the caller's copies. */
-  onStartTripLog: (plan: TripPlanView, placeIds: string[]) => void;
+  /** The real trip form, pre-filled; `placeIds` are the caller's copies,
+   *  `placeTypeIds` their types. */
+  onStartTripLog: (
+    plan: TripPlanView,
+    places: { placeIds: string[]; placeTypeIds: string[] },
+  ) => void;
   myUserId: string | null;
   initialView?: TripPlanPageView;
 }) {
@@ -247,7 +251,7 @@ export default function PlanDetailPanel({
   const startTripLog = () =>
     plan.places.length > 0
       ? setPickingTripPlaces(true)
-      : onStartTripLog(plan, []);
+      : onStartTripLog(plan, { placeIds: [], placeTypeIds: [] });
 
   const planVerbRunners: Record<PlanVerbId, () => void> = {
     edit: () => setEditing(true),
@@ -637,11 +641,12 @@ export default function PlanDetailPanel({
         <PlanTripLogPlacesDialog
           planId={plan.id}
           places={plan.places}
+          copyMedia={copyPlaceMedia}
           onCopied={onOwnChanged}
           onClose={() => setPickingTripPlaces(false)}
-          onDone={(placeIds) => {
+          onDone={(placeIds, placeTypeIds) => {
             setPickingTripPlaces(false);
-            onStartTripLog(plan, placeIds);
+            onStartTripLog(plan, { placeIds, placeTypeIds });
           }}
         />
       )}

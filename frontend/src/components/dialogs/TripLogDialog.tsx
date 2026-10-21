@@ -11,6 +11,7 @@ import {
   isValidLatitude,
   isValidLongitude,
   MAX_PLACES_PER_TRIP,
+  TRIP_PLACES_CAP_SENTENCE,
   MAX_TRIP_TYPES_PER_TRIP,
   primaryTripType,
   SYSTEM_PLACE_TYPE_IDS,
@@ -118,6 +119,8 @@ export type TripLogTrack = {
  *  linked even before the place list has refetched them. */
 export type TripLogPrefill = ReturnType<typeof tripPlanTripLogPrefill> & {
   placeIds: string[];
+  /** Their types, which a canyon's tag needs before the list has them. */
+  placeTypeIds: string[];
 };
 
 /**
@@ -398,7 +401,11 @@ function TripLogDialog({
       initialDisplayNameInput = prefill?.displayName ?? "";
       initialSelectedTypes = enforceCanyoningTag(
         prefill?.types ?? [],
-        linksCanyon(placeTypeIdsFor(initialSelectedPlaceIds)),
+        linksCanyon(
+          prefill
+            ? prefill.placeTypeIds
+            : placeTypeIdsFor(initialSelectedPlaceIds),
+        ),
       );
       initialFieldValues = {};
     }
@@ -812,7 +819,7 @@ function TripLogDialog({
       return;
     }
     if (selectedCount >= MAX_PLACES_PER_TRIP) {
-      setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
+      setPlacesError(TRIP_PLACES_CAP_SENTENCE);
       return;
     }
     setSelectedPlaceIds([...selectedPlaceIds, id]);
@@ -820,7 +827,7 @@ function TripLogDialog({
 
   function startCreate(name: string) {
     if (selectedCount >= MAX_PLACES_PER_TRIP) {
-      setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
+      setPlacesError(TRIP_PLACES_CAP_SENTENCE);
       return;
     }
     setCreating({

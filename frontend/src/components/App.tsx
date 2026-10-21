@@ -101,7 +101,7 @@ import PlansPanel from "./plans/PlansPanel";
 import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
-import { opensPreview } from "./plans/plansModel";
+import { opensPreview, planMapPress } from "./plans/plansModel";
 import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -113,6 +113,8 @@ import {
   drawsNswContours,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  PLAN_ADD_VERBS,
+  planVerbsFor,
   TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
@@ -751,7 +753,11 @@ function App() {
     loaded: standaloneFilesLoaded,
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
-  } = useStandaloneFiles(loadsUserData && (activePanel === "ways" || showWays));
+  } = useStandaloneFiles(
+    // A plan's page offers them to Add a copy, whatever the Ways layer says.
+    loadsUserData &&
+      (activePanel === "ways" || activePanel === "plan-detail" || showWays),
+  );
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],
@@ -783,8 +789,46 @@ function App() {
     loaded: routesLoaded,
     refetch: refetchRoutes,
   } = useRoutes(
-    loadsUserData && (showWays || drawingRoute || activePanel === "ways"),
+    loadsUserData &&
+      (showWays ||
+        drawingRoute ||
+        activePanel === "ways" ||
+        activePanel === "plan-detail"),
   );
+  // With Show my things, which of the user's own the layer switches allow;
+  // all drawn dimmed beside the plan's.
+  const mineShown = {
+    places: !planOnMap || (planShowMine && showPlaces),
+    ways: !planOnMap || (planShowMine && showWays),
+  };
+  const mutedIds = useMemo<ReadonlySet<string>>(
+    () =>
+      planOnMap && planShowMine
+        ? new Set([
+            ...places.map((place) => place.id),
+            ...routes.map((route) => route.id),
+            ...standaloneFiles.map((file) => file.id),
+          ])
+        : new Set(),
+    [planOnMap, planShowMine, places, routes, standaloneFiles],
+  );
+  // One of the user's own things pressed on the map asks for Add a copy,
+  // only while the page itself offers it (not on an archived plan).
+  const pressInPlan = (press: Parameters<typeof planMapPress>[0]) => {
+    const pick = planMapPress(
+      press,
+      { places, routes, files: standaloneFiles, tracks: placeTracks },
+      currentUser?.id ?? null,
+    );
+    if (
+      pick &&
+      planOnMap &&
+      planVerbsFor(PLAN_ADD_VERBS, "web", planOnMap.myRole, {
+        archived: planOnMap.archivedAt != null,
+      }).some((verb) => verb.id === "copy")
+    )
+      setPlanAddCopy(pick);
+  };
 
   // Ways is built from three fetches, so it has nothing to say until all three
   // have settled — one still in flight would show a short list as if it were
@@ -1529,11 +1573,10 @@ function App() {
   const notices = planOnMap ? (
     <Notice
       icon="plan"
-      wraps
-      action={
-        <span className={classes.planBar}>
-          {/* A pressed chip, as Logjam GPS's bar has: a phone's width holds
-              the name, it and Back to my map. */}
+      twoLines
+      controls={
+        <>
+          {/* A pressed chip, as Logjam GPS's bar has. */}
           <Chip
             label={TRIP_PLAN_PAGE.copy.showMine}
             active={planShowMine}
@@ -1543,10 +1586,10 @@ function App() {
           <Button compact onClick={backToMyMap}>
             {TRIP_PLAN_PAGE.copy.backToMap}
           </Button>
-        </span>
+        </>
       }
     >
-      {TRIP_PLAN_PAGE.copy.barPrefix} {planOnMap.name}
+      {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
     </Notice>
   ) : filtersActive && !dimUI ? (
     <Notice
@@ -1819,14 +1862,9 @@ function App() {
                 refetch={planFetch.refetch}
                 own={{
                   places,
-                  routes: routes.filter(
-                    (route) => route.ownerId === currentUser?.id,
-                  ),
+                  routes,
                   files: standaloneFiles,
-                  geoPdfs: geoPdfJobs.filter(
-                    (job) =>
-                      job.status === "completed" && job.syncRole === "owner",
-                  ),
+                  geoPdfs: geoPdfJobs,
                 }}
                 currentUser={currentUser}
                 onOwnChanged={() => {
@@ -1854,10 +1892,10 @@ function App() {
                   setActivePanel("plans");
                 }}
                 onPlansChanged={refetchPlans}
-                onStartTripLog={(plan, placeIds) =>
+                onStartTripLog={(plan, places) =>
                   setTripLogPrefill({
                     ...tripPlanTripLogPrefill(plan),
-                    placeIds,
+                    ...places,
                   })
                 }
               />
@@ -2014,38 +2052,33 @@ function App() {
         <h1 className={classes.visuallyHidden}>Logjam place map</h1>
         <Map
           filters={planOnMap ? emptyFilters : filters}
+          // An open plan's things are drawn whatever the layer switches say;
+          // the switches go on deciding the user's own, shown beside them
+          // only with Show my things, and dimmed (`mutedIds`).
           places={
             planOnMap
-              ? planShowMine
-                ? [...planMapPlaces, ...places]
-                : planMapPlaces
+              ? [...planMapPlaces, ...(mineShown.places ? places : [])]
               : places
           }
-          sharedPlaces={planOnMap && !planShowMine ? [] : sharedPlaces}
-          showPlaces={showPlaces}
+          sharedPlaces={!planOnMap || mineShown.places ? sharedPlaces : []}
+          showPlaces={showPlaces || !!planOnMap}
           // One overlay for every line, so nothing has to be partitioned by
           // ownership on the way to the map any more.
-          showWays={showWays}
-          placeTracks={planOnMap && !planShowMine ? [] : placeTracks}
-          standaloneTracks={planOnMap && !planShowMine ? [] : standaloneTracks}
+          showWays={showWays || !!planOnMap}
+          placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
+          standaloneTracks={
+            !planOnMap || mineShown.ways ? standaloneTracks : []
+          }
           routes={
             planOnMap
-              ? planShowMine
-                ? [...planMapRoutes, ...routes]
-                : planMapRoutes
+              ? [...planMapRoutes, ...(mineShown.ways ? routes : [])]
               : routes
           }
+          mutedIds={mutedIds}
+          searchSelects={!planOnMap}
           routeHover={routeHover}
           selectRoute={(id) => {
-            if (planOnMap) {
-              // The plan's own ways are its items; one of the user's own
-              // offers Add a copy to this plan.
-              if (
-                routes.some((r) => r.id === id && r.ownerId === currentUser?.id)
-              )
-                setPlanAddCopy({ kind: "route", id });
-              return;
-            }
+            if (planOnMap) return pressInPlan({ kind: "route", id });
             const route = routes.find((r) => r.id === id);
             if (route)
               openWay(
@@ -2060,6 +2093,7 @@ function App() {
           // would have made it.
           onMeasureFrom={startMeasuring}
           selectTrack={(mediaId) => {
+            if (planOnMap) return pressInPlan({ kind: "track", id: mediaId });
             const way = allWays.find(
               (each) => each.kind !== "route" && each.id === mediaId,
             );
@@ -2081,8 +2115,7 @@ function App() {
           onDrawPointInsert={routeDraft.insertAnchorAt}
           selectPlace={(id) => {
             if (planOnMap) {
-              if (id && places.some((place) => place.id === id))
-                setPlanAddCopy({ kind: "place", id });
+              if (id) pressInPlan({ kind: "place", id });
               return;
             }
             // A pin opens the place, wherever you pressed it from.

@@ -10,6 +10,8 @@ import {
   planItemDeleteConfirm,
   planItemVerbs,
   PLAN_ITEM_VERBS,
+  TRIP_PLAN_ITEM_GROUP,
+  TRIP_PLAN_ITEM_GROUPS,
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
   tripPlanSavedMessage,
@@ -112,11 +114,13 @@ export default function PlanItems({
     ...plan.files,
     ...plan.geoPdfs,
   ];
-  const groups: [string, TripPlanItem[]][] = [
-    [copy.itemsPlaces, plan.places],
-    [copy.itemsWays, [...plan.routes, ...plan.files]],
-    [copy.itemsMaps, plan.geoPdfs],
-  ];
+  const groups = TRIP_PLAN_ITEM_GROUPS.map(
+    ({ group, title }) =>
+      [
+        title,
+        all.filter((item) => TRIP_PLAN_ITEM_GROUP[item.kind] === group),
+      ] as const,
+  );
   const shown = groups.filter(([, items]) => items.length > 0);
 
   /** The reply, or null once a failure was said. */

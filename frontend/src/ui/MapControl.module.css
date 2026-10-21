@@ -79,15 +79,30 @@
   padding-right: calc((40px - var(--control-sm)) / 2);
 }
 
-/* A notice whose words and action can't share a phone's line: the action
-   goes beneath the words, and the pill becomes a card. */
-@media (max-width: 767px) {
-  .wraps {
-    flex-wrap: wrap;
-    justify-content: center;
-    padding-block: var(--space-1);
-    border-radius: var(--radius-lg);
-  }
+/* A notice with controls: its words, then a row of them beneath, so a
+   phone's width holds both; the pill becomes a card. */
+.stacked {
+  flex-direction: column;
+  padding-block: var(--space-1);
+  border-radius: var(--radius-lg);
+}
+
+.noticeLine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.noticeControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.twoLines {
+  composes: twoLines from "./TwoLines.module.css";
 }
 
 .noticeGlyph {

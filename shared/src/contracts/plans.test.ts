@@ -40,6 +40,9 @@ import {
   TRIP_PLAN_PRINTED_PRESETS,
   planItemDeleteConfirm,
   planItemVerbs,
+  tripPlanAddable,
+  tripPlanAddCopiesLabel,
+  tripPlanAddCopyPrice,
   planMemberVerbs,
   planRemoveConfirm,
   planSelfRoleConfirm,
@@ -612,6 +615,58 @@ describe("a plan's items", () => {
     expect(planItemDeleteConfirm("Wollangambe", 3).confirmBody).toContain(
       "Its 3 photos go too.",
     );
+  });
+});
+
+describe("what Add a copy offers", () => {
+  const own = {
+    places: [{ id: "p1" }, { id: "p2" }],
+    routes: [
+      { id: "r1", ownerId: "me", placeId: null },
+      { id: "r2", ownerId: "me", placeId: "p1" },
+      { id: "r3", ownerId: "friend", placeId: null },
+    ],
+    files: [
+      { id: "f1", linkedPlaceId: null },
+      { id: "f2", linkedPlaceId: "p1" },
+    ],
+    geoPdfs: [
+      { id: "g1", status: "completed", syncRole: "owner" as const },
+      { id: "g2", status: "running", syncRole: "owner" as const },
+      { id: "g3", status: "completed", syncRole: "shared" as const },
+    ],
+  };
+  const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
+
+  // Mutation: offer a ticked place's route or file again, and the plan gets
+  // the same line twice; hide a place's file whatever Bring its photos says,
+  // and with photos off it is lost and can't be added any other way.
+  it("offers a place's route and file only while they would not come with it", () => {
+    const none = { me: "me", tickedPlaceIds: [], copyMedia: true };
+    expect(ids(tripPlanAddable(own, none).routes)).toEqual(["r1", "r2"]);
+    expect(ids(tripPlanAddable(own, none).files)).toEqual(["f1", "f2"]);
+    const withPhotos = { me: "me", tickedPlaceIds: ["p1"], copyMedia: true };
+    expect(ids(tripPlanAddable(own, withPhotos).routes)).toEqual(["r1"]);
+    expect(ids(tripPlanAddable(own, withPhotos).files)).toEqual(["f1"]);
+    const noPhotos = { ...withPhotos, copyMedia: false };
+    expect(ids(tripPlanAddable(own, noPhotos).routes)).toEqual(["r1"]);
+    expect(ids(tripPlanAddable(own, noPhotos).files)).toEqual(["f1", "f2"]);
+  });
+
+  // Mutation: count the zero, and Add a copy opens on "Add 0 copies"; size
+  // a places-only pick, and the one number beside a charge is "0 KB".
+  it("leaves out a zero, in the submit and the price", () => {
+    expect(tripPlanAddCopiesLabel(0)).toBe("Add a copy");
+    expect(tripPlanAddCopiesLabel(2)).toBe("Add 2 copies");
+    expect(tripPlanAddCopyPrice(null, "5.0 GB")).toBe("You have 5.0 GB left.");
+  });
+
+  // Mutation: drop the owner or status checks, and the API's refusal of
+  // someone else's route or an unfinished map is the user's to read.
+  it("offers only the caller's own routes and their finished maps", () => {
+    const state = { me: "me", tickedPlaceIds: [], copyMedia: true };
+    expect(ids(tripPlanAddable(own, state).routes)).not.toContain("r3");
+    expect(ids(tripPlanAddable(own, state).geoPdfs)).toEqual(["g1"]);
   });
 });
 

@@ -69,29 +69,51 @@ export function Notice({
   children,
   action,
   tone = "info",
-  wraps = false,
+  controls,
+  twoLines = false,
 }: {
   icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
   tone?: "info" | "warning";
-  /** At a phone's width the action goes beneath the words: for an action
-   *  too wide to share their line. */
-  wraps?: boolean;
+  /** Controls in a row under the words, for a notice that is a mode with
+   *  ways out (a plan on the map), as Logjam GPS's `Notice` has. */
+  controls?: ReactNode;
+  /** Words with a user's own title in them stop at two lines
+   *  (shared/DESIGN.md §9). */
+  twoLines?: boolean;
 }) {
+  const line = (
+    <>
+      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
+      <span
+        className={[classes.noticeText, twoLines ? classes.twoLines : ""].join(
+          " ",
+        )}
+      >
+        {children}
+      </span>
+      {action}
+    </>
+  );
   return (
     <div
       className={[
         classes.notice,
         action ? classes.withAction : "",
-        wraps ? classes.wraps : "",
+        controls ? classes.stacked : "",
       ].join(" ")}
       data-tone={tone}
       role={tone === "warning" ? "alert" : undefined}
     >
-      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
-      <span className={classes.noticeText}>{children}</span>
-      {action}
+      {controls ? (
+        <>
+          <span className={classes.noticeLine}>{line}</span>
+          <span className={classes.noticeControls}>{controls}</span>
+        </>
+      ) : (
+        line
+      )}
     </div>
   );
 }

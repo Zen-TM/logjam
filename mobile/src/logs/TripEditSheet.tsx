@@ -7,6 +7,7 @@ import {
   formatTripPlaceNames,
   linksCanyon,
   MAX_PLACES_PER_TRIP,
+  TRIP_PLACES_CAP_SENTENCE,
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
   tripPrefillFromTrack,
@@ -327,9 +328,7 @@ export function TripEditSheet({
         return;
       }
       if (selected.length >= MAX_PLACES_PER_TRIP) {
-        setPlacesError(
-          `A trip can have at most ${MAX_PLACES_PER_TRIP} places.`,
-        );
+        setPlacesError(TRIP_PLACES_CAP_SENTENCE);
         return;
       }
       setSelected([...selected, { id: place.id, name: place.name }]);
