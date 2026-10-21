@@ -105,4 +105,7 @@ export const WIPED_DIR_FATE: Record<string, StoreFate> = {
   WEATHER_DIR: {
     keeps: "Forecasts, fetched again with one press.",
   },
+  PLAN_DIR: {
+    keeps: "A plan's files, downloaded again from the plan with one press.",
+  },
 };

@@ -17,6 +17,12 @@ export const TRIP_PLAN_OFFLINE = {
   // The plan went while this phone held it, or a stale row or push opened it.
   gone: "You're no longer in this plan, or it was deleted.",
   noPlansOffline: "Open Plans once with signal to read them here.",
+  download: "Download for the trip",
+  downloading: "Downloading the plan's files…",
+  downloadFailed: "Couldn't download the plan's files.",
+  downloadDone: "Downloaded for the trip.",
+  // It runs only while Logjam GPS is on screen (ADR 0013).
+  downloadKeepOpen: "Keep Logjam GPS open until it finishes.",
 } as const;
 
 /**

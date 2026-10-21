@@ -96,6 +96,14 @@ export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
 
 /**
+ * A trip plan's files, downloaded for the trip (`plans/planFiles.ts`): one
+ * folder per plan, its photos, files and GeoPDFs inside. WIPED: they are other
+ * people's places and photos, shared with this account only. A plan dropped
+ * from the phone takes its folder with it.
+ */
+export const PLAN_DIR = `${FileSystem.documentDirectory}plans/`;
+
+/**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
  * cleared by table, so their files survive with no rows (see wipeLocalData.ts).
  */
@@ -108,6 +116,7 @@ export const WIPED_DIRS = [
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
   WEATHER_DIR,
+  PLAN_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */

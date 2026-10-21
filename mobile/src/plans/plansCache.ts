@@ -16,12 +16,21 @@ import {
 } from "@logjam/shared";
 import { AppState } from "react-native";
 
+import { assertSpaceFor } from "../offline/freeSpace";
 import { canRunNow } from "../offline/networkPolicy";
 import {
   getSyncDb,
   notifyMirrorChanged,
   withSyncTransaction,
 } from "../sync/syncDb";
+import {
+  deletePlanFolder,
+  downloadPlanFiles,
+  missingPlanFiles,
+  planFiles,
+  prunePlanFiles,
+  sweepPlanFolders,
+} from "./planFiles";
 import { getPlan, getPlans } from "./plansApi";
 
 export type PlansList = { plans: TripPlanSummary[]; fetchedAt: string };
@@ -115,11 +124,15 @@ let epoch = 0;
 const dropped = new Set<string>();
 
 /** Called by the sign-out wipe (`offline/wipeLocalData.ts`). */
-export function stopPlansForWipe(): Promise<void> {
+export async function stopPlansForWipe(): Promise<void> {
   epoch += 1;
   dropped.clear();
-  return Promise.resolve();
+  // A download stops before its next file (`downloadPlanFiles`' `alive`).
+  await Promise.allSettled([...downloads]);
 }
+
+// Download for the trip runs, so the wipe can wait for them to stop.
+const downloads = new Set<Promise<unknown>>();
 
 /**
  * GET /plans, and the cache follows: the list is replaced, and a cached plan
@@ -158,6 +171,8 @@ export async function pollPlans(): Promise<PlansList> {
         );
     }
   });
+  // A dropped plan's files go with it.
+  await sweepPlanFolders(new Set((await readCachedPlanStamps()).keys()));
   notifyMirrorChanged();
   return { plans, fetchedAt };
 }
@@ -175,6 +190,7 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
     if (err instanceof ApiError && err.status === 404) {
       const db = await getSyncDb();
       await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", planId);
+      await deletePlanFolder(planId);
       notifyMirrorChanged();
     }
     throw err;
@@ -202,6 +218,9 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
     return stamp?.downloaded_at ?? null;
   });
   notifyMirrorChanged();
+  // An item gone from the plan takes its downloaded file with it.
+  if (began === epoch)
+    await prunePlanFiles(planId, planFiles(plan)).catch(console.error);
   return { plan, fetchedAt, downloadedAt };
 }
 
@@ -242,10 +261,62 @@ export async function afterPlanWrite(
     dropped.add(planId);
     const db = await getSyncDb();
     await db.runAsync("DELETE FROM plans_cache WHERE plan_id = ?", planId);
+    await deletePlanFolder(planId);
     // Told now: the poll below may fail, and the list must not keep its mark.
     notifyMirrorChanged();
   }
   await Promise.all([pollPlans(), gone ? undefined : fetchPlan(planId)]).catch(
     console.error,
   );
+}
+
+/**
+ * Download for the trip: the plan fetched again (fresh presigned URLs), then
+ * every file it points at that is not on the phone yet, then stamped
+ * downloaded. A failure leaves what was fetched and no stamp. False when the
+ * sign-out wipe stopped it: nothing was downloaded to report.
+ */
+export function downloadPlan(
+  planId: string,
+  onProgress: (doneBytes: number, totalBytes: number) => void,
+): Promise<boolean> {
+  const run = runDownload(planId, onProgress);
+  downloads.add(run);
+  void run.catch(() => {}).finally(() => downloads.delete(run));
+  return run;
+}
+
+async function runDownload(
+  planId: string,
+  onProgress: (doneBytes: number, totalBytes: number) => void,
+): Promise<boolean> {
+  const began = epoch;
+  const alive = () => began === epoch;
+  const { plan } = await fetchPlan(planId);
+  if (!alive()) return false;
+  const missing = await missingPlanFiles(planId, planFiles(plan));
+  const total = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
+  // ADR 0005: nothing large is written without asking whether it fits.
+  await assertSpaceFor(total);
+  onProgress(0, total);
+  const complete = await downloadPlanFiles(
+    planId,
+    missing,
+    (done) => onProgress(done, total),
+    alive,
+  );
+  if (!complete) return false;
+  const db = await getSyncDb();
+  let stamped = false;
+  await withSyncTransaction(db, async () => {
+    if (!alive()) return;
+    await db.runAsync(
+      "UPDATE plans_cache SET downloaded_at = ? WHERE plan_id = ?",
+      new Date().toISOString(),
+      planId,
+    );
+    stamped = true;
+  });
+  notifyMirrorChanged();
+  return stamped;
 }
