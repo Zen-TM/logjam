@@ -1,7 +1,7 @@
 // Download for the trip: a plan's photos, files and GeoPDFs into its own
 // app-private folder (`PLAN_DIR/<planId>/`), so they are on the phone in a
-// canyon (opening them from the plan's rows is still to come). The plan's JSON is the cache's (`plansCache.ts`); these are
-// the bytes it points at. A file is named by its item id, so a fresh fetch's
+// canyon, where the plan's rows open them (`planFileSource`). The plan's JSON
+// is the cache's (`plansCache.ts`); these are the bytes it points at. A file is named by its item id, so a fresh fetch's
 // new presigned URLs land on the same file.
 //
 // PRIVACY: other people's places and photos. App-private, wiped with the
@@ -67,6 +67,22 @@ export function planFileUri(
   const dot = file.filename.lastIndexOf(".");
   const ext = dot > 0 ? file.filename.slice(dot).replace(/[^.\w]/g, "") : "";
   return `${folder(planId)}${encodeURIComponent(file.id)}${ext}`;
+}
+
+/**
+ * Where one of a plan's files opens from: the phone's copy once downloaded,
+ * else its presigned URL while online. Null offline with no copy: its row
+ * says "Needs a connection".
+ */
+export function planFileSource(
+  planId: string,
+  file: PlanFile | undefined,
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+): string | null {
+  if (!file) return null;
+  if (onPhone.has(file.id)) return planFileUri(planId, file);
+  return online ? file.url : null;
 }
 
 /** The files of a plan not yet on the phone. */

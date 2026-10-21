@@ -11,6 +11,7 @@ import {
   formatBytes,
   planCountsLabel,
   TRIP_PLAN_OFFLINE,
+  type TripPlanView,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -114,4 +115,29 @@ export function PlanDownload({
       style={{ marginTop: spacing(1) }}
     />
   );
+}
+
+/** The ids of a plan's files on the phone, read again as a download ends. */
+export function usePlanFilesOnPhone(plan: TripPlanView): ReadonlySet<string> {
+  const running = usePlanDownload(plan.id) !== null;
+  const [onPhone, setOnPhone] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    const files = planFiles(plan);
+    void missingPlanFiles(plan.id, files)
+      .then((missing) => {
+        if (cancelled) return;
+        const absent = new Set(missing.map((file) => file.id));
+        setOnPhone(
+          new Set(
+            files.filter((file) => !absent.has(file.id)).map((file) => file.id),
+          ),
+        );
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [plan, running]);
+  return onPhone;
 }

@@ -17,6 +17,7 @@ vi.mock("../offline/localStores", () => ({ PLAN_DIR: "file:///d/plans/" }));
 
 const {
   downloadPlanFiles,
+  planFileSource,
   planFileUri,
   planFiles,
   prunePlanFiles,
@@ -67,6 +68,32 @@ const file = (id: string) => ({
   filename: `${id}.jpg`,
   sizeBytes: 10,
 });
+describe("where a plan's file opens from", () => {
+  const onPhone = new Set(["a"]);
+
+  // Mutation: prefer the URL while online, and a downloaded photo still
+  // fetches (and fails once the presigned URL has expired).
+  it("opens the phone's copy once downloaded, online or not", () => {
+    for (const online of [true, false])
+      expect(planFileSource("p", file("a"), onPhone, online)).toBe(
+        "file:///d/plans/p/a.jpg",
+      );
+  });
+
+  // Mutation: drop the `online` check, and offline a row opens a URL that
+  // can't load instead of saying "Needs a connection".
+  it("opens the URL online, and nothing offline, when not downloaded", () => {
+    expect(planFileSource("p", file("b"), onPhone, true)).toBe("https://s3/b");
+    expect(planFileSource("p", file("b"), onPhone, false)).toBeNull();
+  });
+
+  // Mutation: fall back to a made-up path, and a GeoPDF still rendering opens
+  // a file that isn't there.
+  it("opens nothing for a file with no URL yet", () => {
+    expect(planFileSource("p", undefined, onPhone, true)).toBeNull();
+  });
+});
+
 const deleted = () =>
   fs.deleteAsync.mock.calls.map((call) => (call as unknown[])[0]);
 

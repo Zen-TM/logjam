@@ -7,6 +7,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -15,6 +16,7 @@ import { RefreshControl, ScrollView, Text, View } from "react-native";
 import {
   ApiError,
   contractSectionKeys,
+  mediaCategory,
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
@@ -30,6 +32,7 @@ import {
   weatherAge as updatedAgo,
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
+  type MediaItem,
   type SectionKeysOn,
   type TripPlanPageView,
   type TripPlanView,
@@ -40,7 +43,13 @@ import {
   capabilityScreenBlock,
   unavailableReasonText,
 } from "../auth/capabilities";
+import {
+  importGeoPdfFile,
+  importGeoPdfFromUrl,
+} from "../geopdf/importPipeline";
+import { runGeoPdfImport } from "../geopdf/importRunner";
 import { useConnectivity } from "../map/connectivity";
+import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { onMirrorChanged } from "../sync/syncDb";
 import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
@@ -63,7 +72,8 @@ import {
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
-import { PlanDownload } from "./PlanDownload";
+import { PlanDownload, usePlanFilesOnPhone } from "./PlanDownload";
+import { planFiles, planFileSource } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
@@ -404,7 +414,10 @@ function PlanPage({
           onPress={onShowOnMap}
         />
       ) : null,
-    items: view === "items" ? <Items plan={plan} onInfo={notify} /> : null,
+    items:
+      view === "items" ? (
+        <Items plan={plan} online={online} onInfo={notify} />
+      ) : null,
     forms: view === "forms" ? <Forms plan={plan} /> : null,
     people:
       view === "people" ? (
@@ -572,14 +585,34 @@ function WriteUp({
 
 function Items({
   plan,
+  online,
   onInfo,
 }: {
   plan: TripPlanView;
+  online: boolean;
   onInfo: (message: string) => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
   const [placeId, setPlaceId] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
+  // A downloaded file opens from the phone; one that isn't, from its URL
+  // while online (`planFileSource`).
+  const onPhone = usePlanFilesOnPhone(plan);
+  const files = useMemo(
+    () => new Map(planFiles(plan).map((file) => [file.id, file])),
+    [plan],
+  );
+  const source = (id: string) =>
+    planFileSource(plan.id, files.get(id), onPhone, online);
+  const viewable = (items: readonly MediaItem[]): ViewerMedia[] =>
+    items.flatMap((item) => {
+      const uri = source(item.id);
+      return uri ? [{ ...item, localDisplayPath: uri }] : [];
+    });
+  // Offline, what can't open says why under its name.
+  const subtitle = (addedBy: string | undefined, opens: boolean) =>
+    opens || online ? addedBy : [addedBy, OFFLINE].filter(Boolean).join(" · ");
   const { ways } = tripPlanCounts(plan);
   if (plan.places.length + ways + plan.geoPdfs.length === 0)
     return <EmptyState icon="place" title={copy.itemsEmpty} />;
@@ -587,25 +620,30 @@ function Items({
   const headed =
     [plan.places.length, ways, plan.geoPdfs.length].filter((n) => n > 0)
       .length > 1;
+  const place = plan.places.find((each) => each.id === placeId) ?? null;
+  const placePhotos = place ? viewable(place.media) : [];
   return (
     <>
       {headed && plan.places.length > 0 ? (
         <SectionHeader title={copy.itemsPlaces} count={plan.places.length} />
       ) : null}
-      {plan.places.map((place) => (
+      {plan.places.map((each) => (
         <Row
-          key={place.id}
+          key={each.id}
           icon="place"
           hue={theme.accent}
-          title={place.name}
-          subtitle={tripPlanAddedByLine(place.addedBy)}
-          onPress={() => setPlaceId(place.id)}
+          title={each.name}
+          subtitle={tripPlanAddedByLine(each.addedBy)}
+          onPress={() => setPlaceId(each.id)}
         />
       ))}
       <PlanPlaceSheet
-        place={plan.places.find((place) => place.id === placeId) ?? null}
+        place={place}
         onClose={() => setPlaceId(null)}
         onInfo={onInfo}
+        onPhotos={
+          placePhotos.length > 0 ? () => setViewing(placePhotos) : undefined
+        }
       />
       {headed && ways > 0 ? (
         <SectionHeader title={copy.itemsWays} count={ways} />
@@ -619,27 +657,63 @@ function Items({
           subtitle={tripPlanAddedByLine(route.addedBy)}
         />
       ))}
-      {plan.files.map((file) => (
-        <Row
-          key={file.id}
-          icon="importedFile"
-          hue={assetHue.import}
-          title={mediaDisplayName(file.item)}
-          subtitle={tripPlanAddedByLine(file.addedBy)}
-        />
-      ))}
+      {plan.files.map((file) => {
+        const category = mediaCategory(file.item.mediaType);
+        // A GPX or KML file has no viewer that keeps it out of the caller's
+        // account: importing it is Save a copy.
+        const shown =
+          category === "image" || category === "video"
+            ? viewable([file.item])
+            : null;
+        return (
+          <Row
+            key={file.id}
+            icon="importedFile"
+            hue={assetHue.import}
+            title={mediaDisplayName(file.item)}
+            subtitle={subtitle(
+              tripPlanAddedByLine(file.addedBy),
+              shown === null || shown.length > 0,
+            )}
+            onPress={shown?.length ? () => setViewing(shown) : undefined}
+          />
+        );
+      })}
       {headed && plan.geoPdfs.length > 0 ? (
         <SectionHeader title={copy.itemsMaps} count={plan.geoPdfs.length} />
       ) : null}
-      {plan.geoPdfs.map((pdf) => (
-        <Row
-          key={pdf.id}
-          icon="geoPdf"
-          hue={assetHue.geoPdf}
-          title={pdf.title ?? "GeoPDF"}
-          subtitle={tripPlanAddedByLine(pdf.addedBy)}
+      {plan.geoPdfs.map((pdf) => {
+        const uri = source(pdf.id);
+        const title = pdf.title ?? "GeoPDF";
+        return (
+          <Row
+            key={pdf.id}
+            icon="geoPdf"
+            hue={assetHue.geoPdf}
+            title={title}
+            subtitle={subtitle(tripPlanAddedByLine(pdf.addedBy), uri !== null)}
+            // Onto the map as the caller's own GeoPDF overlay: the import is
+            // on this phone only, and its toast says how it went.
+            onPress={
+              uri
+                ? () =>
+                    void runGeoPdfImport(title, (onProgress, token) =>
+                      uri.startsWith("file:")
+                        ? importGeoPdfFile(title, uri, onProgress, token)
+                        : importGeoPdfFromUrl(title, uri, onProgress, token),
+                    )
+                : undefined
+            }
+          />
+        );
+      })}
+      {viewing ? (
+        <MediaViewer
+          items={viewing}
+          startIndex={0}
+          onClose={() => setViewing(null)}
         />
-      ))}
+      ) : null}
     </>
   );
 }
