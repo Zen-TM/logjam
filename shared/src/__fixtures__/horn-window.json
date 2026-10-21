@@ -1,0 +1,6 @@
+{
+  "comment": "A made-up 3x3 window of heights (row-major from the north-west), its cell size in metres and Horn's slope in degrees. shared/src/demSlope.test.ts and topo/tests/test_nsw_dem.py both read it, so a weight drifting in either language turns that language's test red, and editing the figure to match turns the other's.",
+  "heights": [10, 12, 17, 9, 15, 20, 11, 14, 25],
+  "cellM": 4.5,
+  "degrees": 51.29179169379886
+}

@@ -33,7 +33,7 @@ import { sendPushToUser } from "../services/push";
 //
 // What is stubbed, and why: the base layer is fetched over HTTP from a public
 // tile server (the renderer fetches raster XYZ tiles only; the protomaps
-// archive in the topo bucket is vector, for region-clip and Logjam GPS), so
+// archive in the topo bucket is vector, for Logjam GPS), so
 // tile requests are answered here with a flat PNG and any other host is
 // refused: the suite needs no internet, and a request the worker should not
 // make fails the test. The email and push sends are mocked in THIS process;

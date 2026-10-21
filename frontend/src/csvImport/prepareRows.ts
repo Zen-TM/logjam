@@ -92,7 +92,6 @@ const MISMATCH_EXPLANATIONS: Record<
       : "is above the accepted range — the file may use a different scale",
   unparsableJson: () => "isn't valid JSON",
   unparsableArray: () => "isn't a valid list",
-  coordFormat: () => "isn't in decimal degrees (e.g. -33.6042)",
   mixedTypes: () => "doesn't match the other values in this column",
   emptyDominant: () => "couldn't be read",
 };
@@ -191,7 +190,10 @@ export function buildPlaceInput(
           value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "sources":
-        values[SOURCES_FIELD_KEY] = Array.isArray(value) ? value : [];
+        values[SOURCES_FIELD_KEY] =
+          Array.isArray(value) && value.length > 0 ? value : null;
+        // Guard: the maintainer-shape place golden (mutation: store [] again
+        // and every row without sources gains "_sources": []).
         break;
       default:
         // attr:* / new-attr — an ordinary field value. An `attr:<key>` column
@@ -257,6 +259,21 @@ export function preparePlaceRows(
   return { rows: out, warnings, droppedRows };
 }
 
+// The notes cell, then each "append to notes" column as a "Header: value" line
+// (a Party column has no field of its own, but must not be lost).
+function joinNotes(
+  row: Record<string, string>,
+  notesCol: string | undefined,
+  appendCols: string[],
+): string | null {
+  const parts = [notesCol ? (row[notesCol] ?? "").trim() : ""];
+  for (const h of appendCols) {
+    const v = (row[h] ?? "").trim();
+    if (v) parts.push(`${h}: ${v}`);
+  }
+  return parts.filter(Boolean).join("\n") || null;
+}
+
 export function prepareTripRows(args: {
   headers: string[];
   rows: Record<string, string>[];
@@ -284,6 +301,9 @@ export function prepareTripRows(args: {
   const dateCol = headers.find((h) => tripAssignments[h] === "date");
   const notesCol = headers.find((h) => tripAssignments[h] === "notes");
   const typeCol = headers.find((h) => tripAssignments[h] === "type");
+  const appendCols = headers.filter(
+    (h) => tripAssignments[h] === "appendNotes",
+  );
   if (!nameCol || !dateCol) return { rows: [], warnings: [], droppedRows: 0 };
 
   // Custom-field columns: existing cf:<key> plus any new fields the user named.
@@ -352,7 +372,7 @@ export function prepareTripRows(args: {
       rowIndex,
       sourcePlaceName,
       date: isoDate,
-      notes: notesCol ? row[notesCol] || null : null,
+      notes: joinNotes(row, notesCol, appendCols),
       types: typeCol ? splitTripTypes(row[typeCol] ?? "") : [],
       customFields,
     });

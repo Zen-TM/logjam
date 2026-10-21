@@ -47,7 +47,7 @@ renumber.
   `scripts/wcag-contrast.mjs`, measured on the surface it renders on; its
   known-failures list only shrinks.
 - **A touch target is 48×48 dp**, even when drawn smaller. A mouse target is
-  never under 24px.
+  never under 24px. A link inside running text is exempt, as in WCAG 2.5.8.
 - **On the map, chrome is the least it can be**: no permanent labels, no
   pinned cards, a badge only while what it says is true. A running job is one
   glyph, its numbers one press away.
@@ -121,6 +121,8 @@ renumber.
   looks different.
 - **A pressable thing answers the press at once** (pressed or hover state),
   and nothing else answers a pointer: a chart or a read-only row stays still.
+  Decoration nobody could take for a control is the exception: the rain on
+  Logjam Web's sign-in terrain.
 - **A control a hover reveals is always visible on a coarse pointer.**
 - **A press with a non-obvious effect says so on the thing**: a copyable
   value carries a copy glyph; a file's row says "Click to download".
@@ -170,7 +172,8 @@ renumber.
 
 - **Anything with kinds takes a glyph and a hue per kind from one map**, used
   wherever the kind appears: row tile, active chip, map mark, "add" menu,
-  notification. A notification borrows the hue of the thing it is about.
+  notification. A notification borrows the hue of the thing it is about; one
+  about Logjam itself (a maintainer message) has no thing and takes the accent.
 - **A menu of destinations is not a set of kinds**: Inbox, Friends and
   Settings share one look.
 - **An open vocabulary hashes its hue from the label**, so it survives
@@ -184,7 +187,8 @@ renumber.
 
 - **`Row` is the only list row.** The body opens; the ⋯ acts. Trailing
   order: metric, status, ⋯. A row that asks a question (accept or decline)
-  answers it in its footer.
+  answers it in its footer. A maintainer message's footer says Read
+  message, since nothing else says its row opens one.
 - **What a press does follows from what the thing is.** A thing with a page
   opens it. A thing whose only home is the map (a way, a GeoPDF, a saved map,
   a LiDAR topo) opens on the map. A thing with nowhere to open does its one
@@ -226,7 +230,8 @@ renumber.
 ## 10. Surfaces
 
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
-  for looking.** Never the only way to read something.
+  for looking.** Never the only way to read something, except a maintainer
+  message, which has no page.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title

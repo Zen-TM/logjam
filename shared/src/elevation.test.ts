@@ -7,6 +7,7 @@ import {
   densifyLine,
   densifyLineSegments,
   elevationGainLoss,
+  parseElevationPoint,
   climbFromProfile,
 } from "./elevation.js";
 import type { RoutePoint } from "./routeValidation.js";
@@ -306,5 +307,31 @@ describe("climbFromProfile", () => {
       [100, 140, 120],
     );
     expect(climbFromProfile(profile)?.elevationSource).toBe("terrarium");
+  });
+});
+
+describe("parseElevationPoint", () => {
+  it("takes one in-range [longitude, latitude] pair", () => {
+    expect(parseElevationPoint([150.3, -33.7])).toEqual({
+      lon: 150.3,
+      lat: -33.7,
+    });
+  });
+
+  // Mutation: drop the length check, or swap the axes, and one of these passes.
+  it("refuses everything else", () => {
+    for (const value of [
+      undefined,
+      [],
+      [150.3],
+      [150.3, -33.7, 5],
+      ["150.3", "-33.7"],
+      [Number.NaN, -33.7],
+      [181, -33.7],
+      [150.3, -91],
+      [-33.7, 150.3],
+      { lon: 150.3, lat: -33.7 },
+    ])
+      expect(parseElevationPoint(value)).toHaveProperty("error");
   });
 });

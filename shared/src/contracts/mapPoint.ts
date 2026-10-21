@@ -23,6 +23,7 @@ import {
 import type { IconIdea } from "../icons.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
+import { WEATHER } from "./weather.js";
 
 export const MAP_POINT = {
   id: "map.point",
@@ -35,12 +36,9 @@ export const MAP_POINT = {
     // one to show them.
     { key: "distance" },
     { key: "bearing" },
-    {
-      key: "slope",
-      on: "gps",
-      reason:
-        "A slope needs nine heights from the fine DEM. Logjam GPS reads DEM tiles itself; Logjam Web gets heights from the API's profile route, which answers along a line.",
-    },
+    // From the API's point route on Logjam Web and from the DEM tiles on
+    // Logjam GPS; both say nothing where the fine DEM cannot tell.
+    { key: "slope" },
   ],
   copy: {
     position: "Position",
@@ -67,9 +65,11 @@ type PointVerbDeclaration = {
   icon: IconIdea;
   label: string;
   subtitle?: string;
-  on: ContractPlatform;
-  reason: string;
-};
+} & (
+  | { on?: undefined; reason?: undefined }
+  // Only one client has it, and `reason` says why.
+  | { on: ContractPlatform; reason: string }
+);
 
 /** In the order each client draws them. */
 export const MAP_POINT_VERBS = [
@@ -115,6 +115,8 @@ export const MAP_POINT_VERBS = [
     reason:
       "Logjam GPS copies by pressing the Position figure, which wears the copy glyph.",
   },
+  // Opens the forecast in the panel's place, and backs out to it.
+  { id: "weather", icon: "weather", label: WEATHER.copy.show },
 ] as const satisfies readonly PointVerbDeclaration[];
 
 export type MapPointVerbId = (typeof MAP_POINT_VERBS)[number]["id"];
@@ -129,7 +131,7 @@ export type MapPointVerb = {
 /** The verbs one client has, in the order it draws them. */
 export function mapPointVerbs(platform: ContractPlatform): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
-    .filter((verb) => verb.on === platform)
+    .filter((verb) => verb.on == null || verb.on === platform)
     .map((verb) => ({
       id: verb.id as MapPointVerbId,
       icon: verb.icon,

@@ -6,8 +6,10 @@ import { sendPushToUser, type PushData } from "../services/push";
 import { sendEmail } from "../services/email";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
+import { deleteTopoJobObjects } from "./topoUpload";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
+import { sweepExpiredImportSnapshots } from "./importSnapshot";
 import { sweepEgress } from "./egressMeter";
 import { createAndLaunchTopoExport } from "./topoExportLauncher";
 import { AppError } from "../middleware/errorHandler";
@@ -359,12 +361,7 @@ export async function sweepAbandonedTopoUploads(
   let swept = 0;
   for (const { id } of rows) {
     try {
-      await s3.send(
-        new DeleteObjectCommand({
-          Bucket: bucket,
-          Key: `inputs/${id}/upload.zip`,
-        }),
-      );
+      await deleteTopoJobObjects(bucket, id);
       // Guarded: a /start that landed since the read keeps its row.
       const gone = await prisma.topoJob.deleteMany({
         where: { id, status: "uploading" },
@@ -973,6 +970,16 @@ export function startTopoJobReaper(): () => void {
       })
       .catch((err) => {
         logger.error({ err: safeErrorForLog(err) }, "file_send_sweep_failed");
+      });
+    sweepExpiredImportSnapshots()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "import_snapshots_expired");
+      })
+      .catch((err) => {
+        logger.error(
+          { err: safeErrorForLog(err) },
+          "import_snapshot_sweep_failed",
+        );
       });
     // Rides this interval rather than owning a timer: the sweep is incremental
     // and does nothing when no new access-log objects have been delivered.

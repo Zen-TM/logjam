@@ -220,8 +220,11 @@ resource "aws_cloudwatch_metric_alarm" "topo_stuck_task" {
 # written to a log group and counted from there, rather than sent to the topic
 # directly: an email per failed job is not an alarm, and ECS forgets a stopped
 # task after about an hour, while this log keeps which family failed, its exit
-# code and ECS's reason. The events carry task and job ids, never user data
-# (the only override is the job id env var, api/src/lib/ecsRunTask.ts). A
+# code and ECS's reason. The events carry task and job ids, never user data:
+# the API's only override is the job id env var (api/src/lib/ecsRunTask.ts).
+# A maintainer announcement (docs/operations/announcements.md) is a by-hand
+# RunTask whose overrides are the script's command and the message, the
+# maintainer's own text; a refused or failed one also counts here. A
 # metric filter on the worker log groups was the other option; an OOM-killed
 # task logs nothing.
 resource "aws_cloudwatch_log_group" "worker_failures" {

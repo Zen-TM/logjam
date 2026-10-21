@@ -102,4 +102,7 @@ export const WIPED_DIR_FATE: Record<string, StoreFate> = {
     keeps:
       "Research logs from a developer toggle that is off by default, with no coordinates in them.",
   },
+  WEATHER_DIR: {
+    keeps: "Forecasts, fetched again with one press.",
+  },
 };

@@ -18,8 +18,8 @@ run "plan_role_trusts_only_approved_runs_and_main" {
   }
 
   # Mutation: adding a subject (`pull_request`, a branch, `*`, a StringLike
-  # condition) or a second statement lets workflows nobody approved assume
-  # the plan role.
+  # condition) or a second statement lets workflows outside the
+  # terraform-plan Environment and main assume the plan role.
   assert {
     condition = (
       length(jsondecode(aws_iam_role.github_actions_plan.assume_role_policy).Statement) == 1 &&
@@ -90,7 +90,9 @@ run "ci_reads_no_secret_or_user_data" {
   # Mutation: turning the object Deny back into a list of buckets, adding a
   # bucket to its exceptions, or scoping the log Deny to named log groups
   # leaves the next bucket or log group readable until someone remembers to
-  # add it.
+  # add it. Changing the object Deny's condition (another account, a
+  # negated operator, a second key) leaves buckets of ours readable; dropping
+  # it denies the AWS-owned objects an EB configuration change reads again.
   assert {
     condition = alltrue([
       for p in [
@@ -105,7 +107,8 @@ run "ci_reads_no_secret_or_user_data" {
             "arn:aws:s3:::logjam-tfstate-620853681701/*",
             "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
             "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
-          ])
+          ]) &&
+          try(st.Condition, null) == { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
         ]) &&
         anytrue([
           for st in jsondecode(p).Statement :
@@ -114,7 +117,7 @@ run "ci_reads_no_secret_or_user_data" {
         ])
       )
     ])
-    error_message = "The CI privacy Deny must cover objects in every bucket but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
   }
 
   # Mutation: dropping any of these from the Deny gives the plan and deploy
@@ -294,5 +297,24 @@ run "api_rate_limit_is_one_plain_ip_rule" {
       ] if r.priority == 0] == [[300, "IP", true]]
     )
     error_message = "The API web ACL's rate limit must stay one plain 300 per 5 min per-IP block rule, with no rule scoped down: the CloudFront pricing plan refuses scoped rules."
+  }
+}
+
+run "postgres_errors_log_no_row_values" {
+  command = plan
+  plan_options {
+    target = [aws_db_parameter_group.pgaudit]
+  }
+
+  # At the default verbosity, a constraint violation logs a DETAIL line with
+  # the failing row's values ("Failing row contains (...)"), which can carry a
+  # place's name or coordinates into the postgresql log and its WORM sink.
+  # Mutation: drop the log_error_verbosity parameter, or set it to "default"
+  # or "verbose", and this turns red.
+  assert {
+    condition = contains([
+      for p in aws_db_parameter_group.pgaudit.parameter : p.value if p.name == "log_error_verbosity"
+    ], "terse")
+    error_message = "The RDS parameter group must set log_error_verbosity = terse, so Postgres errors never log row values."
   }
 }

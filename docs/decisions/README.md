@@ -122,11 +122,15 @@ supersede instead.
 | [0024](0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md) | Prod Terraform applies on merge, and only the plan the PR showed | 2026-09-28 | Superseded by [0026](0026-plan-fingerprint-covers-planned-values.md) |
 | [0025](0025-github-settings-in-terraform.md) | The repository's GitHub settings are Terraform, applied on merge like prod | 2026-09-29 | Accepted |
 | [0026](0026-plan-fingerprint-covers-planned-values.md) | The apply compares an HMAC of each changed resource's planned values, reporting first and refusing once trusted | 2026-10-02 | Accepted |
-| [0027](0027-pr-plans-run-after-the-maintainer-approves.md) | Pull-request plans run only after the maintainer approves them | 2026-10-03 | Accepted |
+| [0027](0027-pr-plans-run-after-the-maintainer-approves.md) | Pull-request plans run only after the maintainer approves them | 2026-10-03 | Superseded by [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md) |
 | [0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md) | A height comes from the finest DEM source that has it, and a seam is measured in one source | 2026-10-10 | Accepted |
-| [0029](0029-vector-map-with-every-signed-in-region.md) | A signed-in region save always includes the vector map; a guest's never does | 2026-10-10 | Accepted |
+| [0029](0029-vector-map-with-every-signed-in-region.md) | A signed-in region save always includes the vector map; a guest's never does | 2026-10-10 | Superseded by [0036](0036-the-phone-cuts-its-own-offline-clips.md) |
 | [0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md) | A DEM Logjam builds is terrarium PNG tiles, rounded to a quarter metre, in one PMTiles archive | 2026-10-10 | Accepted |
 | [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md) | Heights in NSW come from the Spatial Services 5 m DEM, built once into our own archive | 2026-10-10 | Accepted |
 | [0032](0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md) | A contributor's AWS access is read-only, behind the CI privacy Deny and MFA | 2026-10-08 | Accepted |
 | [0033](0033-the-api-writes-the-sentence-a-user-reads.md) | The API writes the sentence a user reads when it refuses a request | 2026-10-13 | Accepted |
 | [0034](0034-location-search-reads-a-public-osm-place-registry.md) | Location search reads a public place registry built from OpenStreetMap | 2026-10-17 | Accepted |
+| [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md) | Pull-request plans run unattended, and a main-only job signs their comments | 2026-10-18 | Accepted |
+| [0036](0036-the-phone-cuts-its-own-offline-clips.md) | Logjam GPS cuts every offline clip itself, from the public archives, for guests too | 2026-10-18 | Accepted |
+| [0037](0037-undo-restores-what-an-import-changed-for-a-day.md) | Undoing an import puts back what it changed, field by field, for a day | 2026-10-18 | Accepted |
+| [0038](0038-a-forecast-request-sends-the-cell-not-the-spot.md) | A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo | 2026-10-18 | Accepted |

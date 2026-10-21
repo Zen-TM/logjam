@@ -43,7 +43,8 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
           return regionRejectedLine(state.detail);
         case "source-unavailable":
           // Not the phone's fault and not fixable by retrying, so it doesn't
-          // say "try again" — this is the vector clip's 5xx.
+          // say "try again": the clip's archive is missing or not served by
+          // range.
           return "Logjam couldn't prepare this map right now. Other maps still work.";
         default:
           // The detail is the message from the exception that ended the run,

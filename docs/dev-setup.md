@@ -266,9 +266,8 @@ Then follow the [Linux](#linux) steps from step 2.
 **Apple Silicon:** Postgres (`postgres:16`) and MiniStack
 (`ministackorg/ministack`) publish arm64 images and run natively. The two
 worker images are built for `linux/amd64` on every host (`make build-workers`
-passes `--platform`), because that is what production runs, and because the
-API image downloads an x86-64 `pmtiles` binary. On Apple Silicon they build
-and run under emulation: turn on Docker Desktop's **Use Rosetta for x86/amd64
+passes `--platform`), because that is what production runs. On Apple Silicon
+they build and run under emulation: turn on Docker Desktop's **Use Rosetta for x86/amd64
 emulation** (OrbStack uses Rosetta by default). Expect the first `make dev` to
 take noticeably longer than on Linux while the topo image compiles, and a topo
 job to run slower than on an x86 machine.

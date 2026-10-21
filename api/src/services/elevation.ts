@@ -25,11 +25,13 @@ import {
   demArchive,
   forgetDemArchive,
   demMetresFromRgb,
+  demSlopeReading,
   demTileKey,
   demTileUrl,
   readDemArchive,
   sampleDem,
   type DemSamples,
+  type DemSlopeReading,
   type DemSource,
   type DemTileAddress,
   type SamplePosition,
@@ -133,10 +135,10 @@ const archives = new Map<string, { archive: PMTiles | null; at: number }>();
  * once and remembered, because every profile in NSW would otherwise pay for
  * the failed open. A read that fails AFTER the archive opened throws.
  */
-export async function demArchiveFor(
-  // Structural, so the clip endpoint can ask the same of the contour archive.
-  source: { id: string; archivePath: string },
-): Promise<PMTiles | null> {
+export async function demArchiveFor(source: {
+  id: string;
+  archivePath: string;
+}): Promise<PMTiles | null> {
   // The CDN the clients read it from too: byte ranges of our own file, which
   // say nothing a tile index would.
   const base = getEnv().TOPO_CDN_BASE_URL;
@@ -211,6 +213,14 @@ export function sampleElevations(
   positions: readonly SamplePosition[],
 ): Promise<DemSamples> {
   return sampleDem(positions, readTiles);
+}
+
+/** The slope at a position and where it came from; null where none can tell. */
+export function sampleSlope(
+  lon: number,
+  lat: number,
+): Promise<DemSlopeReading | null> {
+  return demSlopeReading(lon, lat, readTiles);
 }
 
 /** Test seam — the cache is process-wide and would otherwise leak between tests. */

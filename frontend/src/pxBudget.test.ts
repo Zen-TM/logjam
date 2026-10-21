@@ -25,7 +25,6 @@ const BUDGET: Record<string, number> = {
   "components/App.module.css": 5,
   "components/ConsentGate.module.css": 5,
   "components/Footer.module.css": 3,
-  "components/SignIn.module.css": 12,
   "components/common/PlacePicker.module.css": 7,
   "components/dialogs/AddCustomFieldForm.module.css": 7,
   "components/dialogs/ChangeEmailDialog.module.css": 1,

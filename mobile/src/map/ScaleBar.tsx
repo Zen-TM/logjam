@@ -12,7 +12,8 @@ import { forwardRef, useImperativeHandle, useState } from "react";
 import { Text, View } from "react-native";
 
 import { fontSize, radius, spacing, makeStyles, withAlpha } from "../theme";
-import { chooseScaleStep, metersPerPixel } from "./scaleBar";
+import { metersPerPixel } from "@logjam/shared";
+import { chooseScaleStep } from "./scaleBar";
 
 export type ScaleBarHandle = {
   update: (latitude: number, zoom: number) => void;

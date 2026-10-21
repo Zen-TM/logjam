@@ -1464,6 +1464,7 @@ async function main() {
     prisma.customFieldDef.deleteMany(),
     prisma.placeType.deleteMany(),
     prisma.notification.deleteMany(),
+    prisma.announcement.deleteMany(),
     prisma.topoJob.deleteMany(),
     prisma.topoExportJob.deleteMany(),
     prisma.geoPdfJob.deleteMany(),
@@ -2093,6 +2094,17 @@ async function main() {
   const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
   const fid = (n: number) => seedId("f", n);
 
+  // A made-up token: CI points EXPO_PUSH_URL at a stub and local dev reaches
+  // Expo, which refuses it and lets the API prune the row (services/push.ts).
+  await prisma.deviceToken.create({
+    data: {
+      id: fid(19),
+      userId: ALICE_ID,
+      token: "ExponentPushToken[seed-alice-device]",
+      platform: "android",
+    },
+  });
+
   const aliceTopo = fid(1);
   const bobTopo = fid(4);
   const aliceTopoOutputs = topoOutputs(aliceTopo);
@@ -2436,6 +2448,35 @@ async function main() {
   // NOTIFICATION_TYPES, and src/lib/seedCoverage.unit.test.ts holds the seed to
   // them. Bob's two place_shared rows predate this block.
   const egressQuota = 53_687_091_200n; // the column default
+  // Made up, and using every piece of the Markdown subset the clients draw
+  // (shared/src/announcementMarkdown.ts), all three heading levels included,
+  // so the dialog shows them all.
+  const announcement = await prisma.announcement.create({
+    data: {
+      id: fid(20),
+      title: "Logjam is moving to a new server",
+      body: [
+        "Logjam will be **offline for about an hour** on Saturday morning while it moves.",
+        "",
+        "# What to expect",
+        "",
+        "- Logjam GPS keeps recording and *syncs* when it is back.",
+        "- Logjam Web shows `Couldn't reach Logjam` until then.",
+        "",
+        "## If something looks wrong",
+        "",
+        "1. Pull to refresh.",
+        "2. Sign out and in again.",
+        "",
+        "### On Logjam GPS",
+        "",
+        "Recorded tracks wait on the phone until it syncs.",
+        "",
+        "Questions go to [the issue tracker](https://example.com/issues) or [email](mailto:maintainer@example.com).  ",
+        "Thanks for your patience.",
+      ].join("\n"),
+    },
+  });
   await prisma.notification.createMany({
     data: [
       {
@@ -2570,6 +2611,14 @@ async function main() {
         read: true,
         createdAt: ago(1500),
       },
+      // src/scripts/announce.ts
+      {
+        userId: ALICE_ID,
+        type: "announcement",
+        payload: { announcementId: announcement.id },
+        read: false,
+        createdAt: ago(1),
+      },
       {
         userId: ALICE_ID,
         type: "egress_quota_exceeded",
@@ -2592,7 +2641,7 @@ async function main() {
       `(1 incoming to alice), 4 direct shares (3 incoming to alice), ` +
       `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
       `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 4 templates, ` +
-      `2 file sends, 1 invite, 4 tombstones, ` +
+      `2 file sends, 1 invite, 4 tombstones, 1 announcement, ` +
       `${NOTIFICATION_TYPES.length} notification types`,
   );
   console.log(

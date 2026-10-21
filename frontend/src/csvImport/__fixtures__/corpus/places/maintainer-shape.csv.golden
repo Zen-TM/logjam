@@ -84,8 +84,7 @@
           "quality": 3.5,
           "num_abseils": 3,
           "longest_abseil": 22,
-          "hours": 5,
-          "_sources": []
+          "hours": 5
         }
       }
     },
@@ -106,8 +105,7 @@
           "commitment": 3,
           "quality": 4,
           "num_abseils": 5,
-          "hours": 6.5,
-          "_sources": []
+          "hours": 6.5
         }
       }
     },
@@ -119,10 +117,7 @@
         "latitude": -33.6592,
         "longitude": 150.3294,
         "altNames": [],
-        "notes": null,
-        "fieldValues": {
-          "_sources": []
-        }
+        "notes": null
       }
     },
     {
@@ -141,8 +136,7 @@
           "quality": 3.5,
           "num_abseils": 8,
           "longest_abseil": 35,
-          "hours": 10,
-          "_sources": []
+          "hours": 10
         }
       }
     },
@@ -160,8 +154,7 @@
           "commitment": 4,
           "num_abseils": 2,
           "longest_abseil": 10,
-          "hours": 4,
-          "_sources": []
+          "hours": 4
         }
       }
     },
@@ -180,8 +173,7 @@
           "commitment": 3,
           "quality": 3,
           "longest_abseil": 10.5,
-          "hours": 4.5,
-          "_sources": []
+          "hours": 4.5
         }
       }
     }

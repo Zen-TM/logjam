@@ -31,16 +31,19 @@ platform: privacy constrains every feature. Each package has its own
 
 ## How we work
 
-- Branch from `origin/main` in a new worktree, never from the current checkout,
-  and run `make setup` in it first: every package's dependencies, the
-  `shared/` build, the Prisma client and `frontend/.env`. Without it the
-  typecheck fails far from the cause.
+- Branch from `origin/main` in a new worktree, never from the current checkout.
+  Before building, testing or type-checking in it, run `make setup`: every
+  package's dependencies, the `shared/` build, the Prisma client and
+  `frontend/.env`. Without it the typecheck fails far from the cause.
 - A non-trivial feature, schema migration or convention change needs an issue
   or the maintainer's sign-off on the approach. Small fixes land directly.
   Every PR body says which: `Closes #N`, or a line `No issue: <why>`. Guard:
   the `pr-closes` check.
 - Logic both clients need lives in `shared/`, with a parity test; look for it
   there before writing it in a client. [0020](docs/decisions/0020-share-the-decision-not-the-drawing.md)
+- Format with `make format` (Biome and Ruff), never Prettier: it also
+  rewrites Markdown and YAML, which nothing formats back. The pre-commit hook
+  formats what you stage.
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
   app" or "the web app" where either could be meant.
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`

@@ -33,6 +33,7 @@ import { AccountStateProvider } from "./auth/AccountStateContext";
 import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
+import { registerShellTriggers } from "./shellTriggers";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import {
   makeThemed,
@@ -225,7 +226,10 @@ type SavedStackParams = {
 
 type MoreStackParams = {
   MoreHome: undefined;
-  Inbox: undefined;
+  // A tapped announcement push opens its message over the inbox.
+  Inbox:
+    | { openAnnouncement?: { announcementId: string; nonce: number } }
+    | undefined;
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
@@ -815,41 +819,31 @@ export function AppShell({
   // route notification taps: a place reference deep-links to its detail,
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
-  // Sync triggers: initial cycle, app foreground, connectivity regained.
-  // Torn down on sign-out (shell unmount).
+  // Sync triggers: initial cycle, app foreground, connectivity regained, and
+  // the same three moments for the GeoPDF and topo auto-downloads (Settings →
+  // Offline and storage; autoDownload.ts says why not a timer) and the place
+  // names for search. Torn down on sign-out (shell unmount).
   //
-  // A guest registers none of them. This is the load-bearing half of guest
-  // mode: without a cycle ever running, local mutations pile up in the outbox
-  // exactly as they would offline, and the day an account is linked the first
-  // cycle drains them. Registering triggers that could only ever 401 would
-  // also mean a failing sync every foreground, and a permanently red sync
-  // health line on the More tab.
-  useEffect(() => {
-    if (isGuest) return;
-    return registerSyncTriggers();
-  }, [isGuest]);
-
-  // "Auto-download finished GeoPDFs" (Settings → Offline and storage): app
-  // start, foreground, and connection regained — Wi-Fi by default. See
-  // autoDownload.ts for why it checks then and not on a timer. GeoPDFs come
-  // from the user's web account, so there is nothing to download for a guest.
-  useEffect(() => {
-    if (isGuest) return;
-    return registerGeoPdfAutoDownload();
-  }, [isGuest]);
-
-  // The same feature over finished LiDAR topo overlays, on the same three
-  // moments and the same guest rule. Its own registration rather than a shared
-  // one: the two have separate switches and separate connection policies, and a
-  // combined runner would make one's failure the other's.
-  useEffect(() => {
-    if (isGuest) return;
-    return registerTopoAutoDownload();
-  }, [isGuest]);
-
-  // The place names for search, on the same three moments. A guest too: the
-  // file is public and fetched from the CDN, not our API (ADR 0034).
-  useEffect(() => registerPlaceRegistryRefresh(), []);
+  // A guest registers none of the account-backed ones. This is the
+  // load-bearing half of guest mode: without a cycle ever running, local
+  // mutations pile up in the outbox exactly as they would offline, and the day
+  // an account is linked the first cycle drains them. Registering triggers that
+  // could only ever 401 would also mean a failing sync every foreground, and a
+  // permanently red sync health line on the More tab. Guard:
+  // `shellTriggers.test.ts`. The place names go to a guest too
+  // (shellTriggers.ts). The two auto-downloads keep their own
+  // registrations: separate switches and connection policies, and a combined
+  // runner would make one's failure the other's.
+  useEffect(
+    () =>
+      registerShellTriggers(accountState, {
+        sync: registerSyncTriggers,
+        geoPdfAutoDownload: registerGeoPdfAutoDownload,
+        topoAutoDownload: registerTopoAutoDownload,
+        placeRegistryRefresh: registerPlaceRegistryRefresh,
+      }),
+    [accountState],
+  );
 
   // Take the account's theme choice, so a scheme picked in the browser (or on
   // another phone) is the one Logjam GPS is painted in. Keyed on the ACCOUNT's
@@ -894,11 +888,22 @@ export function AppShell({
         // left to do here". The unread list is the queue of things the user
         // still has to deal with, and emptying it on the strength of a
         // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it.
+        // Opening the row is what reads it. An announcement push opens its
+        // message on the inbox, and the message is read when the user closes it.
         if (target.kind === "place") {
           nav.navigate("Places", {
             screen: "PlaceDetail",
             params: { placeId: target.placeId, name: "Place" },
+          });
+        } else if (target.kind === "announcement") {
+          nav.navigate("More", {
+            screen: "Inbox",
+            params: {
+              openAnnouncement: {
+                announcementId: target.announcementId,
+                nonce: Date.now(),
+              },
+            },
           });
         } else {
           // Inbox lives inside the More stack.
@@ -1084,8 +1089,9 @@ export function AppShell({
                     name="Inbox"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <NotificationsScreen
+                        openAnnouncement={route.params?.openAnnouncement}
                         onBack={() => navigation.goBack()}
                         onUnreadChanged={refreshUnread}
                         // A share notification is a way in to the place it is

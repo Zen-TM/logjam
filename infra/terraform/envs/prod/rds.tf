@@ -148,4 +148,13 @@ resource "aws_db_parameter_group" "pgaudit" {
     name  = "log_connections"
     value = "1"
   }
+
+  # Keep row values out of error lines. At the default verbosity a constraint
+  # violation logs "DETAIL: Failing row contains (...)" with the row's values,
+  # coords and names included. Guard: postgres_errors_log_no_row_values in
+  # tests/guards.tftest.hcl.
+  parameter {
+    name  = "log_error_verbosity"
+    value = "terse"
+  }
 }

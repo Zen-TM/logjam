@@ -72,6 +72,12 @@ vi.mock("../tracks/trackRecorder", () => ({
     return Promise.resolve();
   },
 }));
+vi.mock("../weather/weatherStorage", () => ({
+  stopWeatherForWipe: () => {
+    record("stop:weather");
+    return Promise.resolve();
+  },
+}));
 const resetDatabase = vi.hoisted(() => vi.fn());
 vi.mock("@maplibre/maplibre-react-native", () => ({
   OfflineManager: { resetDatabase: () => resetDatabase() },
@@ -133,7 +139,12 @@ describe("wipeAllLocalData", () => {
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
-    for (const stop of ["stop:regions", "stop:geopdf", "stop:track"]) {
+    for (const stop of [
+      "stop:regions",
+      "stop:geopdf",
+      "stop:track",
+      "stop:weather",
+    ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(firstDelete);

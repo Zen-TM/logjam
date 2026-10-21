@@ -230,7 +230,10 @@
       automatic, high-volume, and carry no operator-access signal), but every
       operator read and every database connection &mdash; which account connected
       and from where &mdash; is logged, so administrative access cannot quietly
-      hide among normal app activity. We keep as little as possible: no
+      hide among normal app activity. The one exception is a message the
+      operator sends to every user: it runs as the application, reads only
+      account IDs and push tokens, and the operator&rsquo;s launching of it is
+      recorded in the same write-once log. We keep as little as possible: no
       third-party analytics, crash reports only if you turn them on, short
       retention on logs and exported files, and you can export or permanently
       delete your data yourself at any time.
@@ -285,6 +288,13 @@
           Foundation&rsquo;s Nominatim service
           (<code>nominatim.openstreetmap.org</code>) along with your IP
           address. Nothing else about you or your places is sent.</li>
+      <li><strong>Weather:</strong> when you press &ldquo;Show the weather
+          here&rdquo; on a place or a point on the map, in Logjam Web or
+          Logjam GPS, your browser or phone asks Open-Meteo
+          (<code>api.open-meteo.com</code>, Switzerland) for the forecast. It
+          sends the square of about 11 km around the spot, never the spot
+          itself, and the spot&rsquo;s height to the nearest 10 m, along with
+          your IP address. Nothing else about you or your places is sent.</li>
       <li><strong>Server-side GeoPDF rendering:</strong> when you generate a
           GeoPDF, our servers fetch the same providers&rsquo; tiles for the
           export area. The providers see our server&rsquo;s requests &mdash;

@@ -54,6 +54,7 @@ model User {
   fileSends               FileSend[]
   fileSendsReceived       FileSendRecipient[]
   customFieldDefs         CustomFieldDef[]
+  importSnapshots         ImportSnapshot[]
 
   @@map("users")
 }
@@ -231,6 +232,7 @@ model Place {
   linksB           PlaceLink[]    @relation("PlaceLinkB")
   // At most one — the place's route slot. See Route.placeId.
   route            Route?
+  importSnapshots  ImportSnapshot[]
 
   @@unique([ownerId, ropeWikiId])
   /// TYPE-SCOPED, deliberately. `placeImportKey()` derives from name + rounded
@@ -247,6 +249,29 @@ model Place {
   @@map("places")
 }
 
+/// What one import changed on a place or trip it did not create: the fields it
+/// wrote, with their values before and after, so Undo can put them back
+/// (routes/imports.ts, lib/importSnapshot.ts). `placeId` or `tripLogId` names
+/// the row; the snapshot goes with it when the row is deleted.
+model ImportSnapshot {
+  id        String   @id @default(uuid())
+  ownerId   String   @map("owner_id")
+  batchId   String   @map("batch_id")
+  placeId   String?  @map("place_id")
+  tripLogId String?  @map("trip_log_id")
+  before    Json
+  after     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  place     Place?   @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  tripLog   TripLog? @relation(fields: [tripLogId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, batchId])
+  @@index([placeId])
+  @@index([tripLogId])
+  @@map("import_snapshots")
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -258,6 +283,20 @@ model Notification {
 
   @@index([userId])
   @@map("notifications")
+}
+
+/// A message the maintainer sent every user (src/scripts/announce.ts). Each
+/// user's copy is a Notification of type "announcement" naming this row's id;
+/// GET /notifications reads the title and body from here, so deleting the row
+/// retracts it everywhere. The maintainer's own text, never a user's.
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  /// Markdown source, drawn through @logjam/shared's parseMessageMarkdown.
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("announcements")
 }
 
 model TripLog {
@@ -275,6 +314,7 @@ model TripLog {
   importBatchId String?        @map("import_batch_id")
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   places        TripLogPlace[]
+  importSnapshots ImportSnapshot[]
 
   @@unique([userId, importKey])
   @@index([userId])

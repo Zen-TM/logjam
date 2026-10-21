@@ -28,6 +28,7 @@ jobs:
       api_integration: ${{ steps.scope.outputs.api_integration }}
       mobile: ${{ steps.scope.outputs.mobile }}
       migrations: ${{ steps.scope.outputs.migrations }}
+      topo_e2e: ${{ steps.scope.outputs.topo_e2e }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,7 +59,11 @@ jobs:
           curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
           tar -xzf gitleaks.tar.gz gitleaks
       - name: Scan for secrets
-        run: ./gitleaks detect --source . --no-banner --redact --exit-code 1
+        # A PR or push scans HEAD's history only: checkout fetches every branch
+        # and gitleaks's default is `git log --all`, so a finding on any other
+        # branch would fail every PR. The nightly run keeps `--all`, since the
+        # repo is public and a branch that never gets a PR is scanned nowhere else.
+        run: ./gitleaks detect --source . --no-banner --redact --exit-code 1 --log-opts="${{ github.event_name == 'schedule' && '--all' || 'HEAD' }}"
 
   actionlint:
     runs-on: ubuntu-latest
@@ -81,9 +86,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Install
@@ -95,9 +100,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: shared/package-lock.json
       - name: Install
@@ -134,9 +139,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared and imports from shared/dist
@@ -230,6 +235,8 @@ jobs:
       S3_BUCKET_TOPO: logjam-topo-local
       TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
       CORS_ORIGIN: http://localhost:5173
+      # A stub that answers OK (started below): no CI run reaches Expo.
+      EXPO_PUSH_URL: http://localhost:9099
       # No ECS_SUBNETS: an empty list makes POST /geo-pdf leave the job
       # `queued` and /topo-jobs/:id/start leave it `pending` instead of calling
       # RunTask, which MiniStack here (S3 only, no Docker socket) cannot serve.
@@ -246,9 +253,9 @@ jobs:
       RATE_LIMIT_USER_PATCH_MAX: 1000000
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared and imports from shared/dist.
@@ -289,6 +296,8 @@ jobs:
         run: npm run build
       # dist/index.js, not dist/boot.js: boot resolves DB creds from Secrets
       # Manager, which this job doesn't run.
+      - name: Start the Expo push stub
+        run: node infra/scripts/expo-push-stub.mjs &
       - name: Start API
         working-directory: api
         run: |
@@ -340,9 +349,17 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/a11y.spec.ts --workers=1
+      # Writes to the seeded account and Undoes it, which leaves sync
+      # tombstones (frontend/AGENTS.md): after the integration suite, never
+      # before it.
+      - name: Playwright CSV import
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/csv-import.spec.ts --workers=1
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: playwright-artifacts
           path: |
@@ -356,10 +373,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          # jsdom 30 (vitest's DOM) needs Node 22.22+; the api jobs stay on 20.
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Build shared
@@ -386,12 +402,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          # 22, not 20: outboxPurge.test.ts runs the real mirror schema through
-          # node:sqlite, which Node ships unflagged from 22.13. On 20 the import
-          # fails lint (import/no-unresolved) before the test can fail to load.
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       # mobile depends on shared via file:../shared and imports from shared/dist
@@ -448,9 +461,9 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       # api depends on shared via file:../shared; npm ci resolves it.
@@ -503,9 +516,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Fetch the base (what prod runs)
         run: git fetch --no-tags --depth=1 origin main
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 26
           cache: npm
           cache-dependency-path: api/package-lock.json
       - name: Build shared
@@ -535,11 +548,264 @@ jobs:
         # mise.toml holds the one ruff pin; an empty match fails pip loudly.
         run: |
           pip install "ruff==$(sed -n 's/^ruff *= *"\(.*\)"/\1/p' mise.toml)"
-          ruff check topo
-          ruff format --check topo
+          ruff check topo frontend/scripts
+          ruff format --check topo frontend/scripts
       - name: Unit tests
         working-directory: topo
         run: python -m unittest discover -s tests
+
+  # topo/tests/INTEGRATION.md §2, automated: the real worker image on a real
+  # ELVIS tile, launched the way prod launches it. The API's POST
+  # /topo-jobs/:id/start calls ECS RunTask against MiniStack's ECS, which runs
+  # the image from a task definition registered here, so the RunTask call, its
+  # network config, the container override and the task definition's env are
+  # all exercised. The worker gets a network with no internet: Overpass is a
+  # stub serving a committed response, and the SVTM and fire-history rasters it
+  # reads through /vsis3/ are made-up ones in MiniStack, so a read the job
+  # forgot to stub fails instead of reaching out.
+  #
+  # Its own job, not a step of api-integration: it is scoped to what the worker
+  # image is built from and the two API files that launch it (ci-scope.sh)
+  # rather than to the whole API, and its six minutes (ten with
+  # a cold image cache) run beside that suite instead of after it. The setup it
+  # repeats is about a minute.
+  topo-e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.topo_e2e != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # Unlike api-integration's, this one runs RunTask'd containers, so it has
+      # ECS and the Docker socket, as docker-compose.yml's does.
+      # rollback-compat-mirrors-ci.py allows exactly these two differences.
+      ministack:
+        image: ministackorg/ministack
+        env:
+          SERVICES: s3,ecs
+          DEFAULT_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        ports:
+          - 4566:4566
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+    env:
+      # api-integration's, less what only its suite needs, plus the ECS
+      # settings that make /start call RunTask (subnet and security group are
+      # names MiniStack records and ignores).
+      NODE_ENV: development
+      AUTH_MODE: fake
+      FAKE_USER_SUB: fake-alice-sub
+      PORT: 8080
+      MIN_MOBILE_VERSION: "0.1.0"
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+      PGPASSWORD: logjam
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_MEDIA: logjam-media-local
+      S3_BUCKET_TOPO: logjam-topo-local
+      TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
+      CORS_ORIGIN: http://localhost:5173
+      # No stub runs in this job: a push the API sends fails here, never reaching Expo.
+      EXPO_PUSH_URL: http://localhost:9099
+      ECS_CLUSTER: logjam-cluster
+      ECS_SUBNETS: subnet-local
+      ECS_SECURITY_GROUPS: sg-local
+      # The reaper's sweeps would touch the rows this job drives by hand.
+      TOPO_REAPER_INTERVAL_MS: 0
+      IMAGE: logjam-topo-worker:e2e
+      E2E: topo/tests/e2e
+      # Sorts before the job's own network (github_network_*): MiniStack runs a
+      # task on the first network of its own container, by name. ecs-worker.sh
+      # fails if a worker landed anywhere else.
+      NET: e2e-offline
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Mutation that turns it red: add a variable to topo_worker in ecs.tf.
+      - name: worker.env names every variable the task definition sets
+        run: |
+          want=$(awk '/resource "aws_ecs_task_definition" "topo_worker"/,/^}/' infra/terraform/envs/prod/ecs.tf \
+            | sed -n 's/.*name *= *"\([A-Z0-9_]*\)".*/\1/p' | sort -u)
+          have=$(sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' "$E2E/worker.env" | sort -u)
+          [ -n "$want" ] || { echo "read no variables from ecs.tf's topo_worker"; exit 1; }
+          missing=$(comm -23 <(echo "$want") <(echo "$have"))
+          [ -z "$missing" ] || { echo "worker.env lacks: $missing"; exit 1; }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the worker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: topo
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=topo-worker
+          cache-to: type=gha,scope=topo-worker,mode=max
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci && npx prisma generate
+      - name: Migrate
+        working-directory: api
+        run: npx prisma migrate deploy
+      - name: Wait for MiniStack and create buckets
+        run: |
+          for i in $(seq 1 60); do
+            health=$(curl -sf http://localhost:4566/_localstack/health || true)
+            if grep -q '"s3": "available"' <<<"$health" && grep -q '"ecs": "available"' <<<"$health"; then
+              echo "ministack ready"; break
+            fi
+            if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
+            sleep 2
+          done
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      # Made up, not the real rasters: one value over the whole tile. The fire
+      # year postdates the 2018 capture, so the job's fireStaleFraction says
+      # whether the worker read it.
+      - name: Put made-up SVTM and fire-history rasters in MiniStack
+        run: |
+          mkdir -p "$RUNNER_TEMP/rasters"
+          extent="-a_srs EPSG:4326 -a_ullr 150.28 -33.76 150.34 -33.80 -outsize 64 64 -bands 1"
+          docker run --rm -v "$RUNNER_TEMP/rasters:/out" --entrypoint sh "$IMAGE" -c "
+            gdal_create $extent -ot Byte -burn 1 /out/svtm_formation.tif &&
+            gdal_create $extent -ot UInt16 -burn 2019 /out/fire_history_year.tif"
+          aws s3 cp "$RUNNER_TEMP/rasters/svtm_formation.tif" "s3://$S3_BUCKET_TOPO/svtm/svtm_formation.tif"
+          aws s3 cp "$RUNNER_TEMP/rasters/fire_history_year.tif" "s3://$S3_BUCKET_TOPO/fire/fire_history_year.tif"
+      # MiniStack stays on the job's network too (the runner and the API reach
+      # it there), but its tasks run on this one.
+      - name: A network with no internet, and the Overpass stub on it
+        run: |
+          docker network create --internal "$NET"
+          docker network connect --alias postgres "$NET" "${{ job.services.postgres.id }}"
+          docker network connect --alias ministack "$NET" "${{ job.services.ministack.id }}"
+          docker run -d --name overpass --network "$NET" --network-alias overpass \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/overpass_stub.py /e2e/overpass-katoomba-2506258.json
+      # The task definition is worker.env, which the first step checks against
+      # prod's: one copy of the env. The container name is prod's too, so an
+      # API that overrides a container the definition doesn't have loses its
+      # JOB_ID here as it would on Fargate.
+      - name: Register the cluster and the worker task definition in MiniStack
+        run: |
+          container=$(awk '/resource "aws_ecs_task_definition" "topo_worker"/,/^}/' infra/terraform/envs/prod/ecs.tf \
+            | sed -n 's/^ *name *= *"\(topo-[a-z-]*\)".*/\1/p')
+          [ -n "$container" ] || { echo "read no container name from ecs.tf's topo_worker"; exit 1; }
+          jq -R -s --arg image "$IMAGE" --arg name "$container" '{
+              family: "logjam-topo-worker",
+              requiresCompatibilities: ["FARGATE"],
+              networkMode: "awsvpc",
+              cpu: "4096",
+              memory: "8192",
+              containerDefinitions: [{
+                name: $name,
+                image: $image,
+                essential: true,
+                environment: [split("\n")[] | capture("^(?<name>[A-Z0-9_]+)=(?<value>.*)$")]
+              }]
+            }' "$E2E/worker.env" > "$RUNNER_TEMP/taskdef.json"
+          aws ecs create-cluster --cluster-name "$ECS_CLUSTER"
+          aws ecs register-task-definition --cli-input-json "file://$RUNNER_TEMP/taskdef.json"
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build and start the API
+        working-directory: api
+        run: |
+          npm run build
+          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health > /dev/null; then echo "API ready"; exit 0; fi
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
+      # One ELVIS LAZ tile as ELVIS ships it: Katoomba 2018, Mount Solitary.
+      - name: Fetch the sample tile
+        id: sample
+        run: echo "zip=$(scripts/sample-data.sh elvis-katoomba-2506258-laz.zip)" >> "$GITHUB_OUTPUT"
+      - name: Start a job through the API; ECS runs the worker
+        id: complete
+        env:
+          ZIP: ${{ steps.sample.outputs.zip }}
+        run: |
+          set -o pipefail
+          id=$($E2E/start-job.sh "e2e complete" "$ZIP")
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          cid=$($E2E/ecs-worker.sh "$id")
+          start=$(date +%s)
+          docker logs -f "$cid" 2>&1 | tee "$RUNNER_TEMP/worker.log"
+          echo "::notice title=topo-e2e::worker took $(( $(date +%s) - start )) s"
+          [ "$(docker wait "$cid")" = 0 ] || { echo "the worker exited non-zero"; exit 1; }
+      - name: The job finished, in full
+        env:
+          JOB_ID: ${{ steps.complete.outputs.id }}
+        run: |
+          # Mutation that turns the first grep red: drop OVERPASS_ENDPOINTS from
+          # worker.env; the worker tries the real mirrors and logs "Overpass
+          # attempt". Mutation that turns the second red: empty
+          # SVTM_FORMATION_S3_PATH there; the worker logs "skipping" instead.
+          if grep -E 'raster unavailable|Overpass attempt' "$RUNNER_TEMP/worker.log"; then exit 1; fi
+          grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/worker.log" \
+            || { echo "the worker never read the SVTM raster"; exit 1; }
+          # A point on Mount Solitary, inside the tile.
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/check.py complete "$JOB_ID" 150.311 -33.780
+      # Runbook step 5: the reaper fails a job whose worker died mid-render,
+      # and a worker relaunched for it must leave it failed. ECS launches the
+      # first worker; the relaunch is by hand, since only the reaper's failing
+      # of the row is stood in for here, not a second RunTask.
+      - name: A relaunched worker leaves a reaped job alone
+        env:
+          ZIP: ${{ steps.sample.outputs.zip }}
+        run: |
+          JOB_ID=$($E2E/start-job.sh "e2e reaped" "$ZIP")
+          cid=$($E2E/ecs-worker.sh "$JOB_ID")
+          sql() { psql -h localhost -U logjam -d logjam -tAc "$1"; }
+          for _ in $(seq 1 120); do
+            [ "$(sql "SELECT coalesce(render_tiles_done, 0) > 0 FROM topo_jobs WHERE id = '$JOB_ID'")" = t ] && break
+            sleep 5
+          done
+          done=$(sql "SELECT coalesce(render_tiles_done, 0) FROM topo_jobs WHERE id = '$JOB_ID'")
+          [ "$done" -gt 0 ] || { echo "the worker never rendered (render_tiles_done=$done)"; docker logs "$cid"; exit 1; }
+          sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
+          docker kill "$cid"
+          sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE"
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/check.py reaped "$JOB_ID"
+      - name: Logs (on failure)
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/api.log" || true
+          docker logs overpass || true
+          docker logs "${{ job.services.ministack.id }}" 2>&1 | tail -n 200 || true
+          for c in $(docker ps -aq --filter label=com.amazonaws.ecs.task-arn); do docker logs "$c" 2>&1 | tail -n 100; done || true
 
   # The deploy workflows rewrite live ECS task definitions
   # (infra/scripts/pin-ecs-task-image.sh). Its one piece of real logic
@@ -579,6 +845,10 @@ jobs:
         run: |
           pip install pyyaml==6.0.3
           infra/scripts/rollback-compat-mirrors-ci.py
+      # A required check no job reports, or whose workflow skips PRs by path,
+      # leaves every PR waiting; the ruleset names them only as strings.
+      - name: Required checks are reported on every PR
+        run: infra/scripts/check-required-checks.py
       # Every Dependabot `ignore` names an open tracking issue (see the header of
       # .github/dependabot.yml). The self-test needs no network; the check asks
       # GitHub for each issue's state, and only warns if it cannot.
@@ -588,6 +858,13 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # One Node for every toolchain: the workflows, the api image and the
+      # @types/node pins must all equal mise.toml's. The Lambda's types are
+      # checked against its own runtime instead.
+      - name: Node pins agree with mise.toml
+        run: |
+          infra/scripts/check-node-version.py --self-test
+          infra/scripts/check-node-version.py
       # prod and github apply from the shared, locked S3 state; local's is
       # disposable and must never bind to it. Neither direction is visible in a
       # plan until it is too late, so it is checked here.

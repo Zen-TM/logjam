@@ -51,6 +51,13 @@ export const EXPORT_SECTIONS = {
         include: { places: true },
       }),
   },
+  // What an import changed on places and trips it merged into, kept until
+  // the import is undone.
+  importSnapshots: {
+    models: ["ImportSnapshot"],
+    load: (userId) =>
+      prisma.importSnapshot.findMany({ where: { ownerId: userId } }),
+  },
   // Media metadata only: file contents are not in the JSON.
   media: {
     models: ["Media"],
@@ -176,6 +183,8 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
     "sync bookkeeping: the ids of records already deleted or unshared, which say nothing the rest of the export does not",
   EgressLogCursor:
     "not per user: how far the egress meter has read the storage access logs",
+  Announcement:
+    "not per user: the maintainer's own messages; each user's copy is a row under notifications",
 };
 
 /** v3 adds every section beyond v2's places, trip logs, templates, shares,

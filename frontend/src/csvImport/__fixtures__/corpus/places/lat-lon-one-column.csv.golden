@@ -1,10 +1,57 @@
 {
   "headers": [
     "Name",
-    "Lat/Lon"
+    "Lat/Lon",
+    "Latitude",
+    "Longitude"
   ],
   "dataRows": 2,
   "parseErrors": [],
-  "kind": "unknown",
-  "blocked": "not a place list or logbook"
+  "kind": "place",
+  "assignments": {
+    "Name": "name",
+    "Lat/Lon": "discard",
+    "Latitude": "latitude",
+    "Longitude": "longitude"
+  },
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5603,
+        "longitude": 150.4033
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Corpus One Column Canyon",
+      "input": {
+        "name": "Corpus One Column Canyon",
+        "latitude": -33.3001,
+        "longitude": 150.2501
+      }
+    }
+  ],
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Corpus One Column Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
 }

@@ -23,7 +23,11 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { matchPlace, type MatchCandidate } from "@logjam/shared";
+import {
+  matchPlace,
+  matchTripPlace,
+  type MatchCandidate,
+} from "@logjam/shared";
 
 import { detectColumns } from "./detectColumns";
 import { detectDateFormat } from "./detectDateFormat";
@@ -179,7 +183,7 @@ async function runImport(path: string): Promise<unknown> {
     const key = row.sourcePlaceName.toLowerCase();
     if (!row.sourcePlaceName || seen.has(key)) continue;
     seen.add(key);
-    const result = matchPlace({ name: row.sourcePlaceName }, PLACES);
+    const result = matchTripPlace(row.sourcePlaceName, PLACES);
     matches.push({
       name: row.sourcePlaceName,
       decision: tripRowDecision(result),
