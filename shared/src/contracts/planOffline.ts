@@ -25,6 +25,8 @@ export const TRIP_PLAN_OFFLINE = {
   downloadKeepOpen: "Keep Logjam GPS open until it finishes.",
   // Map data is the existing region download, framed on the plan's items.
   downloadMap: "Download the map for this area too",
+  // Once a saved map region holds the plan's whole area.
+  mapDownloaded: "Map downloaded",
 } as const;
 
 /**

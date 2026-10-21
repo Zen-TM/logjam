@@ -19,7 +19,8 @@ import { spacing } from "../theme";
 import { Row, StatusPill } from "../ui";
 import { startPlanDownload, usePlanDownload } from "./planDownloads";
 import { missingPlanFiles, planFiles, type PlanFile } from "./planFiles";
-import { planBbox } from "./planMap";
+import { useMapArtifacts } from "../offline/useMapArtifacts";
+import { planBbox, planMapSaved } from "./planMap";
 import type { CachedPlan } from "./plansCache";
 
 export function PlanDownload({
@@ -37,6 +38,7 @@ export function PlanDownload({
   const { plan } = cached;
   const [missing, setMissing] = useState<PlanFile[] | null>(null);
   const progress = usePlanDownload(plan.id);
+  const { artifacts } = useMapArtifacts();
   const running = progress !== null;
 
   useEffect(() => {
@@ -62,16 +64,24 @@ export function PlanDownload({
   if (missing === null) return null;
   if (cached.downloadedAt && missing.length === 0) {
     const bbox = planBbox(plan);
+    const mapSaved = bbox !== null && planMapSaved(bbox, artifacts);
     return (
       <>
-        <View style={{ flexDirection: "row" }}>
+        <View style={{ flexDirection: "row", gap: spacing(1) }}>
           <StatusPill
             label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
             tone="muted"
             icon="saveOffline"
           />
+          {mapSaved ? (
+            <StatusPill
+              label={TRIP_PLAN_OFFLINE.mapDownloaded}
+              tone="muted"
+              icon="map"
+            />
+          ) : null}
         </View>
-        {bbox ? (
+        {bbox && !mapSaved ? (
           <Row
             icon="map"
             title={TRIP_PLAN_OFFLINE.downloadMap}

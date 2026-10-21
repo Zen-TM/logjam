@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isPlanPin,
   planBbox,
+  planMapSaved,
   planModeMine,
   planModeReducer,
   planModeStart,
@@ -99,5 +100,35 @@ describe("isPlanPin", () => {
     expect(isPlanPin(plan, "p1")).toBe(true);
     expect(isPlanPin(plan, "mine")).toBe(false);
     expect(isPlanPin(null, "p1")).toBe(false);
+  });
+});
+
+describe("planMapSaved", () => {
+  const area: [number, number, number, number] = [150, -34, 150.5, -33.5];
+  const region = (bbox: [number, number, number, number] | null) => ({
+    kind: "basemap-region" as const,
+    bbox,
+  });
+
+  // Mutation: test overlap instead of containment, and a region that holds
+  // half the plan hides the row that would save the rest.
+  it("is saved only when one region holds the whole area", () => {
+    expect(planMapSaved(area, [region([149.9, -34.1, 150.6, -33.4])])).toBe(
+      true,
+    );
+    expect(planMapSaved(area, [region([149.9, -34.1, 150.2, -33.4])])).toBe(
+      false,
+    );
+  });
+
+  // Mutation: drop the kind check, and a GeoPDF or a topo over the area
+  // counts as the map being saved.
+  it("counts only a saved basemap region", () => {
+    expect(
+      planMapSaved(area, [
+        { kind: "geopdf-import", bbox: [149, -35, 151, -33] },
+        region(null),
+      ]),
+    ).toBe(false);
   });
 });
