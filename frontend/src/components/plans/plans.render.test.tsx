@@ -634,7 +634,13 @@ describe("Start a trip log after a copy failed", () => {
     const onDone = vi.fn();
     const onCopied = vi.fn();
     const place = (id: string, name: string) =>
-      ({ kind: "place", id, name, placeTypeId: "canyon" }) as TripPlanPlace;
+      ({
+        kind: "place",
+        id,
+        name,
+        placeTypeId: "canyon",
+        media: [],
+      }) as TripPlanPlace;
     render(
       <PlanTripLogPlacesDialog
         planId="p1"
