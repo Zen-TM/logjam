@@ -26,6 +26,7 @@ vi.mock("../geopdf/importPipeline", () => geoPdf);
 
 const {
   downloadPlanFiles,
+  linkingProgress,
   linkPlanGeoPdfImport,
   planFileSource,
   planFileUri,
@@ -176,6 +177,29 @@ describe("a plan's GeoPDFs on the map go with the plan", () => {
       JSON.stringify({ g1: "import-1" }),
     );
     expect(deleted()).toEqual([]);
+  });
+
+  // Mutation: link on the import's outcome instead. One that fails (a full
+  // phone) or is killed mid-render keeps its record and the other member's
+  // PDF, unswept, and Saved offers to finish it as the caller's own.
+  it("links the import on its first id, before it can fail", async () => {
+    const seen: unknown[] = [];
+    const report = linkingProgress("p", "g1", (progress) =>
+      seen.push(progress),
+    );
+    report({ phase: "hashing", fraction: 0 });
+    expect(fs.writeAsStringAsync).not.toHaveBeenCalled();
+    report({ phase: "planning", fraction: 0, importId: "import-1" });
+    report({ phase: "rasterising", fraction: 0.5, importId: "import-1" });
+    // The import throws here; the link is already on its way.
+    await vi.waitFor(() =>
+      expect(fs.writeAsStringAsync).toHaveBeenCalledWith(
+        "file:///d/plans/p/geopdf-imports.json",
+        JSON.stringify({ g1: "import-1" }),
+      ),
+    );
+    expect(fs.writeAsStringAsync).toHaveBeenCalledTimes(1);
+    expect(seen).toHaveLength(3);
   });
 
   // Mutation: overwrite the file with only the new link, and a plan's first

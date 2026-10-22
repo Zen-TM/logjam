@@ -24,7 +24,7 @@ import {
 } from "../geopdf/importPipeline";
 import { runGeoPdfImport } from "../geopdf/importRunner";
 import {
-  linkPlanGeoPdfImport,
+  linkingProgress,
   missingPlanFiles,
   openablePlanMedia,
   planFiles,
@@ -185,9 +185,8 @@ export async function openPlanMedia<T extends { id: string }>(
 
 /**
  * A plan's GeoPDF onto the map through the GeoPDF import, from the phone's
- * copy or its URL. A new import is the plan's (`linkPlanGeoPdfImport`) and
- * leaves the phone with it; one already there (the caller's own, or this
- * plan's from before) is left as it is. The import's toast says how it went.
+ * copy or its URL. The import is the plan's (`linkingProgress`) and leaves
+ * the phone with it. The import's toast says how it went.
  */
 export async function openPlanGeoPdf(
   planId: string,
@@ -211,13 +210,10 @@ export async function openPlanGeoPdf(
     online,
   );
   if (!source) return;
-  const outcome = await runGeoPdfImport(title, (onProgress, token) =>
-    source.startsWith("file:")
-      ? importGeoPdfFile(title, source, onProgress, token)
-      : importGeoPdfFromUrl(title, source, onProgress, token),
-  );
-  if (outcome?.status === "imported" || outcome?.status === "paused")
-    await linkPlanGeoPdfImport(planId, geoPdfId, outcome.record.id).catch(
-      console.error,
-    );
+  await runGeoPdfImport(title, (onProgress, token) => {
+    const report = linkingProgress(planId, geoPdfId, onProgress);
+    return source.startsWith("file:")
+      ? importGeoPdfFile(title, source, report, token)
+      : importGeoPdfFromUrl(title, source, report, token);
+  });
 }

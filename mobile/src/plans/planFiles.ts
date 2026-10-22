@@ -16,7 +16,10 @@ import * as FileSystem from "expo-file-system/legacy";
 import type { TripPlanPlace, TripPlanView } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
-import { deleteGeoPdfImport } from "../geopdf/importPipeline";
+import {
+  deleteGeoPdfImport,
+  type GeoPdfProgress,
+} from "../geopdf/importPipeline";
 import { PLAN_DIR } from "../offline/localStores";
 
 /** One file a plan points at, and where it comes from. */
@@ -196,6 +199,31 @@ export async function linkPlanGeoPdfImport(
     `${dir}${IMPORTS}`,
     JSON.stringify(imports),
   );
+}
+
+/**
+ * An import's progress, linking its record to the plan on the first id it
+ * reports. That is before the render that can fail or be killed, so a failed
+ * or interrupted import is swept with the plan too, never left to be resumed
+ * from Saved as the caller's own. A finished import of the same bytes is
+ * returned without an id and left alone; an unfinished one is resumed and
+ * claimed, even one the caller began themselves.
+ */
+export function linkingProgress(
+  planId: string,
+  geoPdfId: string,
+  onProgress: (progress: GeoPdfProgress) => void,
+): (progress: GeoPdfProgress) => void {
+  let linked = false;
+  return (progress) => {
+    if (progress.importId && !linked) {
+      linked = true;
+      void linkPlanGeoPdfImport(planId, geoPdfId, progress.importId).catch(
+        console.error,
+      );
+    }
+    onProgress(progress);
+  };
 }
 
 /** A plan's folder goes, with the GeoPDF imports it names. */
