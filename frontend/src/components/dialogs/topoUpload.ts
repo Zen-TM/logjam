@@ -15,8 +15,8 @@ const CONCURRENCY = 4;
 const ATTEMPTS = 5;
 /** A part that sends no bytes for this long is dropped and retried. */
 const STALL_MS = 60_000;
-// Re-sign five minutes before a part URL expires.
-const URL_FRESH_MS = (TOPO_UPLOAD_PART_URL_TTL_SECONDS - 5 * 60) * 1000;
+// Re-sign a third of the way before a part URL expires.
+const URL_FRESH_MS = (TOPO_UPLOAD_PART_URL_TTL_SECONDS * 1000 * 2) / 3;
 const SIGN_BATCH = Math.min(16, TOPO_UPLOAD_SIGN_MAX);
 
 /** One ZIP on its way to one job. */
@@ -157,6 +157,15 @@ export function submitFailureMessage(error: unknown, uploaded: boolean) {
 const isRefusal = (error: unknown) =>
   error instanceof ApiError && error.status < 500 && error.status !== 429;
 
+/** A job's status: "gone" when the API has no such job, null when it
+ *  couldn't be asked. */
+const jobStatus = (path: string) =>
+  apiFetch<{ status: string }>(path).then(
+    (job) => job.status,
+    (error: unknown) =>
+      error instanceof ApiError && error.status === 404 ? "gone" : null,
+  );
+
 /** Makes a topo job from a ZIP. `submit` again after a failure carries on
  *  with the same job while the file is the same one; `discard` deletes a job
  *  that never started (call it when the user gives up on the ZIP). `held`
@@ -172,10 +181,17 @@ export function useTopoUpload() {
   const discard = useCallback(() => {
     const abandoned = session.current;
     hold(null);
-    if (abandoned)
-      apiFetch(`/topo-jobs/${abandoned.jobId}`, { method: "DELETE" }).catch(
-        () => {},
-      );
+    if (!abandoned) return;
+    const path = `/topo-jobs/${abandoned.jobId}`;
+    // A joined upload may have launched on a /start whose answer was lost, so
+    // it is deleted only while still `uploading`; if that can't be told, the
+    // sweep clears it.
+    const stillUploading = abandoned.completed
+      ? jobStatus(path).then((status) => status === "uploading")
+      : Promise.resolve(true);
+    stillUploading
+      .then((yes) => yes && apiFetch(path, { method: "DELETE" }))
+      .catch(() => {});
   }, [hold]);
   useEffect(() => discard, [discard]);
 
@@ -226,19 +242,14 @@ export function useTopoUpload() {
         // A failed /start says nothing of whether the job left `uploading`:
         // the response may be lost after the job launched, or a 5xx may come
         // before. The job's own status decides.
-        const status = await apiFetch<{ status: string }>(
-          `/topo-jobs/${current.jobId}`,
-        ).then(
-          (job) => job.status,
-          () => null,
-        );
+        const status = await jobStatus(`/topo-jobs/${current.jobId}`);
         if (status === "pending" || status === "processing") {
           hold(null);
           return current.jobId;
         }
-        // Still uploading: submit again carries on. Anything else (failed,
-        // or unknown) starts anew.
-        if (status !== "uploading") hold(null);
+        // Still uploading, or unknown because the connection is down: submit
+        // again carries on, and finds out then. Gone or failed: start anew.
+        if (status !== "uploading" && status !== null) hold(null);
         throw e;
       }
       hold(null);

@@ -70,6 +70,7 @@ type Phase = "form" | "uploading" | "finalizing" | "done";
 type Mode = "form" | "instructions" | "settings";
 
 const DEFAULT_TEMPLATE_ID = "default";
+const HELD_REASON_ID = "topo-held-reason";
 const KEPT_FOR_RESUME =
   "Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.";
 
@@ -200,6 +201,10 @@ export default function TopoDialog({
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("hillshade");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The template the dialog was opened with applies once per fresh open, not
+  // again on the return from drawing the area, which would undo the user's
+  // pick (and, while a job is held, show one it wasn't sent with).
+  const initialTemplateApplied = useRef(false);
   const upload = useTopoUpload();
 
   // Closing empties the form — but going off to draw the area CLOSES this
@@ -219,10 +224,13 @@ export default function TopoDialog({
     if (closedForGood) resetForm();
   }
   // A job whose upload failed and was given up on is deleted, not left
-  // "uploading" in the list.
+  // "uploading" in the list. The next open is a fresh one, so its template
+  // applies. (Here, not in resetForm: that runs during render.)
   const { discard } = upload;
   useEffect(() => {
-    if (closedForGood) discard();
+    if (!closedForGood) return;
+    discard();
+    initialTemplateApplied.current = false;
   }, [closedForGood, discard]);
 
   function resetForm() {
@@ -263,7 +271,8 @@ export default function TopoDialog({
     fetchTopoTemplates()
       .then((list) => {
         setTemplates(list);
-        if (initialTemplateId) {
+        if (initialTemplateId && !initialTemplateApplied.current) {
+          initialTemplateApplied.current = true;
           const t = list.find((x) => x.id === initialTemplateId);
           if (t) {
             setSelectedTemplateId(t.id);
@@ -800,11 +809,10 @@ export default function TopoDialog({
             {/* Two short answers about the same topo: one line holds both. */}
             <div className={classes.nameRow}>
               <TextField
-                id="topo-name"
                 label="Name"
                 placeholder="Name this topo"
                 disabled={upload.held}
-                hint={upload.held ? KEPT_FOR_RESUME : undefined}
+                aria-describedby={upload.held ? HELD_REASON_ID : undefined}
                 value={topoName}
                 onChange={(e) => {
                   setTopoName(e.target.value);
@@ -815,7 +823,7 @@ export default function TopoDialog({
               <Select
                 label="Template"
                 disabled={upload.held}
-                aria-describedby={upload.held ? "topo-name-hint" : undefined}
+                aria-describedby={upload.held ? HELD_REASON_ID : undefined}
                 value={selectedTemplateId}
                 onChange={(e) => selectTemplate(e.target.value)}
               >
@@ -834,6 +842,11 @@ export default function TopoDialog({
                 )}
               </Select>
             </div>
+            {upload.held && (
+              <p id={HELD_REASON_ID} className={classes.summaryNote}>
+                {KEPT_FOR_RESUME}
+              </p>
+            )}
 
             <div className={classes.errandLine}>
               <Button
