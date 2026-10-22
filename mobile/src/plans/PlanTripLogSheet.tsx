@@ -20,7 +20,7 @@ import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
 import { requestSync } from "../sync/syncEngine";
 import { useMirrorPlaces, useMirrorTrips } from "../sync/useSyncQueries";
 import { makeStyles, muted, spacing } from "../theme";
-import { BottomSheet, Button, ErrorBanner, Row } from "../ui";
+import { BottomSheet, Button, ErrorBanner, Row, SelectionMark } from "../ui";
 import { savePlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
 
@@ -195,6 +195,7 @@ export function PlanTripLogSheet({
                   icon="place"
                   title={place.name}
                   selected={on}
+                  right={<SelectionMark selected={on} />}
                   disabled={busy || (!on && full)}
                   subtitle={!on && full ? TRIP_PLACES_CAP_SENTENCE : undefined}
                   onPress={() =>
