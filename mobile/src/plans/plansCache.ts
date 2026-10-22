@@ -177,6 +177,22 @@ export async function pollPlans(): Promise<PlansList> {
   return { plans, fetchedAt };
 }
 
+/** How old a cached copy's presigned URLs may be and still open: the API
+ *  signs a plan's photos and files for an hour (api/src/lib/mediaPresign.ts),
+ *  so this leaves ten minutes for a viewer left open. */
+export const PLAN_URLS_FRESH_MS = 50 * 60_000;
+
+/**
+ * The plan with URLs that will still load: the cached copy while fresh, else
+ * fetched again. For opening a file that isn't on the phone, online.
+ */
+export async function planForUrls(planId: string): Promise<TripPlanView> {
+  const cached = await readCachedPlan(planId);
+  if (cached && Date.now() - Date.parse(cached.fetchedAt) < PLAN_URLS_FRESH_MS)
+    return cached.plan;
+  return (await fetchPlan(planId)).plan;
+}
+
 /**
  * GET /plans/:id into the cache, keeping when it was downloaded. A 404 means
  * the caller can no longer see it, so the cached copy goes too.

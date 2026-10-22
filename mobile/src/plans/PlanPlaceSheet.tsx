@@ -1,36 +1,56 @@
-// A plan place, read: what it is, where, its attributes, its notes and who
-// added it. Opened from a place row on the plan's On the map and from its pin
+// A plan place, read: what it is, where, its attributes, its photos, its notes
+// and who added it. Opened from a place row on the plan's On the map and from its pin
 // in plan mode. Read-only here: a plan place is edited in the plan, not saved
 // over the caller's own, and works offline from the cached plan.
+import { useMemo, useState } from "react";
 import { Clipboard, Text, View } from "react-native";
 import {
   attributeRows,
   formatElevationM,
   mapPointPosition,
+  messageFromError,
+  pluralCount,
   userFieldValues,
   PLACE_PAGE,
   SYSTEM_FIELD_DEFS,
+  TRIP_PLAN_PAGE,
   SYSTEM_PLACE_TYPES,
   tripPlanAddedByLine,
   type TripPlanPlace,
 } from "@logjam/shared";
 
+import { unavailableReasonText } from "../auth/capabilities";
 import { AttributeTable } from "../customFields/CustomFieldValues";
+import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import { BottomSheet, Icon, Row, SectionHeader } from "../ui";
+import { openPlanMedia, usePlanFilesOnPhone } from "./PlanDownload";
+import { openablePlanMedia, placeFiles } from "./planFiles";
 
 export function PlanPlaceSheet({
+  planId,
   place,
+  online,
   onClose,
   onInfo,
 }: {
+  planId: string;
   /** The place shown; null while the sheet is closed. */
   place: TripPlanPlace | null;
+  online: boolean;
   onClose: () => void;
   onInfo: (message: string) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
+  // Its photos open from the phone once downloaded, else from their URLs
+  // while online (`planFileSource`).
+  const files = useMemo(() => (place ? placeFiles(place) : []), [place]);
+  const onPhone = usePlanFilesOnPhone(planId, files);
+  const photos = place
+    ? openablePlanMedia(planId, place.media, files, onPhone, online)
+    : [];
   const type = SYSTEM_PLACE_TYPES.find(
     (each) => each.id === place?.placeTypeId,
   );
@@ -71,12 +91,54 @@ export function PlanPlaceSheet({
             }}
           />
           {attributes.length > 0 ? <AttributeTable rows={attributes} /> : null}
+          {place.media.length > 0 ? (
+            <>
+              <SectionHeader title={PLACE_PAGE.copy.photos} />
+              <Row
+                icon="photo"
+                title={pluralCount(place.media.length, "photo")}
+                subtitle={
+                  photos.length > 0
+                    ? undefined
+                    : unavailableReasonText("needs-connection")
+                }
+                onPress={
+                  photos.length > 0
+                    ? () =>
+                        void openPlanMedia(
+                          planId,
+                          place.media,
+                          files,
+                          onPhone,
+                          online,
+                        )
+                          .then(setViewing)
+                          .catch((err: unknown) =>
+                            onInfo(
+                              messageFromError(
+                                err,
+                                TRIP_PLAN_PAGE.copy.loadFailed,
+                              ),
+                            ),
+                          )
+                    : undefined
+                }
+              />
+            </>
+          ) : null}
           {place.notes ? (
             <Text style={styles.notes} selectable>
               {place.notes}
             </Text>
           ) : null}
         </View>
+      ) : null}
+      {viewing?.length ? (
+        <MediaViewer
+          items={viewing}
+          startIndex={0}
+          onClose={() => setViewing(null)}
+        />
       ) : null}
     </BottomSheet>
   );

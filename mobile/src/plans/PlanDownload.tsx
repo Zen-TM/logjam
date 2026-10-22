@@ -18,10 +18,22 @@ import { relativeTime } from "../screens/syncHealth";
 import { spacing } from "../theme";
 import { Row, StatusPill } from "../ui";
 import { startPlanDownload, usePlanDownload } from "./planDownloads";
-import { missingPlanFiles, planFiles, type PlanFile } from "./planFiles";
+import {
+  importGeoPdfFile,
+  importGeoPdfFromUrl,
+} from "../geopdf/importPipeline";
+import { runGeoPdfImport } from "../geopdf/importRunner";
+import {
+  linkingProgress,
+  missingPlanFiles,
+  openablePlanMedia,
+  planFiles,
+  planFileSource,
+  type PlanFile,
+} from "./planFiles";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { planBbox, planMapSaved } from "./planMap";
-import type { CachedPlan } from "./plansCache";
+import { planForUrls, type CachedPlan } from "./plansCache";
 
 export function PlanDownload({
   cached,
@@ -114,4 +126,94 @@ export function PlanDownload({
       style={{ marginTop: spacing(1) }}
     />
   );
+}
+
+/** Which of these files of a plan are on the phone, read again as a download
+ *  ends. `files` is memoised by the caller. */
+export function usePlanFilesOnPhone(
+  planId: string,
+  files: readonly PlanFile[],
+): ReadonlySet<string> {
+  const running = usePlanDownload(planId) !== null;
+  const [onPhone, setOnPhone] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    void missingPlanFiles(planId, files)
+      .then((missing) => {
+        if (cancelled) return;
+        const absent = new Set(missing.map((file) => file.id));
+        setOnPhone(
+          new Set(
+            files.filter((file) => !absent.has(file.id)).map((file) => file.id),
+          ),
+        );
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [planId, files, running]);
+  return onPhone;
+}
+
+/** The files to open these from. A URL from a copy fetched long ago may have
+ *  expired, so the plan is fetched again first (`planForUrls`); downloaded
+ *  files, or offline, need nothing. */
+async function filesForOpening(
+  planId: string,
+  ids: readonly string[],
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+): Promise<readonly PlanFile[]> {
+  if (!online || ids.every((id) => onPhone.has(id))) return files;
+  return planFiles(await planForUrls(planId));
+}
+
+/** The media that opens now, each with where it opens from. */
+export async function openPlanMedia<T extends { id: string }>(
+  planId: string,
+  items: readonly T[],
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+) {
+  const ids = items.map((item) => item.id);
+  const fresh = await filesForOpening(planId, ids, files, onPhone, online);
+  return openablePlanMedia(planId, items, fresh, onPhone, online);
+}
+
+/**
+ * A plan's GeoPDF onto the map through the GeoPDF import, from the phone's
+ * copy or its URL. The import is the plan's (`linkingProgress`) and leaves
+ * the phone with it. The import's toast says how it went.
+ */
+export async function openPlanGeoPdf(
+  planId: string,
+  geoPdfId: string,
+  title: string,
+  files: readonly PlanFile[],
+  onPhone: ReadonlySet<string>,
+  online: boolean,
+): Promise<void> {
+  const fresh = await filesForOpening(
+    planId,
+    [geoPdfId],
+    files,
+    onPhone,
+    online,
+  );
+  const source = planFileSource(
+    planId,
+    fresh.find((file) => file.id === geoPdfId),
+    onPhone,
+    online,
+  );
+  if (!source) return;
+  await runGeoPdfImport(title, (onProgress, token) => {
+    const report = linkingProgress(planId, geoPdfId, onProgress);
+    return source.startsWith("file:")
+      ? importGeoPdfFile(title, source, report, token)
+      : importGeoPdfFromUrl(title, source, report, token);
+  });
 }

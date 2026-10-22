@@ -60,6 +60,7 @@ const {
   downloadPlan,
   fetchPlan,
   planChanged,
+  planForUrls,
   pollPlans,
   readCachedPlan,
   readCachedPlanStamps,
@@ -366,5 +367,26 @@ describe("planChanged", () => {
     );
     expect(planChanged({ updatedAt: stamp.updatedAt }, stamp)).toBe(false);
     expect(planChanged({ updatedAt: stamp.updatedAt }, undefined)).toBe(false);
+  });
+});
+
+describe("planForUrls", () => {
+  // Mutation: drop the age check, and a photo opened from a plan fetched
+  // yesterday loads a presigned URL that expired an hour after the fetch.
+  it("fetches the plan again once its URLs are near their hour", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-22T08:00:00.000Z"));
+      api.getPlan.mockImplementation(async (id: string) => view(id));
+      await fetchPlan("a");
+      vi.setSystemTime(new Date("2026-10-22T08:10:00.000Z"));
+      await planForUrls("a");
+      expect(api.getPlan).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(new Date("2026-10-22T08:51:00.000Z"));
+      await planForUrls("a");
+      expect(api.getPlan).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
