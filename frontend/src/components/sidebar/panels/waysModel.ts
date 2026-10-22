@@ -13,6 +13,7 @@
 // file's name and `origin` alongside its colour.
 import {
   mediaDisplayName,
+  ROUTE_NAME_MAX_LENGTH,
   routeLengthM,
   type StandaloneFile,
 } from "@logjam/shared";
@@ -78,7 +79,7 @@ export type WayItem = {
 };
 
 /** The box around a line. Null for a line with no points to bound. */
-function boundsOfPoints(
+export function boundsOfPoints(
   points: readonly [number, number][],
 ): [number, number, number, number] | null {
   if (points.length === 0) return null;
@@ -235,4 +236,17 @@ export function wayKindCounts(
   const counts = { all: ways.length, route: 0, track: 0, import: 0 };
   for (const way of ways) counts[way.kind] += 1;
   return counts;
+}
+
+/**
+ * What is wrong with a way's name, as its forms say it: too long at once,
+ * blank once a save was asked for. The API checks the same before it stores
+ * one (`validateRoutePayload`), so a client that skips this reads a fault.
+ */
+export function wayNameError(name: string, saving: boolean): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length > ROUTE_NAME_MAX_LENGTH)
+    return `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`;
+  if (saving && trimmed.length === 0) return "Name is required";
+  return null;
 }
