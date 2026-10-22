@@ -806,23 +806,26 @@ function Forms({
         form.visibleTo === "leaders" ? copy.seenByLeaders : copy.seenByMembers
       }
       onPress={() => onOpen(form.id, "read")}
-      right={
-        <View style={styles.pills}>
-          {form.requiredToJoin ? (
+      // The pills sit under the line: beside the ⋯ they squeezed the title.
+      footer={
+        form.requiredToJoin ? (
+          <View style={styles.pills}>
             <StatusPill label={copy.pillRequired} tone="outline" />
-          ) : null}
-          {form.requiredToJoin && !form.myAnswer ? (
-            <StatusPill label={copy.pillNotAnswered} tone="warning" />
-          ) : null}
-          {verbs.length > 0 ? (
-            <IconButton
-              icon="overflow"
-              accessibilityLabel={`${TRIP_PLAN_FORMS.copy.actions}: ${form.title}`}
-              color={theme.textMuted}
-              onPress={() => onOpen(form.id, "verbs")}
-            />
-          ) : null}
-        </View>
+            {form.myAnswer ? null : (
+              <StatusPill label={copy.pillNotAnswered} tone="warning" />
+            )}
+          </View>
+        ) : undefined
+      }
+      right={
+        verbs.length > 0 ? (
+          <IconButton
+            icon="overflow"
+            accessibilityLabel={`${TRIP_PLAN_FORMS.copy.actions}: ${form.title}`}
+            color={theme.textMuted}
+            onPress={() => onOpen(form.id, "verbs")}
+          />
+        ) : undefined
       }
     />
   ));
