@@ -31,6 +31,7 @@ import {
   tripPlanIsOver,
   tripPlanNotice,
   tripTypeLabel,
+  untitledJobTitle,
   weatherAge as updatedAgo,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_OFFLINE,
@@ -824,7 +825,7 @@ function Items({
           onPhone,
           online,
         );
-        const title = pdf.title ?? "GeoPDF";
+        const title = pdf.title ?? untitledJobTitle("geoPdfJob");
         return (
           <Row
             key={pdf.id}
