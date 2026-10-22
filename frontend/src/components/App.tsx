@@ -114,6 +114,7 @@ import {
   MAP_MEASURE,
   MAP_MEASURE_ICON,
   PLAN_ADD_VERBS,
+  planShowsMine,
   planVerbsFor,
   TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
@@ -797,9 +798,10 @@ function App() {
   );
   // With Show my things, which of the user's own the layer switches allow;
   // all drawn dimmed beside the plan's.
+  const mine = planShowsMine(!!planOnMap, planShowMine);
   const mineShown = {
-    places: !planOnMap || (planShowMine && showPlaces),
-    ways: !planOnMap || (planShowMine && showWays),
+    places: mine && (!planOnMap || showPlaces),
+    ways: mine && (!planOnMap || showWays),
   };
   const mutedIds = useMemo<ReadonlySet<string>>(
     () =>

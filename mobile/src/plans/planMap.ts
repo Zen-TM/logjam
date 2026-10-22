@@ -1,7 +1,7 @@
 // Plan mode on the map: what the map frames when a plan opens on it. Built at
 // navigation time and never stored, like a place's focus: a region of
 // interest stays off the server (mobile/AGENTS.md).
-import type { TripPlanView } from "@logjam/shared";
+import { planShowsMine, type TripPlanView } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
 
@@ -117,6 +117,7 @@ export function planModeReducer(
   }
 }
 
-/** The user's own things are drawn: no plan open, or asked for beside it. */
+/** The user's own things are drawn (`planShowsMine`), with the plan open once
+ *  it is read. */
 export const planModeMine = (state: PlanModeState) =>
-  state.plan === null || state.showMine;
+  planShowsMine(state.plan !== null, state.showMine);

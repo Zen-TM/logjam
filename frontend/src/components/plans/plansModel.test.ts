@@ -526,15 +526,17 @@ describe("a press on the map while a plan is open", () => {
   };
 
   // Mutation: treat a track press as outside the plan (open its way), and
-  // the way page replaces the plan, its bar and its things.
+  // the way page replaces the plan, its bar and its things. Or send a
+  // place's file to its place, and with Bring its photos off the line
+  // pressed doesn't come.
   it("asks Add a copy for the user's own file, or a track's place", () => {
     expect(planMapPress({ kind: "track", id: "f1" }, own, "me")).toEqual({
       kind: "media",
       id: "f1",
     });
     expect(planMapPress({ kind: "track", id: "f2" }, own, "me")).toEqual({
-      kind: "place",
-      id: "p1",
+      kind: "media",
+      id: "f2",
     });
     expect(planMapPress({ kind: "track", id: "t1" }, own, "me")).toEqual({
       kind: "place",

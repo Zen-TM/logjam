@@ -360,7 +360,8 @@ export function itemPatch(
 /**
  * What a press on the map asks while a plan is open: Add a copy of one of
  * the user's own things, or nothing (the plan's own, or someone else's). A
- * place's track or file asks for its place, which brings it.
+ * file of theirs asks for itself, even on a place: its place brings it only
+ * with its photos. Any other track on their place asks for the place.
  */
 export function planMapPress(
   press: { kind: "place" | "route" | "track"; id: string },
@@ -386,12 +387,10 @@ export function planMapPress(
         ? { kind: "route", id: press.id }
         : null;
     case "track": {
-      const file = own.files.find((each) => each.id === press.id);
-      if (file && file.linkedPlaceId == null)
+      if (own.files.some((file) => file.id === press.id))
         return { kind: "media", id: press.id };
       return mine(
-        file?.linkedPlaceId ??
-          own.tracks.find((each) => each.mediaId === press.id)?.placeId,
+        own.tracks.find((each) => each.mediaId === press.id)?.placeId,
       );
     }
   }

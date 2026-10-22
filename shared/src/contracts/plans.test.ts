@@ -26,6 +26,7 @@ import {
   tripPlanIsOver,
   tripPlanLeaveState,
   tripPlanNotice,
+  planShowsMine,
   tripPlanRoleWord,
   tripPlanRowPill,
   tripPlanRowSubtitle,
@@ -296,6 +297,16 @@ describe("a plan's page", () => {
   it("says who added an item, and nothing once their account is gone", () => {
     expect(tripPlanAddedByLine({ username: "tom" })).toBe("Added by tom");
     expect(tripPlanAddedByLine(null)).toBeUndefined();
+  });
+});
+
+// Mutation: return `showMine` alone, and the map is empty of the user's own
+// with no plan on it.
+describe("planShowsMine", () => {
+  it("draws the user's own with no plan, and beside one only when asked", () => {
+    expect(planShowsMine(false, false)).toBe(true);
+    expect(planShowsMine(true, false)).toBe(false);
+    expect(planShowsMine(true, true)).toBe(true);
   });
 });
 

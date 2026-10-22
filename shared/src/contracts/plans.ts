@@ -500,6 +500,13 @@ export function tripPlanNotice(args: {
   return null;
 }
 
+/** The map draws the user's own things: no plan on it, or Show my things
+ *  asked for beside one. Each client turns Show my things off as a plan
+ *  opens. */
+export function planShowsMine(planShown: boolean, showMine: boolean): boolean {
+  return !planShown || showMine;
+}
+
 /** Who's going: active members, leaders first, then editors, then members,
  *  each group in the order they were added. */
 export function tripPlanGoing<
@@ -875,7 +882,6 @@ export function tripPlanFilesChargedTo(
   };
 }
 
-/** Add a copy's submit: "Add 3 copies". */
 /** Where each kind is listed: a plan's Map view and Add a copy group them
  *  the same way. */
 export const TRIP_PLAN_ITEM_GROUP = {
