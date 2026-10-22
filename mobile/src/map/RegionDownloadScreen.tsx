@@ -160,6 +160,9 @@ const HERO_OVERLAP = 16;
  * a handle you have to aim under.
  */
 const MIN_TOP_INSET = HERO_OVERLAP + 22;
+// Past `defaultFrameInsets` (12% and 16% of a phone's map), so the fitted
+// bounds land inside the frame rather than under its edge.
+const BOUNDS_PADDING = { top: 160, bottom: 160, left: 64, right: 64 };
 
 /**
  * The controls panel's height, fixed so the MAP never resizes under a frame the
@@ -182,6 +185,7 @@ export function RegionDownloadScreen({
   initialBasemapId,
   initialCenter,
   initialZoom,
+  initialBounds,
 }: {
   onBack: () => void;
   /**
@@ -199,6 +203,8 @@ export function RegionDownloadScreen({
   initialBasemapId?: BasemapId;
   initialCenter?: [number, number];
   initialZoom?: number;
+  /** A plan's items: the map fits them inside the default frame. */
+  initialBounds?: LngLatBounds;
 }) {
   const styles = useStyles();
 
@@ -550,10 +556,11 @@ export function RegionDownloadScreen({
           onDidFinishLoadingMap={() => setMapReady(true)}
         >
           <Camera
-            initialViewState={{
-              center: startCenter,
-              zoom: startZoom,
-            }}
+            initialViewState={
+              initialBounds
+                ? { bounds: initialBounds, padding: BOUNDS_PADDING }
+                : { center: startCenter, zoom: startZoom }
+            }
           />
           {previewResolved.map((resolved) =>
             resolved.status === "ok" ? (

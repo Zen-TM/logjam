@@ -14,6 +14,7 @@ function registrars() {
     geoPdfAutoDownload: arm("geoPdfAutoDownload"),
     topoAutoDownload: arm("topoAutoDownload"),
     placeRegistryRefresh: arm("placeRegistryRefresh"),
+    plansPoll: arm("plansPoll"),
   };
   return { fns, calls, cleanup };
 }
@@ -40,6 +41,7 @@ describe("registerShellTriggers", () => {
     expect([...linked.calls].sort()).toEqual([
       "geoPdfAutoDownload",
       "placeRegistryRefresh",
+      "plansPoll",
       "sync",
       "topoAutoDownload",
     ]);
@@ -48,6 +50,6 @@ describe("registerShellTriggers", () => {
   it("tears down everything it armed", () => {
     const { fns, cleanup } = registrars();
     registerShellTriggers("linked", fns)();
-    expect(cleanup).toHaveBeenCalledTimes(4);
+    expect(cleanup).toHaveBeenCalledTimes(5);
   });
 });

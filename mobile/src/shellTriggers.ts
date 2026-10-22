@@ -1,7 +1,7 @@
 // Which background triggers `AppShell` arms for an account state. A guest arms
-// none of the account-backed ones (sync, GeoPDF and topo auto-download): they
-// could only 401, and sync not running is what makes guest mode "don't sync
-// yet" (ADR 0007). The place registry refresh is armed for everyone: the file
+// none of the account-backed ones (sync, GeoPDF and topo auto-download, the
+// plans poll): they could only 401, and sync not running is what makes guest
+// mode "don't sync yet" (ADR 0007). The place registry refresh is armed for everyone: the file
 // is public and comes from the CDN, not our API (ADR 0034).
 //
 // The registrars are passed in so a test needs none of the native modules they
@@ -17,6 +17,7 @@ export function registerShellTriggers(
     geoPdfAutoDownload: Register;
     topoAutoDownload: Register;
     placeRegistryRefresh: Register;
+    plansPoll: Register;
   },
 ): () => void {
   const cleanups = [registrars.placeRegistryRefresh()];
@@ -25,6 +26,7 @@ export function registerShellTriggers(
       registrars.sync(),
       registrars.geoPdfAutoDownload(),
       registrars.topoAutoDownload(),
+      registrars.plansPoll(),
     );
   }
   return () => cleanups.forEach((cleanup) => cleanup());

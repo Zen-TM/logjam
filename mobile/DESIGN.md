@@ -171,11 +171,14 @@ Reads come from the on-device mirror and writes queue in the outbox.
 - **Offline is one muted `StatusPill` in the hero**; a second counts what is
   waiting to sync (`SyncStatusPills`). Never a banner, never per row.
 - **A network-only action is disabled with "Needs a connection" as its
-  subtitle.** These need a connection: downloading regions, topos and
-  GeoPDFs; sharing and reading who a place is shared with; adopting or
-  discarding a value from a copy; full-resolution media not yet on the
-  phone; notification preferences; username, email, deleting the account.
-  Everything else works offline.
+  subtitle.** These need a connection: downloading regions, topos,
+  GeoPDFs and a plan's files for the trip; sharing and reading who a place
+  is shared with; adopting or discarding a value from a copy;
+  full-resolution media not yet on the phone; notification preferences;
+  username, email, deleting the account; creating or changing a plan, its
+  sections or its people, and answering its forms (a plan is fetched and
+  cached, not synced); saving a copy of anything in a plan, the places
+  picked for a trip log from it included. Everything else works offline.
 - **`src/auth/capabilities.ts` owns the guest matrix and both strings.** A
   screen whose data needs an account gates itself with
   `capabilityScreenBlock`: hero and back arrow over an `EmptyState`, no
