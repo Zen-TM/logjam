@@ -6,6 +6,7 @@ import {
   type BasemapId,
   type MapArtifact,
   type ResolveContext,
+  type Viewport,
 } from "./sourceResolver";
 
 const CDN = "https://logjamnsw.com";
@@ -411,5 +412,38 @@ describe("statewide slope and hillshade", () => {
     expect(resolveMapSource({ kind: "nsw-hillshade" }, offline)).toMatchObject([
       { status: "unavailable" },
     ]);
+  });
+  // Mutation: draw every slope clip, as the contours do, and where two saved
+  // areas share a tile its bands are painted twice, darker.
+  it("draws one slope clip offline, the area nearest the middle of the screen", () => {
+    const at = (id: string, west: number): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox: [west, -33.8, west + 0.1, -33.7],
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
+    });
+    const drawn = (viewport: Viewport | null) =>
+      resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
+        (r) => r.status === "ok" && r.url,
+      );
+    const screen = (lng: number): Viewport => ({
+      west: lng - 0.02,
+      south: -33.77,
+      east: lng + 0.02,
+      north: -33.73,
+    });
+    expect(drawn(screen(150.36))).toEqual([
+      "pmtiles://file:///maps/katoomba.pmtiles",
+    ]);
+    expect(drawn(screen(150.1))).toEqual([
+      "pmtiles://file:///maps/blackheath.pmtiles",
+    ]);
+    expect(drawn(null)).toEqual(["pmtiles://file:///maps/katoomba.pmtiles"]);
   });
 });

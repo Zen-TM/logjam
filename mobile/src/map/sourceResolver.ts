@@ -45,8 +45,9 @@ export type LogicalLayerRef =
     }
   /** The statewide contour lines (`shared/src/nswContours.ts`). */
   | { kind: "nsw-contours" }
-  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`). */
-  | { kind: "nsw-slope" }
+  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
+   * `viewport` picks the one slope clip drawn offline. */
+  | { kind: "nsw-slope"; viewport?: Viewport | null }
   | { kind: "nsw-hillshade" }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
@@ -309,6 +310,7 @@ function resolveStatewide(
   sourceType: "vector" | "raster-dem",
   clips: MapArtifact["kind"] | null,
   ctx: ResolveContext,
+  choose: (regions: MapArtifact[]) => MapArtifact[] = (regions) => regions,
 ): ResolvedTileSource[] {
   const logicalId = archive.id;
   if (ctx.connectivity === "online") {
@@ -334,7 +336,33 @@ function resolveStatewide(
       },
     ];
   }
-  return regions.map((r) => localArtifactSource(r, logicalId, archive.credit));
+  return choose(regions).map((r) =>
+    localArtifactSource(r, logicalId, archive.credit),
+  );
+}
+
+/**
+ * The one slope clip drawn offline: the saved area nearest the middle of the
+ * screen (the first saved, before the map first settles). A clip is whole
+ * tiles, so areas saved near each other share their low-zoom tiles, and the
+ * bands are translucent: drawing every clip paints those tiles twice, darker,
+ * with a seam where the overlap ends.
+ * Guard: `sourceResolver.test.ts` ("draws one slope clip offline").
+ */
+function nearestRegion(viewport: Viewport | null | undefined) {
+  return (regions: MapArtifact[]): MapArtifact[] => {
+    if (!viewport) return regions.slice(0, 1);
+    const lng = (viewport.west + viewport.east) / 2;
+    const lat = (viewport.south + viewport.north) / 2;
+    const away = ({ bbox }: MapArtifact) => {
+      if (!bbox) return Number.POSITIVE_INFINITY;
+      const [west, south, east, north] = bbox;
+      const dx = Math.max(west - lng, 0, lng - east);
+      const dy = Math.max(south - lat, 0, lat - north);
+      return dx * dx + dy * dy;
+    };
+    return [...regions].sort((a, b) => away(a) - away(b)).slice(0, 1);
+  };
 }
 
 function resolveImport(
@@ -418,7 +446,13 @@ export function resolveMapSource(
     case "nsw-contours":
       return resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx);
     case "nsw-slope":
-      return resolveStatewide(NSW_SLOPE, "raster-dem", "slope-region", ctx);
+      return resolveStatewide(
+        NSW_SLOPE,
+        "raster-dem",
+        "slope-region",
+        ctx,
+        nearestRegion(ref.viewport),
+      );
     // A saved area's heights are z15 alone, the sampler's zoom, so offline a
     // shade could only be drawn close in: none is saved.
     case "nsw-hillshade":
