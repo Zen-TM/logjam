@@ -17,13 +17,16 @@ import {
   TRIP_PLANS_LIST,
   type TripPlanFormView,
   type TripPlanItem,
+  type TripPlanPlace,
   type TripPlanView,
 } from "@logjam/shared";
 
 import {
+  addPlanItem,
   archivePlan,
   inviteMember,
   patchPlanItem,
+  savePlanItem,
   previewInviteLink,
   setMemberRole,
 } from "../../plansApi";
@@ -39,6 +42,9 @@ import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
+import PlanAddCopyDialog from "./PlanAddCopyDialog";
+import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
+import type { TPlace } from "../../placeUtils";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
@@ -83,7 +89,9 @@ vi.mock("../../plansApi", async (importOriginal) => ({
     setView: vi.fn(),
   }),
   archivePlan: vi.fn(),
+  addPlanItem: vi.fn(),
   patchPlanItem: vi.fn(async () => ({})),
+  savePlanItem: vi.fn(),
   inviteMember: vi.fn(),
   setMemberRole: vi.fn(async () => {}),
   getInviteLinks: vi.fn(async () => []),
@@ -214,9 +222,13 @@ function renderPanel(
       view={plan}
       error={null}
       refetch={() => {}}
+      own={{ places: [], routes: [], files: [], geoPdfs: [] }}
+      currentUser={null}
       onOwnChanged={() => {}}
       onOpenItem={() => {}}
       copyPlaceMedia
+      addCopyRequest={null}
+      onAddCopyRequestConsumed={() => {}}
       onBack={() => {}}
       onPlansChanged={() => {}}
       onStartTripLog={() => {}}
@@ -572,5 +584,84 @@ describe("an item's edit refused", () => {
       screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.sectionSave }),
     );
     await waitFor(() => expect(onStale).toHaveBeenCalled());
+  });
+});
+
+describe("Add a copy stopped halfway", () => {
+  // Mutation: drop `onAdded` from the partial failure, and the copy that
+  // landed is missing from the plan until something else refetches it.
+  it("says what landed and why it stopped, and shows what landed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(addPlanItem)
+      .mockResolvedValueOnce({ item: {} as TripPlanItem })
+      .mockRejectedValueOnce(new Error("offline"));
+    const onAdded = vi.fn();
+    const mine = (id: string, name: string) => ({ id, name }) as TPlace;
+    render(
+      <PlanAddCopyDialog
+        planId="p1"
+        places={[mine("a", "Claustral"), mine("b", "Ranon")]}
+        routes={[]}
+        files={[]}
+        geoPdfs={[]}
+        user={null}
+        initial={null}
+        onAdded={onAdded}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Claustral" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ranon" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add 2 copies" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        `Added 1 of 2. ${TRIP_PLAN_PAGE.copy.addCopyFailed}`,
+      ),
+    );
+    expect(onAdded).toHaveBeenCalled();
+  });
+});
+
+describe("Start a trip log after a copy failed", () => {
+  // Mutation: save every picked place again on Next, and a retry puts a
+  // second copy of the first place in the user's places.
+  it("saves only the places not copied yet, then links them all", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(savePlanItem)
+      .mockResolvedValueOnce({ id: "copy-a" })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ id: "copy-b" });
+    const onDone = vi.fn();
+    const onCopied = vi.fn();
+    const place = (id: string, name: string) =>
+      ({ kind: "place", id, name, placeTypeId: "canyon" }) as TripPlanPlace;
+    render(
+      <PlanTripLogPlacesDialog
+        planId="p1"
+        places={[place("a", "Claustral"), place("b", "Ranon")]}
+        copyMedia
+        onCopied={onCopied}
+        onDone={onDone}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Claustral" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ranon" }));
+    const next = screen.getByRole("button", {
+      name: TRIP_PLAN_PAGE.copy.tripLogNext,
+    });
+    fireEvent.click(next);
+    expect(
+      await screen.findByText(/^1 copy saved to your places\./),
+    ).toBeTruthy();
+    expect(onCopied).toHaveBeenCalledTimes(1);
+    fireEvent.click(next);
+    await waitFor(() =>
+      expect(onDone).toHaveBeenCalledWith(
+        ["copy-a", "copy-b"],
+        ["canyon", "canyon"],
+      ),
+    );
+    expect(savePlanItem).toHaveBeenCalledTimes(3);
   });
 });

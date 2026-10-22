@@ -36,8 +36,11 @@ import {
   type PlanVerbId,
   type SectionKeysOn,
   type TripPlanPageView,
+  type GeoPdfJobView,
+  type StandaloneFile,
   type TripPlanFormView,
   type TripPlanItem,
+  type TripPlanItemKind,
   type TripPlanSectionView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -83,20 +86,29 @@ import PlanPrintDialog from "./PlanPrintDialog";
 import PlanPeople from "./PlanPeople";
 import PlanInvitePage from "./PlanInvitePage";
 import PlanItems from "./PlanItems";
+import PlanAddCopyDialog from "./PlanAddCopyDialog";
+import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
+import type { TPlace, TRoute, TUser } from "../../placeUtils";
 import { addedBy } from "./plansModel";
 import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
+/** Add a copy opened from the page rather than from a pin: nothing ticked. */
+const NOTHING_TICKED = { kind: "place" as const, id: "" };
 const formsCopy = TRIP_PLAN_FORMS.copy;
 
 export default function PlanDetailPanel({
   view,
   error,
   refetch,
+  own,
+  currentUser,
   onOwnChanged,
   onOpenItem,
   copyPlaceMedia,
+  addCopyRequest,
+  onAddCopyRequestConsumed,
   onBack,
   onPlansChanged,
   onStartTripLog,
@@ -108,20 +120,40 @@ export default function PlanDetailPanel({
   error: string | null;
   /** Fetch the plan again; `quiet` after a write whose failure was just said. */
   refetch: (options?: { quiet: boolean }) => void;
+  /** The caller's own lists, for Add a copy. */
+  own: {
+    places: TPlace[];
+    routes: TRoute[];
+    files: StandaloneFile[];
+    geoPdfs: GeoPdfJobView[];
+  };
+  currentUser: TUser | null;
   /** A copy saved out of the plan landed in the caller's own lists. */
   onOwnChanged: () => void;
   /** Fit the map to a plan item. */
   onOpenItem: (item: TripPlanItem) => void;
   /** The caller's remembered Bring its photos. */
   copyPlaceMedia: boolean;
+  /** One of the caller's own things pressed on the map: Add a copy, ticked. */
+  addCopyRequest: { kind: TripPlanItemKind; id: string } | null;
+  onAddCopyRequestConsumed: () => void;
   onBack: () => void;
   /** Something the list shows changed (name, dates, archive, membership). */
   onPlansChanged: () => void;
-  onStartTripLog: (plan: TripPlanView) => void;
+  /** The real trip form, pre-filled; `placeIds` are the caller's copies,
+   *  `placeTypeIds` their types. */
+  onStartTripLog: (
+    plan: TripPlanView,
+    places: { placeIds: string[]; placeTypeIds: string[] },
+  ) => void;
   myUserId: string | null;
   initialView?: TripPlanPageView;
 }) {
   const toast = useToast();
+  const [addingCopy, setAddingCopy] = useState<{
+    kind: TripPlanItemKind;
+    id: string;
+  } | null>(null);
   const [tab, setTab] = useState<TripPlanPageView>(initialView);
   const [editing, setEditing] = useState(false);
   const [sectionOpen, setSectionOpen] = useState<{ id: string | null } | null>(
@@ -136,6 +168,7 @@ export default function PlanDetailPanel({
   const [busy, setBusy] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [pickingTripPlaces, setPickingTripPlaces] = useState(false);
   const [deleteAdded, setDeleteAdded] = useState(false);
   // A form's page, one step inside the Forms view; and its two dialogs.
   const [openFormId, setOpenFormId] = useState<string | null>(null);
@@ -214,10 +247,16 @@ export default function PlanDetailPanel({
     }
   }
 
+  // A step that asks nothing is skipped: no places, straight to the form.
+  const startTripLog = () =>
+    plan.places.length > 0
+      ? setPickingTripPlaces(true)
+      : onStartTripLog(plan, { placeIds: [], placeTypeIds: [] });
+
   const planVerbRunners: Record<PlanVerbId, () => void> = {
     edit: () => setEditing(true),
     print: () => setPrinting(true),
-    tripLog: () => onStartTripLog(plan),
+    tripLog: startTripLog,
     archive: () =>
       void run(
         () => archivePlan(plan.id, true),
@@ -239,7 +278,10 @@ export default function PlanDetailPanel({
 
   const addRunners: Record<PlanAddVerbId, () => void> = {
     section: () => setSectionOpen({ id: null }),
-    copy: () => setTab("items"),
+    copy: () => {
+      setTab("items");
+      setAddingCopy(NOTHING_TICKED);
+    },
     form: () => {
       setTab("forms");
       setBuilding({ id: null });
@@ -365,7 +407,7 @@ export default function PlanDetailPanel({
         <Icon idea={notice.icon} size={16} />
         <span className={classes.noticeText}>{notice.text}</span>
         {notice.kind === "over" && (
-          <Button compact onClick={() => onStartTripLog(plan)}>
+          <Button compact onClick={startTripLog}>
             {PLAN_VERBS.find((verb) => verb.id === "tripLog")!.label}
           </Button>
         )}
@@ -457,6 +499,7 @@ export default function PlanDetailPanel({
         myUserId={myUserId}
         onChanged={refetch}
         onSaved={onOwnChanged}
+        onAddCopy={() => setAddingCopy(NOTHING_TICKED)}
         onOpen={onOpenItem}
         copyPlaceMedia={copyPlaceMedia}
       />
@@ -594,6 +637,41 @@ export default function PlanDetailPanel({
         ))
       )}
 
+      {pickingTripPlaces && (
+        <PlanTripLogPlacesDialog
+          planId={plan.id}
+          places={plan.places}
+          copyMedia={copyPlaceMedia}
+          onCopied={onOwnChanged}
+          onClose={() => setPickingTripPlaces(false)}
+          onDone={(placeIds, placeTypeIds) => {
+            setPickingTripPlaces(false);
+            onStartTripLog(plan, { placeIds, placeTypeIds });
+          }}
+        />
+      )}
+      {/* Opened from the page, or by one of the user's own pins pressed on
+          the map (App holds that request until the dialog closes). */}
+      {(addingCopy ?? addCopyRequest) && (
+        <PlanAddCopyDialog
+          planId={plan.id}
+          {...own}
+          user={currentUser}
+          initial={
+            addingCopy && addingCopy !== NOTHING_TICKED
+              ? addingCopy
+              : (addCopyRequest ?? null)
+          }
+          onAdded={() => {
+            refetch();
+            onOwnChanged();
+          }}
+          onClose={() => {
+            setAddingCopy(null);
+            onAddCopyRequestConsumed();
+          }}
+        />
+      )}
       {printing && (
         <PlanPrintDialog plan={plan} onClose={() => setPrinting(false)} />
       )}

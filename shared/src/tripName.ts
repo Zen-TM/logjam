@@ -8,6 +8,8 @@ import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 export const TRIP_NAME_MAX_LENGTH = 200;
 export const TRIP_TYPE_MAX_LENGTH = 40;
 export const MAX_PLACES_PER_TRIP = 20;
+/** Said where a tick would pass the cap, on both clients. */
+export const TRIP_PLACES_CAP_SENTENCE = `A trip can have at most ${MAX_PLACES_PER_TRIP} places.`;
 export const MAX_TRIP_TYPES_PER_TRIP = 10;
 
 /**

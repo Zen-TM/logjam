@@ -137,6 +137,13 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
+const NOTHING_MUTED: ReadonlySet<string> = new Set();
+
+/** A layer's opacity, lowered on a feature stamped `muted`: the user's own
+ *  things beside an open plan's (`mutedIds`). */
+function dimmed(opacity: number): maplibregl.ExpressionSpecification {
+  return ["case", ["boolean", ["get", "muted"], false], 0.4, opacity];
+}
 
 function readCssVar(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement)
@@ -638,6 +645,8 @@ function Map({
   topoFlyTarget,
   onTopoFlyConsumed,
   flyToPlace,
+  mutedIds = NOTHING_MUTED,
+  searchSelects = true,
   onFlyToPlaceConsumed,
   flyToBounds,
   onFlyToBoundsConsumed,
@@ -760,6 +769,12 @@ function Map({
   topoFlyTarget?: GeoJsonPolygonal | null;
   onTopoFlyConsumed?: () => void;
   flyToPlace?: { lat: number; lng: number } | null;
+  /** Ids of places, routes and files drawn dimmed: the user's own beside an
+   *  open plan's, which look different because they behave differently. */
+  mutedIds?: ReadonlySet<string>;
+  /** A search hit on a place selects it, as a press on its pin does; false
+   *  (an open plan, where a press means Add a copy) and it only flies. */
+  searchSelects?: boolean;
   onFlyToPlaceConsumed?: () => void;
   /**
    * Fit the map to a way's extent: opening one centres it, and so does arming
@@ -1198,7 +1213,7 @@ function Map({
             readCssVar("--color-accent", "#3b82f6"),
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
-          "line-opacity": 0.9,
+          "line-opacity": dimmed(0.9),
         },
       });
 
@@ -1231,7 +1246,7 @@ function Map({
             readCssVar("--color-accent", "#3b82f6"),
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
-          "line-opacity": 0.9,
+          "line-opacity": dimmed(0.9),
         },
       });
 
@@ -1284,7 +1299,7 @@ function Map({
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
-          "line-opacity": 0.9,
+          "line-opacity": dimmed(0.9),
         },
       });
       // Direction of travel, as arrowheads riding the line itself. Symbol
@@ -1320,7 +1335,7 @@ function Map({
           "icon-color": ["get", "color"],
           "icon-halo-color": "#ffffff",
           "icon-halo-width": 1,
-          "icon-opacity": 0.9,
+          "icon-opacity": dimmed(0.9),
         },
       });
 
@@ -1435,6 +1450,8 @@ function Map({
           "circle-color": PLACE_TYPE_COLORS[0],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
+          "circle-opacity": dimmed(1),
+          "circle-stroke-opacity": dimmed(1),
         },
       });
 
@@ -1490,6 +1507,7 @@ function Map({
           "text-color": MAP_INK.label,
           "text-halo-color": MAP_INK.casing,
           "text-halo-width": 1.5,
+          "text-opacity": dimmed(1),
         },
       });
 
@@ -1639,6 +1657,7 @@ function Map({
           name: c.name,
           done: isPlaceDoneByViewer(c, isOwned),
           color: typeColor.get(c.placeTypeId) ?? null,
+          muted: mutedIds.has(c.id),
         },
       })),
     });
@@ -1666,7 +1685,7 @@ function Map({
         ),
       );
     }
-  }, [places, sharedPlaces, filters, mapLoaded, placeTypes]);
+  }, [places, sharedPlaces, filters, mapLoaded, placeTypes, mutedIds]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1755,6 +1774,20 @@ function Map({
     },
     [toast],
   );
+  /** A loaded track's feature, stamped muted when its `key` id is. */
+  const muteBy = useCallback(
+    (
+      feature: GeoJSON.Feature,
+      key: "placeId" | "mediaId",
+    ): GeoJSON.Feature => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        muted: mutedIds.has(String(feature.properties?.[key] ?? "")),
+      },
+    }),
+    [mutedIds],
+  );
 
   useEffect(() => {
     if (!mapLoaded || !mapRef.current || !showWays) return;
@@ -1773,12 +1806,15 @@ function Map({
       const source = mapRef.current?.getSource("place-tracks") as
         | maplibregl.GeoJSONSource
         | undefined;
-      source?.setData({ type: "FeatureCollection", features });
+      source?.setData({
+        type: "FeatureCollection",
+        features: features.map((feature) => muteBy(feature, "placeId")),
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [showWays, placeTracks, mapLoaded, loadTrackSource]);
+  }, [showWays, placeTracks, mapLoaded, loadTrackSource, muteBy]);
 
   // Standalone files. The list is the visibility: whatever the user has toggled
   // on is what gets fetched and drawn.
@@ -1799,12 +1835,15 @@ function Map({
       const source = mapRef.current?.getSource("standalone-tracks") as
         | maplibregl.GeoJSONSource
         | undefined;
-      source?.setData({ type: "FeatureCollection", features });
+      source?.setData({
+        type: "FeatureCollection",
+        features: features.map((feature) => muteBy(feature, "mediaId")),
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [standaloneTracks, mapLoaded, loadTrackSource]);
+  }, [standaloneTracks, mapLoaded, loadTrackSource, muteBy]);
 
   // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
   // or feature under it), a right-click asks wherever it lands, and Enter on
@@ -1993,7 +2032,12 @@ function Map({
       features: drawn.map((route) => ({
         type: "Feature" as const,
         geometry: { type: "LineString" as const, coordinates: route.points },
-        properties: { id: route.id, name: route.name, color: route.color },
+        properties: {
+          id: route.id,
+          name: route.name,
+          color: route.color,
+          muted: mutedIds.has(route.id),
+        },
       })),
     });
 
@@ -2009,7 +2053,7 @@ function Map({
           }) as GeoJSON.Feature[],
       ),
     });
-  }, [routes, mapLoaded, editingRouteId]);
+  }, [routes, mapLoaded, editingRouteId, mutedIds]);
 
   // Draw/edit mode: click appends a vertex. Follows the coord-pick idiom
   // (crosshair cursor, handler torn down on exit), except the listener is
@@ -3316,7 +3360,13 @@ function Map({
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
-              selectPlaceRef.current(place.id);
+              if (searchSelects) selectPlaceRef.current(place.id);
+              else
+                mapRef.current?.flyTo({
+                  center: [place.longitude, place.latitude],
+                  zoom: 13,
+                  duration: 1200,
+                });
             }}
             onSelectLocation={(lat, lon) =>
               mapRef.current?.flyTo({

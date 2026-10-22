@@ -383,7 +383,13 @@ export const TRIP_PLAN_PAGE = {
     itemsMaps: "Maps",
     itemsEmpty:
       "Nothing here yet. Add a copy of a place, a way or a map of yours.",
+    addCopyLine:
+      "Everyone in this plan, including people who join later, can keep a copy.",
     bringPhotos: "Bring its photos",
+    photosCountToo: "Photos count too.",
+    addCopyFailed: "Couldn't add a copy.",
+    nothingToAdd: "Nothing of yours here yet.",
+    nothingTicked: "Tick something to add.",
     saveCopyLine:
       "The copy is yours. Changes to it stay with you, and changes in the plan don't reach it.",
     saveCopyFailed: "Couldn't save a copy.",
@@ -395,6 +401,8 @@ export const TRIP_PLAN_PAGE = {
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
     itemDownloadHint: "Click to download",
+    tripLogPlaces: "Places on this trip",
+    tripLogNext: "Next",
 
     // Forms.
     formsEmptyLeader:
@@ -490,6 +498,13 @@ export function tripPlanNotice(args: {
     };
   if (args.over) return { kind: "over", icon: "trip", text: copy.noticeOver };
   return null;
+}
+
+/** The map draws the user's own things: no plan on it, or Show my things
+ *  asked for beside one. Each client turns Show my things off as a plan
+ *  opens. */
+export function planShowsMine(planShown: boolean, showMine: boolean): boolean {
+  return !planShown || showMine;
 }
 
 /** Who's going: active members, leaders first, then editors, then members,
@@ -865,6 +880,95 @@ export function tripPlanFilesChargedTo(
     count: files.length,
     bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
+}
+
+/** Where each kind is listed: a plan's Map view and Add a copy group them
+ *  the same way. */
+export const TRIP_PLAN_ITEM_GROUP = {
+  place: "places",
+  route: "ways",
+  media: "ways",
+  geoPdf: "maps",
+} as const satisfies Record<TripPlanItemKind, "places" | "ways" | "maps">;
+
+export type TripPlanItemGroup = (typeof TRIP_PLAN_ITEM_GROUP)[TripPlanItemKind];
+
+/** The groups in list order, with their headings. */
+export const TRIP_PLAN_ITEM_GROUPS: readonly {
+  group: TripPlanItemGroup;
+  title: string;
+}[] = [
+  { group: "places", title: TRIP_PLAN_PAGE.copy.itemsPlaces },
+  { group: "ways", title: TRIP_PLAN_PAGE.copy.itemsWays },
+  { group: "maps", title: TRIP_PLAN_PAGE.copy.itemsMaps },
+];
+
+/**
+ * What of the caller's own Add a copy offers: their places; their routes and
+ * files; and their finished maps. A place brings its linked route always,
+ * and its files with its photos (api/src/lib/planItems.ts `addPlace`), so a
+ * route or file of a place that is ticked is not offered again while it
+ * would come with it, and is offered while it would not. Guard: plans.test.ts
+ * ("what Add a copy offers").
+ */
+export function tripPlanAddable<
+  P extends { id: string },
+  R extends { ownerId: string; placeId: string | null },
+  F extends { linkedPlaceId: string | null },
+  G extends { status: string; syncRole: "owner" | "shared" },
+>(
+  own: { places: P[]; routes: R[]; files: F[]; geoPdfs: G[] },
+  state: { me: string | null; tickedPlaceIds: string[]; copyMedia: boolean },
+): { places: P[]; routes: R[]; files: F[]; geoPdfs: G[] } {
+  const ticked = (placeId: string | null) =>
+    placeId != null && state.tickedPlaceIds.includes(placeId);
+  return {
+    places: own.places,
+    routes: own.routes.filter(
+      (route) => route.ownerId === state.me && !ticked(route.placeId),
+    ),
+    files: own.files.filter(
+      (file) => !(state.copyMedia && ticked(file.linkedPlaceId)),
+    ),
+    geoPdfs: own.geoPdfs.filter(
+      (pdf) => pdf.status === "completed" && pdf.syncRole === "owner",
+    ),
+  };
+}
+
+/** Add a copy's submit: "Add 3 copies", and the plain verb before a tick
+ *  (a zero is left out, shared/DESIGN.md §11). */
+export function tripPlanAddCopiesLabel(count: number): string {
+  if (count === 0) return "Add a copy";
+  return count === 1 ? "Add 1 copy" : `Add ${count} copies`;
+}
+
+/** What landed, said once the loop ends: the API's sentence for a stop. */
+export function tripPlanAddedMessage(added: number, asked: number): string {
+  if (added === asked)
+    return added === 1 ? "Added 1 copy." : `Added ${added} copies.`;
+  return `Added ${added} of ${asked}.`;
+}
+
+/** The price line above Add a copy's submit. `uses` is null when only
+ *  places are ticked: their photos can't be sized from the list. */
+export function tripPlanAddCopyPrice(
+  uses: string | null,
+  left: string,
+): string {
+  const room = `You have ${left} left.`;
+  return uses ? `Uses ${uses} of your storage. ${room}` : room;
+}
+
+/** Start a trip log's line: what saving a picked place brings. */
+export function tripPlanTripLogPlacesLine(withPhotos: boolean): string {
+  return `Each place you pick is saved to your places first, ${withPhotos ? "with" : "without"} its photos, then linked.`;
+}
+
+/** Start a trip log stopped partway: what is in the user's places already. */
+export function tripPlanTripLogStopped(saved: number, why: string): string {
+  if (saved === 0) return why;
+  return `${saved === 1 ? "1 copy" : `${saved} copies`} saved to your places. ${why}`;
 }
 
 /** Where Save a copy put it. */

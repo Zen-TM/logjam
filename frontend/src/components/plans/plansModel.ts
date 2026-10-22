@@ -20,6 +20,7 @@ import type {
   TripPlanFilePatch,
   TripPlanFormView,
   TripPlanItem,
+  TripPlanItemKind,
   TripPlanJoinAnswers,
   TripPlanPlacePatch,
   TripPlanRoutePatch,
@@ -354,4 +355,43 @@ export function itemPatch(
   if (seen.kind === "place" && now.notes !== was.notes)
     patch.notes = { from: seen.notes, to: now.notes.trim() || null };
   return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * What a press on the map asks while a plan is open: Add a copy of one of
+ * the user's own things, or nothing (the plan's own, or someone else's). A
+ * file of theirs asks for itself, even on a place: its place brings it only
+ * with its photos. Any other track on their place asks for the place.
+ */
+export function planMapPress(
+  press: { kind: "place" | "route" | "track"; id: string },
+  own: {
+    places: readonly { id: string }[];
+    routes: readonly { id: string; ownerId: string }[];
+    files: readonly { id: string; linkedPlaceId: string | null }[];
+    tracks: readonly { mediaId: string; placeId: string }[];
+  },
+  me: string | null,
+): { kind: TripPlanItemKind; id: string } | null {
+  const mine = (placeId: string | null | undefined) =>
+    placeId != null && own.places.some((place) => place.id === placeId)
+      ? { kind: "place" as const, id: placeId }
+      : null;
+  switch (press.kind) {
+    case "place":
+      return mine(press.id);
+    case "route":
+      return own.routes.some(
+        (route) => route.id === press.id && route.ownerId === me,
+      )
+        ? { kind: "route", id: press.id }
+        : null;
+    case "track": {
+      if (own.files.some((file) => file.id === press.id))
+        return { kind: "media", id: press.id };
+      return mine(
+        own.tracks.find((each) => each.mediaId === press.id)?.placeId,
+      );
+    }
+  }
 }

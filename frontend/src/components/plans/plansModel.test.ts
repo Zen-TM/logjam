@@ -16,6 +16,7 @@ import {
   itemPatch,
   joinAnswers,
   opensPreview,
+  planMapPress,
   PLAN_FIELD_GROUPS,
   planPatch,
   planSummary,
@@ -504,5 +505,56 @@ describe("an item edit", () => {
     expect(itemPatch(named, { name: "Day 1", notes: "" })).toEqual({
       displayName: { from: "", to: "Day 1" },
     });
+  });
+});
+
+describe("a press on the map while a plan is open", () => {
+  const own = {
+    places: [{ id: "p1" }],
+    routes: [
+      { id: "r1", ownerId: "me" },
+      { id: "r2", ownerId: "friend" },
+    ],
+    files: [
+      { id: "f1", linkedPlaceId: null },
+      { id: "f2", linkedPlaceId: "p1" },
+    ],
+    tracks: [
+      { mediaId: "t1", placeId: "p1" },
+      { mediaId: "t2", placeId: "theirs" },
+    ],
+  };
+
+  // Mutation: treat a track press as outside the plan (open its way), and
+  // the way page replaces the plan, its bar and its things. Or send a
+  // place's file to its place, and with Bring its photos off the line
+  // pressed doesn't come.
+  it("asks Add a copy for the user's own file, or a track's place", () => {
+    expect(planMapPress({ kind: "track", id: "f1" }, own, "me")).toEqual({
+      kind: "media",
+      id: "f1",
+    });
+    expect(planMapPress({ kind: "track", id: "f2" }, own, "me")).toEqual({
+      kind: "media",
+      id: "f2",
+    });
+    expect(planMapPress({ kind: "track", id: "t1" }, own, "me")).toEqual({
+      kind: "place",
+      id: "p1",
+    });
+    expect(planMapPress({ kind: "track", id: "t2" }, own, "me")).toBeNull();
+  });
+
+  // Mutation: drop the owner check, and a friend's route shared with the
+  // user opens an Add a copy the API refuses.
+  it("asks nothing for the plan's own things or someone else's", () => {
+    expect(planMapPress({ kind: "route", id: "r1" }, own, "me")).toEqual({
+      kind: "route",
+      id: "r1",
+    });
+    expect(planMapPress({ kind: "route", id: "r2" }, own, "me")).toBeNull();
+    expect(
+      planMapPress({ kind: "place", id: "plan-place" }, own, "me"),
+    ).toBeNull();
   });
 });

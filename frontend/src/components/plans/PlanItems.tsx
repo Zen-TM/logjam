@@ -6,9 +6,12 @@ import { useState } from "react";
 import {
   formatBytes,
   mediaSkippedSentence,
+  planAddVerbLabel,
   planItemDeleteConfirm,
   planItemVerbs,
   PLAN_ITEM_VERBS,
+  TRIP_PLAN_ITEM_GROUP,
+  TRIP_PLAN_ITEM_GROUPS,
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
   tripPlanSavedMessage,
@@ -18,10 +21,12 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 import {
+  Button,
   Checkbox,
   EmptyState,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -78,6 +83,7 @@ export default function PlanItems({
   myUserId,
   onChanged,
   onSaved,
+  onAddCopy,
   onOpen,
   copyPlaceMedia,
 }: {
@@ -88,6 +94,7 @@ export default function PlanItems({
   /** The caller's own lists or storage changed: a copy landed, or a thing
    *  they were charged for went. */
   onSaved: () => void;
+  onAddCopy: () => void;
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
   /** The caller's remembered Bring its photos (`uiPreferences`). */
@@ -107,11 +114,13 @@ export default function PlanItems({
     ...plan.files,
     ...plan.geoPdfs,
   ];
-  const groups: [string, TripPlanItem[]][] = [
-    [copy.itemsPlaces, plan.places],
-    [copy.itemsWays, [...plan.routes, ...plan.files]],
-    [copy.itemsMaps, plan.geoPdfs],
-  ];
+  const groups = TRIP_PLAN_ITEM_GROUPS.map(
+    ({ group, title }) =>
+      [
+        title,
+        all.filter((item) => TRIP_PLAN_ITEM_GROUP[item.kind] === group),
+      ] as const,
+  );
   const shown = groups.filter(([, items]) => items.length > 0);
 
   /** The reply, or null once a failure was said. */
@@ -141,6 +150,12 @@ export default function PlanItems({
     delete: () => setDeleting(item),
   });
 
+  const addCopy = !archived && (
+    <Button variant="filled" icon="copy" onClick={onAddCopy}>
+      {planAddVerbLabel("copy")}
+    </Button>
+  );
+
   const photoBytes =
     saving?.kind === "place"
       ? saving.media.reduce((sum, photo) => sum + Number(photo.sizeBytes), 0)
@@ -155,7 +170,7 @@ export default function PlanItems({
     <div className={classes.list}>
       {/* The dialogs stay mounted when a refetch empties the plan. */}
       {shown.length === 0 && (
-        <EmptyState icon="place" title={copy.itemsEmpty} />
+        <EmptyState icon="place" title={copy.itemsEmpty} actions={addCopy} />
       )}
       {shown.map(([heading, items]) => (
         <div key={heading} className={classes.block}>
@@ -206,6 +221,7 @@ export default function PlanItems({
           })}
         </div>
       ))}
+      {addCopy && shown.length > 0 && <ListEnd>{addCopy}</ListEnd>}
 
       <ConfirmDialog
         open={saving != null}
