@@ -10,8 +10,7 @@ import { notificationPlanTarget, type TNotification } from "@logjam/shared";
 export type NotificationTapTarget =
   | { kind: "blocked" }
   | { kind: "place"; placeId: string }
-  | { kind: "plan"; planId: string; view?: "people" }
-  | { kind: "plans" }
+  | { kind: "plan"; planId: string; view?: "people"; invited?: boolean }
   | { kind: "inbox" };
 
 /**
@@ -40,9 +39,8 @@ export function notificationTapTarget(args: {
     ?.placeId;
   if (typeof placeId === "string") return { kind: "place", placeId };
   // A plan push opens where Logjam Web opens its inbox row
-  // (`notificationPlanTarget`), except an invite: Logjam GPS has no preview
-  // yet, so it waits on the Plans list. A plan the recipient lost is only
-  // named in the inbox.
+  // (`notificationPlanTarget`): an invite as its preview, a join request on
+  // People. A plan the recipient lost is only named in the inbox.
   const { type } = (args.data ?? {}) as { type?: unknown };
   const plan =
     typeof type === "string"
@@ -51,7 +49,12 @@ export function notificationTapTarget(args: {
           payload: args.data ?? {},
         } as TNotification)
       : null;
-  if (plan?.invited) return { kind: "plans" };
-  if (plan) return { kind: "plan", planId: plan.planId, view: plan.view };
+  if (plan)
+    return {
+      kind: "plan",
+      planId: plan.planId,
+      view: plan.view,
+      invited: plan.invited,
+    };
   return { kind: "inbox" };
 }

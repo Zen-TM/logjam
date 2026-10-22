@@ -20,7 +20,12 @@ describe("notificationTapTarget", () => {
         data: { type: "plan_join_request", planId: "p-1" },
         routeEditing: false,
       }),
-    ).toEqual({ kind: "plan", planId: "p-1", view: "people" });
+    ).toEqual({
+      kind: "plan",
+      planId: "p-1",
+      view: "people",
+      invited: false,
+    });
   });
 
   // Mutation: send these to the inbox, and a push about a plan the reader is
@@ -33,18 +38,24 @@ describe("notificationTapTarget", () => {
           data: { type, planId: "p-1" },
           routeEditing: false,
         }),
-      ).toEqual({ kind: "plan", planId: "p-1", view: undefined });
+      ).toEqual({
+        kind: "plan",
+        planId: "p-1",
+        view: undefined,
+        invited: false,
+      });
     },
   );
 
-  // Mutation: drop the invite branch.
-  it("opens the list for an invite", () => {
+  // Mutation: drop `invited`, and an invite push opens the member's page,
+  // which 404s for someone not in the plan yet.
+  it("opens an invite as its plan's preview", () => {
     expect(
       notificationTapTarget({
         data: { type: "plan_invited", planId: "p-1" },
         routeEditing: false,
       }),
-    ).toEqual({ kind: "plans" });
+    ).toEqual({ kind: "plan", planId: "p-1", view: undefined, invited: true });
   });
 
   it.each([

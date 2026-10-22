@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FlatList, RefreshControl, Text, View } from "react-native";
+import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
 import {
   contractSectionKeys,
   messageFromError,
@@ -54,7 +54,7 @@ import {
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
-import { createPlan } from "./plansApi";
+import { createPlan, leavePlan } from "./plansApi";
 import {
   planChanged,
   pollPlans,
@@ -126,7 +126,7 @@ export function PlansScreen({
    *  `at` tells one from the next with the same words. */
   message?: { text: string; at: number };
   onBack: () => void;
-  onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name">) => void;
+  onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name" | "status">) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -168,6 +168,34 @@ export function PlansScreen({
     count: byBucket[value].length,
   }));
 
+  const withdraw = useCallback(
+    (plan: TripPlanSummary) =>
+      Alert.alert(plan.name, undefined, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: copy.withdraw,
+          onPress: () =>
+            void leavePlan(plan.id)
+              .then(async () => {
+                await poll();
+                setToast({
+                  text: copy.withdrawn,
+                  tone: "info",
+                  nonce: Date.now(),
+                });
+              })
+              .catch((err: unknown) =>
+                setToast({
+                  text: messageFromError(err, copy.withdrawFailed),
+                  tone: "error",
+                  nonce: Date.now(),
+                }),
+              ),
+        },
+      ]),
+    [poll, setToast],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: TripPlanSummary }) => {
       const stamp = stamps.get(item.id);
@@ -179,10 +207,13 @@ export function PlansScreen({
           title={item.name}
           titleNumberOfLines={2}
           subtitle={tripPlanRowSubtitle(item)}
-          // ponytail: an invite or a request opens nothing yet; the join
-          // screen needs the plan forms (TRIP_PLAN_FORMS, #548).
+          // An invite opens its preview; a request, Withdraw, online.
           onPress={
-            item.status === "active" ? () => onOpenPlan(item) : undefined
+            item.status !== "requested"
+              ? () => onOpenPlan(item)
+              : online
+                ? () => withdraw(item)
+                : undefined
           }
           right={
             <View style={styles.pills}>
@@ -201,7 +232,7 @@ export function PlansScreen({
         />
       );
     },
-    [assetHue.plan, onOpenPlan, stamps, styles.pills],
+    [assetHue.plan, onOpenPlan, online, stamps, styles.pills, withdraw],
   );
 
   if (block) {
@@ -330,7 +361,7 @@ export function PlansScreen({
           const made = await createPlan(values);
           setNewOpen(false);
           void poll();
-          onOpenPlan(made);
+          onOpenPlan({ id: made.id, name: made.name, status: "active" });
         }}
       />
       <Toast message={toast} onDismissed={() => setToast(null)} />
