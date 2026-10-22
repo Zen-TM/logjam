@@ -1095,10 +1095,13 @@ export function tripPlanAddCopyPrice(
   return uses ? `Uses ${uses} of your storage. ${room}` : room;
 }
 
-/** Start a trip log's line: what saving a picked place brings. `null`
- *  when no place has photos, so the line doesn't promise any. */
-export function tripPlanTripLogPlacesLine(withPhotos: boolean | null): string {
-  if (withPhotos === null)
+/** Start a trip log's line: what saving the picked places brings. Photos
+ *  are promised only when a picked place has some. */
+export function tripPlanTripLogPlacesLine(
+  picked: readonly { media: readonly unknown[] }[],
+  withPhotos: boolean,
+): string {
+  if (!picked.some((place) => place.media.length > 0))
     return "Each place you pick is saved to your places first, then linked.";
   return `Each place you pick is saved to your places first, ${withPhotos ? "with" : "without"} its photos, then linked.`;
 }

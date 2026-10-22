@@ -941,11 +941,18 @@ describe("an invite's preview", () => {
 });
 
 describe("Start a trip log's places line", () => {
-  // Mutation: drop the null arm, and a plan whose places have no photos
-  // promises each is saved "with its photos".
-  it("promises photos only where there are some", () => {
-    expect(tripPlanTripLogPlacesLine(null)).not.toMatch(/photos/);
-    expect(tripPlanTripLogPlacesLine(true)).toMatch(/with its photos/);
-    expect(tripPlanTripLogPlacesLine(false)).toMatch(/without its photos/);
+  const bare = { media: [] };
+  const withOne = { media: [{}] };
+  // Mutation: decide from every place, or ignore the picks, and picking
+  // only a place without photos promises "with its photos".
+  it("promises photos only where the picks have some", () => {
+    expect(tripPlanTripLogPlacesLine([bare], true)).not.toMatch(/photos/);
+    expect(tripPlanTripLogPlacesLine([], true)).not.toMatch(/photos/);
+    expect(tripPlanTripLogPlacesLine([bare, withOne], true)).toMatch(
+      /with its photos/,
+    );
+    expect(tripPlanTripLogPlacesLine([withOne], false)).toMatch(
+      /without its photos/,
+    );
   });
 });

@@ -57,7 +57,8 @@ export default function PlanTripLogPlacesDialog({
     try {
       for (const place of chosen) {
         if (saved[place.id]) continue;
-        const copy = await savePlanItem(planId, "place", place.id, copyMedia);
+        // The account's stored preference decides (the line reads it too).
+        const copy = await savePlanItem(planId, "place", place.id);
         saved[place.id] = copy.id;
         skipped += copy.mediaSkipped ?? 0;
         outOfSpace ||= copy.mediaOutOfSpace === true;
@@ -110,7 +111,8 @@ export default function PlanTripLogPlacesDialog({
       >
         <p className={classes.note}>
           {tripPlanTripLogPlacesLine(
-            places.some((place) => place.media.length > 0) ? copyMedia : null,
+            places.filter((place) => picked.includes(place.id)),
+            copyMedia,
           )}
         </p>
         <div className={classes.question}>

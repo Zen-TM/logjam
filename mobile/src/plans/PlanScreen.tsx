@@ -756,7 +756,9 @@ function Items({
             })}
             subtitle={subtitle(
               tripPlanAddedByLine(file.addedBy),
-              shown === null || shown.length > 0,
+              // Opens only as a photo or video; a GPX/KML row's one action
+              // is Save a copy, which needs a connection.
+              !!shown?.length,
             )}
             onPress={
               shown?.length

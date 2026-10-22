@@ -64,13 +64,18 @@ export function PlanPlaceSheet({
           }
         : null,
     online,
-    onFinished: () => setSaving(false),
+    // The whole sheet closes, so the toast isn't drawn under it.
+    onFinished: () => {
+      setSaving(false);
+      onClose();
+    },
     onDone: onInfo,
   });
-  // Every way out of the sub-mode backs out one layer, not while it saves.
+  // Every way out of the sub-mode backs out one layer (none while it saves:
+  // `closable`).
   const back = saving
     ? () => {
-        if (!panel.busy) setSaving(false);
+        if (panel.closable) setSaving(false);
       }
     : undefined;
   // Its photos open from the phone once downloaded, else from their URLs
@@ -94,6 +99,7 @@ export function PlanPlaceSheet({
       visible={place !== null}
       onClose={back ?? onClose}
       onBack={back}
+      closable={!saving || panel.closable}
       title={saving ? panel.title : (place?.name ?? "")}
       footer={saving ? panel.footer : undefined}
     >

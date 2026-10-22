@@ -68,11 +68,10 @@ export function PlanTripLogSheet({
   const [picked, setPicked] = useState<string[]>([]);
   // Plan place id → its copy's id: a retry after a stop saves only the rest.
   const [copies, setCopies] = useState<Record<string, string>>({});
-  // What didn't come with the copies, said once the flow ends: a toast now
-  // would draw under the form that opens at once.
-  // A ref: the form calls onSaved then onClose in one tick, and the note is
-  // said once.
-  const skipped = useRef<string | null>(null);
+  // The photos that didn't come, counted across retries and said once when
+  // the flow ends (a toast now would draw under the form that opens at
+  // once). A ref: it is read where the flow ends, not drawn.
+  const lost = useRef({ count: 0, outOfSpace: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openKey = plan?.id ?? null;
@@ -85,30 +84,23 @@ export function PlanTripLogSheet({
     setError(null);
   }
   const asking = plan !== null && step === "places";
-  // The remembered preference decides, as on Logjam Web: no switch here.
+  // The stored preference decides (the save sends none, so the server
+  // applies it); the line reads it, as on Logjam Web: no switch here.
   const [withMedia] = useRememberedCopyMedia(asking);
   // Picks still in the plan, in its order (a refetch can take one away).
   const chosen = plan ? plan.places.filter((p) => picked.includes(p.id)) : [];
-  const hasPhotos = chosen.some((place) => place.media.length > 0);
 
   async function next(target: TripPlanView) {
     setBusy(true);
     setError(null);
     const saved = { ...copies };
-    let lost = 0;
-    let outOfSpace = false;
     try {
       for (const place of chosen) {
         if (saved[place.id]) continue;
-        const result = await savePlanItem(
-          target.id,
-          "place",
-          place.id,
-          withMedia,
-        );
+        const result = await savePlanItem(target.id, "place", place.id);
         saved[place.id] = result.id;
-        lost += result.mediaSkipped ?? 0;
-        outOfSpace ||= result.mediaOutOfSpace === true;
+        lost.current.count += result.mediaSkipped ?? 0;
+        lost.current.outOfSpace ||= result.mediaOutOfSpace === true;
       }
       setStep("saved");
     } catch (err) {
@@ -122,10 +114,6 @@ export function PlanTripLogSheet({
       if (err instanceof ApiError) await afterPlanWrite(target.id);
     } finally {
       setCopies(saved);
-      skipped.current =
-        [skipped.current, mediaSkippedSentence(lost, outOfSpace)]
-          .filter(Boolean)
-          .join(" ") || null;
       // The copies reach the phone by the next pull: asked for now.
       if (Object.keys(saved).length > Object.keys(copies).length)
         void requestSync().catch(console.error);
@@ -133,17 +121,15 @@ export function PlanTripLogSheet({
     }
   }
 
-  // The skipped photos, said once: with the trip's own message, or alone if
-  // the form closes unsaved.
-  const finish = (message: string | null) => {
-    const note = skipped.current;
-    skipped.current = null;
-    if (message)
-      onSaved(
-        [message, note].filter(Boolean).join(" "),
-        note ? "error" : "info",
-      );
-    else if (note) onSaved(note, "error");
+  // The flow's end (the form closed, saved or not, or the places step
+  // left): the photos that didn't come, said once.
+  const finish = () => {
+    const note = mediaSkippedSentence(
+      lost.current.count,
+      lost.current.outOfSpace,
+    );
+    lost.current = { count: 0, outOfSpace: false };
+    if (note) onSaved(note, "error");
   };
 
   const initialPlaces = chosen.flatMap((place) =>
@@ -155,12 +141,12 @@ export function PlanTripLogSheet({
     <>
       <BottomSheet
         visible={asking}
-        // Not while saving: the loop would land on the next session.
         onClose={() => {
-          if (busy) return;
-          skipped.current = null;
+          finish();
           onClose();
         }}
+        // Not while saving: the loop would land on the next session.
+        closable={!busy}
         onClosed={() => setStep((was) => (was === "saved" ? "form" : was))}
         title={copy.tripLogPlaces}
         footer={
@@ -185,7 +171,7 @@ export function PlanTripLogSheet({
         {plan ? (
           <View style={styles.body}>
             <Text style={styles.muted}>
-              {tripPlanTripLogPlacesLine(hasPhotos ? withMedia : null)}
+              {tripPlanTripLogPlacesLine(chosen, withMedia)}
             </Text>
             {plan.places.map((place) => {
               const on = picked.includes(place.id);
@@ -219,10 +205,12 @@ export function PlanTripLogSheet({
         prefill={prefill}
         existingTypes={existingTypes}
         onClose={() => {
-          finish(null);
+          finish();
           onClose();
         }}
-        onSaved={(message) => finish(message)}
+        // Plainly: an attribute added inside the form says so too, and the
+        // form stays open.
+        onSaved={(message) => onSaved(message, "info")}
       />
     </>
   );

@@ -44,10 +44,9 @@ export type SaveCopyTarget = {
 
 /**
  * Save a copy's panel for `target`: the line, the photos switch, then Save in
- * the footer. `busy` is true while the request runs; a host refuses to close
- * then, so a reply can't land on the next target's panel. `onFinished` ends
- * the host's panel (closes the sheet, or leaves the sub-mode) before the
- * toast.
+ * the footer. A host passes `closable` to its BottomSheet, so a save in
+ * flight can't be dismissed and land on the next target. `onFinished` closes
+ * the host's sheet before the toast, which a Modal sheet would cover.
  */
 export function useSaveCopyPanel({
   planId,
@@ -99,9 +98,14 @@ export function useSaveCopyPanel({
         skipped ? "error" : "info",
       );
     } catch (err) {
-      setError(messageFromError(err, copy.saveCopyFailed));
-      // Gone from the plan, or the plan from the caller: fetched again, the
-      // page shows it as it is.
+      const message = messageFromError(err, copy.saveCopyFailed);
+      if (err instanceof ApiError && err.status === 404) {
+        // Gone from the plan: the refetch takes its sheet away, so the
+        // reason is the page's toast, not a banner on a sheet that went.
+        onFinished();
+        onDone(message, "error");
+      } else setError(message);
+      // Fetched again, the page shows the plan as it is.
       if (err instanceof ApiError) await afterPlanWrite(planId);
     } finally {
       setBusy(false);
@@ -109,7 +113,7 @@ export function useSaveCopyPanel({
   }
 
   return {
-    busy,
+    closable: !busy,
     title: SAVE_A_COPY.label,
     body: target ? (
       <View style={styles.body}>
@@ -168,10 +172,8 @@ export function SaveCopySheet({
   return (
     <BottomSheet
       visible={target !== null}
-      // Not while saving: the reply would land on whatever opens next.
-      onClose={() => {
-        if (!panel.busy) onClose();
-      }}
+      onClose={onClose}
+      closable={panel.closable}
       title={panel.title}
       footer={panel.footer}
     >
