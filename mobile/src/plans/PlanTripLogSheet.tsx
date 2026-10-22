@@ -57,7 +57,10 @@ export function PlanTripLogSheet({
   );
 
   // Each open starts on the places step, or the form when there are none.
-  const [step, setStep] = useState<"places" | "form">("places");
+  // "saved": the copies are made and the places sheet is closing; the form
+  // opens once it has gone (`onClosed`), as one modal can't open while
+  // another closes on Android.
+  const [step, setStep] = useState<"places" | "saved" | "form">("places");
   const [picked, setPicked] = useState<string[]>([]);
   // Plan place id → its copy's id: a retry after a stop saves only the rest.
   const [copies, setCopies] = useState<Record<string, string>>({});
@@ -87,7 +90,7 @@ export function PlanTripLogSheet({
       // The copies reach the phone by the next pull: asked for now.
       void requestSync().catch(console.error);
       setCopies(saved);
-      setStep("form");
+      setStep("saved");
     } catch (err) {
       setCopies(saved);
       setError(
@@ -116,6 +119,7 @@ export function PlanTripLogSheet({
       <BottomSheet
         visible={asking}
         onClose={onClose}
+        onClosed={() => setStep((was) => (was === "saved" ? "form" : was))}
         title={copy.tripLogPlaces}
         footer={
           plan ? (
