@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { answersFromDraft } from "../tripPlanAnswerDraft.js";
 import {
   TRIP_PLAN_FORM_PRESETS,
   type TripPlanQuestion,
@@ -50,6 +51,8 @@ import {
   tripPlanInviteePill,
   tripPlanFilesChargedTo,
   tripPlanInviteLinkLine,
+  tripPlanAnswerRows,
+  tripPlanQuestionChoices,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -817,5 +820,71 @@ describe("tripPlanFilesChargedTo", () => {
         "tom",
       ),
     ).toEqual({ count: 2, bytes: 120 });
+  });
+});
+
+describe("a form's answers as a reader sees them", () => {
+  const user = (id: string) => ({ id, username: id });
+  const answer = (id: string) => ({
+    user: user(id),
+    answers: { q: "x" },
+    updatedAt: "",
+  });
+  const member = (id: string, status: "active" | "requested" | "invited") => ({
+    user: user(id),
+    status,
+  });
+
+  // Mutation: list only those who answered, or leave the requesters mixed
+  // in. A member who owes an answer disappears, or an asker reads as going.
+  it("lists everyone going, those without an answer last, then the askers", () => {
+    const rows = tripPlanAnswerRows(
+      {
+        answers: [answer("carol"), answer("bob"), answer("ivy")],
+        myAnswer: null,
+      },
+      [
+        member("dave", "active"),
+        member("bob", "active"),
+        member("carol", "requested"),
+        member("ivy", "invited"),
+      ],
+    );
+    expect(rows.going.map((row) => [row.user.id, row.answer != null])).toEqual([
+      ["bob", true],
+      ["dave", false],
+    ]);
+    expect(rows.asking.map((row) => row.user.id)).toEqual(["carol"]);
+  });
+});
+
+describe("the picks a choice or yes/no question offers", () => {
+  // Mutation: give yes/no the values "yes"/"no", and every yes/no answer
+  // fails the parser on one client only.
+  it("hold what the shared draft turns into an answer", () => {
+    const yesNo = tripPlanQuestionChoices({ kind: "yesNo", required: true });
+    expect(yesNo.map((pick) => pick.value)).toEqual(["true", "false"]);
+    const questions = [
+      { id: "q", kind: "yesNo" as const, label: "Q", required: true },
+    ];
+    for (const { value } of yesNo)
+      expect(typeof answersFromDraft(questions, { q: value }).q).toBe(
+        "boolean",
+      );
+  });
+
+  // Mutation: drop the "—" stop, and an optional pick can't be taken back.
+  it("starts an optional one with a way back, and a required one without", () => {
+    const options = [{ id: "a", label: "A" }];
+    expect(
+      tripPlanQuestionChoices({ kind: "choice", required: false, options }),
+    ).toEqual([
+      { value: "", label: "—" },
+      { value: "a", label: "A" },
+    ]);
+    expect(
+      tripPlanQuestionChoices({ kind: "choice", required: true, options })[0]
+        .value,
+    ).toBe("a");
   });
 });

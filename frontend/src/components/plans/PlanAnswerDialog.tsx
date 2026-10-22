@@ -5,6 +5,7 @@
 // (`fitAnswerDraft`), so the person sends it against that.
 import { useId, useState } from "react";
 import {
+  tripPlanQuestionChoices,
   answersFromDraft,
   draftFromAnswers,
   fitAnswerDraft,
@@ -87,19 +88,7 @@ function QuestionField({
       );
     case "choice":
     case "yesNo": {
-      const options = [
-        // An optional pick can be taken back (shared/DESIGN.md §10).
-        ...(question.required ? [] : [{ value: "", label: "—" }]),
-        ...(question.kind === "yesNo"
-          ? [
-              { value: "true", label: copy.yes },
-              { value: "false", label: copy.no },
-            ]
-          : (question.options ?? []).map((option) => ({
-              value: option.id,
-              label: option.label,
-            }))),
-      ];
+      const options = tripPlanQuestionChoices(question);
       return (
         <div className={classes.question}>
           <span className={classes.questionLabel} aria-hidden>

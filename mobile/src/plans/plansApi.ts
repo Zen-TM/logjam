@@ -57,6 +57,11 @@ export const putAnswer = (
     { method: "PUT", body },
   );
 
+export const deleteForm = (planId: string, formId: string) =>
+  apiFetch<void>(`${plan(planId)}/forms/${encodeURIComponent(formId)}`, {
+    method: "DELETE",
+  });
+
 export const createSection = (planId: string, body: TripPlanSectionCreate) =>
   apiFetch<TripPlanSectionView>(`${plan(planId)}/sections`, {
     method: "POST",

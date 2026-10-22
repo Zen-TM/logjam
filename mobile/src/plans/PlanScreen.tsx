@@ -300,6 +300,11 @@ function PlanPage({
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
     setToast({ text, tone, nonce: Date.now() });
+  // Stable: FormSheet hands a refusal over from an effect.
+  const notifyError = useCallback(
+    (text: string) => setToast({ text, tone: "error", nonce: Date.now() }),
+    [],
+  );
   const archived = plan.archivedAt != null;
   // Add ▾'s verbs this caller may run; the page draws each where it belongs.
   const adds = new Set(
@@ -389,16 +394,20 @@ function PlanPage({
           icon={notice.icon}
           controls={
             notice.kind === "answer" ? (
-              <Button
-                label={TRIP_PLAN_FORMS.copy.answer}
-                compact
-                variant="outlineAccent"
-                disabled={!online}
-                disabledReason={OFFLINE}
-                onPress={() =>
-                  setFormSheet({ formId: notice.formId, answering: true })
-                }
-              />
+              // The button only dims: the words go under it (ui/Button.tsx).
+              <View style={styles.noticeControl}>
+                <Button
+                  label={TRIP_PLAN_FORMS.copy.answer}
+                  compact
+                  variant="outlineAccent"
+                  disabled={!online}
+                  disabledReason={OFFLINE}
+                  onPress={() =>
+                    setFormSheet({ formId: notice.formId, answering: true })
+                  }
+                />
+                {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+              </View>
             ) : undefined
           }
         >
@@ -535,6 +544,7 @@ function PlanPage({
         online={online}
         onState={setFormSheet}
         onInfo={notify}
+        onError={notifyError}
       />
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -814,6 +824,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   notice: { paddingHorizontal: spacing(2), paddingTop: spacing(1) },
+  noticeControl: { alignItems: "center", gap: spacing(0.5) },
   dates: {
     ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(2),
