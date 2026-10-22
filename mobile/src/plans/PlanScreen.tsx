@@ -81,6 +81,11 @@ import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { PlanTripLogSheet } from "./PlanTripLogSheet";
+import {
+  SAVE_A_COPY,
+  SaveCopySheet,
+  type SaveCopyTarget,
+} from "./SaveCopySheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
@@ -654,9 +659,19 @@ function Items({
 }: {
   plan: TripPlanView;
   online: boolean;
-  onInfo: (message: string) => void;
+  onInfo: (message: string, tone?: "info" | "error") => void;
 }) {
   const theme = useTheme();
+  const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
+  /** Save a copy, on each way and map: its row's trailing control. */
+  const saveCopy = (target: SaveCopyTarget) => (
+    <IconButton
+      icon={SAVE_A_COPY.icon}
+      accessibilityLabel={`${SAVE_A_COPY.label}: ${target.title}`}
+      color={theme.textMuted}
+      onPress={() => setSaving(target)}
+    />
+  );
   const { assetHue } = useHues();
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
@@ -697,6 +712,17 @@ function Items({
         online={online}
         onClose={() => setPlaceId(null)}
         onInfo={onInfo}
+        onSaveCopy={() => {
+          const place = plan.places.find((each) => each.id === placeId);
+          if (!place) return;
+          setPlaceId(null);
+          setSaving({
+            kind: "place",
+            id: place.id,
+            title: place.name,
+            photos: place.media.length,
+          });
+        }}
       />
       {headed && ways > 0 ? (
         <SectionHeader title={copy.itemsWays} count={ways} />
@@ -708,6 +734,12 @@ function Items({
           hue={assetHue.route}
           title={route.name}
           subtitle={tripPlanAddedByLine(route.addedBy)}
+          right={saveCopy({
+            kind: "route",
+            id: route.id,
+            title: route.name,
+            photos: 0,
+          })}
         />
       ))}
       {plan.files.map((file) => {
@@ -724,6 +756,12 @@ function Items({
             icon="importedFile"
             hue={assetHue.import}
             title={mediaDisplayName(file.item)}
+            right={saveCopy({
+              kind: "media",
+              id: file.id,
+              title: mediaDisplayName(file.item),
+              photos: 0,
+            })}
             subtitle={subtitle(
               tripPlanAddedByLine(file.addedBy),
               shown === null || shown.length > 0,
@@ -762,6 +800,7 @@ function Items({
             icon="geoPdf"
             hue={assetHue.geoPdf}
             title={title}
+            right={saveCopy({ kind: "geoPdf", id: pdf.id, title, photos: 0 })}
             subtitle={subtitle(tripPlanAddedByLine(pdf.addedBy), uri !== null)}
             // Onto the map as a GeoPDF import on this phone, which leaves
             // with the plan (`openPlanGeoPdf`).
@@ -781,6 +820,13 @@ function Items({
           />
         );
       })}
+      <SaveCopySheet
+        planId={plan.id}
+        target={saving}
+        online={online}
+        onClose={() => setSaving(null)}
+        onDone={onInfo}
+      />
       {viewing?.length ? (
         <MediaViewer
           items={viewing}

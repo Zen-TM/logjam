@@ -1,0 +1,135 @@
+// Save a copy (`PLAN_ITEM_VERBS`): the caller's own copy of a plan item, in
+// their places, ways or maps. The copy is theirs from then on, and changes on
+// either side don't reach the other (`saveCopyLine`), so it confirms first;
+// a place with photos asks whether they come, as a friend's copy does
+// (`useRememberedCopyMedia`). Logjam Web's twin is PlanItems.tsx's confirm.
+// It works on an archived plan too.
+import { useState } from "react";
+import { Text, View } from "react-native";
+import {
+  ApiError,
+  mediaSkippedSentence,
+  messageFromError,
+  PLAN_ITEM_VERBS,
+  tripPlanSavedMessage,
+  TRIP_PLAN_PAGE,
+  type TripPlanItemKind,
+} from "@logjam/shared";
+
+import { unavailableReasonText } from "../auth/capabilities";
+import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
+import { requestSync } from "../sync/syncEngine";
+import { makeStyles, muted, spacing } from "../theme";
+import { BottomSheet, Button, ErrorBanner, SwitchRow } from "../ui";
+import { savePlanItem } from "./plansApi";
+import { afterPlanWrite } from "./plansCache";
+
+const copy = TRIP_PLAN_PAGE.copy;
+const OFFLINE = unavailableReasonText("needs-connection");
+export const SAVE_A_COPY = PLAN_ITEM_VERBS.find((verb) => verb.id === "save")!;
+
+export type SaveCopyTarget = {
+  kind: TripPlanItemKind;
+  id: string;
+  title: string;
+  /** A place's photos: the switch shows only when there are some. */
+  photos: number;
+};
+
+export function SaveCopySheet({
+  planId,
+  target,
+  online,
+  onClose,
+  onDone,
+}: {
+  planId: string;
+  /** Null while closed. */
+  target: SaveCopyTarget | null;
+  online: boolean;
+  onClose: () => void;
+  onDone: (message: string, tone: "info" | "error") => void;
+}) {
+  const styles = useStyles();
+  const [withMedia, toggleMedia] = useRememberedCopyMedia(target !== null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const asksPhotos = target?.kind === "place" && target.photos > 0;
+
+  async function save(item: SaveCopyTarget) {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await savePlanItem(
+        planId,
+        item.kind,
+        item.id,
+        asksPhotos ? withMedia : undefined,
+      );
+      // The copy is a row of the caller's own, which reaches the phone by
+      // the next sync pull: asked for now, so it shows at once.
+      void requestSync().catch(console.error);
+      const skipped = mediaSkippedSentence(
+        result.mediaSkipped ?? 0,
+        result.mediaOutOfSpace === true,
+      );
+      onClose();
+      onDone(
+        [tripPlanSavedMessage(item.kind), skipped].filter(Boolean).join(" "),
+        skipped ? "error" : "info",
+      );
+    } catch (err) {
+      setError(messageFromError(err, copy.saveCopyFailed));
+      // Gone from the plan, or the plan from the caller: fetched again, the
+      // page shows it as it is.
+      if (err instanceof ApiError) await afterPlanWrite(planId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <BottomSheet
+      visible={target !== null}
+      onClose={() => {
+        setError(null);
+        onClose();
+      }}
+      title={target?.title ?? ""}
+      footer={
+        target ? (
+          <View style={styles.footer}>
+            {error ? <ErrorBanner message={error} /> : null}
+            <Button
+              label={SAVE_A_COPY.label}
+              icon={SAVE_A_COPY.icon}
+              loading={busy}
+              disabled={!online}
+              disabledReason={OFFLINE}
+              onPress={() => void save(target)}
+            />
+            {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+          </View>
+        ) : undefined
+      }
+    >
+      <View style={styles.body}>
+        <Text style={styles.line}>{copy.saveCopyLine}</Text>
+        {asksPhotos ? (
+          <SwitchRow
+            title={copy.bringPhotos}
+            checked={withMedia}
+            onChange={toggleMedia}
+          />
+        ) : null}
+      </View>
+    </BottomSheet>
+  );
+}
+
+const useStyles = makeStyles((theme, textRole) => ({
+  body: { gap: spacing(1.5) },
+  line: { ...textRole.body, color: theme.text },
+  offline: { ...muted(theme, textRole.detail), textAlign: "center" },
+  footer: { gap: spacing(1) },
+}));

@@ -26,6 +26,7 @@ import { makeStyles, muted, spacing, useTheme } from "../theme";
 import { BottomSheet, Icon, Row, SectionHeader } from "../ui";
 import { openPlanMedia, usePlanFilesOnPhone } from "./PlanDownload";
 import { openablePlanMedia, placeFiles } from "./planFiles";
+import { SAVE_A_COPY } from "./SaveCopySheet";
 
 export function PlanPlaceSheet({
   planId,
@@ -33,6 +34,7 @@ export function PlanPlaceSheet({
   online,
   onClose,
   onInfo,
+  onSaveCopy,
 }: {
   planId: string;
   /** The place shown; null while the sheet is closed. */
@@ -40,6 +42,8 @@ export function PlanPlaceSheet({
   online: boolean;
   onClose: () => void;
   onInfo: (message: string) => void;
+  /** Save a copy of it; absent where the sheet offers no writes (the map). */
+  onSaveCopy?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -125,6 +129,13 @@ export function PlanPlaceSheet({
                 }
               />
             </>
+          ) : null}
+          {onSaveCopy ? (
+            <Row
+              icon={SAVE_A_COPY.icon}
+              title={SAVE_A_COPY.label}
+              onPress={onSaveCopy}
+            />
           ) : null}
           {place.notes ? (
             <Text style={styles.notes} selectable>

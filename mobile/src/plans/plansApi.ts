@@ -5,6 +5,9 @@ import type {
   TripPlanAnswerPut,
   TripPlanAnswerView,
   TripPlanCreate,
+  TripPlanItem,
+  TripPlanItemAdd,
+  TripPlanItemKind,
   TripPlanInvitedPreview,
   TripPlanJoinAnswers,
   TripPlanMemberView,
@@ -47,6 +50,35 @@ export const deletePlan = (id: string) =>
 /** Leave, decline an invite or withdraw a request: one call, by status. */
 export const leavePlan = (id: string) =>
   apiFetch<void>(`${plan(id)}/members/me`, { method: "DELETE" });
+
+/** What a copy reports beside the new thing's id: a place's photos and files
+ *  that didn't come, and whether storage was why. */
+export type PlanCopyResult = {
+  id: string;
+  mediaSkipped?: number;
+  mediaOutOfSpace?: true;
+};
+
+/** Save a copy: the caller's own copy of a plan item. `copyMedia` is a
+ *  place's photos; without it the account's preference decides. */
+export const savePlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+  copyMedia?: boolean,
+) =>
+  apiFetch<PlanCopyResult>(
+    `${plan(planId)}/items/${kind}/${encodeURIComponent(itemId)}/save`,
+    { method: "POST", body: copyMedia === undefined ? {} : { copyMedia } },
+  );
+
+/** Add a copy: one of the caller's own things into the plan. */
+export const addPlanItem = (planId: string, body: TripPlanItemAdd) =>
+  apiFetch<{
+    item: TripPlanItem;
+    mediaSkipped?: number;
+    mediaOutOfSpace?: true;
+  }>(`${plan(planId)}/items`, { method: "POST", body });
 
 /** What someone invited by username sees before joining; 404 otherwise. */
 export const getInvitedPreview = (id: string) =>
