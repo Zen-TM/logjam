@@ -527,7 +527,7 @@ function PlanPage({
         onClose={() => setTripLogOpen(false)}
         // A toast only: the form closes itself after Log trip, and an
         // attribute added inside it saves without closing it.
-        onSaved={(text) => notify(text)}
+        onSaved={(text, tone) => notify(text, tone)}
       />
       <PlanDetailsSheet
         visible={editOpen}
@@ -663,12 +663,14 @@ function Items({
 }) {
   const theme = useTheme();
   const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
-  /** Save a copy, on each way and map: its row's trailing control. */
+  /** Save a copy, on each way and map: its row's trailing control, dimmed
+   *  offline with the reason in its label (a route's row says it too). */
   const saveCopy = (target: SaveCopyTarget) => (
     <IconButton
       icon={SAVE_A_COPY.icon}
-      accessibilityLabel={`${SAVE_A_COPY.label}: ${target.title}`}
+      accessibilityLabel={`${SAVE_A_COPY.label}: ${target.title}${online ? "" : `. ${OFFLINE}`}`}
       color={theme.textMuted}
+      disabled={!online}
       onPress={() => setSaving(target)}
     />
   );
@@ -712,17 +714,6 @@ function Items({
         online={online}
         onClose={() => setPlaceId(null)}
         onInfo={onInfo}
-        onSaveCopy={() => {
-          const place = plan.places.find((each) => each.id === placeId);
-          if (!place) return;
-          setPlaceId(null);
-          setSaving({
-            kind: "place",
-            id: place.id,
-            title: place.name,
-            photos: place.media.length,
-          });
-        }}
       />
       {headed && ways > 0 ? (
         <SectionHeader title={copy.itemsWays} count={ways} />
@@ -733,7 +724,8 @@ function Items({
           icon="route"
           hue={assetHue.route}
           title={route.name}
-          subtitle={tripPlanAddedByLine(route.addedBy)}
+          // Its only action is Save a copy, which needs a connection.
+          subtitle={subtitle(tripPlanAddedByLine(route.addedBy), false)}
           right={saveCopy({
             kind: "route",
             id: route.id,

@@ -2,8 +2,14 @@
 // their places, ways or maps. The copy is theirs from then on, and changes on
 // either side don't reach the other (`saveCopyLine`), so it confirms first;
 // a place with photos asks whether they come, as a friend's copy does
-// (`useRememberedCopyMedia`). Logjam Web's twin is PlanItems.tsx's confirm.
-// It works on an archived plan too.
+// (`useRememberedCopyMedia`). Logjam Web's twin is
+// frontend/src/components/plans/PlanItems.tsx's confirm. It works on an
+// archived plan too.
+//
+// A PANEL, not only a sheet: the plan place sheet draws it as its own
+// sub-mode (so a plan pin on the map has it too), and the way and map rows
+// in this sheet (mobile/DESIGN.md §4, ADR 0016: the verb's panel lives with
+// the verb, never handed to a caller as a callback).
 import { useState } from "react";
 import { Text, View } from "react-native";
 import {
@@ -36,24 +42,38 @@ export type SaveCopyTarget = {
   photos: number;
 };
 
-export function SaveCopySheet({
+/**
+ * Save a copy's panel for `target`: the line, the photos switch, then Save in
+ * the footer. `busy` is true while the request runs; a host refuses to close
+ * then, so a reply can't land on the next target's panel. `onFinished` ends
+ * the host's panel (closes the sheet, or leaves the sub-mode) before the
+ * toast.
+ */
+export function useSaveCopyPanel({
   planId,
   target,
   online,
-  onClose,
+  onFinished,
   onDone,
 }: {
   planId: string;
-  /** Null while closed. */
+  /** Null while no panel is open. */
   target: SaveCopyTarget | null;
   online: boolean;
-  onClose: () => void;
+  onFinished: () => void;
   onDone: (message: string, tone: "info" | "error") => void;
 }) {
   const styles = useStyles();
   const [withMedia, toggleMedia] = useRememberedCopyMedia(target !== null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Each target starts clean.
+  const key = target ? `${target.kind}:${target.id}` : null;
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
+  if (key !== openedFor) {
+    setOpenedFor(key);
+    setError(null);
+  }
   const asksPhotos = target?.kind === "place" && target.photos > 0;
 
   async function save(item: SaveCopyTarget) {
@@ -73,7 +93,7 @@ export function SaveCopySheet({
         result.mediaSkipped ?? 0,
         result.mediaOutOfSpace === true,
       );
-      onClose();
+      onFinished();
       onDone(
         [tripPlanSavedMessage(item.kind), skipped].filter(Boolean).join(" "),
         skipped ? "error" : "info",
@@ -88,41 +108,74 @@ export function SaveCopySheet({
     }
   }
 
-  return (
-    <BottomSheet
-      visible={target !== null}
-      onClose={() => {
-        setError(null);
-        onClose();
-      }}
-      title={target?.title ?? ""}
-      footer={
-        target ? (
-          <View style={styles.footer}>
-            {error ? <ErrorBanner message={error} /> : null}
-            <Button
-              label={SAVE_A_COPY.label}
-              icon={SAVE_A_COPY.icon}
-              loading={busy}
-              disabled={!online}
-              disabledReason={OFFLINE}
-              onPress={() => void save(target)}
-            />
-            {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-          </View>
-        ) : undefined
-      }
-    >
+  return {
+    busy,
+    title: SAVE_A_COPY.label,
+    body: target ? (
       <View style={styles.body}>
-        <Text style={styles.line}>{copy.saveCopyLine}</Text>
+        <Text style={styles.line}>
+          {target.title}. {copy.saveCopyLine}
+        </Text>
         {asksPhotos ? (
           <SwitchRow
             title={copy.bringPhotos}
             checked={withMedia}
+            disabled={busy}
             onChange={toggleMedia}
           />
         ) : null}
       </View>
+    ) : null,
+    footer: target ? (
+      <View style={styles.footer}>
+        {error ? <ErrorBanner message={error} /> : null}
+        <Button
+          label={SAVE_A_COPY.label}
+          icon={SAVE_A_COPY.icon}
+          loading={busy}
+          disabled={!online}
+          disabledReason={OFFLINE}
+          onPress={() => void save(target)}
+        />
+        {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+      </View>
+    ) : undefined,
+  };
+}
+
+/** Save a copy for a way or a map on the plan's Map tab. */
+export function SaveCopySheet({
+  planId,
+  target,
+  online,
+  onClose,
+  onDone,
+}: {
+  planId: string;
+  /** Null while closed. */
+  target: SaveCopyTarget | null;
+  online: boolean;
+  onClose: () => void;
+  onDone: (message: string, tone: "info" | "error") => void;
+}) {
+  const panel = useSaveCopyPanel({
+    planId,
+    target,
+    online,
+    onFinished: onClose,
+    onDone,
+  });
+  return (
+    <BottomSheet
+      visible={target !== null}
+      // Not while saving: the reply would land on whatever opens next.
+      onClose={() => {
+        if (!panel.busy) onClose();
+      }}
+      title={panel.title}
+      footer={panel.footer}
+    >
+      {panel.body}
     </BottomSheet>
   );
 }

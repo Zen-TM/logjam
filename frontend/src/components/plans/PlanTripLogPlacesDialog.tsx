@@ -108,7 +108,11 @@ export default function PlanTripLogPlacesDialog({
           if (!busy) void submit();
         }}
       >
-        <p className={classes.note}>{tripPlanTripLogPlacesLine(copyMedia)}</p>
+        <p className={classes.note}>
+          {tripPlanTripLogPlacesLine(
+            places.some((place) => place.media.length > 0) ? copyMedia : null,
+          )}
+        </p>
         <div className={classes.question}>
           {places.map((place) => (
             <Checkbox

@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import {
+  ApiError,
   distinctTripTypes,
+  mediaSkippedSentence,
   messageFromError,
   MAX_PLACES_PER_TRIP,
   tripPlanTripLogPlacesLine,
@@ -18,8 +20,9 @@ import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
 import { requestSync } from "../sync/syncEngine";
 import { useMirrorPlaces, useMirrorTrips } from "../sync/useSyncQueries";
 import { makeStyles, muted, spacing } from "../theme";
-import { BottomSheet, Button, ErrorBanner, Row, SwitchRow } from "../ui";
+import { BottomSheet, Button, ErrorBanner, Row } from "../ui";
 import { savePlanItem } from "./plansApi";
+import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
@@ -29,8 +32,10 @@ const OFFLINE = unavailableReasonText("needs-connection");
  * (shared/DESIGN.md §10), opened on the plan's first day with its name, types
  * and write-up (`tripPlanTripLogPrefill`). A plan with places asks first
  * which were on the trip: each picked one is saved as the caller's own copy
- * (Save a copy, online) and the trip links the copies, as Logjam Web's #573
- * does. Picking none goes straight to the form, which queues offline.
+ * (Save a copy, online), in the plan's order, with or without its photos as
+ * the account's remembered `copyPlaceMedia` says, and the trip links the
+ * copies, as frontend/src/components/plans/PlanTripLogPlacesDialog.tsx does.
+ * Picking none goes straight to the form, which queues offline.
  */
 export function PlanTripLogSheet({
   plan,
@@ -42,7 +47,7 @@ export function PlanTripLogSheet({
   plan: TripPlanView | null;
   online: boolean;
   onClose: () => void;
-  onSaved: (message: string) => void;
+  onSaved: (message: string, tone: "info" | "error") => void;
 }) {
   const styles = useStyles();
   const places = useMirrorPlaces();
@@ -56,7 +61,6 @@ export function PlanTripLogSheet({
     [plan],
   );
 
-  // Each open starts on the places step, or the form when there are none.
   // "saved": the copies are made and the places sheet is closing; the form
   // opens once it has gone (`onClosed`), as one modal can't open while
   // another closes on Android.
@@ -64,6 +68,11 @@ export function PlanTripLogSheet({
   const [picked, setPicked] = useState<string[]>([]);
   // Plan place id → its copy's id: a retry after a stop saves only the rest.
   const [copies, setCopies] = useState<Record<string, string>>({});
+  // What didn't come with the copies, said once the flow ends: a toast now
+  // would draw under the form that opens at once.
+  // A ref: the form calls onSaved then onClose in one tick, and the note is
+  // said once.
+  const skipped = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openKey = plan?.id ?? null;
@@ -76,49 +85,82 @@ export function PlanTripLogSheet({
     setError(null);
   }
   const asking = plan !== null && step === "places";
-  const [withMedia, toggleMedia] = useRememberedCopyMedia(asking);
+  // The remembered preference decides, as on Logjam Web: no switch here.
+  const [withMedia] = useRememberedCopyMedia(asking);
+  // Picks still in the plan, in its order (a refetch can take one away).
+  const chosen = plan ? plan.places.filter((p) => picked.includes(p.id)) : [];
+  const hasPhotos = chosen.some((place) => place.media.length > 0);
 
   async function next(target: TripPlanView) {
     setBusy(true);
     setError(null);
     const saved = { ...copies };
+    let lost = 0;
+    let outOfSpace = false;
     try {
-      for (const id of picked) {
-        if (saved[id]) continue;
-        saved[id] = (await savePlanItem(target.id, "place", id, withMedia)).id;
+      for (const place of chosen) {
+        if (saved[place.id]) continue;
+        const result = await savePlanItem(
+          target.id,
+          "place",
+          place.id,
+          withMedia,
+        );
+        saved[place.id] = result.id;
+        lost += result.mediaSkipped ?? 0;
+        outOfSpace ||= result.mediaOutOfSpace === true;
       }
-      // The copies reach the phone by the next pull: asked for now.
-      void requestSync().catch(console.error);
-      setCopies(saved);
       setStep("saved");
     } catch (err) {
-      setCopies(saved);
       setError(
         tripPlanTripLogStopped(
-          Object.keys(saved).length,
+          chosen.filter((place) => saved[place.id]).length,
           messageFromError(err, copy.saveCopyFailed),
         ),
       );
+      // Gone from the plan meanwhile: fetched again, its row goes too.
+      if (err instanceof ApiError) await afterPlanWrite(target.id);
     } finally {
+      setCopies(saved);
+      skipped.current =
+        [skipped.current, mediaSkippedSentence(lost, outOfSpace)]
+          .filter(Boolean)
+          .join(" ") || null;
+      // The copies reach the phone by the next pull: asked for now.
+      if (Object.keys(saved).length > Object.keys(copies).length)
+        void requestSync().catch(console.error);
       setBusy(false);
     }
   }
 
-  const initialPlaces = plan
-    ? picked.flatMap((id) => {
-        const place = plan.places.find((each) => each.id === id);
-        return place && copies[id]
-          ? [{ id: copies[id], name: place.name }]
-          : [];
-      })
-    : [];
-  const full = picked.length >= MAX_PLACES_PER_TRIP;
+  // The skipped photos, said once: with the trip's own message, or alone if
+  // the form closes unsaved.
+  const finish = (message: string | null) => {
+    const note = skipped.current;
+    skipped.current = null;
+    if (message)
+      onSaved(
+        [message, note].filter(Boolean).join(" "),
+        note ? "error" : "info",
+      );
+    else if (note) onSaved(note, "error");
+  };
+
+  const initialPlaces = chosen.flatMap((place) =>
+    copies[place.id] ? [{ id: copies[place.id], name: place.name }] : [],
+  );
+  const full = chosen.length >= MAX_PLACES_PER_TRIP;
 
   return (
     <>
       <BottomSheet
         visible={asking}
-        onClose={onClose}
+        // Not while saving: the loop would land on the next session.
+        onClose={() => {
+          if (busy) return;
+          skipped.current = null;
+          onClose();
+        }}
         onClosed={() => setStep((was) => (was === "saved" ? "form" : was))}
         title={copy.tripLogPlaces}
         footer={
@@ -129,11 +171,11 @@ export function PlanTripLogSheet({
                 label={copy.tripLogNext}
                 loading={busy}
                 // Picking none needs no connection: nothing is saved.
-                disabled={!online && picked.length > 0}
+                disabled={!online && chosen.length > 0}
                 disabledReason={OFFLINE}
                 onPress={() => void next(plan)}
               />
-              {!online && picked.length > 0 ? (
+              {!online && chosen.length > 0 ? (
                 <Text style={styles.muted}>{OFFLINE}</Text>
               ) : null}
             </View>
@@ -143,15 +185,8 @@ export function PlanTripLogSheet({
         {plan ? (
           <View style={styles.body}>
             <Text style={styles.muted}>
-              {tripPlanTripLogPlacesLine(withMedia)}
+              {tripPlanTripLogPlacesLine(hasPhotos ? withMedia : null)}
             </Text>
-            {plan.places.some((place) => place.media.length > 0) ? (
-              <SwitchRow
-                title={copy.bringPhotos}
-                checked={withMedia}
-                onChange={toggleMedia}
-              />
-            ) : null}
             {plan.places.map((place) => {
               const on = picked.includes(place.id);
               return (
@@ -160,7 +195,7 @@ export function PlanTripLogSheet({
                   icon="place"
                   title={place.name}
                   selected={on}
-                  disabled={!on && full}
+                  disabled={busy || (!on && full)}
                   subtitle={!on && full ? TRIP_PLACES_CAP_SENTENCE : undefined}
                   onPress={() =>
                     setPicked((was) =>
@@ -182,8 +217,11 @@ export function PlanTripLogSheet({
         initialPlaces={initialPlaces}
         prefill={prefill}
         existingTypes={existingTypes}
-        onClose={onClose}
-        onSaved={onSaved}
+        onClose={() => {
+          finish(null);
+          onClose();
+        }}
+        onSaved={(message) => finish(message)}
       />
     </>
   );

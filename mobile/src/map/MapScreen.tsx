@@ -5505,7 +5505,7 @@ export function MapScreen({
         }
         online={connectivity === "online"}
         onClose={() => setPlanPlaceId(null)}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text, tone) => notify(text, tone ?? "info")}
       />
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
           in (DESIGN.md). No "Show on map" row here — the user is looking at

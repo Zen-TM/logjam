@@ -177,8 +177,8 @@ Reads come from the on-device mirror and writes queue in the outbox.
   full-resolution media not yet on the phone; notification preferences;
   username, email, deleting the account; creating or changing a plan, its
   sections or its people, and answering its forms (a plan is fetched and
-  cached, not synced).
-  Everything else works offline.
+  cached, not synced); saving a copy of anything in a plan, the places
+  picked for a trip log from it included. Everything else works offline.
 - **`src/auth/capabilities.ts` owns the guest matrix and both strings.** A
   screen whose data needs an account gates itself with
   `capabilityScreenBlock`: hero and back arrow over an `EmptyState`, no
