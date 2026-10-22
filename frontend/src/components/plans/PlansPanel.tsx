@@ -4,6 +4,7 @@
 // waiting on a leader says who it waits for. Drawn from `TRIP_PLANS_LIST`.
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  PLAN_REQUEST_VERBS,
   contractSectionKeys,
   sortTripPlans,
   todayDateKey,
@@ -130,14 +131,12 @@ export default function PlansPanel({
                 label={`Actions for ${plan.name}`}
                 title={plan.name}
                 placement="right-start"
-                entries={[
-                  {
-                    id: "withdraw",
-                    label: copy.withdraw,
-                    icon: "close",
-                    onSelect: () => void dropMembership(plan),
-                  },
-                ]}
+                entries={PLAN_REQUEST_VERBS.map((verb) => ({
+                  id: verb.id,
+                  label: verb.label,
+                  icon: verb.icon,
+                  onSelect: () => void dropMembership(plan),
+                }))}
                 trigger={(props) => (
                   <IconButton
                     {...props}

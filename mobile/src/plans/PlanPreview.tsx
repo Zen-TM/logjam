@@ -95,7 +95,7 @@ export function PlanPreview({
   useEffect(() => {
     if (block) return;
     let alive = true;
-    opensAsPreview(planId)
+    opensAsPreview(planId, online)
       .then((stillInvited) => {
         if (!alive) return;
         if (stillInvited) setChecked(true);
@@ -108,7 +108,7 @@ export function PlanPreview({
     return () => {
       alive = false;
     };
-  }, [planId, block]);
+  }, [planId, block, online]);
 
   useEffect(() => {
     if (block || !checked || !online) return;
@@ -126,10 +126,17 @@ export function PlanPreview({
           });
           return;
         }
-        // Not invited any more: joined meanwhile, or the invite went.
+        // Not invited any more: joined meanwhile, or the invite went. The
+        // list, just polled, says which.
         await pollPlans().catch(console.error);
+        const stillInvited = await opensAsPreview(planId, false).catch(
+          (failed: unknown) => {
+            console.error(failed);
+            return true;
+          },
+        );
         if (!alive) return;
-        if (await opensAsPreview(planId)) setLoaded({ kind: "gone" });
+        if (stillInvited) setLoaded({ kind: "gone" });
         else joined();
       },
     );
@@ -194,8 +201,8 @@ export function PlanPreview({
                   <Button
                     label={copy.join}
                     compact
-                    loading={busy === "join" && !joining}
-                    disabled={!online || busy !== null}
+                    loading={busy === "join"}
+                    disabled={!online}
                     disabledReason={OFFLINE}
                     onPress={() =>
                       preview.requiredForms.length > 0
@@ -208,7 +215,7 @@ export function PlanPreview({
                     compact
                     variant="outlineAccent"
                     loading={busy === "decline"}
-                    disabled={!online || busy !== null}
+                    disabled={!online}
                     disabledReason={OFFLINE}
                     onPress={() => void decline()}
                   />

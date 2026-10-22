@@ -14,6 +14,7 @@ import {
 } from "react";
 import { FlatList, RefreshControl, Text, View } from "react-native";
 import {
+  PLAN_REQUEST_VERBS,
   contractSectionKeys,
   messageFromError,
   sortTripPlans,
@@ -68,6 +69,7 @@ import { plansListView } from "./planViews";
 
 const copy = TRIP_PLANS_LIST.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
+const WITHDRAW = PLAN_REQUEST_VERBS[0];
 const BUCKETS: TripPlanBucket[] = ["upcoming", "past", "archived"];
 const BUCKET_LABEL: Record<TripPlanBucket, string> = {
   upcoming: copy.bucketUpcoming,
@@ -174,10 +176,11 @@ export function PlansScreen({
   // Decline and Withdraw request: one call, by status (`leavePlan`); no
   // confirm, as on Logjam Web.
   const [menuFor, setMenuFor] = useState<TripPlanSummary | null>(null);
-  const [leaving, setLeaving] = useState<string | null>(null);
+  // Each plan's own: a second decline doesn't free the first's button.
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
   const leave = useCallback(
     (plan: TripPlanSummary, done: string, failed: string) => {
-      setLeaving(plan.id);
+      setLeaving((was) => new Set(was).add(plan.id));
       void leavePlan(plan.id)
         .then(async () => {
           await poll();
@@ -190,7 +193,13 @@ export function PlansScreen({
             nonce: Date.now(),
           }),
         )
-        .finally(() => setLeaving(null));
+        .finally(() =>
+          setLeaving((was) => {
+            const next = new Set(was);
+            next.delete(plan.id);
+            return next;
+          }),
+        );
     },
     [poll, setToast],
   );
@@ -235,7 +244,12 @@ export function PlansScreen({
           // An invite answers in its footer: Open (the preview) · Decline.
           footer={
             item.status === "invited" ? (
-              <View style={styles.footer}>
+              // Its own taps: a dimmed Decline doesn't fall through to the
+              // row's Open.
+              <View
+                style={styles.footer}
+                onStartShouldSetResponder={() => true}
+              >
                 <View style={styles.pills}>
                   <Button
                     label={copy.open}
@@ -246,7 +260,7 @@ export function PlansScreen({
                     label={copy.decline}
                     compact
                     variant="outlineAccent"
-                    loading={leaving === item.id}
+                    loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
                     onPress={() =>
@@ -410,8 +424,8 @@ export function PlansScreen({
       >
         {menuFor ? (
           <Row
-            icon="leave"
-            title={copy.withdraw}
+            icon={WITHDRAW.icon}
+            title={WITHDRAW.label}
             subtitle={online ? undefined : OFFLINE}
             disabled={!online}
             onPress={() => {

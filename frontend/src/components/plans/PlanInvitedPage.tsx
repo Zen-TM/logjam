@@ -53,7 +53,7 @@ export default function PlanInvitedPage({
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed));
+          setError(messageFromError(err, TRIP_PLAN_PREVIEW.copy.loadFailed));
       });
     return () => {
       cancelled = true;
@@ -78,7 +78,7 @@ export default function PlanInvitedPage({
     return (
       <div className={classes.root}>
         <Hero
-          title={TRIP_PLAN_PAGE.copy.loading}
+          title={TRIP_PLAN_PREVIEW.copy.loading}
           onBack={onBack}
           backLabel={TRIP_PLAN_PAGE.copy.back}
         />
@@ -89,7 +89,7 @@ export default function PlanInvitedPage({
               onRetry={() => setFetchCount((n) => n + 1)}
             />
           ) : (
-            <LoadingState label={TRIP_PLAN_PAGE.copy.loading} />
+            <LoadingState label={TRIP_PLAN_PREVIEW.copy.loading} />
           )}
         </div>
       </div>
@@ -161,17 +161,23 @@ export default function PlanInvitedPage({
       </>
     ),
   };
-  // The hero and the notice stand above the list, as before the contract.
-  const [hero, notice, ...rest] = contractSectionKeys(TRIP_PLAN_PREVIEW, "web");
+  // The hero and the notice stand above the list, the rest inside it.
+  const above = new Set<string>(["hero", "notice"]);
+  const keys = contractSectionKeys(TRIP_PLAN_PREVIEW, "web");
 
   return (
     <div className={classes.root}>
-      {sections[hero]}
-      {sections[notice]}
-      <div className={classes.list}>
-        {rest.map((key) => (
+      {keys
+        .filter((key) => above.has(key))
+        .map((key) => (
           <Fragment key={key}>{sections[key]}</Fragment>
         ))}
+      <div className={classes.list}>
+        {keys
+          .filter((key) => !above.has(key))
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
       </div>
       {joining && (
         <PlanJoinDialog

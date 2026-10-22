@@ -401,9 +401,18 @@ describe("opensAsPreview", () => {
       plans: [summary("joined"), summary("asked", "invited")],
     });
     await pollPlans();
-    expect(await opensAsPreview("joined")).toBe(false);
-    expect(await opensAsPreview("asked")).toBe(true);
+    expect(await opensAsPreview("joined", false)).toBe(false);
+    expect(await opensAsPreview("asked", false)).toBe(true);
     // Not in the list yet: the invite arrived since the last poll.
-    expect(await opensAsPreview("new")).toBe(true);
+    expect(await opensAsPreview("new", false)).toBe(true);
+  });
+
+  // Mutation: drop the online guard, and a reader re-invited to a plan the
+  // cache still lists as active skips the invite for a member page that
+  // 404s.
+  it("lets the preview decide online, whatever the list says", async () => {
+    api.getPlans.mockResolvedValueOnce({ plans: [summary("left")] });
+    await pollPlans();
+    expect(await opensAsPreview("left", true)).toBe(true);
   });
 });

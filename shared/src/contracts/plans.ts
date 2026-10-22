@@ -67,7 +67,6 @@ export const TRIP_PLANS_LIST = {
     decline: "Decline",
     declined: "Invite declined.",
     declineFailed: "Couldn't decline the invite.",
-    withdraw: "Withdraw request",
     withdrawn: "Request withdrawn.",
     withdrawFailed: "Couldn't withdraw the request.",
 

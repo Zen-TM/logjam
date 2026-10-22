@@ -179,11 +179,16 @@ export async function pollPlans(): Promise<PlansList> {
 }
 
 /**
- * Whether a plan opened as an invite still opens as its preview: not once
- * the cached list has the reader in it (`opensPreview`), so an old invite
- * push or Inbox row, tapped offline after joining, opens the downloaded plan.
+ * Whether a plan opened as an invite still opens as its preview. Offline,
+ * the cached list decides (`opensPreview`), so an old invite push or Inbox
+ * row tapped after joining opens the downloaded plan. Online, the preview's
+ * own read decides: a cached "active" may be older than a re-invite.
  */
-export async function opensAsPreview(planId: string): Promise<boolean> {
+export async function opensAsPreview(
+  planId: string,
+  online: boolean,
+): Promise<boolean> {
+  if (online) return true;
   const list = await readPlansList();
   return opensPreview(
     true,
