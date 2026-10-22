@@ -22,6 +22,7 @@ import {
   planAddVerbLabel,
   planVerbsFor,
   PLAN_ADD_VERBS,
+  PLAN_FORM_VERBS,
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
@@ -30,6 +31,7 @@ import {
   tripPlanNotice,
   tripTypeLabel,
   weatherAge as updatedAgo,
+  TRIP_PLAN_FORMS,
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
   type SectionKeysOn,
@@ -64,6 +66,7 @@ import {
   type ChipOption,
   type ToastMessage,
 } from "../ui";
+import { FormSheet, type FormSheetState } from "./FormSheet";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
 import {
@@ -294,9 +297,15 @@ function PlanPage({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
+  const [formSheet, setFormSheet] = useState<FormSheetState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
     setToast({ text, tone, nonce: Date.now() });
+  // Stable: FormSheet hands a refusal over from an effect.
+  const notifyError = useCallback(
+    (text: string) => setToast({ text, tone: "error", nonce: Date.now() }),
+    [],
+  );
   const archived = plan.archivedAt != null;
   // Add ▾'s verbs this caller may run; the page draws each where it belongs.
   const adds = new Set(
@@ -382,7 +391,29 @@ function PlanPage({
     ),
     notices: notice ? (
       <View style={styles.notice}>
-        <Notice icon={notice.icon}>{notice.text}</Notice>
+        <Notice
+          icon={notice.icon}
+          controls={
+            notice.kind === "answer" ? (
+              // The button only dims: the words go under it (ui/Button.tsx).
+              <View style={styles.noticeControl}>
+                <Button
+                  label={TRIP_PLAN_FORMS.copy.answer}
+                  compact
+                  variant="outlineAccent"
+                  disabled={!online}
+                  disabledReason={OFFLINE}
+                  onPress={() =>
+                    setFormSheet({ formId: notice.formId, mode: "answer" })
+                  }
+                />
+                {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+              </View>
+            ) : undefined
+          }
+        >
+          {notice.text}
+        </Notice>
       </View>
     ) : null,
     dates: (
@@ -417,7 +448,13 @@ function PlanPage({
       view === "items" ? (
         <Items plan={plan} online={online} onInfo={notify} />
       ) : null,
-    forms: view === "forms" ? <Forms plan={plan} /> : null,
+    forms:
+      view === "forms" ? (
+        <Forms
+          plan={plan}
+          onOpen={(formId, mode) => setFormSheet({ formId, mode })}
+        />
+      ) : null,
     people:
       view === "people" ? (
         <PeopleView
@@ -501,6 +538,14 @@ function PlanPage({
         onState={setSectionSheet}
         onInfo={notify}
         onError={(text) => notify(text, "error")}
+      />
+      <FormSheet
+        state={formSheet}
+        plan={plan}
+        online={online}
+        onState={setFormSheet}
+        onInfo={notify}
+        onError={notifyError}
       />
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -727,9 +772,21 @@ function Items({
   );
 }
 
-function Forms({ plan }: { plan: TripPlanView }) {
+function Forms({
+  plan,
+  onOpen,
+}: {
+  plan: TripPlanView;
+  /** The form's sheet, read or on its ⋯ (`verbs`). */
+  onOpen: (formId: string, mode: "read" | "verbs") => void;
+}) {
+  const theme = useTheme();
   const styles = useStyles();
   const { assetHue } = useHues();
+  // The row offers the form's verbs as its sheet does (shared/DESIGN.md §9).
+  const verbs = planVerbsFor(PLAN_FORM_VERBS, "gps", plan.myRole, {
+    archived: plan.archivedAt != null,
+  });
   if (plan.forms.length === 0)
     return (
       <EmptyState
@@ -748,7 +805,9 @@ function Forms({ plan }: { plan: TripPlanView }) {
       subtitle={
         form.visibleTo === "leaders" ? copy.seenByLeaders : copy.seenByMembers
       }
-      right={
+      onPress={() => onOpen(form.id, "read")}
+      // The pills sit under the line: beside the ⋯ they squeezed the title.
+      footer={
         form.requiredToJoin ? (
           <View style={styles.pills}>
             <StatusPill label={copy.pillRequired} tone="outline" />
@@ -756,6 +815,16 @@ function Forms({ plan }: { plan: TripPlanView }) {
               <StatusPill label={copy.pillNotAnswered} tone="warning" />
             )}
           </View>
+        ) : undefined
+      }
+      right={
+        verbs.length > 0 ? (
+          <IconButton
+            icon="overflow"
+            accessibilityLabel={`${TRIP_PLAN_FORMS.copy.actions}: ${form.title}`}
+            color={theme.textMuted}
+            onPress={() => onOpen(form.id, "verbs")}
+          />
         ) : undefined
       }
     />
@@ -773,6 +842,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   notice: { paddingHorizontal: spacing(2), paddingTop: spacing(1) },
+  noticeControl: { alignItems: "center", gap: spacing(0.5) },
   dates: {
     ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(2),

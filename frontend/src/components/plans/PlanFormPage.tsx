@@ -4,6 +4,7 @@
 // to join. Drawn from `TRIP_PLAN_FORMS`.
 import { Fragment, type ReactNode } from "react";
 import {
+  tripPlanAnswerRows,
   contractSectionKeys,
   currentTripPlanAnswers,
   planVerbsFor,
@@ -48,27 +49,9 @@ export default function PlanFormPage({
   const mine = form.myAnswer
     ? currentTripPlanAnswers(form.questions, form.myAnswer.answers)
     : null;
-  // Who's going, each with their answer or none, those without last. Under
-  // them, for a leader (the API serves no one else theirs), those asking to
-  // join who answered: what a leader reads before letting them in.
-  const answerBy = new Map(
-    [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])].map(
-      (answer) => [answer.user.id, answer],
-    ),
-  );
-  const rows = members
-    .filter((member) => member.status === "active")
-    .map((member) => ({
-      user: member.user,
-      answer: answerBy.get(member.user.id),
-    }))
-    .sort((a, b) => Number(!a.answer) - Number(!b.answer));
-  const asking = members
-    .filter((member) => member.status === "requested")
-    .flatMap((member) => {
-      const answer = answerBy.get(member.user.id);
-      return answer ? [{ user: member.user, answer }] : [];
-    });
+  // Who's going, each with their answer or none, then those asking to join
+  // who answered (`tripPlanAnswerRows`).
+  const { going: rows, asking } = tripPlanAnswerRows(form, members);
 
   const table = (
     title: string,

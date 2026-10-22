@@ -9,6 +9,7 @@ import {
   TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
   type DateOnly,
   type TripPlanAnswerValue,
+  type TripPlanAnswerView,
   type TripPlanQuestion,
   type TripPlanQuestionKind,
   type TripPlanFormPresetId,
@@ -18,6 +19,7 @@ import {
   type TripPlanMemberStatus,
   type TripPlanRole,
   type TripPlanSummary,
+  type TripPlanUserRef,
   type TripPlanView,
 } from "../tripPlans.js";
 import type { ScreenContract } from "./types.js";
@@ -825,6 +827,68 @@ export function tripPlanAnswerText(
     default:
       return String(value);
   }
+}
+
+/**
+ * A form's answers as a reader sees them: everyone going, each with their
+ * answer or none, those without last; then, for a leader (the API serves no
+ * one else theirs), those asking to join who answered, marked apart. Anyone
+ * else with a plan row (an invitee) is left out.
+ */
+export function tripPlanAnswerRows(
+  form: Pick<TripPlanFormView, "answers" | "myAnswer">,
+  members: readonly {
+    user: TripPlanUserRef;
+    status: TripPlanMemberStatus;
+  }[],
+): {
+  going: { user: TripPlanUserRef; answer?: TripPlanAnswerView }[];
+  asking: { user: TripPlanUserRef; answer: TripPlanAnswerView }[];
+} {
+  const answerBy = new Map(
+    [...form.answers, ...(form.myAnswer ? [form.myAnswer] : [])].map(
+      (answer) => [answer.user.id, answer],
+    ),
+  );
+  return {
+    going: members
+      .filter((member) => member.status === "active")
+      .map((member) => ({
+        user: member.user,
+        answer: answerBy.get(member.user.id),
+      }))
+      .sort((a, b) => Number(!a.answer) - Number(!b.answer)),
+    asking: members
+      .filter((member) => member.status === "requested")
+      .flatMap((member) => {
+        const answer = answerBy.get(member.user.id);
+        return answer ? [{ user: member.user, answer }] : [];
+      }),
+  };
+}
+
+/**
+ * The picks a choice or yes/no question offers, as the shared draft holds
+ * them: an option's id, or "true"/"false" (`answersFromDraft` turns only
+ * those into a boolean). An optional one starts with "—", so a pick can be
+ * taken back (shared/DESIGN.md §10).
+ */
+export function tripPlanQuestionChoices(
+  question: Pick<TripPlanQuestion, "kind" | "required" | "options">,
+): { value: string; label: string }[] {
+  const copy = TRIP_PLAN_FORMS.copy;
+  return [
+    ...(question.required ? [] : [{ value: "", label: "—" }]),
+    ...(question.kind === "yesNo"
+      ? [
+          { value: "true", label: copy.yes },
+          { value: "false", label: copy.no },
+        ]
+      : (question.options ?? []).map((option) => ({
+          value: option.id,
+          label: option.label,
+        }))),
+  ];
 }
 
 /** Whether the caller sees other people's answers to a form: leaders always,
