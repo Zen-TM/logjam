@@ -1,10 +1,11 @@
-// A plan someone is invited to by username, before they join: the write-up,
-// the forms required to join and who is going (GET /plans/:id/preview), with
-// Join and Decline. Join answers those forms in a sheet (`TRIP_PLAN_JOIN`),
-// with the controls the Forms tab answers with (`PlanFormFields`). Logjam
-// Web's twin is PlanInvitedPage with PlanJoinDialog. Online only: a preview
-// is not cached, and an invite waits until there is signal.
-import { useCallback, useEffect, useState } from "react";
+// A plan someone is invited to by username, before they join
+// (`TRIP_PLAN_PREVIEW`, GET /plans/:id/preview): the write-up, the forms
+// required to join and who is going, with Join and Decline. Join answers
+// those forms in a sheet (`TRIP_PLAN_JOIN`), with the controls the Forms tab
+// answers with (`PlanFormFields`). Logjam Web's twin is PlanInvitedPage with
+// PlanJoinDialog. A preview is not cached: it needs a connection, unless the
+// reader has joined since, when the plan opens instead (`opensAsPreview`).
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 import {
   ApiError,
@@ -12,20 +13,25 @@ import {
   fitAnswerDraft,
   joinAnswers,
   messageFromError,
-  opensPreview,
-  tripPlanDatesLabel,
+  tripPlanInvitedLine,
   tripPlanJoinTitle,
+  tripPlanPreviewHeaded,
   tripPlanVisibilityLine,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_OFFLINE,
-  TRIP_PLAN_PAGE,
-  TRIP_PLANS_LIST,
+  TRIP_PLAN_PREVIEW,
+  type SectionKeysOn,
   type TripPlanAnswerDraft,
   type TripPlanInvitedPreview,
+  type TripPlanJoinAnswers,
   type TripPlanJoinForm,
 } from "@logjam/shared";
 
-import { unavailableReasonText } from "../auth/capabilities";
+import { useAccountState } from "../auth/AccountStateContext";
+import {
+  capabilityScreenBlock,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { makeStyles, muted, spacing } from "../theme";
 import {
@@ -43,9 +49,9 @@ import {
 } from "../ui";
 import { PlanFormFields } from "./PlanFormFields";
 import { getInvitedPreview, joinPlan, leavePlan } from "./plansApi";
-import { fetchPlan, pollPlans, readPlansList } from "./plansCache";
+import { fetchPlan, opensAsPreview, pollPlans } from "./plansCache";
 
-const copy = TRIP_PLAN_JOIN.copy;
+const copy = TRIP_PLAN_PREVIEW.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
 type Loaded =
@@ -71,39 +77,69 @@ export function PlanPreview({
 }) {
   const styles = useStyles();
   const online = useConnectivity() === "online";
+  // An invite push tapped after sign-out can open this for a guest: no read,
+  // no fetch, as on Plans.
+  const { accountState } = useAccountState();
+  const block = capabilityScreenBlock("plans", accountState);
+  // The list first: joined since (on Logjam Web, or here), it opens the plan.
+  const [checked, setChecked] = useState(false);
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
+  const [reads, setReads] = useState(0);
   const [joining, setJoining] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"join" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The caller's arrow, recreated on each of its renders: not a reason to
+  // read the preview again.
+  const joined = useEffectEvent(() => onJoined());
 
-  const load = useCallback(
-    () =>
-      getInvitedPreview(planId).then(
-        (preview) => setLoaded({ kind: "preview", preview }),
-        async (err: unknown) => {
-          if (!(err instanceof ApiError && err.status === 404)) {
-            setLoaded({
-              kind: "failed",
-              message: messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed),
-            });
-            return;
-          }
-          // Not invited any more: joined meanwhile (from another device), or
-          // the invite went. The list says which.
-          const list = await pollPlans().catch(() => readPlansList());
-          const listed = list?.plans.find((plan) => plan.id === planId)?.status;
-          if (opensPreview(true, listed)) setLoaded({ kind: "gone" });
-          else onJoined();
-        },
-      ),
-    [planId, onJoined],
-  );
   useEffect(() => {
-    if (online) void load();
-  }, [online, load]);
+    if (block) return;
+    let alive = true;
+    opensAsPreview(planId)
+      .then((stillInvited) => {
+        if (!alive) return;
+        if (stillInvited) setChecked(true);
+        else joined();
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        if (alive) setChecked(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [planId, block]);
 
-  async function join(answers: Parameters<typeof joinPlan>[1]) {
-    setBusy(true);
+  useEffect(() => {
+    if (block || !checked || !online) return;
+    let alive = true;
+    getInvitedPreview(planId).then(
+      (preview) => {
+        if (alive) setLoaded({ kind: "preview", preview });
+      },
+      async (err: unknown) => {
+        if (!alive) return;
+        if (!(err instanceof ApiError && err.status === 404)) {
+          setLoaded({
+            kind: "failed",
+            message: messageFromError(err, copy.loadFailed),
+          });
+          return;
+        }
+        // Not invited any more: joined meanwhile, or the invite went.
+        await pollPlans().catch(console.error);
+        if (!alive) return;
+        if (await opensAsPreview(planId)) setLoaded({ kind: "gone" });
+        else joined();
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [planId, block, checked, online, reads]);
+
+  async function join(answers: TripPlanJoinAnswers) {
+    setBusy("join");
     setError(null);
     try {
       await joinPlan(planId, answers);
@@ -111,121 +147,156 @@ export function PlanPreview({
       setJoining(false);
       onJoined();
     } catch (err) {
-      setError(messageFromError(err, copy.joinFailed));
+      setError(messageFromError(err, TRIP_PLAN_JOIN.copy.joinFailed));
       // A 409 is a form changed or gone: read again, the drafts refit.
-      if (err instanceof ApiError && err.status === 409) void load();
+      if (err instanceof ApiError && err.status === 409) setReads((n) => n + 1);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function decline() {
-    setBusy(true);
+    setBusy("decline");
     try {
       await leavePlan(planId);
       await pollPlans().catch(console.error);
-      onDeclined(TRIP_PLANS_LIST.copy.declined);
+      onDeclined(copy.declined);
     } catch (err) {
-      setError(messageFromError(err, TRIP_PLANS_LIST.copy.declineFailed));
+      setError(messageFromError(err, copy.declineFailed));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
+  if (block)
+    return (
+      <View style={styles.screen}>
+        <Hero title={block.title} onBack={onBack} />
+        <EmptyState title={block.title} hint={block.hint} icon="plan" />
+      </View>
+    );
+
   const preview = loaded.kind === "preview" ? loaded.preview : null;
+  const headed = preview ? tripPlanPreviewHeaded(preview) : false;
+  const sections: Record<
+    SectionKeysOn<typeof TRIP_PLAN_PREVIEW, "gps">,
+    ReactNode
+  > | null = preview
+    ? {
+        // The name is the screen's hero; its line is here.
+        hero: <Text style={styles.muted}>{tripPlanInvitedLine(preview)}</Text>,
+        notice: (
+          <>
+            <Notice
+              icon="plan"
+              controls={
+                <View style={styles.controls}>
+                  <Button
+                    label={copy.join}
+                    compact
+                    loading={busy === "join" && !joining}
+                    disabled={!online || busy !== null}
+                    disabledReason={OFFLINE}
+                    onPress={() =>
+                      preview.requiredForms.length > 0
+                        ? setJoining(true)
+                        : void join({})
+                    }
+                  />
+                  <Button
+                    label={copy.decline}
+                    compact
+                    variant="outlineAccent"
+                    loading={busy === "decline"}
+                    disabled={!online || busy !== null}
+                    disabledReason={OFFLINE}
+                    onPress={() => void decline()}
+                  />
+                </View>
+              }
+            >
+              {preview.requiredForms.length > 0
+                ? copy.answerToJoin
+                : copy.invited}
+            </Notice>
+            {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+            {!joining && error ? <ErrorBanner message={error} /> : null}
+          </>
+        ),
+        writeUp: preview.sections.map((section) => (
+          <View key={section.id} style={styles.section}>
+            <SectionHeader title={section.title} />
+            {section.body ? (
+              <Text style={styles.sectionBody} selectable>
+                {section.body}
+              </Text>
+            ) : null}
+          </View>
+        )),
+        // What the notice's "Answer these" means, before Join asks.
+        forms: (
+          <>
+            {preview.requiredForms.length > 0 && headed ? (
+              <SectionHeader title={copy.forms} />
+            ) : null}
+            {preview.requiredForms.map((form) => (
+              <Row
+                key={form.id}
+                icon="form"
+                title={form.title}
+                subtitle={tripPlanVisibilityLine(form.visibleTo, form.preset)}
+              />
+            ))}
+          </>
+        ),
+        people: (
+          <>
+            {headed ? (
+              <SectionHeader
+                title={copy.people}
+                count={preview.members.length}
+              />
+            ) : null}
+            {preview.members.map((member) => (
+              <Row
+                key={member.id}
+                title={member.username}
+                leading={<Avatar username={member.username} />}
+              />
+            ))}
+          </>
+        ),
+      }
+    : null;
+
   return (
     <View style={styles.screen}>
       <Hero title={preview?.name ?? name} onBack={onBack} />
-      {!online && !preview ? (
+      {!checked ? (
+        <LoadingState label={copy.loading} />
+      ) : !online && !preview ? (
         <EmptyState icon="offline" title={OFFLINE} />
       ) : loaded.kind === "loading" ? (
-        <LoadingState label={TRIP_PLAN_PAGE.copy.loading} />
+        <LoadingState label={copy.loading} />
       ) : loaded.kind === "gone" ? (
         <EmptyState icon="plan" title={TRIP_PLAN_OFFLINE.gone} />
       ) : loaded.kind === "failed" ? (
-        <ErrorState message={loaded.message} onRetry={() => void load()} />
-      ) : preview ? (
+        <ErrorState
+          message={loaded.message}
+          onRetry={() => setReads((n) => n + 1)}
+        />
+      ) : preview && sections ? (
         <ScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.muted}>
-            {[
-              tripPlanDatesLabel(preview.startDate, preview.endDate),
-              preview.invitedBy &&
-                `${copy.invitedBy} ${preview.invitedBy.username}`,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </Text>
-          <Notice
-            icon="plan"
-            controls={
-              <View style={styles.controls}>
-                <Button
-                  label={copy.join}
-                  compact
-                  disabled={!online}
-                  disabledReason={OFFLINE}
-                  onPress={() =>
-                    preview.requiredForms.length > 0
-                      ? setJoining(true)
-                      : void join({})
-                  }
-                />
-                <Button
-                  label={copy.decline}
-                  compact
-                  variant="outlineAccent"
-                  loading={busy && !joining}
-                  disabled={!online}
-                  disabledReason={OFFLINE}
-                  onPress={() => void decline()}
-                />
-              </View>
-            }
-          >
-            {preview.requiredForms.length > 0
-              ? copy.answerToJoin
-              : TRIP_PLANS_LIST.copy.pillInvited}
-          </Notice>
-          {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-          {!joining && error ? <ErrorBanner message={error} /> : null}
-          {preview.sections.map((section) => (
-            <View key={section.id} style={styles.section}>
-              <SectionHeader title={section.title} />
-              {section.body ? (
-                <Text style={styles.sectionBody} selectable>
-                  {section.body}
-                </Text>
-              ) : null}
+          {contractSectionKeys(TRIP_PLAN_PREVIEW, "gps").map((key) => (
+            <View key={key} style={styles.block}>
+              {sections[key]}
             </View>
-          ))}
-          {/* What the notice's "Answer these" means, before Join asks. */}
-          {preview.requiredForms.length > 0 ? (
-            <SectionHeader title={TRIP_PLAN_PAGE.copy.viewForms} />
-          ) : null}
-          {preview.requiredForms.map((form) => (
-            <Row
-              key={form.id}
-              icon="form"
-              title={form.title}
-              subtitle={tripPlanVisibilityLine(form.visibleTo, form.preset)}
-            />
-          ))}
-          <SectionHeader
-            title={TRIP_PLAN_PAGE.copy.peopleGoing}
-            count={preview.members.length}
-          />
-          {preview.members.map((member) => (
-            <Row
-              key={member.id}
-              title={member.username}
-              leading={<Avatar username={member.username} />}
-            />
           ))}
           <JoinSheet
             visible={joining}
             preview={preview}
             online={online}
-            busy={busy}
+            busy={busy === "join"}
             error={error}
             onError={setError}
             onClose={() => {
@@ -256,23 +327,29 @@ function JoinSheet({
   online: boolean;
   busy: boolean;
   error: string | null;
-  onError: (sentence: string) => void;
+  /** Null clears it: an edit does (shared/DESIGN.md §11). */
+  onError: (sentence: string | null) => void;
   onClose: () => void;
-  onJoin: (answers: Parameters<typeof joinPlan>[1]) => void;
+  onJoin: (answers: TripPlanJoinAnswers) => void;
 }) {
   const styles = useStyles();
   const [drafts, setDrafts] = useState<Record<string, TripPlanAnswerDraft>>({});
   // A form that changed under the joiner (a 409, then the preview read
-  // again) keeps the answers that still fit.
-  const [shown, setShown] = useState<readonly TripPlanJoinForm[]>(
-    preview.requiredForms,
-  );
-  if (shown !== preview.requiredForms) {
-    setShown(preview.requiredForms);
+  // again) keeps the answers that still fit. Keyed on each form's
+  // `updatedAt`, not the array: a read of the same forms changes nothing.
+  const formsKey = preview.requiredForms
+    .map((form) => `${form.id}@${form.updatedAt}`)
+    .join(",");
+  const [shown, setShown] = useState<{
+    key: string;
+    forms: readonly TripPlanJoinForm[];
+  }>({ key: formsKey, forms: preview.requiredForms });
+  if (shown.key !== formsKey) {
+    setShown({ key: formsKey, forms: preview.requiredForms });
     setDrafts((was) =>
       Object.fromEntries(
         preview.requiredForms.map((form) => {
-          const before = shown.find((each) => each.id === form.id);
+          const before = shown.forms.find((each) => each.id === form.id);
           const draft = was[form.id] ?? {};
           return [
             form.id,
@@ -284,25 +361,21 @@ function JoinSheet({
       ),
     );
   }
-  const sections = {
-    hero: (
-      <Text style={styles.muted}>
-        {[
-          tripPlanDatesLabel(preview.startDate, preview.endDate),
-          preview.invitedBy &&
-            `${copy.invitedBy} ${preview.invitedBy.username}`,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </Text>
-    ),
+  const sections: Record<
+    SectionKeysOn<typeof TRIP_PLAN_JOIN, "gps">,
+    ReactNode
+  > = {
+    hero: <Text style={styles.muted}>{tripPlanInvitedLine(preview)}</Text>,
     forms: preview.requiredForms.map((form) => (
       <View key={form.id} style={styles.section}>
         <SectionHeader title={form.title} />
         <PlanFormFields
           form={form}
           draft={drafts[form.id] ?? {}}
-          onChange={(next) => setDrafts((was) => ({ ...was, [form.id]: next }))}
+          onChange={(next) => {
+            setDrafts((was) => ({ ...was, [form.id]: next }));
+            onError(null);
+          }}
         />
       </View>
     )),
@@ -316,7 +389,7 @@ function JoinSheet({
         <View style={styles.footer}>
           {error ? <ErrorBanner message={error} /> : null}
           <Button
-            label={copy.join}
+            label={TRIP_PLAN_JOIN.copy.join}
             loading={busy}
             disabled={!online}
             disabledReason={OFFLINE}
@@ -346,6 +419,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
     gap: spacing(1.5),
   },
+  block: { gap: spacing(1) },
   sheetBody: { gap: spacing(2) },
   muted: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },

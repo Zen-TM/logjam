@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import {
   contractSectionKeys,
   messageFromError,
@@ -38,11 +38,13 @@ import { useConnectivity } from "../map/connectivity";
 import { onMirrorChanged } from "../sync/syncDb";
 import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
+  BottomSheet,
   Button,
   ChipRail,
   EmptyState,
   ErrorState,
   Hero,
+  IconButton,
   ListEnd,
   LoadingState,
   Row,
@@ -65,6 +67,7 @@ import {
 import { plansListView } from "./planViews";
 
 const copy = TRIP_PLANS_LIST.copy;
+const OFFLINE = unavailableReasonText("needs-connection");
 const BUCKETS: TripPlanBucket[] = ["upcoming", "past", "archived"];
 const BUCKET_LABEL: Record<TripPlanBucket, string> = {
   upcoming: copy.bucketUpcoming,
@@ -168,31 +171,27 @@ export function PlansScreen({
     count: byBucket[value].length,
   }));
 
-  const withdraw = useCallback(
-    (plan: TripPlanSummary) =>
-      Alert.alert(plan.name, undefined, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: copy.withdraw,
-          onPress: () =>
-            void leavePlan(plan.id)
-              .then(async () => {
-                await poll();
-                setToast({
-                  text: copy.withdrawn,
-                  tone: "info",
-                  nonce: Date.now(),
-                });
-              })
-              .catch((err: unknown) =>
-                setToast({
-                  text: messageFromError(err, copy.withdrawFailed),
-                  tone: "error",
-                  nonce: Date.now(),
-                }),
-              ),
-        },
-      ]),
+  // Decline and Withdraw request: one call, by status (`leavePlan`); no
+  // confirm, as on Logjam Web.
+  const [menuFor, setMenuFor] = useState<TripPlanSummary | null>(null);
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const leave = useCallback(
+    (plan: TripPlanSummary, done: string, failed: string) => {
+      setLeaving(plan.id);
+      void leavePlan(plan.id)
+        .then(async () => {
+          await poll();
+          setToast({ text: done, tone: "info", nonce: Date.now() });
+        })
+        .catch((err: unknown) =>
+          setToast({
+            text: messageFromError(err, failed),
+            tone: "error",
+            nonce: Date.now(),
+          }),
+        )
+        .finally(() => setLeaving(null));
+    },
     [poll, setToast],
   );
 
@@ -207,13 +206,9 @@ export function PlansScreen({
           title={item.name}
           titleNumberOfLines={2}
           subtitle={tripPlanRowSubtitle(item)}
-          // An invite opens its preview; a request, Withdraw, online.
+          // The body opens; a request's only action is its ⋯ (shared/DESIGN.md §9).
           onPress={
-            item.status !== "requested"
-              ? () => onOpenPlan(item)
-              : online
-                ? () => withdraw(item)
-                : undefined
+            item.status !== "requested" ? () => onOpenPlan(item) : undefined
           }
           right={
             <View style={styles.pills}>
@@ -227,12 +222,56 @@ export function PlansScreen({
                 />
               ) : null}
               {pill ? <StatusPill label={pill} tone="outline" /> : null}
+              {item.status === "requested" ? (
+                <IconButton
+                  icon="overflow"
+                  accessibilityLabel={`Actions for ${item.name}`}
+                  color={theme.textMuted}
+                  onPress={() => setMenuFor(item)}
+                />
+              ) : null}
             </View>
+          }
+          // An invite answers in its footer: Open (the preview) · Decline.
+          footer={
+            item.status === "invited" ? (
+              <View style={styles.footer}>
+                <View style={styles.pills}>
+                  <Button
+                    label={copy.open}
+                    compact
+                    onPress={() => onOpenPlan(item)}
+                  />
+                  <Button
+                    label={copy.decline}
+                    compact
+                    variant="outlineAccent"
+                    loading={leaving === item.id}
+                    disabled={!online}
+                    disabledReason={OFFLINE}
+                    onPress={() =>
+                      leave(item, copy.declined, copy.declineFailed)
+                    }
+                  />
+                </View>
+                {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
+              </View>
+            ) : undefined
           }
         />
       );
     },
-    [assetHue.plan, onOpenPlan, online, stamps, styles.pills, withdraw],
+    [
+      assetHue.plan,
+      leave,
+      leaving,
+      onOpenPlan,
+      online,
+      setMenuFor,
+      stamps,
+      styles,
+      theme.textMuted,
+    ],
   );
 
   if (block) {
@@ -364,6 +403,25 @@ export function PlansScreen({
           onOpenPlan({ id: made.id, name: made.name, status: "active" });
         }}
       />
+      <BottomSheet
+        visible={menuFor !== null}
+        onClose={() => setMenuFor(null)}
+        title={menuFor?.name ?? ""}
+      >
+        {menuFor ? (
+          <Row
+            icon="leave"
+            title={copy.withdraw}
+            subtitle={online ? undefined : OFFLINE}
+            disabled={!online}
+            onPress={() => {
+              const plan = menuFor;
+              setMenuFor(null);
+              leave(plan, copy.withdrawn, copy.withdrawFailed);
+            }}
+          />
+        ) : null}
+      </BottomSheet>
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
@@ -381,6 +439,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingBottom: spacing(4),
   },
+  footer: { gap: spacing(0.5) },
+  hint: { ...muted(theme, textRole.detail) },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

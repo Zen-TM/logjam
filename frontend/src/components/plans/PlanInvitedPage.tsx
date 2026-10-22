@@ -2,13 +2,15 @@
 // would join (the write-up, who's going, the forms they answer first) with
 // Join and Decline. Joining is theirs to choose, so nothing happens
 // until they press Join.
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
-  TRIP_PLAN_JOIN,
+  contractSectionKeys,
   TRIP_PLAN_PAGE,
-  TRIP_PLANS_LIST,
-  tripPlanDatesLabel,
+  TRIP_PLAN_PREVIEW,
+  tripPlanInvitedLine,
+  tripPlanPreviewHeaded,
   tripPlanVisibilityLine,
+  type SectionKeysOn,
   type TripPlanInvitedPreview,
 } from "@logjam/shared";
 import {
@@ -62,11 +64,11 @@ export default function PlanInvitedPage({
     setBusy(true);
     try {
       await leavePlan(planId);
-      toast.success(TRIP_PLANS_LIST.copy.declined);
+      toast.success(TRIP_PLAN_PREVIEW.copy.declined);
       onDeclined();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, TRIP_PLANS_LIST.copy.declineFailed));
+      toast.error(messageFromError(err, TRIP_PLAN_PREVIEW.copy.declineFailed));
     } finally {
       setBusy(false);
     }
@@ -93,49 +95,47 @@ export default function PlanInvitedPage({
       </div>
     );
 
+  const copy = TRIP_PLAN_PREVIEW.copy;
   // A heading needs a second group to divide from: the write-up or the forms.
-  const headed =
-    preview.sections.length > 0 || preview.requiredForms.length > 0;
-
-  return (
-    <div className={classes.root}>
-      <Hero
-        title={preview.name}
-        onBack={onBack}
-        backLabel={TRIP_PLAN_PAGE.copy.back}
-      />
-      <p className={classes.datesLine}>
-        {[
-          tripPlanDatesLabel(preview.startDate, preview.endDate),
-          preview.invitedBy &&
-            `${TRIP_PLAN_JOIN.copy.invitedBy} ${preview.invitedBy.username}`,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
+  const headed = tripPlanPreviewHeaded(preview);
+  const sections: Record<
+    SectionKeysOn<typeof TRIP_PLAN_PREVIEW, "web">,
+    ReactNode
+  > = {
+    hero: (
+      <>
+        <Hero
+          title={preview.name}
+          onBack={onBack}
+          backLabel={TRIP_PLAN_PAGE.copy.back}
+        />
+        <p className={classes.datesLine}>{tripPlanInvitedLine(preview)}</p>
+      </>
+    ),
+    notice: (
       <div className={classes.notice}>
         <span className={classes.noticeText}>
-          {preview.requiredForms.length > 0
-            ? TRIP_PLAN_JOIN.copy.answerToJoin
-            : TRIP_PLANS_LIST.copy.pillInvited}
+          {preview.requiredForms.length > 0 ? copy.answerToJoin : copy.invited}
         </span>
         <Button compact variant="filled" onClick={() => setJoining(true)}>
-          {TRIP_PLAN_JOIN.copy.join}
+          {copy.join}
         </Button>
         <Button compact busy={busy} onClick={() => void decline()}>
-          {TRIP_PLAN_JOIN.copy.decline}
+          {copy.decline}
         </Button>
       </div>
-      <div className={classes.list}>
-        {preview.sections.map((section) => (
-          <section key={section.id} className={classes.section}>
-            <h3 className={classes.sectionTitle}>{section.title}</h3>
-            {section.body && <p className={classes.body}>{section.body}</p>}
-          </section>
-        ))}
-        {/* What the notice's "Answer these" means, before Join asks. */}
+    ),
+    writeUp: preview.sections.map((section) => (
+      <section key={section.id} className={classes.section}>
+        <h3 className={classes.sectionTitle}>{section.title}</h3>
+        {section.body && <p className={classes.body}>{section.body}</p>}
+      </section>
+    )),
+    // What the notice's "Answer these" means, before Join asks.
+    forms: (
+      <>
         {preview.requiredForms.length > 0 && headed && (
-          <SectionHeader title={TRIP_PLAN_PAGE.copy.viewForms} />
+          <SectionHeader title={copy.forms} />
         )}
         {preview.requiredForms.map((form) => (
           <Row
@@ -144,11 +144,12 @@ export default function PlanInvitedPage({
             subtitle={tripPlanVisibilityLine(form.visibleTo, form.preset)}
           />
         ))}
+      </>
+    ),
+    people: (
+      <>
         {headed && (
-          <SectionHeader
-            title={TRIP_PLAN_PAGE.copy.peopleGoing}
-            count={preview.members.length}
-          />
+          <SectionHeader title={copy.people} count={preview.members.length} />
         )}
         {preview.members.map((member) => (
           <Row
@@ -156,6 +157,20 @@ export default function PlanInvitedPage({
             title={member.username}
             leading={<Avatar username={member.username} />}
           />
+        ))}
+      </>
+    ),
+  };
+  // The hero and the notice stand above the list, as before the contract.
+  const [hero, notice, ...rest] = contractSectionKeys(TRIP_PLAN_PREVIEW, "web");
+
+  return (
+    <div className={classes.root}>
+      {sections[hero]}
+      {sections[notice]}
+      <div className={classes.list}>
+        {rest.map((key) => (
+          <Fragment key={key}>{sections[key]}</Fragment>
         ))}
       </div>
       {joining && (

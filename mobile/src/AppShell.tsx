@@ -256,7 +256,6 @@ type MoreStackParams = {
   // A plan left or deleted comes back here with what happened.
   Plans: { message?: { text: string; at: number } } | undefined;
   // The name rides along for the hero while the cached plan is read.
-  /** `view`: the tab it opens on, People for a join request. */
   /** `view`: the tab it opens on, People for a join request. `invited`: it
    *  opens as the invite's preview (`opensPreview`), until Join. */
   Plan: { planId: string; name: string; view?: "people"; invited?: boolean };

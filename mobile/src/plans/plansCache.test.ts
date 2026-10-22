@@ -59,6 +59,7 @@ const {
   afterPlanWrite,
   downloadPlan,
   fetchPlan,
+  opensAsPreview,
   planChanged,
   planForUrls,
   pollPlans,
@@ -388,5 +389,21 @@ describe("planForUrls", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("opensAsPreview", () => {
+  // Mutation: decide from the push alone (return true), and an old invite
+  // tapped offline after joining strands the reader on "Needs a connection"
+  // instead of the plan they downloaded.
+  it("opens the member's page once the list has the reader in", async () => {
+    api.getPlans.mockResolvedValueOnce({
+      plans: [summary("joined"), summary("asked", "invited")],
+    });
+    await pollPlans();
+    expect(await opensAsPreview("joined")).toBe(false);
+    expect(await opensAsPreview("asked")).toBe(true);
+    // Not in the list yet: the invite arrived since the last poll.
+    expect(await opensAsPreview("new")).toBe(true);
   });
 });

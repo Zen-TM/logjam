@@ -11,6 +11,7 @@
 // ever passed to a logger (`sentry/scrubEvent.test.ts` covers a plan's keys).
 import {
   ApiError,
+  opensPreview,
   type TripPlanSummary,
   type TripPlanView,
 } from "@logjam/shared";
@@ -175,6 +176,19 @@ export async function pollPlans(): Promise<PlansList> {
   await sweepPlanFolders(new Set((await readCachedPlanStamps()).keys()));
   notifyMirrorChanged();
   return { plans, fetchedAt };
+}
+
+/**
+ * Whether a plan opened as an invite still opens as its preview: not once
+ * the cached list has the reader in it (`opensPreview`), so an old invite
+ * push or Inbox row, tapped offline after joining, opens the downloaded plan.
+ */
+export async function opensAsPreview(planId: string): Promise<boolean> {
+  const list = await readPlansList();
+  return opensPreview(
+    true,
+    list?.plans.find((plan) => plan.id === planId)?.status,
+  );
 }
 
 /** How old a cached copy's presigned URLs may be and still open: the API
