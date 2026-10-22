@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
+  mediaSkippedSentence,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_INVITE,
@@ -623,16 +624,19 @@ describe("Add a copy stopped halfway", () => {
 });
 
 describe("Start a trip log after a copy failed", () => {
-  // Mutation: save every picked place again on Next, and a retry puts a
-  // second copy of the first place in the user's places.
+  // Mutations: save every picked place again on Next, and a retry puts a
+  // second copy of the first place in the user's places; drop `onStale`,
+  // and a place gone from the plan 404s on every retry; count only the last
+  // run's photos, and the first copy's missing photo goes unsaid.
   it("saves only the places not copied yet, then links them all", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(savePlanItem)
-      .mockResolvedValueOnce({ id: "copy-a" })
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce({ id: "copy-b" });
+      .mockResolvedValueOnce({ id: "copy-a", mediaSkipped: 1 })
+      .mockRejectedValueOnce(new ApiError(404, "/plans/p1", "POST"))
+      .mockResolvedValueOnce({ id: "copy-b", mediaSkipped: 1 });
     const onDone = vi.fn();
     const onCopied = vi.fn();
+    const onStale = vi.fn();
     const place = (id: string, name: string) =>
       ({
         kind: "place",
@@ -647,6 +651,7 @@ describe("Start a trip log after a copy failed", () => {
         places={[place("a", "Claustral"), place("b", "Ranon")]}
         copyMedia
         onCopied={onCopied}
+        onStale={onStale}
         onDone={onDone}
         onClose={() => {}}
       />,
@@ -661,6 +666,7 @@ describe("Start a trip log after a copy failed", () => {
       await screen.findByText(/^1 copy saved to your places\./),
     ).toBeTruthy();
     expect(onCopied).toHaveBeenCalledTimes(1);
+    expect(onStale).toHaveBeenCalledTimes(1);
     fireEvent.click(next);
     await waitFor(() =>
       expect(onDone).toHaveBeenCalledWith(
@@ -669,5 +675,6 @@ describe("Start a trip log after a copy failed", () => {
       ),
     );
     expect(savePlanItem).toHaveBeenCalledTimes(3);
+    expect(toast.error).toHaveBeenCalledWith(mediaSkippedSentence(2, false));
   });
 });

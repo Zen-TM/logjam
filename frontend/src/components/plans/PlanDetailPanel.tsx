@@ -643,6 +643,7 @@ export default function PlanDetailPanel({
           places={plan.places}
           copyMedia={copyPlaceMedia}
           onCopied={onOwnChanged}
+          onStale={() => refetch({ quiet: true })}
           onClose={() => setPickingTripPlaces(false)}
           onDone={(placeIds, placeTypeIds) => {
             setPickingTripPlaces(false);

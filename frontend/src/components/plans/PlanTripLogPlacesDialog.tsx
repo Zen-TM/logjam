@@ -2,14 +2,14 @@
 // the trip links. A trip links only its owner's places, so each one picked is
 // saved as the caller's copy first, in order. A failure stops before the trip
 // form opens and says how many copies landed; Next again saves only the rest.
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   mediaSkippedSentence,
   MAX_PLACES_PER_TRIP,
+  saveTripPlanPlaces,
   TRIP_PLACES_CAP_SENTENCE,
   TRIP_PLAN_PAGE,
   tripPlanTripLogPlacesLine,
-  tripPlanTripLogStopped,
   type TripPlanPlace,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
@@ -25,6 +25,7 @@ export default function PlanTripLogPlacesDialog({
   places,
   copyMedia,
   onCopied,
+  onStale,
   onDone,
   onClose,
 }: {
@@ -34,6 +35,9 @@ export default function PlanTripLogPlacesDialog({
   copyMedia: boolean;
   /** A copy landed in the caller's places. */
   onCopied: () => void;
+  /** The API refused a save (the place may have left the plan): fetch the
+   *  plan again, so its row goes. */
+  onStale: () => void;
   /** The caller's new copies' ids, in the plan's order, and their types
    *  (the form needs them before the user's places refetch). */
   onDone: (placeIds: string[], placeTypeIds: string[]) => void;
@@ -44,44 +48,41 @@ export default function PlanTripLogPlacesDialog({
   const [picked, setPicked] = useState<string[]>([]);
   // The plan's place id → the caller's copy, kept across a failed Next.
   const [copies, setCopies] = useState<Record<string, string>>({});
+  // The photos that didn't come, summed across a stopped run and its retry.
+  const lost = useRef({ count: 0, outOfSpace: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     setBusy(true);
-    const saved = { ...copies };
     const chosen = places.filter((place) => picked.includes(place.id));
-    const before = Object.keys(saved).length;
-    let skipped = 0;
-    let outOfSpace = false;
-    try {
-      for (const place of chosen) {
-        if (saved[place.id]) continue;
-        // The account's stored preference decides (the line reads it too).
-        const copy = await savePlanItem(planId, "place", place.id);
-        saved[place.id] = copy.id;
-        skipped += copy.mediaSkipped ?? 0;
-        outOfSpace ||= copy.mediaOutOfSpace === true;
-      }
-      const photos = mediaSkippedSentence(skipped, outOfSpace);
-      if (photos) toast.error(photos);
-      onDone(
-        chosen.map((place) => saved[place.id]),
-        chosen.map((place) => place.placeTypeId),
-      );
-    } catch (err) {
-      console.error(err);
-      setError(
-        tripPlanTripLogStopped(
-          chosen.filter((place) => saved[place.id]).length,
-          messageFromError(err, copy.saveCopyFailed),
-        ),
-      );
-    } finally {
-      setCopies(saved);
-      if (Object.keys(saved).length > before) onCopied();
-      setBusy(false);
+    const run = await saveTripPlanPlaces({
+      picked: chosen,
+      copies,
+      // The account's stored preference decides (the line reads it too).
+      save: (placeId) => savePlanItem(planId, "place", placeId),
+      why: (err) => messageFromError(err, copy.saveCopyFailed),
+    });
+    setCopies(run.copies);
+    lost.current.count += run.skipped;
+    lost.current.outOfSpace ||= run.outOfSpace;
+    if (run.added > 0) onCopied();
+    setBusy(false);
+    if (run.stopped) {
+      console.error(run.stopped.error);
+      setError(run.stopped.message);
+      if (run.stopped.refetch) onStale();
+      return;
     }
+    const photos = mediaSkippedSentence(
+      lost.current.count,
+      lost.current.outOfSpace,
+    );
+    if (photos) toast.error(photos);
+    onDone(
+      chosen.map((place) => run.copies[place.id]),
+      chosen.map((place) => place.placeTypeId),
+    );
   }
 
   return (

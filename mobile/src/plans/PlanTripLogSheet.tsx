@@ -1,14 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import {
-  ApiError,
   distinctTripTypes,
   mediaSkippedSentence,
   messageFromError,
   MAX_PLACES_PER_TRIP,
+  saveTripPlanPlaces,
   tripPlanTripLogPlacesLine,
   tripPlanTripLogPrefill,
-  tripPlanTripLogStopped,
   TRIP_PLACES_CAP_SENTENCE,
   TRIP_PLAN_PAGE,
   type TripPlanView,
@@ -72,6 +71,9 @@ export function PlanTripLogSheet({
   // the flow ends (a toast now would draw under the form that opens at
   // once). A ref: it is read where the flow ends, not drawn.
   const lost = useRef({ count: 0, outOfSpace: false });
+  // The form's "Trip logged.", kept for the close that follows it in the
+  // same tick, so the photo note joins it rather than replacing it.
+  const logged = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openKey = plan?.id ?? null;
@@ -93,32 +95,24 @@ export function PlanTripLogSheet({
   async function next(target: TripPlanView) {
     setBusy(true);
     setError(null);
-    const saved = { ...copies };
-    try {
-      for (const place of chosen) {
-        if (saved[place.id]) continue;
-        const result = await savePlanItem(target.id, "place", place.id);
-        saved[place.id] = result.id;
-        lost.current.count += result.mediaSkipped ?? 0;
-        lost.current.outOfSpace ||= result.mediaOutOfSpace === true;
-      }
-      setStep("saved");
-    } catch (err) {
-      setError(
-        tripPlanTripLogStopped(
-          chosen.filter((place) => saved[place.id]).length,
-          messageFromError(err, copy.saveCopyFailed),
-        ),
-      );
+    const run = await saveTripPlanPlaces({
+      picked: chosen,
+      copies,
+      save: (placeId) => savePlanItem(target.id, "place", placeId),
+      why: (err) => messageFromError(err, copy.saveCopyFailed),
+    });
+    setCopies(run.copies);
+    lost.current.count += run.skipped;
+    lost.current.outOfSpace ||= run.outOfSpace;
+    // The copies reach the phone by the next pull: asked for now.
+    if (run.added > 0) void requestSync().catch(console.error);
+    if (run.stopped) {
+      setError(run.stopped.message);
       // Gone from the plan meanwhile: fetched again, its row goes too.
-      if (err instanceof ApiError) await afterPlanWrite(target.id);
-    } finally {
-      setCopies(saved);
-      // The copies reach the phone by the next pull: asked for now.
-      if (Object.keys(saved).length > Object.keys(copies).length)
-        void requestSync().catch(console.error);
-      setBusy(false);
-    }
+      if (run.stopped.refetch)
+        await afterPlanWrite(target.id).catch(console.error);
+    } else setStep("saved");
+    setBusy(false);
   }
 
   // The flow's end (the form closed, saved or not, or the places step
@@ -129,7 +123,8 @@ export function PlanTripLogSheet({
       lost.current.outOfSpace,
     );
     lost.current = { count: 0, outOfSpace: false };
-    if (note) onSaved(note, "error");
+    if (note)
+      onSaved(logged.current ? `${logged.current} ${note}` : note, "error");
   };
 
   const initialPlaces = chosen.flatMap((place) =>
@@ -209,8 +204,14 @@ export function PlanTripLogSheet({
           onClose();
         }}
         // Plainly: an attribute added inside the form says so too, and the
-        // form stays open.
-        onSaved={(message) => onSaved(message, "info")}
+        // form stays open; only a close in the same tick joins it.
+        onSaved={(message) => {
+          logged.current = message;
+          queueMicrotask(() => {
+            logged.current = null;
+          });
+          onSaved(message, "info");
+        }}
       />
     </>
   );
