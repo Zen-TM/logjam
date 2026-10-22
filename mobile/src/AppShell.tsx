@@ -248,7 +248,10 @@ type SavedStackParams = {
 
 type MoreStackParams = {
   MoreHome: undefined;
-  Inbox: undefined;
+  // A tapped announcement push opens its message over the inbox.
+  Inbox:
+    | { openAnnouncement?: { announcementId: string; nonce: number } }
+    | undefined;
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
@@ -918,7 +921,8 @@ export function AppShell({
         // left to do here". The unread list is the queue of things the user
         // still has to deal with, and emptying it on the strength of a
         // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it.
+        // Opening the row is what reads it. An announcement push opens its
+        // message on the inbox, and the message is read when the user closes it.
         if (target.kind === "place") {
           nav.navigate("Places", {
             screen: "PlaceDetail",
@@ -932,6 +936,16 @@ export function AppShell({
               name: TRIP_PLANS_LIST.title,
               view: target.view,
               invited: target.invited,
+            },
+          });
+        } else if (target.kind === "announcement") {
+          nav.navigate("More", {
+            screen: "Inbox",
+            params: {
+              openAnnouncement: {
+                announcementId: target.announcementId,
+                nonce: Date.now(),
+              },
             },
           });
         } else {
@@ -1140,8 +1154,9 @@ export function AppShell({
                     name="Inbox"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <NotificationsScreen
+                        openAnnouncement={route.params?.openAnnouncement}
                         onBack={() => navigation.goBack()}
                         onUnreadChanged={refreshUnread}
                         // A share notification is a way in to the place it is

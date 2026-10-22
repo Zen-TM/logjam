@@ -21,8 +21,14 @@ import unittest
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _DOCKERFILE = os.path.join(_ROOT, "Dockerfile")
 
-# The commands the ECS task defs run (see the Dockerfile entrypoint note).
-_ENTRYPOINTS = ("worker.py", "export_worker.py", "build_place_registry.py")
+# The commands the ECS task defs run, and the script a RunTask command override
+# runs (see the Dockerfile entrypoint note).
+_ENTRYPOINTS = (
+    "worker.py",
+    "export_worker.py",
+    "build_place_registry.py",
+    "build_nsw_dem.py",
+)
 
 
 def _local_module_path(name):
@@ -100,6 +106,16 @@ class TestDockerImageFiles(unittest.TestCase):
             "image — a fresh build raises ModuleNotFoundError at runtime: "
             f"{missing}. Add a COPY line to topo/Dockerfile.",
         )
+
+    # Mutation: turn the last line back into `ENTRYPOINT [...]` and a RunTask
+    # command override (the slope build) or `docker compose run topo python3 ...`
+    # hands its command to worker.py as arguments, which ignores them.
+    def test_the_image_starts_the_worker_as_a_cmd(self):
+        with open(_DOCKERFILE, encoding="utf-8") as fh:
+            lines = [ln.strip() for ln in fh if not ln.lstrip().startswith("#")]
+        self.assertEqual([ln for ln in lines if ln.startswith("ENTRYPOINT")], [])
+        cmds = [ln for ln in lines if ln.startswith("CMD")]
+        self.assertEqual(cmds[-1], 'CMD ["python3", "/app/worker.py"]')
 
     def test_walk_actually_reaches_the_lazy_imports(self):
         # Guards the guard: push_send/email_send are imported inside function

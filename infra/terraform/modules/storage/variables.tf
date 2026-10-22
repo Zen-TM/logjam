@@ -46,12 +46,13 @@ variable "cors_rules" {
 
 variable "lifecycle_rules" {
   type = list(object({
-    id              = string
-    prefix          = string
-    expiration_days = number
+    id                              = string
+    prefix                          = string
+    expiration_days                 = optional(number)
+    abort_incomplete_multipart_days = optional(number)
   }))
   default     = []
-  description = "Object-expiry lifecycle rules. Empty = no lifecycle config managed."
+  description = "Lifecycle rules: expire objects, abort multipart uploads left incomplete, or both. Empty = no lifecycle config managed."
 }
 
 variable "log_target" {

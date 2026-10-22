@@ -25,11 +25,13 @@ import {
   demArchive,
   forgetDemArchive,
   demMetresFromRgb,
+  demSlopeReading,
   demTileKey,
   demTileUrl,
   readDemArchive,
   sampleDem,
   type DemSamples,
+  type DemSlopeReading,
   type DemSource,
   type DemTileAddress,
   type SamplePosition,
@@ -211,6 +213,14 @@ export function sampleElevations(
   positions: readonly SamplePosition[],
 ): Promise<DemSamples> {
   return sampleDem(positions, readTiles);
+}
+
+/** The slope at a position and where it came from; null where none can tell. */
+export function sampleSlope(
+  lon: number,
+  lat: number,
+): Promise<DemSlopeReading | null> {
+  return demSlopeReading(lon, lat, readTiles);
 }
 
 /** Test seam — the cache is process-wide and would otherwise leak between tests. */

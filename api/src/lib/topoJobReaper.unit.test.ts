@@ -1227,9 +1227,18 @@ describe("sweepAbandonedTopoUploads", () => {
   const deleteMany = (prisma as unknown as { topoJob: { deleteMany: Mock } })
     .topoJob.deleteMany;
 
-  it("deletes the ZIP then the uploading row, guarded on status, for rows older than a day", async () => {
+  // Mutation: drop the deleteTopoJobObjects call, and nothing is aborted
+  // or deleted.
+  it("aborts the open upload, deletes the ZIP, then the uploading row, guarded on status, for rows older than a day", async () => {
     jobFindMany.mockResolvedValue([{ id: "stale" }]);
     deleteMany.mockReset().mockResolvedValue({ count: 1 });
+    s3Send.mockImplementation(async (cmd: { constructor: { name: string } }) =>
+      cmd.constructor.name === "ListMultipartUploadsCommand"
+        ? { Uploads: [{ Key: "inputs/stale/upload.zip", UploadId: "u1" }] }
+        : cmd.constructor.name === "ListObjectsV2Command"
+          ? { Contents: [{ Key: "inputs/stale/upload.zip" }] }
+          : {},
+    );
 
     expect(await sweepAbandonedTopoUploads(NOW)).toBe(1);
 
@@ -1238,7 +1247,18 @@ describe("sweepAbandonedTopoUploads", () => {
     expect(where.createdAt.lt).toEqual(
       new Date(NOW.getTime() - 24 * 60 * 60 * 1000),
     );
-    expect(s3Send.mock.calls[0][0].input.Key).toBe("inputs/stale/upload.zip");
+    const inputs = s3Send.mock.calls.map(([cmd]) => cmd.input);
+    expect(inputs).toContainEqual(
+      expect.objectContaining({
+        Key: "inputs/stale/upload.zip",
+        UploadId: "u1",
+      }),
+    );
+    expect(inputs).toContainEqual(
+      expect.objectContaining({
+        Delete: { Objects: [{ Key: "inputs/stale/upload.zip" }] },
+      }),
+    );
     expect(deleteMany).toHaveBeenCalledWith({
       where: { id: "stale", status: "uploading" },
     });

@@ -557,6 +557,21 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
         ]
       },
       {
+        # The LiDAR ZIP's multipart upload (routes/topoJobs.ts). Creating it,
+        # signing its parts and completing it ride on s3:PutObject above;
+        # completing lists the parts, and a delete aborts what is open.
+        Sid      = "TopoInputMultipart"
+        Effect   = "Allow"
+        Action   = ["s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/inputs/*"
+      },
+      {
+        Sid      = "TopoInputMultipartList"
+        Effect   = "Allow"
+        Action   = "s3:ListBucketMultipartUploads"
+        Resource = "arn:aws:s3:::logjam-topo-jobs"
+      },
+      {
         # READ-ONLY, and deliberately so: the egress sweeper (lib/egressMeter.ts)
         # only ever lists and reads access-log objects to sum bytes_sent. It has
         # no reason to write or delete here, and the lifecycle rule —

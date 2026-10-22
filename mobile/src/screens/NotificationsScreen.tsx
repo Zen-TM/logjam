@@ -32,6 +32,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -58,6 +59,8 @@ import {
   messageFromError,
   newestNotificationsFirst,
   notificationActions,
+  notificationAnnouncement,
+  notificationVerb,
   notificationDeleteConfirm,
   notificationHaystack,
   notificationLabel,
@@ -88,6 +91,7 @@ import {
   type BatchFileActionProgress,
 } from "../notifications/batchFileAction";
 import type { NotificationDestination } from "../notifications/notificationDestination";
+import { AnnouncementSheet } from "../notifications/AnnouncementSheet";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -238,6 +242,7 @@ export function NotificationsScreen({
   onOpenPlan,
   onOpenSaved,
   onOpenFriends,
+  openAnnouncement,
 }: {
   onBack: () => void;
   onUnreadChanged?: () => void;
@@ -252,6 +257,11 @@ export function NotificationsScreen({
    */
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
+  /**
+   * A tapped announcement push: open that message once its row is in the
+   * list. `nonce` so tapping the same push twice opens it twice.
+   */
+  openAnnouncement?: { announcementId: string; nonce: number };
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -278,6 +288,8 @@ export function NotificationsScreen({
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
    *  live list, so a refetch can't leave the sheet holding a stale copy. */
   const [menuId, setMenuId] = useState<string | null>(null);
+  /** Which announcement's message sheet is open, by notification id. */
+  const [messageId, setMessageId] = useState<string | null>(null);
   // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
@@ -794,9 +806,15 @@ export function NotificationsScreen({
   );
 
   // Reading it is what marks it read, so both happen on one tap; the place
-  // or the plan then opens on top.
+  // or the plan then opens on top. A message is the exception: it opens over
+  // the inbox and is read when it closes, so in Unread its row stays put until
+  // then (as `toggleBatch` explains).
   const openNotification = useCallback(
     (n: TNotification) => {
+      if (notificationAnnouncement(n)) {
+        setMessageId(n.id);
+        return;
+      }
       void markRead(n);
       const placeId = notificationPlaceId(n);
       const plan = notificationPlanTarget(n);
@@ -805,6 +823,59 @@ export function NotificationsScreen({
     },
     [markRead, onOpenPlace, onOpenPlan],
   );
+
+  const closeMessage = useCallback(() => {
+    const n = notifications.find((row) => row.id === messageId);
+    if (n) void markRead(n);
+    setMessageId(null);
+  }, [markRead, messageId, notifications]);
+
+  // A push can land while a sheet is up, and a second Modal must not stack on
+  // the first: that sheet closes, and its `onClosed` opens the message.
+  const parkedMessage = useRef<TNotification | null>(null);
+  const openParked = useCallback(() => {
+    const parked = parkedMessage.current;
+    parkedMessage.current = null;
+    if (parked) openNotification(parked);
+  }, [openNotification]);
+  const showMessage = useCallback(
+    (n: TNotification) => {
+      if (menuId === null && !actionsOpen && messageId === null) {
+        return openNotification(n);
+      }
+      parkedMessage.current = n;
+      setMenuId(null);
+      setActionsOpen(false);
+      if (messageId !== null) closeMessage();
+    },
+    [actionsOpen, closeMessage, menuId, messageId, openNotification],
+  );
+
+  // The push named the announcement, not the row. The message opens as soon
+  // as the cached or live list holds its row; when neither does, one refetch
+  // per push asks for it, since an inbox already on screen fetches nothing on
+  // its own. A retracted one never arrives, and the inbox is where the tap
+  // lands.
+  const openedNonce = useRef<number | null>(null);
+  const fetchedNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openAnnouncement || openedNonce.current === openAnnouncement.nonce) {
+      return;
+    }
+    const { announcementId, nonce } = openAnnouncement;
+    const row = query.notifications.find(
+      (n) => notificationAnnouncement(n)?.id === announcementId,
+    );
+    if (!row) {
+      if (fetchedNonce.current === nonce) return;
+      fetchedNonce.current = nonce;
+      refetch();
+      return;
+    }
+    openedNonce.current = nonce;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, once the list holds its row
+    showMessage(row);
+  }, [openAnnouncement, query.notifications, refetch, showMessage]);
 
   /**
    * "View in Saved" / "View in Friends" — the other half of a notification
@@ -1062,15 +1133,24 @@ export function NotificationsScreen({
         notification={notifications.find((n) => n.id === menuId) ?? null}
         visible={menuId !== null}
         onClose={() => setMenuId(null)}
+        onClosed={openParked}
         onOpen={openNotification}
         onView={viewNotification}
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
       />
 
+      <AnnouncementSheet
+        notification={notifications.find((n) => n.id === messageId) ?? null}
+        visible={messageId !== null}
+        onClose={closeMessage}
+        onClosed={openParked}
+      />
+
       <BottomSheet
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
+        onClosed={openParked}
         title="Inbox actions"
       >
         <View style={styles.actionsBody}>
@@ -1191,7 +1271,7 @@ const NotificationRow = memo(function NotificationRow({
   const label = notificationLabel(item);
   const meta = notificationMeta(item, theme);
   const target = notificationActions(item);
-  const subtitle = [label.warning, formatTime(item.createdAt)]
+  const subtitle = [label.detail, formatTime(item.createdAt)]
     .filter(Boolean)
     .join(" · ");
   // The row's own STATE beats the unread flag in the one trailing slot: unread
@@ -1274,6 +1354,18 @@ const NotificationRow = memo(function NotificationRow({
               <Text style={styles.actionHint}>Needs a connection</Text>
             ) : null}
           </>
+        ) : notificationAnnouncement(item) ? (
+          // A button, not only the row: nothing else says a row opens a message.
+          <View style={styles.actions}>
+            <Button
+              label={notificationVerb("readMessage").label}
+              variant="outlineAccent"
+              compact
+              grow
+              disabled={selecting}
+              onPress={() => onPress(item)}
+            />
+          </View>
         ) : null
       }
     />

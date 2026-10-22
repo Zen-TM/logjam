@@ -506,15 +506,17 @@ function sensorLoggingSubtitle(
     caps.barometer ? "pressure" : null,
     caps.stepCounter ? "steps" : null,
     "satellites",
+    "GPS positions",
   ].filter(Boolean) as string[];
   // Cost first, and in the same breath as what it buys: the row is four lines
   // and the sentence a user needs before flipping it is the price, not the
   // reassurance. The privacy line stays because it is the second question
-  // everyone asks of a thing called "raw sensors".
+  // everyone asks of a thing called "raw sensors": the file holds positions
+  // now, so what it can truthfully say is where the file goes.
   const cost = caps.imuFifoEvents > 0 ? "a few percent" : "some";
   // Disk is stated because it is the larger of the two costs and the one that
   // can take the recording down with it if it runs out.
-  const what = `${channels.join(", ")} to a file for later analysis — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour. No positions written.`;
+  const what = `${channels.join(", ")} to a file on this phone — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour.`;
   if (!enabled) return what;
   const status = sensorLogStatus();
   if (status == null || !status.logging)

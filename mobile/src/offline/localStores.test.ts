@@ -104,6 +104,8 @@ describe("the wipe covers every declared store", () => {
     expect(wiped).toContain("IMPORTS_DIR");
     expect(wiped).toContain("MEDIA_CACHE_DIR");
     expect(wiped).toContain("OVERLAY_DIR");
+    // The research logger's files hold raw GPS fixes.
+    expect(wiped).toContain("SENSOR_LOG_DIR");
   });
 
   it("keeps the spared directories out of the wipe, on purpose", () => {

@@ -1,5 +1,5 @@
-// Sensor + GNSS-status LOGGER for track-accuracy research. Writes CSV; reads
-// nothing back. See private/todo/track-accuracy.md for what the data is for.
+// Sensor, GNSS-status and raw-GPS LOGGER for track-accuracy research. Writes
+// CSV; reads nothing back.
 //
 // WHY THIS EXISTS AS A NATIVE MODULE AT ALL, because it is the whole reason:
 // `expo-sensors` unregisters every sensor when the activity backgrounds
@@ -17,11 +17,13 @@
 // report latency is a ~100x CPU cost on the rail that already dominates this
 // app's power — never do it.
 //
-// PRIVACY: this file writes a phone's motion, plus satellite counts and signal
-// strengths. It writes NO position: no lat/lon, no altitude, nothing derived
-// from a fix. The log lives in app-private storage beside the databases, is
-// never uploaded, and is read by pulling it off the device deliberately. Logs
-// and errors here carry counts and static strings only.
+// PRIVACY: THE FILE HOLDS POSITIONS. Beside a phone's motion, satellite counts
+// and signal strengths, the `gps` rows are raw fixes: latitude, longitude,
+// altitude, speed, bearing. The log lives in app-private storage beside the
+// databases, is never uploaded, and is read by pulling it off the device
+// deliberately; `tracks/sensorLog.ts` says what wipes and deletes it. Nothing
+// here calls `Log`, and errors carry static strings only: never a row, a path
+// or a coordinate.
 package expo.modules.logjamsensors
 
 import android.content.Context
@@ -32,7 +34,10 @@ import android.hardware.SensorManager
 import android.hardware.TriggerEvent
 import android.hardware.TriggerEventListener
 import android.location.GnssStatus
+import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -42,6 +47,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 class SensorLogException(message: String) : CodedException(message)
@@ -56,6 +62,9 @@ class SensorLogException(message: String) : CodedException(message)
  *   stp,<elapsedNanos>,<cumulativeStepsSinceBoot>
  *   sig,<elapsedNanos>                      (significant motion fired)
  *   gnss,<elapsedNanos>,<inView>,<used>,<meanTopFourCn0>,<maxCn0>
+ *   gps,<elapsedNanos>,<lat>,<lon>,<altM>,<hAccM>,<speedMps>,<speedAccMps>,
+ *       <bearingDeg>,<vAccM>               (one line; a field the fix lacks is empty)
+ *   mark,<elapsedNanos>,<epochMillis>,<n>   (a tap by the person recording)
  *
  * Times are `SystemClock.elapsedRealtimeNanos()` — the SAME clock the sensors
  * stamp their own events with, and monotonic across suspend, so a log can be
@@ -64,7 +73,11 @@ class SensorLogException(message: String) : CodedException(message)
  *
  *   anchor,<elapsedNanos>,<epochMillis>
  */
-private const val CSV_HEADER = "# logjam sensor log v1"
+private const val CSV_HEADER = "# logjam sensor log v2"
+
+/** `Locale.US` so a phone set to a comma-decimal language still writes CSV. */
+private fun d(present: Boolean, value: Double, decimals: Int): String =
+  if (present) String.format(Locale.US, "%.${decimals}f", value) else ""
 
 /** One barometer sample a second; see the listener for why this is enforced here. */
 private const val BARO_MIN_GAP_NANOS = 900_000_000L
@@ -189,6 +202,39 @@ private object SensorLog {
   }
 
   /**
+   * The receiver's own 1 Hz fixes, straight from `GPS_PROVIDER`: not the fused
+   * provider the recorder listens to, and not the recorder's rate. The recorder
+   * wakes the receiver once per fix; this request keeps it tracking, so the two
+   * can be compared afterwards. Nothing reads these rows back, and the recorder
+   * stores exactly what it did before.
+   *
+   * ONE RECEIVER, THOUGH: while this runs, the recorder's fused fixes come from
+   * a receiver that is no longer duty-cycled.
+   */
+  val gpsListener = object : LocationListener {
+    override fun onLocationChanged(l: Location) {
+      val o = Build.VERSION.SDK_INT >= 26 // the two accuracies below
+      write(
+        "gps,${l.elapsedRealtimeNanos}," +
+          "${d(true, l.latitude, 7)},${d(true, l.longitude, 7)}," +
+          "${d(l.hasAltitude(), l.altitude, 1)}," +
+          "${d(l.hasAccuracy(), l.accuracy.toDouble(), 1)}," +
+          "${d(l.hasSpeed(), l.speed.toDouble(), 2)}," +
+          "${if (o) d(l.hasSpeedAccuracy(), l.speedAccuracyMetersPerSecond.toDouble(), 2) else ""}," +
+          "${d(l.hasBearing(), l.bearing.toDouble(), 1)}," +
+          if (o) d(l.hasVerticalAccuracy(), l.verticalAccuracyMeters.toDouble(), 1) else "",
+      )
+    }
+
+    // Abstract below API 30, and a provider switched off mid-trip must not
+    // throw into the looper.
+    override fun onProviderEnabled(provider: String) = Unit
+    override fun onProviderDisabled(provider: String) = Unit
+    @Deprecated("Deprecated in Java")
+    override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) = Unit
+  }
+
+  /**
    * Never throws at the caller — a logger that can break the thing it is
    * observing is worse than no logger. A failed write is counted and the run
    * carries on; the count is what `logStatus` reports.
@@ -297,6 +343,17 @@ class LogjamSensorsModule : Module() {
       } catch (_: SecurityException) {
         SensorLog.write("# gnss status unavailable: permission")
       }
+      // Its own try, and any Throwable: no permission, no GPS provider on this
+      // handset, a vendor quirk. The rest of the log and the recording carry
+      // on without the raw fixes.
+      try {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        lm.requestLocationUpdates(
+          LocationManager.GPS_PROVIDER, 1000L, 0f, SensorLog.gpsListener, t.looper,
+        )
+      } catch (_: Throwable) {
+        SensorLog.write("# raw gps unavailable")
+      }
 
       file.absolutePath
     }
@@ -309,6 +366,8 @@ class LogjamSensorsModule : Module() {
       }
       try {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        // First, and alone: a receiver left tracking is the costly leak.
+        try { lm.removeUpdates(SensorLog.gpsListener) } catch (_: Throwable) {}
         lm.unregisterGnssStatusCallback(SensorLog.gnssCallback)
       } catch (_: Throwable) {
         // Never registered (permission denied at start) — nothing to undo.
@@ -328,6 +387,19 @@ class LogjamSensorsModule : Module() {
         "samples" to SensorLog.sampleCount.get(),
         "dropped" to SensorLog.droppedCount.get(),
       )
+    }
+
+    /**
+     * One row for a tap. `n` is the caller's count because it has to survive a
+     * process death mid-file, and this object does not. False when no log is
+     * running, so the button can only confirm a row that was written.
+     */
+    Function("mark") { n: Int ->
+      val logging = SensorLog.writer != null
+      SensorLog.write(
+        "mark,${SystemClock.elapsedRealtimeNanos()},${System.currentTimeMillis()},$n",
+      )
+      logging
     }
 
     Function("logStatus") {
