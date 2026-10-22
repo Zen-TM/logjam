@@ -31,6 +31,7 @@ import type {
 } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
+import type { NotificationPlanTarget } from "@logjam/shared";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
 import { PanelCloseContext } from "../../ui/Hero";
@@ -139,6 +140,9 @@ function SidebarPanel({
   onRetryStandaloneFiles,
   onOpenWay,
   wayDetail,
+  plansPanel,
+  planDetail,
+  onOpenPlan,
   drawPanel,
   measurePanel,
   currentUserId,
@@ -263,6 +267,11 @@ function SidebarPanel({
    * `layersButton` and `notices` already take.
    */
   wayDetail: ReactNode;
+  /** Plans and a plan's page, built by App, which owns the plan list (the nav
+   *  badge reads it) and the open plan (the map will draw it). */
+  plansPanel: ReactNode;
+  planDetail: ReactNode;
+  onOpenPlan: (target: NotificationPlanTarget) => void;
   drawPanel: ReactNode;
   measurePanel: ReactNode;
   currentUserId: string | null;
@@ -480,6 +489,7 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
+            onOpenPlan={onOpenPlan}
           />
         )}
         {activePanel === "logs" && logsView === "stats" && (
@@ -581,6 +591,8 @@ function SidebarPanel({
           />
         )}
         {activePanel === "way-detail" && wayDetail}
+        {activePanel === "plans" && plansPanel}
+        {activePanel === "plan-detail" && planDetail}
         {activePanel === "way-draw" && drawPanel}
         {activePanel === "measure" && measurePanel}
         {activePanel === "ways" && (

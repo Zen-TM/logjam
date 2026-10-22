@@ -33,6 +33,8 @@ import {
   notificationKind,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
+  type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
   selectionCountLabel,
@@ -158,6 +160,7 @@ function NotificationsPanel({
   setActivePanel,
   onMapsViewChange,
   onTopoFlyTarget,
+  onOpenPlan,
 }: {
   notifications: TNotification[];
   notificationsLoaded: boolean;
@@ -172,6 +175,7 @@ function NotificationsPanel({
   setActivePanel: (panel: PanelId | null) => void;
   onMapsViewChange: (view: MapsView) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  onOpenPlan: (target: NotificationPlanTarget) => void;
 }) {
   const toast = useToast();
   const dayIdPrefix = useId();
@@ -372,6 +376,8 @@ function NotificationsPanel({
       setSelectedPlaceID(placeId);
       setActivePanel("place-detail");
     }
+    const plan = notificationPlanTarget(n);
+    if (plan) onOpenPlan(plan);
   };
 
   // In Unread, the read row leaves as the dialog closes and takes the focus
@@ -412,6 +418,7 @@ function NotificationsPanel({
       setActivePanel("place-detail");
       return;
     }
+    if (destination.kind === "plan") return onOpenPlan(destination.target);
     if (destination.mapsView) onMapsViewChange(destination.mapsView);
     setActivePanel(destination.panel);
     // Opening a topo fits the map to it, from here as from its own row: the map
