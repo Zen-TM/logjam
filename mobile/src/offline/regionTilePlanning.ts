@@ -12,7 +12,7 @@ import {
   type RegionTilePlan,
 } from "@logjam/shared";
 
-import { hashKey } from "../map/sourceResolver";
+import { hashKey, type MapArtifact } from "../map/sourceResolver";
 import type { RegionClipSpec } from "./regionDownloads";
 
 /** Plan order: zoom ascending, then row-major within a level. */
@@ -97,6 +97,18 @@ export function regionClipSpecs(
     clip(NSW_SLOPE.id, { slope: true }),
     clip("protomaps"),
   ];
+}
+
+/** What a saved clip is filed as in the registry. */
+export function regionClipKind(
+  spec: Pick<RegionClipSpec, "demSourceId" | "contours" | "slope">,
+): MapArtifact["kind"] {
+  // A DEM clip is filed under its source id, which is what the sampler
+  // looks saved files up by (offline/demLookup.ts).
+  if (spec.demSourceId) return "dem-region";
+  if (spec.contours) return "contours-region";
+  if (spec.slope) return "slope-region";
+  return "basemap-region";
 }
 
 /**

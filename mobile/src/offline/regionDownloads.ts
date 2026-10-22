@@ -32,7 +32,7 @@ import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
 import { deleteArtifact, insertArtifact } from "./registryDb";
-import { exhaustedTileOutcome } from "./regionTilePlanning";
+import { exhaustedTileOutcome, regionClipKind } from "./regionTilePlanning";
 import {
   connectionAllows,
   type RegionCancelToken,
@@ -418,15 +418,7 @@ export async function runRegionClip(
 
     const artifact: MapArtifact = {
       id: spec.id,
-      // A DEM clip is filed under its source id, which is what the sampler
-      // looks saved files up by (offline/demLookup.ts).
-      kind: spec.demSourceId
-        ? "dem-region"
-        : spec.contours
-          ? "contours-region"
-          : spec.slope
-            ? "slope-region"
-            : "basemap-region",
+      kind: regionClipKind(spec),
       logicalKey:
         spec.demSourceId ??
         (spec.contours

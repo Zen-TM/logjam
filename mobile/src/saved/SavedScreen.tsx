@@ -151,6 +151,7 @@ import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
   groupArtifacts,
+  isRegionArtifact,
   overlayJobId,
   regionGroupKey,
 } from "../offline/artifactGroups";
@@ -653,13 +654,7 @@ export function SavedScreen({
   // The DEM saved with a run belongs to that run's card: its bytes are part of
   // what the area cost, and deleting the area has to take it with it. It is not
   // one of the "maps", though — see `basemapMembers`.
-  const regionArtifacts = artifacts.filter(
-    (a) =>
-      a.kind === "basemap-region" ||
-      a.kind === "dem-region" ||
-      a.kind === "contours-region" ||
-      a.kind === "slope-region",
-  );
+  const regionArtifacts = artifacts.filter(isRegionArtifact);
 
   // A region download in flight, as one card per run at the top of the Regions
   // filter. It is background work — the queue keeps running while the user is
