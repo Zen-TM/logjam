@@ -20,24 +20,17 @@
 //
 // PRIVACY: place names reach this sheet — a user cannot decide about "3 things"
 // — and nothing here logs.
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
-import {
-  copyAndRemoveConfirm,
-  messageFromError,
-  copyConfirm,
-} from "@logjam/shared";
+import { copyAndRemoveConfirm, copyConfirm } from "@logjam/shared";
 
-import { apiFetch } from "../api/apiFetch";
-import { fetchCurrentUser, useApiQuery } from "../api/queries";
-import { useAccountState } from "../auth/AccountStateContext";
-import type { TUser } from "../api/types";
 import { formatBytes } from "../format";
 import { listMediaForLinked } from "../sync/mirrorStore";
 import { spacing, makeStyles } from "../theme";
 import { BottomSheet, Button, FieldError, SwitchRow } from "../ui";
 import type { CopyAndRemoveTarget } from "./copyAndRemove";
+import { useRememberedCopyMedia } from "./rememberedCopyMedia";
 
 /** What the sheet found attached to the places being copied. */
 type PlaceMediaTally = { count: number; bytes: number };
@@ -114,16 +107,6 @@ export function useCopyPanel({
   const styles = useStyles();
 
   const visible = active;
-  const { accountState } = useAccountState();
-  // Gated on `active` as well as on having an account: this hook lives
-  // inside two sheets that stay MOUNTED between openings, so an ungated query
-  // would fetch on every sheet mount for a panel nobody opened. (`/users/me` is
-  // cached for 60 s in apiFetch, which makes the open itself free anyway.)
-  const userQuery = useApiQuery(
-    fetchCurrentUser,
-    "Couldn't load your settings.",
-    active && accountState !== "guest",
-  );
 
   const [media, setMedia] = useState<PlaceMediaTally>(NO_MEDIA);
   useEffect(() => {
@@ -145,38 +128,11 @@ export function useCopyPanel({
     };
   }, [visible, targets]);
 
-  // Undefined until the account answers; the switch renders from the same
-  // default the server would apply, so it never shows a position that is a lie.
-  const remembered = userQuery.data?.uiPreferences?.copyPlaceMedia ?? true;
-  const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
-  // Re-seeded on each open, and when the account's answer lands while open.
-  const seedKey = visible ? remembered : null;
-  const [seededFor, setSeededFor] = useState<boolean | null>(null);
-  if (seedKey !== seededFor) {
-    setSeededFor(seedKey);
-    if (seedKey !== null) setCopyMedia(seedKey);
-  }
-
-  /** Flipping the switch also moves the remembered default — that IS the memory. */
-  const toggleMedia = useCallback(() => {
-    setCopyMedia((current) => {
-      const next = !(current ?? true);
-      apiFetch<TUser>("/users/me", {
-        method: "PATCH",
-        body: { copyPlaceMedia: next },
-      }).catch((err: unknown) => {
-        // The copy still honours THIS sheet's answer (it is sent explicitly),
-        // so a failed save costs the memory, not the action.
-        console.error(messageFromError(err, "Couldn't save that preference."));
-      });
-      return next;
-    });
-  }, []);
+  const [withMedia, toggleMedia] = useRememberedCopyMedia(visible);
 
   const one = targets.length === 1;
   const itemName = one ? targets[0].title : "";
   const kindLabel = one ? targets[0].entityType : "item";
-  const withMedia = copyMedia ?? true;
 
   const confirm =
     mode === "copyAndRemove"

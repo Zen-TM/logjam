@@ -26,6 +26,7 @@ import { makeStyles, muted, spacing, useTheme } from "../theme";
 import { BottomSheet, Icon, Row, SectionHeader } from "../ui";
 import { openPlanMedia, usePlanFilesOnPhone } from "./PlanDownload";
 import { openablePlanMedia, placeFiles } from "./planFiles";
+import { SAVE_A_COPY, useSaveCopyPanel } from "./SaveCopySheet";
 
 export function PlanPlaceSheet({
   planId,
@@ -39,11 +40,44 @@ export function PlanPlaceSheet({
   place: TripPlanPlace | null;
   online: boolean;
   onClose: () => void;
-  onInfo: (message: string) => void;
+  onInfo: (message: string, tone?: "info" | "error") => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
+  // Save a copy is this sheet's sub-mode, reset for each place.
+  const [saving, setSaving] = useState(false);
+  const [savingFor, setSavingFor] = useState(place?.id ?? null);
+  if ((place?.id ?? null) !== savingFor) {
+    setSavingFor(place?.id ?? null);
+    setSaving(false);
+  }
+  const panel = useSaveCopyPanel({
+    planId,
+    target:
+      saving && place
+        ? {
+            kind: "place",
+            id: place.id,
+            title: place.name,
+            photos: place.media.length,
+          }
+        : null,
+    online,
+    // The whole sheet closes, so the toast isn't drawn under it.
+    onFinished: () => {
+      setSaving(false);
+      onClose();
+    },
+    onDone: onInfo,
+  });
+  // Every way out of the sub-mode backs out one layer (none while it saves:
+  // `closable`).
+  const back = saving
+    ? () => {
+        if (panel.closable) setSaving(false);
+      }
+    : undefined;
   // Its photos open from the phone once downloaded, else from their URLs
   // while online (`planFileSource`).
   const files = useMemo(() => (place ? placeFiles(place) : []), [place]);
@@ -63,10 +97,15 @@ export function PlanPlaceSheet({
   return (
     <BottomSheet
       visible={place !== null}
-      onClose={onClose}
-      title={place?.name ?? ""}
+      onClose={back ?? onClose}
+      onBack={back}
+      closable={!saving || panel.closable}
+      title={saving ? panel.title : (place?.name ?? "")}
+      footer={saving ? panel.footer : undefined}
     >
-      {place ? (
+      {saving ? (
+        panel.body
+      ) : place ? (
         <View style={styles.body}>
           <Text style={styles.detail}>
             {[type?.name ?? "Place", tripPlanAddedByLine(place.addedBy)]
@@ -126,6 +165,15 @@ export function PlanPlaceSheet({
               />
             </>
           ) : null}
+          <Row
+            icon={SAVE_A_COPY.icon}
+            title={SAVE_A_COPY.label}
+            subtitle={
+              online ? undefined : unavailableReasonText("needs-connection")
+            }
+            disabled={!online}
+            onPress={() => setSaving(true)}
+          />
           {place.notes ? (
             <Text style={styles.notes} selectable>
               {place.notes}

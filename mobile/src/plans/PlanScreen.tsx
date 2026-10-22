@@ -81,6 +81,11 @@ import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { PlanTripLogSheet } from "./PlanTripLogSheet";
+import {
+  SAVE_A_COPY,
+  SaveCopySheet,
+  type SaveCopyTarget,
+} from "./SaveCopySheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
@@ -522,7 +527,7 @@ function PlanPage({
         onClose={() => setTripLogOpen(false)}
         // A toast only: the form closes itself after Log trip, and an
         // attribute added inside it saves without closing it.
-        onSaved={(text) => notify(text)}
+        onSaved={(text, tone) => notify(text, tone)}
       />
       <PlanDetailsSheet
         visible={editOpen}
@@ -654,9 +659,21 @@ function Items({
 }: {
   plan: TripPlanView;
   online: boolean;
-  onInfo: (message: string) => void;
+  onInfo: (message: string, tone?: "info" | "error") => void;
 }) {
   const theme = useTheme();
+  const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
+  /** Save a copy, on each way and map: its row's trailing control, dimmed
+   *  offline with the reason in its label (a route's row says it too). */
+  const saveCopy = (target: SaveCopyTarget) => (
+    <IconButton
+      icon={SAVE_A_COPY.icon}
+      accessibilityLabel={`${SAVE_A_COPY.label}: ${target.title}${online ? "" : `. ${OFFLINE}`}`}
+      color={theme.textMuted}
+      disabled={!online}
+      onPress={() => setSaving(target)}
+    />
+  );
   const { assetHue } = useHues();
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);
@@ -707,7 +724,14 @@ function Items({
           icon="route"
           hue={assetHue.route}
           title={route.name}
-          subtitle={tripPlanAddedByLine(route.addedBy)}
+          // Its only action is Save a copy, which needs a connection.
+          subtitle={subtitle(tripPlanAddedByLine(route.addedBy), false)}
+          right={saveCopy({
+            kind: "route",
+            id: route.id,
+            title: route.name,
+            photos: 0,
+          })}
         />
       ))}
       {plan.files.map((file) => {
@@ -724,9 +748,17 @@ function Items({
             icon="importedFile"
             hue={assetHue.import}
             title={mediaDisplayName(file.item)}
+            right={saveCopy({
+              kind: "media",
+              id: file.id,
+              title: mediaDisplayName(file.item),
+              photos: 0,
+            })}
             subtitle={subtitle(
               tripPlanAddedByLine(file.addedBy),
-              shown === null || shown.length > 0,
+              // Opens only as a photo or video; a GPX/KML row's one action
+              // is Save a copy, which needs a connection.
+              !!shown?.length,
             )}
             onPress={
               shown?.length
@@ -762,6 +794,7 @@ function Items({
             icon="geoPdf"
             hue={assetHue.geoPdf}
             title={title}
+            right={saveCopy({ kind: "geoPdf", id: pdf.id, title, photos: 0 })}
             subtitle={subtitle(tripPlanAddedByLine(pdf.addedBy), uri !== null)}
             // Onto the map as a GeoPDF import on this phone, which leaves
             // with the plan (`openPlanGeoPdf`).
@@ -781,6 +814,13 @@ function Items({
           />
         );
       })}
+      <SaveCopySheet
+        planId={plan.id}
+        target={saving}
+        online={online}
+        onClose={() => setSaving(null)}
+        onDone={onInfo}
+      />
       {viewing?.length ? (
         <MediaViewer
           items={viewing}

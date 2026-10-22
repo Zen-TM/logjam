@@ -57,6 +57,7 @@ import {
   opensPreview,
   tripPlanInvitedLine,
   tripPlanPreviewHeaded,
+  tripPlanTripLogPlacesLine,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -936,5 +937,22 @@ describe("an invite's preview", () => {
     expect(
       tripPlanPreviewHeaded({ sections: [], requiredForms: [{}] as never }),
     ).toBe(true);
+  });
+});
+
+describe("Start a trip log's places line", () => {
+  const bare = { media: [] };
+  const withOne = { media: [{}] };
+  // Mutation: decide from every place, or ignore the picks, and picking
+  // only a place without photos promises "with its photos".
+  it("promises photos only where the picks have some", () => {
+    expect(tripPlanTripLogPlacesLine([bare], true)).not.toMatch(/photos/);
+    expect(tripPlanTripLogPlacesLine([], true)).not.toMatch(/photos/);
+    expect(tripPlanTripLogPlacesLine([bare, withOne], true)).toMatch(
+      /with its photos/,
+    );
+    expect(tripPlanTripLogPlacesLine([withOne], false)).toMatch(
+      /without its photos/,
+    );
   });
 });
