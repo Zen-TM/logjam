@@ -20,10 +20,10 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
+  planVerbLabel,
   planVerbsFor,
   PLAN_ADD_VERBS,
   PLAN_FORM_VERBS,
-  PLAN_VERBS,
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
@@ -94,7 +94,6 @@ import {
 import { planPageView } from "./planViews";
 
 const copy = TRIP_PLAN_PAGE.copy;
-const TRIP_LOG_VERB = PLAN_VERBS.find((verb) => verb.id === "tripLog")!;
 const OFFLINE = unavailableReasonText("needs-connection");
 
 function usePlan(planId: string, online: boolean, blocked: boolean) {
@@ -416,7 +415,7 @@ function PlanPage({
             ) : notice.kind === "over" ? (
               // Live offline: a trip log is the caller's own and queues.
               <Button
-                label={TRIP_LOG_VERB.label}
+                label={planVerbLabel("tripLog")}
                 compact
                 variant="outlineAccent"
                 onPress={() => setTripLogOpen(true)}

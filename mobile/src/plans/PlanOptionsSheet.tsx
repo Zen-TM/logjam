@@ -141,8 +141,6 @@ export function PlanOptionsSheet({
     }
   };
 
-  // A trip log is the caller's own and queues; every other verb writes to
-  // the plan and needs a connection.
   const live = (id: PlanVerbId) => online || id === "tripLog";
   const verbs = plan
     ? planVerbs("gps", plan.myRole, {
