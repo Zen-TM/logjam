@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import {
   TRIP_PLAN_FORMS,
   TRIP_PLAN_FORM_PRESETS,
@@ -15,16 +16,19 @@ import {
   tripPlanInPlanNow,
   TRIP_PLANS_LIST,
   type TripPlanFormView,
+  type TripPlanItem,
   type TripPlanView,
 } from "@logjam/shared";
 
 import {
   archivePlan,
   inviteMember,
+  patchPlanItem,
   previewInviteLink,
   setMemberRole,
 } from "../../plansApi";
 import { planInvite } from "../../pendingInvite";
+import { ApiError } from "../../errors/ApiError";
 import PlanDetailPanel from "./PlanDetailPanel";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanInviteLinkDialog from "./PlanInviteLinkDialog";
@@ -34,6 +38,7 @@ import PlanPeople from "./PlanPeople";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
+import PlanItemEditDialog from "./PlanItemEditDialog";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
@@ -78,6 +83,7 @@ vi.mock("../../plansApi", async (importOriginal) => ({
     setView: vi.fn(),
   }),
   archivePlan: vi.fn(),
+  patchPlanItem: vi.fn(async () => ({})),
   inviteMember: vi.fn(),
   setMemberRole: vi.fn(async () => {}),
   getInviteLinks: vi.fn(async () => []),
@@ -199,6 +205,27 @@ describe("a section deleted while its form is open", () => {
   });
 });
 
+/** A plan's page on `plan`, App's props stubbed; `overrides` win. */
+function renderPanel(
+  overrides: Partial<ComponentProps<typeof PlanDetailPanel>> = {},
+) {
+  return render(
+    <PlanDetailPanel
+      view={plan}
+      error={null}
+      refetch={() => {}}
+      onOwnChanged={() => {}}
+      onOpenItem={() => {}}
+      copyPlaceMedia
+      onBack={() => {}}
+      onPlansChanged={() => {}}
+      onStartTripLog={() => {}}
+      myUserId="u1"
+      {...overrides}
+    />,
+  );
+}
+
 describe("the plan's page after a failed write", () => {
   // Mutation: refetch the list after any archive, and one failure is said
   // twice: the archive's toast, then the list's.
@@ -206,15 +233,7 @@ describe("the plan's page after a failed write", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(archivePlan).mockRejectedValue(new Error("offline"));
     const onPlansChanged = vi.fn();
-    render(
-      <PlanDetailPanel
-        planId="p1"
-        onBack={() => {}}
-        onPlansChanged={onPlansChanged}
-        onStartTripLog={() => {}}
-        myUserId="u1"
-      />,
-    );
+    renderPanel({ onPlansChanged });
     fireEvent.click(
       screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.actions }),
     );
@@ -466,5 +485,92 @@ describe("joining a plan with Safety contacts to fill in", () => {
     expect(
       screen.getByText(/Members may print them for someone not on the trip/),
     ).toBeTruthy();
+  });
+});
+
+describe("an item's edit over someone else's change", () => {
+  // Mutation: drop the `adoptTheirs` step in PlanItemEditDialog, and the save
+  // sends the opened name back over the one another member just wrote.
+  it("sends only the user's own field, compared with what is stored", async () => {
+    const stored = {
+      kind: "place",
+      id: "pl1",
+      name: "Wollangambe",
+      notes: "",
+    } as TripPlanItem;
+    const view = (now: TripPlanItem) => (
+      <PlanItemEditDialog
+        planId="p1"
+        opened={stored}
+        item={now}
+        onSaved={() => {}}
+        onStale={() => {}}
+        onClose={() => {}}
+      />
+    );
+    const { rerender } = render(view(stored));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: TRIP_PLAN_PAGE.copy.itemNotes }),
+      { target: { value: "Exit left." } },
+    );
+    rerender(view({ ...stored, name: "Wolly" } as TripPlanItem));
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.sectionSave }),
+    );
+    await waitFor(() => expect(patchPlanItem).toHaveBeenCalled());
+    expect(patchPlanItem).toHaveBeenCalledWith("p1", "place", "pl1", {
+      notes: { from: "", to: "Exit left." },
+    });
+  });
+});
+describe("an item's edit refused", () => {
+  const way = {
+    kind: "route",
+    id: "r1",
+    name: "Walk in",
+  } as TripPlanItem;
+  const view = (onStale = () => {}) => (
+    <PlanItemEditDialog
+      planId="p1"
+      opened={way}
+      item={way}
+      onSaved={() => {}}
+      onStale={onStale}
+      onClose={() => {}}
+    />
+  );
+
+  // Mutation: drop the route check, and a blank way name reaches the API,
+  // which answers with a fault the user didn't make.
+  it("checks a way's name before it is sent", () => {
+    render(view());
+    fireEvent.change(
+      screen.getByRole("textbox", { name: TRIP_PLAN_PAGE.copy.itemName }),
+      { target: { value: "  " } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.sectionSave }),
+    );
+    expect(screen.getByText("Name is required")).toBeTruthy();
+    expect(patchPlanItem).not.toHaveBeenCalled();
+  });
+
+  // Mutation: refetch on a 409 only, and an item deleted meanwhile says
+  // "Couldn't find that." on every Save, never that it went.
+  it("fetches the plan again when the item went", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(patchPlanItem).mockRejectedValueOnce(
+      new ApiError(404, "/plans/p1/items/route/r1", "PATCH"),
+    );
+    const onStale = vi.fn();
+    render(view(onStale));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: TRIP_PLAN_PAGE.copy.itemName }),
+      { target: { value: "Walk out" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.sectionSave }),
+    );
+    await waitFor(() => expect(onStale).toHaveBeenCalled());
   });
 });

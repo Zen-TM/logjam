@@ -38,6 +38,8 @@ import {
   tripPlanVisibilityLine,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
+  planItemDeleteConfirm,
+  planItemVerbs,
   planMemberVerbs,
   planRemoveConfirm,
   planSelfRoleConfirm,
@@ -541,6 +543,75 @@ describe("who sees a form's answers, as its filler reads it", () => {
     expect(tripPlanVisibilityLine("members", "gear")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("members")).not.toMatch(printed);
     expect(tripPlanVisibilityLine("leaders", "carpool")).not.toMatch(printed);
+  });
+});
+
+describe("a plan's items", () => {
+  const ids = (verbs: { id: string }[]) => verbs.map((v) => v.id);
+  const live = { archived: false };
+
+  // Mutation: offer Edit and Delete to every member, and a member's press
+  // on someone else's place is the API's 403 (`canChangeItem`).
+  it("lets a member change only what they added, a leader or an editor anything", () => {
+    const theirs = { kind: "place", mine: false };
+    expect(ids(planItemVerbs("member", theirs, live))).toEqual(["save"]);
+    expect(
+      ids(planItemVerbs("member", { kind: "place", mine: true }, live)),
+    ).toEqual(["save", "edit", "delete"]);
+    expect(ids(planItemVerbs("editor", theirs, live))).toEqual([
+      "save",
+      "edit",
+      "delete",
+    ]);
+  });
+
+  // Mutation: drop `whenArchived` from Save a copy, and an archived plan's
+  // things can no longer be kept, which the API allows.
+  it("keeps Save a copy on an archived plan, and gives a map no Edit", () => {
+    expect(
+      ids(
+        planItemVerbs(
+          "leader",
+          { kind: "route", mine: true },
+          { archived: true },
+        ),
+      ),
+    ).toEqual(["save"]);
+    expect(
+      ids(planItemVerbs("leader", { kind: "geoPdf", mine: true }, live)),
+    ).toEqual(["download", "save", "delete"]);
+  });
+
+  // Mutation: offer Download on every kind, and a place's ⋯ has a verb with
+  // nothing to fetch; drop its `whenArchived`, and an archived plan's
+  // files can't be had.
+  it("puts Download first on a file or a map, archived plans too", () => {
+    expect(
+      ids(planItemVerbs("member", { kind: "media", mine: false }, live)),
+    ).toEqual(["download", "save"]);
+    expect(
+      ids(
+        planItemVerbs(
+          "member",
+          { kind: "geoPdf", mine: false },
+          { archived: true },
+        ),
+      ),
+    ).toEqual(["download", "save"]);
+  });
+
+  // Mutation: leave the count out, and a place's photos go unannounced
+  // (shared/DESIGN.md §9: a destructive confirm counts what goes).
+  it("counts a deleted place's photos", () => {
+    expect(planItemDeleteConfirm("Wollangambe").confirmBody).toBe(
+      "It goes for everyone in the plan. Copies people saved stay.",
+    );
+    expect(planItemDeleteConfirm("Wollangambe", 1).confirmBody).toBe(
+      "It goes for everyone in the plan. Its photo goes too. Copies people saved stay.",
+    );
+    expect(planItemDeleteConfirm("Wollangambe", 3).confirmBody).toContain(
+      "Its 3 photos go too.",
+    );
   });
 });
 

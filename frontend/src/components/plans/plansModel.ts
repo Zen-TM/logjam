@@ -17,8 +17,12 @@ import type {
   TripPlanFormPatch,
   TripPlanFormPresetId,
   TripPlanAnswerDraft,
+  TripPlanFilePatch,
   TripPlanFormView,
+  TripPlanItem,
   TripPlanJoinAnswers,
+  TripPlanPlacePatch,
+  TripPlanRoutePatch,
   TripPlanJoinForm,
   TripPlanMemberStatus,
   TripPlanPatch,
@@ -294,26 +298,6 @@ export function joinAnswers(
   return { value };
 }
 
-type ChargedFile = { sizeBytes: string; chargedTo: { id: string } | null };
-
-/** Every file in a plan that counts against someone's storage. */
-function planFiles(plan: TripPlanView): ChargedFile[] {
-  return [
-    ...plan.files,
-    ...plan.geoPdfs,
-    ...plan.places.flatMap((place) => place.media),
-  ];
-}
-
-/** The files a person's storage pays for: what a removal moves or deletes. */
-export function filesChargedTo(plan: TripPlanView, userId: string) {
-  const files = planFiles(plan).filter((file) => file.chargedTo?.id === userId);
-  return {
-    count: files.length,
-    bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
-  };
-}
-
 /** What a person added, counted as the leave dialog prices it. */
 export function addedBy(plan: TripPlanView, userId: string) {
   const mine = <T extends { addedBy: { id: string } | null }>(items: T[]) =>
@@ -330,4 +314,44 @@ export function addedBy(plan: TripPlanView, userId: string) {
     maps: mine(plan.geoPdfs).length,
     bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
+}
+
+/** The words an item's edit form holds. A file with no name of its own is
+ *  blank here, so saving untouched never writes its filename as its name. */
+export type ItemWords = { name: string; notes: string };
+
+export function itemWords(item: TripPlanItem): ItemWords {
+  switch (item.kind) {
+    case "place":
+      return { name: item.name, notes: item.notes ?? "" };
+    case "route":
+      return { name: item.name, notes: "" };
+    case "media":
+      return { name: item.item.displayName ?? "", notes: "" };
+    case "geoPdf":
+      return { name: item.title ?? "", notes: "" };
+  }
+}
+
+/**
+ * An item edit's compare-and-set body, or null when nothing changed. Each
+ * `from` is the stored value of `seen`, never the form's blanked words: the
+ * API compares it exactly, and a stored "" is not null.
+ */
+export function itemPatch(
+  seen: TripPlanItem,
+  now: ItemWords,
+): TripPlanPlacePatch | TripPlanRoutePatch | TripPlanFilePatch | null {
+  const was = itemWords(seen);
+  const name = now.name.trim();
+  if (seen.kind === "media")
+    return name === was.name
+      ? null
+      : { displayName: { from: seen.item.displayName, to: name || null } };
+  if (seen.kind === "geoPdf") return null;
+  const patch: TripPlanPlacePatch = {};
+  if (name !== was.name) patch.name = { from: seen.name, to: name };
+  if (seen.kind === "place" && now.notes !== was.notes)
+    patch.notes = { from: seen.notes, to: now.notes.trim() || null };
+  return Object.keys(patch).length > 0 ? patch : null;
 }

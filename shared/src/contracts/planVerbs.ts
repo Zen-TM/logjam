@@ -350,6 +350,75 @@ export function planMemberVerbs(
   );
 }
 
+/** A plan item's ⋯. A file's one job is Download, so it comes first. */
+export const PLAN_ITEM_VERBS = [
+  {
+    id: "download",
+    icon: "download",
+    label: "Download",
+    roles: ANY,
+    whenArchived: true,
+  },
+  {
+    id: "save",
+    icon: "copy",
+    label: "Save a copy",
+    roles: ANY,
+    whenArchived: true,
+  },
+  { id: "edit", icon: "edit", label: "Edit", roles: ANY },
+  {
+    id: "delete",
+    icon: "delete",
+    label: "Delete from plan",
+    roles: ANY,
+    danger: true,
+    separated: true,
+  },
+] as const satisfies readonly PlanVerbDeclaration[];
+
+export type PlanItemVerbId = (typeof PLAN_ITEM_VERBS)[number]["id"];
+
+/**
+ * The verbs a caller has on one plan item: Download on a file or a map, and
+ * Save a copy, for anyone; Edit and Delete on what they added, or on anything
+ * for a leader or an editor, as planAccess.ts's `canChangeItem` allows. A
+ * map's words are its job's, so a GeoPDF has no Edit.
+ */
+export function planItemVerbs(
+  callerRole: TripPlanRole,
+  item: { kind: string; mine: boolean },
+  state: { archived: boolean },
+): PlanVerb<PlanItemVerbId>[] {
+  const changes = callerRole !== "member" || item.mine;
+  const file = item.kind === "media" || item.kind === "geoPdf";
+  return planVerbsFor(PLAN_ITEM_VERBS, "web", callerRole, state).filter(
+    (verb) =>
+      verb.id === "download"
+        ? file
+        : verb.id === "save" ||
+          (changes && !(verb.id === "edit" && item.kind === "geoPdf")),
+  );
+}
+
+/** `photos`: a place's, which go with it (counted, shared/DESIGN.md §9). */
+export function planItemDeleteConfirm(
+  title: string,
+  photos = 0,
+): PlanConfirmCopy {
+  const theirs =
+    photos === 0
+      ? ""
+      : photos === 1
+        ? " Its photo goes too."
+        : ` Its ${photos} photos go too.`;
+  return {
+    confirmTitle: `Delete ${title} from the plan?`,
+    confirmBody: `It goes for everyone in the plan.${theirs} Copies people saved stay.`,
+    confirmLabel: "Delete",
+  };
+}
+
 /** The role a "Make …" verb gives. */
 export const PLAN_ROLE_OF_VERB: Partial<
   Record<PlanMemberVerbId, TripPlanRole>

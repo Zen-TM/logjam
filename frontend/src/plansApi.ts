@@ -11,6 +11,11 @@ import {
   type TripPlanFormPatch,
   type TripPlanFormView,
   type TripPlanInvitedPreview,
+  type TripPlanItem,
+  type TripPlanItemKind,
+  type TripPlanFilePatch,
+  type TripPlanPlacePatch,
+  type TripPlanRoutePatch,
   type TripPlanInviteView,
   type TripPlanJoinAnswers,
   type TripPlanLinkPreview,
@@ -168,6 +173,33 @@ export const redeemInviteLink = (token: string, answers: TripPlanJoinAnswers) =>
     body: { token, answers },
   });
 
+const item = (planId: string, kind: TripPlanItemKind, itemId: string) =>
+  `${plan(planId)}/items/${kind}/${encodeURIComponent(itemId)}`;
+/** Save a copy to the caller's own account; the body is the kind's copy shape. */
+export const savePlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+  copyMedia?: boolean,
+) =>
+  // The copy, as the kind's own copy route answers.
+  apiFetch<{ id: string; mediaSkipped?: number; mediaOutOfSpace?: true }>(
+    `${item(planId, kind, itemId)}/save`,
+    { method: "POST", body: copyMedia === undefined ? {} : { copyMedia } },
+  );
+export const patchPlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+  body: TripPlanPlacePatch | TripPlanRoutePatch | TripPlanFilePatch,
+) =>
+  apiFetch<TripPlanItem>(item(planId, kind, itemId), { method: "PATCH", body });
+export const deletePlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+) => apiFetch<void>(item(planId, kind, itemId), { method: "DELETE" });
+
 /** GET /plans: the cheap list, for the Plans page and the nav badge. */
 export function usePlans(enabled: boolean) {
   const [plans, setPlans] = useState<TripPlanSummary[]>([]);
@@ -215,12 +247,24 @@ export function usePlan(
   const [view, setView] = useState<TripPlanView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [request, setRequest] = useState({ count: 0, quiet: false });
+  // Everything here is one plan's: another id, or the same one opened again
+  // after none, starts from nothing. Guard: plansApi.test.tsx.
+  const [current, setCurrent] = useState(id);
+  if (current !== id) {
+    setCurrent(id);
+    setView(null);
+    setError(null);
+    setRequest({ count: 0, quiet: false });
+  }
   const report = useRef(onBackgroundError);
   // Which plan a view has loaded for: a failure before then is the page's.
   const loaded = useRef<string | null>(null);
   useEffect(() => {
     report.current = onBackgroundError;
   });
+  useEffect(() => {
+    loaded.current = null;
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -252,6 +296,11 @@ export function usePlan(
       })),
     [],
   );
-  // A view of another plan is never shown while this one loads.
-  return { view: view?.id === id ? view : null, error, refetch, setView };
+  // Another plan's view or error is never shown while this one loads.
+  return {
+    view: view?.id === id ? view : null,
+    error,
+    refetch,
+    setView,
+  };
 }
