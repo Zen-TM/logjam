@@ -73,6 +73,10 @@ export type TUser = {
   monthlyEgressUsedBytes: string;
   consentedAt: string | null;
   consentVersion: string | null;
+  /** The version PATCH /users/me accepts now; `consentVersion` is stale when
+   * it is null or older (see needsReconsent). Absent from a server that
+   * predates the field. */
+  currentConsentVersion?: string;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];

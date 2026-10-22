@@ -22,7 +22,12 @@ import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isThemeSchemeId, needsReconsent, type IconIdea } from "@logjam/shared";
+import {
+  currentConsentVersionOf,
+  isThemeSchemeId,
+  needsReconsent,
+  type IconIdea,
+} from "@logjam/shared";
 
 import {
   fetchCurrentUser,
@@ -957,6 +962,7 @@ export function AppShell({
   if (user && !consented && needsReconsent(user)) {
     return (
       <ConsentGate
+        consentVersion={currentConsentVersionOf(user)}
         onConsented={() => {
           setConsented(true);
           userQuery.refetch();

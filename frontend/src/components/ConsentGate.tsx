@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  CURRENT_CONSENT_VERSION,
-  PENDING_CONSENT_STORAGE_KEY,
-} from "../consent";
+import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
 import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
 import BrandMark from "./brand/BrandMark";
@@ -21,9 +18,12 @@ import classes from "./ConsentGate.module.css";
  * so opening the terms would answer the question about them.
  */
 function ConsentGate({
+  consentVersion,
   onAccepted,
   onSignOut,
 }: {
+  /** The version the server named, which is the only one it will record. */
+  consentVersion: string;
   onAccepted: (user: TUser) => void;
   onSignOut: () => void;
 }) {
@@ -39,7 +39,7 @@ function ConsentGate({
     setSubmitting(true);
     setError(null);
     try {
-      const user = await recordConsent(CURRENT_CONSENT_VERSION);
+      const user = await recordConsent(consentVersion);
       localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
       // Parent swaps in the updated user, unmounting this gate — no state
       // updates after this point.
@@ -63,8 +63,8 @@ function ConsentGate({
         <h1 className={classes.title}>Updated terms</h1>
         <p className={classes.body}>
           Logjam&apos;s Terms of Use and Privacy Policy have changed (last
-          updated {CURRENT_CONSENT_VERSION}). Please review them and confirm
-          your agreement to keep using Logjam.
+          updated {consentVersion}). Please review them and confirm your
+          agreement to keep using Logjam.
         </p>
         <p className={classes.legal}>
           <a href="/tos.html" target="_blank" rel="noopener noreferrer">
