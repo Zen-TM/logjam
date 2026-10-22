@@ -172,6 +172,7 @@ export function PlanScreen({
   initialView,
   onBack,
   onShowOnMap,
+  onDownloadMap,
   onGone,
 }: {
   planId: string;
@@ -185,6 +186,8 @@ export function PlanScreen({
     planId: string,
     bbox: [number, number, number, number] | null,
   ) => void;
+  /** The region download, framed on the plan's items. */
+  onDownloadMap: (bbox: [number, number, number, number]) => void;
   /** The caller left or deleted the plan: back to Plans, saying so. */
   onGone: (message: string) => void;
 }) {
@@ -240,6 +243,7 @@ export function PlanScreen({
       onRefresh={() => void refresh()}
       onBack={onBack}
       onShowOnMap={() => onShowOnMap(planId, planBbox(cached.plan))}
+      onDownloadMap={onDownloadMap}
       onGone={onGone}
       onLeaving={setLeaving}
     />
@@ -257,6 +261,7 @@ function PlanPage({
   onRefresh,
   onBack,
   onShowOnMap,
+  onDownloadMap,
   onGone,
   onLeaving,
 }: {
@@ -270,6 +275,7 @@ function PlanPage({
   onRefresh: () => void;
   onBack: () => void;
   onShowOnMap: () => void;
+  onDownloadMap: (bbox: [number, number, number, number]) => void;
   onGone: (message: string) => void;
   onLeaving: (leaving: boolean) => void;
 }) {
@@ -357,7 +363,12 @@ function PlanPage({
             ) : null}
           </View>
         ) : null}
-        <PlanDownload cached={cached} online={online} now={now} />
+        <PlanDownload
+          cached={cached}
+          online={online}
+          now={now}
+          onDownloadMap={onDownloadMap}
+        />
       </Hero>
     ),
     notices: notice ? (
@@ -506,7 +517,7 @@ function WriteUp({
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const add = canWrite ? (
+  const addButton = (
     <Button
       label={planAddVerbLabel("section")}
       icon="add"
@@ -515,6 +526,13 @@ function WriteUp({
       disabledReason={OFFLINE}
       onPress={() => onSection({ mode: "add" })}
     />
+  );
+  // The button only dims: the words go under it (ui/Button.tsx).
+  const add = canWrite ? (
+    <>
+      {addButton}
+      {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+    </>
   ) : null;
   if (plan.sections.length === 0)
     return (
@@ -664,6 +682,7 @@ function Forms({ plan }: { plan: TripPlanView }) {
 const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
   age: { ...muted(theme, textRole.detail) },
+  offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

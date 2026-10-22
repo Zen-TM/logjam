@@ -3,6 +3,8 @@
 // progress card), and Downloaded, with when, once every file the plan points
 // at is on the phone. A plan that gained files since keeps its stamp but
 // offers the rest. The run is `planDownloads.ts`'s, so it outlives this row.
+// Once downloaded, the map for the plan's area is offered: the region
+// download.
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import {
@@ -17,21 +19,26 @@ import { spacing } from "../theme";
 import { Row, StatusPill } from "../ui";
 import { startPlanDownload, usePlanDownload } from "./planDownloads";
 import { missingPlanFiles, planFiles, type PlanFile } from "./planFiles";
+import { useMapArtifacts } from "../offline/useMapArtifacts";
+import { planBbox, planMapSaved } from "./planMap";
 import type { CachedPlan } from "./plansCache";
 
 export function PlanDownload({
   cached,
   online,
   now,
+  onDownloadMap,
 }: {
   cached: CachedPlan;
   online: boolean;
   /** For "Downloaded 3 days ago". */
   now: number;
+  onDownloadMap: (bbox: [number, number, number, number]) => void;
 }) {
   const { plan } = cached;
   const [missing, setMissing] = useState<PlanFile[] | null>(null);
   const progress = usePlanDownload(plan.id);
+  const { artifacts } = useMapArtifacts();
   const running = progress !== null;
 
   useEffect(() => {
@@ -55,16 +62,40 @@ export function PlanDownload({
       />
     );
   if (missing === null) return null;
-  if (cached.downloadedAt && missing.length === 0)
+  if (cached.downloadedAt && missing.length === 0) {
+    const bbox = planBbox(plan);
+    const mapSaved = bbox !== null && planMapSaved(bbox, artifacts);
     return (
-      <View style={{ flexDirection: "row" }}>
-        <StatusPill
-          label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
-          tone="muted"
-          icon="saveOffline"
-        />
-      </View>
+      <>
+        <View style={{ flexDirection: "row", gap: spacing(1) }}>
+          <StatusPill
+            label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
+            tone="muted"
+            icon="saveOffline"
+          />
+          {mapSaved ? (
+            <StatusPill
+              label={TRIP_PLAN_OFFLINE.mapDownloaded}
+              tone="muted"
+              icon="map"
+            />
+          ) : null}
+        </View>
+        {bbox && !mapSaved ? (
+          <Row
+            icon="map"
+            title={TRIP_PLAN_OFFLINE.downloadMap}
+            subtitle={
+              online ? undefined : unavailableReasonText("needs-connection")
+            }
+            disabled={!online}
+            onPress={() => onDownloadMap(bbox)}
+            style={{ marginTop: spacing(1) }}
+          />
+        ) : null}
+      </>
     );
+  }
 
   const bytes = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
   const price = planCountsLabel(

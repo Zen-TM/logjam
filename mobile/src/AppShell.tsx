@@ -172,12 +172,14 @@ type MapStackParams = {
   MapTripDetail: { trip: MirrorTrip };
   // Where the map was looking when "Save maps for offline use" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
+  // A plan's Download the map for this area too passes its items' bounds.
   MapRegionDownload:
     | {
         basemapId: BasemapId;
         center: [number, number];
         zoom: number;
       }
+    | { bounds: [number, number, number, number] }
     | undefined;
 };
 
@@ -408,9 +410,13 @@ function MapStackNav() {
                 params: { filter: "region", nonce: Date.now() },
               });
             }}
-            initialBasemapId={route.params?.basemapId}
-            initialCenter={route.params?.center}
-            initialZoom={route.params?.zoom}
+            {...(route.params && "bounds" in route.params
+              ? { initialBounds: route.params.bounds }
+              : {
+                  initialBasemapId: route.params?.basemapId,
+                  initialCenter: route.params?.center,
+                  initialZoom: route.params?.zoom,
+                })}
           />
         )}
       </MapStack.Screen>
@@ -1267,6 +1273,12 @@ export function AppShell({
                                 focus: { bbox, nonce: Date.now() },
                               }),
                             },
+                          })
+                        }
+                        onDownloadMap={(bounds) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapRegionDownload",
+                            params: { bounds },
                           })
                         }
                         onGone={(text) =>
