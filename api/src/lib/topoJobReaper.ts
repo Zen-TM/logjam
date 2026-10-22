@@ -274,6 +274,17 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
 }
 
 /**
+ * The stuck-job sweeps skip a plan's GeoPDF (null userId): there is no owner
+ * to tell. A plan's GeoPDF is a copy of a finished one, made completed
+ * (lib/planItems.ts), so it is never queued or running.
+ */
+function ownedJob<T extends { userId: string | null }>(
+  row: T,
+): row is T & { userId: string } {
+  return row.userId !== null;
+}
+
+/**
  * Flip overdue rows to failed ONE AT A TIME and notify only the rows this pass
  * actually claimed.
  *
@@ -565,10 +576,12 @@ export async function reapStuckTopoJobs(
   const geoPdfQueuedCutoff = new Date(
     now.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS,
   );
-  const queuedGeoPdfJobs = await prisma.geoPdfJob.findMany({
-    where: { status: "queued", createdAt: { lt: geoPdfQueuedCutoff } },
-    select: { id: true, userId: true },
-  });
+  const queuedGeoPdfJobs = (
+    await prisma.geoPdfJob.findMany({
+      where: { status: "queued", createdAt: { lt: geoPdfQueuedCutoff } },
+      select: { id: true, userId: true },
+    })
+  ).filter(ownedJob);
   reaped += await claimAndNotify(
     queuedGeoPdfJobs,
     (id) =>
@@ -583,16 +596,18 @@ export async function reapStuckTopoJobs(
   const geoPdfRunningCutoff = new Date(
     now.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS,
   );
-  const overdueGeoPdfJobs = await prisma.geoPdfJob.findMany({
-    where: {
-      status: "running",
-      OR: [
-        { startedAt: { lt: geoPdfRunningCutoff } },
-        { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
-      ],
-    },
-    select: { id: true, userId: true, ecsTaskArn: true },
-  });
+  const overdueGeoPdfJobs = (
+    await prisma.geoPdfJob.findMany({
+      where: {
+        status: "running",
+        OR: [
+          { startedAt: { lt: geoPdfRunningCutoff } },
+          { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
+        ],
+      },
+      select: { id: true, userId: true, ecsTaskArn: true },
+    })
+  ).filter(ownedJob);
   if (overdueGeoPdfJobs.length > 0) {
     reaped += await claimAndNotify(
       overdueGeoPdfJobs,
@@ -670,6 +685,10 @@ export async function expireCompletedExports(
  * removed: S3 object deleted, storage charge decremented, row removed in one
  * transaction. Per-row failures are logged and skipped so one bad row can't
  * wedge the others.
+ *
+ * A plan's GeoPDF never expires: nothing in a plan is deleted on a timer, and
+ * the adder's storage pays for it. Guard: topoJobReaper.unit.test.ts ("leaves
+ * a plan's GeoPDF").
  */
 export async function expireCompletedGeoPdfJobs(
   now: Date = new Date(),
@@ -680,8 +699,13 @@ export async function expireCompletedGeoPdfJobs(
 
   const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
   const expiredRows = await prisma.geoPdfJob.findMany({
-    where: { status: "completed", completedAt: { lt: cutoff } },
-    select: { id: true, userId: true, resultKey: true, resultBytes: true },
+    where: { status: "completed", completedAt: { lt: cutoff }, planId: null },
+    select: {
+      id: true,
+      userId: true,
+      resultKey: true,
+      resultBytes: true,
+    },
   });
 
   let expired = 0;
@@ -693,7 +717,8 @@ export async function expireCompletedGeoPdfJobs(
         );
       }
       await prisma.$transaction(async (tx) => {
-        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
+        if (row.userId)
+          await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
         // Same transaction as the row delete: Share.entityId is polymorphic, so
         // Postgres cannot cascade — without this the rows outlive the job and
         // keep the recipient's notification resolvable to a dead id.

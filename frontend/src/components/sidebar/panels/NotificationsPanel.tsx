@@ -93,6 +93,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   topo: "lidar",
   export: "export",
   geoPdf: "geoPdf",
+  plan: "plan",
   message: "info",
   problem: "warning",
 };
@@ -107,6 +108,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
   geoPdf: "var(--hue-geo-pdf)",
+  plan: "var(--hue-plan)",
   message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };

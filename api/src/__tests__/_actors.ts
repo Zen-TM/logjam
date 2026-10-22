@@ -37,6 +37,11 @@ export const BOB_SHARED_ROUTE_ID = "70000000-0000-4000-8000-000000000003";
 /** Bob's complete topo job and GeoPDF, DIRECTLY shared with alice too. */
 export const BOB_SHARED_TOPO_JOB_ID = "f0000000-0000-4000-8000-000000000004";
 export const BOB_SHARED_GEOPDF_JOB_ID = "f0000000-0000-4000-8000-000000000009";
+/** The seed's plan (alice leads, bob is a member, carol asked to join) and the place
+ *  and route it owns, which belong to no user. */
+export const SEED_PLAN_ID = "f0000000-0000-4000-8000-000000000100";
+export const PLAN_PLACE_ID = "60000000-0000-4000-8000-000000000100";
+export const PLAN_ROUTE_ID = "70000000-0000-4000-8000-000000000100";
 /** Everything bob shares with alice, in the seed: the exact set the friend
  *  audit reports in each direction. */
 export const BOB_SHARES_WITH_ALICE = [

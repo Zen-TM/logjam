@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import type { FriendShareRow } from "./sharing.js";
+import { type FriendShareRow, untitledJobTitle } from "./sharing.js";
 
 import {
   buildShareCards,
   copyAndRemoveOutcomeMessage,
   copyConfirm,
   copyOutcomeMessage,
+  mediaSkippedSentence,
   removeAllConfirm,
   removeOutcomeMessage,
   removeRowSubtitle,
@@ -53,6 +54,8 @@ describe("buildShareCards", () => {
       friendName: FRIEND,
     });
     expect(card.title).toBe("Untitled topo");
+    // A plan's list names an untitled GeoPDF the same way.
+    expect(untitledJobTitle("geoPdfJob")).toBe("Untitled GeoPDF");
   });
 
   // My own grants: there is nothing to copy (it is already mine) and nothing to
@@ -410,5 +413,22 @@ describe("removeRowSubtitle", () => {
       "Takes it off your account. bob keeps the original place.",
     );
     expect(subtitle).not.toContain("?");
+  });
+});
+
+describe("mediaSkippedSentence", () => {
+  // Mutation: drop the outOfSpace branch, and a full account reads as a
+  // fault; drop the singular, and one photo "weren't copied".
+  it("says how many didn't come, and why when storage stopped them", () => {
+    expect(mediaSkippedSentence(0, true)).toBeNull();
+    expect(mediaSkippedSentence(2, true)).toBe(
+      "Your storage is full, so 2 photos and files weren't copied.",
+    );
+    expect(mediaSkippedSentence(1, true)).toBe(
+      "Your storage is full, so 1 photo or file wasn't copied.",
+    );
+    expect(mediaSkippedSentence(1, false)).toBe(
+      "1 photo or file couldn't be copied.",
+    );
   });
 });

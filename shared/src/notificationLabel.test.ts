@@ -5,6 +5,7 @@ import {
   notificationHaystack,
   notificationKind,
   notificationLabel,
+  notificationPlanTarget,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -291,5 +292,70 @@ describe("NOTIFICATION_TYPES", () => {
         "Notification",
       );
     }
+  });
+});
+
+// Mutation that turns this red: word a plan_access_ended reason as another's,
+// or drop the planName the payload carries for it.
+describe("plan notifications", () => {
+  it("names the people and the plan resolved at read time", () => {
+    expect(
+      notificationLabel(
+        notification("plan_join_request", {
+          requesterUsername: "tom",
+          planName: "Wollangambe trip",
+        }),
+      ).text,
+    ).toBe("tom asked to join Wollangambe trip");
+  });
+
+  it("says why access ended, by reason", () => {
+    const ended = (reason: string) =>
+      notificationLabel(
+        notification("plan_access_ended", {
+          reason,
+          planName: "Wollangambe trip",
+        }),
+      ).text;
+    expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
+    expect(ended("declined")).toBe(
+      "Your request to join Wollangambe trip was turned down",
+    );
+    expect(ended("deleted")).toBe("Wollangambe trip was deleted");
+  });
+});
+
+describe("a plan notification", () => {
+  it("is a plan, wearing the plan's glyph and hue", () => {
+    for (const type of NOTIFICATION_TYPES.filter((t) => t.startsWith("plan_")))
+      expect(notificationKind(notification(type))).toBe("plan");
+  });
+
+  // Mutations: return a target for plan_access_ended, and opening it lands
+  // on a 404 for a plan the reader is no longer in; drop the view, and a
+  // request opens away from where it is answered; drop `invited`, and an
+  // invite opens the member's page, which 404s for someone invited.
+  it("opens its plan where the reader acts on it, unless the plan is gone for them", () => {
+    expect(
+      notificationPlanTarget(
+        notification("plan_join_request", { planId: "p" }),
+      ),
+    ).toEqual({ planId: "p", view: "people", invited: false });
+    expect(
+      notificationPlanTarget(notification("plan_invited", { planId: "p" })),
+    ).toEqual({ planId: "p", invited: true });
+    expect(
+      notificationPlanTarget(
+        notification("plan_join_approved", { planId: "p" }),
+      ),
+    ).toEqual({ planId: "p", invited: false });
+    expect(
+      notificationPlanTarget(
+        notification("plan_access_ended", { planId: "p", reason: "removed" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationPlanTarget(notification("place_shared", { planId: "p" })),
+    ).toBeNull();
   });
 });

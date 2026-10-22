@@ -13,8 +13,7 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError, malformed } from "../middleware/errorHandler";
-import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "../services/awsClients";
 import { logger, safeErrorForLog } from "../lib/logger";
 import type {
@@ -31,6 +30,7 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { geoPdfTitle } from "../lib/geoPdfTitle";
+import { geoPdfDownloadFilename, presignResult } from "../lib/geoPdfResult";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import {
   assertHasStorageQuota,
@@ -64,58 +64,15 @@ const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 // per-user in-flight cap pattern in topoExports.ts, but tighter — GeoPDF jobs
 // are typically much shorter than topo exports.
 const MAX_IN_FLIGHT_PER_USER = 2;
-const PRESIGN_TTL_SECONDS = 86400; // 24h
 
 // Server-side cap on the GeoPDF list. X-Total-Count carries the true total so
 // the client can show a truncation caption when this cap bites.
 const GEO_PDF_LIST_CAP = 50;
 
-// Derive a human download filename from the job's title, falling back to a
-// date-stamped name. The stored S3 key stays the generic logjam-export.pdf
-// (worker contract); only the presented download name is overridden, via the
-// presigned URL's ResponseContentDisposition. Sanitised to a conservative
-// ASCII-safe set so no RFC 5987 encoding is needed.
-function geoPdfDownloadFilename(config: unknown, createdAt: Date): string {
-  const title = geoPdfTitle(config);
-  const base =
-    title !== null
-      ? title
-      : `logjam-geopdf-${createdAt.toISOString().slice(0, 10)}`;
-  const safe =
-    base
-      .replace(/[^a-zA-Z0-9 _-]+/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 80) || "logjam-geopdf";
-  return `${safe}.pdf`;
-}
-
-async function presignResult(
-  resultKey: string | null,
-  filename?: string,
-): Promise<{ url: string; expiresAt: string } | null> {
-  if (!resultKey) return null;
-  const url = await getSignedUrl(
-    s3,
-    new GetObjectCommand({
-      Bucket: TOPO_BUCKET,
-      Key: resultKey,
-      ...(filename
-        ? { ResponseContentDisposition: `attachment; filename="${filename}"` }
-        : {}),
-    }),
-    { expiresIn: PRESIGN_TTL_SECONDS },
-  );
-  const expiresAt = new Date(
-    Date.now() + PRESIGN_TTL_SECONDS * 1000,
-  ).toISOString();
-  return { url, expiresAt };
-}
-
-function rowToView(
+export function rowToView(
   row: {
     id: string;
-    userId: string;
+    userId: string | null;
     status: string;
     config: unknown;
     estimatedSeconds: number | null;
@@ -330,7 +287,8 @@ router.get(
     const row = await prisma.geoPdfJob.findUnique({
       where: { id: getParam(req.params.id) },
     });
-    if (!row) throw new AppError(404, say`Couldn't find that GeoPDF.`);
+    // A plan's GeoPDF (null userId) answers as a missing one.
+    if (!row?.userId) throw new AppError(404, say`Couldn't find that GeoPDF.`);
     // Owner or share recipient; a stranger gets the same 404 a missing id gets.
     // The presigned download below rides this decision — a sharee may download,
     // which is the whole point of sharing a rendered PDF.

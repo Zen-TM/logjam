@@ -301,13 +301,13 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
       expect(res.status).toBe(400);
     });
 
-    it("more than 10 types are rejected with 400", async () => {
+    it("more than 10 types are rejected with 413 (an array over its cap)", async () => {
       const types = Array.from({ length: 11 }, (_, i) => `type-${i}`);
       const res = await request(API_URL)
         .post("/trips")
         .set(CAROL)
         .send({ date: "2026-06-23", types });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(413);
     });
   });
 });

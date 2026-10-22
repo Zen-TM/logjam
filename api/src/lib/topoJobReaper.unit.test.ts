@@ -951,6 +951,21 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
     expect(count).toBe(2);
   });
 
+  // Mutation: drop `.filter(ownedJob)` from either GeoPDF sweep.
+  it("skips a plan's GeoPDF (null userId) in both stuck sweeps", async () => {
+    stageByStatus(geoPdfFindMany, {
+      queued: [{ id: "plan-q", userId: null }],
+      running: [{ id: "plan-r", userId: null, ecsTaskArn: "arn:task/r" }],
+    });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
+
+    const count = await reapStuckTopoJobs(NOW);
+
+    expect(geoPdfUpdateMany).not.toHaveBeenCalled();
+    expect(ecsSend).not.toHaveBeenCalled();
+    expect(count).toBe(0);
+  });
+
   it("includes geo_pdf_jobs counts in the total reaped", async () => {
     stageByStatus(geoPdfFindMany, {
       queued: ["q1", "q2", "q3", "q4"].map((id) => ({ id, userId: "u1" })),
@@ -1003,6 +1018,12 @@ describe("expireCompletedGeoPdfJobs", () => {
     expect(s3Send.mock.invocationCallOrder[0]).toBeLessThan(
       transaction.mock.invocationCallOrder[0],
     );
+  });
+
+  // Mutation: drop `planId: null` from expireCompletedGeoPdfJobs's query.
+  it("leaves a plan's GeoPDF past the TTL", async () => {
+    await expireCompletedGeoPdfJobs(NOW);
+    expect(geoPdfFindMany.mock.calls[0][0].where.planId).toBeNull();
   });
 
   it("cleans up rows without a resultKey and skips the S3 call", async () => {

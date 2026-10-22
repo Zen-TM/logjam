@@ -17,9 +17,12 @@ export type PlaceRole = "owner" | "shared" | "none";
 
 export async function getPlaceRole(
   userId: string,
-  place: { id: string; ownerId: string },
+  place: { id: string; ownerId: string | null },
 ): Promise<PlaceRole> {
   if (place.ownerId === userId) return "owner";
+  // A plan-owned place (null owner) is nobody's and is never shared.
+  // Guard: src/__tests__/tripPlanRows.test.ts.
+  if (place.ownerId === null) return "none";
   const share = await prisma.placeShare.findFirst({
     where: { placeId: place.id, sharedWithId: userId },
     select: { id: true },
@@ -36,7 +39,7 @@ export async function getPlaceRole(
  */
 export async function requirePlaceAccess(
   userId: string,
-  place: { id: string; ownerId: string },
+  place: { id: string; ownerId: string | null },
 ): Promise<Exclude<PlaceRole, "none">> {
   const role = await getPlaceRole(userId, place);
   if (role === "none") throw new AppError(404, say`Couldn't find that place.`);
@@ -54,7 +57,7 @@ export async function requirePlaceAccess(
  */
 export async function requirePlaceOwnerAccess(
   userId: string,
-  place: { id: string; ownerId: string },
+  place: { id: string; ownerId: string | null },
   forbiddenMessage: UserSentence,
 ): Promise<void> {
   const role = await getPlaceRole(userId, place);
@@ -73,7 +76,7 @@ export async function requirePlaceOwnerAccess(
  */
 export function requirePlaceOwner(
   userId: string,
-  place: { ownerId: string },
+  place: { ownerId: string | null },
   denial: AppError = new AppError(404, say`Couldn't find that place.`),
 ): void {
   if (place.ownerId !== userId) throw denial;

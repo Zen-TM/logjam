@@ -59,10 +59,16 @@ describe("contract copy", () => {
     expect(copyViolations("Finished GeoPDFs")).toEqual([]);
   });
 
+  // One word, then a name: the name's own capital makes it read as Title
+  // Case ("Join Ranon").
+  const verbThenName = new Set(["tripPlanJoinTitle(Ranon)"]);
+
   it("breaks no copy rule", () => {
-    const offenders = all.flatMap(([path, text]) =>
-      copyViolations(text).map((id) => `${path}: "${text}" — ${copySay(id)}`),
-    );
+    const offenders = all
+      .filter(([path]) => !verbThenName.has(path))
+      .flatMap(([path, text]) =>
+        copyViolations(text).map((id) => `${path}: "${text}" — ${copySay(id)}`),
+      );
     expect(offenders).toEqual([]);
   });
 });

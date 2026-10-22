@@ -35,6 +35,7 @@ import { logger, safeErrorForLog } from "./logger";
 import { mediaKeys } from "./mediaKeys";
 import { deleteS3KeysBestEffort } from "./s3Cleanup";
 import { getStorageUsage, incrementStorageUsed } from "./storageQuota";
+import { touchPlan } from "./planAccess";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -78,7 +79,10 @@ export async function placeMediaToCopy(placeId: string) {
 export async function copyPlaceMedia(args: {
   sourcePlaceId: string;
   targetPlaceId: string;
+  /** Who is charged, and whose key prefix the objects get. */
   recipientId: string;
+  /** Set when the target is a plan's place: the rows are the plan's. */
+  planId?: string;
 }): Promise<PlaceMediaCopyResult> {
   const { rows } = await placeMediaToCopy(args.sourcePlaceId);
   if (rows.length === 0) return { copied: 0, skipped: 0 };
@@ -88,48 +92,23 @@ export async function copyPlaceMedia(args: {
   let landedBytes = 0n;
 
   for (const row of rows) {
-    const mediaId = randomUUID();
-    const target = mediaKeys(args.recipientId, mediaId, row.mediaType);
-    const pairs: [from: string, to: string][] = [
-      [row.s3KeyDisplay, target.displayKey],
-      ...(row.s3KeyThumbnail
-        ? ([[row.s3KeyThumbnail, target.thumbnailKey]] as [string, string][])
-        : []),
-    ];
-    try {
-      for (const [from, to] of pairs) {
-        await s3.send(
-          new CopyObjectCommand({
-            Bucket: MEDIA_BUCKET,
-            // Same bucket, so this is a server-side copy: no download, no
-            // egress charged to anyone, and the sharee's own egress allowance
-            // is untouched.
-            CopySource: `${MEDIA_BUCKET}/${encodeURIComponent(from).replace(/%2F/g, "/")}`,
-            Key: to,
-          }),
-        );
-      }
-    } catch (err) {
-      // Ids and counts only — never the filename.
-      logger.warn(
-        { mediaId, err: safeErrorForLog(err) },
-        "place_copy_media_object_failed",
-      );
-      await deleteS3KeysBestEffort(
-        MEDIA_BUCKET,
-        pairs.map(([, to]) => to),
-      );
-      continue;
-    }
-    landedKeys.push(...pairs.map(([, to]) => to));
+    const copy = await copyMediaObjects(row, args.recipientId);
+    if (!copy) continue;
+    landedKeys.push(...copy.keys);
     landedBytes += row.fileSizeBytes;
     landed.push({
-      id: mediaId,
-      ownerId: args.recipientId,
+      id: copy.mediaId,
+      ...(args.planId
+        ? {
+            planId: args.planId,
+            addedById: args.recipientId,
+            chargedToId: args.recipientId,
+          }
+        : { ownerId: args.recipientId }),
       linkedType: "place",
       linkedId: args.targetPlaceId,
-      s3KeyDisplay: target.displayKey,
-      s3KeyThumbnail: row.s3KeyThumbnail ? target.thumbnailKey : null,
+      s3KeyDisplay: copy.displayKey,
+      s3KeyThumbnail: copy.thumbnailKey,
       mediaType: row.mediaType,
       filename: row.filename,
       fileSizeBytes: row.fileSizeBytes,
@@ -149,6 +128,7 @@ export async function copyPlaceMedia(args: {
     // uses, for the same reason: no crash window may leave the quota charged
     // with nothing to show for it.
     await prisma.$transaction(async (tx) => {
+      if (args.planId) await touchPlan(tx, args.planId);
       await incrementStorageUsed(args.recipientId, landedBytes, tx);
       const { used, quota } = await getStorageUsage(args.recipientId, tx);
       if (used > quota) throw new OutOfSpace();
@@ -163,6 +143,63 @@ export async function copyPlaceMedia(args: {
   }
 
   return { copied: landed.length, skipped: rows.length - landed.length };
+}
+
+/**
+ * Server-side copy of one media row's objects to fresh keys under
+ * `recipientId`'s prefix. Null when a copy failed; whatever landed of it is
+ * removed again. The one object copy that place copies and Plans share.
+ */
+export async function copyMediaObjects(
+  row: {
+    mediaType: string;
+    s3KeyDisplay: string;
+    s3KeyThumbnail: string | null;
+  },
+  recipientId: string,
+): Promise<{
+  mediaId: string;
+  displayKey: string;
+  thumbnailKey: string | null;
+  keys: string[];
+} | null> {
+  const mediaId = randomUUID();
+  const target = mediaKeys(recipientId, mediaId, row.mediaType);
+  const pairs: [from: string, to: string][] = [
+    [row.s3KeyDisplay, target.displayKey],
+    ...(row.s3KeyThumbnail
+      ? ([[row.s3KeyThumbnail, target.thumbnailKey]] as [string, string][])
+      : []),
+  ];
+  const keys = pairs.map(([, to]) => to);
+  try {
+    for (const [from, to] of pairs) {
+      await s3.send(
+        new CopyObjectCommand({
+          Bucket: MEDIA_BUCKET,
+          // Same bucket, so this is a server-side copy: no download, no
+          // egress charged to anyone, and the sharee's own egress allowance
+          // is untouched.
+          CopySource: `${MEDIA_BUCKET}/${encodeURIComponent(from).replace(/%2F/g, "/")}`,
+          Key: to,
+        }),
+      );
+    }
+  } catch (err) {
+    // Ids and counts only — never the filename.
+    logger.warn(
+      { mediaId, err: safeErrorForLog(err) },
+      "place_copy_media_object_failed",
+    );
+    await deleteS3KeysBestEffort(MEDIA_BUCKET, keys);
+    return null;
+  }
+  return {
+    mediaId,
+    displayKey: target.displayKey,
+    thumbnailKey: row.s3KeyThumbnail ? target.thumbnailKey : null,
+    keys,
+  };
 }
 
 /** Internal rollback signal — never reaches a response. */
