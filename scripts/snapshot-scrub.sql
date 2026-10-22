@@ -86,6 +86,19 @@ UPDATE import_snapshots SET before = '{}', after = '{}';
 UPDATE routes SET name = 'route-' || substring(id::text, 1, 8);
 UPDATE media SET display_name = NULL, filename = 'file-' || substring(id::text, 1, 8);
 
+-- Plans: the write-up, the forms and every answer. Safety contacts are names
+-- and phone numbers of people who are not Logjam users.
+UPDATE trip_plans
+SET name = 'plan-' || substring(id::text, 1, 8),
+    trip_types = pg_temp.scrub_trip_types(trip_types);
+UPDATE trip_plan_sections
+SET title = 'section-' || substring(id::text, 1, 8),
+    body = '';
+UPDATE trip_plan_forms
+SET title = 'form-' || substring(id::text, 1, 8),
+    questions = '[]';
+UPDATE trip_plan_answers SET answers = '{}';
+
 -- DELIBERATELY NOT SCRUBBED, so the omission reads as a decision:
 --   places.latitude/longitude, routes.points/anchors, media.metadata —
 --   coordinates and geometry. A snapshot exists to give a dev real map data;

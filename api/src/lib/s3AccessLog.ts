@@ -168,6 +168,8 @@ export function isBillableEgress(
  *   inputs|outputs|jobs/<topoJobId>/… → looked up via the job tables
  *   exports/geo-pdf/<geoPdfJobId>/…   → ditto (checked before `exports/`, whose
  *                                       prefix it shares)
+ *   plans/geo-pdf/<geoPdfJobId>/…     → ditto (a plan's copy; the job row
+ *                                       charges it to chargedToId)
  *   exports/<exportJobId>/…           → ditto
  *   master/…                          → shared basemap, nobody's egress
  *
@@ -204,6 +206,10 @@ export function attributeKey(key: string): KeyAttribution | null {
       }
       return second
         ? { kind: "job", table: "topoExportJob", jobId: second }
+        : null;
+    case "plans":
+      return second === "geo-pdf" && third
+        ? { kind: "job", table: "geoPdfJob", jobId: third }
         : null;
     default:
       // master/* (shared basemap tiles) and anything new we have not taught

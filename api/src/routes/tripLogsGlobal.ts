@@ -1,16 +1,15 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError, malformed } from "../middleware/errorHandler";
+import { accepted, AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
   say,
   enforceCanyoningTag,
   linksCanyon,
   MAX_PLACES_PER_TRIP,
-  MAX_TRIP_TYPES_PER_TRIP,
   TRIP_NAME_MAX_LENGTH,
-  TRIP_TYPE_MAX_LENGTH,
+  parseTripTypeList,
 } from "@logjam/shared";
 import { getParam } from "../lib/getParam";
 import { deleteTripsCascade } from "../lib/bulkDelete";
@@ -92,43 +91,12 @@ export async function placeTypeIdsOf(placeIds: string[]): Promise<string[]> {
   return rows.map((row) => row.placeTypeId);
 }
 
-// Normalizes an optional free-text trip-type list: an array of strings, each
-// trimmed and nonempty, deduped case-insensitively, order preserved, capped.
+// An optional trip-type list, by shared `parseTripTypeList`'s rules.
 // undefined → undefined (PATCH: leave unchanged); null → [] (clears the list).
 export function parseTripTypes(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   if (value === null) return [];
-  if (!Array.isArray(value))
-    throw malformed("types must be an array of strings or null");
-
-  const result: string[] = [];
-  const seen = new Set<string>();
-  for (const item of value) {
-    if (typeof item !== "string")
-      throw malformed("types must be an array of strings");
-    const trimmed = item.trim();
-    if (trimmed.length === 0)
-      throw malformed("types entries must not be empty");
-    if (trimmed.length > TRIP_TYPE_MAX_LENGTH)
-      throw new AppError(
-        400,
-        say`A trip type can be up to ${TRIP_TYPE_MAX_LENGTH} characters.`,
-      );
-    const key = trimmed.toLowerCase();
-    if (seen.has(key))
-      throw new AppError(
-        400,
-        say`This trip has the same type twice. Remove one and save again.`,
-      );
-    seen.add(key);
-    result.push(trimmed);
-  }
-  if (result.length > MAX_TRIP_TYPES_PER_TRIP)
-    throw new AppError(
-      400,
-      say`A trip can have up to ${MAX_TRIP_TYPES_PER_TRIP} types.`,
-    );
-  return result;
+  return accepted(parseTripTypeList(value, "types"));
 }
 
 // Resolves the `types` array a PATCH should persist, enforcing the canyoning

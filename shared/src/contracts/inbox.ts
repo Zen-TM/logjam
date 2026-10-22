@@ -103,13 +103,16 @@ type NotificationVerbDeclaration = {
 };
 
 /**
- * A notification's ⋯, in order. "Open" is only for one about a place, "Read
- * message" only for a maintainer announcement; "View in …" names the tab its subject lives in, which differs by client (Maps on
+ * A notification's ⋯, in order. "Open place" is only for one about a place,
+ * "Open plan" for one about a plan the reader can open, "Read message" only
+ * for a maintainer announcement; "View in …" names the tab its subject lives
+ * in, which differs by client (Maps on
  * Logjam Web, Saved on Logjam GPS), so its label is the destination's own.
  * Read and Unread are one row whose direction follows the notification.
  */
 export const NOTIFICATION_VERBS = [
   { id: "open", icon: "forward", label: "Open place" },
+  { id: "openPlan", icon: "forward", label: "Open plan" },
   { id: "view", icon: "forward", label: "View in …" },
   { id: "readMessage", icon: "forward", label: "Read message" },
   { id: "markRead", icon: "show", label: "Mark as read" },

@@ -32,6 +32,10 @@ const OWNER_DATA_MODELS = [
   "TripLog",
   "CustomFieldDef",
   "ImportSnapshot",
+  "TripPlan",
+  "TripPlanSection",
+  "TripPlanForm",
+  "TripPlanAnswer",
 ];
 
 /**
@@ -47,6 +51,8 @@ const SCRUB_EXEMPT: Record<string, string> = {
     "slug of the label, which IS scrubbed; kept so values stay addressable",
   "custom_field_defs.entity": "protocol vocabulary, not user text",
   "custom_field_defs.type": "protocol vocabulary, not user text",
+  "trip_plan_forms.visible_to": "protocol vocabulary, not user text",
+  "trip_plan_forms.preset": "protocol vocabulary, not user text",
 };
 
 /** `@@map("x")` for a model, else its snake-cased name. */

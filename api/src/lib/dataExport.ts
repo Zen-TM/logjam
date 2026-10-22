@@ -81,6 +81,41 @@ export const EXPORT_SECTIONS = {
         select: { id: true, createdAt: true, expiresAt: true },
       }),
   },
+  // The plans the user is in, and their own answers to a plan's forms. What
+  // is in a plan belongs to its group, so it is left out.
+  tripPlanMemberships: {
+    models: ["TripPlanMember", "TripPlan"],
+    load: (userId) =>
+      prisma.tripPlanMember.findMany({
+        where: { userId },
+        include: {
+          plan: {
+            select: { id: true, name: true, startDate: true, endDate: true },
+          },
+        },
+      }),
+  },
+  tripPlanAnswers: {
+    models: ["TripPlanAnswer", "TripPlanForm"],
+    load: (userId) =>
+      prisma.tripPlanAnswer.findMany({
+        where: { userId },
+        include: {
+          form: {
+            select: { id: true, planId: true, title: true, questions: true },
+          },
+        },
+      }),
+  },
+  // Unspent plan invite links the user made; as friendInvites, no hash.
+  tripPlanInvites: {
+    models: ["TripPlanInvite"],
+    load: (userId) =>
+      prisma.tripPlanInvite.findMany({
+        where: { createdById: userId },
+        select: { id: true, planId: true, createdAt: true, expiresAt: true },
+      }),
+  },
   sharesGiven: {
     models: ["PlaceShare"],
     load: (userId) =>
@@ -185,6 +220,8 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
     "not per user: how far the egress meter has read the storage access logs",
   Announcement:
     "not per user: the maintainer's own messages; each user's copy is a row under notifications",
+  TripPlanSection:
+    "a plan's write-up belongs to its group, not to one member; the plans the user is in are under tripPlanMemberships",
 };
 
 /** v3 adds every section beyond v2's places, trip logs, templates, shares,

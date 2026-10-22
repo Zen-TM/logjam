@@ -104,30 +104,50 @@ export async function resolveCopyPlaceType(
  * The values a copy keeps and the ones it parks, for a copy landing in
  * `placeTypeId`.
  *
- * The SOURCE's `foreignFields` are deliberately NOT read here: a copy clears
- * them rather than concatenating. A copy-of-a-copy reconciles the
- * sender's `fieldValues` against the recipient's definitions and nothing else —
- * otherwise residue accumulates down a share chain with no owner and no way to
- * clear it.
+ * The SOURCE's `foreignFields` are deliberately NOT read for an owned source:
+ * a copy clears them rather than concatenating. A copy-of-a-copy reconciles
+ * the sender's `fieldValues` against the recipient's definitions and nothing
+ * else — otherwise residue accumulates down a share chain with no owner and no
+ * way to clear it.
+ *
+ * A PLAN is the exception on both sides, because its place belongs to no one
+ * and so has no one's definitions but the system's. Into a plan
+ * (`recipientId` null), every value without a system definition is parked.
+ * Out of a plan (`sourceOwnerId` null), the parked values ARE the plan's
+ * values, which every member saw and could not adopt, so they are fed back
+ * through the split as values, each its own definition, as a type change does.
+ * Guard: __tests__/planItems.test.ts ("lands a place of the adder's own type
+ * as a Marker").
  */
 export async function reconcileCopiedPlace(args: {
-  recipientId: string;
-  sourceOwnerId: string;
+  recipientId: string | null;
+  sourceOwnerId: string | null;
   sourceTypeId: string;
   targetTypeId: string;
   fieldValues: unknown;
+  foreignFields?: unknown;
 }): Promise<{
   fieldValues: Record<string, unknown>;
   foreignFields: ReturnType<typeof reconcileCopiedFieldValues>["foreignFields"];
 }> {
+  const parked =
+    args.sourceOwnerId === null ? asForeignFields(args.foreignFields) : [];
   const [senderDefs, recipientDefs]: TripLogCustomFieldDef[][] =
     await Promise.all([
       defsForPlaceType(args.sourceOwnerId, args.sourceTypeId),
       defsForPlaceType(args.recipientId, args.targetTypeId),
     ]);
   return reconcileCopiedFieldValues({
-    fieldValues: args.fieldValues,
-    senderDefs,
+    fieldValues: {
+      ...Object.fromEntries(parked.map((item) => [item.key, item.value])),
+      ...asFieldValues(args.fieldValues),
+    },
+    senderDefs: [
+      ...parked
+        .filter((item) => !senderDefs.some((def) => def.key === item.key))
+        .map(parkedItemAsDef),
+      ...senderDefs,
+    ],
     recipientDefs,
   });
 }

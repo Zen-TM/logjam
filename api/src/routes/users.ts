@@ -24,6 +24,7 @@ import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
+import { handOverPlans } from "../lib/planItems";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
@@ -33,6 +34,7 @@ import {
   AdminGetUserCommand,
   UserNotFoundException,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { PLAN_PERSON_KEY } from "../lib/planMembership";
 
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
@@ -495,6 +497,10 @@ router.delete(
 
     const user = await resolveUser(sub);
 
+    // First the plans let go of the user: what they added stays, and what it
+    // counts against moves on (lib/planItems.ts handOverPlans).
+    await handOverPlans(user.id);
+
     // Pre-fetch every S3 pointer the user owns BEFORE touching the DB. Once the
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
@@ -667,6 +673,21 @@ router.delete(
     });
 
     await prisma.$transaction([
+      // First, so this transaction takes the row of every plan the user is
+      // in or created before any row inside one (an answer, a membership),
+      // the order every plan write takes them in (lib/planAccess.ts
+      // touchPlan); the other order deadlocks against a leader deleting a
+      // form this user answered, or a plan they're in. Touching the plans
+      // also tells the other members' poll that someone left. The user.delete
+      // below would null createdById anyway (SetNull), but last.
+      prisma.tripPlan.updateMany({
+        where: { members: { some: { userId: user.id } } },
+        data: { updatedAt: new Date() },
+      }),
+      prisma.tripPlan.updateMany({
+        where: { createdById: user.id },
+        data: { createdById: null },
+      }),
       ...(accountTombstones.length > 0
         ? [prisma.syncTombstone.createMany({ data: accountTombstones })]
         : []),
@@ -720,6 +741,16 @@ router.delete(
           ],
         },
       }),
+      // Plan rows other members hold that name this user. Read time would
+      // drop them too, once the memberships are gone (routes/notifications.ts).
+      prisma.notification.deleteMany({
+        where: {
+          OR: Object.entries(PLAN_PERSON_KEY).map(([type, key]) => ({
+            type,
+            payload: { path: [key], equals: user.id },
+          })),
+        },
+      }),
       prisma.placeShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),
@@ -758,6 +789,15 @@ router.delete(
       // account being deleted. Explicit per convention even though the FK
       // cascade covers the rows.
       prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
+      // The user's own place types, after their places (Place.placeTypeId
+      // restricts). Explicit per convention even though the FK cascades.
+      prisma.placeType.deleteMany({ where: { ownerId: user.id } }),
+      // Plans: the user's answers (safety contacts name people who are not
+      // Logjam users) and memberships go with them; the plans, and what the
+      // user added to them, stay with the group. Explicit per convention
+      // even though the FK cascade covers the rows.
+      prisma.tripPlanAnswer.deleteMany({ where: { userId: user.id } }),
+      prisma.tripPlanMember.deleteMany({ where: { userId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 

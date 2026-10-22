@@ -6,12 +6,8 @@ vi.mock("../services/prisma", () => ({
   default: { place: { findMany: vi.fn(), count: vi.fn() } },
 }));
 
-import {
-  validatePlaceTextFields,
-  PLACE_NAME_MAX_LENGTH,
-  PLACE_MAX_ALT_NAMES,
-  placePayloadRefusal,
-} from "./places";
+import { PLACE_MAX_ALT_NAMES, PLACE_NAME_MAX_LENGTH } from "@logjam/shared";
+import { validatePlaceTextFields, placePayloadRefusal } from "./places";
 import { PLACE_FIELDS } from "./sync";
 
 // `validatePlacePayload` (shared) covers coordinates + numerics only;

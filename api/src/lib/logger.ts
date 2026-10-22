@@ -88,6 +88,18 @@ export const redactPaths = [
   // Location search (POST /places/search): the typed text, often the name of
   // a place the user would rather not publish. Body-shaped only, as above.
   "req.body.q",
+  // PLANS: a plan's name and trip types are covered above. A section's title
+  // and text, a form's title and questions (their labels, hints and options),
+  // and every answer are the group's own words; an answer is often a safety
+  // contact, the details of someone who is not a Logjam user at all.
+  "req.body.title",
+  "req.body.body",
+  "req.body.questions",
+  "req.body.answers",
+  // A plan place's position and a plan route's line, as compare-and-set
+  // pairs ({ from, to }), which the coordinate wildcards above can't reach.
+  "req.body.position",
+  "req.body.geometry",
   // Authorization headers (never log credentials)
   "req.headers.authorization",
   'req.headers["x-fake-sub"]',

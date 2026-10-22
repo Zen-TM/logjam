@@ -43,6 +43,11 @@ const PUSH_TITLES: Record<string, string> = {
   // what stops the next call site reaching for a username. The inbox has the
   // numbers; this only has to get the user there.
   bulk_shared: "New things were shared with you",
+  plan_invited: "You were invited to a trip plan",
+  plan_join_request: "Someone asked to join your plan",
+  plan_join_approved: "You're in",
+  plan_member_joined: "Someone joined your plan",
+  plan_access_ended: "A plan is no longer available",
 };
 
 const GENERIC_TITLE = "Logjam notification";
@@ -62,6 +67,7 @@ export type PushData = {
   /** Groups the notifications one bulk share created. Opaque uuid. */
   batchId?: string;
   announcementId?: string;
+  planId?: string;
 };
 
 const ALLOWED_DATA_KEYS = new Set([
@@ -77,6 +83,7 @@ const ALLOWED_DATA_KEYS = new Set([
   "fileSendId",
   "batchId",
   "announcementId",
+  "planId",
 ]);
 
 export type ExpoPushMessage = {
