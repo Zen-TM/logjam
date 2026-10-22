@@ -640,7 +640,7 @@ describe("Start a trip log after a copy failed", () => {
         name,
         placeTypeId: "canyon",
         media: [],
-      }) as TripPlanPlace;
+      }) as unknown as TripPlanPlace;
     render(
       <PlanTripLogPlacesDialog
         planId="p1"
