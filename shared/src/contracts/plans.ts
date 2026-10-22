@@ -392,6 +392,7 @@ export const TRIP_PLAN_PAGE = {
     bringPhotos: "Bring its photos",
     photosCountToo: "Photos count too.",
     addCopyFailed: "Couldn't add a copy.",
+    mapsLoadFailed: "Couldn't load your maps.",
     nothingToAdd: "Nothing of yours here yet.",
     nothingTicked: "Tick something to add.",
     saveCopyLine:
@@ -1100,22 +1101,39 @@ export function tripPlanAddCopyPrice(
 /**
  * Add a copy's price line, or null while nothing ticked is priced: what the
  * ticked files use of the storage left, and "Photos count too." when ticked
- * places bring their photos (their size isn't in the list).
+ * places bring their photos (their size isn't in the list). Null too until
+ * the account's storage is known.
  */
 export function tripPlanAddCopyPriceLine(args: {
+  /** The ticked files' and maps' sizes, summed. */
   bytes: number;
-  photosToo: boolean;
-  leftBytes: number | null;
+  /** A place is among what is sent. */
+  placesPicked: boolean;
+  /** Bring its photos. */
+  copyMedia: boolean;
+  quotaBytes: number | null;
+  usedBytes: number | null;
 }): string | null {
-  if (args.leftBytes == null || (args.bytes === 0 && !args.photosToo))
-    return null;
+  const photosToo = args.placesPicked && args.copyMedia;
+  if (args.quotaBytes == null || args.usedBytes == null) return null;
+  if (args.bytes === 0 && !photosToo) return null;
   const line = tripPlanAddCopyPrice(
     args.bytes > 0 ? formatBytes(args.bytes) : null,
-    formatBytes(args.leftBytes),
+    formatBytes(Math.max(0, args.quotaBytes - args.usedBytes)),
   );
-  return args.photosToo
-    ? `${line} ${TRIP_PLAN_PAGE.copy.photosCountToo}`
-    : line;
+  return photosToo ? `${line} ${TRIP_PLAN_PAGE.copy.photosCountToo}` : line;
+}
+
+/**
+ * What Add a copy sends: the ticked rows still offered, in list order. A
+ * tick whose row a ticked place now brings is not sent (it would be copied
+ * twice); it comes back ticked if that place is unticked.
+ */
+export function tripPlanAddPicks<T extends { kind: string; id: string }>(
+  offered: readonly T[],
+  ticked: readonly string[],
+): T[] {
+  return offered.filter((row) => ticked.includes(`${row.kind}:${row.id}`));
 }
 
 /**

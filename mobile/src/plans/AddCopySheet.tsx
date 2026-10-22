@@ -16,6 +16,7 @@ import {
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
+  tripPlanAddPicks,
   untitledJobTitle,
   TRIP_PLAN_ITEM_GROUPS,
   TRIP_PLAN_PAGE,
@@ -87,7 +88,7 @@ export function AddCopySheet({
   const user = useApiQuery(fetchCurrentUser, copy.addCopyFailed, visible);
   const maps = useApiQuery(
     listGeoPdfJobs,
-    "Couldn't load your maps.",
+    copy.mapsLoadFailed,
     visible && online,
   );
   const [files, setFiles] = useState<MirrorMedia[]>([]);
@@ -192,19 +193,18 @@ export function AddCopySheet({
       hue: assetHue.geoPdf,
     })),
   };
-  // A pick no longer offered (it now comes with a ticked place) is not sent;
-  // it comes back ticked if that place is unticked. Sent in list order.
-  const picks = [...rows.places, ...rows.ways, ...rows.maps].filter((each) =>
-    ticked.includes(keyOf(each)),
+  // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
+  const picks = tripPlanAddPicks(
+    [...rows.places, ...rows.ways, ...rows.maps],
+    ticked,
   );
   const isTicked = (pick: Pick) => ticked.includes(keyOf(pick));
   const priceLine = tripPlanAddCopyPriceLine({
     bytes: picks.reduce((sum, each) => sum + each.bytes, 0),
-    photosToo: tickedPlaceIds.length > 0 && withMedia,
-    leftBytes:
-      user.data != null
-        ? Math.max(0, user.data.storageQuotaBytes - user.data.storageUsedBytes)
-        : null,
+    placesPicked: picks.some((each) => each.kind === "place"),
+    copyMedia: withMedia,
+    quotaBytes: user.data?.storageQuotaBytes ?? null,
+    usedBytes: user.data?.storageUsedBytes ?? null,
   });
 
   async function add() {
@@ -244,14 +244,15 @@ export function AddCopySheet({
   }
 
   const list = rows[group];
-  const mapsPending = group === "maps" && maps.data == null;
+  // The maps are read online; offline (or gone offline mid-read) says so.
+  const mapsOffline = group === "maps" && !online && maps.data == null;
+  const mapsPending = group === "maps" && online && maps.data == null;
   return (
     <BottomSheet
       visible={visible}
+      onClose={onClose}
       // Not while adding: the run's end would land on the next session.
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      closable={!busy}
       title={planAddVerbLabel("copy")}
       footer={
         <View style={styles.footer}>
@@ -292,7 +293,9 @@ export function AddCopySheet({
             onChange={toggleMedia}
           />
         ) : null}
-        {mapsPending && maps.error ? (
+        {mapsOffline ? (
+          <EmptyState icon="offline" title={OFFLINE} />
+        ) : mapsPending && maps.error ? (
           <ErrorState message={maps.error} onRetry={maps.refetch} />
         ) : mapsPending ? (
           <LoadingState />

@@ -4,6 +4,7 @@
 // API's words.
 import { useId, useState } from "react";
 import {
+  tripPlanAddPicks,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
   formatBytes,
@@ -113,18 +114,17 @@ export default function PlanAddCopyDialog({
       bytes: pdf.resultBytes ?? 0,
     })),
   };
-  // A pick no longer offered (it now comes with a ticked place) is not sent.
+  // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
   const all = [...lists.places, ...lists.ways, ...lists.maps];
-  const chosen = all.filter((row) => picked.some((p) => key(p) === key(row)));
+  const chosen = tripPlanAddPicks(all, picked.map(key));
   const bytes = chosen.reduce((sum, row) => sum + row.bytes, 0);
   const placesChosen = chosen.some((row) => row.kind === "place");
-  const left = user
-    ? Math.max(0, user.storageQuotaBytes - user.storageUsedBytes)
-    : null;
   const priceLine = tripPlanAddCopyPriceLine({
     bytes,
-    photosToo: placesChosen && bringPhotos,
-    leftBytes: left,
+    placesPicked: placesChosen,
+    copyMedia: bringPhotos,
+    quotaBytes: user?.storageQuotaBytes ?? null,
+    usedBytes: user?.storageUsedBytes ?? null,
   });
 
   const toggle = (pick: Pick) =>

@@ -60,6 +60,7 @@ import {
   tripPlanTripLogPlacesLine,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
+  tripPlanAddPicks,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -961,18 +962,46 @@ describe("Start a trip log's places line", () => {
 
 describe("Add a copy's footer and outcome", () => {
   const MB = 1024 * 1024;
-  // Mutation: say "Photos count too." for a ticked place whatever its
-  // switch, and it promises a cost the POST (copyMedia: false) never takes.
+  const room = { quotaBytes: MB, usedBytes: 0 };
+  // Mutation: drop `&& copyMedia`, and "Photos count too." promises a cost
+  // the POST (copyMedia: false) never takes.
   it("prices what is ticked, photos only when they come", () => {
     expect(
-      tripPlanAddCopyPriceLine({ bytes: 0, photosToo: false, leftBytes: MB }),
+      tripPlanAddCopyPriceLine({
+        bytes: 0,
+        placesPicked: false,
+        copyMedia: true,
+        ...room,
+      }),
     ).toBeNull();
     expect(
-      tripPlanAddCopyPriceLine({ bytes: 0, photosToo: true, leftBytes: MB }),
+      tripPlanAddCopyPriceLine({
+        bytes: 0,
+        placesPicked: true,
+        copyMedia: true,
+        ...room,
+      }),
     ).toMatch(/Photos count too\.$/);
     expect(
-      tripPlanAddCopyPriceLine({ bytes: MB, photosToo: false, leftBytes: MB }),
+      tripPlanAddCopyPriceLine({
+        bytes: MB,
+        placesPicked: true,
+        copyMedia: false,
+        ...room,
+      }),
     ).not.toMatch(/Photos/);
+  });
+
+  // Mutation: send every tick, and a route ticked before its place goes
+  // twice, once alone and once with the place, both charged.
+  it("sends only ticks still offered, in list order", () => {
+    const offered = [
+      { kind: "place", id: "p" },
+      { kind: "geoPdf", id: "g" },
+    ];
+    expect(
+      tripPlanAddPicks(offered, ["geoPdf:g", "route:r", "place:p"]),
+    ).toEqual(offered);
   });
 
   // Mutation: toast a run that added nothing, and its reason leaves the
