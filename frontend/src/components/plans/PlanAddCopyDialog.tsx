@@ -4,17 +4,16 @@
 // API's words.
 import { useId, useState } from "react";
 import {
+  tripPlanAddCopyPriceLine,
+  tripPlanAddOutcome,
   formatBytes,
   planAddVerbLabel,
   TRIP_PLAN_PAGE,
   tripPlanAddCopiesLabel,
-  tripPlanAddCopyPrice,
   tripPlanAddable,
-  tripPlanAddedMessage,
   TRIP_PLAN_ITEM_GROUP,
   TRIP_PLAN_ITEM_GROUPS,
   type TripPlanItemGroup,
-  mediaSkippedSentence,
   untitledJobTitle,
   type GeoPdfJobView,
   type StandaloneFile,
@@ -122,6 +121,11 @@ export default function PlanAddCopyDialog({
   const left = user
     ? Math.max(0, user.storageQuotaBytes - user.storageUsedBytes)
     : null;
+  const priceLine = tripPlanAddCopyPriceLine({
+    bytes,
+    photosToo: placesChosen && bringPhotos,
+    leftBytes: left,
+  });
 
   const toggle = (pick: Pick) =>
     setPicked((was) =>
@@ -136,7 +140,7 @@ export default function PlanAddCopyDialog({
     let added = 0;
     let skipped = 0;
     let outOfSpace = false;
-    const photos = () => mediaSkippedSentence(skipped, outOfSpace);
+    let why: string | null = null;
     try {
       for (const row of chosen) {
         const reply = await addPlanItem(planId, {
@@ -148,20 +152,23 @@ export default function PlanAddCopyDialog({
         skipped += reply.mediaSkipped ?? 0;
         outOfSpace ||= reply.mediaOutOfSpace === true;
       }
-      const done = tripPlanAddedMessage(added, chosen.length);
-      if (photos()) toast.error(`${done} ${photos()}`);
-      else toast.success(done);
-      onAdded();
-      onClose();
     } catch (err) {
       console.error(err);
-      const why = messageFromError(err, copy.addCopyFailed);
-      if (added > 0) {
-        const done = tripPlanAddedMessage(added, chosen.length);
-        toast.error([done, photos(), why].filter(Boolean).join(" "));
-        onAdded();
-        onClose();
-      } else setError(why);
+      why = messageFromError(err, copy.addCopyFailed);
+    }
+    try {
+      const outcome = tripPlanAddOutcome({
+        added,
+        asked: chosen.length,
+        skipped,
+        outOfSpace,
+        why,
+      });
+      if (!outcome) return setError(why);
+      if (outcome.tone === "error") toast.error(outcome.message);
+      else toast.success(outcome.message);
+      onAdded();
+      onClose();
     } finally {
       setBusy(false);
     }
@@ -228,15 +235,7 @@ export default function PlanAddCopyDialog({
             onChange={setBringPhotos}
           />
         )}
-        {(bytes > 0 || (placesChosen && bringPhotos)) && left != null && (
-          <p className={classes.body}>
-            {tripPlanAddCopyPrice(
-              bytes > 0 ? formatBytes(bytes) : null,
-              formatBytes(left),
-            )}
-            {placesChosen && bringPhotos ? ` ${copy.photosCountToo}` : ""}
-          </p>
-        )}
+        {priceLine && <p className={classes.body}>{priceLine}</p>}
         {error && <ErrorBanner message={error} />}
       </form>
     </Dialog>

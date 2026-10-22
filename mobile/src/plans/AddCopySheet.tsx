@@ -1,52 +1,69 @@
 // Add a copy (`PLAN_ADD_VERBS`): the caller's own places, ways and finished
 // maps, ticked, each sent into the plan as a copy, one request each
-// (POST /plans/:id/items). What is offered is shared (`tripPlanAddable`): a
-// route or file that a ticked place brings with it is not offered again.
-// Everyone in the plan can keep a copy of what is added (`addCopyLine`), and
-// the files count against the adder's storage (`tripPlanAddCopyPrice`).
-// Logjam Web's twin is PlanAddCopyDialog (#573). Online only.
+// (POST /plans/:id/items), in list order. What is offered is
+// `addableFromMirror`: the caller's own, on the server, less what a ticked
+// place brings. Everyone in the plan can keep a copy of what is added
+// (`addCopyLine`), and the files count against the adder's storage
+// (`tripPlanAddCopyPriceLine`). Logjam Web's twin is
+// frontend/src/components/plans/PlanAddCopyDialog.tsx. Online only.
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import {
   formatBytes,
   mediaDisplayName,
-  mediaSkippedSentence,
   messageFromError,
   planAddVerbLabel,
-  tripPlanAddable,
   tripPlanAddCopiesLabel,
-  tripPlanAddCopyPrice,
-  tripPlanAddedMessage,
+  tripPlanAddCopyPriceLine,
+  tripPlanAddOutcome,
+  untitledJobTitle,
   TRIP_PLAN_ITEM_GROUPS,
   TRIP_PLAN_PAGE,
-  type TripPlanItemAdd,
+  type TripPlanItemKind,
   type TripPlanItemGroup,
 } from "@logjam/shared";
 
-import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { listGeoPdfJobs } from "../api/geoPdfJobs";
+import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { unavailableReasonText } from "../auth/capabilities";
 import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
 import { listStandaloneMedia, type MirrorMedia } from "../sync/mirrorStore";
 import { getSyncStateValue } from "../sync/syncDb";
-import { useMirrorPlaces, useMirrorRoutes } from "../sync/useSyncQueries";
-import { makeStyles, muted, spacing } from "../theme";
+import {
+  useMirrorPlaces,
+  useMirrorRoutes,
+  usePendingCreateIds,
+} from "../sync/useSyncQueries";
+import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
   ChipRail,
   EmptyState,
   ErrorBanner,
+  ErrorState,
+  LoadingState,
   Row,
+  SelectionMark,
   SwitchRow,
 } from "../ui";
+import type { Glyph } from "../ui";
+import { addableFromMirror } from "./addable";
 import { addPlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
-type Pick = TripPlanItemAdd & { title: string; bytes: number };
+type Pick = {
+  kind: TripPlanItemKind;
+  id: string;
+  title: string;
+  bytes: number;
+  icon: Glyph;
+  hue?: string;
+};
+const keyOf = (pick: Pick) => `${pick.kind}:${pick.id}`;
 
 export function AddCopySheet({
   planId,
@@ -61,16 +78,21 @@ export function AddCopySheet({
   onClose: () => void;
   onDone: (message: string, tone: "info" | "error") => void;
 }) {
+  const theme = useTheme();
+  const { assetHue } = useHues();
   const styles = useStyles();
   const places = useMirrorPlaces();
   const routes = useMirrorRoutes();
+  const pendingCreates = usePendingCreateIds();
   const user = useApiQuery(fetchCurrentUser, copy.addCopyFailed, visible);
-  const [files, setFiles] = useState<MirrorMedia[]>([]);
-  const [maps, setMaps] = useState<Awaited<ReturnType<typeof listGeoPdfJobs>>>(
-    [],
+  const maps = useApiQuery(
+    listGeoPdfJobs,
+    "Couldn't load your maps.",
+    visible && online,
   );
+  const [files, setFiles] = useState<MirrorMedia[]>([]);
   const [group, setGroup] = useState<TripPlanItemGroup>("places");
-  const [ticked, setTicked] = useState<Pick[]>([]);
+  const [ticked, setTicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [withMedia, toggleMedia] = useRememberedCopyMedia(visible);
@@ -80,7 +102,7 @@ export function AddCopySheet({
     void getSyncStateValue("userId").then(setMe).catch(console.error);
   }, []);
 
-  // Files are the mirror's; maps are the account's GeoPDF jobs, online.
+  // Files are the mirror's imports and recordings.
   useEffect(() => {
     if (!visible) return;
     let alive = true;
@@ -89,25 +111,13 @@ export function AddCopySheet({
       listStandaloneMedia("track"),
     ])
       .then(([imports, tracks]) => {
-        // Not uploaded yet: the API has no row of it to copy.
-        if (alive)
-          setFiles(
-            [...imports, ...tracks].filter(
-              (file) => file.syncState === "synced",
-            ),
-          );
+        if (alive) setFiles([...imports, ...tracks]);
       })
       .catch(console.error);
-    if (online)
-      void listGeoPdfJobs()
-        .then((jobs) => {
-          if (alive) setMaps(jobs);
-        })
-        .catch(console.error);
     return () => {
       alive = false;
     };
-  }, [visible, online]);
+  }, [visible]);
 
   const [openedFor, setOpenedFor] = useState(false);
   if (visible !== openedFor) {
@@ -120,35 +130,38 @@ export function AddCopySheet({
   }
 
   const tickedPlaceIds = ticked
-    .filter((each) => each.kind === "place")
-    .map((each) => each.id);
+    .filter((key) => key.startsWith("place:"))
+    .map((key) => key.slice("place:".length));
   const offered = useMemo(
     () =>
-      tripPlanAddable(
+      addableFromMirror(
         {
-          places: (places.data ?? []).filter(
-            (place) => place.syncRole === "owner",
-          ),
-          routes: (routes.data ?? []).map((route) => ({
-            ...route,
-            ownerId: route.ownerId ?? "",
-          })),
-          files: files.map((file) => ({
-            ...file,
-            linkedPlaceId: file.linkedType === "place" ? file.linkedId : null,
-          })),
-          geoPdfs: maps,
+          places: places.data ?? [],
+          routes: routes.data ?? [],
+          files,
+          geoPdfs: maps.data ?? [],
         },
-        { me, tickedPlaceIds, copyMedia: withMedia },
+        { me, pendingCreates, tickedPlaceIds, copyMedia: withMedia },
       ),
-    [places.data, routes.data, files, maps, me, tickedPlaceIds, withMedia],
+    [
+      places.data,
+      routes.data,
+      files,
+      maps.data,
+      me,
+      pendingCreates,
+      tickedPlaceIds,
+      withMedia,
+    ],
   );
   const rows: Record<TripPlanItemGroup, Pick[]> = {
+    // Places keep the accent, as the plan's own list does.
     places: offered.places.map((place) => ({
       kind: "place",
       id: place.id,
       title: place.name,
       bytes: 0,
+      icon: "place",
     })),
     ways: [
       ...offered.routes.map((route) => ({
@@ -156,34 +169,43 @@ export function AddCopySheet({
         id: route.id,
         title: route.name,
         bytes: 0,
+        icon: "route" as const,
+        hue: assetHue.route,
       })),
       ...offered.files.map((file) => ({
         kind: "media" as const,
         id: file.id,
         title: mediaDisplayName(file),
         bytes: file.fileSizeBytes ?? 0,
+        // A recording and an import look as they do in Saved.
+        ...(file.origin === "track"
+          ? { icon: "track" as const, hue: assetHue.track }
+          : { icon: "importedFile" as const, hue: assetHue.import }),
       })),
     ],
     maps: offered.geoPdfs.map((pdf) => ({
       kind: "geoPdf" as const,
       id: pdf.id,
-      title: pdf.title ?? "GeoPDF",
+      title: pdf.title ?? untitledJobTitle("geoPdfJob"),
       bytes: pdf.resultBytes ?? 0,
+      icon: "geoPdf" as const,
+      hue: assetHue.geoPdf,
     })),
   };
-  // What a ticked place now brings is no longer offered: untick it too.
-  const shown = new Set(
-    Object.values(rows).flatMap((list) => list.map((each) => each.id)),
+  // A pick no longer offered (it now comes with a ticked place) is not sent;
+  // it comes back ticked if that place is unticked. Sent in list order.
+  const picks = [...rows.places, ...rows.ways, ...rows.maps].filter((each) =>
+    ticked.includes(keyOf(each)),
   );
-  const picks = ticked.filter((each) => shown.has(each.id));
-  const isTicked = (id: string) => picks.some((each) => each.id === id);
-  const bytes = picks.reduce((sum, each) => sum + each.bytes, 0);
-  const left =
-    user.data != null
-      ? formatBytes(
-          Math.max(0, user.data.storageQuotaBytes - user.data.storageUsedBytes),
-        )
-      : null;
+  const isTicked = (pick: Pick) => ticked.includes(keyOf(pick));
+  const priceLine = tripPlanAddCopyPriceLine({
+    bytes: picks.reduce((sum, each) => sum + each.bytes, 0),
+    photosToo: tickedPlaceIds.length > 0 && withMedia,
+    leftBytes:
+      user.data != null
+        ? Math.max(0, user.data.storageQuotaBytes - user.data.storageUsedBytes)
+        : null,
+  });
 
   async function add() {
     if (picks.length === 0) return setError(copy.nothingTicked);
@@ -192,6 +214,7 @@ export function AddCopySheet({
     let added = 0;
     let skipped = 0;
     let outOfSpace = false;
+    let why: string | null = null;
     try {
       for (const pick of picks) {
         const result = await addPlanItem(planId, {
@@ -204,61 +227,36 @@ export function AddCopySheet({
         outOfSpace ||= result.mediaOutOfSpace === true;
       }
     } catch (err) {
-      const why = messageFromError(err, copy.addCopyFailed);
-      if (added === 0) {
-        setError(why);
-        setBusy(false);
-        return;
-      }
-      await afterPlanWrite(planId);
-      setBusy(false);
-      onClose();
-      onDone(
-        [
-          tripPlanAddedMessage(added, picks.length),
-          mediaSkippedSentence(skipped, outOfSpace),
-          why,
-        ]
-          .filter(Boolean)
-          .join(" "),
-        "error",
-      );
-      return;
+      why = messageFromError(err, copy.addCopyFailed);
     }
-    await afterPlanWrite(planId);
+    const outcome = tripPlanAddOutcome({
+      added,
+      asked: picks.length,
+      skipped,
+      outOfSpace,
+      why,
+    });
+    if (added > 0) await afterPlanWrite(planId);
     setBusy(false);
+    if (!outcome) return setError(why);
     onClose();
-    const photos = mediaSkippedSentence(skipped, outOfSpace);
-    onDone(
-      [tripPlanAddedMessage(added, picks.length), photos]
-        .filter(Boolean)
-        .join(" "),
-      photos ? "error" : "info",
-    );
+    onDone(outcome.message, outcome.tone);
   }
 
   const list = rows[group];
+  const mapsPending = group === "maps" && maps.data == null;
   return (
     <BottomSheet
       visible={visible}
-      onClose={onClose}
+      // Not while adding: the run's end would land on the next session.
+      onClose={() => {
+        if (!busy) onClose();
+      }}
       title={planAddVerbLabel("copy")}
       footer={
         <View style={styles.footer}>
           {error ? <ErrorBanner message={error} /> : null}
-          {left ? (
-            <Text style={styles.muted}>
-              {[
-                tripPlanAddCopyPrice(
-                  bytes > 0 ? formatBytes(bytes) : null,
-                  left,
-                ),
-                tickedPlaceIds.length > 0 ? copy.photosCountToo : null,
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            </Text>
-          ) : null}
+          {priceLine ? <Text style={styles.muted}>{priceLine}</Text> : null}
           <Button
             label={tripPlanAddCopiesLabel(picks.length)}
             loading={busy}
@@ -279,39 +277,43 @@ export function AddCopySheet({
           options={TRIP_PLAN_ITEM_GROUPS.map(({ group: value, title }) => ({
             value,
             label: title,
-            count: rows[value].length,
+            // A zero is left out, and so is a count not read yet.
+            count:
+              value === "maps" && maps.data == null
+                ? undefined
+                : rows[value].length || undefined,
           }))}
         />
         {group === "places" && tickedPlaceIds.length > 0 ? (
           <SwitchRow
             title={copy.bringPhotos}
             checked={withMedia}
+            disabled={busy}
             onChange={toggleMedia}
           />
         ) : null}
-        {list.length === 0 ? (
+        {mapsPending && maps.error ? (
+          <ErrorState message={maps.error} onRetry={maps.refetch} />
+        ) : mapsPending ? (
+          <LoadingState />
+        ) : list.length === 0 ? (
           <EmptyState icon="place" title={copy.nothingToAdd} />
         ) : (
           list.map((each) => (
             <Row
-              key={each.id}
-              icon={
-                each.kind === "place"
-                  ? "place"
-                  : each.kind === "route"
-                    ? "route"
-                    : each.kind === "geoPdf"
-                      ? "geoPdf"
-                      : "importedFile"
-              }
+              key={keyOf(each)}
+              icon={each.icon}
+              hue={each.hue ?? theme.accent}
               title={each.title}
               subtitle={each.bytes > 0 ? formatBytes(each.bytes) : undefined}
-              selected={isTicked(each.id)}
+              selected={isTicked(each)}
+              disabled={busy}
+              right={<SelectionMark selected={isTicked(each)} />}
               onPress={() =>
                 setTicked((was) =>
-                  isTicked(each.id)
-                    ? was.filter((other) => other.id !== each.id)
-                    : [...was, each],
+                  was.includes(keyOf(each))
+                    ? was.filter((key) => key !== keyOf(each))
+                    : [...was, keyOf(each)],
                 )
               }
             />

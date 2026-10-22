@@ -24,6 +24,8 @@ import {
   type TripPlanView,
 } from "../tripPlans.js";
 import type { ScreenContract } from "./types.js";
+import { formatBytes } from "../format.js";
+import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
 
 export const TRIP_PLANS_LIST = {
@@ -1093,6 +1095,50 @@ export function tripPlanAddCopyPrice(
 ): string {
   const room = `You have ${left} left.`;
   return uses ? `Uses ${uses} of your storage. ${room}` : room;
+}
+
+/**
+ * Add a copy's price line, or null while nothing ticked is priced: what the
+ * ticked files use of the storage left, and "Photos count too." when ticked
+ * places bring their photos (their size isn't in the list).
+ */
+export function tripPlanAddCopyPriceLine(args: {
+  bytes: number;
+  photosToo: boolean;
+  leftBytes: number | null;
+}): string | null {
+  if (args.leftBytes == null || (args.bytes === 0 && !args.photosToo))
+    return null;
+  const line = tripPlanAddCopyPrice(
+    args.bytes > 0 ? formatBytes(args.bytes) : null,
+    formatBytes(args.leftBytes),
+  );
+  return args.photosToo
+    ? `${line} ${TRIP_PLAN_PAGE.copy.photosCountToo}`
+    : line;
+}
+
+/**
+ * How an Add a copy run ended, as its toast says it: what landed, the photos
+ * that didn't come, and why it stopped. Null when nothing landed: the dialog
+ * stays open with the reason.
+ */
+export function tripPlanAddOutcome(args: {
+  added: number;
+  asked: number;
+  skipped: number;
+  outOfSpace: boolean;
+  /** The stop's reason, when one stopped the run. */
+  why: string | null;
+}): { message: string; tone: "info" | "error" } | null {
+  if (args.added === 0) return null;
+  const photos = mediaSkippedSentence(args.skipped, args.outOfSpace);
+  return {
+    message: [tripPlanAddedMessage(args.added, args.asked), photos, args.why]
+      .filter(Boolean)
+      .join(" "),
+    tone: photos || args.why ? "error" : "info",
+  };
 }
 
 /** Start a trip log's line: what saving the picked places brings. Photos

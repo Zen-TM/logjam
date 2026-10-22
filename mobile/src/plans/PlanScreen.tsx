@@ -679,7 +679,7 @@ function Items({
     <>
       <Button
         label={planAddVerbLabel("copy")}
-        icon="add"
+        icon="copy"
         variant="outlineAccent"
         disabled={!online}
         disabledReason={OFFLINE}

@@ -58,6 +58,8 @@ import {
   tripPlanInvitedLine,
   tripPlanPreviewHeaded,
   tripPlanTripLogPlacesLine,
+  tripPlanAddCopyPriceLine,
+  tripPlanAddOutcome,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -954,5 +956,37 @@ describe("Start a trip log's places line", () => {
     expect(tripPlanTripLogPlacesLine([withOne], false)).toMatch(
       /without its photos/,
     );
+  });
+});
+
+describe("Add a copy's footer and outcome", () => {
+  const MB = 1024 * 1024;
+  // Mutation: say "Photos count too." for a ticked place whatever its
+  // switch, and it promises a cost the POST (copyMedia: false) never takes.
+  it("prices what is ticked, photos only when they come", () => {
+    expect(
+      tripPlanAddCopyPriceLine({ bytes: 0, photosToo: false, leftBytes: MB }),
+    ).toBeNull();
+    expect(
+      tripPlanAddCopyPriceLine({ bytes: 0, photosToo: true, leftBytes: MB }),
+    ).toMatch(/Photos count too\.$/);
+    expect(
+      tripPlanAddCopyPriceLine({ bytes: MB, photosToo: false, leftBytes: MB }),
+    ).not.toMatch(/Photos/);
+  });
+
+  // Mutation: toast a run that added nothing, and its reason leaves the
+  // dialog where it can be read.
+  it("says what landed, and nothing when nothing did", () => {
+    const base = { asked: 2, skipped: 0, outOfSpace: false, why: null };
+    expect(tripPlanAddOutcome({ ...base, added: 0, why: "No." })).toBeNull();
+    expect(tripPlanAddOutcome({ ...base, added: 2 })).toEqual({
+      message: "Added 2 copies.",
+      tone: "info",
+    });
+    expect(tripPlanAddOutcome({ ...base, added: 1, why: "No." })).toEqual({
+      message: "Added 1 of 2. No.",
+      tone: "error",
+    });
   });
 });
