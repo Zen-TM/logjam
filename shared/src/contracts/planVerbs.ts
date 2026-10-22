@@ -172,6 +172,12 @@ export function planAddVerbLabel(id: PlanAddVerbId): string {
   return PLAN_ADD_VERBS.find((verb) => verb.id === id)!.label;
 }
 
+/** A plan verb's words, where one stands outside its ⋯ (the over notice's
+ *  Start a trip log). */
+export function planVerbLabel(id: PlanVerbId): string {
+  return PLAN_VERBS.find((verb) => verb.id === id)!.label;
+}
+
 /** One list's verbs a role may run on one client, on a plan in this state. */
 export function planVerbsFor<D extends readonly PlanVerbDeclaration[]>(
   declarations: D,

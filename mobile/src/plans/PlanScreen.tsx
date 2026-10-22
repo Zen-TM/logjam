@@ -20,6 +20,7 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
+  planVerbLabel,
   planVerbsFor,
   PLAN_ADD_VERBS,
   PLAN_FORM_VERBS,
@@ -79,6 +80,7 @@ import { openablePlanMedia, planFiles, planFileSource } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
+import { PlanTripLogSheet } from "./PlanTripLogSheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
@@ -296,6 +298,7 @@ function PlanPage({
   const { plan } = cached;
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [tripLogOpen, setTripLogOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
   const [formSheet, setFormSheet] = useState<FormSheetState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -409,6 +412,14 @@ function PlanPage({
                 />
                 {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
               </View>
+            ) : notice.kind === "over" ? (
+              // Live offline: a trip log is the caller's own and queues.
+              <Button
+                label={planVerbLabel("tripLog")}
+                compact
+                variant="outlineAccent"
+                onPress={() => setTripLogOpen(true)}
+              />
             ) : undefined
           }
         >
@@ -499,10 +510,19 @@ function PlanPage({
         online={online}
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditOpen(true)}
+        onTripLog={() => setTripLogOpen(true)}
         onInfo={notify}
         onError={(text) => notify(text, "error")}
         onGone={onGone}
         onLeaving={onLeaving}
+      />
+      <PlanTripLogSheet
+        plan={tripLogOpen ? plan : null}
+        online={online}
+        onClose={() => setTripLogOpen(false)}
+        // A toast only: the form closes itself after Log trip, and an
+        // attribute added inside it saves without closing it.
+        onSaved={(text) => notify(text)}
       />
       <PlanDetailsSheet
         visible={editOpen}
