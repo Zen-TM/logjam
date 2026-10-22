@@ -306,6 +306,20 @@ model Notification {
   @@map("notifications")
 }
 
+/// A message the maintainer sent every user (src/scripts/announce.ts). Each
+/// user's copy is a Notification of type "announcement" naming this row's id;
+/// GET /notifications reads the title and body from here, so deleting the row
+/// retracts it everywhere. The maintainer's own text, never a user's.
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  /// Markdown source, drawn through @logjam/shared's parseMessageMarkdown.
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("announcements")
+}
+
 model TripLog {
   id            String         @id @default(uuid())
   userId        String         @map("user_id")

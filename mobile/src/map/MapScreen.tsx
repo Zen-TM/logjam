@@ -303,6 +303,7 @@ import type { TripTrackSource } from "../tracks/tripTrackSource";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
 import { RecordingSheet } from "../tracks/RecordingSheet";
+import { SensorMarkButton } from "../tracks/SensorMarkButton";
 import {
   isRecordingWriteFailing,
   onTrackWriteHealthChanged,
@@ -5039,6 +5040,11 @@ export function MapScreen({
             Points aren&apos;t being saved — finish the recording and check free
             space.
           </Notice>
+        ) : null}
+
+        {/* Developer builds only; draws nothing unless a sensor log is running. */}
+        {activeTrack?.state === "recording" ? (
+          <SensorMarkButton key={activeTrack.id} trackId={activeTrack.id} />
         ) : null}
 
         {/* Measure HUD — the same panel as route draw, minus Save. */}

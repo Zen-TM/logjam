@@ -138,6 +138,7 @@ describe("account-delete purge covers every notification type", () => {
     ],
     "api/src/routes/shares.ts": ["item_shared"],
     "api/src/routes/sharing.ts": ["place_shared"],
+    "api/src/scripts/announce.ts": ["announcement"],
     "api/src/worker/geoPdfWorker.ts": ["geo_pdf_complete"],
     "topo/worker.py": ["topo_complete", "topo_failed"],
     "topo/export_worker.py": ["topo_export_complete"],
@@ -154,6 +155,8 @@ describe("account-delete purge covers every notification type", () => {
     "topo_export_complete",
     "topo_export_skipped",
     "geo_pdf_complete",
+    // From no user: the maintainer's script, one row per recipient.
+    "announcement",
   ];
 
   const repo = join(import.meta.dirname, "..", "..", "..");
@@ -208,5 +211,16 @@ describe("account-delete purge covers every notification type", () => {
         !purge.includes(`"${t}"`),
     );
     expect(unnamed).toEqual([]);
+  });
+});
+
+describe("account-delete purge of topo jobs", () => {
+  // deleteTopoJobObjects aborts a job's open upload before deleting its
+  // prefixes (lib/topoUpload.unit.test.ts), which a prefix delete alone
+  // cannot see. Mutation: purge the topo prefixes with deleteS3Prefix again.
+  it("removes each topo job's objects through deleteTopoJobObjects", () => {
+    expect(purgeSource).toMatch(
+      /topoJobs\.map\(\(\{ id \}\) => deleteTopoJobObjects\(TOPO_BUCKET, id\)\)/,
+    );
   });
 });

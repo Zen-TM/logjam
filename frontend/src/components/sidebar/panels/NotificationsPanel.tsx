@@ -26,6 +26,7 @@ import {
   inboxTruncatedNote,
   isResolvedElsewhereError,
   newestNotificationsFirst,
+  notificationAnnouncement,
   notificationActions,
   notificationDeleteConfirm,
   notificationHaystack,
@@ -61,6 +62,7 @@ import { triggerDownload } from "../../../download";
 import type { MapsView, PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import AnnouncementDialog from "../../dialogs/AnnouncementDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -94,6 +96,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   export: "export",
   geoPdf: "geoPdf",
   plan: "plan",
+  message: "info",
   problem: "warning",
 };
 
@@ -108,6 +111,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
   export: "var(--hue-import)",
   geoPdf: "var(--hue-geo-pdf)",
   plan: "var(--hue-plan)",
+  message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };
 
@@ -190,6 +194,10 @@ function NotificationsPanel({
     null,
   );
   const [confirming, setConfirming] = useState(false);
+  const [messageOf, setMessageOf] = useState<TNotification | null>(null);
+  // Where focus goes once a closed message's row has left the list: a row id,
+  // or null for the page's title.
+  const refocus = useRef<{ rowId: string | null } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Refetch on every open — notifications are otherwise only fetched at boot, so
@@ -354,8 +362,14 @@ function NotificationsPanel({
     [onOverrideRead, onRefetchNotifications, toast],
   );
 
-  // Reading it is what marks it read; a place it is about opens on top.
+  // Reading it is what marks it read; a place it is about opens on top. A
+  // message is read once its dialog closes (`closeMessage`), so its row is
+  // still there while it is open.
   const openNotification = (n: TNotification) => {
+    if (notificationAnnouncement(n)) {
+      setMessageOf(n);
+      return;
+    }
     if (!n.read) void setRead([n.id], true);
     const placeId = notificationPlaceId(n);
     if (placeId) {
@@ -365,6 +379,36 @@ function NotificationsPanel({
     const plan = notificationPlanTarget(n);
     if (plan) onOpenPlan(plan);
   };
+
+  // In Unread, the read row leaves as the dialog closes and takes the focus
+  // the dialog hands back with it: the row that takes its place gets it, else
+  // the previous one, else the page's title (NotificationsPanel.test.tsx).
+  const closeMessage = () => {
+    if (messageOf && !messageOf.read) {
+      void setRead([messageOf.id], true);
+      if (bucket === "unread") {
+        const i = rowIds.indexOf(messageOf.id);
+        refocus.current = { rowId: rowIds[i + 1] ?? rowIds[i - 1] ?? null };
+      }
+    }
+    setMessageOf(null);
+  };
+
+  // After the dialog's own restore, which runs as it unmounts.
+  useEffect(() => {
+    const to = refocus.current;
+    const root = rootRef.current;
+    if (messageOf || !to || !root) return;
+    refocus.current = null;
+    const target = to.rowId
+      ? root.querySelector<HTMLElement>(
+          // The row's open button: its checkbox is the button with a role.
+          `[data-row-id="${CSS.escape(to.rowId)}"] button:not([role])`,
+        )
+      : root.querySelector<HTMLElement>("h2");
+    if (target && !to.rowId) target.tabIndex = -1;
+    target?.focus();
+  }, [messageOf]);
 
   // Following a notification through to its subject reads it, as opening does.
   const goTo = (n: TNotification, destination: InboxDestination) => {
@@ -559,6 +603,17 @@ function NotificationsPanel({
   const rowEntries = (n: TNotification): MenuEntry[] => {
     const destination = inboxDestination(n);
     const entries: MenuEntry[] = [];
+    if (notificationAnnouncement(n)) {
+      entries.push(
+        {
+          id: "read-message",
+          label: notificationVerb("readMessage").label,
+          icon: "forward",
+          onSelect: () => openNotification(n),
+        },
+        { id: "sep-message", separator: true },
+      );
+    }
     if (destination) {
       entries.push(
         {
@@ -666,6 +721,20 @@ function NotificationsPanel({
         </Button>
       );
     }
+    // A button, not only the row: nothing else says a row opens a message.
+    if (notificationAnnouncement(n)) {
+      return (
+        <Button
+          compact
+          variant="outline"
+          disabled={selecting}
+          disabledReason="Not while selecting"
+          onClick={() => openNotification(n)}
+        >
+          {notificationVerb("readMessage").label}
+        </Button>
+      );
+    }
     return null;
   };
 
@@ -698,7 +767,7 @@ function NotificationsPanel({
       const label = notificationLabel(row);
       title = label.text;
       subtitle = [
-        label.warning,
+        label.detail,
         notificationActions(row)?.pill,
         formatTime(row.createdAt),
       ]
@@ -709,6 +778,7 @@ function NotificationsPanel({
     return (
       <Row
         key={row.id}
+        data-row-id={row.id}
         className={member ? classes.member : undefined}
         title={title}
         subtitle={subtitle || undefined}
@@ -995,6 +1065,10 @@ function NotificationsPanel({
           });
         }}
         onClose={() => setPendingConfirm(null)}
+      />
+      <AnnouncementDialog
+        message={messageOf && notificationAnnouncement(messageOf)}
+        onClose={closeMessage}
       />
     </div>
   );

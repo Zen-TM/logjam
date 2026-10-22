@@ -104,8 +104,9 @@ type NotificationVerbDeclaration = {
 
 /**
  * A notification's ⋯, in order. "Open place" is only for one about a place,
- * "Open plan" for one about a plan the reader can open; "View
- * in …" names the tab its subject lives in, which differs by client (Maps on
+ * "Open plan" for one about a plan the reader can open, "Read message" only
+ * for a maintainer announcement; "View in …" names the tab its subject lives
+ * in, which differs by client (Maps on
  * Logjam Web, Saved on Logjam GPS), so its label is the destination's own.
  * Read and Unread are one row whose direction follows the notification.
  */
@@ -113,6 +114,7 @@ export const NOTIFICATION_VERBS = [
   { id: "open", icon: "forward", label: "Open place" },
   { id: "openPlan", icon: "forward", label: "Open plan" },
   { id: "view", icon: "forward", label: "View in …" },
+  { id: "readMessage", icon: "forward", label: "Read message" },
   { id: "markRead", icon: "show", label: "Mark as read" },
   { id: "markUnread", icon: "hide", label: "Mark as unread" },
   {
@@ -144,3 +146,13 @@ export function notificationDeleteConfirm(count: number): {
     confirmBody: `${one ? "It goes" : "They go"} from every device on your account. This can't be undone.`,
   };
 }
+
+/**
+ * A maintainer announcement opened from its row: Logjam Web's dialog, Logjam
+ * GPS's sheet. Its title is the message's own; `untitled` stands in when it
+ * has none, and is also the push title (api/src/services/push.ts).
+ */
+export const ANNOUNCEMENT = {
+  from: "From the Logjam maintainer",
+  untitled: "A message from the Logjam maintainer",
+} as const;

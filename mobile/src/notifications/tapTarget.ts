@@ -11,6 +11,7 @@ export type NotificationTapTarget =
   | { kind: "blocked" }
   | { kind: "place"; placeId: string }
   | { kind: "plan"; planId: string; view?: "people"; invited?: boolean }
+  | { kind: "announcement"; announcementId: string }
   | { kind: "inbox" };
 
 /**
@@ -21,9 +22,10 @@ export type NotificationTapTarget =
  * Alert rather than silently ignored. Without that precedence a push lands the
  * user in PlaceDetail with the pen still armed and nothing on screen saying so.
  *
- * Below the draft it is just the payload: a placeId goes to that place, and
- * everything else — no id, an id that is not a string, a payload that is not an
- * object — falls back to the inbox, where every notification is listed anyway.
+ * Below the draft it is just the payload: a placeId goes to that place, an
+ * announcementId to the inbox with that message open, and everything else —
+ * no id, an id that is not a string, a payload that is not an object — falls
+ * back to the inbox, where every notification is listed anyway.
  *
  * That fallback carries the two ACTIONABLE kinds, and is the right destination:
  * a friend request and a file send are answered inline on their inbox row, so
@@ -35,8 +37,11 @@ export function notificationTapTarget(args: {
   routeEditing: boolean;
 }): NotificationTapTarget {
   if (args.routeEditing) return { kind: "blocked" };
-  const placeId = (args.data as { placeId?: unknown } | null | undefined)
-    ?.placeId;
+  const data = args.data as
+    | { placeId?: unknown; announcementId?: unknown }
+    | null
+    | undefined;
+  const placeId = data?.placeId;
   if (typeof placeId === "string") return { kind: "place", placeId };
   // A plan push opens where Logjam Web opens its inbox row
   // (`notificationPlanTarget`): an invite as its preview, a join request on
@@ -56,5 +61,9 @@ export function notificationTapTarget(args: {
       view: plan.view,
       invited: plan.invited,
     };
+  const announcementId = data?.announcementId;
+  if (typeof announcementId === "string" && announcementId.length > 0) {
+    return { kind: "announcement", announcementId };
+  }
   return { kind: "inbox" };
 }

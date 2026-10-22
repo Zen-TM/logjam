@@ -61,8 +61,8 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 ```bash
 # 1. Clone / copy this project
-git clone <this-repo> logjam-topo
-cd logjam-topo
+git clone <this-repo> logjam
+cd logjam/topo
 
 # 2. Create input/output directories
 mkdir -p input output
@@ -81,10 +81,11 @@ docker compose up
 
 ### Custom options
 
-Edit the `command:` section in `docker-compose.yml`, or override at runtime:
+Edit the `command:` section in `docker-compose.yml`, or override at runtime
+(the image's own command starts the job worker, so name the script):
 
 ```bash
-docker compose run topo \
+docker compose run topo python3 /app/pipeline.py \
   /input/elvis.zip \
   --output /output \
   --workers 8 \
@@ -98,6 +99,13 @@ docker compose run topo \
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--skip-osm` | off | Skip Overpass API download (offline mode) |
+| `--benchmark` | off | Print a per-step timing report at the end |
+| `--layers LIST` | `all` | Comma-separated layers: `hillshade`, `vegetation`, `features`, `slope`, `contours` |
+| `--settings-json PATH` | none | Per-job render overrides (the shape of `TopoSettings` in `shared/src/topoSettings.ts`) |
+| `--export-geojson DIR` | none | Copy the intermediate contour and OSM GeoJSON to `DIR` |
+| `--export-footprint DIR` | none | Copy the data-coverage footprint GeoJSON to `DIR` |
+| `--metrics-json PATH` | none | Write per-phase timings and tile counts to `PATH` |
+| `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |
 
 ---
 
@@ -196,8 +204,15 @@ to GPU-based tile rendering while avoiding CUDA/ROCm dependency complexity.
 `build_nsw_dem.py` turns NSW Spatial Services' 5 m DEM sheets into the
 `nsw-5m` archive Logjam reads heights from: terrarium PNG tiles, zoom 8 to 15,
 in one PMTiles file. It is a one-off build, separate from the LiDAR pipeline
-above, and needs GDAL with its Python bindings, NumPy, Pillow and the
+above, and needs GDAL with its Python bindings (installed separately, as in
+[Running without Docker](#running-without-docker-linux)), and NumPy, Pillow and
+the [`pmtiles`](https://pypi.org/project/pmtiles/) Python package (in
+`requirements.txt`). Only `contours` and the `pmtiles show` check below need the
 [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary.
+
+`pack` and `slope` write PMTiles with the Python package, which spools the
+archive through `$TMPDIR`: point it at a disk with room if `/tmp` is a small
+tmpfs, or `pack` fails with "Disk quota exceeded".
 
 ```bash
 # One sheet, about 200 MB to download and 10 minutes to tile on 4 cores.
@@ -226,18 +241,20 @@ not at all.
 All 343 sheets, once. Why Logjam hosts its own copy, and what the licence
 asks: [ADR 0031](../docs/decisions/0031-nsw-heights-come-from-the-spatial-services-5m-dem.md).
 
-Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM:
+Measured on the October 2026 build, on a 32-core machine with 128 GB of RAM
+(`pack` then used the go-pmtiles binary, which is quicker and spooled nothing
+through `$TMPDIR`; `pack` now takes longer and about one archive more disk):
 
 | | |
 |---|---|
 | `fetch` | 1 h 49 min, one sheet at a time; about 60 GB on disk once converted |
 | `tile` | 1 h 36 min with 30 workers, for 885 blocks (about 48 core-hours) |
-| `pack` | 3 min |
+| `pack` | 3 min (go-pmtiles) |
 | Result | 16.9 GB, 1,027,356 tiles |
-| Disk | 96 GB in use when `pack` finished; allow 150 GB |
+| Disk | 96 GB in use when `pack` finished (go-pmtiles); allow 150 GB, and more with the Python writer |
 
-Any machine with GDAL, Python and `pmtiles` does: nothing here touches AWS
-until the archive is published.
+Any machine with GDAL and Python (and the `pmtiles` binary for the check) does:
+nothing here touches AWS until the archive is published.
 
 ```bash
 python3 build_nsw_dem.py fetch dem/src
@@ -262,7 +279,153 @@ curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem
 No deploy is needed. The API looks for the archive every five minutes and
 starts reading it when it appears; the clients read it on their next lookup.
 If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
-the same week.
+the same week. A new height archive leaves the slope archive (below) on the old
+heights and month: rebuild it, deleting `dem/nsw-5m-slope.work/` first if an
+earlier local run left one.
+
+### The statewide slope archive
+
+The same 5 m heights as a second archive, `nsw-5m-slope.pmtiles`, whose
+"height" is the slope of the ground in degrees, rounded to 1°, so a client draws
+it as a `raster-dem` `color-relief` layer and the bands are a style, not a
+rebuild. Format and zooms: z15 is Horn's slope over the z15 height tiles, the
+method of `demSlopeAt` in `shared/src/demSlope.ts` (on the Katoomba sheet, 80
+probe points differed from it by at most 0.000004° before rounding); each
+coarser zoom to z8 is the steepest pixel of the four below. A pixel is no-data
+wherever any of its nine heights is.
+
+`slope` reads the finished height archive, not the sheets, so it runs anywhere
+that has the archive:
+
+```bash
+python3 build_nsw_dem.py slope dem/nsw-5m.pmtiles dem/nsw-5m-slope.pmtiles --jobs 8
+```
+
+The archive's credit takes the month from the height archive's own credit. The
+work files go in `dem/nsw-5m-slope.work/` (`--work` moves them), one per block,
+and a stopped run on the same disk carries on from the blocks it finished. A
+block that fails stops the run at once with its traceback, and a child killed
+part-way (out of memory) stops it with an error rather than hanging it.
+
+Measured on the Katoomba sheet (6 blocks, 3,649 tiles), on one core of a busy
+laptop: 45 ms a tile on its fullest blocks (the PNG encoding is nearly all of it,
+at level 6), 845 MB peak per job, and 107 MB against the height archive's
+133 MB (it is one of the most rugged sheets, so a worst case). Scaled to the
+state's 1.03 M tiles that is about 13 core-hours, or under two hours on 8 vCPU,
+and 11 to 13 GB out. The statewide archive's directories are bigger than this
+sheet's and every tile read decodes one, which could add a fifth: allow three
+hours. It has not been run statewide.
+
+#### Building it in AWS
+
+Running it is a prod change and the maintainer's to make: it needs `ecs run-task`
+and the Terraform outputs, which a contributor's read-only access does not have.
+Fargate has what it needs without a new task definition: the
+`logjam-topo-worker` one has 8 vCPU and 16 GB, its role reads and writes the
+topo bucket, and the image carries `build_nsw_dem.py` and the `pmtiles` package.
+The image starts `worker.py` as a `CMD`, which the run's command override
+replaces.
+The task runs `python3 /app/build_nsw_dem.py slope-s3 logjam-topo-jobs`, which
+downloads `master/dem/nsw-5m.pmtiles`, builds the slope archive and uploads
+`master/dem/nsw-5m-slope.pmtiles`, and exits non-zero at the first step that
+fails (nothing is uploaded from a build that did not finish). Its default disk
+is 20 GiB, so the run asks for 120: about 17 GB of input, 13 GB of block files,
+and a further 13 GB each for the MBTiles the packer builds, its spool and the
+result. Run it once *Deploy topo worker* has pushed an image that has `slope-s3`.
+Run the blocks below in order, from `topo/` of a fresh clone, and stop at the
+first one that prints an error.
+
+The task holds 8 of the account's 30 Fargate vCPU for two to three hours, and the
+API's cap on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default, in
+`api/src/lib/env.ts`) counts job rows, not tasks, so it does not see it. A user
+job that starts while it runs can fail to start, and shows as failed, once user
+load passes 22 vCPU. Run it when Logjam is quiet. The `logjam-topo-stuck-task`
+alarm emails when some task has been running in each of six clock hours in a
+row. This run can set it off if it takes over four hours, or with user jobs
+running either side of it: that is expected, so do not stop the task because
+of it.
+
+First the cluster, subnets and security group. All three lines must print a
+value:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/infra/terraform/envs/prod" && terraform init -input=false && CLUSTER=$(terraform output -raw ecs_cluster) && SUBNETS=$(terraform output -raw ecs_subnets) && SG=$(terraform output -raw ecs_security_groups) && echo "$CLUSTER" && echo "$SUBNETS" && echo "$SG"
+```
+
+The later blocks use `CLUSTER`, `SUBNETS`, `SG` and `TASK`, and stop with an
+error if one is not set. In a new shell, run the block above again, and set
+`TASK` to the ARN the start block printed (keep it; while the task runs,
+`aws ecs list-tasks --cluster "$CLUSTER" --started-by slope-build` finds it).
+
+Then see what is running. Before the start the list should be empty (a user job
+in it means wait); during the run it should hold only your task:
+
+```bash
+: "${CLUSTER:?run the first block}" && aws ecs list-tasks --cluster "$CLUSTER" --desired-status RUNNING
+```
+
+Start it. `TASK` must print a task ARN:
+
+```bash
+OUT=; : "${CLUSTER:?run the first block}" "${SUBNETS:?run the first block}" "${SG:?run the first block}" && OUT=$(aws ecs run-task --cluster "$CLUSTER" --started-by slope-build --launch-type FARGATE --task-definition logjam-topo-worker --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}" --overrides '{"ephemeralStorage":{"sizeInGiB":120},"containerOverrides":[{"name":"topo-worker","command":["python3","/app/build_nsw_dem.py","slope-s3","logjam-topo-jobs","--jobs","8"]}]}' --output json)
+TASK=$(jq -er '.tasks[0].taskArn' <<<"$OUT") || { TASK=; echo "NOT STARTED:"; jq '.failures' <<<"$OUT"; }
+echo "$TASK"
+```
+
+If it printed `NOT STARTED`, nothing is running: read the failure reason and fix
+it, then run the block again. Otherwise wait for the container to start. RunTask
+accepts a task that then fails to pull the image or to start, and that would
+otherwise look like a silent download:
+
+```bash
+if : "${CLUSTER:?run the first block}" "${TASK:?no task started}" && aws ecs wait tasks-running --cluster "$CLUSTER" --tasks "$TASK"; then echo RUNNING; fi
+```
+
+If it did not print `RUNNING`, read why with the `describe-tasks` command below
+(`stoppedReason`); if the waiter timed out after 10 minutes, run it again.
+
+Follow the log (the log group also holds every user job's streams):
+
+```bash
+: "${TASK:?run the start block}" && aws logs tail /ecs/logjam-topo-worker --follow --log-stream-name-prefix "ecs/topo-worker/${TASK##*/}"
+```
+
+The log reads, in order: `downloading s3://…/nsw-5m.pmtiles`, `downloaded N
+bytes`, `N blocks` (885 at most), one `[n/N] …` line per finished block, `built N
+bytes`, and `uploaded s3://…/nsw-5m-slope.pmtiles`. The download (`downloading`
+to `downloaded`) and the packing (the last block line to `built`) are each
+silent for tens of minutes. A block that fails stops the run with its
+traceback. From the `N blocks` line on, if 15 minutes pass with no new block
+line before the last `[n/N]`, stop the task and read the log:
+
+```bash
+: "${CLUSTER:?run the first block}" "${TASK:?run the start block}" && aws ecs stop-task --cluster "$CLUSTER" --task "$TASK"
+```
+
+After the last block line, wait for `uploaded s3://…`: the run has succeeded
+when the log prints it. Press Ctrl-C then (the tail never exits by itself).
+Confirm with the task, checking every 15 minutes: it has finished when this
+prints `STOPPED`, with exit code `0` beside it. ECS forgets a stopped task after
+about an hour, so read it within the hour:
+
+```bash
+: "${CLUSTER:?run the first block}" "${TASK:?run the start block}" && aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" --query 'tasks[0].[lastStatus,containers[0].exitCode,stoppedReason]' --output text
+```
+
+Later than that, the upload is the task's last step, so a `LastModified` after
+the time you started the task means it exited 0:
+
+```bash
+aws s3api head-object --bucket logjam-topo-jobs --key master/dem/nsw-5m-slope.pmtiles --query '[LastModified,ContentLength,ContentType]'
+```
+
+A Fargate disk is gone when the task stops, so a task that dies starts over:
+there is no resuming across tasks. Check the result as for the height archive;
+it should print `206`:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
+```
 
 ---
 
