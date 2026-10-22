@@ -22,6 +22,7 @@ import {
   planAddVerbLabel,
   planVerbsFor,
   PLAN_ADD_VERBS,
+  PLAN_FORM_VERBS,
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
@@ -403,7 +404,7 @@ function PlanPage({
                   disabled={!online}
                   disabledReason={OFFLINE}
                   onPress={() =>
-                    setFormSheet({ formId: notice.formId, answering: true })
+                    setFormSheet({ formId: notice.formId, mode: "answer" })
                   }
                 />
                 {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
@@ -451,7 +452,7 @@ function PlanPage({
       view === "forms" ? (
         <Forms
           plan={plan}
-          onOpen={(formId) => setFormSheet({ formId, answering: false })}
+          onOpen={(formId, mode) => setFormSheet({ formId, mode })}
         />
       ) : null,
     people:
@@ -776,10 +777,16 @@ function Forms({
   onOpen,
 }: {
   plan: TripPlanView;
-  onOpen: (formId: string) => void;
+  /** The form's sheet, read or on its ⋯ (`verbs`). */
+  onOpen: (formId: string, mode: "read" | "verbs") => void;
 }) {
+  const theme = useTheme();
   const styles = useStyles();
   const { assetHue } = useHues();
+  // The row offers the form's verbs as its sheet does (shared/DESIGN.md §9).
+  const verbs = planVerbsFor(PLAN_FORM_VERBS, "gps", plan.myRole, {
+    archived: plan.archivedAt != null,
+  });
   if (plan.forms.length === 0)
     return (
       <EmptyState
@@ -798,16 +805,24 @@ function Forms({
       subtitle={
         form.visibleTo === "leaders" ? copy.seenByLeaders : copy.seenByMembers
       }
-      onPress={() => onOpen(form.id)}
+      onPress={() => onOpen(form.id, "read")}
       right={
-        form.requiredToJoin ? (
-          <View style={styles.pills}>
+        <View style={styles.pills}>
+          {form.requiredToJoin ? (
             <StatusPill label={copy.pillRequired} tone="outline" />
-            {form.myAnswer ? null : (
-              <StatusPill label={copy.pillNotAnswered} tone="warning" />
-            )}
-          </View>
-        ) : undefined
+          ) : null}
+          {form.requiredToJoin && !form.myAnswer ? (
+            <StatusPill label={copy.pillNotAnswered} tone="warning" />
+          ) : null}
+          {verbs.length > 0 ? (
+            <IconButton
+              icon="overflow"
+              accessibilityLabel={`${TRIP_PLAN_FORMS.copy.actions}: ${form.title}`}
+              color={theme.textMuted}
+              onPress={() => onOpen(form.id, "verbs")}
+            />
+          ) : null}
+        </View>
       }
     />
   ));

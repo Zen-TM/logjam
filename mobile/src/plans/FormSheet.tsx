@@ -45,6 +45,7 @@ import {
   Button,
   ErrorBanner,
   IconButton,
+  Row,
   SectionHeader,
 } from "../ui";
 import { PlanFormFields } from "./PlanFormFields";
@@ -54,7 +55,11 @@ import { afterPlanWrite } from "./plansCache";
 const copy = TRIP_PLAN_FORMS.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
-export type FormSheetState = { formId: string; answering: boolean } | null;
+/** `verbs`: the form's ⋯ (a leader's Delete form), as rows. */
+export type FormSheetState = {
+  formId: string;
+  mode: "read" | "answer" | "verbs";
+} | null;
 
 /** One person's answers, question by question, in the form's order. */
 const answerRows = (
@@ -94,7 +99,8 @@ export function FormSheet({
     : undefined;
   // An archived plan is read-only: its answers stay, nothing is sent.
   const canAnswer = plan.archivedAt == null;
-  const answering = state?.answering === true && form != null && canAnswer;
+  const answering = state?.mode === "answer" && form != null && canAnswer;
+  const choosing = state?.mode === "verbs" && form != null;
   const verbs = planVerbsFor(PLAN_FORM_VERBS, "gps", plan.myRole, {
     archived: plan.archivedAt != null,
   });
@@ -108,6 +114,9 @@ export function FormSheet({
     "id" | "updatedAt" | "questions" | "visibleTo"
   > | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Who sees the answers changed under the draft: said by the footer until
+  // Send or a way out, never as a refusal (edits leave it, so does the toast).
+  const [changed, setChanged] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!answering || !form) {
     if (draftFor) setDraftFor(null);
@@ -115,13 +124,13 @@ export function FormSheet({
     setDraftFor(form);
     setDraft(draftFromAnswers(form.questions, form.myAnswer?.answers ?? {}));
     setError(null);
+    setChanged(false);
   } else if (draftFor.updatedAt !== form.updatedAt) {
     setDraft(fitAnswerDraft(draftFor.questions, form.questions, draft));
     setDraftFor(form);
     // Widened or narrowed under the person typing (a refetch from any push):
     // said before Send, which now carries the new visibility.
-    if (draftFor.visibleTo !== form.visibleTo)
-      setError(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE);
+    if (draftFor.visibleTo !== form.visibleTo) setChanged(true);
   }
   // A refusal that took answering away (the plan archived, the form deleted)
   // or landed after the sheet was left goes to the page's toast, once. The
@@ -136,14 +145,16 @@ export function FormSheet({
   }, [error, answering, onError]);
 
   const back =
-    answering && form
+    (answering || choosing) && form
       ? () => {
           setError(null);
-          onState({ formId: form.id, answering: false });
+          setChanged(false);
+          onState({ formId: form.id, mode: "read" });
         }
       : undefined;
   const close = () => {
     setError(null);
+    setChanged(false);
     onState(null);
   };
 
@@ -157,6 +168,9 @@ export function FormSheet({
       return;
     }
     const sending = state;
+    // A refusal from before is answered by this Send, whatever it gets.
+    setError(null);
+    setChanged(false);
     setBusy(true);
     try {
       await putAnswer(plan.id, target.id, {
@@ -208,7 +222,7 @@ export function FormSheet({
   > | null =
     form && rows
       ? {
-          // The title is the sheet's; its ⋯ is a leader's Delete form.
+          // The title is the sheet's; its ⋯ is the verbs mode.
           hero:
             verbs.length > 0 ? (
               <View style={styles.actions}>
@@ -216,19 +230,7 @@ export function FormSheet({
                   icon="overflow"
                   accessibilityLabel={copy.actions}
                   color={theme.textMuted}
-                  disabled={!online}
-                  onPress={() =>
-                    Alert.alert(form.title, undefined, [
-                      ...verbs.map((verb) => ({
-                        text: verb.label,
-                        style: (verb.danger ? "destructive" : "default") as
-                          | "destructive"
-                          | "default",
-                        onPress: () => remove(form),
-                      })),
-                      { text: "Cancel", style: "cancel" as const },
-                    ])
-                  }
+                  onPress={() => onState({ formId: form.id, mode: "verbs" })}
                 />
               </View>
             ) : null,
@@ -254,9 +256,7 @@ export function FormSheet({
                     variant="outlineAccent"
                     disabled={!online}
                     disabledReason={OFFLINE}
-                    onPress={() =>
-                      onState({ formId: form.id, answering: true })
-                    }
+                    onPress={() => onState({ formId: form.id, mode: "answer" })}
                   />
                   {online ? null : (
                     <Text style={styles.offline}>{OFFLINE}</Text>
@@ -308,6 +308,11 @@ export function FormSheet({
       footer={
         answering && form ? (
           <View style={styles.footer}>
+            {changed ? (
+              <Text style={styles.changed}>
+                {TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE}
+              </Text>
+            ) : null}
             {error ? <ErrorBanner message={error} /> : null}
             <Button
               label={copy.save}
@@ -330,6 +335,22 @@ export function FormSheet({
             setError(null);
           }}
         />
+      ) : choosing && form ? (
+        <View style={styles.block}>
+          {verbs.map((verb) => (
+            <Row
+              key={verb.id}
+              icon={verb.icon}
+              hue={verb.danger ? theme.warning : undefined}
+              title={verb.label}
+              subtitle={online ? undefined : OFFLINE}
+              disabled={!online}
+              onPress={() => {
+                if (verb.id === "delete") remove(form);
+              }}
+            />
+          ))}
+        </View>
       ) : sections ? (
         <View style={styles.body}>
           {contractSectionKeys(TRIP_PLAN_FORMS, "gps").map((key) =>
@@ -350,4 +371,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   muted: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   footer: { gap: spacing(1) },
+  changed: { ...textRole.detail, color: theme.text },
 }));
