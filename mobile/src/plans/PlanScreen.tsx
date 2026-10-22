@@ -23,6 +23,7 @@ import {
   planVerbsFor,
   PLAN_ADD_VERBS,
   PLAN_FORM_VERBS,
+  PLAN_VERBS,
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
@@ -93,6 +94,7 @@ import {
 import { planPageView } from "./planViews";
 
 const copy = TRIP_PLAN_PAGE.copy;
+const TRIP_LOG_VERB = PLAN_VERBS.find((verb) => verb.id === "tripLog")!;
 const OFFLINE = unavailableReasonText("needs-connection");
 
 function usePlan(planId: string, online: boolean, blocked: boolean) {
@@ -411,6 +413,14 @@ function PlanPage({
                 />
                 {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
               </View>
+            ) : notice.kind === "over" ? (
+              // Live offline: a trip log is the caller's own and queues.
+              <Button
+                label={TRIP_LOG_VERB.label}
+                compact
+                variant="outlineAccent"
+                onPress={() => setTripLogOpen(true)}
+              />
             ) : undefined
           }
         >
@@ -511,10 +521,9 @@ function PlanPage({
         plan={tripLogOpen ? plan : null}
         online={online}
         onClose={() => setTripLogOpen(false)}
-        onSaved={(text) => {
-          setTripLogOpen(false);
-          notify(text);
-        }}
+        // A toast only: the form closes itself after Log trip, and an
+        // attribute added inside it saves without closing it.
+        onSaved={(text) => notify(text)}
       />
       <PlanDetailsSheet
         visible={editOpen}

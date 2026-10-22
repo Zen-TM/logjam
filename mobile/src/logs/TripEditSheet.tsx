@@ -231,7 +231,8 @@ export function TripEditSheet({
     setOpenedWith(trip ?? null);
     setMode("form");
     setPlaceSearch("");
-    setCustomTypes([]);
+    // A plan's own type (a leader's "lilo") stays a chip when unticked.
+    setCustomTypes(trip ? [] : (prefill?.types ?? []));
     setSaving(false);
     setDateKey(
       trip
@@ -243,9 +244,11 @@ export function TripEditSheet({
     setSelected(
       trip ? trip.places.map((link) => ({ ...link })) : (initialPlaces ?? []),
     );
-    setDisplayName(trip?.displayName ?? prefill?.displayName ?? "");
-    setTypes(trip?.types ?? prefill?.types ?? []);
-    setNotes(trip?.notes ?? prefill?.notes ?? "");
+    setDisplayName(
+      trip ? (trip.displayName ?? "") : (prefill?.displayName ?? ""),
+    );
+    setTypes(trip ? trip.types : (prefill?.types ?? []));
+    setNotes(trip ? (trip.notes ?? "") : (prefill?.notes ?? ""));
     setDateTarget({ kind: "trip" });
     setEditingField(null);
     setFieldValues(fieldValueStrings(trip?.customFields));

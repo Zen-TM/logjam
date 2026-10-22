@@ -5,7 +5,7 @@
 // reason (mobile/DESIGN.md §8); a trip log is the caller's own and queues.
 // Edit and Start a trip log are the caller's: this sheet closes and the
 // caller opens the form.
-import { Fragment } from "react";
+import { Fragment, useRef } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import {
   ApiError,
@@ -94,10 +94,15 @@ export function PlanOptionsSheet({
         onError(messageFromError(err, failed));
       });
 
+  // A verb that opens a form is parked and opened from `onClosed`: a sheet
+  // can't open while this one is closing (mobile/DESIGN.md §4).
+  const parked = useRef<(() => void) | null>(null);
   const run = (id: PlanVerbId, target: TripPlanView) => {
+    if (id === "edit" || id === "tripLog") {
+      parked.current = id === "edit" ? onEdit : onTripLog;
+      return onClose();
+    }
     onClose();
-    if (id === "edit") return onEdit();
-    if (id === "tripLog") return onTripLog();
     if (id === "archive" || id === "unarchive") {
       const archived = id === "archive";
       void write(
@@ -136,6 +141,9 @@ export function PlanOptionsSheet({
     }
   };
 
+  // A trip log is the caller's own and queues; every other verb writes to
+  // the plan and needs a connection.
+  const live = (id: PlanVerbId) => online || id === "tripLog";
   const verbs = plan
     ? planVerbs("gps", plan.myRole, {
         archived: plan.archivedAt != null,
@@ -150,6 +158,11 @@ export function PlanOptionsSheet({
     <BottomSheet
       visible={plan !== null}
       onClose={onClose}
+      onClosed={() => {
+        const open = parked.current;
+        parked.current = null;
+        open?.();
+      }}
       title={plan?.name ?? ""}
     >
       {plan ? (
@@ -163,15 +176,8 @@ export function PlanOptionsSheet({
                 icon={verb.icon}
                 hue={verb.danger ? theme.warning : undefined}
                 title={verb.label}
-                subtitle={
-                  online || verb.id === "tripLog"
-                    ? verb.disabledReason
-                    : OFFLINE
-                }
-                disabled={
-                  (!online && verb.id !== "tripLog") ||
-                  verb.disabledReason != null
-                }
+                subtitle={live(verb.id) ? verb.disabledReason : OFFLINE}
+                disabled={!live(verb.id) || verb.disabledReason != null}
                 onPress={() => run(verb.id, plan)}
               />
             </Fragment>
