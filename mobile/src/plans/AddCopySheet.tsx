@@ -16,6 +16,7 @@ import {
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
+  tripPlanAddKey,
   tripPlanAddPicks,
   untitledJobTitle,
   TRIP_PLAN_ITEM_GROUPS,
@@ -64,7 +65,7 @@ type Pick = {
   icon: Glyph;
   hue?: string;
 };
-const keyOf = (pick: Pick) => `${pick.kind}:${pick.id}`;
+const keyOf = tripPlanAddKey;
 
 export function AddCopySheet({
   planId,

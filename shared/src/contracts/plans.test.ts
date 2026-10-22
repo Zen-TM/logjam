@@ -60,6 +60,7 @@ import {
   tripPlanTripLogPlacesLine,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
+  tripPlanAddKey,
   tripPlanAddPicks,
 } from "./index.js";
 
@@ -992,16 +993,18 @@ describe("Add a copy's footer and outcome", () => {
     ).not.toMatch(/Photos/);
   });
 
-  // Mutation: send every tick, and a route ticked before its place goes
-  // twice, once alone and once with the place, both charged.
+  // Mutations: send every tick, and a route ticked before its place goes
+  // twice, once alone and once with the place, both charged; or send every
+  // row offered (`return offered`), and an unticked route goes too.
   it("sends only ticks still offered, in list order", () => {
-    const offered = [
-      { kind: "place", id: "p" },
-      { kind: "geoPdf", id: "g" },
-    ];
-    expect(
-      tripPlanAddPicks(offered, ["geoPdf:g", "route:r", "place:p"]),
-    ).toEqual(offered);
+    const place = { kind: "place", id: "p" };
+    const unticked = { kind: "route", id: "q" };
+    const pdf = { kind: "geoPdf", id: "g" };
+    const ticked = [pdf, { kind: "route", id: "r" }, place].map(tripPlanAddKey);
+    expect(tripPlanAddPicks([place, unticked, pdf], ticked)).toEqual([
+      place,
+      pdf,
+    ]);
   });
 
   // Mutation: toast a run that added nothing, and its reason leaves the

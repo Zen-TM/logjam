@@ -4,6 +4,7 @@
 // API's words.
 import { useId, useState } from "react";
 import {
+  tripPlanAddKey,
   tripPlanAddPicks,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
@@ -38,7 +39,7 @@ const copy = TRIP_PLAN_PAGE.copy;
 
 type Pick = { kind: TripPlanItemKind; id: string };
 type Row = Pick & { title: string; bytes: number };
-const key = (pick: Pick) => `${pick.kind}:${pick.id}`;
+const key = tripPlanAddKey;
 
 export default function PlanAddCopyDialog({
   planId,

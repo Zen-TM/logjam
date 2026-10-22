@@ -1124,6 +1124,10 @@ export function tripPlanAddCopyPriceLine(args: {
   return photosToo ? `${line} ${TRIP_PLAN_PAGE.copy.photosCountToo}` : line;
 }
 
+/** An Add a copy row's tick: what both clients store and `tripPlanAddPicks` matches. */
+export const tripPlanAddKey = (row: { kind: string; id: string }) =>
+  `${row.kind}:${row.id}`;
+
 /**
  * What Add a copy sends: the ticked rows still offered, in list order. A
  * tick whose row a ticked place now brings is not sent (it would be copied
@@ -1133,7 +1137,7 @@ export function tripPlanAddPicks<T extends { kind: string; id: string }>(
   offered: readonly T[],
   ticked: readonly string[],
 ): T[] {
-  return offered.filter((row) => ticked.includes(`${row.kind}:${row.id}`));
+  return offered.filter((row) => ticked.includes(tripPlanAddKey(row)));
 }
 
 /**
