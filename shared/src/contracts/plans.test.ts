@@ -58,6 +58,10 @@ import {
   tripPlanInvitedLine,
   tripPlanPreviewHeaded,
   tripPlanTripLogPlacesLine,
+  tripPlanAddCopyPriceLine,
+  tripPlanAddOutcome,
+  tripPlanAddKey,
+  tripPlanAddPicks,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -954,5 +958,67 @@ describe("Start a trip log's places line", () => {
     expect(tripPlanTripLogPlacesLine([withOne], false)).toMatch(
       /without its photos/,
     );
+  });
+});
+
+describe("Add a copy's footer and outcome", () => {
+  const MB = 1024 * 1024;
+  const room = { quotaBytes: MB, usedBytes: 0 };
+  // Mutation: drop `&& copyMedia`, and "Photos count too." promises a cost
+  // the POST (copyMedia: false) never takes.
+  it("prices what is ticked, photos only when they come", () => {
+    expect(
+      tripPlanAddCopyPriceLine({
+        bytes: 0,
+        placesPicked: false,
+        copyMedia: true,
+        ...room,
+      }),
+    ).toBeNull();
+    expect(
+      tripPlanAddCopyPriceLine({
+        bytes: 0,
+        placesPicked: true,
+        copyMedia: true,
+        ...room,
+      }),
+    ).toMatch(/Photos count too\.$/);
+    expect(
+      tripPlanAddCopyPriceLine({
+        bytes: MB,
+        placesPicked: true,
+        copyMedia: false,
+        ...room,
+      }),
+    ).not.toMatch(/Photos/);
+  });
+
+  // Mutations: send every tick, and a route ticked before its place goes
+  // twice, once alone and once with the place, both charged; or send every
+  // row offered (`return offered`), and an unticked route goes too.
+  it("sends only ticks still offered, in list order", () => {
+    const place = { kind: "place", id: "p" };
+    const unticked = { kind: "route", id: "q" };
+    const pdf = { kind: "geoPdf", id: "g" };
+    const ticked = [pdf, { kind: "route", id: "r" }, place].map(tripPlanAddKey);
+    expect(tripPlanAddPicks([place, unticked, pdf], ticked)).toEqual([
+      place,
+      pdf,
+    ]);
+  });
+
+  // Mutation: toast a run that added nothing, and its reason leaves the
+  // dialog where it can be read.
+  it("says what landed, and nothing when nothing did", () => {
+    const base = { asked: 2, skipped: 0, outOfSpace: false, why: null };
+    expect(tripPlanAddOutcome({ ...base, added: 0, why: "No." })).toBeNull();
+    expect(tripPlanAddOutcome({ ...base, added: 2 })).toEqual({
+      message: "Added 2 copies.",
+      tone: "info",
+    });
+    expect(tripPlanAddOutcome({ ...base, added: 1, why: "No." })).toEqual({
+      message: "Added 1 of 2. No.",
+      tone: "error",
+    });
   });
 });

@@ -24,6 +24,8 @@ import {
   type TripPlanView,
 } from "../tripPlans.js";
 import type { ScreenContract } from "./types.js";
+import { formatBytes } from "../format.js";
+import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
 
 export const TRIP_PLANS_LIST = {
@@ -390,6 +392,7 @@ export const TRIP_PLAN_PAGE = {
     bringPhotos: "Bring its photos",
     photosCountToo: "Photos count too.",
     addCopyFailed: "Couldn't add a copy.",
+    mapsLoadFailed: "Couldn't load your maps.",
     nothingToAdd: "Nothing of yours here yet.",
     nothingTicked: "Tick something to add.",
     saveCopyLine:
@@ -1093,6 +1096,71 @@ export function tripPlanAddCopyPrice(
 ): string {
   const room = `You have ${left} left.`;
   return uses ? `Uses ${uses} of your storage. ${room}` : room;
+}
+
+/**
+ * Add a copy's price line, or null while nothing ticked is priced: what the
+ * ticked files use of the storage left, and "Photos count too." when ticked
+ * places bring their photos (their size isn't in the list). Null too until
+ * the account's storage is known.
+ */
+export function tripPlanAddCopyPriceLine(args: {
+  /** The ticked files' and maps' sizes, summed. */
+  bytes: number;
+  /** A place is among what is sent. */
+  placesPicked: boolean;
+  /** Bring its photos. */
+  copyMedia: boolean;
+  quotaBytes: number | null;
+  usedBytes: number | null;
+}): string | null {
+  const photosToo = args.placesPicked && args.copyMedia;
+  if (args.quotaBytes == null || args.usedBytes == null) return null;
+  if (args.bytes === 0 && !photosToo) return null;
+  const line = tripPlanAddCopyPrice(
+    args.bytes > 0 ? formatBytes(args.bytes) : null,
+    formatBytes(Math.max(0, args.quotaBytes - args.usedBytes)),
+  );
+  return photosToo ? `${line} ${TRIP_PLAN_PAGE.copy.photosCountToo}` : line;
+}
+
+/** An Add a copy row's tick: what both clients store and `tripPlanAddPicks` matches. */
+export const tripPlanAddKey = (row: { kind: string; id: string }) =>
+  `${row.kind}:${row.id}`;
+
+/**
+ * What Add a copy sends: the ticked rows still offered, in list order. A
+ * tick whose row a ticked place now brings is not sent (it would be copied
+ * twice); it comes back ticked if that place is unticked.
+ */
+export function tripPlanAddPicks<T extends { kind: string; id: string }>(
+  offered: readonly T[],
+  ticked: readonly string[],
+): T[] {
+  return offered.filter((row) => ticked.includes(tripPlanAddKey(row)));
+}
+
+/**
+ * How an Add a copy run ended, as its toast says it: what landed, the photos
+ * that didn't come, and why it stopped. Null when nothing landed: the dialog
+ * stays open with the reason.
+ */
+export function tripPlanAddOutcome(args: {
+  added: number;
+  asked: number;
+  skipped: number;
+  outOfSpace: boolean;
+  /** The stop's reason, when one stopped the run. */
+  why: string | null;
+}): { message: string; tone: "info" | "error" } | null {
+  if (args.added === 0) return null;
+  const photos = mediaSkippedSentence(args.skipped, args.outOfSpace);
+  return {
+    message: [tripPlanAddedMessage(args.added, args.asked), photos, args.why]
+      .filter(Boolean)
+      .join(" "),
+    tone: photos || args.why ? "error" : "info",
+  };
 }
 
 /** Start a trip log's line: what saving the picked places brings. Photos

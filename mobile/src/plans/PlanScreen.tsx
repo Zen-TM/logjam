@@ -31,6 +31,7 @@ import {
   tripPlanIsOver,
   tripPlanNotice,
   tripTypeLabel,
+  untitledJobTitle,
   weatherAge as updatedAgo,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_OFFLINE,
@@ -87,6 +88,7 @@ import {
   type SaveCopyTarget,
 } from "./SaveCopySheet";
 import { patchPlan } from "./plansApi";
+import { AddCopySheet } from "./AddCopySheet";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
   afterPlanWrite,
@@ -462,7 +464,12 @@ function PlanPage({
       ) : null,
     items:
       view === "items" ? (
-        <Items plan={plan} online={online} onInfo={notify} />
+        <Items
+          plan={plan}
+          online={online}
+          canAdd={adds.has("copy")}
+          onInfo={notify}
+        />
       ) : null,
     forms:
       view === "forms" ? (
@@ -655,14 +662,40 @@ function WriteUp({
 function Items({
   plan,
   online,
+  canAdd,
   onInfo,
 }: {
   plan: TripPlanView;
   online: boolean;
+  /** The caller may Add a copy (and it's live). */
+  canAdd: boolean;
   onInfo: (message: string, tone?: "info" | "error") => void;
 }) {
   const theme = useTheme();
   const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
+  const [adding, setAdding] = useState(false);
+  const styles = useStyles();
+  // The button only dims: the words go under it (ui/Button.tsx).
+  const add = canAdd ? (
+    <>
+      <Button
+        label={planAddVerbLabel("copy")}
+        icon="copy"
+        variant="outlineAccent"
+        disabled={!online}
+        disabledReason={OFFLINE}
+        onPress={() => setAdding(true)}
+      />
+      {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+      <AddCopySheet
+        planId={plan.id}
+        visible={adding}
+        online={online}
+        onClose={() => setAdding(false)}
+        onDone={onInfo}
+      />
+    </>
+  ) : null;
   /** Save a copy, on each way and map: its row's trailing control, dimmed
    *  offline with the reason in its label (a route's row says it too). */
   const saveCopy = (target: SaveCopyTarget) => (
@@ -688,7 +721,12 @@ function Items({
     opens || online ? addedBy : [addedBy, OFFLINE].filter(Boolean).join(" · ");
   const { ways } = tripPlanCounts(plan);
   if (plan.places.length + ways + plan.geoPdfs.length === 0)
-    return <EmptyState icon="place" title={copy.itemsEmpty} />;
+    return (
+      <>
+        <EmptyState icon="place" title={copy.itemsEmpty} />
+        {add}
+      </>
+    );
   // A heading needs a second group to divide from (shared/DESIGN.md §2).
   const headed =
     [plan.places.length, ways, plan.geoPdfs.length].filter((n) => n > 0)
@@ -787,7 +825,7 @@ function Items({
           onPhone,
           online,
         );
-        const title = pdf.title ?? "GeoPDF";
+        const title = pdf.title ?? untitledJobTitle("geoPdfJob");
         return (
           <Row
             key={pdf.id}
@@ -814,6 +852,7 @@ function Items({
           />
         );
       })}
+      {add}
       <SaveCopySheet
         planId={plan.id}
         target={saving}
