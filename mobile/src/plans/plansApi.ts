@@ -2,6 +2,8 @@
 // Online only: a plan is fetched and cached (`plansCache.ts`), never synced,
 // and a write waits for a connection.
 import type {
+  TripPlanAnswerPut,
+  TripPlanAnswerView,
   TripPlanCreate,
   TripPlanMemberView,
   TripPlanRole,
@@ -43,6 +45,17 @@ export const deletePlan = (id: string) =>
 /** Leave, decline an invite or withdraw a request: one call, by status. */
 export const leavePlan = (id: string) =>
   apiFetch<void>(`${plan(id)}/members/me`, { method: "DELETE" });
+
+/** A member's answer to a form; 409 if the form or who sees it changed. */
+export const putAnswer = (
+  planId: string,
+  formId: string,
+  body: TripPlanAnswerPut,
+) =>
+  apiFetch<TripPlanAnswerView>(
+    `${plan(planId)}/forms/${encodeURIComponent(formId)}/answers/me`,
+    { method: "PUT", body },
+  );
 
 export const createSection = (planId: string, body: TripPlanSectionCreate) =>
   apiFetch<TripPlanSectionView>(`${plan(planId)}/sections`, {

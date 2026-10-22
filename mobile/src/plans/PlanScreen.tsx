@@ -30,6 +30,7 @@ import {
   tripPlanNotice,
   tripTypeLabel,
   weatherAge as updatedAgo,
+  TRIP_PLAN_FORMS,
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
   type SectionKeysOn,
@@ -64,6 +65,7 @@ import {
   type ChipOption,
   type ToastMessage,
 } from "../ui";
+import { FormSheet, type FormSheetState } from "./FormSheet";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
 import {
@@ -294,6 +296,7 @@ function PlanPage({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
+  const [formSheet, setFormSheet] = useState<FormSheetState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
     setToast({ text, tone, nonce: Date.now() });
@@ -382,7 +385,25 @@ function PlanPage({
     ),
     notices: notice ? (
       <View style={styles.notice}>
-        <Notice icon={notice.icon}>{notice.text}</Notice>
+        <Notice
+          icon={notice.icon}
+          controls={
+            notice.kind === "answer" ? (
+              <Button
+                label={TRIP_PLAN_FORMS.copy.answer}
+                compact
+                variant="outlineAccent"
+                disabled={!online}
+                disabledReason={OFFLINE}
+                onPress={() =>
+                  setFormSheet({ formId: notice.formId, answering: true })
+                }
+              />
+            ) : undefined
+          }
+        >
+          {notice.text}
+        </Notice>
       </View>
     ) : null,
     dates: (
@@ -417,7 +438,13 @@ function PlanPage({
       view === "items" ? (
         <Items plan={plan} online={online} onInfo={notify} />
       ) : null,
-    forms: view === "forms" ? <Forms plan={plan} /> : null,
+    forms:
+      view === "forms" ? (
+        <Forms
+          plan={plan}
+          onOpen={(formId) => setFormSheet({ formId, answering: false })}
+        />
+      ) : null,
     people:
       view === "people" ? (
         <PeopleView
@@ -501,6 +528,13 @@ function PlanPage({
         onState={setSectionSheet}
         onInfo={notify}
         onError={(text) => notify(text, "error")}
+      />
+      <FormSheet
+        state={formSheet}
+        plan={plan}
+        online={online}
+        onState={setFormSheet}
+        onInfo={notify}
       />
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -727,7 +761,13 @@ function Items({
   );
 }
 
-function Forms({ plan }: { plan: TripPlanView }) {
+function Forms({
+  plan,
+  onOpen,
+}: {
+  plan: TripPlanView;
+  onOpen: (formId: string) => void;
+}) {
   const styles = useStyles();
   const { assetHue } = useHues();
   if (plan.forms.length === 0)
@@ -748,6 +788,7 @@ function Forms({ plan }: { plan: TripPlanView }) {
       subtitle={
         form.visibleTo === "leaders" ? copy.seenByLeaders : copy.seenByMembers
       }
+      onPress={() => onOpen(form.id)}
       right={
         form.requiredToJoin ? (
           <View style={styles.pills}>
