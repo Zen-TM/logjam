@@ -1,8 +1,10 @@
 // A plan's ⋯ on its page. WHICH verbs, in what order and under what words is
 // `planVerbs` in `@logjam/shared`, the declaration Logjam Web's menu renders
-// from too; this sheet only says how each runs here. Every one of them writes,
-// so offline each is drawn disabled with its reason (mobile/DESIGN.md §8).
-// Edit is the caller's: this sheet closes and the caller opens the form.
+// from too; this sheet only says how each runs here. Every one but Start a
+// trip log writes to the plan, so offline each is drawn disabled with its
+// reason (mobile/DESIGN.md §8); a trip log is the caller's own and queues.
+// Edit and Start a trip log are the caller's: this sheet closes and the
+// caller opens the form.
 import { Fragment } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import {
@@ -34,6 +36,7 @@ export function PlanOptionsSheet({
   online,
   onClose,
   onEdit,
+  onTripLog,
   onInfo,
   onError,
   onGone,
@@ -44,6 +47,7 @@ export function PlanOptionsSheet({
   online: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onTripLog: () => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** The caller left or deleted the plan: its page must go, saying so. */
@@ -93,6 +97,7 @@ export function PlanOptionsSheet({
   const run = (id: PlanVerbId, target: TripPlanView) => {
     onClose();
     if (id === "edit") return onEdit();
+    if (id === "tripLog") return onTripLog();
     if (id === "archive" || id === "unarchive") {
       const archived = id === "archive";
       void write(
@@ -131,16 +136,13 @@ export function PlanOptionsSheet({
     }
   };
 
-  // ponytail: Start a trip log and Print are not drawn here yet. Print is
-  // Logjam Web's (`planVerbs` leaves it out); a trip log from a plan needs the
-  // trip form to take a prefill, which comes with Add a copy.
   const verbs = plan
     ? planVerbs("gps", plan.myRole, {
         archived: plan.archivedAt != null,
         dated: plan.startDate != null || plan.endDate != null,
         over: tripPlanIsOver(plan, todayDateKey()),
         ...tripPlanLeaveState(plan),
-      }).filter((verb) => verb.id !== "tripLog")
+      })
     : [];
 
   return (
@@ -161,8 +163,15 @@ export function PlanOptionsSheet({
                 icon={verb.icon}
                 hue={verb.danger ? theme.warning : undefined}
                 title={verb.label}
-                subtitle={online ? verb.disabledReason : OFFLINE}
-                disabled={!online || verb.disabledReason != null}
+                subtitle={
+                  online || verb.id === "tripLog"
+                    ? verb.disabledReason
+                    : OFFLINE
+                }
+                disabled={
+                  (!online && verb.id !== "tripLog") ||
+                  verb.disabledReason != null
+                }
                 onPress={() => run(verb.id, plan)}
               />
             </Fragment>

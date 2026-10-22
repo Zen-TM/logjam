@@ -11,6 +11,7 @@ import {
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
   tripPrefillFromTrack,
+  type TripPlanTripLogPrefill,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
@@ -91,6 +92,7 @@ export function TripEditSheet({
   places,
   initialPlaces,
   fromTrack,
+  prefill,
   existingTypes,
   onSaved,
   online,
@@ -114,6 +116,13 @@ export function TripEditSheet({
    * when the sheet opens, not when it changes.
    */
   fromTrack?: TripTrackSource | null;
+  /**
+   * "Start a trip log from this plan": a NEW trip opens on the plan's first
+   * day, named after it, with its types and its write-up as notes
+   * (`tripPlanTripLogPrefill`). Ignored when editing; read when the sheet
+   * opens, like `initialPlaces`.
+   */
+  prefill?: TripPlanTripLogPrefill | null;
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -229,14 +238,14 @@ export function TripEditSheet({
         ? toDateKey(new Date(trip.date))
         : fromTrack
           ? tripPrefillFromTrack({ startedAt: fromTrack.startedAt }).date
-          : todayDateKey(),
+          : (prefill?.date ?? todayDateKey()),
     );
     setSelected(
       trip ? trip.places.map((link) => ({ ...link })) : (initialPlaces ?? []),
     );
-    setDisplayName(trip?.displayName ?? "");
-    setTypes(trip?.types ?? []);
-    setNotes(trip?.notes ?? "");
+    setDisplayName(trip?.displayName ?? prefill?.displayName ?? "");
+    setTypes(trip?.types ?? prefill?.types ?? []);
+    setNotes(trip?.notes ?? prefill?.notes ?? "");
     setDateTarget({ kind: "trip" });
     setEditingField(null);
     setFieldValues(fieldValueStrings(trip?.customFields));

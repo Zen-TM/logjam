@@ -776,6 +776,9 @@ export function tripPlanTripLogPrefill(plan: {
   };
 }
 
+/** What the trip form opens with, from a plan. */
+export type TripPlanTripLogPrefill = ReturnType<typeof tripPlanTripLogPrefill>;
+
 // ── Forms ───────────────────────────────────────────────────────────
 
 export const TRIP_PLAN_FORMS = {

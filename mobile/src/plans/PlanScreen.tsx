@@ -79,6 +79,7 @@ import { openablePlanMedia, planFiles, planFileSource } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
+import { PlanTripLogSheet } from "./PlanTripLogSheet";
 import { patchPlan } from "./plansApi";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
@@ -296,6 +297,7 @@ function PlanPage({
   const { plan } = cached;
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [tripLogOpen, setTripLogOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
   const [formSheet, setFormSheet] = useState<FormSheetState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -499,10 +501,20 @@ function PlanPage({
         online={online}
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditOpen(true)}
+        onTripLog={() => setTripLogOpen(true)}
         onInfo={notify}
         onError={(text) => notify(text, "error")}
         onGone={onGone}
         onLeaving={onLeaving}
+      />
+      <PlanTripLogSheet
+        plan={tripLogOpen ? plan : null}
+        online={online}
+        onClose={() => setTripLogOpen(false)}
+        onSaved={(text) => {
+          setTripLogOpen(false);
+          notify(text);
+        }}
       />
       <PlanDetailsSheet
         visible={editOpen}
