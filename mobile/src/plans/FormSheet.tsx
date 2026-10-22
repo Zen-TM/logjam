@@ -120,11 +120,10 @@ export function FormSheet({
         formUpdatedAt: target.updatedAt,
       });
       await afterPlanWrite(plan.id);
+      // Closed, as Logjam Web's dialog closes, so the toast shows; unless
+      // the sheet has moved on meanwhile.
+      onState((now) => (now === sending ? null : now));
       onInfo(copy.saved);
-      // Back to the form, unless the sheet has moved on meanwhile.
-      onState((now) =>
-        now === sending ? { formId: target.id, answering: false } : now,
-      );
     } catch (err) {
       setError(messageFromError(err, copy.saveFailed));
       // A 409 is the form or who sees it changing: fetched again, the draft
@@ -225,9 +224,10 @@ export function FormSheet({
         <PlanFormFields form={form} draft={draft} onChange={setDraft} />
       ) : sections ? (
         <View style={styles.body}>
-          {contractSectionKeys(TRIP_PLAN_FORMS, "gps").map((key) => (
-            <View key={key}>{sections[key]}</View>
-          ))}
+          {/* The hero is the sheet's title: no empty slot for it. */}
+          {contractSectionKeys(TRIP_PLAN_FORMS, "gps").map((key) =>
+            sections[key] ? <View key={key}>{sections[key]}</View> : null,
+          )}
         </View>
       ) : null}
     </BottomSheet>

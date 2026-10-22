@@ -2,7 +2,7 @@
 // them in: one control per question kind, holding the shared draft
 // (`tripPlanAnswerDraft.ts`). Logjam Web's twin is `PlanFormFields` in
 // PlanAnswerDialog.tsx; the parser that checks what is sent is shared too.
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 import {
   tripPlanVisibilityLine,
   TRIP_PLAN_FORMS,
@@ -13,15 +13,8 @@ import {
   type TripPlanQuestion,
 } from "@logjam/shared";
 
-import { makeStyles, muted } from "../theme";
-import {
-  ChipPicker,
-  ChipRail,
-  Field,
-  FormStack,
-  SwitchRow,
-  TextField,
-} from "../ui";
+import { makeStyles, muted, spacing } from "../theme";
+import { Chip, ChipRail, Field, FormStack, SwitchRow, TextField } from "../ui";
 
 const copy = TRIP_PLAN_FORMS.copy;
 
@@ -34,6 +27,7 @@ function QuestionField({
   value: TripPlanAnswerDraft[string] | undefined;
   onChange: (next: TripPlanAnswerDraft[string]) => void;
 }) {
+  const styles = useStyles();
   const label = question.required ? `${question.label} *` : question.label;
   const hint = question.help || undefined;
   const text = typeof value === "string" ? value : "";
@@ -89,24 +83,28 @@ function QuestionField({
         </Field>
       );
     case "multiChoice": {
+      // Chips under a field's label, not ChipPicker: that one heads a
+      // vocabulary with a section header, which a question isn't.
       const ticked = Array.isArray(value) ? value : [];
       return (
-        <ChipPicker
-          label={label}
-          hint={hint}
-          options={(question.options ?? []).map((option) => ({
-            value: option.id,
-            label: option.label,
-          }))}
-          selected={ticked}
-          onToggle={(id) =>
-            onChange(
-              ticked.includes(id)
-                ? ticked.filter((each) => each !== id)
-                : [...ticked, id],
-            )
-          }
-        />
+        <Field label={label} hint={hint}>
+          <View style={styles.chips}>
+            {(question.options ?? []).map((option) => (
+              <Chip
+                key={option.id}
+                label={option.label}
+                active={ticked.includes(option.id)}
+                onPress={() =>
+                  onChange(
+                    ticked.includes(option.id)
+                      ? ticked.filter((id) => id !== option.id)
+                      : [...ticked, option.id],
+                  )
+                }
+              />
+            ))}
+          </View>
+        </Field>
       );
     }
     case "agree":
@@ -151,4 +149,5 @@ export function PlanFormFields({
 
 const useStyles = makeStyles((theme, textRole) => ({
   visibility: { ...muted(theme, textRole.detail) },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
 }));
