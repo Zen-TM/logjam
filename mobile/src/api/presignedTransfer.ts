@@ -97,10 +97,12 @@ export async function uploadToPresignedUrl(
   );
 }
 
-/** Download a presigned URL to `fileUri`. The directory must already exist. */
+/** Download a presigned URL to `fileUri`. The directory must already exist.
+ *  `onBytes` hears the bytes written so far, for a progress row. */
 export async function downloadFromPresignedUrl(
   downloadUrl: string,
   fileUri: string,
+  onBytes?: (written: number) => void,
 ): Promise<FileSystem.FileSystemDownloadResult> {
   let moved = false;
   const task = FileSystem.createDownloadResumable(
@@ -109,6 +111,7 @@ export async function downloadFromPresignedUrl(
     {},
     ({ totalBytesWritten }) => {
       if (totalBytesWritten > 0) moved = true;
+      onBytes?.(totalBytesWritten);
     },
   );
   return awaitStart(

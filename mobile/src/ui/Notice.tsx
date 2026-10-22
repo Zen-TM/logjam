@@ -13,29 +13,33 @@ import { Icon, type Glyph } from "./Icon";
  * centred on the screen but whose words hug the left reads as drifting); the
  * intent is the glyph, and `tone="warning"` adds the warning edge.
  * Over the map it is not pressable, so it never eats a pan; `action` is the one
- * pressable inside it.
+ * pressable beside the words, and `controls` a row of them under the words, for
+ * a notice that is a mode with ways out (plan mode on the map).
  */
 export function Notice({
   icon,
   children,
   action,
+  controls,
+  numberOfLines,
   tone = "info",
 }: {
   icon?: Glyph;
   children: string;
   /** Trailing control that answers the notice (an `IconButton`). */
   action?: React.ReactNode;
+  /** Controls in a row under the words. */
+  controls?: React.ReactNode;
+  /** A user's own title in the words stops at two lines (shared/DESIGN.md §9). */
+  numberOfLines?: number;
   tone?: "info" | "warning";
 }) {
   const theme = useTheme();
   const styles = useStyles();
 
   const warning = tone === "warning";
-  return (
-    <View
-      style={[styles.notice, warning && styles.warning]}
-      accessibilityRole={warning ? "alert" : undefined}
-    >
+  const line = (
+    <>
       {icon ? (
         <Icon
           idea={icon}
@@ -43,8 +47,29 @@ export function Notice({
           color={warning ? theme.warning : theme.accent}
         />
       ) : null}
-      <Text style={styles.text}>{children}</Text>
+      <Text style={styles.text} numberOfLines={numberOfLines}>
+        {children}
+      </Text>
       {action}
+    </>
+  );
+  return (
+    <View
+      style={[
+        styles.notice,
+        controls != null && styles.stacked,
+        warning && styles.warning,
+      ]}
+      accessibilityRole={warning ? "alert" : undefined}
+    >
+      {controls ? (
+        <>
+          <View style={styles.line}>{line}</View>
+          <View style={styles.controls}>{controls}</View>
+        </>
+      ) : (
+        line
+      )}
     </View>
   );
 }
@@ -65,6 +90,14 @@ const useStyles = makeStyles((theme, textRole) => ({
     backgroundColor: theme.page,
   },
   warning: { borderColor: theme.warning },
+  stacked: { flexDirection: "column", paddingVertical: spacing(1) },
+  line: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  controls: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: spacing(1),
+  },
   // `flexShrink`, not `flex: 1`: the notice hugs its words until they wrap.
   text: {
     flexShrink: 1,

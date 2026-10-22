@@ -1,5 +1,5 @@
-// More tab — the hub for the surfaces folded off the tab bar (Inbox, Friends,
-// Sync issues, Settings, Account).
+// More tab — the hub for the surfaces folded off the tab bar (Inbox, Plans,
+// Friends, Sync issues, Settings, Account).
 //
 // A hub is a menu, and a menu is not very interesting. What makes this screen
 // worth opening is the ONE question it can answer that no other screen owns:
@@ -19,14 +19,22 @@
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Text, View } from "react-native";
+import {
+  tripPlansBadgeCount,
+  tripPlansMoreSubtitle,
+  TRIP_PLANS_LIST,
+  type TripPlanSummary,
+} from "@logjam/shared";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
+import { readPlansList } from "../plans/plansCache";
+import { onMirrorChanged } from "../sync/syncDb";
 import {
   usePendingSyncCount,
   useSyncIssueCount,
@@ -42,6 +50,7 @@ import {
   StatusPill,
   Icon,
   Toast,
+  todayDateKey,
   type Glyph,
   type ToastMessage,
 } from "../ui";
@@ -63,6 +72,7 @@ export function MoreScreen({
   onOpenInbox,
   onOpenAccount,
   onOpenFriends,
+  onOpenPlans,
   onOpenSyncIssues,
   onOpenSettings,
 }: {
@@ -70,6 +80,7 @@ export function MoreScreen({
   onOpenInbox: () => void;
   onOpenAccount: () => void;
   onOpenFriends: () => void;
+  onOpenPlans: () => void;
   onOpenSyncIssues: () => void;
   onOpenSettings: () => void;
 }) {
@@ -90,6 +101,8 @@ export function MoreScreen({
   const syncStatus = useSyncStatus();
   const pendingCount = usePendingSyncCount();
   const issueCount = useSyncIssueCount();
+  const plans = useCachedPlansList(isGuest);
+  const plansWaiting = plans ? tripPlansBadgeCount(plans) : 0;
 
   const health = syncHealth({
     online,
@@ -180,6 +193,27 @@ export function MoreScreen({
             />
           }
         />
+        {/* Read from the plans cache, which the shell's poll keeps fresh: the
+            hub fetches nothing of its own. An invite is also an unread inbox
+            row, so it badges this row, not the tab a second time. */}
+        <Row
+          icon="plan"
+          title={TRIP_PLANS_LIST.title}
+          subtitle={
+            plans ? tripPlansMoreSubtitle(plans, todayDateKey()) : undefined
+          }
+          onPress={onOpenPlans}
+          {...capabilityRowProps("plans", accountState, online)}
+          right={
+            <Trailing
+              badge={
+                plansWaiting ? (
+                  <StatusPill label={String(plansWaiting)} tone="accent" />
+                ) : null
+              }
+            />
+          }
+        />
         <Row
           icon="friends"
           title="Friends"
@@ -235,6 +269,21 @@ export function MoreScreen({
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
+}
+
+/** The last GET /plans, re-read whenever the cache changes; null for a guest. */
+function useCachedPlansList(isGuest: boolean): TripPlanSummary[] | null {
+  const [plans, setPlans] = useState<TripPlanSummary[] | null>(null);
+  useEffect(() => {
+    if (isGuest) return;
+    const read = () =>
+      readPlansList()
+        .then((list) => setPlans(list?.plans ?? null))
+        .catch(console.error);
+    read();
+    return onMirrorChanged(read);
+  }, [isGuest]);
+  return plans;
 }
 
 /** Optional badge, then the chevron — the §5 trailing order. */

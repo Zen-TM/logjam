@@ -1,0 +1,224 @@
+import { useMemo, useRef, useState } from "react";
+import { Text, View } from "react-native";
+import {
+  distinctTripTypes,
+  mediaSkippedSentence,
+  messageFromError,
+  MAX_PLACES_PER_TRIP,
+  saveTripPlanPlaces,
+  tripPlanTripLogPlacesLine,
+  tripPlanTripLogPrefill,
+  TRIP_PLACES_CAP_SENTENCE,
+  TRIP_PLAN_PAGE,
+  type TripPlanView,
+} from "@logjam/shared";
+
+import { unavailableReasonText } from "../auth/capabilities";
+import { TripEditSheet } from "../logs/TripEditSheet";
+import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
+import { requestSync } from "../sync/syncEngine";
+import { useMirrorPlaces, useMirrorTrips } from "../sync/useSyncQueries";
+import { makeStyles, muted, spacing } from "../theme";
+import { BottomSheet, Button, ErrorBanner, Row, SelectionMark } from "../ui";
+import { savePlanItem } from "./plansApi";
+import { afterPlanWrite } from "./plansCache";
+
+const copy = TRIP_PLAN_PAGE.copy;
+const OFFLINE = unavailableReasonText("needs-connection");
+
+/**
+ * "Start a trip log from this plan": the same trip form as everywhere
+ * (shared/DESIGN.md §10), opened on the plan's first day with its name, types
+ * and write-up (`tripPlanTripLogPrefill`). A plan with places asks first
+ * which were on the trip: each picked one is saved as the caller's own copy
+ * (Save a copy, online), in the plan's order, with or without its photos as
+ * the account's remembered `copyPlaceMedia` says, and the trip links the
+ * copies, as frontend/src/components/plans/PlanTripLogPlacesDialog.tsx does.
+ * Picking none goes straight to the form, which queues offline.
+ */
+export function PlanTripLogSheet({
+  plan,
+  online,
+  onClose,
+  onSaved,
+}: {
+  /** Null while closed. */
+  plan: TripPlanView | null;
+  online: boolean;
+  onClose: () => void;
+  onSaved: (message: string, tone: "info" | "error") => void;
+}) {
+  const styles = useStyles();
+  const places = useMirrorPlaces();
+  const trips = useMirrorTrips();
+  const existingTypes = useMemo(
+    () => distinctTripTypes(trips.data ?? []),
+    [trips.data],
+  );
+  const prefill = useMemo(
+    () => (plan ? tripPlanTripLogPrefill(plan) : null),
+    [plan],
+  );
+
+  // "saved": the copies are made and the places sheet is closing; the form
+  // opens once it has gone (`onClosed`), as one modal can't open while
+  // another closes on Android.
+  const [step, setStep] = useState<"places" | "saved" | "form">("places");
+  const [picked, setPicked] = useState<string[]>([]);
+  // Plan place id → its copy's id: a retry after a stop saves only the rest.
+  const [copies, setCopies] = useState<Record<string, string>>({});
+  // The photos that didn't come, counted across retries and said once when
+  // the flow ends (a toast now would draw under the form that opens at
+  // once). A ref: it is read where the flow ends, not drawn.
+  const lost = useRef({ count: 0, outOfSpace: false });
+  // The form's "Trip logged.", kept for the close that follows it in the
+  // same tick, so the photo note joins it rather than replacing it.
+  const logged = useRef<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const openKey = plan?.id ?? null;
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
+  if (openKey !== openedFor) {
+    setOpenedFor(openKey);
+    setStep(plan && plan.places.length > 0 ? "places" : "form");
+    setPicked([]);
+    setCopies({});
+    setError(null);
+  }
+  const asking = plan !== null && step === "places";
+  // The stored preference decides (the save sends none, so the server
+  // applies it); the line reads it, as on Logjam Web: no switch here.
+  const [withMedia] = useRememberedCopyMedia(asking);
+  // Picks still in the plan, in its order (a refetch can take one away).
+  const chosen = plan ? plan.places.filter((p) => picked.includes(p.id)) : [];
+
+  async function next(target: TripPlanView) {
+    setBusy(true);
+    setError(null);
+    const run = await saveTripPlanPlaces({
+      picked: chosen,
+      copies,
+      save: (placeId) => savePlanItem(target.id, "place", placeId),
+      why: (err) => messageFromError(err, copy.saveCopyFailed),
+    });
+    setCopies(run.copies);
+    lost.current.count += run.skipped;
+    lost.current.outOfSpace ||= run.outOfSpace;
+    // The copies reach the phone by the next pull: asked for now.
+    if (run.added > 0) void requestSync().catch(console.error);
+    if (run.stopped) {
+      setError(run.stopped.message);
+      // Gone from the plan meanwhile: fetched again, its row goes too.
+      if (run.stopped.refetch)
+        await afterPlanWrite(target.id).catch(console.error);
+    } else setStep("saved");
+    setBusy(false);
+  }
+
+  // The flow's end (the form closed, saved or not, or the places step
+  // left): the photos that didn't come, said once.
+  const finish = () => {
+    const note = mediaSkippedSentence(
+      lost.current.count,
+      lost.current.outOfSpace,
+    );
+    lost.current = { count: 0, outOfSpace: false };
+    if (note)
+      onSaved(logged.current ? `${logged.current} ${note}` : note, "error");
+  };
+
+  const initialPlaces = chosen.flatMap((place) =>
+    copies[place.id] ? [{ id: copies[place.id], name: place.name }] : [],
+  );
+  const full = chosen.length >= MAX_PLACES_PER_TRIP;
+
+  return (
+    <>
+      <BottomSheet
+        visible={asking}
+        onClose={() => {
+          finish();
+          onClose();
+        }}
+        // Not while saving: the loop would land on the next session.
+        closable={!busy}
+        onClosed={() => setStep((was) => (was === "saved" ? "form" : was))}
+        title={copy.tripLogPlaces}
+        footer={
+          plan ? (
+            <View style={styles.footer}>
+              {error ? <ErrorBanner message={error} /> : null}
+              <Button
+                label={copy.tripLogNext}
+                loading={busy}
+                // Picking none needs no connection: nothing is saved.
+                disabled={!online && chosen.length > 0}
+                disabledReason={OFFLINE}
+                onPress={() => void next(plan)}
+              />
+              {!online && chosen.length > 0 ? (
+                <Text style={styles.muted}>{OFFLINE}</Text>
+              ) : null}
+            </View>
+          ) : undefined
+        }
+      >
+        {plan ? (
+          <View style={styles.body}>
+            <Text style={styles.muted}>
+              {tripPlanTripLogPlacesLine(chosen, withMedia)}
+            </Text>
+            {plan.places.map((place) => {
+              const on = picked.includes(place.id);
+              return (
+                <Row
+                  key={place.id}
+                  icon="place"
+                  title={place.name}
+                  selected={on}
+                  right={<SelectionMark selected={on} />}
+                  disabled={busy || (!on && full)}
+                  subtitle={!on && full ? TRIP_PLACES_CAP_SENTENCE : undefined}
+                  onPress={() =>
+                    setPicked((was) =>
+                      on
+                        ? was.filter((id) => id !== place.id)
+                        : [...was, place.id],
+                    )
+                  }
+                />
+              );
+            })}
+          </View>
+        ) : null}
+      </BottomSheet>
+      <TripEditSheet
+        online={online}
+        visible={plan !== null && step === "form"}
+        places={places.data ?? []}
+        initialPlaces={initialPlaces}
+        prefill={prefill}
+        existingTypes={existingTypes}
+        onClose={() => {
+          finish();
+          onClose();
+        }}
+        // Plainly: an attribute added inside the form says so too, and the
+        // form stays open; only a close in the same tick joins it.
+        onSaved={(message) => {
+          logged.current = message;
+          queueMicrotask(() => {
+            logged.current = null;
+          });
+          onSaved(message, "info");
+        }}
+      />
+    </>
+  );
+}
+
+const useStyles = makeStyles((theme, textRole) => ({
+  body: { gap: spacing(1) },
+  muted: { ...muted(theme, textRole.detail) },
+  footer: { gap: spacing(1) },
+}));

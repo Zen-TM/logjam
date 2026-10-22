@@ -25,8 +25,15 @@ import { IconButton, Icon } from "../ui";
 // light scheme's ink would vanish into the backdrop.
 const photoChrome = THEME_SCHEMES.sandstone.tokens;
 
+/** What the viewer needs of an item. A plan's photo, not a mirror row, gives
+ *  its downloaded copy or its URL as `localDisplayPath`. */
+export type ViewerMedia = Pick<
+  MirrorMedia,
+  "id" | "mediaType" | "filename" | "localDisplayPath"
+>;
+
 /**
- * Full-screen viewer for a trip's or place's attachments.
+ * Full-screen viewer for a trip's, place's or plan's attachments.
  *
  * Paged, not single-item: you arrive from one thumbnail but you are looking
  * through a set, so it swipes horizontally between items and offers arrows for
@@ -37,20 +44,21 @@ const photoChrome = THEME_SCHEMES.sandstone.tokens;
  * opening the viewer costs one download, not the whole trip's worth.
  *
  * PRIVACY: everything shown is already on the device; the viewer adds no
- * network access of its own beyond the authed media fetch the cache performs.
+ * network access of its own beyond the authed media fetch the cache performs,
+ * or a plan photo's presigned URL while it isn't downloaded.
  */
 export function MediaViewer({
   items,
   startIndex,
   onClose,
 }: {
-  items: MirrorMedia[];
+  items: readonly ViewerMedia[];
   startIndex: number;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const width = Dimensions.get("window").width;
-  const listRef = useRef<FlatList<MirrorMedia>>(null);
+  const listRef = useRef<FlatList<ViewerMedia>>(null);
   const [index, setIndex] = useState(startIndex);
 
   const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -101,9 +109,14 @@ export function MediaViewer({
         />
 
         <View style={[styles.topBar, { paddingTop: insets.top + spacing(1) }]}>
-          <Text style={styles.counter}>
-            {items.length > 1 ? `${index + 1} / ${items.length}` : ""}
-          </Text>
+          {/* An empty pill still draws its backdrop: one item gets none. */}
+          {items.length > 1 ? (
+            <Text
+              style={styles.counter}
+            >{`${index + 1} / ${items.length}`}</Text>
+          ) : (
+            <View />
+          )}
           <IconButton
             icon="close"
             accessibilityLabel="Close"
@@ -159,7 +172,7 @@ export function MediaViewer({
 }
 
 /** One page: resolves its own file, then renders by category. */
-function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
+function MediaPage({ item, active }: { item: ViewerMedia; active: boolean }) {
   const [uri, setUri] = useState<string | null>(item.localDisplayPath ?? null);
   const [state, setState] = useState<"idle" | "loading" | "missing">(
     item.localDisplayPath ? "idle" : "loading",

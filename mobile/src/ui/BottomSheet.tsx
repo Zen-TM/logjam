@@ -134,9 +134,16 @@ export function BottomSheet({
   overlay,
   header,
   children,
+  closable = true,
 }: {
   visible: boolean;
   onClose: () => void;
+  /**
+   * False while the sheet's work can't be left (a save in flight, whose
+   * reply would land on whatever opens next): a drag springs back, and the
+   * back gesture, the backdrop and × do nothing.
+   */
+  closable?: boolean;
   title: string;
   /**
    * Renders a back arrow beside the title. Present only for a sheet showing a
@@ -448,10 +455,10 @@ export function BottomSheet({
           animated: false,
         });
       }
-      if (outcome === "close") {
+      if (outcome === "close" && closable) {
         pull.current.closing = true;
         onClose();
-      } else if (outcome === "snap")
+      } else if (outcome === "snap" || outcome === "close")
         outerRef.current?.scrollToEnd({ animated: true });
     };
     // The owner has answered a close the drag asked for by rendering this
@@ -501,7 +508,7 @@ export function BottomSheet({
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={closable ? onClose : () => {}}
     >
       <Animated.View
         style={[styles.backdrop, { opacity: progress }]}
@@ -561,7 +568,7 @@ export function BottomSheet({
           style={{ height: Math.max(SHEET_TRAVEL, viewportHeight) }}
           accessibilityRole="button"
           accessibilityLabel={`Close ${title}`}
-          onPress={onClose}
+          onPress={closable ? onClose : undefined}
         />
         {/* Keyboard-aware: a sheet containing a TextInput must ride above the
             keyboard, or the field it exists to expose is the one thing hidden.
@@ -618,6 +625,7 @@ export function BottomSheet({
                 icon="close"
                 accessibilityLabel="Close"
                 color={theme.text}
+                disabled={!closable}
                 onPress={onClose}
               />
             </View>

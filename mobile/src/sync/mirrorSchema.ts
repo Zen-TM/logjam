@@ -27,6 +27,14 @@ export type TableSchema = {
   columns: Record<string, string>;
   /** Extra CREATE INDEX statements (name and body only). */
   indexes?: { name: string; on: string }[];
+  /**
+   * A mirror table that a mirror reset (`wipeMirror`, a schema-version bump)
+   * leaves alone: what it holds is fetched one row at a time and read
+   * offline, so no pull rebuilds it. Sign-out and a user change still clear
+   * it. A column added later reaches it as a local table's does
+   * (`ensureLocalColumns`). Guard: `plans/plansCache.test.ts`.
+   */
+  keepOnReset?: true;
 };
 
 export const SYNC_TABLES: readonly TableSchema[] = [
@@ -328,6 +336,29 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     name: "notifications_cache",
     kind: "mirror",
     columns: { fetched_at: "TEXT NOT NULL", payload_json: "TEXT NOT NULL" },
+  },
+  {
+    // Trip plans, fetched and cached like the inbox (`plans/plansCache.ts`):
+    // the last GET /plans, and the last GET /plans/:id of each plan opened.
+    // `plan_updated_at` is that response's `updatedAt`, compared with the
+    // poll's to mark a plan changed; `downloaded_at` is set by Download for
+    // the trip. Kept through a reset: a plan opened once reads in a canyon.
+    name: "plans_list_cache",
+    kind: "mirror",
+    keepOnReset: true,
+    columns: { fetched_at: "TEXT NOT NULL", payload_json: "TEXT NOT NULL" },
+  },
+  {
+    name: "plans_cache",
+    kind: "mirror",
+    keepOnReset: true,
+    columns: {
+      plan_id: "TEXT PRIMARY KEY",
+      fetched_at: "TEXT NOT NULL",
+      plan_updated_at: "TEXT NOT NULL",
+      downloaded_at: "TEXT",
+      payload_json: "TEXT NOT NULL",
+    },
   },
 ];
 

@@ -59,6 +59,13 @@ export const PLACE_LABEL_EXPR = [
   ["get", "name"],
 ];
 
+const MUTED_OPACITY = [
+  "case",
+  ["==", ["get", "muted"], true],
+  0.4,
+  1,
+] as unknown as number;
+
 const LABEL_STYLE = {
   textField: PLACE_LABEL_EXPR as unknown as string,
   ...PIN_LABEL_TEXT,
@@ -185,13 +192,16 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             // the map, not a second piece of information.
             circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
+            // `muted`: the user's own, faint beside a plan's in plan mode.
+            circleOpacity: MUTED_OPACITY,
+            circleStrokeOpacity: MUTED_OPACITY,
           }}
         />
         <Layer
           key={`${idPrefix}place-labels`}
           type="symbol"
           id={`${idPrefix}place-labels`}
-          style={LABEL_STYLE}
+          style={{ ...LABEL_STYLE, textOpacity: MUTED_OPACITY }}
         />
       </GeoJSONSource>
     </>
