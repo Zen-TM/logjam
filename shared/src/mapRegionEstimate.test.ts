@@ -262,9 +262,10 @@ describe("planRegionForBasemaps", () => {
     );
   });
 
-  // Mutation: leave the slope clip out of the totals, and the free-space
-  // check passes an area whose download then does not fit.
-  it("counts the slope clip in the bytes", () => {
+  // Mutation: halve SLOPE_TILE_BYTES, and the estimate no longer brackets
+  // the measured clip. (Leaving the slope out of the totals
+  // turns the two sum tests above red.)
+  it("prices the slope clip from its measured tiles", () => {
     const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
     // A real clip of this area, from the Katoomba sheet's slope, is 6.0 MB.
     expect(job.slope.meanBytes).toBeGreaterThan(4_500_000);
