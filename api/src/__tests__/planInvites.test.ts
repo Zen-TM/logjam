@@ -244,7 +244,7 @@ describe("holding a link", () => {
 
   it("refuses a request without the forms required to join", async () => {
     const res = await redeem(CAROL_SUB, token, {});
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(
       await prisma.tripPlanMember.count({
         where: { planId, userId: CAROL_ID },

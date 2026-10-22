@@ -11,7 +11,6 @@ import {
   isTripPlanFormPresetId,
   isTripPlanFormVisibility,
   parseTripPlanAnswers,
-  say,
   TRIP_PLAN_FORM_CHANGED_SENTENCE,
   TRIP_PLAN_MAX_FORMS,
   TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
@@ -310,8 +309,9 @@ export async function saveJoinAnswers(
   const missing = await tx.tripPlanForm.count({
     where: { planId, requiredToJoin: true, id: { notIn: ids } },
   });
-  if (missing > 0)
-    throw new AppError(400, say`Answer the forms marked required to join.`);
+  // Clients send every form the preview marked required, so one missing was
+  // made required after they read it: a 409, and they read it again.
+  if (missing > 0) throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
   const answers = forms.map((form) => {
     const entry = given[form.id];
     if (typeof entry !== "object" || entry === null || Array.isArray(entry))

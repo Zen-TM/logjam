@@ -226,9 +226,13 @@ describe("the invited preview and joining", () => {
         .set(as(CAROL_SUB))
         .send({ answers });
 
+    // Mutation: back to 400, and a joiner shown the forms before one was
+    // made required is never told to read them again.
     const none = await join({});
-    expect(none.status).toBe(400);
-    expect(none.body.error).toBe("Answer the forms marked required to join.");
+    expect(none.status).toBe(409);
+    expect(none.body.error).toBe(
+      "This form changed since you opened it. Check it, then answer again.",
+    );
     // Mutation: skip the visibleTo check in saveJoinAnswers.
     const widened = await join(await joinAnswers("members"));
     expect(widened.status).toBe(409);

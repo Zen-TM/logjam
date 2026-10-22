@@ -74,6 +74,7 @@ import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { PlanPreview } from "./plans/PlanPreview";
 import { PlanScreen } from "./plans/PlanScreen";
 import { PlansScreen } from "./plans/PlansScreen";
 import {
@@ -255,8 +256,9 @@ type MoreStackParams = {
   // A plan left or deleted comes back here with what happened.
   Plans: { message?: { text: string; at: number } } | undefined;
   // The name rides along for the hero while the cached plan is read.
-  /** `view`: the tab it opens on, People for a join request. */
-  Plan: { planId: string; name: string; view?: "people" };
+  /** `view`: the tab it opens on, People for a join request. `invited`: it
+   *  opens as the invite's preview (`opensPreview`), until Join. */
+  Plan: { planId: string; name: string; view?: "people"; invited?: boolean };
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -929,10 +931,9 @@ export function AppShell({
               planId: target.planId,
               name: TRIP_PLANS_LIST.title,
               view: target.view,
+              invited: target.invited,
             },
           });
-        } else if (target.kind === "plans") {
-          nav.navigate("More", { screen: "Plans" });
         } else {
           // Inbox lives inside the More stack.
           nav.navigate("More", { screen: "Inbox" });
@@ -1149,6 +1150,14 @@ export function AppShell({
                         onOpenPlace={(placeId) =>
                           navigation.navigate("MorePlaceDetail", { placeId })
                         }
+                        onOpenPlan={(target) =>
+                          navigation.navigate("Plan", {
+                            planId: target.planId,
+                            name: TRIP_PLANS_LIST.title,
+                            view: target.view,
+                            invited: target.invited,
+                          })
+                        }
                         // A notification about a saved item is a way in to that
                         // item: the Saved tab, on its filter, with the row pulsed.
                         // The filter alone when the notification names the thing
@@ -1245,6 +1254,7 @@ export function AppShell({
                           navigation.navigate("Plan", {
                             planId: plan.id,
                             name: plan.name,
+                            invited: plan.status === "invited",
                           })
                         }
                       />
@@ -1258,36 +1268,52 @@ export function AppShell({
                     // params under a screen that still holds A's state.
                     getId={({ params }) => params.planId}
                   >
-                    {({ navigation, route }) => (
-                      <PlanScreen
-                        planId={route.params.planId}
-                        name={route.params.name}
-                        initialView={route.params.view}
-                        onBack={() => navigation.goBack()}
-                        onShowOnMap={(planId, bbox) =>
-                          navigation.getParent()?.navigate("Map", {
-                            screen: "MapView",
-                            params: {
-                              planMode: { planId, nonce: Date.now() },
-                              ...(bbox && {
-                                focus: { bbox, nonce: Date.now() },
-                              }),
-                            },
-                          })
-                        }
-                        onDownloadMap={(bounds) =>
-                          navigation.getParent()?.navigate("Map", {
-                            screen: "MapRegionDownload",
-                            params: { bounds },
-                          })
-                        }
-                        onGone={(text) =>
-                          navigation.popTo("Plans", {
-                            message: { text, at: Date.now() },
-                          })
-                        }
-                      />
-                    )}
+                    {({ navigation, route }) =>
+                      route.params.invited ? (
+                        <PlanPreview
+                          planId={route.params.planId}
+                          name={route.params.name}
+                          onBack={() => navigation.goBack()}
+                          onJoined={() =>
+                            navigation.setParams({ invited: false })
+                          }
+                          onDeclined={(text) =>
+                            navigation.popTo("Plans", {
+                              message: { text, at: Date.now() },
+                            })
+                          }
+                        />
+                      ) : (
+                        <PlanScreen
+                          planId={route.params.planId}
+                          name={route.params.name}
+                          initialView={route.params.view}
+                          onBack={() => navigation.goBack()}
+                          onShowOnMap={(planId, bbox) =>
+                            navigation.getParent()?.navigate("Map", {
+                              screen: "MapView",
+                              params: {
+                                planMode: { planId, nonce: Date.now() },
+                                ...(bbox && {
+                                  focus: { bbox, nonce: Date.now() },
+                                }),
+                              },
+                            })
+                          }
+                          onDownloadMap={(bounds) =>
+                            navigation.getParent()?.navigate("Map", {
+                              screen: "MapRegionDownload",
+                              params: { bounds },
+                            })
+                          }
+                          onGone={(text) =>
+                            navigation.popTo("Plans", {
+                              message: { text, at: Date.now() },
+                            })
+                          }
+                        />
+                      )
+                    }
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="Account"

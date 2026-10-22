@@ -138,12 +138,18 @@ export const PLAN_FORM_VERBS = [
   },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
+/** A plan the caller asked to join, until they're let in: its row's ⋯. */
+export const PLAN_REQUEST_VERBS = [
+  { id: "withdraw", icon: "leave", label: "Withdraw request", roles: ANY },
+] as const satisfies readonly PlanVerbDeclaration[];
+
 /** Every plan verb list, for the guards that hold them all. */
 export const PLAN_VERB_LISTS = [
   PLAN_VERBS,
   PLAN_ADD_VERBS,
   PLAN_SECTION_VERBS,
   PLAN_FORM_VERBS,
+  PLAN_REQUEST_VERBS,
 ] as const;
 
 export type PlanVerbId = (typeof PLAN_VERBS)[number]["id"];

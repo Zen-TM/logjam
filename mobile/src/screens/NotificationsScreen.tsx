@@ -62,6 +62,7 @@ import {
   notificationHaystack,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
   notificationsTruncated,
   selectionCountLabel,
   tallyNotifications,
@@ -70,6 +71,7 @@ import {
   type NotificationActions,
   type NotificationBatch,
   type NotificationInlineAction,
+  type NotificationPlanTarget,
 } from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
@@ -233,12 +235,15 @@ export function NotificationsScreen({
   onBack,
   onUnreadChanged,
   onOpenPlace,
+  onOpenPlan,
   onOpenSaved,
   onOpenFriends,
 }: {
   onBack: () => void;
   onUnreadChanged?: () => void;
   onOpenPlace: (placeId: string) => void;
+  /** A plan notification: its plan, as Logjam Web's inbox opens it. */
+  onOpenPlan: (target: NotificationPlanTarget) => void;
   /**
    * "View in Saved" — the tab, on the filter the subject lives under, with that
    * row pulsed on arrival. `highlightKey` is null when the notification names
@@ -789,14 +794,16 @@ export function NotificationsScreen({
   );
 
   // Reading it is what marks it read, so both happen on one tap; the place
-  // then opens on top.
+  // or the plan then opens on top.
   const openNotification = useCallback(
     (n: TNotification) => {
       void markRead(n);
       const placeId = notificationPlaceId(n);
+      const plan = notificationPlanTarget(n);
       if (placeId) onOpenPlace(placeId);
+      else if (plan) onOpenPlan(plan);
     },
-    [markRead, onOpenPlace],
+    [markRead, onOpenPlace, onOpenPlan],
   );
 
   /**

@@ -20,6 +20,7 @@ import {
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
+  TRIP_PLAN_PREVIEW,
 } from "./plans.js";
 import type { ScreenContract } from "./types.js";
 
@@ -74,6 +75,7 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   TRIP_PLANS_LIST,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_JOIN,
+  TRIP_PLAN_PREVIEW,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_FORMS,
 ];

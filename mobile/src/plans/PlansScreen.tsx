@@ -14,6 +14,7 @@ import {
 } from "react";
 import { FlatList, RefreshControl, Text, View } from "react-native";
 import {
+  PLAN_REQUEST_VERBS,
   contractSectionKeys,
   messageFromError,
   sortTripPlans,
@@ -38,11 +39,13 @@ import { useConnectivity } from "../map/connectivity";
 import { onMirrorChanged } from "../sync/syncDb";
 import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
+  BottomSheet,
   Button,
   ChipRail,
   EmptyState,
   ErrorState,
   Hero,
+  IconButton,
   ListEnd,
   LoadingState,
   Row,
@@ -54,7 +57,7 @@ import {
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
-import { createPlan } from "./plansApi";
+import { createPlan, leavePlan } from "./plansApi";
 import {
   planChanged,
   pollPlans,
@@ -65,6 +68,8 @@ import {
 import { plansListView } from "./planViews";
 
 const copy = TRIP_PLANS_LIST.copy;
+const OFFLINE = unavailableReasonText("needs-connection");
+const WITHDRAW = PLAN_REQUEST_VERBS[0];
 const BUCKETS: TripPlanBucket[] = ["upcoming", "past", "archived"];
 const BUCKET_LABEL: Record<TripPlanBucket, string> = {
   upcoming: copy.bucketUpcoming,
@@ -126,7 +131,7 @@ export function PlansScreen({
    *  `at` tells one from the next with the same words. */
   message?: { text: string; at: number };
   onBack: () => void;
-  onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name">) => void;
+  onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name" | "status">) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -168,6 +173,37 @@ export function PlansScreen({
     count: byBucket[value].length,
   }));
 
+  // Decline and Withdraw request: one call, by status (`leavePlan`); no
+  // confirm, as on Logjam Web.
+  const [menuFor, setMenuFor] = useState<TripPlanSummary | null>(null);
+  // Each plan's own: a second decline doesn't free the first's button.
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
+  const leave = useCallback(
+    (plan: TripPlanSummary, done: string, failed: string) => {
+      setLeaving((was) => new Set(was).add(plan.id));
+      void leavePlan(plan.id)
+        .then(async () => {
+          await poll();
+          setToast({ text: done, tone: "info", nonce: Date.now() });
+        })
+        .catch((err: unknown) =>
+          setToast({
+            text: messageFromError(err, failed),
+            tone: "error",
+            nonce: Date.now(),
+          }),
+        )
+        .finally(() =>
+          setLeaving((was) => {
+            const next = new Set(was);
+            next.delete(plan.id);
+            return next;
+          }),
+        );
+    },
+    [poll, setToast],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: TripPlanSummary }) => {
       const stamp = stamps.get(item.id);
@@ -179,10 +215,9 @@ export function PlansScreen({
           title={item.name}
           titleNumberOfLines={2}
           subtitle={tripPlanRowSubtitle(item)}
-          // ponytail: an invite or a request opens nothing yet; the join
-          // screen needs the plan forms (TRIP_PLAN_FORMS, #548).
+          // The body opens; a request's only action is its ⋯ (shared/DESIGN.md §9).
           onPress={
-            item.status === "active" ? () => onOpenPlan(item) : undefined
+            item.status !== "requested" ? () => onOpenPlan(item) : undefined
           }
           right={
             <View style={styles.pills}>
@@ -196,12 +231,61 @@ export function PlansScreen({
                 />
               ) : null}
               {pill ? <StatusPill label={pill} tone="outline" /> : null}
+              {item.status === "requested" ? (
+                <IconButton
+                  icon="overflow"
+                  accessibilityLabel={`Actions for ${item.name}`}
+                  color={theme.textMuted}
+                  onPress={() => setMenuFor(item)}
+                />
+              ) : null}
             </View>
+          }
+          // An invite answers in its footer: Open (the preview) · Decline.
+          footer={
+            item.status === "invited" ? (
+              // Its own taps: a dimmed Decline doesn't fall through to the
+              // row's Open.
+              <View
+                style={styles.footer}
+                onStartShouldSetResponder={() => true}
+              >
+                <View style={styles.pills}>
+                  <Button
+                    label={copy.open}
+                    compact
+                    onPress={() => onOpenPlan(item)}
+                  />
+                  <Button
+                    label={copy.decline}
+                    compact
+                    variant="outlineAccent"
+                    loading={leaving.has(item.id)}
+                    disabled={!online}
+                    disabledReason={OFFLINE}
+                    onPress={() =>
+                      leave(item, copy.declined, copy.declineFailed)
+                    }
+                  />
+                </View>
+                {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
+              </View>
+            ) : undefined
           }
         />
       );
     },
-    [assetHue.plan, onOpenPlan, stamps, styles.pills],
+    [
+      assetHue.plan,
+      leave,
+      leaving,
+      onOpenPlan,
+      online,
+      setMenuFor,
+      stamps,
+      styles,
+      theme.textMuted,
+    ],
   );
 
   if (block) {
@@ -330,9 +414,28 @@ export function PlansScreen({
           const made = await createPlan(values);
           setNewOpen(false);
           void poll();
-          onOpenPlan(made);
+          onOpenPlan({ id: made.id, name: made.name, status: "active" });
         }}
       />
+      <BottomSheet
+        visible={menuFor !== null}
+        onClose={() => setMenuFor(null)}
+        title={menuFor?.name ?? ""}
+      >
+        {menuFor ? (
+          <Row
+            icon={WITHDRAW.icon}
+            title={WITHDRAW.label}
+            subtitle={online ? undefined : OFFLINE}
+            disabled={!online}
+            onPress={() => {
+              const plan = menuFor;
+              setMenuFor(null);
+              leave(plan, copy.withdrawn, copy.withdrawFailed);
+            }}
+          />
+        ) : null}
+      </BottomSheet>
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
@@ -350,6 +453,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingBottom: spacing(4),
   },
+  footer: { gap: spacing(0.5) },
+  hint: { ...muted(theme, textRole.detail) },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

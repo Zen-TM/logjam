@@ -4,6 +4,7 @@ import {
   TRIP_PLAN_FORM_PRESETS,
   type TripPlanQuestion,
   type TripPlanSummary,
+  type DateOnly,
 } from "../tripPlans.js";
 import {
   planCountsLabel,
@@ -53,6 +54,9 @@ import {
   tripPlanInviteLinkLine,
   tripPlanAnswerRows,
   tripPlanQuestionChoices,
+  opensPreview,
+  tripPlanInvitedLine,
+  tripPlanPreviewHeaded,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -886,5 +890,51 @@ describe("the picks a choice or yes/no question offers", () => {
       tripPlanQuestionChoices({ kind: "choice", required: true, options })[0]
         .value,
     ).toBe("a");
+  });
+});
+
+describe("which page a plan opens on", () => {
+  // Mutation: decide from the list alone, and an invite that arrived while
+  // the list was open opens the member's page, which 404s.
+  it("opens an invite's preview though the list has not heard of it", () => {
+    expect(opensPreview(true, undefined)).toBe(true);
+    expect(opensPreview(true, "invited")).toBe(true);
+    expect(opensPreview(true, "active")).toBe(false);
+    expect(opensPreview(false, "invited")).toBe(false);
+  });
+});
+
+describe("an invite's preview", () => {
+  const preview = {
+    startDate: "2026-11-26" as DateOnly,
+    endDate: "2026-11-27" as DateOnly,
+    invitedBy: { id: "c", username: "carol" },
+  };
+  // Mutation: drop the invitedBy part, or join a stray " · " when there is
+  // no invitedBy.
+  it("says the dates and who invited, whichever there are", () => {
+    expect(tripPlanInvitedLine(preview, 2026)).toBe(
+      "Thu 26 – Fri 27 Nov · Invited by carol",
+    );
+    expect(tripPlanInvitedLine({ ...preview, invitedBy: null }, 2026)).toBe(
+      "Thu 26 – Fri 27 Nov",
+    );
+    expect(
+      tripPlanInvitedLine(
+        { startDate: null, endDate: null, invitedBy: preview.invitedBy },
+        2026,
+      ),
+    ).toBe("No dates yet · Invited by carol");
+  });
+
+  // Mutation: always head the people, and a preview of people alone gets a
+  // lone heading.
+  it("heads its groups only beside a second one", () => {
+    expect(tripPlanPreviewHeaded({ sections: [], requiredForms: [] })).toBe(
+      false,
+    );
+    expect(
+      tripPlanPreviewHeaded({ sections: [], requiredForms: [{}] as never }),
+    ).toBe(true);
   });
 });

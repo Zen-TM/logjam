@@ -16,6 +16,7 @@ import {
   type TripPlanFormView,
   type TripPlanFormVisibility,
   type TripPlanItemKind,
+  type TripPlanInvitedPreview,
   type TripPlanMemberStatus,
   type TripPlanRole,
   type TripPlanSummary,
@@ -66,7 +67,6 @@ export const TRIP_PLANS_LIST = {
     decline: "Decline",
     declined: "Invite declined.",
     declineFailed: "Couldn't decline the invite.",
-    withdraw: "Withdraw request",
     withdrawn: "Request withdrawn.",
     withdrawFailed: "Couldn't withdraw the request.",
 
@@ -602,9 +602,77 @@ export const TRIP_PLAN_JOIN = {
   },
 } as const satisfies ScreenContract;
 
+/**
+ * A plan someone is invited to by username, before they join
+ * (GET /plans/:id/preview): what they would join and what it asks first,
+ * with Join and Decline. Its words are the join dialog's and the plan page's.
+ */
+export const TRIP_PLAN_PREVIEW = {
+  id: "plans.preview",
+  question: "What would I be joining, and what does it ask first?",
+  sections: [
+    // The name, then "dates · Invited by …" (`tripPlanInvitedLine`).
+    { key: "hero" },
+    // "Answer these to join." (or "Invited") with Join and Decline.
+    { key: "notice" },
+    { key: "writeUp" },
+    // The forms required to join, each with who sees its answers.
+    { key: "forms" },
+    // Who's going. Forms and people are headed only beside a second group
+    // (`tripPlanPreviewHeaded`, shared/DESIGN.md §2).
+    { key: "people" },
+  ],
+  // The join dialog's and the plan page's words, not a second copy.
+  copy: {
+    answerToJoin: TRIP_PLAN_JOIN.copy.answerToJoin,
+    invited: TRIP_PLANS_LIST.copy.pillInvited,
+    join: TRIP_PLAN_JOIN.copy.join,
+    decline: TRIP_PLAN_JOIN.copy.decline,
+    declined: TRIP_PLANS_LIST.copy.declined,
+    declineFailed: TRIP_PLANS_LIST.copy.declineFailed,
+    forms: TRIP_PLAN_PAGE.copy.viewForms,
+    people: TRIP_PLAN_PAGE.copy.peopleGoing,
+    loading: TRIP_PLAN_PAGE.copy.loading,
+    loadFailed: TRIP_PLAN_PAGE.copy.loadFailed,
+  },
+} as const satisfies ScreenContract;
+
+/** The preview's line under its name: its dates, and who invited. */
+export function tripPlanInvitedLine(
+  preview: Pick<TripPlanInvitedPreview, "startDate" | "endDate" | "invitedBy">,
+  thisYear: number = new Date().getFullYear(),
+): string {
+  return [
+    tripPlanDatesLabel(preview.startDate, preview.endDate, thisYear),
+    preview.invitedBy &&
+      `${TRIP_PLAN_JOIN.copy.invitedBy} ${preview.invitedBy.username}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Whether the preview's forms and people take headings: only beside a
+ *  write-up or a form to divide them from. */
+export function tripPlanPreviewHeaded(
+  preview: Pick<TripPlanInvitedPreview, "sections" | "requiredForms">,
+): boolean {
+  return preview.sections.length > 0 || preview.requiredForms.length > 0;
+}
+
 /** The join dialog's title. */
 export function tripPlanJoinTitle(planName: string): string {
   return `Join ${planName}`;
+}
+
+/** Whether a plan opens as an invite's preview: as its opener said, unless
+ *  the plans list since has the reader in it (they joined meanwhile). Not
+ *  from the list alone: an invite that arrived while the list was open is
+ *  not in it yet, and the member's page 404s for someone invited. */
+export function opensPreview(
+  invited: boolean,
+  listed: TripPlanMemberStatus | undefined,
+): boolean {
+  return invited && listed !== "active";
 }
 
 /** A leader inviting people: by username, or by a link, which they can turn

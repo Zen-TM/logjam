@@ -1,6 +1,7 @@
 import {
   notificationPlaceId,
   notificationPlanTarget,
+  notificationVerb,
   type NotificationPlanTarget,
   type TNotification,
 } from "@logjam/shared";
@@ -35,9 +36,15 @@ const GEOPDFS: InboxDestination = {
 
 export function inboxDestination(n: TNotification): InboxDestination | null {
   const placeId = notificationPlaceId(n);
-  if (placeId) return { kind: "place", label: "Open place", placeId };
+  if (placeId)
+    return { kind: "place", label: notificationVerb("open").label, placeId };
   const plan = notificationPlanTarget(n);
-  if (plan) return { kind: "plan", label: "Open plan", target: plan };
+  if (plan)
+    return {
+      kind: "plan",
+      label: notificationVerb("openPlan").label,
+      target: plan,
+    };
   const failed = n.payload.status === "failed";
   switch (n.type) {
     case "friend_request":
