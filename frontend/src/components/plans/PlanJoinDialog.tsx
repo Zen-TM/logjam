@@ -9,6 +9,7 @@ import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   fitAnswerDraft,
+  joinAnswers,
   TRIP_PLAN_JOIN,
   tripPlanDatesLabel,
   tripPlanJoinTitle,
@@ -22,7 +23,6 @@ import { Button, Dialog, ErrorBanner, SectionHeader } from "../../ui";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { PlanFormFields } from "./PlanAnswerDialog";
-import { joinAnswers } from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_JOIN.copy;

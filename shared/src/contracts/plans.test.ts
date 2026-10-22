@@ -53,6 +53,7 @@ import {
   tripPlanInviteLinkLine,
   tripPlanAnswerRows,
   tripPlanQuestionChoices,
+  opensPreview,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -886,5 +887,16 @@ describe("the picks a choice or yes/no question offers", () => {
       tripPlanQuestionChoices({ kind: "choice", required: true, options })[0]
         .value,
     ).toBe("a");
+  });
+});
+
+describe("which page a plan opens on", () => {
+  // Mutation: decide from the list alone, and an invite that arrived while
+  // the list was open opens the member's page, which 404s.
+  it("opens an invite's preview though the list has not heard of it", () => {
+    expect(opensPreview(true, undefined)).toBe(true);
+    expect(opensPreview(true, "invited")).toBe(true);
+    expect(opensPreview(true, "active")).toBe(false);
+    expect(opensPreview(false, "invited")).toBe(false);
   });
 });

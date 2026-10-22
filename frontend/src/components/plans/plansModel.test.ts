@@ -14,8 +14,6 @@ import {
   addedBy,
   answeredForm,
   itemPatch,
-  joinAnswers,
-  opensPreview,
   planMapPress,
   PLAN_FIELD_GROUPS,
   planPatch,
@@ -419,48 +417,6 @@ describe("a request's answers", () => {
     } as unknown as TripPlanView;
     expect(answeredForm(plan, "carol")).toBe("contacts");
     expect(answeredForm(plan, "sue")).toBeNull();
-  });
-});
-
-describe("joining", () => {
-  const rules = {
-    id: "rules",
-    title: "Trip rules",
-    preset: "rules" as const,
-    questions: TRIP_PLAN_FORM_PRESETS.rules.questions,
-    visibleTo: "leaders" as const,
-    updatedAt: "2026-10-19T00:00:00.000Z",
-  };
-
-  // Mutation: drop visibleTo or formUpdatedAt from the echo, and an answer
-  // follows a form that widened after it was shown.
-  it("echoes each form as it was shown", () => {
-    expect(joinAnswers([rules], { rules: { agree: true } })).toEqual({
-      value: {
-        rules: {
-          answers: { agree: true },
-          visibleTo: "leaders",
-          formUpdatedAt: "2026-10-19T00:00:00.000Z",
-        },
-      },
-    });
-  });
-
-  it("refuses with the parser's sentence when a required answer is missing", () => {
-    expect(joinAnswers([rules], {})).toEqual({
-      sentence: "Answer every question marked required.",
-    });
-  });
-});
-
-describe("which page a plan opens on", () => {
-  // Mutation: decide from the list alone, and an invite that arrived while
-  // Logjam Web was open opens the member's page, which 404s.
-  it("opens an invite's preview though the list has not heard of it", () => {
-    expect(opensPreview(true, undefined)).toBe(true);
-    expect(opensPreview(true, "invited")).toBe(true);
-    expect(opensPreview(true, "active")).toBe(false);
-    expect(opensPreview(false, "invited")).toBe(false);
   });
 });
 

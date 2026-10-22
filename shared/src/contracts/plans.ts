@@ -607,6 +607,17 @@ export function tripPlanJoinTitle(planName: string): string {
   return `Join ${planName}`;
 }
 
+/** Whether a plan opens as an invite's preview: as its opener said, unless
+ *  the plans list since has the reader in it (they joined meanwhile). Not
+ *  from the list alone: an invite that arrived while the list was open is
+ *  not in it yet, and the member's page 404s for someone invited. */
+export function opensPreview(
+  invited: boolean,
+  listed: TripPlanMemberStatus | undefined,
+): boolean {
+  return invited && listed !== "active";
+}
+
 /** A leader inviting people: by username, or by a link, which they can turn
  *  off. A step inside the plan page's People. */
 export const TRIP_PLAN_INVITE = {

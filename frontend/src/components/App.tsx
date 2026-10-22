@@ -101,7 +101,7 @@ import PlansPanel from "./plans/PlansPanel";
 import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
-import { opensPreview, planMapPress } from "./plans/plansModel";
+import { planMapPress } from "./plans/plansModel";
 import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -113,6 +113,7 @@ import {
   drawsNswContours,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  opensPreview,
   PLAN_ADD_VERBS,
   planShowsMine,
   planVerbsFor,
