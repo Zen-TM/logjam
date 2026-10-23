@@ -15,11 +15,12 @@
 // WHO IS ASKING matters too. The answer reads the sharpened areas the caller
 // may see (ADR 0040), so it differs between users and changes with a share.
 // `scopeProfileCache` empties the cache when the signed-in user or their set
-// of areas changes (`profileCacheScope`), and a profile asked for before then
-// is not stored when it arrives: a revoked sharee loses the area's heights
-// once the list is fetched again, and the next person to sign in on the tab
-// never sees the last one's (elevationCache.test.ts, "who the cache was
-// filled for").
+// of areas changes (`profileCacheScope`, called by useCompletedTopoJobs.ts,
+// which owns that list), and a profile asked for before then is not stored
+// when it arrives: a revoked sharee loses the area's heights once the list
+// is fetched again, and the next person to sign in on the tab never sees the
+// last one's. Guards: useCompletedTopoJobs.test.ts ("empties the profile
+// cache"), and placeUtils.profileCache.test.ts for the late answer.
 //
 // PRIVACY: the key is a route's point list, which is precise wilderness
 // location data. It stays in memory, is never logged, and never leaves here.
@@ -86,7 +87,7 @@ export function cachedProfile(key: string): CachedProfile | null {
 export function cacheProfile(
   key: string,
   profile: CachedProfile,
-  askedIn: number = generation,
+  askedIn: number,
 ): void {
   if (askedIn !== generation) return;
   entries.delete(key);

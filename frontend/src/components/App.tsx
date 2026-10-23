@@ -23,7 +23,6 @@ import type { TBbox } from "./map/Map";
 import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
-import { profileCacheScope, scopeProfileCache } from "../elevationCache";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -670,15 +669,6 @@ function App() {
     setActivePanel(null);
   }, [activePanel]);
 
-  // During render, not in an effect: a profile hook below reads the cache as
-  // it renders, and must never see another user's or a revoked area's
-  // (elevationCache.test.ts, "who the cache was filled for").
-  scopeProfileCache(
-    profileCacheScope(
-      authenticated,
-      sharpenedAreas.map((area) => area.id),
-    ),
-  );
   const {
     places,
     total: placesTotal,

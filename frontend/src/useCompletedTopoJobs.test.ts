@@ -4,16 +4,31 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const fetchOverlays = vi.hoisted(() => vi.fn());
 vi.mock("./placeUtils", () => ({ apiFetch: fetchOverlays }));
 
+import {
+  cacheProfile,
+  cachedProfile,
+  clearProfileCache,
+  profileCacheGeneration,
+  type CachedProfile,
+} from "./elevationCache";
 import type { CompletedTopoJob } from "./topoLayerTypes";
 import { useCompletedTopoJobs } from "./useCompletedTopoJobs";
 
-const job = (id: string) => ({ jobId: id }) as CompletedTopoJob;
+// A job id ending "-area" is a sharpened job with an area of that id.
+const job = (id: string) =>
+  ({
+    jobId: id,
+    ...(id.endsWith("-area") ? { sharpened: { id } } : {}),
+  }) as CompletedTopoJob;
 const answer = (ids: string[]) => ({
   jobs: ids.map(job),
   expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
 });
 
-afterEach(() => fetchOverlays.mockReset());
+afterEach(() => {
+  fetchOverlays.mockReset();
+  clearProfileCache();
+});
 
 // A session expiry signs out with no reload, so the next person to sign in
 // shares the tab with the last one's state. Mutation: keep the jobs across
@@ -39,7 +54,10 @@ describe("useCompletedTopoJobs across a sign-out", () => {
     expect(result.current.jobs).toEqual([]);
   });
 
-  it("drops a list that arrives after the user signed out", async () => {
+  // Mutation: judge the stretch when the list arrives rather than when it
+  // was asked for, and A's list, landing after B has signed in, is drawn
+  // for B (until B's own list lands, or a day later if B's fetch fails).
+  it("drops a list asked for before the next user signed in", async () => {
     let arrive: (value: unknown) => void = () => {};
     fetchOverlays.mockReturnValueOnce(new Promise((r) => (arrive = r)));
     const { result, rerender } = renderHook(
@@ -47,7 +65,46 @@ describe("useCompletedTopoJobs across a sign-out", () => {
       { initialProps: { signedIn: true } },
     );
     rerender({ signedIn: false });
+    fetchOverlays.mockResolvedValueOnce(answer([]));
+    rerender({ signedIn: true });
+    await waitFor(() => expect(result.current.loaded).toBe(true));
     await act(async () => arrive(answer(["a-job"])));
     expect(result.current.jobs).toEqual([]);
+  });
+});
+
+const profile = {
+  samples: [],
+  gainM: 0,
+  lossM: 0,
+  minM: null,
+  maxM: null,
+  attribution: "",
+} as CachedProfile;
+
+// Mutation: drop the hook's scope call, and the profile cache, keyed on a
+// line's points alone, hands the next user on the tab the last one's
+// profile, or a revoked sharee the heights of an area they can't see.
+describe("useCompletedTopoJobs and the profile cache", () => {
+  it("empties the profile cache on signing out, and when an area goes", async () => {
+    fetchOverlays.mockResolvedValueOnce(answer(["x-area", "y-area"]));
+    const { result, rerender } = renderHook(
+      ({ signedIn }) => useCompletedTopoJobs(signedIn),
+      { initialProps: { signedIn: true } },
+    );
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2));
+    cacheProfile("line", profile, profileCacheGeneration());
+    rerender({ signedIn: false });
+    expect(cachedProfile("line")).toBeNull();
+
+    fetchOverlays.mockResolvedValueOnce(answer(["x-area", "y-area"]));
+    rerender({ signedIn: true });
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2));
+    cacheProfile("line", profile, profileCacheGeneration());
+    fetchOverlays.mockResolvedValueOnce(answer(["x-area"]));
+    await act(async () => {
+      await result.current.refetch();
+    });
+    expect(cachedProfile("line")).toBeNull();
   });
 });

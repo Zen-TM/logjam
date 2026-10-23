@@ -23,7 +23,7 @@ beforeEach(clearProfileCache);
 
 describe("the elevation profile cache", () => {
   it("answers for geometry it has seen, and not for geometry it has not", () => {
-    cacheProfile("[[150,-33]]", profile(1));
+    cacheProfile("[[150,-33]]", profile(1), profileCacheGeneration());
     expect(cachedProfile("[[150,-33]]")?.gainM).toBe(1);
     expect(cachedProfile("[[150.1,-33]]")).toBeNull();
   });
@@ -38,6 +38,7 @@ describe("the elevation profile cache", () => {
         [150.1, -33],
       ]),
       profile(1),
+      profileCacheGeneration(),
     );
     expect(
       cachedProfile(
@@ -50,14 +51,15 @@ describe("the elevation profile cache", () => {
   });
 
   it("replaces rather than duplicates when the same line is sampled again", () => {
-    cacheProfile("k", profile(1));
-    cacheProfile("k", profile(2));
+    cacheProfile("k", profile(1), profileCacheGeneration());
+    cacheProfile("k", profile(2), profileCacheGeneration());
     expect(cachedProfileCount()).toBe(1);
     expect(cachedProfile("k")?.gainM).toBe(2);
   });
 
   it("stays bounded", () => {
-    for (let i = 0; i < 60; i++) cacheProfile(`line-${i}`, profile(i));
+    for (let i = 0; i < 60; i++)
+      cacheProfile(`line-${i}`, profile(i), profileCacheGeneration());
     expect(cachedProfileCount()).toBe(40);
     // The earliest are gone; the most recent survive.
     expect(cachedProfile("line-0")).toBeNull();
@@ -67,10 +69,11 @@ describe("the elevation profile cache", () => {
   // Least recently USED, not oldest stored: the line someone keeps coming back
   // to is the one worth keeping, however long ago it was first sampled.
   it("evicts what has not been read, not what was stored first", () => {
-    for (let i = 0; i < 40; i++) cacheProfile(`line-${i}`, profile(i));
+    for (let i = 0; i < 40; i++)
+      cacheProfile(`line-${i}`, profile(i), profileCacheGeneration());
     // Touch the oldest, then push one more in.
     expect(cachedProfile("line-0")?.gainM).toBe(0);
-    cacheProfile("line-40", profile(40));
+    cacheProfile("line-40", profile(40), profileCacheGeneration());
 
     expect(cachedProfile("line-0")?.gainM).toBe(0);
     expect(cachedProfile("line-1")).toBeNull();
@@ -106,12 +109,12 @@ describe("who the cache was filled for", () => {
   // revoked, is handed heights read from an area they cannot see.
   it("forgets every profile when the user or their areas change", () => {
     scopeProfileCache("true,area-1");
-    cacheProfile("[[150,-33]]", profile(1));
+    cacheProfile("[[150,-33]]", profile(1), profileCacheGeneration());
     scopeProfileCache("true,area-1");
     expect(cachedProfile("[[150,-33]]")?.gainM).toBe(1);
     scopeProfileCache("true");
     expect(cachedProfileCount()).toBe(0);
-    cacheProfile("[[150,-33]]", profile(2));
+    cacheProfile("[[150,-33]]", profile(2), profileCacheGeneration());
     scopeProfileCache("false");
     expect(cachedProfileCount()).toBe(0);
   });

@@ -67,9 +67,9 @@ afterEach(() => {
 });
 
 describe("the terrain router", () => {
-  // Mutations: answer an absent tile with null data (MapLibre then leaves it
-  // loading for good: no parent drawn, no idle), or with the statewide tile
-  // (the halo returns).
+  // Mutations: answer an absent tile with null data (MapLibre 6.14 then draws
+  // an empty tile, not the parent), or with the statewide tile (the halo
+  // returns).
   it("throws for a tile no archive holds, so the parent is drawn", async () => {
     setRoutedAreas([area]);
     held.set(area.slopeUrl, new Set([15, 16]));
@@ -137,18 +137,56 @@ describe("the terrain router", () => {
     }
   });
 
+  // Mutation: swallow a statewide archive's failure too, and a statewide
+  // archive that is gone draws a blank layer the map never flags.
+  it("lets a statewide archive's failure through", async () => {
+    setRoutedAreas([area]);
+    failing.set(SLOPE, new Error("Bad response code: 404"));
+    await expect(read("slope", 14, 15050, 9827)).rejects.toThrow(
+      "Bad response code: 404",
+    );
+  });
+
   // Mutation: log the URL or the tile on any path, and a coarse location or
   // a bearer credential reaches the console.
   it("logs nothing", async () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map(
       (level) => vi.spyOn(console, level).mockImplementation(() => {}),
     );
+    const noContours = { ...area, id: "a9", contoursUrl: null };
+    const quiet = (tile: Promise<unknown>) => tile.catch(() => {});
+    // Read: an area's tile and a statewide one, both holding data.
     setRoutedAreas([area]);
+    held.set(area.slopeUrl, new Set([15]));
+    held.set(SLOPE, new Set([14]));
+    await read("slope", 15, 30100, 19654);
+    await read("slope", 14, 15050, 9827);
+    // Absent: past zmax, a missing raster tile, an empty contour tile.
     held.set(area.contoursUrl!, new Set());
-    await read("slope", 17, 120400, 78616).catch(() => {});
-    failing.set(area.slopeUrl, new Error("Bad response code: 404"));
-    await read("slope", 15, 30100, 19654).catch(() => {});
+    await quiet(read("slope", 17, 120400, 78616));
+    await quiet(read("hillshade", 16, 60200, 39308));
     await read("contours", 14, 15050, 9827);
+    // An area with contours and no URL for them.
+    setRoutedAreas([noContours]);
+    await quiet(read("contours", 14, 15050, 9827));
+    // Failures: an area's, a statewide one, an abort.
+    setRoutedAreas([area]);
+    failing.set(area.slopeUrl, new Error("Bad response code: 404"));
+    await quiet(read("slope", 15, 30100, 19654));
+    failing.set(SLOPE, new Error("Bad response code: 403"));
+    await quiet(read("slope", 14, 15050, 9827));
+    failing.set(
+      area.slopeUrl,
+      Object.assign(new Error("aborted"), { name: "AbortError" }),
+    );
+    await quiet(read("slope", 15, 30100, 19654));
+    // A URL that is not the router's.
+    await quiet(
+      terrainTile(
+        { url: "logjam-terrain://nope/1/2/3" },
+        new AbortController(),
+      ),
+    );
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
     for (const spy of spies) spy.mockRestore();
   });

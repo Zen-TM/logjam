@@ -5,9 +5,12 @@
 // PRIVACY: a session expiry signs out with no reload, so the next person to
 // sign in shares the tab with the last one's state. Signing out forgets the
 // list, and a list asked for before then is dropped when it arrives, so no
-// one is drawn another user's areas (useCompletedTopoJobs.test.ts).
+// one is drawn another user's areas. The elevation profile cache is scoped
+// here too, to who is signed in and which areas they can see: a profile
+// reads those areas (elevationCache.ts). Guard: useCompletedTopoJobs.test.ts.
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { profileCacheScope, scopeProfileCache } from "./elevationCache";
 import { apiFetch } from "./placeUtils";
 import type {
   CompletedOverlaysResponse,
@@ -30,6 +33,14 @@ export function useCompletedTopoJobs(loadsUserData: boolean) {
       setExpiresAt(null);
     }
   }
+
+  // During render too: a profile hook reads the cache as it renders.
+  scopeProfileCache(
+    profileCacheScope(
+      loadsUserData,
+      jobs.flatMap((job) => (job.sharpened ? [job.sharpened.id] : [])),
+    ),
+  );
 
   // One per signed-in stretch, aborted when it ends: a list asked for in a
   // stretch that has ended is dropped when it arrives.
