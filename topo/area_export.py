@@ -1,8 +1,9 @@
 """
 area_export.py
 --------------
-An export of an area: the statewide terrain over a box, as raw data for a GIS.
-GeoTIFF (a zip of one file per layer, with CREDITS.txt) or one GeoPackage.
+An export of an area: the statewide terrain over a box, as raw data for a GIS
+(GeoTIFF, a zip of one file per layer with CREDITS.txt, or one GeoPackage), or
+as a styled map for an offline map app (one MBTiles, `render_mbtiles`).
 
 Everything is read from the published archives, never the source sheets, so a
 file holds the numbers the map, the slope readout and Logjam GPS read:
@@ -18,10 +19,16 @@ Rasters are warped once into GDA2020 / MGA, the zone of the box's centre, at
 5 m: in web mercator a GIS computing slope from the heights would be off by
 1/cos(latitude). The z15 tiles are first written into one tiled GeoTIFF on
 disk, so memory stays flat however large the box: GDAL warps it in chunks.
+
+An MBTiles stays in web mercator, where its tiles are. Its contours are the
+statewide contour archive's own lines, the ones the map draws, read a tile at
+a time: recut from the heights, a 100 km box is ~60 M vertices, and the
+renderer would hold them all in each process.
 """
 
 from __future__ import annotations
 
+import gzip
 import io
 import logging
 import math
@@ -29,9 +36,10 @@ import subprocess
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Dict, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from osgeo import gdal, osr
@@ -47,6 +55,11 @@ from pmtiles.tile import (
 from build_nsw_dem import (
     CONTOUR_CELL_M,
     CONTOUR_INTERVAL_M,
+    CONTOUR_KEY,
+    CONTOUR_LAYER,
+    CONTOUR_MAJOR_M,
+    CONTOUR_ZOOMS,
+    HALF_WORLD_M,
     HEIGHT_KEY,
     NODATA,
     SLOPE_KEY,
@@ -55,15 +68,40 @@ from build_nsw_dem import (
     lonlat_to_tile,
     tile_bounds_3857,
 )
+from pipeline import (
+    COMPOSITE_LAYER_ORDER,
+    HILLSHADE_DEFAULTS,
+    TILE_SIZE,
+    _parse_rgba_hex,
+    create_mbtiles,
+    finalise_bounds,
+    insert_tile,
+    render_contours_tile,
+    tile_to_bbox,
+    tiles_for_bbox,
+)
+from renderers.tile_compose import (
+    _composite_workers,
+    _vector_style_to_render_settings,
+)
 
 gdal.UseExceptions()
 log = logging.getLogger("export_worker.area")
 
 # shared/src/areaExport.ts declares these too (tests/test_area_export.py).
 LAYERS = ("heights", "slope", "hillshade", "contours")
-FORMATS = ("geotiff", "gpkg")
-# A GeoTIFF is rasters only: contours go in a GeoPackage.
-LAYERS_BY_FORMAT = {"geotiff": ("heights", "slope", "hillshade"), "gpkg": LAYERS}
+FORMATS = ("geotiff", "gpkg", "mbtiles")
+# A GeoTIFF is rasters only: contours go in a GeoPackage. An MBTiles is a
+# picture of the map, with no heights to draw.
+LAYERS_BY_FORMAT = {
+    "geotiff": ("heights", "slope", "hillshade"),
+    "gpkg": LAYERS,
+    "mbtiles": ("slope", "hillshade", "contours"),
+}
+# An MBTiles from where the box is a few tiles to past the 5 m terrain's z15,
+# the zooms an offline map app shows a trail map at.
+MBTILES_ZOOMS = (11, 16)
+CONTOUR_ZMAX = max(zmax for _, zmax in CONTOUR_ZOOMS.values())
 CELL_M = 5
 SLOPE_NODATA = 255
 # Tiles fetched and decoded at once, and how many are handed out together: a
@@ -398,16 +436,261 @@ def package(made: Made, fmt: str, work: Path) -> Path:
     raise AreaExportError(f"unknown area export format {fmt}")
 
 
+Rgba = Tuple[int, int, int, int]
+
+
+def slope_colours(bands: Sequence[dict]) -> List[Rgba]:
+    """The colour of each whole degree (an index 0–255) for slope bands: a
+    band takes fromDeg up to, not including, toDeg, as `render_slope_tile`
+    draws it; every other value, the no-data 255 among them, is clear."""
+    colours = [(0, 0, 0, 0)] * 256
+    for band in bands:
+        for deg in range(int(band["fromDeg"]), int(band["toDeg"])):
+            colours[deg] = _parse_rgba_hex(band["colour"])
+    return colours
+
+
+def hillshade_colours(tint: str) -> List[Rgba]:
+    """Each shade (0–255) under a tint, as `render_hillshade_tile` draws it;
+    0 is gdaldem's no-data, so clear."""
+    r, g, b, a = _parse_rgba_hex(tint)
+    return [(0, 0, 0, 0)] + [
+        (v * r // 255, v * g // 255, v * b // 255, a) for v in range(1, 256)
+    ]
+
+
+def value_cog(source: Path, out: Path, nodata: int) -> None:
+    """A Byte raster as a COG, its overviews for the low zooms."""
+    run(
+        "gdal_translate", "-q", "-a_nodata", str(nodata), "-of", "COG",
+        "-co", "COMPRESS=DEFLATE", "-co", "BIGTIFF=IF_SAFER",
+        "-co", "NUM_THREADS=ALL_CPUS",
+        str(source), str(out),
+    )  # fmt: skip
+
+
+def styled_tile(cog: Path, colours: np.ndarray, z: int, x: int, y: int) -> Image.Image:
+    """One tile of a Byte COG, value v drawn as colours[v] (a 256 x 4 table).
+    The values are warped and then coloured, not the colours warped: GDAL's
+    warp turns a clear colour opaque, and would blend two bands' colours at
+    their edge."""
+    lon_min, lat_min, lon_max, lat_max = tile_to_bbox(x, y, z)
+    dataset = gdal.Warp(
+        "", str(cog), format="MEM", dstSRS="EPSG:4326",
+        outputBounds=(lon_min, lat_min, lon_max, lat_max),
+        width=TILE_SIZE, height=TILE_SIZE, resampleAlg="bilinear", dstAlpha=True,
+    )  # fmt: skip
+    values, valid = dataset.ReadAsArray()
+    rgba = colours[values]
+    rgba[..., 3] = rgba[..., 3].astype(np.uint16) * valid // 255
+    return Image.fromarray(rgba)
+
+
+def mbtiles_settings(style: dict) -> dict:
+    """The pipeline's render settings for the account's style: its contour
+    colours, widths and label size, and its slope bands. Contours step as the
+    map's do: 50 m lines from z11, every 10 m from z14."""
+    settings = _vector_style_to_render_settings(style)
+    settings["contours"]["zoomBands"] = [
+        {"zoomMin": MBTILES_ZOOMS[0], "zoomMax": CONTOUR_ZMAX - 1,
+         "intervalM": CONTOUR_MAJOR_M, "majorEveryN": 1},
+        {"zoomMin": CONTOUR_ZMAX, "zoomMax": MBTILES_ZOOMS[1],
+         "intervalM": CONTOUR_INTERVAL_M,
+         "majorEveryN": CONTOUR_MAJOR_M // CONTOUR_INTERVAL_M},
+    ]  # fmt: skip
+    if style.get("slopeBands"):
+        settings["slope"]["bands"] = style["slopeBands"]
+    return settings
+
+
+def fetch_contour_tiles(reader: Archive, bbox: Bbox, out: Path) -> int:
+    """The contour archive's tiles over the box, every zoom it has, as
+    `out/z/x/y.pbf` for GDAL's MVT driver. Returns how many had lines."""
+    wanted = [
+        (z, x, y)
+        for z in range(MBTILES_ZOOMS[0], CONTOUR_ZMAX + 1)
+        for x, y in tiles_for_bbox(*bbox, z)
+    ]
+
+    def fetch(zxy: Tuple[int, int, int]) -> bool:
+        data = reader.get(*zxy)
+        if not data:
+            return False
+        path = out / "{}/{}/{}.pbf".format(*zxy)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(gzip.decompress(data) if data[:2] == b"\x1f\x8b" else data)
+        return True
+
+    with ThreadPoolExecutor(FETCH_THREADS) as pool:
+        return sum(pool.map(fetch, wanted))
+
+
+@lru_cache(maxsize=8)
+def contour_lines(path: str, z: int, x: int, y: int) -> List[Tuple[dict, list]]:
+    """One contour tile's lines, as `render_contours_tile` takes them:
+    (feature, lon/lat coordinates). Cached: a z15 or z16 tile draws its z14
+    parent's lines, and its siblings come to the same process in a row."""
+    dataset = gdal.OpenEx(
+        path, gdal.OF_VECTOR, allowed_drivers=["MVT"],
+        open_options=[f"X={x}", f"Y={y}", f"Z={z}"],
+    )  # fmt: skip
+    lines = []
+    for feature in dataset.GetLayerByName(CONTOUR_LAYER):
+        geometry = feature.GetGeometryRef()
+        parts = [geometry.GetGeometryRef(i) for i in range(geometry.GetGeometryCount())]
+        for part in parts or [geometry]:
+            merc = np.asarray(part.GetPoints() or [], dtype=float)
+            if len(merc) < 2:
+                continue
+            lon = merc[:, 0] / HALF_WORLD_M * 180
+            lat = np.degrees(
+                2 * np.arctan(np.exp(merc[:, 1] / HALF_WORLD_M * np.pi)) - np.pi / 2
+            )
+            props = {"properties": {"elev": feature.GetField("elev")}}
+            lines.append((props, np.column_stack([lon, lat]).tolist()))
+    return lines
+
+
+def clip_to_box(tile: Image.Image, bbox: Bbox, z: int, x: int, y: int) -> Image.Image:
+    """The tile with everything outside the box cleared. A contour tile, or a
+    z15 tile of a mosaic, runs past the box, and the file's bounds are the box.
+    Pixels are linear in lon/lat, as the layers draw them."""
+    lon_min, lat_min, lon_max, lat_max = tile_to_bbox(x, y, z)
+    sx = TILE_SIZE / (lon_max - lon_min)
+    sy = TILE_SIZE / (lat_max - lat_min)
+    left, right = (round((lon - lon_min) * sx) for lon in (bbox[0], bbox[2]))
+    top, bottom = (round((lat_max - lat) * sy) for lat in (bbox[3], bbox[1]))
+    rect = (max(left, 0), max(top, 0), min(right, TILE_SIZE), min(bottom, TILE_SIZE))
+    clipped = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
+    if rect[0] < rect[2] and rect[1] < rect[3]:
+        clipped.paste(tile.crop(rect), rect[:2])
+    return clipped
+
+
+def mbtiles_tile(job: tuple) -> Tuple[int, int, int, Optional[bytes]]:
+    """One tile of the map, its layers in the pipeline's order. Runs in a
+    worker process."""
+    z, x, y, bbox, rasters, contour_dir, settings = job
+    tile = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
+    for layer in COMPOSITE_LAYER_ORDER:
+        if layer in rasters:
+            img = styled_tile(*rasters[layer], z, x, y)
+        elif layer == "contours" and contour_dir:
+            cz = min(z, CONTOUR_ZMAX)
+            cx, cy = x >> (z - cz), y >> (z - cz)
+            path = Path(contour_dir) / f"{cz}/{cx}/{cy}.pbf"
+            if not path.exists():
+                continue
+            lines = contour_lines(str(path), cz, cx, cy)
+            img = render_contours_tile({}, tile_to_bbox(x, y, z), z, settings, lines)
+        else:
+            continue
+        tile = Image.alpha_composite(tile, img)
+    tile = clip_to_box(tile, bbox, z, x, y)
+    if tile.getextrema()[3][1] == 0:
+        return z, x, y, None
+    buf = io.BytesIO()
+    tile.save(buf, format="PNG", optimize=True)
+    return z, x, y, buf.getvalue()
+
+
+def render_mbtiles(
+    archives: Dict[str, GetBytes],
+    bbox: Bbox,
+    layers: Sequence[str],
+    style: dict,
+    work: Path,
+) -> Path:
+    """The box as one MBTiles, drawn with the account's style."""
+    heights_reader = Archive(archives["heights"])
+    attribution = heights_reader.metadata().get("attribution")
+    if not attribution:
+        raise AreaExportError("the heights archive carries no attribution")
+    settings = mbtiles_settings(style)
+    # Each raster layer's COG and its colour table.
+    rasters: Dict[str, Tuple[Path, np.ndarray]] = {}
+    if "hillshade" in layers:
+        mosaic = work / "heights-3857.tif"
+        shade = work / "hillshade-3857.tif"
+        write_mosaic(heights_reader, bbox, mosaic, "heights", attribution)
+        gdal.DEMProcessing(
+            str(shade), str(mosaic), "hillshade",
+            azimuth=HILLSHADE_DEFAULTS["azimuth"],
+            altitude=HILLSHADE_DEFAULTS["altitude"],
+            zFactor=HILLSHADE_DEFAULTS["zFactor"],
+            # Web-mercator metres are cos(latitude) metres on the ground.
+            scale=math.cos(math.radians((bbox[1] + bbox[3]) / 2)),
+            computeEdges=True,
+            creationOptions=["TILED=YES", "COMPRESS=DEFLATE", "BIGTIFF=IF_SAFER"],
+        )  # fmt: skip
+        mosaic.unlink()
+        rasters["hillshade"] = (
+            work / "hillshade.tif",
+            np.array(hillshade_colours(HILLSHADE_DEFAULTS["colour"]), np.uint8),
+        )
+        value_cog(shade, rasters["hillshade"][0], 0)
+        shade.unlink()
+    if "slope" in layers:
+        mosaic = work / "slope-3857.tif"
+        write_mosaic(Archive(archives["slope"]), bbox, mosaic, "slope", attribution)
+        rasters["slope"] = (
+            work / "slope.tif",
+            np.array(slope_colours(settings["slope"]["bands"]), np.uint8),
+        )
+        value_cog(mosaic, rasters["slope"][0], SLOPE_NODATA)
+        mosaic.unlink()
+    contour_dir: Optional[Path] = None
+    if "contours" in layers:
+        contour_dir = work / "contours"
+        if fetch_contour_tiles(Archive(archives["contours"]), bbox, contour_dir) == 0:
+            raise AreaOutsideNsw("no contour tiles in the box")
+
+    zmin, zmax = MBTILES_ZOOMS
+    tiles = [
+        (z, x, y) for z in range(zmin, zmax + 1) for x, y in tiles_for_bbox(*bbox, z)
+    ]
+    # Siblings under one z14 parent in a row, so a worker's line cache hits.
+    tiles.sort(
+        key=lambda t: (
+            t[0],
+            t[1] >> max(0, t[0] - CONTOUR_ZMAX),
+            t[2] >> max(0, t[0] - CONTOUR_ZMAX),
+        )
+    )
+    out = work / "logjam-area.mbtiles"
+    conn = create_mbtiles(
+        str(out), "logjam-area", credit_line(layers, attribution), zmin, zmax
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO metadata VALUES ('attribution', ?)",
+        (credit_line(layers, attribution),),
+    )
+    jobs = [(z, x, y, bbox, rasters, contour_dir, settings) for z, x, y in tiles]
+    with ProcessPoolExecutor(_composite_workers()) as pool:
+        for z, x, y, png in pool.map(mbtiles_tile, jobs, chunksize=64):
+            if png is not None:
+                insert_tile(conn, z, x, y, png)
+    finalise_bounds(conn, *bbox, center_zoom=(zmin + zmax) // 2)
+    conn.close()
+    for path, _ in rasters.values():
+        path.unlink()
+    return out
+
+
 def render_area(
     archives: Dict[str, GetBytes],
     bbox: Bbox,
     layers: Sequence[str],
     fmt: str,
     work: Path,
+    style: Optional[dict] = None,
 ) -> Path:
+    """`style` is the export's style snapshot, which only an MBTiles draws."""
     allowed = LAYERS_BY_FORMAT.get(fmt)
     if allowed is None or not layers or any(l not in allowed for l in layers):
         raise AreaExportError(f"bad request: {fmt} {layers}")
+    if fmt == "mbtiles":
+        return render_mbtiles(archives, bbox, layers, style or {}, work)
     return package(make_layers(archives, bbox, layers, work), fmt, work)
 
 
@@ -415,4 +698,5 @@ def s3_archives(s3, bucket: str) -> Dict[str, GetBytes]:
     return {
         "heights": s3_ranges(s3, bucket, HEIGHT_KEY),
         "slope": s3_ranges(s3, bucket, SLOPE_KEY),
+        "contours": s3_ranges(s3, bucket, CONTOUR_KEY),
     }

@@ -69,6 +69,21 @@ describe("areaExportRequestError", () => {
     ).not.toBeNull();
   });
 
+  // Mutation: give MBTiles every layer, and the worker is asked to draw
+  // heights it has no style for.
+  it("draws an MBTiles from slope, hillshade and contours, never heights", () => {
+    expect(
+      areaExportRequestError({
+        ...ok,
+        format: "mbtiles",
+        layers: ["slope", "hillshade", "contours"],
+      }),
+    ).toBeNull();
+    expect(
+      areaExportRequestError({ ...ok, format: "mbtiles", layers: ["heights"] }),
+    ).not.toBeNull();
+  });
+
   it("refuses an empty, inverted or off-Earth box, and bad layers", () => {
     expect(
       areaExportRequestError({
@@ -83,6 +98,6 @@ describe("areaExportRequestError", () => {
     expect(
       areaExportRequestError({ ...ok, layers: ["heights", "heights"] }),
     ).not.toBeNull();
-    expect(areaExportRequestError({ ...ok, format: "mbtiles" })).not.toBeNull();
+    expect(areaExportRequestError({ ...ok, format: "geojson" })).not.toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 // An export of an area: the statewide terrain over a box, as raw data for a
-// GIS, made by the export worker (topo/area_export.py, which mirrors the layer
-// names: topo/tests/test_area_export.py).
+// GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
+// by the export worker (topo/area_export.py, which mirrors these declarations:
+// topo/tests/test_area_export.py).
 import { NSW_5M } from "./demSources.js";
 import { say } from "./userSentence.js";
 
@@ -13,15 +14,19 @@ export const AREA_EXPORT_LAYERS = [
 ] as const;
 export type AreaExportLayer = (typeof AREA_EXPORT_LAYERS)[number];
 
-export const AREA_EXPORT_FORMATS = ["geotiff", "gpkg"] as const;
+export const AREA_EXPORT_FORMATS = ["geotiff", "gpkg", "mbtiles"] as const;
 export type AreaExportFormat = (typeof AREA_EXPORT_FORMATS)[number];
 
-/** A GeoTIFF is rasters only: contours go in a GeoPackage. */
+/**
+ * A GeoTIFF is rasters only: contours go in a GeoPackage. An MBTiles is a
+ * picture of the map, so it has no heights to draw.
+ */
 export const AREA_EXPORT_LAYERS_BY_FORMAT: Readonly<
   Record<AreaExportFormat, readonly AreaExportLayer[]>
 > = {
   geotiff: ["heights", "slope", "hillshade"],
   gpkg: AREA_EXPORT_LAYERS,
+  mbtiles: ["slope", "hillshade", "contours"],
 };
 
 export type AreaBbox = {

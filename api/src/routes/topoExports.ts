@@ -27,6 +27,7 @@ import {
   RASTER_LAYERS,
   validateExportRequest,
   VECTOR_STYLE_DEFAULTS,
+  normalizeUserUiPreferences,
   type ExportFormat,
   type ExportBundling,
   type TopoExportJobView,
@@ -162,10 +163,20 @@ router.post(
         sourceJobIds: [],
         layers: area.data.layers,
         format: area.data.format,
-        // A GeoTIFF is a file per layer; a GeoPackage holds them all.
+        // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.
         bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
-        // Raw data: no style is drawn into it.
-        vectorStyleSnapshot: {},
+        // Raw data has no style drawn into it. An MBTiles is drawn with the
+        // account's contour style and slope bands as they are now; the worker
+        // reads `slopeBands` beside the vector style (topo/area_export.py).
+        vectorStyleSnapshot:
+          area.data.format === "mbtiles"
+            ? {
+                ...((user.vectorStyle as object | null) ??
+                  VECTOR_STYLE_DEFAULTS),
+                slopeBands: normalizeUserUiPreferences(user.uiPreferences)
+                  .slopeBands,
+              }
+            : {},
         // No size signal the estimator knows yet, so no estimate.
         sourceTileCount: null,
         monthlyComputeCredits: user.monthlyComputeCredits,

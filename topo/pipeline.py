@@ -1034,7 +1034,13 @@ def declutter_labels(items):
 # ---------------------------------------------------------------------------
 
 
-def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Connection:
+def create_mbtiles(
+    path: str,
+    name: str,
+    description: str = "",
+    minzoom: int = ZOOM_MIN,
+    maxzoom: int = ZOOM_MAX,
+) -> sqlite3.Connection:
     # Schema matches exactly what QGIS produces (confirmed working in Gaia):
     # - lowercase column types, no NOT NULL, no PRIMARY KEY on tiles
     # - UNIQUE INDEX only, no extra indexes
@@ -1058,8 +1064,8 @@ def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Conne
         ("version", "1.1"),
         ("description", description),
         ("format", "png"),
-        ("minzoom", str(ZOOM_MIN)),
-        ("maxzoom", str(ZOOM_MAX)),
+        ("minzoom", str(minzoom)),
+        ("maxzoom", str(maxzoom)),
     ]
     for k, v in meta:
         c.execute("INSERT OR REPLACE INTO metadata (name, value) VALUES (?,?)", (k, v))
@@ -1076,7 +1082,14 @@ def insert_tile(conn: sqlite3.Connection, z: int, x: int, y: int, png_bytes: byt
     )
 
 
-def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max):
+def finalise_bounds(
+    conn: sqlite3.Connection,
+    lon_min,
+    lat_min,
+    lon_max,
+    lat_max,
+    center_zoom: int = (ZOOM_MIN + ZOOM_MAX) // 2,
+):
     # Round to 6dp — full float precision in bounds strings causes parse
     # failures in some MBTiles consumers including older Gaia versions.
     lo_lon = round(lon_min, 6)
@@ -1086,7 +1099,7 @@ def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max
     cx = round((lo_lon + hi_lon) / 2, 6)
     cy = round((lo_lat + hi_lat) / 2, 6)
     bounds = f"{lo_lon},{lo_lat},{hi_lon},{hi_lat}"
-    center = f"{cx},{cy},{(ZOOM_MIN + ZOOM_MAX) // 2}"
+    center = f"{cx},{cy},{center_zoom}"
     conn.execute("INSERT OR REPLACE INTO metadata VALUES ('bounds',?)", (bounds,))
     conn.execute("INSERT OR REPLACE INTO metadata VALUES ('center',?)", (center,))
     conn.commit()
@@ -3585,7 +3598,12 @@ def render_contours_tile(
     bbox_wgs84: Tuple,
     zoom: int,
     settings: Dict[str, Any],
+    contour_lines: Optional[List[Tuple[dict, list]]] = None,
 ) -> Image.Image:
+    """`contour_lines`, when given, are the (feature, lon/lat coords) lines
+    near this tile, read by the caller (an area export reads them from the
+    statewide contour archive, a tile at a time), and `contour_paths` is
+    unused. Every interval pass filters them by `elev`."""
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -3648,16 +3666,17 @@ def render_contours_tile(
 
     # Draw from largest interval first (so smaller sit on top)
     for interval in intervals_to_draw:
-        path = contour_paths.get(interval)
-        if not path or not os.path.exists(path):
-            continue
-        try:
-            records, tree = _load_contour_index(path)
-        except Exception as e:
-            log.warning(f"Contour geojson load failed for interval {interval}: {e}")
-            continue
-        if tree is None:
-            continue
+        if contour_lines is None:
+            path = contour_paths.get(interval)
+            if not path or not os.path.exists(path):
+                continue
+            try:
+                records, tree = _load_contour_index(path)
+            except Exception as e:
+                log.warning(f"Contour geojson load failed for interval {interval}: {e}")
+                continue
+            if tree is None:
+                continue
 
         # When this interval is coarser than the active interval (e.g. drawing
         # the 50 m band underneath the 5 m band), treat its lines as major.
@@ -3670,12 +3689,14 @@ def render_contours_tile(
         # (keep features whose bbox intersects tile ± pad), at O(log n + hits)
         # per tile instead of scanning every feature in the job.
         pad = 0.05
-        query_box = shapely_box(
-            lon_min - pad, lat_min - pad, lon_max + pad, lat_max + pad
-        )
-        for idx in tree.query(query_box):
-            feat, coords = records[int(idx)]
-
+        if contour_lines is None:
+            query_box = shapely_box(
+                lon_min - pad, lat_min - pad, lon_max + pad, lat_max + pad
+            )
+            near = [records[int(idx)] for idx in tree.query(query_box)]
+        else:
+            near = contour_lines
+        for feat, coords in near:
             pts = [lonlat_to_px(c[0], c[1]) for c in coords]
             if len(pts) < 2:
                 continue
