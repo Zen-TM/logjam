@@ -20,27 +20,34 @@ export function useCompletedTopoJobs(loadsUserData: boolean) {
   // is not "no topos yet" (shared/DESIGN.md §11).
   const [loaded, setLoaded] = useState(false);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  // Which signed-in stretch a request belongs to: bumped on signing out.
-  const session = useRef(0);
-
   // During render, so not even one frame draws the last user's areas.
-  const [signedOutFor, setSignedOutFor] = useState(!loadsUserData);
-  if (!loadsUserData !== signedOutFor) {
-    setSignedOutFor(!loadsUserData);
+  const [signedOut, setSignedOut] = useState(!loadsUserData);
+  if (!loadsUserData !== signedOut) {
+    setSignedOut(!loadsUserData);
     if (!loadsUserData) {
-      session.current += 1;
       setJobs([]);
       setLoaded(false);
       setExpiresAt(null);
     }
   }
 
+  // One per signed-in stretch, aborted when it ends: a list asked for in a
+  // stretch that has ended is dropped when it arrives.
+  const stretch = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!loadsUserData) return;
+    const controller = new AbortController();
+    stretch.current = controller;
+    return () => controller.abort();
+  }, [loadsUserData]);
+
   const refetch = useCallback(() => {
-    const asked = session.current;
+    const signal = stretch.current?.signal;
+    const current = () => signal != null && !signal.aborted;
     return (
       apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays")
         .then((answer) => {
-          if (asked !== session.current) return;
+          if (!current()) return;
           setJobs(answer.jobs);
           setExpiresAt(answer.expiresAt);
         })
@@ -50,11 +57,12 @@ export function useCompletedTopoJobs(loadsUserData: boolean) {
           console.error(err);
         })
         .finally(() => {
-          if (asked === session.current) setLoaded(true);
+          if (current()) setLoaded(true);
         })
     );
   }, []);
 
+  // After the stretch's controller above, which the fetch reads.
   useEffect(() => {
     if (!loadsUserData) return;
     refetch();
