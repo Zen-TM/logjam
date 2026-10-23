@@ -35,9 +35,10 @@ regexes = [
   '''ap-southeast-2_x5zPhJXMk''',             # Cognito User Pool ID (public)
   '''row\.s3KeyThumbnail''',                   # a Prisma field read (copyPlaceMedia.ts), not a key
   # generic-api-key reads `<display column>, <thumbnail column>` in planItems.ts
-  # (its SQL select lists and a key array) as `key = value` and takes the
-  # thumbnail column name as the secret. It sits here, not in a rule-scoped
-  # table, because the pre-commit hook may run gitleaks 8.16, which replaces a
-  # regex-less `[[rules]]` entry instead of extending the default rule.
-  '''s3_?[Kk]ey_?[Dd]isplay\b[^,\n]{0,40},\s*(?:f\.)?s3_?[Kk]ey_?[Tt]humbnail\b''',
+  # (its SQL select lists, and a key array in earlier, unmerged plans history)
+  # as `key = value` and takes the thumbnail column name as the secret. It sits
+  # here, not in a rule-scoped table, because the pre-commit hook may run
+  # gitleaks 8.16, which replaces a regex-less `[[rules]]` entry instead of
+  # extending the default rule.
+  '''s3_?[Kk]ey_?[Dd]isplay\b[^,\n]{0,40},\s*(?:f\.)?s3_?[Kk]ey_?[Tt]humbnail\s?$''',
 ]
