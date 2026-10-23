@@ -20,7 +20,9 @@ import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import { TERRAIN_ENTRIES } from "./map/terrainEntries";
+import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
+import { setRoutedAreas } from "./map/terrainRouter";
+import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -36,10 +38,6 @@ import {
   type PanelId,
 } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
-import type {
-  CompletedTopoJob,
-  CompletedOverlaysResponse,
-} from "../topoLayerTypes";
 import {
   usePlaces,
   usePlaceTracks,
@@ -308,15 +306,38 @@ function App() {
   const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygonal | null>(
     null,
   );
-  // All of the user's completed topo jobs (with presigned PMTiles URLs per
-  // layer). Replaces the old single "master" mosaic — each job is its own
-  // set of overlays, controlled per-job in the Overlays panel.
-  const [completedTopoJobs, setCompletedTopoJobs] = useState<
-    CompletedTopoJob[]
-  >([]);
-  // True once the first fetch settles, either way: an empty list before then is
-  // not "no topos yet" (shared/DESIGN.md §11).
-  const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
+  const auth = useAuth();
+  const authenticated = auth.state === "authenticated";
+  const { hydrateFromUser } = useThemePreferences();
+  const {
+    currentUser,
+    error: currentUserError,
+    refetchCurrentUser,
+    applyCurrentUser,
+  } = useCurrentUser(authenticated);
+  const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // `authenticated` is NOT enough to start fetching the user's data: a user
+  // whose recorded consent is stale gets ConsentGate rendered instead of
+  // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
+  // `loadsUserData` is what they wait on.
+  //
+  // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
+  // the answer arrives. Everything downstream of them gates on this instead.
+  // The localStorage read is deliberately unmemoised — it is a string compare,
+  // and the key is removed in the boot effect below, whose `applyCurrentUser`
+  // re-render is what re-reads it.
+  const { blocked: consentBlocked, settled: consentSettled } = consentGate(
+    currentUser,
+    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
+  );
+  const loadsUserData = authenticated && consentSettled;
+  // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
+  // on signing out (useCompletedTopoJobs.ts).
+  const {
+    jobs: completedTopoJobs,
+    loaded: completedTopoJobsLoaded,
+    refetch: refetchCompletedTopoJobs,
+  } = useCompletedTopoJobs(loadsUserData, authenticated);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
   // "unavailable" badge in the Layers panel.
@@ -503,7 +524,15 @@ function App() {
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
   const { contours, slope, hillshade } = terrainLayers;
+  const sharpenedAreas = useMemo(
+    () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
+    [completedTopoJobs],
+  );
   const mapTopoLayers = useMemo(() => {
+    // Here, not in an effect: the Map's effects run before this component's,
+    // and its routed sources ask for tiles as soon as it adds them.
+    setRoutedAreas(sharpenedAreas);
+    const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       slope,
@@ -513,10 +542,17 @@ function App() {
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
         .filter((key) => shown[key])
-        .map((key) => TERRAIN_ENTRIES[key]),
+        .map((key) => entries[key]),
       ...combinedTopoLayers,
     ];
-  }, [activeLayerId, contours, slope, hillshade, combinedTopoLayers]);
+  }, [
+    activeLayerId,
+    contours,
+    slope,
+    hillshade,
+    combinedTopoLayers,
+    sharpenedAreas,
+  ]);
 
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
@@ -633,31 +669,6 @@ function App() {
     setActivePanel(null);
   }, [activePanel]);
 
-  const auth = useAuth();
-  const authenticated = auth.state === "authenticated";
-  const { hydrateFromUser } = useThemePreferences();
-  const {
-    currentUser,
-    error: currentUserError,
-    refetchCurrentUser,
-    applyCurrentUser,
-  } = useCurrentUser(authenticated);
-  const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
-  // `authenticated` is NOT enough to start fetching the user's data: a user
-  // whose recorded consent is stale gets ConsentGate rendered instead of
-  // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
-  // `loadsUserData` is what they wait on.
-  //
-  // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
-  // the answer arrives. Everything downstream of them gates on this instead.
-  // The localStorage read is deliberately unmemoised — it is a string compare,
-  // and the key is removed in the boot effect below, whose `applyCurrentUser`
-  // re-render is what re-reads it.
-  const { blocked: consentBlocked, settled: consentSettled } = consentGate(
-    currentUser,
-    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
-  );
-  const loadsUserData = authenticated && consentSettled;
   const {
     places,
     total: placesTotal,
@@ -903,56 +914,16 @@ function App() {
       });
   }, [loadsUserData]);
 
-  // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
-  // auth and whenever a job transitions to complete.
-  const [overlaysExpiresAt, setOverlaysExpiresAt] = useState<string | null>(
-    null,
-  );
-  const refetchCompletedTopoJobs = useCallback(() => {
-    return (
-      apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays")
-        .then(({ jobs, expiresAt }) => {
-          setCompletedTopoJobs(jobs);
-          setOverlaysExpiresAt(expiresAt);
-          setLidarJobToggles((prev) => {
-            // Default newly-seen jobs to visible; preserve prior toggle state
-            // for jobs we already knew about.
-            const next: Record<string, boolean> = { ...prev };
-            for (const j of jobs) {
-              if (next[j.jobId] === undefined) next[j.jobId] = true;
-            }
-            return next;
-          });
-        })
-        // Best-effort: called again on the next poll tick / job completion,
-        // so a transient failure here is non-critical.
-        .catch((err) => {
-          console.error(err);
-        })
-        .finally(() => setCompletedTopoJobsLoaded(true))
-    );
-  }, []);
-
+  // Default newly-seen jobs to visible; keep the toggle of jobs already known.
   useEffect(() => {
-    if (!loadsUserData) return;
-    refetchCompletedTopoJobs();
-  }, [loadsUserData, refetchCompletedTopoJobs]);
-
-  // Pre-refetch presigned PMTiles URLs ~30 min before the server-reported expiry
-  // so MapLibre tile requests never see a 403 in an active session.
-  useEffect(() => {
-    if (!loadsUserData || !overlaysExpiresAt) return;
-    const refetchAt = new Date(overlaysExpiresAt).getTime() - 30 * 60 * 1000;
-    const delay = refetchAt - Date.now();
-    if (delay <= 0) {
-      refetchCompletedTopoJobs();
-      return;
-    }
-    const timer = setTimeout(() => {
-      refetchCompletedTopoJobs();
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [loadsUserData, overlaysExpiresAt, refetchCompletedTopoJobs]);
+    setLidarJobToggles((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      for (const j of completedTopoJobs) {
+        if (next[j.jobId] === undefined) next[j.jobId] = true;
+      }
+      return next;
+    });
+  }, [completedTopoJobs, setLidarJobToggles]);
 
   // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
   // recent-exports list (rendered in the LiDAR panel accordion) and the
