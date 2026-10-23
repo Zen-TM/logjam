@@ -328,6 +328,30 @@ class TestProcessSharpen(unittest.TestCase):
         )
         self.assertEqual(sorted(uploads), sorted(sharpen["keys"].values()))
 
+    def test_the_stored_result_is_the_example_the_api_reads(self):
+        # Mutation: a key or field the worker adds renamed, which the API's
+        # parser would read as no area (shared/src/__fixtures__/sharpen-result.json,
+        # read by api/src/services/sharpenedAreas.unit.test.ts too).
+        import json
+        import os
+
+        root = os.path.join(os.path.dirname(__file__), "..", "..")
+        path = os.path.join(root, "shared/src/__fixtures__/sharpen-result.json")
+        with open(path) as f:
+            example = json.load(f)
+        stored = example["stored"]
+        reported = {k: v for k, v in stored.items() if k not in ("keys", "vegetation")}
+
+        def finished(out):
+            (out / "sharpen.json").write_text(json.dumps(reported))
+            for name in stored["keys"]:
+                (out / f"{name}.pmtiles").write_bytes(b"x")
+            return 0
+
+        self.assertEqual(example["jobId"], "job-1")  # run_job's job id
+        result, _, _ = self.run_job({"v": 1, "vegetation": False}, finished)
+        self.assertEqual(result[-1], stored)
+
     def test_a_ticked_job_gets_the_legacy_vegetation_layer(self):
         result, _, legacy = self.run_job({"v": 1, "vegetation": True}, self.finished)
         output_keys, _, _, total, _, sharpen = result

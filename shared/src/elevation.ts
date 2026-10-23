@@ -90,8 +90,9 @@ export type ElevationProfile = {
   maxM: number | null;
   /**
    * The DEM sources the heights were read from (`demSources.ts`): any
-   * sharpened area's (`lidar-<job id>`) first, then the public ones finest
-   * first. Absent on a profile from an API that predates it.
+   * sharpened area's (`lidar-<job id>`) first, in the order the line meets
+   * them, then the public ones finest first. Absent on a profile from an API
+   * that predates it.
    */
   demSourceIds?: string[];
   /**

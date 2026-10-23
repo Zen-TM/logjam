@@ -43,7 +43,7 @@ The publisher states the data is good to ±0.9 m on open ground.
 - **Pyramid:** each coarser zoom is the mean of the heights below it, taken
   before encoding, never the mean of encoded pixels.
 - **Container:** one PMTiles archive per source, read by byte range.
-- **Update 2026-10-24: a sharpened area's heights are rounded finer past
+- **Update 2026-10-23: a sharpened area's heights are rounded finer past
   z15.** `topo/sharpen.py` rounds to a quarter metre at z15 and halves the
   step each zoom deeper: ⅛ m at z16 and 1⁄16 m at z17
   ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)). A quarter metre
@@ -86,7 +86,7 @@ clients' formula, and checks the no-data value and the rounding.
 - **Rounding to 1/8 m.** 22 % larger on rugged ground and 36 % larger on flat
   ground than a quarter metre, for digits finer than the data's stated
   accuracy.
-- **A quarter metre at every zoom of a sharpened area** (2026-10-24). What
+- **A quarter metre at every zoom of a sharpened area** (2026-10-23). What
   #590 shipped while this update was pending. Rejected because on 1 m pixels
   it draws terraces in the hillshade, which the survey's finer data exists
   to avoid.

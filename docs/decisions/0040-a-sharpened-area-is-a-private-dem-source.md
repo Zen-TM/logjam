@@ -35,9 +35,12 @@ found three problems:
   ([0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)).
   Among areas, the finer one wins, then the newer, then the lower id
   (`compareSharpenedAreas`). `demSourcesFor` gives the sampler that order,
-  and the tile router uses the same one, so a height and the tile drawn under
-  it come from the same area. A source names its archive by `areaId`, never
-  by a URL or a path.
+  and the tile router uses the same one. They share the precedence, not the
+  test of which areas hold a point: the sampler asks an area's `coverage`,
+  the router its tile range, which is the coverage widened to whole z14
+  tiles. So in that margin a finer area's tile (its 5 m fill) can be drawn
+  where a coarser area's coverage answers the height. A source names its
+  archive by `areaId`, never by a URL or a path.
 - **Only the owner and the users it is shared with directly read it.**
   `visibleSharpenedAreas` in `api/src/services/sharpenedAreas.ts` applies the
   rule `completed-overlays` already applies.
@@ -46,7 +49,8 @@ found three problems:
   - A client gets the archives as presigned URLs in
     `GET /topo-jobs/completed-overlays`, in a `sharpened` field of its own
     (`SharpenedOverlay`), so a build that reads only `layers` ignores it. The
-    archive keys never leave the API.
+    archive keys reach a client only inside the presigned URLs, never as
+    fields of their own.
   - A stranger gets the statewide answer, worded as anywhere else.
 - **Each map tile comes from exactly one archive.** `terrainTileArchive`
   routes heights and slope from z15 to the first area whose z15 range holds
@@ -74,6 +78,12 @@ Guards:
 - `api/src/__tests__/sharpenedAreas.test.ts`: owner, sharee, stranger and
   revoked share, end to end.
 - `api/src/services/elevation.unit.test.ts`: an area read from S3 by range.
+- `topo/tests/test_sharpen.py`:
+  - `TestTileRange`: the range widened to whole z14 tiles;
+  - `TestPyramid.test_every_zoom_from_zmax_to_z15_at_the_blocks_tiles`;
+  - `TestBlockGrids`: the survey first, then the 5 m fill;
+  - `TestCredit`.
+- `topo/tests/e2e/check.py`: the job's result carries the survey's credit.
 
 ## Consequences
 
@@ -93,6 +103,9 @@ Guards:
     tiles.
   - **Revoking.** A presigned URL keeps working until it expires, 24 h at
     most after the share ends.
+  - **Old builds.** A Logjam GPS build older than this reads a profile's
+    `lidar-<job id>` as a source it does not know, and stores that track's
+    climb as `terrarium` until a newer build stores it as `lidar`.
 - **Neutral:** each client routes per tile. Logjam Web can do it in the
   browser with a MapLibre protocol. MapLibre Native has no custom protocol,
   so Logjam GPS will read routed tiles through an API route. That route must

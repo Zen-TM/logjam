@@ -72,7 +72,7 @@ level 9.
   between tiles and between the builder's blocks are invisible because every tile
   sees its neighbours.
 
-- **Update 2026-10-24: a sharpened area's slope archive starts at z15.**
+- **Update 2026-10-23: a sharpened area's slope archive starts at z15.**
   `topo/sharpen.py` writes the same encoding, 1° rounding, max pyramid and
   PNG level from z15 to the area's zmax (16 or 17)
   ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)). Horn runs at

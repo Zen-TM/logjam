@@ -120,3 +120,42 @@ describe("POST /elevation/point inside a sharpened area", () => {
     expect(res.body.attribution).toContain("NSW 5 m");
   });
 });
+
+describe("POST /elevation/profile inside a sharpened area", () => {
+  beforeEach(() => {
+    process.env.AUTH_MODE = "fake";
+  });
+
+  // Mutations: sample the line without the caller's areas, or credit it from
+  // the public sources alone.
+  it("reads the areas the caller may see, and credits the survey", async () => {
+    const area = {
+      id: "job-1",
+      zmax: 17,
+      tiles15: [0, 0, 1, 1],
+      coverage: [150.3, -33.8, 150.4, -33.7],
+      contours: true,
+      credit: "Elevation: derived from a LiDAR survey.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      keys: { heights: "h", slope: "s", contours: "c" },
+    };
+    visible.mockResolvedValue([area]);
+    dem.heights.mockImplementation(async (positions: unknown[]) => ({
+      heights: positions.map(() => 412.4),
+      sourceIds: positions.map(() => "lidar-job-1"),
+      levelled: positions.map(() => 412.4),
+    }));
+    const res = await request(app)
+      .post("/elevation/profile")
+      .send({
+        points: [
+          [150.31, -33.75],
+          [150.32, -33.76],
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(dem.heights.mock.calls[0]![1]).toEqual([area]);
+    expect(res.body.demSourceIds).toEqual(["lidar-job-1"]);
+    expect(res.body.attribution).toContain(area.credit);
+  });
+});

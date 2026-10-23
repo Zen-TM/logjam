@@ -123,7 +123,7 @@ class TestPyramid(unittest.TestCase):
     """Mutations that turn it red: the slope pyramid by the mean (a cliff
     fades out of its band zoomed out, ADR 0039), and heights rounded to the
     same step at every zoom (terraces in the hillshade at z17, ADR 0030's
-    update of 2026-10-24)."""
+    update of 2026-10-23)."""
 
     def test_heights_round_finer_with_each_zoom(self):
         import io
@@ -205,6 +205,31 @@ class TestCredit(unittest.TestCase):
             )
         self.assertIsNone(extraction_month(self.zip_dated((1980, 0, 0, 0, 0, 0))))
         self.assertNotIn("extracted", credit(None))
+
+
+class TestResult(unittest.TestCase):
+    """Mutation that turns it red: a field of the result renamed or retyped
+    on the worker's side, which the API's parser would then read as no area
+    (api/src/services/sharpenedAreas.unit.test.ts reads the same example)."""
+
+    def test_the_result_is_the_example_the_api_reads(self):
+        import json
+
+        root = os.path.join(os.path.dirname(__file__), "..", "..")
+        path = os.path.join(root, "shared/src/__fixtures__/sharpen-result.json")
+        with open(path) as f:
+            stored = json.load(f)["stored"]
+        reported = sharpen_module.sharpen_result(
+            stored["zmax"],
+            tuple(stored["tiles15"]),
+            tuple(stored["coverage"]),
+            stored["ground"],
+            stored["extracted"],
+        )
+        added_by_the_worker = {"keys", "vegetation"}
+        self.assertEqual(
+            reported, {k: v for k, v in stored.items() if k not in added_by_the_worker}
+        )
 
 
 class TestGround(unittest.TestCase):

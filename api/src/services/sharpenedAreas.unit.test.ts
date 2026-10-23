@@ -1,38 +1,41 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./prisma", () => ({ default: {} }));
 
 import { sharpenedAreaFrom } from "./sharpenedAreas";
 
-// A made-up result, as topo/sharpen.py and topo/worker.py write it.
-const result = {
-  v: 1,
-  zmax: 16,
-  tiles15: [30100, 19400, 30103, 19403],
-  coverage: [150.7, -33.8, 150.72, -33.78],
-  ground: "class-2",
-  extracted: "March 2025",
-  credit: "Elevation: derived from a LiDAR survey. CC BY 3.0 AU.",
-  keys: {
-    heights: "outputs/job-1/heights.pmtiles",
-    slope: "outputs/job-1/slope.pmtiles",
-    contours: "outputs/job-1/contours.pmtiles",
-  },
-  vegetation: false,
+// The example both sides' tests read: what topo/sharpen.py and
+// topo/worker.py store, made up.
+const example = JSON.parse(
+  readFileSync(
+    join(__dirname, "../../../shared/src/__fixtures__/sharpen-result.json"),
+    "utf8",
+  ),
+) as {
+  jobId: string;
+  stored: Record<string, unknown> & {
+    keys: Record<string, string>;
+    credit: string;
+  };
 };
+const result = example.stored;
 const row = (sharpen: unknown) => ({
-  id: "job-1",
+  id: example.jobId,
   createdAt: new Date("2026-10-24T00:00:00.000Z"),
   sharpen,
 });
 
 describe("sharpenedAreaFrom", () => {
+  // Mutation: a field renamed or retyped on either side, and every area
+  // silently disappears (topo/tests/test_sharpen.py reads the same example).
   it("reads a sharpened job's result", () => {
     expect(sharpenedAreaFrom(row(result))).toEqual({
       id: "job-1",
-      zmax: 16,
-      tiles15: [30100, 19400, 30103, 19403],
-      coverage: [150.7, -33.8, 150.72, -33.78],
+      zmax: result.zmax,
+      tiles15: result.tiles15,
+      coverage: result.coverage,
       contours: true,
       credit: result.credit,
       createdAt: "2026-10-24T00:00:00.000Z",
@@ -48,6 +51,8 @@ describe("sharpenedAreaFrom", () => {
     });
   });
 
+  // Mutation: accept a result of an unknown version, a mark the worker has
+  // not replaced, a zmax with no archive, or one with no credit.
   it("is no area for a legacy job, a job still marked, or a result it cannot read", () => {
     expect(sharpenedAreaFrom(row(null))).toBeNull();
     expect(sharpenedAreaFrom(row({ v: 1, vegetation: true }))).toBeNull();

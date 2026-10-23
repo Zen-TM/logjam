@@ -51,7 +51,7 @@ export type DemSource = {
   /**
    * A sharpened area's job id. Its archive is private, so neither field
    * above names it: the runtime opens it after checking the caller may read
-   * the area (`sharpenedDemSource`).
+   * the area (`sharpenedDemSource`; the API's check: `api/src/__tests__/sharpenedAreas.test.ts`).
    */
   areaId?: string;
   /** Required by the source's terms wherever a height from it is shown. */

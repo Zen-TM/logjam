@@ -222,7 +222,7 @@ def rounding_at(layer: dem.Layer, z: int) -> dem.Layer:
     """Heights rounded to ADR 0030's quarter metre at z15, halved each zoom
     deeper: the quarter metre was sized for z15's ~4 m pixels, and on 1 m
     pixels it draws terraces in the hillshade and puts up to ~7° of noise in
-    a tapped slope (ADR 0030's update of 2026-10-24; tests/test_sharpen.py
+    a tapped slope (ADR 0030's update of 2026-10-23; tests/test_sharpen.py
     `TestPyramid`)."""
     if layer is not HEIGHTS:
         return layer
@@ -727,6 +727,23 @@ def footprint_bbox(path: Path) -> Tuple[float, float, float, float]:
     return tuple(round(v, 6) for v in shape(geometry).bounds)
 
 
+def sharpen_result(zmax, tiles15, coverage, kind, extracted) -> dict:
+    """What the job reports. topo/worker.py stores it with the archive keys,
+    and the API reads it (api/src/services/sharpenedAreas.ts): the example in
+    shared/src/__fixtures__/sharpen-result.json holds all three to one shape
+    (tests/test_sharpen.py `TestResult`). The credit the clients show is
+    declared here, once."""
+    return {
+        "v": 1,
+        "zmax": zmax,
+        "tiles15": list(tiles15),
+        "coverage": list(coverage),
+        "ground": kind,
+        "extracted": extracted,
+        "credit": credit(extracted),
+    }
+
+
 def sharpen(args) -> dict:
     bench = pipeline.Benchmark()
     out = Path(args.out)
@@ -783,16 +800,7 @@ def sharpen(args) -> dict:
             if not contour_archive(blocks_dir, out, extracted):
                 log.info("No 10 m contour crosses the area: no contour archive")
 
-    result = {
-        "v": 1,
-        "zmax": zmax,
-        "tiles15": list(tiles15),
-        "coverage": list(coverage),
-        "ground": kind,
-        "extracted": extracted,
-        # What the clients credit for the area: declared once, here.
-        "credit": credit(extracted),
-    }
+    result = sharpen_result(zmax, tiles15, coverage, kind, extracted)
     (out / "sharpen.json").write_text(json.dumps(result))
     if args.metrics_json:
         bench.set_tile_counts(len(contents.las_files or contents.dem_files), tile_count)

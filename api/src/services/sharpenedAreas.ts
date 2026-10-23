@@ -2,9 +2,9 @@
 // those shared with them directly, the rule /topo-jobs/completed-overlays
 // applies. docs/decisions/0040-a-sharpened-area-is-a-private-dem-source.md
 //
-// PRIVACY: an area's tile range and coverage say where its owner surveyed,
-// and its archive keys are owner-only bucket keys. Nothing here logs them,
-// and the keys never leave the API.
+// PRIVACY: an area's tile range and coverage say where its owner surveyed.
+// Nothing here logs them. Its archive keys reach a client only inside
+// presigned URLs, never as fields of their own (src/__tests__/sharpenedAreas.test.ts).
 import { Prisma } from "@prisma/client";
 import type { SharpenedArea } from "@logjam/shared";
 import prisma from "./prisma";

@@ -5,13 +5,14 @@
 // docs/decisions/0040-a-sharpened-area-is-a-private-dem-source.md
 //
 // PRIVACY: an area's tile range and coverage say where its owner surveyed.
-// Nothing in this file logs, and no caller may log what it returns.
+// Nothing in this file logs.
 
 import {
   DEM_SOURCES,
   SHARPENED_SOURCE_PREFIX,
   type DemSource,
 } from "./demSources.js";
+import { escapeXml } from "./escapeXml.js";
 
 /**
  * Whether /start marks a new job to sharpen. Off until Logjam Web draws
@@ -44,8 +45,9 @@ export type SharpenedArea = {
 /**
  * A sharpened area in `GET /topo-jobs/completed-overlays` (its `sharpened`
  * field): the area, and its archives as presigned URLs that expire with the
- * response's `expiresAt`. A sharee gets the same; the archive keys never
- * leave the API.
+ * response's `expiresAt`. A sharee gets the same. The archive keys reach a
+ * client only inside these URLs, never as fields of their own
+ * (`api/src/__tests__/sharpenedAreas.test.ts`).
  */
 export type SharpenedOverlay = SharpenedArea & {
   heightsUrl: string;
@@ -62,8 +64,11 @@ export type TerrainArchiveLayer = (typeof TERRAIN_ARCHIVE_LAYERS)[number];
 /**
  * Which of two areas answers where both could: the finer, then the newer,
  * then the lower id, so the order never depends on how a list was fetched.
- * The sampler and the tile router use the same order, so a height and the
- * tile drawn under it come from the same area.
+ * The sampler and the tile router use the same order. They do not ask the
+ * same question of an area: the sampler its `coverage`, the router its
+ * `tiles15`, the coverage widened to whole z14 tiles. In that margin a finer
+ * area's tile (its 5 m fill) can be drawn where a coarser area answers the
+ * height.
  */
 export function compareSharpenedAreas(
   a: SharpenedArea,
@@ -74,13 +79,11 @@ export function compareSharpenedAreas(
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-const escapeHtml = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
 /**
  * An area as a DEM source. It ranks above every statewide source
  * (ADR 0028), and its archive is private: each runtime opens it itself,
- * after it has checked the caller may read the area.
+ * after it has checked the caller may read the area (the API's check:
+ * `api/src/__tests__/sharpenedAreas.test.ts`).
  */
 export function sharpenedDemSource(area: SharpenedArea): DemSource {
   return {
@@ -91,7 +94,7 @@ export function sharpenedDemSource(area: SharpenedArea): DemSource {
     archivePath: null,
     areaId: area.id,
     credit: area.credit,
-    creditHtml: escapeHtml(area.credit),
+    creditHtml: escapeXml(area.credit),
   };
 }
 

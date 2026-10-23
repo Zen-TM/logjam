@@ -7,6 +7,7 @@
 // and each client only draws.
 import { MAP_MEASURE } from "./contracts/mapMeasure.js";
 import {
+  climbSourceOf,
   GPS_CLIMB_SOURCE,
   NSW_5M,
   SHARPENED_CLIMB_SOURCE,
@@ -146,6 +147,14 @@ const HEIGHT_SOURCE_NAMES: Record<string, string> = {
 /** A source this build does not know was written by a newer one. */
 const UNNAMED_SOURCE = "terrain data";
 
+/** The name of the one climb source a profile was read from, if just one. */
+function heightSourceName(sourceIds: readonly string[] | undefined): string {
+  const sources = new Set(sourceIds?.map(climbSourceOf));
+  return sources.size === 1
+    ? (HEIGHT_SOURCE_NAMES[[...sources][0]!] ?? UNNAMED_SOURCE)
+    : UNNAMED_SOURCE;
+}
+
 /**
  * The line under a finished recording's stored Ascent and Descent, saying
  * which source they were read from (nothing stored beside them means GPS).
@@ -190,13 +199,10 @@ export function trackHeights(
     : dem?.filledFromGps
       ? "Terrain data covers part of this track — the rest is from GPS"
       : dem
-        ? // Named only when ONE source answered: a line read from two has no
-          // single name, and the credit beside it lists both.
-          `Heights from ${
-            (dem.demSourceIds?.length === 1
-              ? HEIGHT_SOURCE_NAMES[dem.demSourceIds[0]!]
-              : undefined) ?? UNNAMED_SOURCE
-          }`
+        ? // Named only when ONE source answered, counting every sharpened
+          // area as one (`lidar`), as a stored climb is: a line read from two
+          // has no single name, and the credit beside it lists both.
+          `Heights from ${heightSourceName(dem.demSourceIds)}`
         : demProfile
           ? "Terrain data incomplete — heights from GPS"
           : demLoading

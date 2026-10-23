@@ -30,6 +30,11 @@ Property ... remains unchanged, maintained and preserved".
   Services 5 m DEM: the `NSW_5M` entry in `shared/src/demSources.ts`, ahead of
   the worldwide tiles, which still answer wherever it has no height
   ([0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)).
+- **Update 2026-10-23: inside a sharpened area, its owner and the users it
+  is shared with read the area's heights first**
+  ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)). Everywhere
+  else, and for everyone else, the 5 m DEM answers as above. Everything else
+  above stands.
 - **Our own copy.** `topo/build_nsw_dem.py` builds every sheet into one
   archive, kept in the topo bucket beside the vector basemap
   ([0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md)). Nothing asks

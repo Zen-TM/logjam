@@ -146,6 +146,8 @@ describe("a sharpened area's heights", () => {
     );
   const at = (lon: number, lat: number) => ({ lon, lat, distanceM: 0 });
 
+  // Mutations: areas ranked after the public sources, or an area sampled
+  // at a zoom other than its zmax.
   it("ranks the areas above the public sources, in their own order", () => {
     expect(sources.map((s) => s.id)).toEqual([
       "lidar-fine",
@@ -185,6 +187,8 @@ describe("a sharpened area's heights", () => {
     expect(isClimbSource("lidar")).toBe(true);
   });
 
+  // Mutation: store a climb that leaves the area as `lidar`, and the track
+  // is never offered again when a finer source covers the rest.
   it("store a climb that leaves the area as the coarser source", async () => {
     const positions = [at(150.715, -33.795), at(150.5, -33.795)];
     const profile = buildElevationProfile(

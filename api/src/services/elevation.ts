@@ -36,6 +36,7 @@ import {
   demTileUrl,
   readDemArchive,
   sampleDem,
+  say,
   type DemSamples,
   type DemSlopeReading,
   type DemSource,
@@ -43,6 +44,8 @@ import {
   type SamplePosition,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
+import { isMissingObjectError } from "../lib/fileSendAccess";
+import { AppError } from "../middleware/errorHandler";
 import { logger } from "../lib/logger";
 import { s3 } from "./awsClients";
 import type { VisibleSharpenedArea } from "./sharpenedAreas";
@@ -172,8 +175,8 @@ export async function demArchiveFor(source: {
 
 /**
  * A job's archive in the topo bucket, read by range on the API's role, with
- * the same timeout as a CDN read. A missing archive throws: the caller was
- * told the area exists, so its absence is a failure, not "no terrain".
+ * the same timeout as a CDN read. Its failures throw; `tileBytes` decides
+ * what a missing archive means.
  */
 function s3Source(key: string): Source {
   return {
@@ -208,9 +211,24 @@ async function tileBytes(
 ): Promise<Map<string, Uint8Array>> {
   if (source.areaId != null) {
     const area = areas.find((a) => a.id === source.areaId);
-    return area
-      ? readDemArchive(demArchive(s3Source(area.keys.heights)), source, wanted)
-      : new Map();
+    if (!area) return new Map();
+    // ponytail: one open archive per area ever read (`s3:` keys in shared's
+    // archive map), each with its header and up to 100 directory entries,
+    // held for the life of the process; cap those entries oldest-first, as
+    // `cacheTile` does, when the number of areas makes it matter.
+    try {
+      return await readDemArchive(
+        demArchive(s3Source(area.keys.heights)),
+        source,
+        wanted,
+      );
+    } catch (error) {
+      // DELETE /topo-jobs/:id removes a job's archives before its row, so a
+      // job being deleted can still be listed with no archive: its positions
+      // fall through to the public sources. Any other failure is ours.
+      if (isMissingObjectError(error)) return new Map();
+      throw new AppError(503, say`Couldn't read the terrain here. Try again.`);
+    }
   }
   if (source.archivePath != null) {
     const archive = await demArchiveFor({
