@@ -99,6 +99,9 @@ resource "aws_cognito_user_pool" "main" {
   }
 }
 
+# 10 years: Logjam GPS must never sign a user out mid-trip, and a trip with no
+# signal must not cost access to local data. Explicit sign-out still revokes the
+# token (enable_token_revocation), as does a password change.
 resource "aws_cognito_user_pool_client" "main" {
   access_token_validity                         = 60
   allowed_oauth_flows                           = ["code"]
@@ -114,7 +117,7 @@ resource "aws_cognito_user_pool_client" "main" {
   name                                          = "logjam"
   prevent_user_existence_errors                 = "ENABLED"
   read_attributes                               = []
-  refresh_token_validity                        = 5
+  refresh_token_validity                        = 3650
   supported_identity_providers                  = ["COGNITO"]
   user_pool_id                                  = aws_cognito_user_pool.main.id
   write_attributes                              = []
