@@ -1055,8 +1055,8 @@ function App() {
     return () => clearInterval(interval);
   }, [activeTopoJobs, refetchNotifications, refetchCompletedTopoJobs]);
 
-  // Register for active-job polling. The dialog owns the success surface
-  // (in-dialog "Submitted" view) and its own close, so no toast/close here.
+  // The dialog owns the success surface (in-dialog "Submitted" view) and its
+  // own close, so no toast/close here.
   const handleTopoJobCreated = useCallback(
     (job: TopoJob) =>
       routeMadeTopoJob(job, {
