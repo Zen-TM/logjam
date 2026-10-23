@@ -57,7 +57,16 @@ elvis-katoomba-2506258-laz.zip`:
    `complete` with its outputs, footprint, metrics and
    storage charge; the objects are in the bucket and the input ZIP is gone;
    every layer's tile on Mount Solitary decodes and is not blank.
-5. **Resurrection check** (`e2e/check.py reaped`): a second job is launched
+5. **Sharpen** (`e2e/check.py sharpened`): `e2e/statewide.py` puts made-up
+   stand-ins for the statewide height and slope archives in MiniStack (the
+   heights a steep plane, so the check can say what every fill pixel must
+   hold), a job is inserted with its `sharpen` mark set by hand and the worker
+   run on it with `docker run`. By hand because the API marks no job while
+   `SHARPEN_NEW_JOBS` (`shared/src/sharpen.ts`) is off. The row must be
+   `complete` with its result and ground kind, every z15 tile of its range in
+   both raster archives, the survey's own heights on Mount Solitary, the fill
+   pixels of the range's corner tile in place, and a contour tile.
+6. **Resurrection check** (`e2e/check.py reaped`): a second job is launched
    the same way, its worker killed mid-render and the row force-failed as the
    reaper would; a worker relaunched for the same `JOB_ID` leaves it
    `failed`, with no outputs and no notification. The relaunch is by `docker

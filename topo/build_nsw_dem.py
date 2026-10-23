@@ -659,6 +659,25 @@ def run(*command: str) -> None:
     subprocess.run(command, check=True)
 
 
+def contour_lines(raster: Path, raw: Path, lines: Path, run=run) -> None:
+    """CONTOUR_INTERVAL_M lines of a height raster into a GeoPackage in
+    lon/lat, as two layers: `major` (every CONTOUR_MAJOR_M) and `minor`. The
+    statewide archive and a sharpened area's (sharpen.py) are both cut by
+    this, so they share a schema."""
+    run(
+        *["gdal_contour", "-q", "-a", "elev", "-i", str(CONTOUR_INTERVAL_M)],
+        *["-snodata", str(NODATA), "-f", "GPKG", str(raster), str(raw)],
+        *["-nln", "cont"],
+    )
+    for name, test in (("major", "="), ("minor", "<>")):
+        run(
+            *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(lines)],
+            *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
+            "select elev, geom from cont where cast(elev as integer)"
+            f" % {CONTOUR_MAJOR_M} {test} 0",
+        )
+
+
 def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
     """10 m contours of every sheet, as vector tiles in one PMTiles archive.
 
@@ -692,18 +711,7 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
             *["gdalwarp", "-q", "-overwrite", "-tr", "10", "10", "-r", "average"],
             *["-co", "COMPRESS=ZSTD", str(sheet), str(smooth)],
         )
-        run(
-            *["gdal_contour", "-q", "-a", "elev", "-i", str(CONTOUR_INTERVAL_M)],
-            *["-snodata", str(NODATA), "-f", "GPKG", str(smooth), str(raw)],
-            *["-nln", "cont"],
-        )
-        for name, test in (("major", "="), ("minor", "<>")):
-            run(
-                *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(part)],
-                *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
-                "select elev, geom from cont where cast(elev as integer)"
-                f" % {CONTOUR_MAJOR_M} {test} 0",
-            )
+        contour_lines(smooth, raw, part)
         smooth.unlink()
         raw.unlink()
         part.rename(lines)

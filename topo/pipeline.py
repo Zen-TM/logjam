@@ -85,6 +85,23 @@ logging.basicConfig(
 )
 log = logging.getLogger("topo")
 
+
+def _gdal_message(err_class: int, err_num: int, _message: str) -> None:
+    """GDAL's warnings and errors, logged by class and number only. GDAL's own
+    output quotes file names ("… Skipping <file>"), and an ELVIS file's name
+    says where the survey is. An error still raises (UseExceptions)."""
+    log.warning(f"GDAL message, class {err_class}, number {err_num}")
+
+
+# Replaces GDAL's default printing to stderr (CloudWatch), on the importing
+# thread: nothing here runs GDAL on threads of its own, and a forked worker
+# inherits it. Pushed on import, not in main(), so a spawned pool child (which
+# imports this and never runs main) keeps it; every importer gets it, the
+# export worker too, through renderers/tile_compose.py, whose warnings lose
+# their text with it. SetErrorHandler is no substitute: under UseExceptions it
+# has no effect. Guard: tests/test_log_privacy.py `TestGdalMessages`.
+gdal.PushErrorHandler(_gdal_message)
+
 # Composite stacking order, bottom→top. Hand-synced mirror of TOPO_LAYERS in
 # shared/src/topoSettings.ts, which is canonical: a layer is added there first,
 # and tests/test_layer_sync.py fails if this list or its order drifts from it.
@@ -181,9 +198,9 @@ class Benchmark:
     def set_survey_selection(self, decisions: Optional[List[dict]]):
         """Record the per-footprint overlapping-survey resolution (see
         select_surveys_by_layer). None/empty when no footprint had more than one
-        survey (the common single-survey job) or for DEM-only jobs. Privacy-safe:
-        numeric tile ids + area/date survey labels only, never place
-        names/coords."""
+        survey (the common single-survey job) or for DEM-only jobs. It says
+        where the survey is (see SurveySelection), so it goes to the job's own
+        metrics row only."""
         self._survey_decisions = decisions
 
     def write_metrics(self, path: str):
@@ -1457,7 +1474,7 @@ def run_pdal_sequential_full(
     # laz path → its five per-tile GeoTIFF paths.
     grids: Dict[str, Dict[str, str]] = {}
     for i, laz in enumerate(union):
-        log.info(f"PDAL tile {i + 1}/{len(union)}: {os.path.basename(laz)}")
+        log.info(f"PDAL tile {i + 1}/{len(union)}")
         # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
         # each tile keeps last_progress_at fresh through the whole PDAL pass so
         # the stall-reaper doesn't false-kill a big job before render starts.
@@ -2067,9 +2084,10 @@ class SurveySelection:
 
     terrain_tiles feeds the DTM (hillshade/slope/contours); veg_tiles feeds the
     vegetation-return counts. A footprint with a single survey contributes the
-    same tile to both. `decisions` is a privacy-safe per-footprint audit
-    (numeric tile ids + area/date survey labels only, never place names/coords)
-    folded into the job metrics.
+    same tile to both. `decisions` is a per-footprint audit folded into the
+    job's own metrics row. Its tile ids (an MGA easting and northing) and
+    survey labels (an area name) say where the survey is, so they go to that
+    row and never to a log (tests/test_log_privacy.py).
     """
 
     terrain_tiles: List[str]
@@ -2142,9 +2160,8 @@ def select_surveys_by_layer(las_files: List[str]) -> SurveySelection:
             }
         )
         log.info(
-            f"Footprint {footprint}: {len(tiles)} surveys → "
-            f"terrain={terrain_win.survey_label} ({terrain_density:.2f} pts/m²), "
-            f"veg={veg_win.survey_label} ({veg_win.capture_yyyymm})"
+            f"{len(tiles)} overlapping surveys: terrain from the densest "
+            f"({terrain_density:.2f} pts/m²), vegetation from the newest"
         )
 
     return SurveySelection(terrain, veg, decisions)
@@ -3624,9 +3641,7 @@ def render_contours_tile(
         try:
             records, tree = _load_contour_index(path)
         except Exception as e:
-            log.warning(
-                f"Contour geojson load failed for interval {interval} ({path}): {e}"
-            )
+            log.warning(f"Contour geojson load failed for interval {interval}: {e}")
             continue
         if tree is None:
             continue
@@ -3771,7 +3786,7 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
                 veg_img = _apply_footprint_mask(veg_img, cfg.footprint_path, bbox_wgs84)
             slope_img = _apply_footprint_mask(slope_img, cfg.footprint_path, bbox_wgs84)
         except Exception as _e:
-            log.warning(f"Footprint mask failed for tile {z}/{x}/{y}: {_e}")
+            log.warning(f"Footprint mask failed for a tile: {_e}")
 
     # --- Contours ---
     contour_img = render_contours_tile(cfg.contour_paths, bbox_wgs84, z, cfg.settings)
@@ -3949,7 +3964,12 @@ def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]
 # ---------------------------------------------------------------------------
 
 
-def merge_dem_tiles(dem_files: List[Path], out_path: str):
+def merge_dem_tiles(
+    dem_files: List[Path],
+    out_path: str,
+    resolution: str = "average",
+    resample: Optional[str] = None,
+):
     """Mosaic multiple DEM GeoTIFFs into one, preserving their NATIVE CRS.
 
     Stays native (axis-aligned, no rotation wedge) so the footprint can be
@@ -3957,6 +3977,10 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
     (reproject_raster_to_web_mercator). Source nodata is normalised to -9999 so
     downstream steps see a consistent hole value. If the DEM tiles span multiple
     CRSs (rare zone-crossing job), each is reprojected to Web Mercator first.
+    Where tiles overlap, the last one listed wins; `resolution` is the
+    mosaic's cell (gdal.BuildVRT's: "average", "highest" …) and `resample`
+    how a tile of another cell is resampled to it (BuildVRT's default,
+    nearest, when None).
     """
     log.info(f"Merging {len(dem_files)} DEM tile(s) …")
     paths = [str(f) for f in dem_files]
@@ -3980,7 +4004,13 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
         paths = merc
 
     vrt_path = out_path.replace(".tif", "_input.vrt")
-    gdal.BuildVRT(vrt_path, paths, VRTNodata=src_nodata)
+    gdal.BuildVRT(
+        vrt_path,
+        paths,
+        VRTNodata=src_nodata,
+        resolution=resolution,
+        **({"resampleAlg": resample} if resample else {}),
+    )
     # Identity mosaic (no reprojection); normalise nodata to -9999.
     gdal.Warp(
         out_path,
@@ -4258,9 +4288,6 @@ def main():
 
         # ── Step 4: Bounding box ─────────────────────────────────────────────
         lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
-        log.info(
-            f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}"
-        )
 
         # ── Step 5: OSM features ─────────────────────────────────────────────
         # OSM is always fetched (unless --skip-osm for offline tests). The

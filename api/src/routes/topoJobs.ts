@@ -22,6 +22,7 @@ import {
   validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
   RASTER_TEMPLATE_DEFAULTS,
+  SHARPEN_NEW_JOBS,
   TOPO_UPLOAD_SIGN_MAX,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
@@ -355,6 +356,7 @@ router.post(
     );
     const tailBytes = await tail.Body!.transformToByteArray();
     let verifiedTileCount: number | null = null;
+    let lazCount = 0;
     try {
       const entries = parseZipCentralDirectory(
         new Uint8Array(tailBytes),
@@ -370,6 +372,7 @@ router.post(
         );
       }
       verifiedTileCount = zipStats.tileCount || null;
+      lazCount = zipStats.lazCount;
     } catch (e) {
       if (e instanceof ElvisZipError) {
         throw new AppError(400, e.sentence);
@@ -405,6 +408,9 @@ router.post(
         data: {
           status: "pending",
           attemptCount: { increment: 1 },
+          ...(SHARPEN_NEW_JOBS
+            ? { sharpen: sharpenMark(lazCount, job.layerOptions) }
+            : {}),
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,
@@ -455,6 +461,17 @@ router.post(
     res.json({ jobId, status: "pending" });
   },
 );
+
+/**
+ * What /start writes to `TopoJob.sharpen` to send a job down the sharpen
+ * pipeline; the worker replaces it with its result. Vegetation needs point
+ * clouds, so it is ticked only for a ZIP that has them.
+ */
+export function sharpenMark(lazCount: number, layerOptions: unknown) {
+  const vegetation = (layerOptions as { vegetation?: { enabled?: unknown } })
+    ?.vegetation;
+  return { v: 1, vegetation: lazCount > 0 && vegetation?.enabled === true };
+}
 
 // GET /topo-jobs — list authenticated user's jobs
 router.get(

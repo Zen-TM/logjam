@@ -429,6 +429,31 @@ curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem
 
 ---
 
+## Sharpening an area
+
+A job the API marks to sharpen (`topo_jobs.sharpen`, set at `/start` while
+`SHARPEN_NEW_JOBS` in `shared/src/sharpen.ts` is on) runs `sharpen.py`
+instead of `pipeline.py`. It writes the statewide terrain formats at the
+survey's own cell: `heights.pmtiles` and `slope.pmtiles` (terrarium PNG,
+z15 to z16 for 2 m ground or z17 for 1 m) and `contours.pmtiles` (10 m
+lines at z14). Where the survey has no ground, each tile holds the statewide
+5 m data, so a client takes every tile from one archive. Ground is the ZIP's
+ELVIS DEM, or a TIN of the survey's class 2 when it has none; a ZIP with
+neither, or with only 5 m DEMs, fails with a sentence for its owner.
+
+To run it by hand, put the two statewide archives in `./output/statewide`,
+or a clip of them over the area (the [NSW 5 m DEM
+archive](#building-the-nsw-5-m-dem-archive) and [the statewide slope
+archive](#the-statewide-slope-archive) say how they are built), then:
+
+```bash
+docker compose run topo python3 /app/sharpen.py /input/elvis.zip /output/sharpened \
+  --statewide-heights /output/statewide/nsw-5m.pmtiles \
+  --statewide-slope /output/statewide/nsw-5m-slope.pmtiles
+```
+
+---
+
 ## Building the place registry
 
 `build_place_registry.py` turns Geofabrik's NSW OpenStreetMap extract into the

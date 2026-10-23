@@ -775,7 +775,33 @@ jobs:
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py complete "$JOB_ID" 150.311 -33.780
-      # Runbook step 5: the reaper fails a job whose worker died mid-render,
+      # A job marked to sharpen runs topo/sharpen.py, not the legacy pipeline.
+      # Marked by hand and run by hand: the API marks no job until
+      # SHARPEN_NEW_JOBS is on. Made-up statewide archives stand in for the
+      # published ones it fills from (statewide.py says why their values).
+      - name: A job marked to sharpen makes its archives
+        env:
+          ZIP: ${{ steps.sample.outputs.zip }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/statewide"
+          docker run --rm -v "$RUNNER_TEMP/statewide:/out" -v "$PWD/$E2E:/e2e:ro" \
+            --entrypoint python3 "$IMAGE" /e2e/statewide.py /out
+          for name in nsw-5m nsw-5m-slope; do
+            aws s3 cp "$RUNNER_TEMP/statewide/$name.pmtiles" "s3://$S3_BUCKET_TOPO/master/dem/$name.pmtiles"
+          done
+          id=$(cat /proc/sys/kernel/random/uuid)
+          key="inputs/$id/sample.zip"
+          aws s3 cp "$ZIP" "s3://$S3_BUCKET_TOPO/$key"
+          psql -h localhost -U logjam -d logjam -v ON_ERROR_STOP=1 -c "
+            INSERT INTO topo_jobs (id, user_id, status, name, s3_input_key, sharpen, updated_at)
+            SELECT '$id', id, 'pending', 'e2e sharpen', '$key', '{\"v\": 1, \"vegetation\": false}', now()
+            FROM users WHERE cognito_id = 'fake-alice-sub'"
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$id" "$IMAGE"
+          # A point on Mount Solitary, inside the tile.
+          docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
+            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
+            /e2e/check.py sharpened "$id" 150.311 -33.780
+      # Runbook step 6: the reaper fails a job whose worker died mid-render,
       # and a worker relaunched for it must leave it failed. ECS launches the
       # first worker; the relaunch is by hand, since only the reaper's failing
       # of the row is stood in for here, not a second RunTask.
