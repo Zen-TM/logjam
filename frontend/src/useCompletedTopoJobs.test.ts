@@ -38,7 +38,7 @@ describe("useCompletedTopoJobs across a sign-out", () => {
   it("holds no job of the last user once signed out", async () => {
     fetchOverlays.mockResolvedValueOnce(answer(["a-job"]));
     const { result, rerender } = renderHook(
-      ({ signedIn }) => useCompletedTopoJobs(signedIn),
+      ({ signedIn }) => useCompletedTopoJobs(signedIn, signedIn),
       { initialProps: { signedIn: true } },
     );
     await waitFor(() => expect(result.current.jobs).toHaveLength(1));
@@ -56,12 +56,14 @@ describe("useCompletedTopoJobs across a sign-out", () => {
 
   // Mutation: judge the stretch when the list arrives rather than when it
   // was asked for, and A's list, landing after B has signed in, is drawn
-  // for B (until B's own list lands, or a day later if B's fetch fails).
+  // for B, replacing B's own list if that landed first, until the next
+  // refetch (a day later, or sooner if B creates, finishes or deletes a
+  // topo).
   it("drops a list asked for before the next user signed in", async () => {
     let arrive: (value: unknown) => void = () => {};
     fetchOverlays.mockReturnValueOnce(new Promise((r) => (arrive = r)));
     const { result, rerender } = renderHook(
-      ({ signedIn }) => useCompletedTopoJobs(signedIn),
+      ({ signedIn }) => useCompletedTopoJobs(signedIn, signedIn),
       { initialProps: { signedIn: true } },
     );
     rerender({ signedIn: false });
@@ -89,7 +91,7 @@ describe("useCompletedTopoJobs and the profile cache", () => {
   it("empties the profile cache on signing out, and when an area goes", async () => {
     fetchOverlays.mockResolvedValueOnce(answer(["x-area", "y-area"]));
     const { result, rerender } = renderHook(
-      ({ signedIn }) => useCompletedTopoJobs(signedIn),
+      ({ signedIn }) => useCompletedTopoJobs(signedIn, signedIn),
       { initialProps: { signedIn: true } },
     );
     await waitFor(() => expect(result.current.jobs).toHaveLength(2));
@@ -105,6 +107,23 @@ describe("useCompletedTopoJobs and the profile cache", () => {
     await act(async () => {
       await result.current.refetch();
     });
+    expect(cachedProfile("line")).toBeNull();
+  });
+});
+
+// Mutation: scope the cache on whether user data loads rather than on
+// whether anyone is signed in. Before /me settles (or if it fails) that is
+// false for the whole session, so an expiry changes nothing: the next user,
+// in the same state, is handed the last one's profile for the same line.
+describe("useCompletedTopoJobs and a profile cached before /me settled", () => {
+  it("empties the cache when the session ends, whatever user data did", () => {
+    const { rerender } = renderHook(
+      ({ signedIn }) => useCompletedTopoJobs(false, signedIn),
+      { initialProps: { signedIn: true } },
+    );
+    cacheProfile("line", profile, profileCacheGeneration());
+    rerender({ signedIn: false });
+    rerender({ signedIn: true });
     expect(cachedProfile("line")).toBeNull();
   });
 });

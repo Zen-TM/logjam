@@ -17,7 +17,15 @@ import type {
   CompletedTopoJob,
 } from "./topoLayerTypes";
 
-export function useCompletedTopoJobs(loadsUserData: boolean) {
+/**
+ * `loadsUserData` gates the fetch (signed in, consent settled);
+ * `authenticated` alone scopes the profile cache, since a profile can be
+ * read before /me settles, or when it fails.
+ */
+export function useCompletedTopoJobs(
+  loadsUserData: boolean,
+  authenticated: boolean,
+) {
   const [jobs, setJobs] = useState<CompletedTopoJob[]>([]);
   // True once the first fetch settles, either way: an empty list before then
   // is not "no topos yet" (shared/DESIGN.md §11).
@@ -37,7 +45,7 @@ export function useCompletedTopoJobs(loadsUserData: boolean) {
   // During render too: a profile hook reads the cache as it renders.
   scopeProfileCache(
     profileCacheScope(
-      loadsUserData,
+      authenticated,
       jobs.flatMap((job) => (job.sharpened ? [job.sharpened.id] : [])),
     ),
   );

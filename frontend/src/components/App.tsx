@@ -337,7 +337,7 @@ function App() {
     jobs: completedTopoJobs,
     loaded: completedTopoJobsLoaded,
     refetch: refetchCompletedTopoJobs,
-  } = useCompletedTopoJobs(loadsUserData);
+  } = useCompletedTopoJobs(loadsUserData, authenticated);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
   // "unavailable" badge in the Layers panel.
