@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import appConfig from "../app.config";
+import patched from "../maplibre/patched.json";
 import packageJson from "../package.json";
 
 type Config = Parameters<typeof appConfig>[0]["config"];
@@ -26,9 +27,24 @@ afterEach(() => vi.unstubAllEnvs());
 // (the application id, a URL scheme) lets one replace or answer for the other.
 describe("app variant", () => {
   // Mutation: make any dev-only field unconditional in app.config.ts.
-  it("is exactly app.json plus the version when no variant is set", () => {
+  it("is exactly app.json plus the versions when no variant is set", () => {
+    const plugins = appJson.expo.plugins?.map((plugin) =>
+      Array.isArray(plugin) && plugin[0] === "@maplibre/maplibre-react-native"
+        ? [
+            plugin[0],
+            {
+              ...plugin[1],
+              android: { ...plugin[1].android, nativeVersion: patched.version },
+            },
+          ]
+        : plugin,
+    );
     expect(JSON.stringify(resolve({}))).toBe(
-      JSON.stringify({ ...appJson.expo, version: packageJson.version }),
+      JSON.stringify({
+        ...appJson.expo,
+        version: packageJson.version,
+        plugins,
+      }),
     );
   });
 

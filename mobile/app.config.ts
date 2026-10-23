@@ -1,9 +1,11 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
+import patched from "./maplibre/patched.json";
 import packageJson from "./package.json";
 
 // Static config stays in app.json — Expo passes it in as `config` here, and this
-// file only layers on the parts that must come from the environment.
+// file only layers on the parts that must come from the environment, and the
+// versions declared once elsewhere (package.json, maplibre/patched.json).
 //
 // google-services.json (FCM/push) is deliberately NOT committed: the repo is
 // public, and the file carries the Firebase project id and Android API key.
@@ -19,7 +21,7 @@ import packageJson from "./package.json";
 // LOGJAM_APP_VARIANT=dev (at prebuild AND for Metro) makes a second app that
 // installs beside the real one: its own application id, launcher name and URL
 // scheme, so a phone that holds real data can also run a build pointed at the
-// local stack. Unset, the config is exactly app.json plus the version.
+// local stack. Unset, the config is exactly app.json plus the versions.
 // Guard: src/appVariant.test.ts.
 const DEV_SUFFIX = ".dev";
 
@@ -40,6 +42,22 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? "logjam-mobile",
     // The one declaration of the app version (guard: src/versionAgreement.test.ts).
     version: packageJson.version,
+    // The one declaration of the MapLibre Android version, while Logjam GPS
+    // builds against our patched one (#587; guard: src/patchedMapLibre.test.ts).
+    plugins: config.plugins?.map((plugin) =>
+      Array.isArray(plugin) && plugin[0] === "@maplibre/maplibre-react-native"
+        ? [
+            plugin[0],
+            {
+              ...plugin[1],
+              android: {
+                ...plugin[1]?.android,
+                nativeVersion: patched.version,
+              },
+            },
+          ]
+        : plugin,
+    ),
     android: {
       ...config.android,
       ...(googleServicesFile ? { googleServicesFile } : {}),
