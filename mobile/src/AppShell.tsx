@@ -19,6 +19,7 @@ import {
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
 import { isRouteEditing } from "./map/routeEditLock";
+import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -858,6 +859,11 @@ export function AppShell({
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
     if (isThemeSchemeId(accountScheme)) setThemeSchemeId(accountScheme);
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
+
+  // The account's slope bands, kept on the phone so the map has them offline.
+  useEffect(() => {
+    keepAccountSlopeBands(userQuery.data?.uiPreferences?.slopeBands);
+  }, [userQuery.data?.uiPreferences?.slopeBands]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap

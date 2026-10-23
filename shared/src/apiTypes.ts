@@ -11,6 +11,7 @@ import type { MediaItem } from "./media.js";
 import type { NotificationPreferences, ThemeSchemeId } from "./themeSchemes.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type { SlopeBand } from "./topoSettings.js";
 
 export type TPlace = {
   id: string;
@@ -85,6 +86,7 @@ export type TUser = {
     autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
+    slopeBands?: SlopeBand[];
   } | null;
 };
 

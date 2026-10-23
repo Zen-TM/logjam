@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
+import { MAX_SLOPE_BANDS } from "@logjam/shared";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 //
@@ -124,6 +125,60 @@ describe("users routes (fake auth = alice)", () => {
     for (const k of keys) {
       expect(restore.body.uiPreferences.notifications[k]).toBe(original[k]);
     }
+  });
+
+  it("PATCH /users/me stores the user's slope bands, and restores", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.slopeBands;
+    expect(original.length).toBeGreaterThan(0);
+    const bands = [
+      { fromDeg: 30, toDeg: 45, colour: "#ffff00ff" },
+      { fromDeg: 45, toDeg: 90, colour: "#ff0000ff" },
+    ];
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands: bands });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.slopeBands).toEqual(bands);
+    } finally {
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands: original });
+    }
+  });
+
+  // Mutation: store the body's bands without `parseSlopeBands`, and a band
+  // MapLibre cannot draw reaches both clients' maps.
+  it("PATCH /users/me rejects slope bands the editor would not accept", async () => {
+    for (const slopeBands of [
+      [],
+      [{ fromDeg: 40, toDeg: 30, colour: "#ff0000ff" }],
+      [{ fromDeg: 40, toDeg: 50, colour: "red" }],
+    ]) {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  // Mutation: drop the length check before `parseSlopeBands`, and an
+  // over-long list is a 400 checked element by element.
+  it("PATCH /users/me answers too many slope bands with 413", async () => {
+    const slopeBands = Array.from({ length: MAX_SLOPE_BANDS + 1 }, (_, i) => ({
+      fromDeg: i * 10,
+      toDeg: i * 10 + 10,
+      colour: "#ff0000ff",
+    }));
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ slopeBands });
+    expect(res.status).toBe(413);
   });
 
   // Consent boundary: the server is the integrity half of the

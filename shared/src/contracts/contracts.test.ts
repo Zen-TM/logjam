@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
+import { TERRAIN_LAYER_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
@@ -34,6 +35,7 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_OVERLAY_REFINEMENTS,
+  MAP_TERRAIN,
   attributeDeleteConfirm,
   contractSectionKeys,
   deleteAccountPhrase,
@@ -597,12 +599,24 @@ describe("the map's layers", () => {
   it("draws Offline on Logjam GPS only, and says why", () => {
     expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
       "basemap",
+      "terrain",
       "overlays",
     ]);
     expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
       "basemap",
+      "terrain",
       "overlays",
       "offline",
+    ]);
+  });
+
+  // Mutation: reorder the contract's rows or TERRAIN_LAYER_KEYS alone, and a
+  // client lists the layers in one order and stacks them in another.
+  it("lists the Terrain group in the order it is stacked", () => {
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(TERRAIN_LAYER_KEYS);
+    expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
+      ...TERRAIN_LAYER_KEYS,
+      "slopeBands",
     ]);
   });
 });

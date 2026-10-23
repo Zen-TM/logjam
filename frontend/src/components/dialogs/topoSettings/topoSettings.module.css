@@ -96,7 +96,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
+  /* The pointer's target floor. Guard: frontend/e2e/a11y.spec.ts ("the
+     Layers popover's Terrain tab, and its slope bands"). */
+  min-height: var(--control-sm);
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);

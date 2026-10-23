@@ -6,6 +6,8 @@ import {
   say,
   normalizeThemeSchemeId,
   normalizeUserUiPreferences,
+  MAX_SLOPE_BANDS,
+  parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
 } from "@logjam/shared";
@@ -317,6 +319,7 @@ router.patch(
       autoDownloadGeoPdfs,
       importMergePolicy,
       copyPlaceMedia,
+      slopeBands,
       consentVersion,
     } = req.body as {
       username?: unknown;
@@ -325,6 +328,7 @@ router.patch(
       autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       copyPlaceMedia?: unknown;
+      slopeBands?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -374,7 +378,8 @@ router.patch(
       notifications !== undefined ||
       autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined ||
-      copyPlaceMedia !== undefined
+      copyPlaceMedia !== undefined ||
+      slopeBands !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -399,6 +404,14 @@ router.patch(
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
+      }
+      if (Array.isArray(slopeBands) && slopeBands.length > MAX_SLOPE_BANDS) {
+        throw malformed(`At most ${MAX_SLOPE_BANDS} slopeBands`, 413);
+      }
+      const nextSlopeBands =
+        slopeBands === undefined ? undefined : parseSlopeBands(slopeBands);
+      if (nextSlopeBands === null) {
+        throw malformed("Invalid slopeBands");
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
@@ -425,6 +438,7 @@ router.patch(
           : {}),
         ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
+        ...(nextSlopeBands ? { slopeBands: nextSlopeBands } : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),

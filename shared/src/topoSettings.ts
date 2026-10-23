@@ -90,11 +90,12 @@ export const HILLSHADE_LIMITS = {
   zFactor: { min: 0.1, max: 10 },
 } as const;
 
-export interface SlopeBand {
+// A type, not an interface, so a stored preference of bands is JSON to Prisma.
+export type SlopeBand = {
   fromDeg: number; // inclusive
   toDeg: number; // exclusive
   colour: RgbaHex;
-}
+};
 
 export interface SlopeSettings {
   enabled: boolean;
@@ -421,7 +422,7 @@ function inRange(n: unknown, lo: number, hi: number): n is number {
   return typeof n === "number" && Number.isFinite(n) && n >= lo && n <= hi;
 }
 
-const MAX_SLOPE_BANDS = 8;
+export const MAX_SLOPE_BANDS = 8;
 
 export function validateRasterTemplateSettings(
   input: unknown,
@@ -609,6 +610,32 @@ export function slopeBandsError(bands: SlopeBand[]): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Slope bands from outside (a request body, a stored preference), or null
+ * unless they are well-formed bands the editor itself would accept.
+ */
+export function parseSlopeBands(value: unknown): SlopeBand[] | null {
+  if (!Array.isArray(value)) return null;
+  const bands = value.map((band) =>
+    isObject(band)
+      ? { fromDeg: band.fromDeg, toDeg: band.toDeg, colour: band.colour }
+      : null,
+  );
+  if (
+    bands.some(
+      (band) =>
+        band == null ||
+        typeof band.fromDeg !== "number" ||
+        typeof band.toDeg !== "number" ||
+        typeof band.colour !== "string" ||
+        !HEX_RGBA_RE.test(band.colour),
+    )
+  )
+    return null;
+  const parsed = bands as SlopeBand[];
+  return slopeBandsError(parsed) == null ? parsed : null;
 }
 
 /**

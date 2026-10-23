@@ -9,14 +9,19 @@ import {
 import {
   contractSectionKeys,
   MAP_LAYERS,
+  MAP_TERRAIN,
   PLACE_TYPE_COLORS,
+  takesNswContours,
   type RegionBbox,
   type SectionKeysOn,
+  type SlopeBand,
+  type TerrainLayerKey,
 } from "@logjam/shared";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
 import { boundsIntersect, footprintBounds } from "./topoFootprint";
+import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
 import {
   Chip,
@@ -35,7 +40,7 @@ import classes from "./LayersPopover.module.css";
 
 type BaseLayer = TileLayer & { id: string; name: string };
 type Setter<T> = (value: T | ((prev: T) => T)) => void;
-type View = "overlays" | "basemap" | "topos";
+type View = "overlays" | "basemap" | "terrain" | "topos" | "slopeBands";
 
 // A layer-row descriptor, shown as the row's info tooltip. Only vegetation needs
 // one: its orange crosshatch (fire more recent than the survey) is the least
@@ -48,6 +53,7 @@ const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
 };
 
 const copy = MAP_LAYERS.copy;
+const terrainCopy = MAP_TERRAIN.copy;
 
 const countOf = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -118,8 +124,10 @@ export default function LayersPopover({
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
-  contoursOverImagery,
-  onContoursOverImageryChange,
+  terrainLayers,
+  onTerrainLayerChange,
+  slopeBands,
+  onSlopeBandsChange,
   mapView,
   onImportFile,
 }: {
@@ -149,8 +157,10 @@ export default function LayersPopover({
   baseLayers: readonly BaseLayer[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
-  contoursOverImagery: boolean;
-  onContoursOverImageryChange: (on: boolean) => void;
+  terrainLayers: Readonly<Record<TerrainLayerKey, boolean>>;
+  onTerrainLayerChange: (key: TerrainLayerKey, on: boolean) => void;
+  slopeBands: SlopeBand[];
+  onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
@@ -181,7 +191,13 @@ export default function LayersPopover({
       open={open}
       onClose={close}
       anchorRef={anchorRef}
-      label={view === "topos" ? "LiDAR topos" : "Map layers"}
+      label={
+        view === "topos"
+          ? "LiDAR topos"
+          : view === "slopeBands"
+            ? terrainCopy.slopeBands
+            : "Map layers"
+      }
       className={classes.popover}
       // Both views carry their own × in the header.
       closeButton={false}
@@ -203,6 +219,13 @@ export default function LayersPopover({
           unavailableTopoLayerNames={unavailableTopoLayerNames}
           mapBounds={mapBounds}
         />
+      ) : view === "slopeBands" ? (
+        <SlopeBandsView
+          onBack={() => setView("terrain")}
+          onClose={close}
+          bands={slopeBands}
+          onChange={onSlopeBandsChange}
+        />
       ) : (
         <>
           <div className={classes.head}>
@@ -212,7 +235,13 @@ export default function LayersPopover({
               options={contractSectionKeys(MAP_LAYERS, "web").map((key) =>
                 key === "basemap"
                   ? { value: key, label: copy.tabBasemap, icon: "map" as const }
-                  : { value: key, label: copy.tabOverlays, count: overlaysOn },
+                  : key === "terrain"
+                    ? { value: key, label: copy.tabTerrain }
+                    : {
+                        value: key,
+                        label: copy.tabOverlays,
+                        count: overlaysOn,
+                      },
               )}
               value={view}
               onChange={setView}
@@ -227,30 +256,20 @@ export default function LayersPopover({
               () => ReactNode
             > = {
               basemap: () => (
-                <>
-                  <BasemapGallery
-                    layers={baseLayers}
-                    activeLayerId={activeLayerId}
-                    onChange={onActiveLayerChange}
-                    mapView={mapView}
-                  />
-                  {/* Imagery has no contours of its own; the vector basemap
-                      always draws them (shared nswContours.ts). */}
-                  {activeLayerId === "six-imagery" && (
-                    <div className={classes.body}>
-                      <Row
-                        title="Contours"
-                        trailing={
-                          <Toggle
-                            checked={contoursOverImagery}
-                            onChange={onContoursOverImageryChange}
-                            label="Show contours"
-                          />
-                        }
-                      />
-                    </div>
-                  )}
-                </>
+                <BasemapGallery
+                  layers={baseLayers}
+                  activeLayerId={activeLayerId}
+                  onChange={onActiveLayerChange}
+                  mapView={mapView}
+                />
+              ),
+              terrain: () => (
+                <TerrainPane
+                  layers={terrainLayers}
+                  onChange={onTerrainLayerChange}
+                  activeLayerId={activeLayerId}
+                  onOpenSlopeBands={() => setView("slopeBands")}
+                />
               ),
               overlays: () => (
                 <div className={classes.body}>
@@ -337,6 +356,97 @@ export default function LayersPopover({
         </>
       )}
     </Popover>
+  );
+}
+
+/** The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. */
+export function TerrainPane({
+  layers,
+  onChange,
+  activeLayerId,
+  onOpenSlopeBands,
+}: {
+  layers: Readonly<Record<TerrainLayerKey, boolean>>;
+  onChange: (key: TerrainLayerKey, on: boolean) => void;
+  activeLayerId: string;
+  onOpenSlopeBands: () => void;
+}) {
+  // One shape for all three, so the Slope row's chevron is the only difference.
+  const row = (key: TerrainLayerKey, extra: ReactNode = null) => {
+    const title = terrainCopy[key];
+    const printed = key === "contours" && !takesNswContours(activeLayerId);
+    return (
+      <Row
+        key={key}
+        title={title}
+        subtitle={printed ? terrainCopy.contoursPrinted : undefined}
+        trailing={
+          <>
+            {extra}
+            <Toggle
+              checked={layers[key]}
+              onChange={(on) => onChange(key, on)}
+              label={`Show ${title.toLowerCase()}`}
+              disabled={printed}
+            />
+          </>
+        }
+      />
+    );
+  };
+  const panes: Record<
+    SectionKeysOn<typeof MAP_TERRAIN, "web">,
+    () => ReactNode
+  > = {
+    contours: () => row("contours"),
+    slope: () =>
+      row(
+        "slope",
+        <IconButton
+          icon="disclosure"
+          label={terrainCopy.slopeBands}
+          onClick={onOpenSlopeBands}
+        />,
+      ),
+    hillshade: () => row("hillshade"),
+    // Opened from the Slope row's chevron, as a view of its own.
+    slopeBands: () => null,
+  };
+  return (
+    <div className={classes.body}>
+      {contractSectionKeys(MAP_TERRAIN, "web").map((key) => panes[key]())}
+    </div>
+  );
+}
+
+/** The bands the statewide slope is drawn in, edited while the map redraws. */
+function SlopeBandsView({
+  onBack,
+  onClose,
+  bands,
+  onChange,
+}: {
+  onBack: () => void;
+  onClose: () => void;
+  bands: SlopeBand[];
+  onChange: (bands: SlopeBand[]) => void;
+}) {
+  return (
+    <>
+      <div className={classes.head}>
+        <IconButton icon="back" label="Back to terrain" onClick={onBack} />
+        <div className={classes.titleBlock}>
+          <span className={classes.title}>{terrainCopy.slopeBands}</span>
+        </div>
+        <IconButton icon="close" label="Close" onClick={onClose} />
+      </div>
+      <div className={classes.body}>
+        <SlopeSettings
+          value={{ enabled: true, bands }}
+          onChange={(next) => onChange(next.bands)}
+        />
+      </div>
+    </>
   );
 }
 

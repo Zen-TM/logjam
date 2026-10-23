@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   basemapsCoveringViewport,
-  hasSavedImageryContours,
   resolveMapSource,
   hashKey,
   type BasemapId,
@@ -373,24 +372,37 @@ describe("statewide contours", () => {
   });
 });
 
-describe("hasSavedImageryContours", () => {
-  const imagery = (groupId: string) =>
-    artifact({
-      id: `i-${groupId}`,
-      kind: "basemap-region",
-      logicalKey: "six-imagery",
-      groupId,
+describe("statewide slope and hillshade", () => {
+  // Mutation: resolve either as `raster`, and MapLibre draws the terrarium
+  // PNGs as coloured noise instead of a slope or a shade.
+  it("online: the CDN's DEM archives, as DEMs", () => {
+    const [slope] = resolveMapSource({ kind: "nsw-slope" }, ctx());
+    expect(slope).toMatchObject({
+      status: "ok",
+      sourceType: "raster-dem",
+      url: `pmtiles://${CDN}/master/dem/nsw-5m-slope.pmtiles`,
+      attribution: expect.stringMatching(/^Slope: derived from the NSW 5 m/),
     });
-  const contours = (groupId: string) =>
-    artifact({ id: `c-${groupId}`, kind: "contours-region", groupId });
+    const [shade] = resolveMapSource({ kind: "nsw-hillshade" }, ctx());
+    expect(shade).toMatchObject({
+      status: "ok",
+      sourceType: "raster-dem",
+      url: `pmtiles://${CDN}/master/dem/nsw-5m.pmtiles`,
+      attribution: expect.stringMatching(/^Hillshade: derived/),
+    });
+  });
 
-  // Mutation: test for a contour clip anywhere, and the switch is offered
-  // offline when the only contours saved are with a vector area, where
-  // switching it on over imagery draws nothing.
-  it("needs both in the same saved area", () => {
-    expect(hasSavedImageryContours([imagery("a"), contours("a")])).toBe(true);
-    expect(hasSavedImageryContours([imagery("a"), contours("b")])).toBe(false);
-    expect(hasSavedImageryContours([imagery("a")])).toBe(false);
-    expect(hasSavedImageryContours([])).toBe(false);
+  it("offline: not drawn from any other saved clip", () => {
+    const saved = [
+      artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
+      artifact({ id: "d", kind: "dem-region", logicalKey: "nsw-5m" }),
+    ];
+    for (const kind of ["nsw-slope", "nsw-hillshade"] as const)
+      expect(
+        resolveMapSource(
+          { kind },
+          ctx({ connectivity: "offline", artifacts: saved }),
+        ),
+      ).toMatchObject([{ status: "unavailable" }]);
   });
 });
