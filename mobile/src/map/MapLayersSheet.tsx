@@ -64,6 +64,7 @@ import {
   type Glyph,
   SwitchRow,
 } from "../ui";
+import { unavailableReasonText } from "../auth/capabilities";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
@@ -204,6 +205,7 @@ export function MapLayersSheet({
         layers={terrainLayers}
         onChange={onTerrainLayerChange}
         basemapId={basemapId}
+        online={online}
       />
     ),
     overlays: () => (
@@ -314,10 +316,12 @@ function TerrainTab({
   layers,
   onChange,
   basemapId,
+  online,
 }: {
   layers: Readonly<Record<TerrainLayerKey, boolean>>;
   onChange: (key: TerrainLayerKey, on: boolean) => void;
   basemapId: BasemapId;
+  online: boolean;
 }) {
   const styles = useStyles();
   const terrain = MAP_TERRAIN.copy;
@@ -348,6 +352,11 @@ function TerrainTab({
       <SwitchRow
         key="hillshade"
         title={terrain.hillshade}
+        // A saved area keeps no shade (sourceResolver.ts).
+        description={
+          online ? undefined : unavailableReasonText("needs-connection")
+        }
+        disabled={!online}
         style={styles.itemRow}
         checked={layers.hillshade}
         onChange={(on) => onChange("hillshade", on)}

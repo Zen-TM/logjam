@@ -45,8 +45,9 @@ export type LogicalLayerRef =
     }
   /** The statewide contour lines (`shared/src/nswContours.ts`). */
   | { kind: "nsw-contours" }
-  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`). */
-  | { kind: "nsw-slope" }
+  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
+   * `viewport` picks the one slope clip drawn offline. */
+  | { kind: "nsw-slope"; viewport?: Viewport | null }
   | { kind: "nsw-hillshade" }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
@@ -86,13 +87,15 @@ export interface MapArtifact {
     | "dem-region"
     /** A clip of the statewide contours, saved with the basemap they draw on. */
     | "contours-region"
+    /** A clip of the statewide slope, saved the same way. */
+    | "slope-region"
     | "topo-overlay"
     | "geopdf-import"
     | "vector-import";
   /** basemapId | "<jobId>/<layer>" | importId */
   logicalKey: string;
   format: "pmtiles" | "mbtiles";
-  sourceType: "vector" | "raster";
+  sourceType: "vector" | "raster" | "raster-dem";
   /** Absolute app-private path, backup-excluded. */
   path: string;
   bbox: [number, number, number, number] | null;
@@ -307,6 +310,7 @@ function resolveStatewide(
   sourceType: "vector" | "raster-dem",
   clips: MapArtifact["kind"] | null,
   ctx: ResolveContext,
+  choose: (regions: MapArtifact[]) => MapArtifact[] = (regions) => regions,
 ): ResolvedTileSource[] {
   const logicalId = archive.id;
   if (ctx.connectivity === "online") {
@@ -332,7 +336,41 @@ function resolveStatewide(
       },
     ];
   }
-  return regions.map((r) => localArtifactSource(r, logicalId, archive.credit));
+  return choose(regions).map((r) =>
+    localArtifactSource(r, logicalId, archive.credit),
+  );
+}
+
+/**
+ * The one slope clip drawn offline: the saved area nearest the middle of the
+ * screen, and of those holding it, the biggest, so a canyon saved inside a
+ * wider area doesn't crop the slope to its own edge (before the map first
+ * settles, the biggest area). A clip is whole tiles, so areas saved near each
+ * other share their low-zoom tiles, and the bands are translucent: drawing
+ * every clip paints those tiles twice, darker, with a seam where the overlap
+ * ends.
+ * Guard: `sourceResolver.test.ts` ("draws one slope clip offline", "draws the
+ * wider clip where a saved area sits inside another").
+ */
+function nearestRegion(viewport: Viewport | null | undefined) {
+  return (regions: MapArtifact[]): MapArtifact[] => {
+    const lng = viewport ? (viewport.west + viewport.east) / 2 : 0;
+    const lat = viewport ? (viewport.south + viewport.north) / 2 : 0;
+    const perLng = Math.cos((lat * Math.PI) / 180);
+    const away = ({ bbox }: MapArtifact) => {
+      if (!bbox) return Number.POSITIVE_INFINITY;
+      if (!viewport) return 0;
+      const [west, south, east, north] = bbox;
+      const dx = Math.max(west - lng, 0, lng - east) * perLng;
+      const dy = Math.max(south - lat, 0, lat - north);
+      return dx * dx + dy * dy;
+    };
+    const size = ({ bbox }: MapArtifact) =>
+      bbox ? (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) : 0;
+    return [...regions]
+      .sort((a, b) => away(a) - away(b) || size(b) - size(a))
+      .slice(0, 1);
+  };
 }
 
 function resolveImport(
@@ -415,9 +453,16 @@ export function resolveMapSource(
       return resolveTopoOverlay(ref, ctx);
     case "nsw-contours":
       return resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx);
-    // Nothing saves a clip of either yet, so offline neither draws.
     case "nsw-slope":
-      return resolveStatewide(NSW_SLOPE, "raster-dem", null, ctx);
+      return resolveStatewide(
+        NSW_SLOPE,
+        "raster-dem",
+        "slope-region",
+        ctx,
+        nearestRegion(ref.viewport),
+      );
+    // A saved area's heights are z15 alone, the sampler's zoom, so offline a
+    // shade could only be drawn close in: none is saved.
     case "nsw-hillshade":
       return resolveStatewide(NSW_HILLSHADE, "raster-dem", null, ctx);
     case "geopdf-import":

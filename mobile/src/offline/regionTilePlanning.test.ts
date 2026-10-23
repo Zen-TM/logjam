@@ -109,10 +109,10 @@ describe("deadTileBudget", () => {
 });
 
 describe("regionClipSpecs", () => {
-  // Mutation: drop the contours or the vector map from the list and this goes
-  // red: a saved area is then blank offline, with tools that draw straight
-  // lines. That the screen enqueues this list for every account has no guard.
-  it("gives every area the DEM archives, the contours and the vector map", () => {
+  // Mutation: drop the contours, the slope or the vector map from the list
+  // and this goes red: a saved area is then blank offline, with tools that
+  // draw straight lines, or has a Slope switch that draws nothing. That the screen enqueues this list for every account has no guard.
+  it("gives every area the DEM archives, the contours, the slope and the vector map", () => {
     const run = {
       bbox: BBOX,
       groupId: "g",
@@ -124,15 +124,18 @@ describe("regionClipSpecs", () => {
       id: `id${n++}`,
       label: basemapId,
     }));
-    expect(specs.map((s) => [s.basemapId, s.demSourceId, s.contours])).toEqual([
-      ["nsw-5m", "nsw-5m", undefined],
-      ["nsw-contours", undefined, true],
-      ["protomaps", undefined, undefined],
+    expect(
+      specs.map((s) => [s.basemapId, s.demSourceId, s.contours, s.slope]),
+    ).toEqual([
+      ["nsw-5m", "nsw-5m", undefined, undefined],
+      ["nsw-contours", undefined, true, undefined],
+      ["nsw-5m-slope", undefined, undefined, true],
+      ["protomaps", undefined, undefined, undefined],
     ]);
     for (const spec of specs) {
       expect(spec).toMatchObject({ taskKind: "clip", ...run });
     }
-    expect(new Set(specs.map((s) => s.id)).size).toBe(3);
+    expect(new Set(specs.map((s) => s.id)).size).toBe(4);
   });
 });
 

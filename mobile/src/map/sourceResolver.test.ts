@@ -6,6 +6,7 @@ import {
   type BasemapId,
   type MapArtifact,
   type ResolveContext,
+  type Viewport,
 } from "./sourceResolver";
 
 const CDN = "https://logjamnsw.com";
@@ -392,17 +393,88 @@ describe("statewide slope and hillshade", () => {
     });
   });
 
-  it("offline: not drawn from any other saved clip", () => {
+  // Mutation: match the slope by `dem-region`, and offline the saved
+  // heights are coloured as if they were degrees.
+  it("offline: the slope from its own clips, the shade from none", () => {
     const saved = [
       artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
       artifact({ id: "d", kind: "dem-region", logicalKey: "nsw-5m" }),
+      artifact({ id: "s", kind: "slope-region", sourceType: "raster-dem" }),
     ];
-    for (const kind of ["nsw-slope", "nsw-hillshade"] as const)
+    const offline = ctx({ connectivity: "offline", artifacts: saved });
+    const slope = resolveMapSource({ kind: "nsw-slope" }, offline);
+    expect(slope).toHaveLength(1);
+    expect(slope[0]).toMatchObject({
+      status: "ok",
+      origin: "local",
+      sourceType: "raster-dem",
+    });
+    expect(resolveMapSource({ kind: "nsw-hillshade" }, offline)).toMatchObject([
+      { status: "unavailable" },
+    ]);
+  });
+  // Mutation: draw every slope clip, as the contours do, and where two saved
+  // areas share a tile its bands are painted twice, darker.
+  it("draws one slope clip offline, the area nearest the middle of the screen", () => {
+    const at = (id: string, west: number): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox: [west, -33.8, west + 0.1, -33.7],
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
+    });
+    const drawn = (viewport: Viewport | null) =>
+      resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
+        (r) => r.status === "ok" && r.url,
+      );
+    const screen = (lng: number): Viewport => ({
+      west: lng - 0.02,
+      south: -33.77,
+      east: lng + 0.02,
+      north: -33.73,
+    });
+    expect(drawn(screen(150.36))).toEqual([
+      "pmtiles://file:///maps/katoomba.pmtiles",
+    ]);
+    expect(drawn(screen(150.1))).toEqual([
+      "pmtiles://file:///maps/blackheath.pmtiles",
+    ]);
+    expect(drawn(null)).toEqual(["pmtiles://file:///maps/katoomba.pmtiles"]);
+  });
+  // Mutation: drop the size tie-break, and the newest area (the registry's
+  // first) wins every tie: the canyon's clip, whose bounds crop the slope.
+  it("draws the wider clip where a saved area sits inside another", () => {
+    const clip = (id: string, bbox: MapArtifact["bbox"]): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox,
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [
+        clip("canyon", [150.3, -33.75, 150.32, -33.73]),
+        clip("valley", [150.2, -33.9, 150.5, -33.6]),
+      ],
+    });
+    const screen: Viewport = {
+      west: 150.3,
+      south: -33.75,
+      east: 150.32,
+      north: -33.73,
+    };
+    for (const viewport of [screen, null])
       expect(
-        resolveMapSource(
-          { kind },
-          ctx({ connectivity: "offline", artifacts: saved }),
+        resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
+          (r) => r.status === "ok" && r.url,
         ),
-      ).toMatchObject([{ status: "unavailable" }]);
+      ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
   });
 });

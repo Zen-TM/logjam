@@ -13,6 +13,23 @@
 // never rendered and never logged. Guard: mobile/src/sentry/scrubEvent.test.ts.
 import type { MapArtifact } from "../map/sourceResolver";
 
+/**
+ * What a saved area is made of: every kind its run files, the clips and the
+ * tile pyramids. Saved groups them into the area's card and sign-out counts
+ * them as the area's bytes. Guard: `artifactGroups.test.ts`
+ * ("REGION_ARTIFACT_KINDS").
+ */
+export const REGION_ARTIFACT_KINDS: readonly MapArtifact["kind"][] = [
+  "basemap-region",
+  "dem-region",
+  "contours-region",
+  "slope-region",
+];
+
+export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {
+  return REGION_ARTIFACT_KINDS.includes(artifact.kind);
+}
+
 export type Bbox = [west: number, south: number, east: number, north: number];
 
 export type ArtifactGroup = {

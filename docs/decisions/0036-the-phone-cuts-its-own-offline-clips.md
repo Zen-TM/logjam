@@ -119,8 +119,9 @@ saved, by anyone, whatever maps are picked.** `checkRegionCaps` in
 `shared/src/mapRegionEstimate.ts` refuses it on the save screen (guard:
 `mapRegionEstimate.test.ts`, "rejects an area over MAX_REGION_AREA_KM2
 whatever is being saved"). The cap now
-bounds what a save costs the phone: about 90 MB and 130 requests for the three
-clips of 40 km of mountains, above.
+bounds what a save costs the phone: about 160 MB and 185 requests for the four
+clips of 40 km of mountains (updated 2026-10-23: the three above, plus the
+slope clip below).
 
 **A clip that fails never fails the region.** The rest saves and the card
 reports one map that did not finish. A DEM or contour archive the CDN does not
@@ -155,6 +156,22 @@ Nothing new calls it.
   release will include the phone-cut clips, so no released build ever calls it. The area cap
   stays in `shared/`, for the phone. The paragraph above and the guards it names
   no longer apply. Everything else above stands.
+- **Update 2026-10-23: every saved area also clips the statewide slope**
+  (`NSW_SLOPE` in `shared/src/terrain.ts`), so Logjam GPS draws the Terrain
+  group's Slope offline. It is a fourth entry in `regionClipSpecs`, cut the
+  same way, at the archive's own zooms (z8 to z15), and filed as
+  `slope-region`. A slope archive the CDN lacks is left out like a DEM or
+  contour one. Guards: `regionTilePlanning.test.ts` ("regionClipSpecs"),
+  `regionDownloads.test.ts` ("leaves out a DEM or contour archive the CDN
+  lacks, and only that", which covers the slope too, and "files a slope clip
+  as the DEM the map colours"). A 40 km Katoomba box's slope clip, planned
+  with `planExtract` from a local copy of the Katoomba sheet's slope, is
+  64 MB in 53 requests, and `SLOPE_TILE_BYTES` in
+  `shared/src/mapRegionEstimate.ts` prices the statewide archive's at about
+  71 MB.
+  Hillshade is not saved: MapLibre shades the height archive, and an area
+  keeps its heights at z15 alone, so offline a shade could only be drawn
+  close in. Everything else above stands.
 
 ## Consequences
 
@@ -177,12 +194,13 @@ Nothing new calls it.
   default (OkHttp's on Android): a header removed there would fail every
   clip. No guard: only the device check shows it.
 - **Negative:** the `/master/*` behaviour caches nothing (`max_ttl = 0`), so
-  every range is an S3 GET. At about 130 per save that is a fraction of a cent.
+  every range is an S3 GET. At about 185 per save (updated 2026-10-23) that is
+  a fraction of a cent.
 - **Negative (updated 2026-10-18):** there were two ways to cut a clip until
   the endpoint went. It is removed (#510), with the API image's `pmtiles`
   binary and `PROTOMAPS_ARCHIVE_URI`, so there is one way now.
-- **Negative:** a guest now downloads the DEM and contour clips too, up to
-  about 80 MB more per mountain area than before.
+- **Negative:** a guest now downloads the DEM, contour and slope clips too, up
+  to about 150 MB more per mountain area than before (updated 2026-10-23).
 - **Neutral:** an area saved before this change keeps what it was saved with.
   Nothing backfills the clips.
 

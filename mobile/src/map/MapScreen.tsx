@@ -1416,11 +1416,12 @@ export function MapScreen({
   const slopeResolved = useMemo(
     () =>
       terrainLayers.slope
-        ? resolveMapSource({ kind: "nsw-slope" }, ctx).filter(
-            (r) => r.status === "ok",
-          )
+        ? resolveMapSource(
+            { kind: "nsw-slope", viewport: viewportBbox },
+            ctx,
+          ).filter((r) => r.status === "ok")
         : [],
-    [terrainLayers.slope, ctx],
+    [terrainLayers.slope, viewportBbox, ctx],
   );
   const hillshadeResolved = useMemo(
     () =>

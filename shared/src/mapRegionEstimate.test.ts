@@ -242,7 +242,8 @@ describe("planRegionForBasemaps", () => {
     expect(job.p90Bytes).toBe(
       job.perSource[0].size.p90Bytes +
         job.demArchives[0].size.p90Bytes +
-        job.contours.p90Bytes,
+        job.contours.p90Bytes +
+        job.slope.p90Bytes,
     );
   });
 
@@ -256,8 +257,21 @@ describe("planRegionForBasemaps", () => {
     expect(job.meanBytes).toBe(
       job.perSource[0].size.meanBytes +
         job.demArchives[0].size.meanBytes +
-        job.contours.meanBytes,
+        job.contours.meanBytes +
+        job.slope.meanBytes,
     );
+  });
+
+  // Mutation: halve SLOPE_TILE_BYTES, and the estimate no longer brackets
+  // the measured clip. (Leaving the slope out of the totals
+  // turns the two sum tests above red.)
+  it("prices the slope clip from its measured tiles", () => {
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
+    // A real clip of this area, from the Katoomba sheet's slope, is 6.0 MB.
+    expect(job.slope.meanBytes).toBeGreaterThan(4_500_000);
+    expect(job.slope.meanBytes).toBeLessThan(6_000_000);
+    expect(job.slope.p90Bytes).toBeGreaterThan(6_000_000);
+    expect(job.slope.p90Bytes).toBeLessThan(8_000_000);
   });
 
   // Mutation: add an archive source to DEM_SOURCES without its measured tile

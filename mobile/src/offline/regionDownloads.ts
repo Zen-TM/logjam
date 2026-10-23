@@ -1,5 +1,5 @@
 // An offline clip of one of Logjam's own PMTiles archives (the vector
-// basemap, a DEM, the contours), cut on the phone from the public archive on
+// basemap, a DEM, the contours, the slope), cut on the phone from the public archive on
 // the CDN by byte range (`planExtract` in shared/src/pmtilesExtract.ts),
 // written into app-private storage as it arrives, then registered. The
 // resolver picks it up from the registry with no map code changes.
@@ -19,6 +19,7 @@ import {
   BASEMAP_CATALOG,
   DEM_SOURCES,
   NSW_CONTOURS,
+  NSW_SLOPE,
   fetchExtractRequest,
   planExtract,
   type ExtractPlan,
@@ -31,7 +32,7 @@ import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
 import { deleteArtifact, insertArtifact } from "./registryDb";
-import { exhaustedTileOutcome } from "./regionTilePlanning";
+import { exhaustedTileOutcome, regionClipKind } from "./regionTilePlanning";
 import {
   connectionAllows,
   type RegionCancelToken,
@@ -48,6 +49,8 @@ export type RegionClipSpec = {
   demSourceId?: string;
   /** Set when the clip is of the statewide contours: shared nswContours.ts. */
   contours?: boolean;
+  /** Set when the clip is of the statewide slope: shared terrain.ts. */
+  slope?: boolean;
   label: string;
   /** The download run this belongs to — see MapArtifact.groupId. */
   groupId: string;
@@ -59,8 +62,8 @@ export type RegionClipSpec = {
 type Source = Parameters<typeof planExtract>[0];
 
 /**
- * Where the clip comes from, and at what zooms: a DEM's and the contours' are
- * the ones their readers use; the vector map's are all the archive has. Its
+ * Where the clip comes from, and at what zooms: a DEM's, the contours' and
+ * the slope's are the ones their readers use; the vector map's are all the archive has. Its
  * full detail, whatever the detail rail says, because the rail prices rasters
  * and a lower zoom drops the minor tracks snapping follows.
  */
@@ -79,6 +82,7 @@ function clipArchiveFor(spec: RegionClipSpec): {
     };
   }
   if (spec.contours) return NSW_CONTOURS;
+  if (spec.slope) return NSW_SLOPE;
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
   return { archivePath: entry.urlTemplate };
@@ -273,10 +277,11 @@ export async function runRegionClip(
   onProgress: (progress: RegionJobProgress) => void,
   token: RegionCancelToken,
 ): Promise<RegionRunOutcome> {
-  // A DEM or contour archive that is not on the CDN (not built yet) is not
-  // this run's failure: the area keeps its worldwide heights and its basemap,
-  // and the job leaves the queue as if it had never been planned.
-  const optional = spec.demSourceId != null || spec.contours === true;
+  // A DEM, contour or slope archive that is not on the CDN (not built yet) is
+  // not this run's failure: the area keeps its worldwide heights and its
+  // basemap, and the job leaves the queue as if it had never been planned.
+  const optional =
+    spec.demSourceId != null || spec.contours === true || spec.slope === true;
   let handle: FileHandle | null = null;
   const settle = async (stop: {
     stop: RegionRunOutcome;
@@ -413,17 +418,22 @@ export async function runRegionClip(
 
     const artifact: MapArtifact = {
       id: spec.id,
+      kind: regionClipKind(spec),
       // A DEM clip is filed under its source id, which is what the sampler
       // looks saved files up by (offline/demLookup.ts).
-      kind: spec.demSourceId
-        ? "dem-region"
-        : spec.contours
-          ? "contours-region"
-          : "basemap-region",
       logicalKey:
-        spec.demSourceId ?? (spec.contours ? NSW_CONTOURS.id : "protomaps"),
+        spec.demSourceId ??
+        (spec.contours
+          ? NSW_CONTOURS.id
+          : spec.slope
+            ? NSW_SLOPE.id
+            : "protomaps"),
       format: "pmtiles",
-      sourceType: spec.demSourceId ? "raster" : "vector",
+      sourceType: spec.demSourceId
+        ? "raster"
+        : spec.slope
+          ? "raster-dem"
+          : "vector",
       // Registry stores the scheme-less absolute path; the resolver prefixes
       // pmtiles://file:// itself.
       path: fileUri.replace(/^file:\/\//, ""),
