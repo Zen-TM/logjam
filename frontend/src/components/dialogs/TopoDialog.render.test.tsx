@@ -2,6 +2,19 @@ import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// The switch, read at each render: the template tests hold the form it
+// brings back when set off (a revert is one line), the rest the form it shows.
+const switches = vi.hoisted(() => ({ sharpen: false }));
+vi.mock("@logjam/shared", async (importOriginal) => {
+  const shared = await importOriginal<typeof import("@logjam/shared")>();
+  return {
+    ...shared,
+    get SHARPEN_NEW_JOBS() {
+      return switches.sharpen;
+    },
+  };
+});
+
 import TopoDialog, { type TopoTemplate } from "./TopoDialog";
 import { apiFetch } from "../../placeUtils";
 
@@ -50,6 +63,7 @@ HTMLDialogElement.prototype.close = function () {
 };
 
 afterEach(() => {
+  switches.sharpen = false;
   cleanup();
   discard.mockClear();
   vi.mocked(apiFetch).mockImplementation(async () => templates as never);
@@ -124,5 +138,19 @@ describe("TopoDialog, choosing a ZIP", () => {
     const zip = new File(["PK"], "survey.zip", { type: "application/zip" });
     fireEvent.change(input, { target: { files: [zip] } });
     expect(discard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TopoDialog once new jobs sharpen", () => {
+  // Mutations: the old title, or a template picker for a job that draws no
+  // styled layer a template could set.
+  it("sharpens an area, with no template or style to choose", () => {
+    switches.sharpen = true;
+    render(dialog({ open: true }));
+    expect(
+      screen.getByRole("heading", { name: "Sharpen an area" }),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Template", { exact: true })).toBeNull();
+    expect(screen.queryByText("How this topo is drawn")).toBeNull();
   });
 });

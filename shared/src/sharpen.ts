@@ -15,11 +15,12 @@ import {
 import { escapeXml } from "./escapeXml.js";
 
 /**
- * Whether /start marks a new job to sharpen. Off until Logjam Web draws
- * sharpened areas: merging to main deploys the API and the worker, and
- * before then a sharpened job's archives would draw on no client.
+ * Whether a new job sharpens: /start marks it (the worker then runs
+ * topo/sharpen.py), and Logjam Web offers "Sharpen an area" with no style
+ * options. Setting it back to false returns new jobs to the legacy pipeline
+ * and the old form together; a job already marked still sharpens.
  */
-export const SHARPEN_NEW_JOBS = false;
+export const SHARPEN_NEW_JOBS = true;
 
 /** A completed sharpened job, as a client and the API's sampler need it. */
 export type SharpenedArea = {

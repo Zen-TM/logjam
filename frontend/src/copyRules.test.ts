@@ -42,6 +42,12 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
   },
   {
     file: "components/dialogs/TopoDialog.tsx",
+    text: "Digital Elevation Model",
+    reason:
+      "the name of ELVIS's own menu entry, which the step tells the user to open",
+  },
+  {
+    file: "components/dialogs/TopoDialog.tsx",
     text: "select the specific tiles",
     reason:
       "ELVIS's own map draws its LiDAR tiles, and the user picks them there",

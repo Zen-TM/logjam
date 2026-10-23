@@ -53,19 +53,22 @@ elvis-katoomba-2506258-laz.zip`:
    row has its `ecs_task_arn`, that MiniStack lists that task, and that the
    container got the `JOB_ID` override and sits on the no-internet network
    only.
-4. **Happy path** (`e2e/check.py complete`): the worker exits 0 and the row is
-   `complete` with its outputs, footprint, metrics and
-   storage charge; the objects are in the bucket and the input ZIP is gone;
-   every layer's tile on Mount Solitary decodes and is not blank.
-5. **Sharpen** (`e2e/check.py sharpened`): `e2e/statewide.py` puts made-up
-   stand-ins for the statewide height and slope archives in MiniStack (the
-   heights a steep plane, so the check can say what every fill pixel must
-   hold), a job is inserted with its `sharpen` mark set by hand and the worker
-   run on it with `docker run`. By hand because the API marks no job while
-   `SHARPEN_NEW_JOBS` (`shared/src/sharpen.ts`) is off. The row must be
-   `complete` with its result and ground kind, every z15 tile of its range in
-   both raster archives, the survey's own heights on Mount Solitary, the fill
-   pixels of the range's corner tile in place, and a contour tile.
+4. **Sharpen** (`e2e/check.py sharpened`): before the job starts,
+   `e2e/statewide.py` puts made-up stand-ins for the statewide height and
+   slope archives in MiniStack (the heights a steep plane, so the check can
+   say what every fill pixel must hold). `SHARPEN_NEW_JOBS`
+   (`shared/src/sharpen.ts`) is on, so `/start` marks the job and the worker
+   runs `sharpen.py`. The row must be `complete` with its result and ground
+   kind, every z15 tile of its range in both raster archives, the survey's own
+   heights on Mount Solitary, the fill pixels of the range's corner tile in
+   place, and a contour tile.
+5. **Legacy pipeline** (`e2e/check.py complete`): a job with no mark is
+   inserted by hand (the API marks every new job) and the worker run on it
+   with `docker run`, as one still pending when the switch flipped would be.
+   The worker exits 0 and the row is `complete` with its outputs, footprint,
+   metrics and storage charge; the objects are in the bucket and the input
+   ZIP is gone; every layer's tile on Mount Solitary decodes and is not
+   blank.
 6. **Resurrection check** (`e2e/check.py reaped`): a second job is launched
    the same way, its worker killed mid-render and the row force-failed as the
    reaper would; a worker relaunched for the same `JOB_ID` leaves it

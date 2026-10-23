@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   removeShareConfirm,
+  SHARPEN_NEW_JOBS,
   type TopoExportJobView,
   type VectorStyleSettings,
 } from "@logjam/shared";
@@ -63,6 +64,7 @@ import {
   exportLabel,
   fileSubtitle,
   formatDay,
+  isOlderLidarJob,
   plural,
   topoLabel,
   topoNamesById,
@@ -78,6 +80,13 @@ import classes from "./MapsPanel.module.css";
 
 /** The three lists this view holds, one tab each. */
 type LidarTab = "topos" | "exports" | "templates";
+
+/** What makes a new LiDAR job, in every place that offers one. */
+const MAKE_LABEL = SHARPEN_NEW_JOBS ? "Sharpen an area" : "Make a LiDAR topo";
+
+/** A sharpened job and an older LiDAR topo, told apart in the list. */
+const identityOf = (job: CompletedTopoJob) =>
+  job.sharpened ? MAP_IDENTITY.sharpened : MAP_IDENTITY.topo;
 
 export default function LidarPanel({
   views,
@@ -218,15 +227,20 @@ export default function LidarPanel({
     // Export is NOT owner-gated: a recipient can already see the overlay, and
     // POST /topo-exports accepts a shared source job, making the export under
     // the recipient's own account (api/src/__tests__/topoExports.test.ts).
-    const exportEntry: MenuEntry = {
-      id: "export",
-      label: "Export…",
-      icon: "export",
-      onSelect: () => setExportJob(job),
-    };
+    // A sharpened job has none of the files this export reads.
+    const exportEntry: MenuEntry[] = job.sharpened
+      ? []
+      : [
+          {
+            id: "export",
+            label: "Export…",
+            icon: "export",
+            onSelect: () => setExportJob(job),
+          },
+        ];
     if (job.syncRole === "owner") {
       return [
-        exportEntry,
+        ...exportEntry,
         {
           id: "share",
           label: "Share…",
@@ -276,7 +290,7 @@ export default function LidarPanel({
     // (api/src/lib/shareAccess.unit.test.ts).
     const confirm = removeShareConfirm({ kindLabel: "topo", itemName: label });
     return [
-      exportEntry,
+      ...exportEntry,
       { id: "remove-sep", separator: true },
       {
         id: "removeShare",
@@ -337,12 +351,17 @@ export default function LidarPanel({
   ];
 
   const templateEntries = (template: TopoTemplate): MenuEntry[] => [
-    {
-      id: "make",
-      label: "Make a LiDAR topo with this",
-      icon: "lidar",
-      onSelect: () => onOpenTopoWithTemplate(template.id),
-    },
+    // A sharpened job draws no styled layer a template could set.
+    ...(SHARPEN_NEW_JOBS
+      ? []
+      : ([
+          {
+            id: "make",
+            label: "Make a LiDAR topo with this",
+            icon: "lidar",
+            onSelect: () => onOpenTopoWithTemplate(template.id),
+          },
+        ] satisfies MenuEntry[])),
     // The built-in Default is nobody's to change: absent, not disabled.
     ...(template.isSystem
       ? []
@@ -407,21 +426,25 @@ export default function LidarPanel({
             onClick={() => openSheet(!sheetOpen)}
           />
           <Menu
-            label="Make a LiDAR topo"
+            label={MAKE_LABEL}
             placement="bottom-end"
             entries={[
               {
                 id: "make",
-                label: "Make a LiDAR topo",
+                label: MAKE_LABEL,
                 icon: "lidar",
                 onSelect: onOpenTopo,
               },
-              {
-                id: "template",
-                label: "New template…",
-                icon: "add",
-                onSelect: () => setEditingTemplate(null),
-              },
+              ...(SHARPEN_NEW_JOBS
+                ? []
+                : [
+                    {
+                      id: "template",
+                      label: "New template…",
+                      icon: "add" as const,
+                      onSelect: () => setEditingTemplate(null),
+                    },
+                  ]),
             ]}
             trigger={(props) => (
               <Button
@@ -449,7 +472,7 @@ export default function LidarPanel({
   // The same button is the empty state's and the end of the list's.
   const makeTopoButton = (
     <Button compact variant="filled" icon="lidar" onClick={onOpenTopo}>
-      Make a LiDAR topo
+      {MAKE_LABEL}
     </Button>
   );
 
@@ -462,7 +485,11 @@ export default function LidarPanel({
       <EmptyState
         icon="lidar"
         title="No LiDAR topos yet"
-        body="Pick an area and Logjam Web builds contours, slope, hillshade and vegetation from the government's LiDAR survey. Save one to Logjam GPS for the field."
+        body={
+          SHARPEN_NEW_JOBS
+            ? "Pick an area and order its LiDAR from the government's survey: Logjam Web draws the contours, slope and hillshade there at the survey's own detail."
+            : "Pick an area and Logjam Web builds contours, slope, hillshade and vegetation from the government's LiDAR survey. Save one to Logjam GPS for the field."
+        }
         actions={makeTopoButton}
       />
     </div>
@@ -487,12 +514,12 @@ export default function LidarPanel({
                 title={label}
                 // A named topo keeps its date beneath; an unnamed one IS its date.
                 subtitle={job.name ? formatDay(job.createdAt) : undefined}
-                description={MAP_IDENTITY.topo.label}
+                description={identityOf(job).label}
                 leading={
                   <IconTile
-                    icon="lidar"
-                    hue={MAP_IDENTITY.topo.hue}
-                    label={MAP_IDENTITY.topo.label}
+                    icon={identityOf(job).icon}
+                    hue={identityOf(job).hue}
+                    label={identityOf(job).label}
                   />
                 }
                 onOpen={
@@ -502,6 +529,9 @@ export default function LidarPanel({
                 }
                 trailing={
                   <>
+                    {isOlderLidarJob(job, SHARPEN_NEW_JOBS) && (
+                      <StatusPill label="Old" tone="outline" />
+                    )}
                     {job.syncRole !== "owner" && (
                       <StatusPill label="Shared" tone="outline" />
                     )}

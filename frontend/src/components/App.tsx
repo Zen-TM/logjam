@@ -107,6 +107,7 @@ import {
   MAP_MEASURE,
   MAP_MEASURE_ICON,
   MAP_TERRAIN,
+  SHARPEN_NEW_JOBS,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -1505,7 +1506,7 @@ function App() {
       menu: [
         {
           id: "topo",
-          label: "Make a LiDAR topo",
+          label: SHARPEN_NEW_JOBS ? "Sharpen an area" : "Make a LiDAR topo",
           icon: "lidar",
           onSelect: () => {
             setActivePanel(null);

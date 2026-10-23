@@ -9,9 +9,10 @@ name=$1
 zip=$2
 api=http://localhost:8080
 
-# Logjam Web sends the default settings unless the user changes them.
+# Logjam Web sends the default settings with vegetation off, unless the
+# user ticks it (frontend sharpenJob.ts).
 settings=$(cd shared && node --input-type=module -e \
-  "import { RASTER_TEMPLATE_DEFAULTS as d } from './dist/topoSettings.js'; console.log(JSON.stringify(d))")
+  "import { RASTER_TEMPLATE_DEFAULTS as d } from './dist/topoSettings.js'; console.log(JSON.stringify({ ...d, vegetation: { ...d.vegetation, enabled: false } }))")
 created=$(jq -n --arg name "$name" --argjson settings "$settings" \
     '{jobName: $name, tileCount: 1, settings: $settings}' \
   | curl -sf -X POST "$api/topo-jobs" -H 'content-type: application/json' -d @-)

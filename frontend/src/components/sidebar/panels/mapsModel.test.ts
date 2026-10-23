@@ -6,6 +6,7 @@ import {
   fileSubtitle,
   geoPdfLabel,
   geoPdfsBeingMade,
+  isOlderLidarJob,
   topoWorkBeingMade,
 } from "./mapsModel";
 
@@ -160,5 +161,16 @@ describe("what a finished map is called", () => {
     expect(
       fileSubtitle({ bytes: null, createdAt: "2026-09-10T05:00:00.000Z" }),
     ).not.toContain("MB");
+  });
+});
+
+describe("an older LiDAR job", () => {
+  // Mutations: mark the sharpened jobs instead, or mark the old ones before
+  // new jobs sharpen, when every job is of the old kind.
+  it("is marked once new jobs sharpen, and only if it has no area", () => {
+    const area = { sharpened: {} } as Parameters<typeof isOlderLidarJob>[0];
+    expect(isOlderLidarJob({}, true)).toBe(true);
+    expect(isOlderLidarJob(area, true)).toBe(false);
+    expect(isOlderLidarJob({}, false)).toBe(false);
   });
 });

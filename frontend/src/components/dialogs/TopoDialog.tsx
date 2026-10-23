@@ -29,6 +29,7 @@ import {
   estimateElvisTileCount,
   formatCredits,
   regionNameFromSurvey,
+  SHARPEN_NEW_JOBS,
   type ElvisStats,
   type RasterTemplateSettings,
   type AutoExportSettings,
@@ -45,6 +46,7 @@ import {
   Icon,
   ErrorBanner,
   FieldError,
+  SwitchRow,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
@@ -53,6 +55,7 @@ import { fetchTopoTemplates } from "./topoTemplatesFetch";
 import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
 import { submitFailureMessage, useTopoUpload } from "./topoUpload";
+import { sharpenJobRequest } from "./sharpenJob";
 import classes from "./TopoDialog.module.css";
 
 export type TopoTemplate = {
@@ -193,6 +196,8 @@ export default function TopoDialog({
   const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({
     ...AUTO_EXPORT_DEFAULTS,
   }));
+  // Sharpening: the one styled layer a job can still make, off unless asked.
+  const [vegetation, setVegetation] = useState(false);
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] =
     useState<string>(DEFAULT_TEMPLATE_ID);
@@ -512,8 +517,9 @@ export default function TopoDialog({
           tileCount: stats.tileCount || null,
           jobName: topoName.trim() || stats.surveyNames[0] || null,
           filename: file.name,
-          settings,
-          autoExport,
+          ...(SHARPEN_NEW_JOBS
+            ? sharpenJobRequest(settings, vegetation, stats.lazCount)
+            : { settings, autoExport }),
         },
         {
           progress: (sent, total) => {
@@ -578,7 +584,9 @@ export default function TopoDialog({
             ? "Getting LiDAR from ELVIS"
             : mode === "settings"
               ? "How this topo is drawn"
-              : "Make a LiDAR topo";
+              : SHARPEN_NEW_JOBS
+                ? "Sharpen an area"
+                : "Make a LiDAR topo";
 
   return (
     <>
@@ -817,7 +825,9 @@ export default function TopoDialog({
             <div className={classes.nameRow}>
               <TextField
                 label="Name"
-                placeholder="Name this topo"
+                placeholder={
+                  SHARPEN_NEW_JOBS ? "Name this area" : "Name this topo"
+                }
                 disabled={upload.held}
                 aria-describedby={upload.held ? HELD_REASON_ID : undefined}
                 value={topoName}
@@ -827,27 +837,32 @@ export default function TopoDialog({
                 }}
               />
 
-              <Select
-                label="Template"
-                disabled={upload.held}
-                aria-describedby={upload.held ? HELD_REASON_ID : undefined}
-                value={selectedTemplateId}
-                onChange={(e) => selectTemplate(e.target.value)}
-              >
-                {/* Until /topo-templates resolves, render the synthetic system
+              {/* A sharpened job draws no styled layer a template could set. */}
+              {!SHARPEN_NEW_JOBS && (
+                <Select
+                  label="Template"
+                  disabled={upload.held}
+                  aria-describedby={upload.held ? HELD_REASON_ID : undefined}
+                  value={selectedTemplateId}
+                  onChange={(e) => selectTemplate(e.target.value)}
+                >
+                  {/* Until /topo-templates resolves, render the synthetic system
                   Default entry (always first in the server list) so the initial
                   value "default" is never out of range. */}
-                {templates.length === 0 ? (
-                  <option value={DEFAULT_TEMPLATE_ID}>Default (system)</option>
-                ) : (
-                  templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                      {t.isSystem ? " (system)" : ""}
+                  {templates.length === 0 ? (
+                    <option value={DEFAULT_TEMPLATE_ID}>
+                      Default (system)
                     </option>
-                  ))
-                )}
-              </Select>
+                  ) : (
+                    templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.isSystem ? " (system)" : ""}
+                      </option>
+                    ))
+                  )}
+                </Select>
+              )}
             </div>
             {upload.held && (
               <p id={HELD_REASON_ID} className={classes.summaryNote}>
@@ -855,21 +870,35 @@ export default function TopoDialog({
               </p>
             )}
 
-            <div className={classes.errandLine}>
-              <Button
-                icon="settings"
-                compact
-                variant="outline"
-                disabled={upload.held}
-                disabledReason={KEPT_FOR_RESUME}
-                onClick={() => setMode("settings")}
-              >
-                How this topo is drawn
-              </Button>
-              {settingsInvalid && (
-                <StatusPill label="A setting needs fixing" tone="warning" />
-              )}
-            </div>
+            {SHARPEN_NEW_JOBS ? (
+              stats &&
+              stats.lazCount > 0 && (
+                <SwitchRow
+                  title="Vegetation (experimental)"
+                  description="Also draws how thick the scrub is, from the point clouds. It takes longer."
+                  checked={vegetation}
+                  disabled={upload.held}
+                  disabledReason={KEPT_FOR_RESUME}
+                  onChange={setVegetation}
+                />
+              )
+            ) : (
+              <div className={classes.errandLine}>
+                <Button
+                  icon="settings"
+                  compact
+                  variant="outline"
+                  disabled={upload.held}
+                  disabledReason={KEPT_FOR_RESUME}
+                  onClick={() => setMode("settings")}
+                >
+                  How this topo is drawn
+                </Button>
+                {settingsInvalid && (
+                  <StatusPill label="A setting needs fixing" tone="warning" />
+                )}
+              </div>
+            )}
           </>
         )}
       </Dialog>
@@ -1039,16 +1068,34 @@ function ElvisInstructions({
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Take the point clouds" />
-          <p className={classes.stepLine}>
-            Under <strong>NSW Government — Spatial Services</strong> →{" "}
-            <strong>Point Clouds</strong>, beside <strong>AHD</strong>, press{" "}
-            <strong>Select all</strong>, or select the specific tiles you want.
-          </p>
-          <p className={classes.stepLine}>
-            Alternatively, select only DEM files for a faster but less precise
-            topo with no vegetation layer.
-          </p>
+          {SHARPEN_NEW_JOBS ? (
+            <>
+              <SectionHeader title="Take the 1 m or 2 m DEM" />
+              <p className={classes.stepLine}>
+                Under <strong>NSW Government — Spatial Services</strong> →{" "}
+                <strong>Digital Elevation Model</strong>, select the 1 m or 2 m
+                DEM, not the 5 m one: Logjam already has that for all of NSW.
+              </p>
+              <p className={classes.stepLine}>
+                Take the <strong>Point Clouds</strong> too if you want the
+                vegetation layer, which is drawn from them.
+              </p>
+            </>
+          ) : (
+            <>
+              <SectionHeader title="Take the point clouds" />
+              <p className={classes.stepLine}>
+                Under <strong>NSW Government — Spatial Services</strong> →{" "}
+                <strong>Point Clouds</strong>, beside <strong>AHD</strong>,
+                press <strong>Select all</strong>, or select the specific tiles
+                you want.
+              </p>
+              <p className={classes.stepLine}>
+                Alternatively, select only DEM files for a faster but less
+                precise topo with no vegetation layer.
+              </p>
+            </>
+          )}
         </div>
       </li>
 
