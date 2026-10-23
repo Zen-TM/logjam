@@ -95,8 +95,11 @@ def _gdal_message(err_class: int, err_num: int, _message: str) -> None:
 
 # Replaces GDAL's default printing to stderr (CloudWatch), on the importing
 # thread: nothing here runs GDAL on threads of its own, and a forked worker
-# inherits it. SetErrorHandler is no substitute: under UseExceptions it has no
-# effect. Guard: tests/test_log_privacy.py `TestGdalMessages`.
+# inherits it. Pushed on import, not in main(), so a spawned pool child (which
+# imports this and never runs main) keeps it; every importer gets it, the
+# export worker too, through renderers/tile_compose.py, whose warnings lose
+# their text with it. SetErrorHandler is no substitute: under UseExceptions it
+# has no effect. Guard: tests/test_log_privacy.py `TestGdalMessages`.
 gdal.PushErrorHandler(_gdal_message)
 
 # Composite stacking order, bottom→top. Hand-synced mirror of TOPO_LAYERS in

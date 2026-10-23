@@ -2,10 +2,12 @@
 Privacy): no coordinate, bbox, tile index, footprint id or survey name.
 Its stdout goes to CloudWatch.
 
-Two guards. A scan of every `log.*()` call in the job's modules for the
-names that hold such a value, and the overlapping-survey pick run for real
+Three guards. A scan of every `log.*()` call in the job's modules for the
+names that hold such a value; the overlapping-survey pick run for real
 under assertLogs, since its footprint id and survey labels are the values
-most tempting to log. Mutations that turn it red: restoring pipeline.py's
+most tempting to log; and pipeline.py's GDAL handler, which logs a message's
+class and number, never its text (`TestGdalMessages`, whose mutations its
+own docstring names). Mutations of the first two that turn it red: restoring pipeline.py's
 `Coverage: lon …, lat …` line, putting `{footprint}` or a survey label back
 in the overlapping-surveys log, logging a tile's `{z}/{x}/{y}`, or restoring
 the filename in the PDAL tile log.

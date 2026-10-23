@@ -184,7 +184,32 @@ class TestGround(unittest.TestCase):
     """Mutations that turn it red: LAZ chosen over a usable DEM, a ZIP of LAZ
     and 5 m DEMs refused, the DEMs mosaicked fine to coarse (a coarse one wins
     where they overlap), an empty DEM taken over the point clouds (or setting
-    zmax), and an empty class 2 gridded anyway."""
+    zmax), and an empty class 2 gridded anyway. `dem_cell` reporting a cell
+    for a DEM with no valid pixel (its emptiness check deleted) turns
+    `test_an_empty_dem_has_no_cell` red."""
+
+    def test_an_empty_dem_has_no_cell(self):
+        from unittest import mock
+
+        import sharpen
+
+        with mock.patch.object(sharpen.pipeline, "gdal") as gdal:
+            gdal.Open.return_value.GetGeoTransform.return_value = (
+                0,
+                2.0,
+                0,
+                0,
+                0,
+                -2.0,
+            )
+            with mock.patch.object(
+                sharpen.pipeline, "raster_has_valid_pixels", return_value=False
+            ):
+                self.assertIsNone(sharpen.dem_cell(Path("empty.tif")))
+            with mock.patch.object(
+                sharpen.pipeline, "raster_has_valid_pixels", return_value=True
+            ):
+                self.assertEqual(sharpen.dem_cell(Path("full.tif")), 2.0)
 
     def test_an_empty_dem_is_dropped(self):
         # None: a DEM with no height in it.

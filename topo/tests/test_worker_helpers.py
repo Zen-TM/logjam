@@ -82,8 +82,8 @@ class TestSafeErrorMessage(unittest.TestCase):
             self.assertNotRegex(msg, r"subprocess|pipeline|tippecanoe|tiles")
 
     def test_memory_error(self):
-        # One sentence, declared once, for an area too big for memory however
-        # it shows: sharpen.py refuses one in advance with the same.
+        # One sentence, declared once, for an area too big for memory: an
+        # out-of-memory kill here, and sharpen.py's refusal in advance.
         from worker_common import TOO_BIG
 
         self.assertEqual(safe_error_message(MemoryError()), TOO_BIG)
