@@ -19,8 +19,9 @@ OUT receives:
   footprint.geojson where the survey has ground
   sharpen.json      zmax, the tile range, coverage, ground kind, extraction month
 
-A ZIP Logjam cannot sharpen (no ground classified, only 5 m DEMs) writes
-`error.json` with the sentence its owner reads and exits 2.
+A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
+reads (the `CannotSharpen` sentences: no ground classified, no ground with a
+height, only 5 m DEMs, too big for memory) and exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -42,6 +43,7 @@ and PDAL's own output is captured, never printed.
 """
 
 import argparse
+import concurrent.futures.process
 import contextlib
 import dataclasses
 import functools
@@ -49,6 +51,7 @@ import json
 import logging
 import math
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -64,6 +67,7 @@ import numpy as np
 
 import build_nsw_dem as dem
 import pipeline
+from worker_common import TOO_BIG
 
 log = logging.getLogger("sharpen")
 
@@ -97,7 +101,6 @@ EMPTY_GROUND = (
     "Logjam couldn't map any ground from this ZIP. Download the area again "
     "from ELVIS with its DEM, and make it again."
 )
-TOO_BIG = "This area was too big to process. Try a smaller one."
 ONLY_5M = (
     "This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. "
     "Choose the 1 m or 2 m DEM, or the point clouds, in ELVIS."
@@ -126,22 +129,28 @@ def cell_for_density(ground_per_m2: float) -> int:
     return 1 if ground_per_m2 >= DENSE_GROUND_PTS_M2 else 2
 
 
-def dem_plan(dem_cells: List[float], has_laz: bool) -> Tuple[Optional[int], List[int]]:
+def dem_plan(
+    dem_cells: List[Optional[float]], has_laz: bool
+) -> Tuple[Optional[int], List[int]]:
     """Which ground a ZIP gives: (zmax, the DEMs to mosaic, coarse to fine)
-    when it has a DEM finer than 5 m, else (None, []) to grid its class 2.
+    when it has a DEM finer than 5 m with heights in it, else (None, []) to
+    grid its class 2. A cell is None for a DEM with no height at all (ELVIS
+    sometimes bundles one).
 
-    A 5 m DEM adds nothing to the statewide data, so it is dropped; a ZIP left
+    An empty DEM and a 5 m one add nothing, so both are dropped; a ZIP left
     with nothing to sharpen is refused, and one that still has point clouds
     falls to them. Coarse to fine, so where DEMs overlap the finest is drawn
     last and wins (tests/test_sharpen.py `TestGround`).
     """
-    usable = [(c, i) for i, c in enumerate(dem_cells) if zoom_for_cell(c)]
+    usable = [(c, i) for i, c in enumerate(dem_cells) if c and zoom_for_cell(c)]
     if usable:
         usable.sort(reverse=True)
         return zoom_for_cell(usable[-1][0]), [i for _, i in usable]
     if has_laz:
         return None, []
-    raise CannotSharpen(ONLY_5M)
+    if any(dem_cells):
+        raise CannotSharpen(ONLY_5M)
+    raise CannotSharpen(EMPTY_GROUND)
 
 
 def class2_cell(ground_points: int, area_m2: float) -> int:
@@ -257,7 +266,10 @@ def las_summary(path: str) -> dict:
     return json.loads(run("pdal", "info", "--summary", path))["summary"]
 
 
-def dem_cell(path: Path) -> float:
+def dem_cell(path: Path) -> Optional[float]:
+    """A DEM's cell in metres, or None when it holds no height."""
+    if not pipeline.raster_has_valid_pixels(str(path)):
+        return None
     ds = pipeline.gdal.Open(str(path))
     cell = abs(ds.GetGeoTransform()[1])
     ds = None
@@ -266,7 +278,7 @@ def dem_cell(path: Path) -> float:
 
 def dem_ground(dem_files: List[Path], order: List[int], out: str) -> None:
     """Mosaic the chosen DEMs at the finest one's cell, finest drawn last, a
-    coarser one upsampled bilinear (tests/test_sharpen.py `TestDemGround`)."""
+    coarser one upsampled bilinear (tests/test_sharpen.py `TestGroundSteps`)."""
     pipeline.merge_dem_tiles(
         [dem_files[i] for i in order], out, resolution="highest", resample="bilinear"
     )
@@ -320,29 +332,35 @@ TIN_MEMORY_SHARE = 0.7
 
 def tin_workers(cpus: int, window_points: int, memory_bytes: int) -> int:
     """TIN jobs at a time: one a CPU, and as many as the largest job's points
-    fit in memory. An area whose largest job alone won't fit is refused, where
-    running it would only end in an out-of-memory kill (tests/test_sharpen.py
-    `TestTinWorkers`)."""
-    fits = int(
-        TIN_MEMORY_SHARE * memory_bytes // (TIN_BYTES_PER_POINT * max(window_points, 1))
-    )
-    if fits == 0:
+    fit in TIN_MEMORY_SHARE of the memory, but always one when it fits in all
+    of it. An area whose largest job needs more than all of the memory is
+    refused: run alone it would only end in an out-of-memory kill
+    (tests/test_sharpen.py `TestTinWorkers`)."""
+    need = TIN_BYTES_PER_POINT * max(window_points, 1)
+    if need > memory_bytes:
         raise CannotSharpen(TOO_BIG)
-    return min(cpus, fits)
+    return max(1, min(cpus, int(TIN_MEMORY_SHARE * memory_bytes // need)))
 
 
-def available_memory() -> int:
-    """Bytes the job can still take: the host's MemAvailable, or, when the
-    container has a cgroup v2 memory limit, that limit less the cgroup's
-    memory.current if it is lower."""
-    with open("/proc/meminfo") as f:
-        found = dict(line.split(":", 1) for line in f)
+def available_memory(
+    meminfo: Path = Path("/proc/meminfo"), cgroup: Path = Path("/sys/fs/cgroup")
+) -> int:
+    """Bytes the job can still take, never below zero: the host's
+    MemAvailable or, when the container has a cgroup v2 memory limit and it
+    is lower, that limit less what the cgroup holds that it can't give back
+    (memory.current less memory.stat's inactive_file, the page cache the
+    kernel reclaims first: the extracted ZIP and the ground files are written
+    before this is asked). Tests: tests/test_sharpen.py `TestTinWorkers`."""
+    found = dict(line.split(":", 1) for line in meminfo.read_text().splitlines())
     free = int(found["MemAvailable"].split()[0]) * 1024
-    with contextlib.suppress(OSError, ValueError):
-        cgroup = Path("/sys/fs/cgroup")
+    with contextlib.suppress(OSError, ValueError, KeyError):
         limit = int((cgroup / "memory.max").read_text())  # "max": no limit
-        free = min(free, limit - int((cgroup / "memory.current").read_text()))
-    return free
+        stat = dict(
+            line.split() for line in (cgroup / "memory.stat").read_text().splitlines()
+        )
+        held = int((cgroup / "memory.current").read_text()) - int(stat["inactive_file"])
+        free = min(free, limit - held)
+    return max(0, free)
 
 
 def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int:
@@ -390,8 +408,9 @@ def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int
         futures = [pool.submit(_tin_tile, j) for j in jobs]
         for k, done in enumerate(as_completed(futures), 1):
             tins.append(Path(done.result()))
-            # The reaper fails a job whose progress stalls for 20 minutes; a
-            # dense area runs one long TIN job at a time.
+            # The reaper fails a job whose progress stalls for
+            # TOPO_REAPER_PROGRESS_STALL_MS (api/src/lib/env.ts); a dense area
+            # runs one long TIN job at a time.
             pipeline._write_progress(k, len(jobs), "tin")
     pipeline.merge_dem_tiles(sorted(tins), out)
     return zoom_for_cell(cell)
@@ -686,16 +705,30 @@ def require_ground(ground: str) -> None:
     """Refuse a ground grid with no height in it: a DEM of no-data, or class 2
     too sparse for any triangle. The footprint would otherwise fall back to
     the whole grid, and the job would claim an area it has no ground for
-    (tests/test_sharpen.py `TestGround`)."""
+    (tests/test_sharpen.py `TestGroundSteps`)."""
     if not pipeline.raster_has_valid_pixels(ground):
         raise CannotSharpen(EMPTY_GROUND)
 
 
 def report_failure(error: BaseException) -> str:
     """A failure as its type and the code locations it came through, not its
-    message, which can quote an input's ELVIS name (see PRIVACY above)."""
-    frames = traceback.extract_tb(error.__traceback__)
-    where = " < ".join(f"{Path(f.filename).name}:{f.lineno}" for f in reversed(frames))
+    message, which can quote an input's ELVIS name (see PRIVACY above).
+
+    A failure in a pool job reaches here with its own frames as text: the
+    pool hands back the exception with the job's traceback formatted into its
+    __cause__, message and all. Only the file:line pairs are taken from it
+    (tests/test_sharpen.py `TestReportFailure`)."""
+    frames = [
+        (Path(f.filename).name, f.lineno)
+        for f in traceback.extract_tb(error.__traceback__)
+    ]
+    cause = error.__cause__
+    if isinstance(cause, concurrent.futures.process._RemoteTraceback):
+        frames += [
+            (Path(name).name, int(line))
+            for name, line in re.findall(r'File "([^"]+)", line (\d+)', cause.tb)
+        ]
+    where = " < ".join(f"{name}:{line}" for name, line in reversed(frames))
     return f"sharpen failed: {type(error).__name__} at {where}"
 
 

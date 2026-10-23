@@ -44,6 +44,7 @@ import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
 
 from worker_common import (
+    TOO_BIG,
     compose_database_url,
     create_notification,
     get_user_email,
@@ -80,7 +81,7 @@ def safe_error_message(e: Exception) -> str:
     if isinstance(e, subprocess.CalledProcessError):
         return GENERIC_FAILURE
     if isinstance(e, MemoryError) or "OOM" in msg or "exit code -9" in msg:
-        return "This area was too big to process. Try a smaller one."
+        return TOO_BIG
     if isinstance(e, RuntimeError):
         return GENERIC_FAILURE
     if isinstance(e, (OSError, IOError)):
@@ -285,7 +286,7 @@ def _heartbeat_loop(
     except Exception as e:
         log.warning(f"Heartbeat disabled (no DB connection): {e}")
         return
-    last_done = None
+    last = None
     # stop_event.wait returns True when set → exit promptly on subprocess end.
     while not stop_event.wait(interval):
         try:
@@ -294,9 +295,12 @@ def _heartbeat_loop(
             payload = json.loads(progress_path.read_text())
             done = payload.get("done")
             total = payload.get("total")
-            if done is None or done == last_done:
+            # By phase as well: sharpen.py's phases each count from 1, and a
+            # phase that starts on the last one's count is still progress
+            # (tests/test_heartbeat.py, "a new phase at the same count").
+            if done is None or (payload.get("phase"), done) == last:
                 continue
-            last_done = done
+            last = (payload.get("phase"), done)
             update_status(
                 conn,
                 job_id,

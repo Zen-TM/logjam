@@ -20,6 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
 import build_nsw_dem as dem  # noqa: E402
+import pipeline  # noqa: E402
+import sharpen as sharpen_module  # noqa: E402
 from sharpen import (  # noqa: E402
     CannotSharpen,
     blocks_of,
@@ -181,8 +183,19 @@ class TestCredit(unittest.TestCase):
 class TestGround(unittest.TestCase):
     """Mutations that turn it red: LAZ chosen over a usable DEM, a ZIP of LAZ
     and 5 m DEMs refused, the DEMs mosaicked fine to coarse (a coarse one wins
-    where they overlap), an empty class 2 gridded anyway, and a ground grid
-    with no height carried on to a job that claims the whole area."""
+    where they overlap), an empty DEM taken over the point clouds (or setting
+    zmax), and an empty class 2 gridded anyway."""
+
+    def test_an_empty_dem_is_dropped(self):
+        # None: a DEM with no height in it.
+        self.assertEqual(dem_plan([None], has_laz=True), (None, []))
+        self.assertEqual(dem_plan([None, 2.0], has_laz=False), (16, [1]))
+        with self.assertRaises(CannotSharpen) as ctx:
+            dem_plan([None], has_laz=False)
+        self.assertIn("couldn't map any ground", str(ctx.exception))
+        with self.assertRaises(CannotSharpen) as ctx:
+            dem_plan([None, 5.0], has_laz=False)
+        self.assertIn("5 m", str(ctx.exception))
 
     def test_a_dem_finer_than_5m_beats_the_point_clouds(self):
         self.assertEqual(dem_plan([2.0], has_laz=True), (16, [0]))
@@ -210,8 +223,12 @@ class TestGroundSteps(unittest.TestCase):
     """The ground steps' calls, with PDAL and GDAL mocked.
 
     Mutations that turn it red: an SMRF (or any re-classifying) fallback when
-    class 2 is empty, the DEM mosaic at the default resolution, and a coarser
-    DEM upsampled nearest (2 x 2 blocks in the hillshade)."""
+    class 2 is empty; the DEM mosaic at the default resolution, or a coarser
+    DEM upsampled nearest (2 x 2 blocks in the hillshade), whether dem_ground
+    stops asking or merge_dem_tiles stops forwarding; require_ground's call
+    removed, so a ground grid with no height goes on to claim the whole area;
+    and TIN results collected without a progress write (the reaper fails a
+    long dense job while it works)."""
 
     def test_class_2_only_and_never_smrf(self):
         from unittest import mock
@@ -258,23 +275,112 @@ class TestGroundSteps(unittest.TestCase):
             [files[2], files[0]], "g.tif", resolution="highest", resample="bilinear"
         )
 
-    def test_a_ground_grid_with_no_height_is_refused(self):
+    def test_a_ground_grid_with_no_height_is_refused_before_the_footprint(self):
+        from types import SimpleNamespace
         from unittest import mock
 
         import sharpen
 
-        with mock.patch.object(
-            sharpen.pipeline, "raster_has_valid_pixels", return_value=False
+        contents = SimpleNamespace(dem_files=[Path("a.tif")], las_files=[])
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(
+                sharpen.pipeline, "extract_elvis_zip", return_value=contents
+            ),
+            mock.patch.object(sharpen, "extraction_month", return_value=None),
+            mock.patch.object(sharpen, "dem_cell", return_value=1.0),
+            mock.patch.object(sharpen, "dem_ground"),
+            mock.patch.object(
+                sharpen.pipeline, "raster_has_valid_pixels", return_value=False
+            ),
+            mock.patch.object(sharpen.pipeline, "compute_data_footprint") as footprint,
         ):
+            args = SimpleNamespace(zip="in.zip", out=tmp, workers=1, metrics_json=None)
             with self.assertRaises(CannotSharpen) as ctx:
-                sharpen.require_ground("g.tif")
+                sharpen.sharpen(args)
         self.assertIn("couldn't map any ground", str(ctx.exception))
+        footprint.assert_not_called()
+
+    def test_merge_forwards_the_cell_and_the_resampling(self):
+        from unittest import mock
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(pipeline, "gdal") as gdal,
+            mock.patch.object(pipeline, "_distinct_raster_crs", return_value={"one"}),
+        ):
+            gdal.Open.return_value.GetRasterBand.return_value.GetNoDataValue.return_value = -9999
+            out = os.path.join(tmp, "g.tif")
+            pipeline.merge_dem_tiles([Path("a.tif")], out)
+            legacy = gdal.BuildVRT.call_args.kwargs
+            pipeline.merge_dem_tiles(
+                [Path("a.tif")], out, resolution="highest", resample="bilinear"
+            )
+            sharpened = gdal.BuildVRT.call_args.kwargs
+        # The legacy pipeline's mosaic, as it was: gdalbuildvrt's defaults.
+        self.assertEqual(legacy["resolution"], "average")
+        self.assertNotIn("resampleAlg", legacy)
+        self.assertEqual(sharpened["resolution"], "highest")
+        self.assertEqual(sharpened["resampleAlg"], "bilinear")
+
+    def test_the_tin_phase_reports_progress_per_job(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from unittest import mock
+
+        import sharpen
+
+        summary = {
+            "bounds": {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000},
+            "num_points": 500_000,
+        }
+        tiles = ["a.laz", "b.laz", "c.laz"]
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(sharpen, "run", return_value=""),
+            mock.patch.object(sharpen, "las_summary", return_value=summary),
+            mock.patch.object(
+                sharpen.pipeline,
+                "select_surveys_by_layer",
+                return_value=mock.Mock(terrain_tiles=tiles),
+            ),
+            mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
+            mock.patch.object(sharpen, "_tin_tile", side_effect=lambda job: job[4]),
+            mock.patch.object(sharpen, "available_memory", return_value=2**34),
+            mock.patch.object(sharpen.pipeline, "merge_dem_tiles"),
+            mock.patch.object(sharpen.pipeline, "_write_progress") as progress,
+        ):
+            sharpen.laz_ground([Path(t) for t in tiles], "g.tif", Path(tmp), 2)
+        tin = [c.args for c in progress.call_args_list if c.args[2] == "tin"]
+        self.assertEqual(tin, [(1, 3, "tin"), (2, 3, "tin"), (3, 3, "tin")])
+
+
+LEAK = "Katoomba201804-LID2-C3-AHD_2506258_56_0002_0002.laz"
+
+
+def _fails_in_a_pool():
+    raise RuntimeError(f"pdal failed on {LEAK}")
 
 
 class TestReportFailure(unittest.TestCase):
     """A failure leaves sharpen.py as its type and code locations, never its
-    message, which can quote an input's ELVIS name. Mutation that turns it
-    red: print the exception itself."""
+    message, which can quote an input's ELVIS name. Mutations that turn it
+    red: print the exception itself, and leave out a pool job's own frames
+    (most of the work runs in pools, and the line is all the log gets)."""
+
+    def test_a_pool_jobs_frames_without_its_message(self):
+        from concurrent.futures import ProcessPoolExecutor
+
+        import sharpen
+
+        with ProcessPoolExecutor(1) as pool:
+            try:
+                pool.submit(_fails_in_a_pool).result()
+            except RuntimeError as error:
+                report = sharpen.report_failure(error)
+        line = _fails_in_a_pool.__code__.co_firstlineno + 1
+        self.assertIn(f"test_sharpen.py:{line}", report)
+        for part in ("Katoomba", "2506258", "pdal failed"):
+            self.assertNotIn(part, report)
 
     def test_main_reports_no_message(self):
         import contextlib
@@ -305,8 +411,10 @@ class TestReportFailure(unittest.TestCase):
 
 class TestTinWorkers(unittest.TestCase):
     """Mutations that turn it red: the pool sized by CPUs alone, so eight
-    dense TIN jobs at once run a 16 GB task out of memory, and a job too big
-    for memory on its own run anyway (an out-of-memory kill after the work)."""
+    dense TIN jobs at once run a 16 GB task out of memory; a job that fits in
+    memory alone refused because it misses the pool's share; one that
+    doesn't fit run anyway (an out-of-memory kill after the work); and free
+    memory read with the page cache counted as held, or below zero."""
 
     def test_bounded_by_memory_as_well_as_cpus(self):
         gib = 2**30
@@ -314,9 +422,50 @@ class TestTinWorkers(unittest.TestCase):
         self.assertEqual(tin_workers(8, 45_000_000, 16 * gib), 1)
         self.assertEqual(tin_workers(8, 5_000_000, 16 * gib), 8)
         self.assertEqual(tin_workers(8, 5_000_000, 4 * gib), 2)
+
+    def test_refused_only_when_one_job_alone_wont_fit(self):
+        bpp = sharpen_module.TIN_BYTES_PER_POINT
+        gib = 2**30
+        # 55 M points need 11.55 GB: over the pool's 70 % of 15 GiB, under all of it.
+        self.assertEqual(tin_workers(8, 55_000_000, 15 * gib), 1)
+        self.assertEqual(tin_workers(8, 1000, 1000 * bpp), 1)
         with self.assertRaises(CannotSharpen) as ctx:
-            tin_workers(8, 10**10, gib)
-        self.assertIn("too big", str(ctx.exception))
+            tin_workers(8, 1001, 1000 * bpp)
+        from worker_common import TOO_BIG
+
+        self.assertEqual(str(ctx.exception), TOO_BIG)
+        with self.assertRaises(CannotSharpen):
+            tin_workers(8, 1, 0)
+
+    def write(self, root, files):
+        for name, text in files.items():
+            (root / name).write_text(text)
+
+    def test_free_memory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            meminfo = root / "meminfo"
+            meminfo.write_text("MemTotal: 16000000 kB\nMemAvailable: 10000000 kB\n")
+            cgroup = root / "cg"
+            cgroup.mkdir()
+            free = sharpen_module.available_memory(meminfo, cgroup)
+            self.assertEqual(free, 10_000_000 * 1024)  # no cgroup files: the host's
+            self.write(cgroup, {"memory.max": "max\n"})
+            self.assertEqual(sharpen_module.available_memory(meminfo, cgroup), free)
+            # A 4 GiB limit, 3 GiB charged of which 2 GiB is page cache.
+            self.write(
+                cgroup,
+                {
+                    "memory.max": f"{4 * 2**30}\n",
+                    "memory.current": f"{3 * 2**30}\n",
+                    "memory.stat": f"anon 1\ninactive_file {2 * 2**30}\n",
+                },
+            )
+            self.assertEqual(
+                sharpen_module.available_memory(meminfo, cgroup), 3 * 2**30
+            )
+            self.write(cgroup, {"memory.current": f"{9 * 2**30}\n"})
+            self.assertEqual(sharpen_module.available_memory(meminfo, cgroup), 0)
 
 
 class TestMosaic(unittest.TestCase):

@@ -801,7 +801,7 @@ jobs:
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py sharpened "$id" 150.311 -33.780
-      # Runbook step 5: the reaper fails a job whose worker died mid-render,
+      # Runbook step 6: the reaper fails a job whose worker died mid-render,
       # and a worker relaunched for it must leave it failed. ECS launches the
       # first worker; the relaunch is by hand, since only the reaper's failing
       # of the row is stood in for here, not a second RunTask.

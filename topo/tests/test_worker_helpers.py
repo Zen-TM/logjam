@@ -82,8 +82,12 @@ class TestSafeErrorMessage(unittest.TestCase):
             self.assertNotRegex(msg, r"subprocess|pipeline|tippecanoe|tiles")
 
     def test_memory_error(self):
-        self.assertIn("too big", safe_error_message(MemoryError()))
-        self.assertIn("too big", safe_error_message(RuntimeError("exit code -9")))
+        # One sentence, declared once, for an area too big for memory however
+        # it shows: sharpen.py refuses one in advance with the same.
+        from worker_common import TOO_BIG
+
+        self.assertEqual(safe_error_message(MemoryError()), TOO_BIG)
+        self.assertEqual(safe_error_message(RuntimeError("exit code -9")), TOO_BIG)
 
     def test_os_error_points_at_input(self):
         self.assertIn("LiDAR data", safe_error_message(OSError("bad zip")))

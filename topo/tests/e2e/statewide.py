@@ -26,9 +26,10 @@ BOX = (150.25, -33.84, 150.38, -33.72)  # west, south, east, north
 X0, Y0 = dem.lonlat_to_tile(BOX[0], BOX[3], 15)
 X1, Y1 = dem.lonlat_to_tile(BOX[2], BOX[1], 15)
 FILL_BASE_M = 5000.0
-# Rise per z15 pixel, steep enough that fill one zmax pixel out of place
-# misses by more than FILL_TOLERANCE_M: at z17 a pixel is 1/4 of a z15 pixel,
-# so 0.25 m east or 0.1875 m south; at z16, twice that. Whole multiples of
+# Rise per z15 pixel, steep enough that fill shifted by one zmax pixel is
+# caught: across a tile's pixels the shift adds 0.25 m east or 0.1875 m south
+# at z17 (a quarter of a z15 pixel), twice that at z16, while the height
+# archive's 1/4 m rounding moves a pixel by at most 0.125 m. Whole multiples of
 # 1/256 m, so the plane is exact in the terrarium (it peaks near 10 km).
 FILL_EAST_M, FILL_SOUTH_M = 1.0, 0.75
 # Over the height archive's 1/4 m rounding (at most 0.125 m off).

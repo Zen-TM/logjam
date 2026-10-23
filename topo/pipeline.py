@@ -85,6 +85,20 @@ logging.basicConfig(
 )
 log = logging.getLogger("topo")
 
+
+def _gdal_message(err_class: int, err_num: int, _message: str) -> None:
+    """GDAL's warnings and errors, logged by class and number only. GDAL's own
+    output quotes file names ("… Skipping <file>"), and an ELVIS file's name
+    says where the survey is. An error still raises (UseExceptions)."""
+    log.warning(f"GDAL message, class {err_class}, number {err_num}")
+
+
+# Replaces GDAL's default printing to stderr (CloudWatch), on the importing
+# thread: nothing here runs GDAL on threads of its own, and a forked worker
+# inherits it. SetErrorHandler is no substitute: under UseExceptions it has no
+# effect. Guard: tests/test_log_privacy.py `TestGdalMessages`.
+gdal.PushErrorHandler(_gdal_message)
+
 # Composite stacking order, bottom→top. Hand-synced mirror of TOPO_LAYERS in
 # shared/src/topoSettings.ts, which is canonical: a layer is added there first,
 # and tests/test_layer_sync.py fails if this list or its order drifts from it.
@@ -3624,9 +3638,7 @@ def render_contours_tile(
         try:
             records, tree = _load_contour_index(path)
         except Exception as e:
-            log.warning(
-                f"Contour geojson load failed for interval {interval} ({path}): {e}"
-            )
+            log.warning(f"Contour geojson load failed for interval {interval}: {e}")
             continue
         if tree is None:
             continue
