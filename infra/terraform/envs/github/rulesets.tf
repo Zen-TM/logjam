@@ -218,3 +218,36 @@ resource "github_repository_ruleset" "mobile_release_branches" {
     prevent_destroy = true
   }
 }
+
+# A maplibre-android-v* tag holds the patched MapLibre Android the Logjam GPS
+# build downloads (mobile/plugins/withPatchedMapLibre.js). Anyone may cut a new
+# one; only admins may move or delete one, so the release a build pins never
+# changes under it. Guard: tests/guards.tftest.hcl.
+resource "github_repository_ruleset" "maplibre_android_tags" {
+  name        = "maplibre-android-tags"
+  repository  = github_repository.logjam.name
+  target      = "tag"
+  enforcement = "active"
+
+  conditions {
+    ref_name {
+      include = ["refs/tags/maplibre-android-v*"]
+      exclude = []
+    }
+  }
+
+  bypass_actors {
+    actor_id    = local.admin_bypass.actor_id
+    actor_type  = local.admin_bypass.actor_type
+    bypass_mode = local.admin_bypass.bypass_mode
+  }
+
+  rules {
+    update   = true
+    deletion = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
