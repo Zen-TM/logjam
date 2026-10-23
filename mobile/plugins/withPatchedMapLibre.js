@@ -9,8 +9,8 @@
 //
 // WHERE THE LIBRARY COMES FROM. `.github/workflows/maplibre-android.yml` builds
 // it from MapLibre's sources and Makefile and attaches it to the GitHub release
-// `maplibre-android-v<version>`. A GitHub release, not a committed file: an
-// 18 MB binary in git stays in the history of every clone forever. This plugin
+// `maplibre-android-v<version>`. A GitHub release, not a committed file: a
+// 200 MB binary in git stays in the history of every clone forever. This plugin
 // fetches it at prebuild (EAS builders have the network) into a Maven folder
 // inside the generated `android/`, and the build takes it from there.
 //
