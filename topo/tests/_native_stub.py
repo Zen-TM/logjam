@@ -53,6 +53,8 @@ for _name in (
     "shapely.strtree",
     "PIL",
     "boto3",
+    "botocore",
+    "botocore.config",
     "psycopg2",
     "psycopg2.extras",
     "pmtiles",

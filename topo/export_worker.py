@@ -39,6 +39,7 @@ from typing import Optional, Tuple
 import boto3
 import psycopg2
 import psycopg2.extras
+from botocore.config import Config
 
 from renderers import (
     ExportTooLarge,
@@ -50,7 +51,13 @@ from renderers import (
     render_geojson,
     render_gpx,
 )
-from area_export import AreaExportError, render_area, s3_archives
+from area_export import (
+    FETCH_THREADS,
+    AreaExportError,
+    AreaOutsideNsw,
+    render_area,
+    s3_archives,
+)
 from worker_common import (
     compose_database_url,
     create_notification,
@@ -78,8 +85,8 @@ GENERIC_FAILURE = (
 def failure_sentence(error: Exception) -> str:
     """What the owner reads for a failed export: never the exception's text."""
     return (
-        ExportTooLarge.SENTENCE
-        if isinstance(error, ExportTooLarge)
+        error.SENTENCE
+        if isinstance(error, (ExportTooLarge, AreaOutsideNsw))
         else GENERIC_FAILURE
     )
 
@@ -90,7 +97,12 @@ DATABASE_URL = compose_database_url()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 EXPORT_JOB_ID = os.environ["EXPORT_JOB_ID"]
 
-s3 = boto3.client("s3", region_name=AWS_REGION)
+# An area export reads its archives FETCH_THREADS ranges at a time.
+s3 = boto3.client(
+    "s3",
+    region_name=AWS_REGION,
+    config=Config(max_pool_connections=FETCH_THREADS),
+)
 
 
 def db_connect():
@@ -279,7 +291,7 @@ def render_area_export(export_job: dict, work: Path) -> Path:
     log.info(
         f"Rendering area format={export_job['format']} "
         f"layers={list(export_job['layers'])}"
-    )  # the box itself is a place: never logged
+    )  # the box is a place: never logged (tests/test_export_worker_helpers.py)
     return render_area(
         s3_archives(s3, BUCKET),
         (bbox["west"], bbox["south"], bbox["east"], bbox["north"]),
@@ -341,7 +353,7 @@ def main():
 
     except AreaExportError as e:
         log.error(f"AreaExportError: {e}")  # detail stays in worker logs
-        error_msg = GENERIC_FAILURE
+        error_msg = failure_sentence(e)
     except RenderError as e:
         raw = str(e)
         log.error(f"RenderError: {raw}")  # full detail stays in worker logs

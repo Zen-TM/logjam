@@ -646,6 +646,8 @@ def slope_s3(bucket: str, work: Path, jobs: int, client=None) -> None:
 # ── contours ─────────────────────────────────────────────────────────────────
 
 CONTOUR_INTERVAL_M = 10
+# The cell heights are averaged to before contouring (see `contours`).
+CONTOUR_CELL_M = 10
 CONTOUR_MAJOR_M = 50  # the clients style `elev % 50 == 0` as a major line
 # 50 m lines from z11 and the rest from z14, the zooms both clients draw them
 # at (the pattern a topo area's own contours have); a client overzooms past z14.
@@ -707,8 +709,9 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
         part.unlink(missing_ok=True)
         # Averaged to 10 m first: contours of the raw 5 m grid are knobbly,
         # and every wiggle is a vertex a phone has to store and draw.
+        cell = str(CONTOUR_CELL_M)
         run(
-            *["gdalwarp", "-q", "-overwrite", "-tr", "10", "10", "-r", "average"],
+            *["gdalwarp", "-q", "-overwrite", "-tr", cell, cell, "-r", "average"],
             *["-co", "COMPRESS=ZSTD", str(sheet), str(smooth)],
         )
         contour_lines(smooth, raw, part)

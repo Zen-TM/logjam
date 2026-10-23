@@ -1,7 +1,7 @@
 """Unit tests for the pure pieces of area_export.py: the MGA zone, which steps
 a set of layers needs, the credit line, the tiles over a box, and the layer
-names shared/src/areaExport.ts declares, and the archive reader against one
-pmtiles itself wrote. The GDAL steps need the worker image, so they are not
+names, formats and refusal sentence shared/src/areaExport.ts declares, and the
+archive reader against one pmtiles itself wrote. The GDAL steps need the worker image, so they are not
 run here (topo/AGENTS.md).
 """
 
@@ -18,7 +18,10 @@ import _native_stub  # noqa: F401,E402
 from _native_stub import is_stubbed  # noqa: E402
 
 from area_export import (  # noqa: E402
+    FORMATS,
     LAYERS,
+    LAYERS_BY_FORMAT,
+    AreaOutsideNsw,
     credit_line,
     mga_epsg,
     plan,
@@ -70,7 +73,6 @@ class Credit(unittest.TestCase):
         )
 
 
-@unittest.skipIf(is_stubbed("numpy"), "needs numpy")
 class Tiles(unittest.TestCase):
     def test_the_tiles_cover_the_box(self):
         # Katoomba, about 2 km square, at z15 (~1 km tiles here).
@@ -135,14 +137,48 @@ class ArchiveReads(unittest.TestCase):
 
 
 class SyncWithShared(unittest.TestCase):
+    """shared/src/areaExport.ts is what the API checks a request against, and
+    this worker's declarations must say the same."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(_AREA_EXPORT_TS, encoding="utf-8") as fh:
+            cls.src = fh.read()
+
+    def names(self, pattern: str):
+        match = re.search(pattern, self.src, re.DOTALL)
+        self.assertIsNotNone(match, f"{pattern} not found in areaExport.ts")
+        return tuple(re.findall(r'"([a-z]+)"', match.group("body")))
+
     # Mutation: add a layer to AREA_EXPORT_LAYERS only, and the API queues a
     # layer this worker refuses.
-    def test_layer_names_match_area_export_ts(self):
-        with open(_AREA_EXPORT_TS, encoding="utf-8") as fh:
-            src = fh.read()
-        match = re.search(r"AREA_EXPORT_LAYERS = \[(?P<body>[^\]]*)\]", src, re.DOTALL)
-        self.assertIsNotNone(match, "AREA_EXPORT_LAYERS not found in areaExport.ts")
-        self.assertEqual(tuple(re.findall(r'"([a-z]+)"', match.group("body"))), LAYERS)
+    def test_layer_names_match(self):
+        self.assertEqual(
+            self.names(r"AREA_EXPORT_LAYERS = \[(?P<body>[^\]]*)\]"), LAYERS
+        )
+
+    # Mutation: add a format to AREA_EXPORT_FORMATS only, or let a GeoTIFF hold
+    # contours on one side only, and the API queues an export this worker
+    # refuses.
+    def test_formats_and_their_layers_match(self):
+        self.assertEqual(
+            self.names(r"AREA_EXPORT_FORMATS = \[(?P<body>[^\]]*)\]"), FORMATS
+        )
+        self.assertEqual(
+            self.names(r"\bgeotiff: \[(?P<body>[^\]]*)\]"), LAYERS_BY_FORMAT["geotiff"]
+        )
+        self.assertRegex(self.src, r"\bgpkg: AREA_EXPORT_LAYERS\b")
+        self.assertEqual(LAYERS_BY_FORMAT["gpkg"], LAYERS)
+        self.assertEqual(tuple(LAYERS_BY_FORMAT), FORMATS)
+
+    # Mutation: reword one copy of the sentence, and a box past NSW reads
+    # differently refused at submit and failed by the worker.
+    def test_outside_nsw_sentence_matches(self):
+        match = re.search(r"AREA_EXPORT_OUTSIDE_NSW = say`([^`]*)`", self.src)
+        self.assertIsNotNone(
+            match, "AREA_EXPORT_OUTSIDE_NSW not found in areaExport.ts"
+        )
+        self.assertEqual(match.group(1), AreaOutsideNsw.SENTENCE)
 
 
 if __name__ == "__main__":

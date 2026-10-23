@@ -70,9 +70,9 @@ describe("topo-exports route (fake auth)", () => {
   });
 
   // An export of an area is refused before anything is queued when it is too
-  // large, outside the statewide terrain, or asks a GeoTIFF for contours.
-  // Mutation: drop any one of the route's three checks, and that request
-  // queues a worker that can only fail.
+  // large, off the statewide terrain's coverage rectangle, or asks a GeoTIFF
+  // for contours. Mutation: drop any one of the route's three checks, and that
+  // request queues a worker that can only fail.
   describe("an export of an area", () => {
     // About 10 km square near Katoomba.
     const bbox = { west: 150.25, south: -33.75, east: 150.36, north: -33.66 };

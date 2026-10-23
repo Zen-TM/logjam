@@ -539,7 +539,10 @@ model TopoExportJob {
   // "composite" | "per-layer"
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
   // An export of an area: {west, south, east, north} in degrees, and no
-  // source job. Null for an export of a LiDAR job. Never logged: it is a place.
+  // source job. Null for an export of a LiDAR job. Never logged, as it is a
+  // place: the request logger keeps no body (src/lib/logger.unit.test.ts, "is
+  // not in what the request logger keeps of the request"), and the worker
+  // logs no box (topo/tests/test_export_worker_helpers.py).
   bbox                Json?
   // Snapshot of the source job's input tileCount at export creation. The
   // source TopoJob is deletable, so this can't be re-derived by join later —

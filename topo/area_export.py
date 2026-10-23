@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import subprocess
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -44,20 +45,25 @@ from pmtiles.tile import (
 )
 
 from build_nsw_dem import (
+    CONTOUR_CELL_M,
     CONTOUR_INTERVAL_M,
     HEIGHT_KEY,
     NODATA,
     SLOPE_KEY,
     ZMAX,
     decode_terrarium,
+    lonlat_to_tile,
     tile_bounds_3857,
 )
 
 gdal.UseExceptions()
 log = logging.getLogger("export_worker.area")
 
+# shared/src/areaExport.ts declares these too (tests/test_area_export.py).
 LAYERS = ("heights", "slope", "hillshade", "contours")
-RASTERS = ("heights", "slope", "hillshade")
+FORMATS = ("geotiff", "gpkg")
+# A GeoTIFF is rasters only: contours go in a GeoPackage.
+LAYERS_BY_FORMAT = {"geotiff": ("heights", "slope", "hillshade"), "gpkg": LAYERS}
 CELL_M = 5
 SLOPE_NODATA = 255
 # Tiles fetched and decoded at once, and how many are handed out together: a
@@ -65,17 +71,21 @@ SLOPE_NODATA = 255
 FETCH_THREADS = 16
 FETCH_CHUNK = 256
 
-# What a layer is called in a credit line, in LAYERS order.
-_CREDIT_NAMES = {
-    "heights": "heights",
-    "slope": "slope",
-    "hillshade": "hillshade",
-    "contours": "contours",
-}
-
 
 class AreaExportError(Exception):
     """An area export that failed; the message is for the log only."""
+
+
+class AreaOutsideNsw(AreaExportError):
+    """No statewide tiles in the box: the API's coverage rectangle is wider
+    than NSW, so a box in Victoria or Queensland gets this far. `SENTENCE` is
+    what the owner reads, the API's AREA_EXPORT_OUTSIDE_NSW
+    (tests/test_area_export.py)."""
+
+    SENTENCE = (
+        "That area is outside NSW, where the statewide terrain is. Choose an "
+        "area in NSW."
+    )
 
 
 Bbox = Tuple[float, float, float, float]  # west, south, east, north (degrees)
@@ -104,7 +114,7 @@ def credit_line(layers: Sequence[str], attribution: str) -> str:
     attribution ("Derived from the NSW 5 m … extracted October 2026 …"): each
     layer is derived from the same DEM, and the archive knows its extract date.
     """
-    names = [_CREDIT_NAMES[l] for l in LAYERS if l in layers]
+    names = [l for l in LAYERS if l in layers]
     listed = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
     return f"{listed[0].upper()}{listed[1:]}: {attribution[0].lower()}{attribution[1:]}"
 
@@ -112,17 +122,32 @@ def credit_line(layers: Sequence[str], attribution: str) -> str:
 def tile_range(bbox: Bbox, zoom: int) -> Tuple[int, int, int, int]:
     """(x0, y0, x1, y1), inclusive, of the tiles covering a box."""
     west, south, east, north = bbox
-    n = 2**zoom
+    x0, y0 = lonlat_to_tile(west, north, zoom)
+    x1, y1 = lonlat_to_tile(east, south, zoom)
+    return x0, y0, x1, y1
 
-    def tx(lon: float) -> int:
-        return min(n - 1, max(0, int((lon + 180) / 360 * n)))
 
-    def ty(lat: float) -> int:
-        rad = np.radians(lat)
-        y = (1 - np.log(np.tan(rad) + 1 / np.cos(rad)) / np.pi) / 2 * n
-        return min(n - 1, max(0, int(y)))
-
-    return tx(west), ty(north), tx(east), ty(south)
+def mga_extent(bbox: Bbox, epsg: int) -> Tuple[Bbox, Bbox]:
+    """The MGA rectangle a box is warped to, on the 5 m grid, and that
+    rectangle's own lon/lat bounds. The box is rotated in MGA, so the rectangle
+    reaches past it at the corners: the mosaic covers the lon/lat bounds, or
+    those corners come out no-data."""
+    wgs84, mga = osr.SpatialReference(), osr.SpatialReference()
+    wgs84.ImportFromEPSG(4326)
+    mga.ImportFromEPSG(epsg)
+    for srs in (wgs84, mga):
+        srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    xmin, ymin, xmax, ymax = osr.CoordinateTransformation(wgs84, mga).TransformBounds(
+        *bbox, 21
+    )
+    rect = (
+        math.floor(xmin / CELL_M) * CELL_M,
+        math.floor(ymin / CELL_M) * CELL_M,
+        math.ceil(xmax / CELL_M) * CELL_M,
+        math.ceil(ymax / CELL_M) * CELL_M,
+    )
+    around = osr.CoordinateTransformation(mga, wgs84).TransformBounds(*rect, 21)
+    return rect, tuple(around)
 
 
 def s3_ranges(s3, bucket: str, key: str) -> GetBytes:
@@ -173,11 +198,11 @@ def write_mosaic(
     path: Path,
     kind: str,
     attribution: str,
-) -> int:
+) -> None:
     """The archive's z15 tiles over the box as one tiled web-mercator GeoTIFF:
     heights as Float32 (no-data NODATA), slope as Byte degrees (no-data 255).
-    Returns how many tiles had data. Tiles are fetched and decoded in threads
-    and written by this one, a chunk at a time."""
+    Tiles are fetched and decoded in threads and written by this one, a chunk
+    at a time."""
     x0, y0, x1, y1 = tile_range(bbox, ZMAX)
     cols, rows = x1 - x0 + 1, y1 - y0 + 1
     west, _, _, north = tile_bounds_3857(ZMAX, x0, y0)
@@ -232,7 +257,8 @@ def write_mosaic(
                 found += 1
     band.FlushCache()
     dataset = None
-    return found
+    if found == 0:
+        raise AreaOutsideNsw(f"no {kind} tiles in the box")
 
 
 def run(*command: str) -> None:
@@ -242,15 +268,13 @@ def run(*command: str) -> None:
 
 
 def warp_to_mga(
-    source: Path, out: Path, bbox: Bbox, epsg: int, resampling: str
+    source: Path, out: Path, rect: Bbox, epsg: int, resampling: str
 ) -> None:
-    west, south, east, north = bbox
     run(
         "gdalwarp", "-q", "-overwrite",
         "-t_srs", f"EPSG:{epsg}",
-        "-te_srs", "EPSG:4326",
-        "-te", str(west), str(south), str(east), str(north),
-        "-tr", str(CELL_M), str(CELL_M), "-tap",
+        "-te", *map(str, rect),
+        "-tr", str(CELL_M), str(CELL_M),
         "-r", resampling,
         "-multi", "-wo", "NUM_THREADS=ALL_CPUS", "-wm", "512",
         "-of", "COG",
@@ -281,21 +305,20 @@ def make_layers(
     if not attribution:
         raise AreaExportError("the heights archive carries no attribution")
     credit = credit_line(layers, attribution)
+    rect, around = mga_extent(bbox, epsg)
     rasters: Dict[str, Path] = {}
 
     if steps["heights"]:
         mosaic = work / "heights-3857.tif"
-        found = write_mosaic(heights_reader, bbox, mosaic, "heights", credit)
-        if found == 0:
-            raise AreaExportError("no statewide heights inside the box")
+        write_mosaic(heights_reader, around, mosaic, "heights", credit)
         rasters["heights"] = work / "heights.tif"
-        warp_to_mga(mosaic, rasters["heights"], bbox, epsg, "bilinear")
+        warp_to_mga(mosaic, rasters["heights"], rect, epsg, "bilinear")
         mosaic.unlink()
     if steps["slope"]:
         mosaic = work / "slope-3857.tif"
-        write_mosaic(Archive(archives["slope"]), bbox, mosaic, "slope", credit)
+        write_mosaic(Archive(archives["slope"]), around, mosaic, "slope", credit)
         rasters["slope"] = work / "slope.tif"
-        warp_to_mga(mosaic, rasters["slope"], bbox, epsg, "near")
+        warp_to_mga(mosaic, rasters["slope"], rect, epsg, "near")
         mosaic.unlink()
     if steps["hillshade"]:
         shade = work / "hillshade-raw.tif"
@@ -321,8 +344,9 @@ def make_layers(
         contours = work / "contours.gpkg"
         # The statewide build's recipe (build_nsw_dem.contours): averaged to
         # 10 m first, or the lines follow every knob of the 5 m grid.
+        cell = str(CONTOUR_CELL_M)
         run(
-            "gdalwarp", "-q", "-overwrite", "-tr", "10", "10", "-r", "average",
+            "gdalwarp", "-q", "-overwrite", "-tr", cell, cell, "-r", "average",
             "-co", "COMPRESS=DEFLATE", "-co", "BIGTIFF=IF_SAFER",
             str(rasters["heights"]), str(smooth),
         )  # fmt: skip
@@ -348,8 +372,6 @@ DISCLAIMER = (
 def package(made: Made, fmt: str, work: Path) -> Path:
     """The file the user downloads."""
     if fmt == "geotiff":
-        if made.contours is not None:
-            raise AreaExportError("GeoTIFF holds no contours")
         out = work / "logjam-area.zip"
         with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_STORED) as zf:
             # The rasters are compressed already.
@@ -383,9 +405,9 @@ def render_area(
     fmt: str,
     work: Path,
 ) -> Path:
-    unknown = [l for l in layers if l not in LAYERS]
-    if unknown or not layers:
-        raise AreaExportError(f"bad layers {layers}")
+    allowed = LAYERS_BY_FORMAT.get(fmt)
+    if allowed is None or not layers or any(l not in allowed for l in layers):
+        raise AreaExportError(f"bad request: {fmt} {layers}")
     return package(make_layers(archives, bbox, layers, work), fmt, work)
 
 

@@ -65,7 +65,12 @@ export function areaExportTooLarge(bbox: AreaBbox): boolean {
   return Math.max(widthKm, heightKm) > AREA_EXPORT_MAX_SIDE_KM;
 }
 
-/** Whether the box touches the statewide terrain at all. */
+/**
+ * Whether the box touches the statewide terrain's coverage rectangle, a quick
+ * check at submit. The rectangle takes in parts of Victoria, South Australia
+ * and Queensland, so a box there passes, and the worker, finding no tiles,
+ * fails it with the same sentence (topo/area_export.py `AreaOutsideNsw`).
+ */
 export function areaInNsw(bbox: AreaBbox): boolean {
   const [west, south, east, north] = NSW_5M.coverage;
   return (
