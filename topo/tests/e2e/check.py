@@ -13,9 +13,9 @@ worker.py's claim fails "status stays failed"; pointing FIRE_HISTORY_S3_PATH
 at a missing key fails "fire history read from S3". A second worker that never
 renders is caught by ci.yml's step, which needs render_tiles_done > 0 before
 it kills the container. For `sharpened`: the worker running the legacy
-pipeline for a marked job fails "the mark became the result"; slope taken by
-Horn over the filled heights, or no fill at all, fails "the fill is the
-statewide value".
+pipeline for a marked job fails "the mark became the result"; no fill, or
+fill read a tile away or flipped, fails "the fill is the statewide value, in
+place".
 """
 
 import gzip
@@ -35,7 +35,7 @@ from pmtiles.reader import MmapSource, Reader  # noqa: E402
 
 from worker import ALL_LAYERS, BUCKET, RASTER_LAYERS, db_connect, s3  # noqa: E402
 from build_nsw_dem import decode_terrarium  # noqa: E402
-from statewide import FILL_HEIGHT_M, FILL_SLOPE_DEG  # noqa: E402
+from statewide import FILL_BASE_M, FILL_SLOPE_DEG, X0, Y0, fill_height  # noqa: E402
 
 failures = []
 
@@ -171,6 +171,10 @@ def sharpened(job_id, lon, lat):
     check(job["footprint"] is not None, "footprint filled")
     check((job["output_bytes"] or 0) > 0, "output_bytes counted")
     check(job["s3_output_keys"] == [], "no legacy layers without the vegetation tick")
+    check(
+        result.get("ground") == "class-2",
+        f"ground from the LAZ's class 2 (got {result.get('ground')})",
+    )
     check(not exists(job["s3_input_key"]), "input ZIP deleted")
     if not keys:
         return
@@ -203,16 +207,31 @@ def sharpened(job_id, lon, lat):
         survey is not None and float(np.nanmedian(survey)) < 2000,
         "the point reads the survey's ground, not the fill",
     )
-    # The made-up statewide surface is far above any real ground: a pixel
-    # outside the footprint, in the range's corner, takes it.
-    corner_h = values(heights, 15, x0, y0)
+    # The made-up statewide surface is a plane far above any real ground, so
+    # the range's north-west corner (outside the footprint) is fill, and each
+    # of its pixels must hold the plane where it lies (statewide.py).
+    f = 2 ** (zmax - 15)
+    tx, ty = x0 * f, y0 * f
+    corner = values(heights, zmax, tx, ty)
+    misplaced, fill_pixels = 0, 0
+    for row in range(256):
+        for col in range(256):
+            got = corner[row, col] if corner is not None else np.nan
+            if not got > FILL_BASE_M - 100:
+                continue
+            fill_pixels += 1
+            # Pixel centres at zmax, in z15 pixels from the box's corner tile.
+            u = (tx * 256 + col + 0.5) / f - 0.5 - X0 * 256
+            v = (ty * 256 + row + 0.5) / f - 0.5 - Y0 * 256
+            misplaced += abs(got - fill_height(u, v)) > 0.1
     corner_s = values(slope, 15, x0, y0)
     check(
-        corner_h is not None
-        and abs(float(np.nanmax(corner_h)) - FILL_HEIGHT_M) < 1
+        fill_pixels > 1000
+        and misplaced == 0
         and corner_s is not None
         and FILL_SLOPE_DEG in set(np.unique(corner_s[~np.isnan(corner_s)]).tolist()),
-        "the fill is the statewide value",
+        f"the fill is the statewide value, in place ({fill_pixels} fill pixels,"
+        f" {misplaced} misplaced)",
     )
     _, cx, cy = tile_at(lon, lat, 14)
     tile = archive(keys["contours"]).get(14, cx, cy)

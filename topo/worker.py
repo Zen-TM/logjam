@@ -604,9 +604,7 @@ def process_job(
     return (*process_legacy(job, tmp, zip_path), None)
 
 
-# Beside the height archive the slope archive is built from: build_nsw_dem.py.
-STATEWIDE_HEIGHTS_KEY = "master/dem/nsw-5m.pmtiles"
-STATEWIDE_SLOPE_KEY = "master/dem/nsw-5m-slope.pmtiles"
+# contours.pmtiles is absent when no 10 m level crosses the area.
 SHARPEN_ARCHIVES = ("heights", "slope", "contours")
 
 
@@ -629,10 +627,6 @@ def process_sharpen(
         str(Path(__file__).parent / "sharpen.py"),
         str(zip_path),
         str(out),
-        "--statewide-heights",
-        f"s3://{BUCKET}/{STATEWIDE_HEIGHTS_KEY}",
-        "--statewide-slope",
-        f"s3://{BUCKET}/{STATEWIDE_SLOPE_KEY}",
         "--workers",
         str(os.cpu_count() or 4),
         "--metrics-json",
@@ -664,6 +658,8 @@ def process_sharpen(
     keys = {}
     for name in SHARPEN_ARCHIVES:
         local = out / f"{name}.pmtiles"
+        if name == "contours" and not local.exists():
+            continue
         keys[name] = f"outputs/{job_id}/{name}.pmtiles"
         log.info(f"Uploading {keys[name]} …")
         s3.upload_file(

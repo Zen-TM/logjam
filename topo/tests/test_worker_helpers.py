@@ -270,8 +270,9 @@ class TestProcessSharpen(unittest.TestCase):
 
     Mutations that turn it red: process_job ignoring `job["sharpen"]` (the
     legacy pipeline runs), the archives' keys left out of the result, the
-    vegetation tick ignored, and exit 2 reported as the generic failure
-    instead of sharpen.py's sentence.
+    vegetation tick ignored, a missing contour archive uploaded anyway (or
+    failing the job), and exit 2 reported as the generic failure instead of
+    sharpen.py's sentence.
     """
 
     def run_job(self, mark, write):
@@ -330,6 +331,19 @@ class TestProcessSharpen(unittest.TestCase):
         self.assertEqual(output_keys, [{"name": "vegetation"}])
         self.assertEqual(total, 37)
         self.assertTrue(sharpen["vegetation"])
+
+    def test_no_contour_archive_is_left_out(self):
+        import json
+
+        def no_contours(out):
+            (out / "sharpen.json").write_text(json.dumps({"v": 1, "zmax": 16}))
+            for name in ("heights", "slope"):
+                (out / f"{name}.pmtiles").write_bytes(b"x" * 10)
+            return 0
+
+        result, uploads, _ = self.run_job({"v": 1, "vegetation": False}, no_contours)
+        self.assertEqual(sorted(result[-1]["keys"]), ["heights", "slope"])
+        self.assertEqual(len(uploads), 2)
 
     def test_a_zip_it_cannot_sharpen_says_why(self):
         import json

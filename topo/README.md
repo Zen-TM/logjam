@@ -441,8 +441,10 @@ lines at z14). Where the survey has no ground, each tile holds the statewide
 ELVIS DEM, or a TIN of the survey's class 2 when it has none; a ZIP with
 neither, or with only 5 m DEMs, fails with a sentence for its owner.
 
-To run it by hand, with the statewide archives (or a clip of them covering
-the area) in `./output/statewide`, as in Quick start:
+To run it by hand, put the two statewide archives in `./output/statewide`,
+or a clip of them over the area (the [NSW 5 m DEM
+archive](#building-the-nsw-5-m-dem-archive) and [the statewide slope
+archive](#the-statewide-slope-archive) say how they are built), then:
 
 ```bash
 docker compose run topo python3 /app/sharpen.py /input/elvis.zip /output/sharpened \

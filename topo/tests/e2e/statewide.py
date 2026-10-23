@@ -1,15 +1,20 @@
 """Made-up stand-ins for the published statewide archives, for CI's
-topo-e2e job: `nsw-5m.pmtiles` at a flat FILL_HEIGHT_M and
-`nsw-5m-slope.pmtiles` at a flat FILL_SLOPE_DEG, over the z15 tiles of a
-box. Values no real ground has, so check.py can tell the fill from the
-survey. Runs inside the worker image.
+topo-e2e job, over the z15 tiles of BOX (the sample tile and a margin).
+Runs inside the worker image:
 
-  python3 statewide.py OUT_DIR WEST SOUTH EAST NORTH
+  python3 statewide.py OUT_DIR
+
+`nsw-5m.pmtiles` is a plane, `fill_height` of each z15 pixel, far above any
+real ground: check.py tells the fill from the survey by it, and because a
+plane survives bilinear resampling unchanged, it can say what height every
+fill pixel must hold, so fill landing a tile away or flipped shows.
+`nsw-5m-slope.pmtiles` is a flat FILL_SLOPE_DEG.
 """
 
 import sys
 
 sys.path.insert(0, "/app")
+import dataclasses  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import numpy as np  # noqa: E402
@@ -17,33 +22,42 @@ import numpy as np  # noqa: E402
 import build_nsw_dem as dem  # noqa: E402
 from sharpen import write_pmtiles  # noqa: E402
 
-FILL_HEIGHT_M = 5000.0
+BOX = (150.25, -33.84, 150.38, -33.72)  # west, south, east, north
+X0, Y0 = dem.lonlat_to_tile(BOX[0], BOX[3], 15)
+X1, Y1 = dem.lonlat_to_tile(BOX[2], BOX[1], 15)
+FILL_BASE_M = 5000.0
+FILL_EAST_M, FILL_SOUTH_M = 0.05, 0.03  # rise per z15 pixel
 FILL_SLOPE_DEG = 3.0
 
 
-def archive(out: Path, value: float, layer, box) -> None:
-    west, south, east, north = box
-    x0, y0 = dem.lonlat_to_tile(west, north, 15)
-    x1, y1 = dem.lonlat_to_tile(east, south, 15)
-    grid = np.full((dem.TILE, dem.TILE), value, np.float32)
-    rgb = dem.encode_terrarium(grid, np.ones_like(grid, bool), layer.rounding)
-    png = dem.png_bytes(rgb, layer.png_level)
-    rows = [(15, x, y, png) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)]
-    write_pmtiles(
-        rows,
-        out,
-        {
-            "name": "made up",
-            "format": "png",
-            "minzoom": "15",
-            "maxzoom": "15",
-            "bounds": f"{west},{south},{east},{north}",
-        },
+def fill_height(col, row):
+    """The plane at z15 pixel (col, row), counted from BOX's north-west tile;
+    fractional for a point between pixel centres."""
+    return FILL_BASE_M + FILL_EAST_M * col + FILL_SOUTH_M * row
+
+
+def archive(out: Path, grid_of, layer) -> None:
+    rows = []
+    for x in range(X0, X1 + 1):
+        for y in range(Y0, Y1 + 1):
+            grid = grid_of(x, y).astype(np.float32)
+            rgb = dem.encode_terrarium(grid, np.ones_like(grid, bool), layer.rounding)
+            rows.append((15, x, y, dem.png_bytes(rgb, layer.png_level)))
+    meta = {"name": "made up", "format": "png", "minzoom": "15", "maxzoom": "15"}
+    write_pmtiles(rows, out, {**meta, "bounds": ",".join(map(str, BOX))})
+
+
+def plane(x, y):
+    i = np.arange(dem.TILE)
+    return fill_height(
+        (x - X0) * dem.TILE + i[None, :], (y - Y0) * dem.TILE + i[:, None]
     )
 
 
 if __name__ == "__main__":
     out = Path(sys.argv[1])
-    box = tuple(float(v) for v in sys.argv[2:6])
-    archive(out / "nsw-5m.pmtiles", FILL_HEIGHT_M, dem.HEIGHTS, box)
-    archive(out / "nsw-5m-slope.pmtiles", FILL_SLOPE_DEG, dem.SLOPE, box)
+    # Stored to the terrarium's own 1/256 m, so the plane is exact.
+    exact = dataclasses.replace(dem.HEIGHTS, rounding=1 / 256)
+    archive(out / "nsw-5m.pmtiles", plane, exact)
+    flat = lambda x, y: np.full((dem.TILE, dem.TILE), FILL_SLOPE_DEG)  # noqa: E731
+    archive(out / "nsw-5m-slope.pmtiles", flat, dem.SLOPE)

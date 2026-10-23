@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from pathlib import Path
 
 import numpy as np
 
@@ -20,13 +21,20 @@ import _native_stub  # noqa: F401,E402
 
 import build_nsw_dem as dem  # noqa: E402
 from sharpen import (  # noqa: E402
+    CannotSharpen,
     blocks_of,
     block_grids,
     cell_for_density,
+    class2_cell,
+    contour_archive,
     credit,
+    dem_plan,
     extraction_month,
-    fill,
+    mosaic_bounds,
     pyramid,
+    sharpen_block,
+    tin_workers,
+    z15_mosaic,
     tile_range,
     zoom_for_cell,
     HEIGHTS,
@@ -44,7 +52,7 @@ class TestZoom(unittest.TestCase):
         self.assertIsNone(zoom_for_cell(5.0))
 
     def test_ground_density_sets_the_cell(self):
-        # Lab, Q1: a Category 2 survey's class 2 is ~0.12 pts/m².
+        # A Category 2 survey's class 2 holds ~0.12 pts/m² (measured on NSW tiles).
         self.assertEqual(cell_for_density(0.12), 2)
         self.assertEqual(cell_for_density(2.0), 1)
 
@@ -161,20 +169,167 @@ class TestPyramid(unittest.TestCase):
 
 
 class TestCredit(unittest.TestCase):
+    """Mutations that turn it red: the month taken from the oldest entry, and
+    a zero DOS date taken as a date (the job then fails after all its work)."""
+
+    def zip_dated(self, *dates):
+        tmp = tempfile.mkdtemp()
+        path = os.path.join(tmp, "a.zip")
+        with zipfile.ZipFile(path, "w") as zf:
+            for n, when in enumerate(dates):
+                zf.writestr(zipfile.ZipInfo(f"x{n}", when), b"")
+        return path
+
     def test_the_month_elvis_packed_the_zip(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "a.zip")
-            with zipfile.ZipFile(path, "w") as zf:
-                for when in ((2025, 3, 1, 0, 0, 0), (2026, 10, 2, 0, 0, 0)):
-                    zf.writestr(zipfile.ZipInfo("x" + str(when[0]), when), b"")
-            self.assertEqual(extraction_month(path), "October 2026")
+        path = self.zip_dated((2025, 3, 1, 0, 0, 0), (2026, 10, 2, 0, 0, 0))
+        self.assertEqual(extraction_month(path), "October 2026")
         self.assertIn("extracted October 2026. CC BY 3.0 AU", credit("October 2026"))
 
+    def test_an_entry_with_no_date_is_skipped(self):
+        path = self.zip_dated((2025, 3, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0))
+        self.assertEqual(extraction_month(path), "March 2025")
+        self.assertIsNone(extraction_month(self.zip_dated((1980, 0, 0, 0, 0, 0))))
+        self.assertNotIn("extracted", credit(None))
 
-class TestFill(unittest.TestCase):
-    def test_nan_takes_the_statewide_value(self):
-        out = fill(np.array([1.0, np.nan]), np.array([5.0, 6.0]))
-        np.testing.assert_array_equal(out, [1.0, 6.0])
+
+class TestGround(unittest.TestCase):
+    """Mutations that turn it red: LAZ chosen over a usable DEM, a ZIP of LAZ
+    and 5 m DEMs refused, the DEMs mosaicked fine to coarse (a coarse one wins
+    where they overlap), and an empty class 2 gridded anyway (or re-classified)."""
+
+    def test_a_dem_finer_than_5m_beats_the_point_clouds(self):
+        self.assertEqual(dem_plan([2.0], has_laz=True), (16, [0]))
+
+    def test_5m_dems_are_dropped_and_the_finest_drawn_last(self):
+        self.assertEqual(dem_plan([5.0, 1.0, 2.0], has_laz=False), (17, [2, 1]))
+
+    def test_laz_with_only_5m_dems_grids_the_class_2(self):
+        self.assertEqual(dem_plan([5.0], has_laz=True), (None, []))
+        self.assertEqual(dem_plan([], has_laz=True), (None, []))
+
+    def test_only_5m_dems_is_refused(self):
+        with self.assertRaises(CannotSharpen) as ctx:
+            dem_plan([5.0, 5.0], has_laz=False)
+        self.assertIn("5 m", str(ctx.exception))
+
+    def test_no_class_2_is_refused(self):
+        with self.assertRaises(CannotSharpen) as ctx:
+            class2_cell(0, 4e6)
+        self.assertIn("no ground", str(ctx.exception))
+        self.assertEqual(class2_cell(int(0.12 * 4e6), 4e6), 2)
+
+
+class TestTinWorkers(unittest.TestCase):
+    """Mutation that turns it red: the pool sized by CPUs alone, so eight
+    dense TIN jobs at once run a 16 GB task out of memory."""
+
+    def test_bounded_by_memory_as_well_as_cpus(self):
+        gib = 2**30
+        # A Category 1 tile and its eight neighbours: ~45 M ground points.
+        self.assertEqual(tin_workers(8, 45_000_000, 16 * gib), 1)
+        self.assertEqual(tin_workers(8, 5_000_000, 16 * gib), 8)
+        self.assertEqual(tin_workers(8, 5_000_000, 4 * gib), 2)
+        self.assertEqual(tin_workers(8, 10**10, gib), 1)
+
+
+class TestMosaic(unittest.TestCase):
+    """Mutations that turn it red: a wrong offset in the tiles the mosaic reads
+    (the fill lands a tile away) or bounds that don't match them."""
+
+    def test_each_tile_lands_in_its_place(self):
+        bx, by = 1000, 2000
+        grid = z15_mosaic(
+            lambda x, y: np.full((256, 256), x * 10 + y, np.float32), bx, by
+        )
+        for row in range(4):
+            for col in range(4):
+                x, y = 2 * bx - 1 + col, 2 * by - 1 + row
+                self.assertEqual(
+                    float(grid[row * 256 + 128, col * 256 + 128]), x * 10 + y
+                )
+
+    def test_bounds_are_those_tiles(self):
+        bx, by = 1000, 2000
+        west, south, east, north = mosaic_bounds(bx, by)
+        self.assertEqual(
+            (west, north), dem.tile_bounds_3857(15, 2 * bx - 1, 2 * by - 1)[0::3]
+        )
+        tw, ts, te, tn = dem.tile_bounds_3857(14, bx, by)
+        span = te - tw
+        self.assertAlmostEqual(east - west, 2 * span)
+        self.assertAlmostEqual(north - south, 2 * span)
+        self.assertAlmostEqual(west, tw - span / 2)
+
+
+class TestSharpenBlock(unittest.TestCase):
+    """A block's work files are named by its position, never its tile: a
+    traceback that prints a path then says nothing of where. Mutation that
+    turns it red: name them `{bx}-{by}` again."""
+
+    def test_work_files_name_no_tile(self):
+        from unittest import mock
+
+        import sharpen
+
+        bx, by = 15031, 9824
+        with tempfile.TemporaryDirectory() as tmp:
+            reader = mock.Mock()
+            reader.get.return_value = None
+            sharpen._ctx.update(
+                heights=reader, slope=reader, ground="g", zmax=16, work=Path(tmp)
+            )
+            n = 2 * 256 * 2 + 2 * sharpen.MARGIN_PX
+            with (
+                mock.patch.object(
+                    sharpen, "_warp", return_value=np.full((n, n), 500.0, np.float32)
+                ),
+                mock.patch.object(sharpen.pipeline, "gdal") as gdal,
+            ):
+                count = sharpen_block((3, bx, by))
+            names = sorted(os.listdir(tmp))
+            written = [
+                c.args[0]
+                for c in gdal.GetDriverByName.return_value.Create.call_args_list
+                if c.args[0]  # in-memory datasets have no name
+            ]
+        self.assertGreater(count, 0)
+        self.assertEqual(names, ["block-3.sqlite"])
+        self.assertEqual([os.path.basename(w) for w in written], ["contour-3.tif"])
+        for name in names + written:
+            self.assertNotIn(str(bx), name)
+            self.assertNotIn(str(by), name)
+
+
+class TestContourArchive(unittest.TestCase):
+    """Mutation that turns it red: converting an empty MBTiles (pmtiles raises,
+    and the job fails) instead of leaving the contours to the statewide layer."""
+
+    def test_no_contour_crosses_the_area(self):
+        import sqlite3
+        from unittest import mock
+
+        import sharpen
+
+        def fake_run(*command):
+            if "MVT" in command:
+                db = sqlite3.connect(command[command.index("MVT") + 1])
+                db.execute(
+                    "create table tiles (zoom_level, tile_column, tile_row, tile_data)"
+                )
+                db.commit()
+                db.close()
+            return ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                mock.patch.object(sharpen, "run", side_effect=fake_run),
+                mock.patch.object(sharpen.pipeline, "gdal"),
+                mock.patch("pmtiles.convert.mbtiles_to_pmtiles") as convert,
+            ):
+                made = contour_archive(Path(tmp), Path(tmp), "October 2026")
+            self.assertFalse(made)
+            convert.assert_not_called()
+            self.assertEqual(os.listdir(tmp), [])
 
 
 if __name__ == "__main__":

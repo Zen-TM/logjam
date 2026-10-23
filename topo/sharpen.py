@@ -5,15 +5,17 @@ sharpen.py
 Sharpen an area: an ELVIS ZIP to the statewide terrain formats at the
 survey's own cell, for a job the API marked to sharpen (`topo_jobs.sharpen`).
 
-    sharpen.py ZIP OUT --statewide-heights SRC --statewide-slope SRC
+    sharpen.py ZIP OUT [--statewide-heights SRC] [--statewide-slope SRC]
                        [--workers N] [--progress-file P] [--metrics-json P]
 
-SRC is a local `.pmtiles` path or `s3://bucket/key`: the published
-`nsw-5m.pmtiles` and `nsw-5m-slope.pmtiles`. OUT receives:
+SRC is a local `.pmtiles` path or `s3://bucket/key`; the default is the
+published `nsw-5m.pmtiles` or `nsw-5m-slope.pmtiles` in $S3_BUCKET_TOPO.
+OUT receives:
 
   heights.pmtiles   terrarium heights, z15 to zmax, a mean pyramid (ADR 0030)
   slope.pmtiles     terrarium slope in degrees, z15 to zmax, a max pyramid (ADR 0039)
-  contours.pmtiles  10 m contours at z14, the statewide archive's schema
+  contours.pmtiles  10 m contours at z14, the statewide archive's schema;
+                    absent when no 10 m level crosses the area
   footprint.geojson where the survey has ground
   sharpen.json      zmax, the tile range, coverage, ground kind, extraction month
 
@@ -26,12 +28,14 @@ zmax (z14 for contours). Where the survey has no ground, a tile holds the
 statewide 5 m data instead, so a client can take each tile from exactly one
 archive and draw no seam.
 
-Ground is the ZIP's ELVIS DEM when it has one; otherwise the survey's own
-class 2, as a TIN. Never a re-classification of the points: on a classified
-survey that puts ground on the canopy.
+Ground is the ZIP's ELVIS DEM when it has one finer than 5 m; otherwise the
+survey's own class 2, as a TIN. Never a re-classification of the points: on
+a classified survey that puts ground on the canopy.
 
-PRIVACY: the footprint, the tile range and every tile index say where the
-user surveyed. Nothing here logs them; counts and timings only.
+PRIVACY: the footprint, the tile range, a tile index and a survey's name say
+where the user surveyed. No log call names them (tests/test_log_privacy.py),
+and work files are named by position, not by tile (tests/test_sharpen.py
+`TestSharpenBlock`), so a traceback carries none either.
 """
 
 import argparse
@@ -63,8 +67,10 @@ log = logging.getLogger("sharpen")
 # and the statewide layer draws every zoom above.
 ZMIN = 15
 CONTOUR_ZOOM = 14
-# Pixel ground size at -34° is ~1.0 m at z17 and ~2.0 m at z16.
-DENSE_GROUND_PTS_M2 = 1.0  # class 2 per m² that supports a 1 m cell (lab, Q1)
+# Pixel ground size at -34° is ~1.0 m at z17 and ~2.0 m at z16. A 1 m cell
+# needs a ground point a square metre: a Category 2 survey's class 2 holds
+# ~0.12 (measured on NSW tiles), so a 1 m grid of it is mostly interpolation.
+DENSE_GROUND_PTS_M2 = 1.0
 # Neighbouring tiles' ground read around a tile, so its TIN meets theirs.
 TIN_BUFFER_M = 30
 # A triangle longer than this spans a void (water, a gap in the survey), not
@@ -73,14 +79,13 @@ TIN_MAX_EDGE_M = 50
 # Pixels of context around a block: Horn needs one, the contour smoothing a
 # few more at the contour grid.
 MARGIN_PX = 16
-CONTOUR_SMOOTH_SIGMA_M = 3.0
 NODATA = dem.NODATA
 
-# Heights are rounded finer at each zoom past z15: ADR 0030's quarter metre
-# was sized for z15's ~4 m pixels, and on 1 m pixels the same step draws
-# terraces in the hillshade and puts up to ~7° of noise in a tapped slope.
-# Halving it with the pixel keeps z15's noise (tests/test_sharpen.py
-# `TestPyramid`).
+# Heights are rounded finer at each zoom past z15, a departure from ADR
+# 0030's quarter metre pending an update to that ADR: the quarter metre was
+# sized for z15's ~4 m pixels, and on 1 m pixels the same step draws terraces
+# in the hillshade and puts up to ~7° of noise in a tapped slope. Halving it
+# with the pixel keeps z15's noise (tests/test_sharpen.py `TestPyramid`).
 HEIGHTS = dem.Layer("Sharpened heights", "", dem.halve, dem.ROUNDING_M, 9)
 SLOPE = dem.Layer("Sharpened slope", "", dem.halve_max, dem.SLOPE_ROUNDING_DEG, 6)
 
@@ -116,6 +121,31 @@ def cell_for_density(ground_per_m2: float) -> int:
     return 1 if ground_per_m2 >= DENSE_GROUND_PTS_M2 else 2
 
 
+def dem_plan(dem_cells: List[float], has_laz: bool) -> Tuple[Optional[int], List[int]]:
+    """Which ground a ZIP gives: (zmax, the DEMs to mosaic, coarse to fine)
+    when it has a DEM finer than 5 m, else (None, []) to grid its class 2.
+
+    A 5 m DEM adds nothing to the statewide data, so it is dropped; a ZIP left
+    with nothing to sharpen is refused, and one that still has point clouds
+    falls to them. Coarse to fine, so where DEMs overlap the finest is drawn
+    last and wins (tests/test_sharpen.py `TestGround`).
+    """
+    usable = [(c, i) for i, c in enumerate(dem_cells) if zoom_for_cell(c)]
+    if usable:
+        usable.sort(reverse=True)
+        return zoom_for_cell(usable[-1][0]), [i for _, i in usable]
+    if has_laz:
+        return None, []
+    raise CannotSharpen(ONLY_5M)
+
+
+def class2_cell(ground_points: int, area_m2: float) -> int:
+    """The cell a survey's class 2 supports, over the tiles that have any."""
+    if ground_points == 0:
+        raise CannotSharpen(NO_GROUND)
+    return cell_for_density(ground_points / area_m2)
+
+
 def tile_range(
     bbox: Tuple[float, float, float, float],
 ) -> Tuple[int, int, int, int]:
@@ -135,6 +165,14 @@ def blocks_of(tiles15: Tuple[int, int, int, int]) -> List[Tuple[int, int]]:
         for by in range(y0 >> 1, (y1 >> 1) + 1)
         for bx in range(x0 >> 1, (x1 >> 1) + 1)
     ]
+
+
+def mosaic_bounds(bx: int, by: int) -> Tuple[float, float, float, float]:
+    """Web mercator bounds of `z15_mosaic`'s grid: the z14 block and one z15
+    tile all round."""
+    west, _, _, north = dem.tile_bounds_3857(ZMIN, 2 * bx - 1, 2 * by - 1)
+    _, south, east, _ = dem.tile_bounds_3857(ZMIN, 2 * bx + 2, 2 * by + 2)
+    return west, south, east, north
 
 
 def fill(ground: np.ndarray, statewide: np.ndarray) -> np.ndarray:
@@ -185,19 +223,22 @@ def pyramid(grid: np.ndarray, zmax: int, bx: int, by: int, layer: dem.Layer):
             grid = layer.reduce(grid)
 
 
-def extraction_month(zip_path: str) -> str:
+def extraction_month(zip_path: str) -> Optional[str]:
     """The month ELVIS packed the ZIP, from its newest entry: the date the
-    licence asks a derived product to show."""
+    licence asks a derived product to show. An entry with no date (a zero DOS
+    date, as some re-zipping tools write) says nothing, so it is skipped;
+    None when no entry has one."""
     with zipfile.ZipFile(zip_path) as zf:
-        newest = max(info.date_time for info in zf.infolist())
-    return datetime(*newest).strftime("%B %Y")
+        dated = [i.date_time for i in zf.infolist() if i.date_time[1] > 0]
+    return datetime(*max(dated)).strftime("%B %Y") if dated else None
 
 
-def credit(extracted: str) -> str:
+def credit(extracted: Optional[str]) -> str:
     """What ELVIS metadata asks of a derived product (CC BY 3.0 AU)."""
+    when = f", extracted {extracted}" if extracted else ""
     return (
         "Elevation: derived from a LiDAR survey, © Department of Customer"
-        f" Service (NSW Spatial Services), extracted {extracted}. CC BY 3.0 AU."
+        f" Service (NSW Spatial Services){when}. CC BY 3.0 AU."
     )
 
 
@@ -213,18 +254,16 @@ def las_summary(path: str) -> dict:
     return json.loads(run("pdal", "info", "--summary", path))["summary"]
 
 
-def dem_ground(dem_files: List[Path], out: str) -> int:
-    """Mosaic the ZIP's DEMs; returns zmax."""
-    cells = []
-    for path in dem_files:
-        ds = pipeline.gdal.Open(str(path))
-        cells.append(abs(ds.GetGeoTransform()[1]))
-        ds = None
-    zmax = zoom_for_cell(min(cells))
-    if zmax is None:
-        raise CannotSharpen(ONLY_5M)
-    pipeline.merge_dem_tiles(dem_files, out)
-    return zmax
+def dem_cell(path: Path) -> float:
+    ds = pipeline.gdal.Open(str(path))
+    cell = abs(ds.GetGeoTransform()[1])
+    ds = None
+    return cell
+
+
+def dem_ground(dem_files: List[Path], order: List[int], out: str) -> None:
+    """Mosaic the chosen DEMs at the finest one's cell, finest drawn last."""
+    pipeline.merge_dem_tiles([dem_files[i] for i in order], out, resolution="highest")
 
 
 def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
@@ -264,29 +303,59 @@ def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
     return out
 
 
+# Peak memory of one TIN job per ground point it reads: PDAL holds every point
+# of every file it reads (its own tile's ground and its neighbours') and the
+# mesh over them. Measured on kiosk: 992 MiB for a Category 1 tile's 5.0 M
+# ground points read alone, ~210 bytes a point.
+TIN_BYTES_PER_POINT = 210
+# Of the memory the container may still use, the share TIN jobs may take.
+TIN_MEMORY_SHARE = 0.7
+
+
+def tin_workers(cpus: int, window_points: int, memory_bytes: int) -> int:
+    """TIN jobs at a time: one a CPU, as many as the largest job's points fit
+    in memory, and never none (tests/test_sharpen.py `TestTinWorkers`)."""
+    fits = int(
+        TIN_MEMORY_SHARE * memory_bytes // (TIN_BYTES_PER_POINT * max(window_points, 1))
+    )
+    return max(1, min(cpus, fits))
+
+
+def available_memory() -> int:
+    """Bytes this container may still use: the host's available memory, or
+    the container's cgroup limit when that is lower."""
+    with open("/proc/meminfo") as f:
+        found = dict(line.split(":", 1) for line in f)
+    limits = [int(found["MemAvailable"].split()[0]) * 1024]
+    for path in (
+        "/sys/fs/cgroup/memory.max",
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    ):
+        with contextlib.suppress(OSError, ValueError):
+            limits.append(int(Path(path).read_text().strip()))
+    return min(limits)
+
+
 def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int:
-    """A TIN of the survey's class 2 over every terrain tile; returns zmax."""
+    """A TIN of the survey's class 2 over every terrain tile that has any;
+    returns zmax."""
     terrain = pipeline.select_surveys_by_layer([str(f) for f in las_files])
-    tiles = terrain.terrain_tiles
-    grounds, bounds, area = [], [], 0.0
-    total = 0
-    for i, path in enumerate(tiles):
+    paths = terrain.terrain_tiles
+    tiles = []  # (ground file, bounds, ground points) of tiles with ground
+    for i, path in enumerate(paths):
         b = las_summary(path)["bounds"]
-        area += (b["maxx"] - b["minx"]) * (b["maxy"] - b["miny"])
         ground = str(work / f"ground-{i}.las")
         run(
             *["pdal", "translate", path, ground, "range"],
             "--filters.range.limits=Classification[2:2]",
         )
-        total += int(las_summary(ground)["num_points"])
-        grounds.append(ground)
-        bounds.append(b)
-        pipeline._write_progress(i + 1, len(tiles), "ground")
-    if total == 0:
-        raise CannotSharpen(NO_GROUND)
-    density = total / area
-    cell = cell_for_density(density)
-    log.info(f"{len(tiles)} tile(s), {density:.2f} ground pts/m² → {cell} m cell")
+        count = int(las_summary(ground)["num_points"])
+        if count:
+            tiles.append((ground, b, count))
+        pipeline._write_progress(i + 1, len(paths), "ground")
+    total = sum(count for *_, count in tiles)
+    area = sum((b["maxx"] - b["minx"]) * (b["maxy"] - b["miny"]) for _, b, _ in tiles)
+    cell = class2_cell(total, area)
 
     def near(a: dict, c: dict) -> bool:
         return not (
@@ -296,18 +365,18 @@ def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int
             or c["maxy"] < a["miny"] - TIN_BUFFER_M
         )
 
-    jobs = [
-        (
-            str(i),
-            b,
-            [g for g, c in zip(grounds, bounds) if near(b, c)],
-            float(cell),
-            str(work / f"tin-{i}.tif"),
-            str(work),
-        )
-        for i, b in enumerate(bounds)
-    ]
-    with ProcessPoolExecutor(workers) as pool:
+    jobs, window = [], 0
+    for i, (_, b, _) in enumerate(tiles):
+        around = [(g, c) for g, nb, c in tiles if near(b, nb)]
+        window = max(window, sum(c for _, c in around))
+        out_i = str(work / f"tin-{i}.tif")
+        jobs.append((str(i), b, [g for g, _ in around], float(cell), out_i, str(work)))
+    n = tin_workers(workers, window, available_memory())
+    log.info(
+        f"{len(tiles)} of {len(paths)} tile(s) with ground, "
+        f"{total / area:.2f} pts/m² → {cell} m cell, {n} TIN job(s) at a time"
+    )
+    with ProcessPoolExecutor(n) as pool:
         tins = [Path(f.result()) for f in [pool.submit(_tin_tile, j) for j in jobs]]
     pipeline.merge_dem_tiles(tins, out)
     return zoom_for_cell(cell)
@@ -420,10 +489,11 @@ def statewide_tile(reader, x: int, y: int) -> Optional[np.ndarray]:
     return dem.height_tile(reader, ZMIN, x, y)
 
 
-def sharpen_block(block: Tuple[int, int]) -> int:
-    """Heights and slope tiles of one z14 block into its own file, and its
-    filled heights at the contour grid. Returns the tile count."""
-    bx, by = block
+def sharpen_block(block: Tuple[int, int, int]) -> int:
+    """Heights and slope tiles of the i-th z14 block, (i, bx, by), into its
+    own file, and its filled heights at the contour grid. Returns the tile
+    count. Files are named by i, never by the tile they hold."""
+    i, bx, by = block
     zmax, work = _ctx["zmax"], _ctx["work"]
     size = 2 * dem.TILE * 2 ** (zmax - ZMIN)
     m = MARGIN_PX
@@ -432,20 +502,21 @@ def sharpen_block(block: Tuple[int, int]) -> int:
     outer = (west - m * px, south - m * px, east + m * px, north + m * px)
 
     ground = _warp(_ctx["ground"], outer, size + 2 * m, "bilinear")
-    # The z15 mosaic reaches one z15 tile (half the block) past each edge.
     span = east - west
-    ring = (west - span / 2, south - span / 2, east + span / 2, north + span / 2)
     up = {}
     for name in ("heights", "slope"):
         mosaic = z15_mosaic(lambda x, y: statewide_tile(_ctx[name], x, y), bx, by)
-        up[name] = _warp(_mem(mosaic, ring), outer, size + 2 * m, "bilinear")
+        up[name] = _warp(
+            _mem(mosaic, mosaic_bounds(bx, by)), outer, size + 2 * m, "bilinear"
+        )
 
     first_row = by * size
     heights, slope, filled = block_grids(
         ground, up["heights"], up["slope"], first_row, zmax
     )
 
-    tmp = work / f"{bx}-{by}.tmp"
+    done = work / f"block-{i}.sqlite"
+    tmp = done.with_suffix(".tmp")
     tmp.unlink(missing_ok=True)
     count = 0
     with contextlib.closing(sqlite3.connect(tmp)) as db:
@@ -460,7 +531,7 @@ def sharpen_block(block: Tuple[int, int]) -> int:
             db.executemany("insert into tiles values (?,?,?,?,?)", rows)
             count += len(rows)
         db.commit()
-    tmp.rename(work / f"{bx}-{by}.sqlite")
+    tmp.rename(done)
 
     # Contours are cut at z16 (~2 m), smoothed with the margin in hand so a
     # block edge is seamless, and the margin dropped before they are written.
@@ -471,12 +542,12 @@ def sharpen_block(block: Tuple[int, int]) -> int:
     cell_m = float(dem.pixel_size_m(first_row + size // 2, 1, zmax)[0]) * factor
     valid = ~np.isnan(contour)
     smooth = pipeline._normalized_gaussian(
-        np.nan_to_num(contour), valid, CONTOUR_SMOOTH_SIGMA_M / cell_m
+        np.nan_to_num(contour), valid, pipeline.CONTOUR_SMOOTH_SIGMA_M / cell_m
     )
     cm = m // factor
     smooth = np.where(valid, smooth, NODATA)[cm:-cm, cm:-cm].astype(np.float32)
     ds = pipeline.gdal.GetDriverByName("GTiff").Create(
-        str(work / f"contour-{bx}-{by}.tif"),
+        str(work / f"contour-{i}.tif"),
         smooth.shape[1],
         smooth.shape[0],
         1,
@@ -514,6 +585,12 @@ def write_pmtiles(rows, out: Path, meta: dict) -> None:
             ((z, x, (1 << z) - 1 - y, data) for z, x, y, data in rows),
         )
         db.executemany("insert into metadata values (?, ?)", meta.items())
+        # The converter looks every tile up by its key: without the index
+        # that is a scan per tile, minutes per layer on a large area.
+        db.execute(
+            "create unique index tile_index on tiles"
+            " (zoom_level, tile_column, tile_row)"
+        )
         db.commit()
     mbtiles_to_pmtiles(str(mbtiles), str(out), None)
     mbtiles.unlink()
@@ -530,7 +607,7 @@ def raster_archives(work: Path, out: Path, tiles15, zmax: int, extracted: str):
     for layer, name in ((HEIGHTS, "heights"), (SLOPE, "slope")):
 
         def rows():
-            for block in sorted(work.glob("*.sqlite")):
+            for block in sorted(work.glob("block-*.sqlite")):
                 with contextlib.closing(sqlite3.connect(block)) as db:
                     yield from db.execute(
                         "select z, x, y, data from tiles where layer = ?", (name,)
@@ -552,9 +629,11 @@ def raster_archives(work: Path, out: Path, tiles15, zmax: int, extracted: str):
         )
 
 
-def contour_archive(work: Path, out: Path, extracted: str) -> None:
+def contour_archive(work: Path, out: Path, extracted: Optional[str]) -> bool:
     """10 m contours of the blocks' filled heights, as the statewide archive
-    has them: one `contours` layer, an `elev` attribute, at z14 only."""
+    has them: one `contours` layer, an `elev` attribute, at z14 only. False,
+    and no archive, when no 10 m level crosses the area: the statewide
+    contours then show there (tests/test_sharpen.py `TestContourArchive`)."""
     from pmtiles.convert import mbtiles_to_pmtiles
 
     vrt = work / "contours.vrt"
@@ -585,8 +664,14 @@ def contour_archive(work: Path, out: Path, extracted: str) -> None:
         *["-dsco", f"CONF={json.dumps(conf)}"],
         *["-dsco", f"DESCRIPTION={credit(extracted).replace('Elevation', 'Contours')}"],
     )
-    mbtiles_to_pmtiles(str(mbtiles), str(out / "contours.pmtiles"), z)
-    mbtiles.unlink()
+    has_tiles = False
+    if mbtiles.exists():
+        with contextlib.closing(sqlite3.connect(mbtiles)) as db:
+            has_tiles = db.execute("select count(*) from tiles").fetchone()[0] > 0
+    if has_tiles:
+        mbtiles_to_pmtiles(str(mbtiles), str(out / "contours.pmtiles"), z)
+    mbtiles.unlink(missing_ok=True)
+    return has_tiles
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
@@ -608,11 +693,14 @@ def sharpen(args) -> dict:
         work = Path(tmp)
         with bench.step("Extract", key="extract"):
             contents = pipeline.extract_elvis_zip(args.zip, str(work / "zip"))
+        extracted = extraction_month(args.zip)
         ground = str(work / "ground.tif")
         with bench.step("Ground", key="ground"):
-            if contents.dem_files:
+            cells = [dem_cell(p) for p in contents.dem_files]
+            zmax, order = dem_plan(cells, bool(contents.las_files))
+            if order:
                 kind = "elvis-dem"
-                zmax = dem_ground(contents.dem_files, ground)
+                dem_ground(contents.dem_files, order, ground)
             else:
                 kind = "class-2"
                 zmax = laz_ground(contents.las_files, ground, work, args.workers)
@@ -640,14 +728,17 @@ def sharpen(args) -> dict:
                 ),
             ) as pool,
         ):
-            futures = [pool.submit(sharpen_block, b) for b in blocks]
+            futures = [
+                pool.submit(sharpen_block, (i, bx, by))
+                for i, (bx, by) in enumerate(blocks)
+            ]
             for n, done in enumerate(as_completed(futures), 1):
                 tile_count += done.result()
                 pipeline._write_progress(n, len(blocks), "tiles")
-        extracted = extraction_month(args.zip)
         with bench.step("Archives", key="archives"):
             raster_archives(blocks_dir, out, tiles15, zmax, extracted)
-            contour_archive(blocks_dir, out, extracted)
+            if not contour_archive(blocks_dir, out, extracted):
+                log.info("No 10 m contour crosses the area: no contour archive")
 
     result = {
         "v": 1,
@@ -670,8 +761,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("zip")
     parser.add_argument("out")
-    parser.add_argument("--statewide-heights", required=True)
-    parser.add_argument("--statewide-slope", required=True)
+    bucket = os.environ.get("S3_BUCKET_TOPO", "")
+    parser.add_argument(
+        "--statewide-heights", default=f"s3://{bucket}/{dem.HEIGHT_KEY}"
+    )
+    parser.add_argument("--statewide-slope", default=f"s3://{bucket}/{dem.SLOPE_KEY}")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 2)
     parser.add_argument("--progress-file")
     parser.add_argument("--metrics-json")
