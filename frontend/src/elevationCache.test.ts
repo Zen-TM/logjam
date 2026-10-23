@@ -4,6 +4,8 @@ import {
   cachedProfile,
   cachedProfileCount,
   clearProfileCache,
+  profileCacheGeneration,
+  profileCacheScope,
   scopeProfileCache,
   type CachedProfile,
 } from "./elevationCache";
@@ -76,6 +78,29 @@ describe("the elevation profile cache", () => {
 });
 
 describe("who the cache was filled for", () => {
+  // Mutations: a scope without the signed-in state (the next user on the tab
+  // keeps the cache) or without the areas (a revoked share keeps it), or one
+  // that changes when the same areas come back in another order.
+  it("is the signed-in state and the set of areas, in any order", () => {
+    const scope = profileCacheScope(true, ["a", "b"]);
+    expect(profileCacheScope(true, ["b", "a"])).toBe(scope);
+    expect(profileCacheScope(false, ["a", "b"])).not.toBe(scope);
+    expect(profileCacheScope(true, ["a"])).not.toBe(scope);
+    expect(profileCacheScope(true, ["a", "b", "c"])).not.toBe(scope);
+  });
+
+  // Mutation: store an answer whatever scope it was asked in, and a profile
+  // read through a revoked area is cached again after the cache emptied.
+  it("drops a profile asked for before the scope changed", () => {
+    scopeProfileCache("true,area-1");
+    const askedIn = profileCacheGeneration();
+    scopeProfileCache("true");
+    cacheProfile("[[150,-33]]", profile(1), askedIn);
+    expect(cachedProfile("[[150,-33]]")).toBeNull();
+    cacheProfile("[[150,-33]]", profile(1), profileCacheGeneration());
+    expect(cachedProfile("[[150,-33]]")?.gainM).toBe(1);
+  });
+
   // Mutation: keep the cache across a change of user or of visible areas, and
   // the next person to sign in on the tab, or a sharee whose share was
   // revoked, is handed heights read from an area they cannot see.

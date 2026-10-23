@@ -5,17 +5,18 @@
 // area's edge.
 //
 // A tile the router leaves absent is a thrown `AbsentTerrainTile`: MapLibre
-// then draws the loaded parent tile, as ordinary overzoom. A null `data`
-// would leave the tile loading for good, with no parent and no `idle`
-// (checked on GL JS 5.24; `terrainRouter.test.ts` holds the throw).
+// marks it errored and draws the loaded parent, as ordinary overzoom. A null
+// `data` draws an empty tile instead, not the parent (MapLibre GL JS 6.14,
+// checked on the dev stack; `terrainRouter.test.ts` holds the throw).
 //
 // PRIVACY: a tile index is a coarse location, and an area's URL is a bearer
-// credential. Nothing here logs either.
+// credential. Nothing here logs either (`terrainRouter.test.ts`, "logs
+// nothing").
 import {
-  NSW_5M,
   NSW_CONTOURS,
+  NSW_HILLSHADE,
   NSW_SLOPE,
-  escapeXml,
+  sharpenedDemSource,
   terrainTileArchive,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
@@ -25,17 +26,25 @@ import { PMTiles } from "pmtiles";
 
 export const TERRAIN_PROTOCOL = "logjam-terrain";
 
-/** The archive each Terrain layer reads: the hillshade shades the heights. */
+/**
+ * Each Terrain layer's statewide archive, declared once: the unrouted
+ * entries (terrainEntries.ts) and the router both read it
+ * (`terrainRouter.test.ts`, "reads the statewide archive the entries do").
+ */
+export const TERRAIN_STATEWIDE = {
+  contours: NSW_CONTOURS,
+  slope: NSW_SLOPE,
+  hillshade: NSW_HILLSHADE,
+} as const satisfies Record<
+  TerrainLayerKey,
+  { archivePath: string; minzoom: number; maxzoom: number; creditHtml: string }
+>;
+
+/** Which of an area's archives a layer reads: the hillshade shades heights. */
 const ARCHIVE_LAYER: Record<TerrainLayerKey, TerrainArchiveLayer> = {
   contours: "contours",
   slope: "slope",
   hillshade: "heights",
-};
-
-const STATEWIDE_PATH: Record<TerrainArchiveLayer, string> = {
-  heights: NSW_5M.archivePath,
-  slope: NSW_SLOPE.archivePath,
-  contours: NSW_CONTOURS.archivePath,
 };
 
 const AREA_URL = {
@@ -97,12 +106,16 @@ export function terrainTileTemplate(
   return `${TERRAIN_PROTOCOL}://${key}/${areasKey(areas)}/{z}/{x}/{y}`;
 }
 
-/** The credit for a routed layer: the statewide one, then each area's. */
+/**
+ * The credit for a routed layer: the statewide one, then every visible
+ * area's, each line once (areas from the same month credit alike).
+ */
 export function routedAttribution(
   statewide: string,
   areas: readonly SharpenedOverlay[],
 ): string {
-  return [statewide, ...areas.map((a) => escapeXml(a.credit))].join(" ");
+  const lines = areas.map((area) => sharpenedDemSource(area).creditHtml);
+  return [statewide, ...new Set(lines)].join(" ");
 }
 
 const URL_PATTERN = new RegExp(
@@ -116,7 +129,8 @@ export async function terrainTile(
 ): Promise<{ data: Uint8Array }> {
   const match = URL_PATTERN.exec(params.url);
   if (!match) throw new Error("Not a terrain tile URL");
-  const layer = ARCHIVE_LAYER[match[1] as TerrainLayerKey];
+  const key = match[1] as TerrainLayerKey;
+  const layer = ARCHIVE_LAYER[key];
   const [z, x, y] = [match[2], match[3], match[4]].map(Number) as [
     number,
     number,
@@ -124,13 +138,25 @@ export async function terrainTile(
   ];
   const answer = terrainTileArchive(routedAreas, layer, z, x, y);
   if (answer === "absent") throw new AbsentTerrainTile();
-  const url =
-    answer === "statewide"
-      ? `${window.location.origin}/${STATEWIDE_PATH[layer]}`
-      : answer[AREA_URL[layer]];
+  const statewide = answer === "statewide";
+  const url = statewide
+    ? `${window.location.origin}/${TERRAIN_STATEWIDE[key].archivePath}`
+    : answer[AREA_URL[layer]];
   // The router hands contours only to an area that has them.
   if (!url) throw new AbsentTerrainTile();
-  const tile = await archiveAt(url).getZxy(z, x, y, abort.signal);
+  let tile;
+  try {
+    tile = await archiveAt(url).getZxy(z, x, y, abort.signal);
+  } catch (error) {
+    // An area's URL can expire, or its job be deleted, while the map holds
+    // it. Its tile is then absent, so the parent draws: thrown on, the
+    // failure would read as the shared statewide source being gone, and the
+    // map would drop the whole layer. An abort is MapLibre's own, and the
+    // statewide archive's failures are the source's.
+    if (statewide || (error as { name?: unknown })?.name === "AbortError")
+      throw error;
+    throw new AbsentTerrainTile();
+  }
   if (tile) return { data: new Uint8Array(tile.data) };
   // A vector tile with nothing in it is empty, as the pmtiles protocol has
   // it; a raster one is left to its parent.

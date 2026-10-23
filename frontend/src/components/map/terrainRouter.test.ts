@@ -2,7 +2,9 @@ import type { SharpenedOverlay } from "@logjam/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Each archive the router opens answers from this table: url → zoom → tile.
+// One in `failing` rejects instead, as an expired or deleted URL does.
 const held = vi.hoisted(() => new Map<string, Set<number>>());
+const failing = vi.hoisted(() => new Map<string, Error>());
 vi.mock("pmtiles", () => ({
   PMTiles: class {
     url: string;
@@ -10,6 +12,8 @@ vi.mock("pmtiles", () => ({
       this.url = url;
     }
     async getZxy(z: number) {
+      const failure = failing.get(this.url);
+      if (failure) throw failure;
       return held.get(this.url)?.has(z)
         ? { data: new TextEncoder().encode(`${this.url}@${z}`).buffer }
         : undefined;
@@ -20,6 +24,7 @@ vi.mock("pmtiles", () => ({
 import {
   areasKey,
   isAbsentTerrainTile,
+  routedAttribution,
   setRoutedAreas,
   terrainTile,
   terrainTileTemplate,
@@ -57,6 +62,7 @@ const read = async (layer: string, z: number, x: number, y: number) => {
 
 afterEach(() => {
   held.clear();
+  failing.clear();
   setRoutedAreas([]);
 });
 
@@ -67,7 +73,9 @@ describe("the terrain router", () => {
   it("throws for a tile no archive holds, so the parent is drawn", async () => {
     setRoutedAreas([area]);
     held.set(area.slopeUrl, new Set([15, 16]));
-    held.set(SLOPE, new Set([15]));
+    // The statewide archive has this z16 tile: a router that answered it
+    // would draw it, so only the throw passes.
+    held.set(SLOPE, new Set([15, 16]));
     const absent = read("slope", 16, 30099 * 2, 19654 * 2);
     await expect(absent).rejects.toSatisfy(isAbsentTerrainTile);
     // As MapLibre may hand it on: a copy with the message alone.
@@ -104,6 +112,47 @@ describe("the terrain router", () => {
     expect(await read("contours", 14, 15050, 9827)).toBe("");
   });
 
+  // Mutation: let an area archive's failure through, and the map's handler
+  // reads "Bad response code: 403" as a dead source: it tears down the whole
+  // statewide Terrain layer it shares an id with, for the session.
+  it("draws past an area archive that fails, but lets an abort through", async () => {
+    setRoutedAreas([area]);
+    failing.set(area.slopeUrl, new Error("Bad response code: 403"));
+    await expect(read("slope", 15, 30100, 19654)).rejects.toSatisfy(
+      isAbsentTerrainTile,
+    );
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    failing.set(area.slopeUrl, abort);
+    await expect(read("slope", 15, 30100, 19654)).rejects.toBe(abort);
+  });
+
+  // Mutation: a statewide path in the router that differs from the entry's,
+  // and a user who gains an area sees another statewide archive below z15.
+  it("reads the statewide archive the entries do", async () => {
+    setRoutedAreas([area]);
+    for (const key of ["contours", "slope", "hillshade"] as const) {
+      const url = TERRAIN_ENTRIES[key].pmtilesUrl;
+      held.set(url, new Set([13]));
+      expect(await read(key, 13, 7525, 4913)).toBe(`${url}@13`);
+    }
+  });
+
+  // Mutation: log the URL or the tile on any path, and a coarse location or
+  // a bearer credential reaches the console.
+  it("logs nothing", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map(
+      (level) => vi.spyOn(console, level).mockImplementation(() => {}),
+    );
+    setRoutedAreas([area]);
+    held.set(area.contoursUrl!, new Set());
+    await read("slope", 17, 120400, 78616).catch(() => {});
+    failing.set(area.slopeUrl, new Error("Bad response code: 404"));
+    await read("slope", 15, 30100, 19654).catch(() => {});
+    await read("contours", 14, 15050, 9827);
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    for (const spy of spies) spy.mockRestore();
+  });
+
   // Mutation: key the set on the URLs, and every 24 h refresh of them
   // rebuilds the map's terrain sources.
   it("keys a set of areas on what changes the tiles, not on its URLs", () => {
@@ -134,5 +183,18 @@ describe("terrainEntries", () => {
     expect(entries.slope.attribution).toContain(
       "a survey &lt;made up&gt; &amp; credited.",
     );
+  });
+
+  // Mutation: one line per area, and two areas from the same month credit
+  // the survey twice under every Terrain layer.
+  it("credits each line once, for every visible area", () => {
+    const other = { ...area, id: "a2", credit: "Elevation: another survey." };
+    const credit = routedAttribution("Statewide.", [
+      area,
+      { ...area, id: "a3" },
+      other,
+    ]);
+    expect(credit.split("credited.").length - 1).toBe(1);
+    expect(credit).toContain("another survey.");
   });
 });

@@ -38,7 +38,11 @@ import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 // Profiles already sampled this session, so reopening or editing a line does
 // not re-ask the DEM a question it has answered (see the module's header).
-import { cacheProfile, cachedProfile } from "./elevationCache";
+import {
+  cacheProfile,
+  cachedProfile,
+  profileCacheGeneration,
+} from "./elevationCache";
 
 // The server's REST response shapes are declared ONCE in shared/ and
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
@@ -605,11 +609,13 @@ export function useElevationProfile(points: ProfiledLine | null) {
     if (!fetchKey) return;
     // A late response from a previous line must not overwrite this one's.
     let current = true;
+    const askedIn = profileCacheGeneration();
     getElevationProfile(JSON.parse(fetchKey) as ProfiledLine)
       .then((result) => {
-        // Cached even if this hook has moved on: the answer is about the
-        // geometry, not about who asked.
-        cacheProfile(fetchKey, result);
+        // Cached even if this hook has moved on to another line, but not if
+        // the user or their areas changed meanwhile: the answer read what
+        // the caller could see then (elevationCache.ts).
+        cacheProfile(fetchKey, result, askedIn);
         if (current) setProfile(result);
       })
       .catch((err) => {

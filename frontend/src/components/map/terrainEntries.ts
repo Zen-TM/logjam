@@ -1,13 +1,14 @@
 import {
   NSW_5M,
-  NSW_CONTOURS,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
 
-import { routedAttribution, terrainTileTemplate } from "./terrainRouter";
+import {
+  TERRAIN_STATEWIDE,
+  routedAttribution,
+  terrainTileTemplate,
+} from "./terrainRouter";
 
 /**
  * The Terrain group's layers as entries of `topoLayers`, beside the topo
@@ -19,21 +20,21 @@ import { routedAttribution, terrainTileTemplate } from "./terrainRouter";
 export const TERRAIN_ENTRIES = {
   contours: {
     id: "nswcontours",
-    pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.contours.archivePath}`,
     format: "vector" as const,
-    attribution: NSW_CONTOURS.creditHtml,
+    attribution: TERRAIN_STATEWIDE.contours.creditHtml,
   },
   slope: {
     id: "nswslope",
-    pmtilesUrl: `${window.location.origin}/${NSW_SLOPE.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.slope.archivePath}`,
     format: "slope" as const,
-    attribution: NSW_SLOPE.creditHtml,
+    attribution: TERRAIN_STATEWIDE.slope.creditHtml,
   },
   hillshade: {
     id: "nswhillshade",
-    pmtilesUrl: `${window.location.origin}/${NSW_HILLSHADE.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.hillshade.archivePath}`,
     format: "hillshade" as const,
-    attribution: NSW_HILLSHADE.creditHtml,
+    attribution: TERRAIN_STATEWIDE.hillshade.creditHtml,
   },
 } satisfies Record<TerrainLayerKey, unknown>;
 
@@ -59,11 +60,8 @@ export function terrainEntries(
 > {
   if (areas.length === 0) return TERRAIN_ENTRIES;
   const deepest = Math.max(...areas.map((a) => a.zmax));
-  const routed = (
-    key: TerrainLayerKey,
-    statewide: { minzoom: number; maxzoom: number; creditHtml: string },
-    maxzoom: number,
-  ) => {
+  const routed = (key: TerrainLayerKey, maxzoom: number) => {
+    const statewide = TERRAIN_STATEWIDE[key];
     const template = terrainTileTemplate(key, areas);
     return {
       ...TERRAIN_ENTRIES[key],
@@ -79,8 +77,8 @@ export function terrainEntries(
     };
   };
   return {
-    contours: routed("contours", NSW_CONTOURS, NSW_CONTOURS.maxzoom),
-    slope: routed("slope", NSW_SLOPE, deepest),
-    hillshade: routed("hillshade", NSW_HILLSHADE, deepest),
+    contours: routed("contours", TERRAIN_STATEWIDE.contours.maxzoom),
+    slope: routed("slope", deepest),
+    hillshade: routed("hillshade", deepest),
   };
 }

@@ -85,4 +85,3 @@ export * from "./statPairs.js";
 export * from "./friendInvite.js";
 export * from "./geoPdfTileMath.js";
 export * from "./sharpen.js";
-export * from "./escapeXml.js";

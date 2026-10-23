@@ -15,9 +15,11 @@
 // WHO IS ASKING matters too. The answer reads the sharpened areas the caller
 // may see (ADR 0040), so it differs between users and changes with a share.
 // `scopeProfileCache` empties the cache when the signed-in user or their set
-// of areas changes: a revoked sharee loses the area's heights once the list
-// is fetched again, and the next person to sign in on the tab never sees the
-// last one's (elevationCache.test.ts).
+// of areas changes (`profileCacheScope`), and a profile asked for before then
+// is not stored when it arrives: a revoked sharee loses the area's heights
+// once the list is fetched again, and the next person to sign in on the tab
+// never sees the last one's (elevationCache.test.ts, "who the cache was
+// filled for").
 //
 // PRIVACY: the key is a route's point list, which is precise wilderness
 // location data. It stays in memory, is never logged, and never leaves here.
@@ -39,15 +41,31 @@ const entries = new Map<string, CachedProfile>();
 
 /** Who the remembered profiles were read for. */
 let scope = "";
+/** Bumped with every change of scope, so a late answer can tell it is late. */
+let generation = 0;
+
+/** The scope of a signed-in state and the areas it can see, in any order. */
+export function profileCacheScope(
+  authenticated: boolean,
+  areaIds: readonly string[],
+): string {
+  return [authenticated, ...[...areaIds].sort()].join(",");
+}
 
 /**
- * Forget every profile when `next` (who is signed in, and which areas they
- * can see) differs from the scope the cache was filled for.
+ * Forget every profile when `next` (`profileCacheScope`) differs from the
+ * scope the cache was filled for.
  */
 export function scopeProfileCache(next: string): void {
   if (next === scope) return;
   scope = next;
+  generation += 1;
   entries.clear();
+}
+
+/** Read when a request starts; handed back to `cacheProfile` with its answer. */
+export function profileCacheGeneration(): number {
+  return generation;
 }
 
 /** The profile for this exact geometry, or null if it has not been sampled. */
@@ -61,7 +79,16 @@ export function cachedProfile(key: string): CachedProfile | null {
   return hit;
 }
 
-export function cacheProfile(key: string, profile: CachedProfile): void {
+/**
+ * Remember a profile, unless the scope changed since it was asked for
+ * (`askedIn`): it was read with what the caller could see then.
+ */
+export function cacheProfile(
+  key: string,
+  profile: CachedProfile,
+  askedIn: number = generation,
+): void {
+  if (askedIn !== generation) return;
   entries.delete(key);
   entries.set(key, profile);
   while (entries.size > MAX_ENTRIES) {
@@ -75,6 +102,7 @@ export function cacheProfile(key: string, profile: CachedProfile): void {
 export function clearProfileCache(): void {
   entries.clear();
   scope = "";
+  generation += 1;
 }
 
 /** How many lines are remembered. For the test, and for nothing else. */
