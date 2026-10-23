@@ -2,12 +2,13 @@
 Privacy): no coordinate, bbox, tile index, footprint id or survey name.
 Its stdout goes to CloudWatch.
 
-Three guards. A scan of every `log.*()` call in the job's modules for the
+Four guards. A scan of every `log.*()` call in the job's modules for the
 names that hold such a value; the overlapping-survey pick run for real
 under assertLogs, since its footprint id and survey labels are the values
 most tempting to log; and pipeline.py's GDAL handler, which logs a message's
 class and number, never its text (`TestGdalMessages`, whose mutations its
-own docstring names). Mutations of the first two that turn it red: restoring pipeline.py's
+own docstring names); and a failed job's last line (`TestUncaughtFailure`,
+likewise). Mutations of the first two that turn it red: restoring pipeline.py's
 `Coverage: lon …, lat …` line, putting `{footprint}` or a survey label back
 in the overlapping-surveys log, logging a tile's `{z}/{x}/{y}`, or restoring
 the filename in the PDAL tile log.
@@ -102,8 +103,8 @@ class TestOverlappingSurveysLog(unittest.TestCase):
 class TestGdalMessages(unittest.TestCase):
     """GDAL prints warnings to stderr with the file they're about ("Skipping
     <file>", from BuildVRT). pipeline.py replaces that output on import.
-    Mutations that turn it red: the handler logs GDAL's message, or it is not
-    pushed (so GDAL prints its own)."""
+    Mutations that turn it red: the handler logs GDAL's message, it is not
+    pushed (so GDAL prints its own), or it logs past GDAL's cap of 1000."""
 
     leak = "/tmp/w/Katoomba201804-LID2-AHD_2506258_56_0002_0002_2m.tif"
 
@@ -116,6 +117,16 @@ class TestGdalMessages(unittest.TestCase):
         self.assertIn("number 1", text)
         for part in ("Katoomba", "2506258", "Skipping"):
             self.assertNotIn(part, text)
+
+    def test_stops_at_gdals_cap(self):
+        with (
+            mock.patch.object(pipeline, "_gdal_messages", 0),
+            self.assertLogs(pipeline.log, "WARNING") as logs,
+        ):
+            for _ in range(pipeline._GDAL_MESSAGES_MAX + 5):
+                pipeline._gdal_message(2, 1, "")
+        self.assertEqual(len(logs.output), pipeline._GDAL_MESSAGES_MAX)
+        self.assertIn("limit reached", logs.output[-1])
 
     def test_the_handler_is_pushed(self):
         if _native_stub.is_stubbed("osgeo"):
@@ -146,6 +157,42 @@ class TestGdalMessages(unittest.TestCase):
                     os.close(saved)
                 err.seek(0)
                 self.assertEqual(err.read(), b"")
+
+
+class TestUncaughtFailure(unittest.TestCase):
+    """A legacy job that fails leaves pipeline.py as its type and code
+    locations, never Python's traceback, whose message can quote an ELVIS
+    file ("`pdal info --summary` failed for <file>"). Mutations that turn it
+    red: main lets the exception escape, or prints it."""
+
+    def test_main_reports_no_message(self):
+        import contextlib
+        import io
+        import sys
+        import tempfile
+
+        leak = "Katoomba201804-LID2-C3-AHD_2506258_56_0002_0002.laz"
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            zip_path = os.path.join(tmp, "in.zip")
+            open(zip_path, "w").close()
+            argv = ["pipeline.py", zip_path, "--work-dir", tmp, "--output", tmp]
+            with (
+                mock.patch.object(
+                    pipeline,
+                    "extract_elvis_zip",
+                    side_effect=RuntimeError(f"pdal info failed for {leak}"),
+                ),
+                mock.patch.object(sys, "argv", argv),
+                contextlib.redirect_stderr(err),
+                self.assertRaises(SystemExit) as ctx,
+            ):
+                pipeline.main()
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("RuntimeError at", err.getvalue())
+        self.assertIn("pipeline.py:", err.getvalue())
+        for part in ("Katoomba", "2506258", "pdal info"):
+            self.assertNotIn(part, err.getvalue())
 
 
 if __name__ == "__main__":

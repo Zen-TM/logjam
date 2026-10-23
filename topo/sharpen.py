@@ -38,12 +38,11 @@ where the user surveyed. No log call names them (tests/test_log_privacy.py).
 Work files are named by position, not by tile (tests/test_sharpen.py
 `TestSharpenBlock`), but the ZIP's files keep their ELVIS names (survey and
 MGA tile), and a failure's message can quote one: so a failure is reported
-by its type and code locations only (`report_failure`, `TestReportFailure`),
-and PDAL's own output is captured, never printed.
+by its type and code locations only (`pipeline.report_failure`,
+`TestReportFailure`), and PDAL's own output is captured, never printed.
 """
 
 import argparse
-import concurrent.futures.process
 import contextlib
 import dataclasses
 import functools
@@ -51,12 +50,10 @@ import json
 import logging
 import math
 import os
-import re
 import sqlite3
 import subprocess
 import sys
 import tempfile
-import traceback
 import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
@@ -710,28 +707,6 @@ def require_ground(ground: str) -> None:
         raise CannotSharpen(EMPTY_GROUND)
 
 
-def report_failure(error: BaseException) -> str:
-    """A failure as its type and the code locations it came through, not its
-    message, which can quote an input's ELVIS name (see PRIVACY above).
-
-    A failure in a pool job reaches here with its own frames as text: the
-    pool hands back the exception with the job's traceback formatted into its
-    __cause__, message and all. Only the file:line pairs are taken from it
-    (tests/test_sharpen.py `TestReportFailure`)."""
-    frames = [
-        (Path(f.filename).name, f.lineno)
-        for f in traceback.extract_tb(error.__traceback__)
-    ]
-    cause = error.__cause__
-    if isinstance(cause, concurrent.futures.process._RemoteTraceback):
-        frames += [
-            (Path(name).name, int(line))
-            for name, line in re.findall(r'File "([^"]+)", line (\d+)', cause.tb)
-        ]
-    where = " < ".join(f"{name}:{line}" for name, line in reversed(frames))
-    return f"sharpen failed: {type(error).__name__} at {where}"
-
-
 def footprint_bbox(path: Path) -> Tuple[float, float, float, float]:
     from shapely.geometry import shape
 
@@ -834,7 +809,7 @@ def main() -> None:
         (Path(args.out) / "error.json").write_text(json.dumps({"sentence": str(e)}))
         sys.exit(2)
     except Exception as e:  # noqa: BLE001 - every failure, told without its message
-        print(report_failure(e), file=sys.stderr)
+        print(pipeline.report_failure(e, "sharpen"), file=sys.stderr)
         sys.exit(1)
 
 
