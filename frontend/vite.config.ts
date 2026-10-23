@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { createHash } from "node:crypto";
 import fs from "fs";
@@ -96,34 +96,45 @@ export function maplibreWorkerPlugin(
   };
 }
 
-export default defineConfig({
-  // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
-  // (e.g. an orphaned server from a prior session) instead of silently
-  // falling back to 5174 — which the API's CORS_ORIGIN (localhost:5173)
-  // would then reject, surfacing as a confusing "CORS request did not
-  // succeed" rather than the real cause.
-  server: {
-    port: 5173,
-    strictPort: true,
-    proxy: {
-      // The Protomaps PMTiles archive lives behind the web distribution's
-      // ordered /master/* behaviour, so in PROD it is same-origin and needs
-      // nothing. In dev the app is on localhost, and the CDN sends no
-      // Access-Control-Allow-Origin — CloudFront custom response-headers
-      // policies are gated behind the AWS Business plan, so CORS can't simply
-      // be switched on. Proxying keeps the archive same-origin in dev too,
-      // which also means the app never needs a CDN base URL: it always
-      // fetches /master/* from its own origin.
-      "/master": {
-        target: "https://logjamnsw.com",
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  // DEV_MASTER_URL (frontend/.env) points the /master proxy at MiniStack's
+  // topo bucket, so dev maps read local archives. Unset, it stays the prod CDN:
+  // a fresh MiniStack has no archives to serve.
+  const master = new URL(
+    loadEnv(mode, import.meta.dirname, "").DEV_MASTER_URL ||
+      "https://logjamnsw.com",
+  );
+  const masterPrefix = master.pathname.replace(/\/$/, "");
+  return {
+    // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
+    // (e.g. an orphaned server from a prior session) instead of silently
+    // falling back to 5174 — which the API's CORS_ORIGIN (localhost:5173)
+    // would then reject, surfacing as a confusing "CORS request did not
+    // succeed" rather than the real cause.
+    server: {
+      port: 5173,
+      strictPort: true,
+      proxy: {
+        // The Protomaps PMTiles archive lives behind the web distribution's
+        // ordered /master/* behaviour, so in PROD it is same-origin and needs
+        // nothing. In dev the app is on localhost, and the CDN sends no
+        // Access-Control-Allow-Origin — CloudFront custom response-headers
+        // policies are gated behind the AWS Business plan, so CORS can't simply
+        // be switched on. Proxying keeps the archive same-origin in dev too,
+        // which also means the app never needs a CDN base URL: it always
+        // fetches /master/* from its own origin.
+        "/master": {
+          target: master.origin,
+          changeOrigin: true,
+          rewrite: (p: string) => masterPrefix + p,
+        },
       },
     },
-  },
-  plugins: [react(), cspMetaPlugin(), maplibreWorkerPlugin()],
-  resolve: {
-    alias: {
-      "@styles": path.resolve(import.meta.dirname, "src/styles"),
+    plugins: [react(), cspMetaPlugin(), maplibreWorkerPlugin()],
+    resolve: {
+      alias: {
+        "@styles": path.resolve(import.meta.dirname, "src/styles"),
+      },
     },
-  },
+  };
 });

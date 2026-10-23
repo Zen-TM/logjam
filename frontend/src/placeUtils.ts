@@ -1335,33 +1335,48 @@ type PresignMediaResponse = {
 
 // Direct PUT to a presigned S3 URL. Intentionally raw (not apiFetch): the target
 // is S3, not our API, and it must NOT carry the Authorization header. The
-// Content-Type must match what the presign signed, or S3 rejects it.
+// Content-Type must match what the presign signed, or S3 rejects it; null sends
+// none, for a URL that signed none.
 //
 // Uses XMLHttpRequest rather than fetch so an optional onProgress callback can
 // report upload progress — fetch cannot observe request-body upload progress.
-// onProgress fires with bytes (loaded, total) as the body streams to S3.
+// onProgress fires with bytes (loaded, total) as the body streams to S3. With
+// stallMs, a request that sends nothing for that long is aborted and rejects.
 export function putToPresignedUrl(
   url: string,
   body: Blob,
-  contentType: string,
+  contentType: string | null,
   onProgress?: (loaded: number, total: number) => void,
+  stallMs?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType);
-    if (onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(e.loaded, e.total);
-      };
-    }
+    if (contentType) xhr.setRequestHeader("Content-Type", contentType);
+    let stall: ReturnType<typeof setTimeout> | undefined;
+    let stalled = false;
+    const arm = () => {
+      if (!stallMs) return;
+      clearTimeout(stall);
+      stall = setTimeout(() => {
+        stalled = true;
+        xhr.abort();
+      }, stallMs);
+    };
+    xhr.upload.onprogress = (e) => {
+      arm();
+      if (onProgress && e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+    xhr.onloadend = () => clearTimeout(stall);
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`Upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("Upload failed (network error)"));
     xhr.ontimeout = () => reject(new Error("Upload failed (timeout)"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.onabort = () =>
+      reject(new Error(stalled ? "Upload stalled" : "Upload cancelled"));
+    arm();
     xhr.send(body);
   });
 }

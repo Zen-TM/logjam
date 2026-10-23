@@ -111,6 +111,23 @@ hand (it's gitignored and overwritten on each `make dev`/`make reset`). To chang
 a dev value, edit `infra/terraform/envs/local/env-files.tf` (and add new vars to
 both `api/src/lib/env.ts` and `infra/terraform/templates/env.local.tftpl`).
 
+By default dev maps fetch the `master/*` archives from the prod CDN. To read
+them from MiniStack instead, upload the archives, then set `DEV_MASTER_URL` in
+`frontend/.env` and `EXPO_PUBLIC_TOPO_CDN_BASE_URL` in `mobile/.env` (values in
+the `.env.example` files). Build the 5 m DEM and the contours with
+`build_nsw_dem.py` ([topo/README.md](topo/README.md#building-the-nsw-5-m-dem-archive)),
+or use the committed Katoomba DEM slice, and upload each to its `master/` key
+with the stack up (`test`/`test` are MiniStack's dummy credentials):
+
+```bash
+curl -u test:test --upload-file shared/src/__fixtures__/nsw-5m-z15-katoomba.pmtiles \
+  http://127.0.0.1:4566/logjam-topo-local/master/dem/nsw-5m.pmtiles
+# contours: master/contours/nsw-10m.pmtiles
+```
+
+The vector basemap (`master/basemap/protomaps-nsw.pmtiles`) has no local source,
+so it 404s and the map has no base layer.
+
 ### Command reference
 
 | Command | What it does |

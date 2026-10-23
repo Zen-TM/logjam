@@ -11,6 +11,7 @@ import type {
   GeoJsonPolygonal,
   DownloadUrl,
 } from "./dialogs/TopoDialog";
+import { routeMadeTopoJob } from "./dialogs/topoUpload";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import PlaceDialog from "./dialogs/PlaceDialog";
@@ -1073,11 +1074,19 @@ function App() {
     return () => clearInterval(interval);
   }, [activeTopoJobs, refetchNotifications, refetchCompletedTopoJobs]);
 
-  const handleTopoJobCreated = useCallback((job: TopoJob) => {
-    // Register for active-job polling. The dialog owns the success surface
-    // (in-dialog "Submitted" view) and its own close, so no toast/close here.
-    setActiveTopoJobs((prev) => [job, ...prev]);
-  }, []);
+  // The dialog owns the success surface (in-dialog "Submitted" view) and its
+  // own close, so no toast/close here.
+  const handleTopoJobCreated = useCallback(
+    (job: TopoJob) =>
+      routeMadeTopoJob(job, {
+        track: (made) => setActiveTopoJobs((prev) => [made, ...prev]),
+        finished: () => {
+          refetchCompletedTopoJobs();
+          refetchNotifications();
+        },
+      }),
+    [refetchCompletedTopoJobs, refetchNotifications],
+  );
 
   // Durable delete replaces the old hide-only dismiss so failed rows can't
   // linger invisibly (DELETE /topo-jobs/:id handles failed rows + S3 cleanup
