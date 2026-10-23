@@ -20,7 +20,9 @@ import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import { TERRAIN_ENTRIES } from "./map/terrainEntries";
+import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
+import { setRoutedAreas } from "./map/terrainRouter";
+import { scopeProfileCache } from "../elevationCache";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -503,7 +505,15 @@ function App() {
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
   const { contours, slope, hillshade } = terrainLayers;
+  const sharpenedAreas = useMemo(
+    () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
+    [completedTopoJobs],
+  );
   const mapTopoLayers = useMemo(() => {
+    // Here, not in an effect: the Map's effects run before this component's,
+    // and its routed sources ask for tiles as soon as it adds them.
+    setRoutedAreas(sharpenedAreas);
+    const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       slope,
@@ -513,10 +523,17 @@ function App() {
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
         .filter((key) => shown[key])
-        .map((key) => TERRAIN_ENTRIES[key]),
+        .map((key) => entries[key]),
       ...combinedTopoLayers,
     ];
-  }, [activeLayerId, contours, slope, hillshade, combinedTopoLayers]);
+  }, [
+    activeLayerId,
+    contours,
+    slope,
+    hillshade,
+    combinedTopoLayers,
+    sharpenedAreas,
+  ]);
 
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
@@ -635,6 +652,11 @@ function App() {
 
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
+  // During render, not in an effect: a profile hook below reads the cache as
+  // it renders, and must never see another user's or a revoked area's.
+  scopeProfileCache(
+    [authenticated, ...sharpenedAreas.map((area) => area.id).sort()].join(","),
+  );
   const { hydrateFromUser } = useThemePreferences();
   const {
     currentUser,

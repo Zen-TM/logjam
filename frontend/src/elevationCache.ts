@@ -9,9 +9,15 @@
 // never persisted. That rule is about STORING a profile against a Route: it
 // would go stale the moment a vertex moved, and the geometry must stay the one
 // source of truth. Keying on the exact point list keeps both properties — move
-// a vertex and the key changes, so it re-samples — while a DEM is, in that
-// module's own words, "a fixed surface, so re-reading the same point gives the
-// same answer". Nothing here outlives the tab, and nothing is written down.
+// a vertex and the key changes, so it re-samples. Nothing here outlives the
+// tab, and nothing is written down.
+//
+// WHO IS ASKING matters too. The answer reads the sharpened areas the caller
+// may see (ADR 0040), so it differs between users and changes with a share.
+// `scopeProfileCache` empties the cache when the signed-in user or their set
+// of areas changes: a revoked sharee loses the area's heights once the list
+// is fetched again, and the next person to sign in on the tab never sees the
+// last one's (elevationCache.test.ts).
 //
 // PRIVACY: the key is a route's point list, which is precise wilderness
 // location data. It stays in memory, is never logged, and never leaves here.
@@ -30,6 +36,19 @@ const MAX_ENTRIES = 40;
 
 /** Insertion order IS the recency order: a read re-inserts. */
 const entries = new Map<string, CachedProfile>();
+
+/** Who the remembered profiles were read for. */
+let scope = "";
+
+/**
+ * Forget every profile when `next` (who is signed in, and which areas they
+ * can see) differs from the scope the cache was filled for.
+ */
+export function scopeProfileCache(next: string): void {
+  if (next === scope) return;
+  scope = next;
+  entries.clear();
+}
 
 /** The profile for this exact geometry, or null if it has not been sampled. */
 export function cachedProfile(key: string): CachedProfile | null {
@@ -52,10 +71,10 @@ export function cacheProfile(key: string, profile: CachedProfile): void {
   }
 }
 
-/** Test seam. Nothing in Logjam Web clears this: a tab reload is the only reset,
- *  and a profile cannot go stale for geometry that has not changed. */
+/** Test seam; Logjam Web empties the cache through `scopeProfileCache`. */
 export function clearProfileCache(): void {
   entries.clear();
+  scope = "";
 }
 
 /** How many lines are remembered. For the test, and for nothing else. */

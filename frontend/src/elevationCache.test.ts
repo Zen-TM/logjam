@@ -4,6 +4,7 @@ import {
   cachedProfile,
   cachedProfileCount,
   clearProfileCache,
+  scopeProfileCache,
   type CachedProfile,
 } from "./elevationCache";
 
@@ -71,5 +72,22 @@ describe("the elevation profile cache", () => {
 
     expect(cachedProfile("line-0")?.gainM).toBe(0);
     expect(cachedProfile("line-1")).toBeNull();
+  });
+});
+
+describe("who the cache was filled for", () => {
+  // Mutation: keep the cache across a change of user or of visible areas, and
+  // the next person to sign in on the tab, or a sharee whose share was
+  // revoked, is handed heights read from an area they cannot see.
+  it("forgets every profile when the user or their areas change", () => {
+    scopeProfileCache("true,area-1");
+    cacheProfile("[[150,-33]]", profile(1));
+    scopeProfileCache("true,area-1");
+    expect(cachedProfile("[[150,-33]]")?.gainM).toBe(1);
+    scopeProfileCache("true");
+    expect(cachedProfileCount()).toBe(0);
+    cacheProfile("[[150,-33]]", profile(2));
+    scopeProfileCache("false");
+    expect(cachedProfileCount()).toBe(0);
   });
 });

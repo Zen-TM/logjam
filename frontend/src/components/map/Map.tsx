@@ -53,6 +53,8 @@ export type { SnapMode };
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
+// The Terrain group's tiles once the user can see a sharpened area.
+maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
 
 // Decide whether a MapLibre source error means the PMTiles archive is
 // DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
@@ -114,7 +116,12 @@ import {
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
-import { TERRAIN_ENTRIES } from "./terrainEntries";
+import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
+import {
+  TERRAIN_PROTOCOL,
+  isAbsentTerrainTile,
+  terrainTile,
+} from "./terrainRouter";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   BASEMAP_CATALOG,
@@ -737,6 +744,8 @@ function Map({
     /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
     format?: "raster" | "vector" | "slope" | "hillshade";
     attribution?: string;
+    /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
+    tiles?: RoutedTiles;
   }[];
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
@@ -1002,6 +1011,9 @@ function Map({
   // Topo entries whose transient (non-terminal) load error was already logged
   // this session — one console line per source, not one per flaky tile.
   const transientTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Where each Terrain source reads from: the statewide archive, or the router
+  // for one set of sharpened areas. A change rebuilds the source.
+  const terrainSourceFromRef = useRef(new globalThis.Map<string, string>());
   const onTopoSourceUnavailableRef = useRef(onTopoSourceUnavailable);
   useEffect(() => {
     onTopoSourceUnavailableRef.current = onTopoSourceUnavailable;
@@ -1110,6 +1122,8 @@ function Map({
       }
       const entryId = sourceId.slice("topo-src-".length);
       if (failedTopoSourcesRef.current.has(entryId)) return;
+      // The router's way of saying "draw the parent": not an error at all.
+      if (isAbsentTerrainTile(event.error)) return;
 
       if (!isTerminalTopoSourceError(event.error)) {
         // Non-terminal: do NOT tear down or blacklist — retrying is correct.
@@ -2620,18 +2634,39 @@ function Map({
     }
 
     // Add sources + layers for new entries
-    layers.forEach(({ id, pmtilesUrl, format, attribution }) => {
+    layers.forEach(({ id, pmtilesUrl, format, attribution, tiles }) => {
       // Known-missing source (PMTiles load already failed this session) — do
       // not re-add it on layer toggles, or the 404 retry spam returns.
       if (failedTopoSourcesRef.current.has(id)) return;
       const srcId = `topo-src-${id}`;
       const fmt = format ?? "raster";
+      // A Terrain source made for another set of areas (or for none) has the
+      // wrong zooms and holds tiles from the wrong archives: rebuild it.
+      if (TERRAIN_LAYER_KEYS.some((key) => TERRAIN_ENTRIES[key].id === id)) {
+        const reads = tiles?.template ?? pmtilesUrl;
+        const before = terrainSourceFromRef.current.get(srcId);
+        if (before !== undefined && before !== reads && map.getSource(srcId)) {
+          for (const lid of ownedLayerIds(id))
+            if (map.getLayer(lid)) map.removeLayer(lid);
+          map.removeSource(srcId);
+        }
+        terrainSourceFromRef.current.set(srcId, reads);
+      }
+      // An archive's own TileJSON, or the router's tiles with its zooms.
+      const from = tiles
+        ? {
+            tiles: [tiles.template],
+            minzoom: tiles.minzoom,
+            maxzoom: tiles.maxzoom,
+            bounds: [...tiles.bounds] as [number, number, number, number],
+          }
+        : { url: `pmtiles://${pmtilesUrl}` };
 
       if (fmt === "slope" || fmt === "hillshade") {
         if (!map.getSource(srcId)) {
           map.addSource(srcId, {
             type: "raster-dem",
-            url: `pmtiles://${pmtilesUrl}`,
+            ...from,
             tileSize: 256,
             encoding: "terrarium",
             attribution,
@@ -2668,7 +2703,7 @@ function Map({
         } else {
           map.addSource(srcId, {
             type: "vector",
-            url: `pmtiles://${pmtilesUrl}`,
+            ...from,
             attribution,
           });
         }

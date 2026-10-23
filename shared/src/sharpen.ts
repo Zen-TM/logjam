@@ -109,7 +109,10 @@ export function demSourcesFor(
 }
 
 /** Where a terrain tile comes from: the statewide archive, an area's, or none. */
-export type TerrainTileAnswer = "statewide" | "absent" | SharpenedArea;
+export type TerrainTileAnswer<A extends SharpenedArea = SharpenedArea> =
+  | "statewide"
+  | "absent"
+  | A;
 
 const holds = (
   range: readonly [number, number, number, number],
@@ -132,13 +135,13 @@ const holds = (
  * the z14 ancestor, else statewide. Deeper zooms overzoom z14, so a contour
  * tile is never absent. Guard: `sharpen.test.ts`.
  */
-export function terrainTileArchive(
-  areas: readonly SharpenedArea[],
+export function terrainTileArchive<A extends SharpenedArea>(
+  areas: readonly A[],
   layer: TerrainArchiveLayer,
   z: number,
   x: number,
   y: number,
-): TerrainTileAnswer {
+): TerrainTileAnswer<A> {
   const ordered = [...areas].sort(compareSharpenedAreas);
   if (layer === "contours") {
     if (z < 14) return "statewide";
