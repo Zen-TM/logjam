@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lat2tileY, RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
+import { lat2tileY, RASTER_TEMPLATE_DEFAULTS, tileY2lat } from "@logjam/shared";
 import {
   decodeTerrarium,
   hillshadePixels,
@@ -11,8 +11,6 @@ import {
 const SIZE = 8;
 const ZOOM = 15;
 const TILE_Y = lat2tileY(-33.7, ZOOM);
-// One z15 pixel here is about 4 m across.
-const PIXEL_M = 4;
 
 function plane(rise: (x: number, y: number) => number): DemGrid {
   const values = new Float32Array(SIZE * SIZE);
@@ -29,8 +27,8 @@ const centre = (pixels: Uint8ClampedArray) => {
 describe("hillshadePixels", () => {
   // y counts down the grid, so rising with x and y is ground that faces
   // north-west, toward the light at 335°.
-  const facingLight = plane((x, y) => (x + y) * 0.3 * PIXEL_M);
-  const facingAway = plane((x, y) => -(x + y) * 0.3 * PIXEL_M);
+  const facingLight = plane((x, y) => (x + y) * 1.2);
+  const facingAway = plane((x, y) => -(x + y) * 1.2);
 
   // Mutation: take the north row from the south one in either derivative, and
   // the light lands on the far side of the hill.
@@ -55,20 +53,63 @@ describe("hillshadePixels", () => {
     ).toBe(0);
   });
 
+  // The ground size of one z15 pixel on the centre row.
+  const centreLat = tileY2lat(TILE_Y + (SIZE / 2 + 0.5) / 256, ZOOM);
+  const pixelM =
+    (40075016.686 * Math.cos((centreLat * Math.PI) / 180)) / (256 * 2 ** ZOOM);
+
+  // MapLibre shades a slope as if it were atan(0.625 × tan(slope)), however
+  // far the map is zoomed in: 45° shades as 32°. Mutation: change the 0.625,
+  // drop the cos(latitude), or leave out the tile size from the divisor.
+  it("shades a 45° face as MapLibre does", () => {
+    const shaded = Math.atan(0.625);
+    const alpha =
+      (1 - Math.cos(shaded)) * (1 - Math.sin(shaded)) + Math.sin(shaded);
+    const face = plane((x) => x * pixelM);
+    expect(centre(hillshadePixels(face, ZOOM, TILE_Y)).alpha).toBeCloseTo(
+      255 * alpha,
+      -0.5,
+    );
+  });
+
+  // Below z15 MapLibre steepens the shading of the coarser tiles. Mutation:
+  // drop the exaggeration.
+  it("steepens the shading of heights read below z15, as the map does", () => {
+    const at = (zoom: number) => {
+      const tileY = lat2tileY(-33.7, zoom);
+      const lat = tileY2lat(tileY + (SIZE / 2 + 0.5) / 256, zoom);
+      const pixel =
+        (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (256 * 2 ** zoom);
+      // The same 27° face at both zooms.
+      const face = plane((x) => x * 0.5 * pixel);
+      return centre(hillshadePixels(face, zoom, tileY)).alpha;
+    };
+    expect(at(13)).toBeGreaterThan(at(15) + 10);
+  });
+
   // Mutation: drop the clamp on the derivative. MapLibre stores it in a byte,
-  // so past ~30° every slope shades alike, and the print must too.
-  it("shades every steep face alike, as the screen does", () => {
+  // so past ~78° here every face shades alike, and the print must too.
+  it("shades every near-vertical face alike, as the screen does", () => {
     const steep = hillshadePixels(
-      plane((x) => x * 2 * PIXEL_M),
+      plane((x) => x * 6 * pixelM),
       ZOOM,
       TILE_Y,
     );
     const cliff = hillshadePixels(
-      plane((x) => x * 6 * PIXEL_M),
+      plane((x) => x * 12 * pixelM),
       ZOOM,
       TILE_Y,
     );
     expect(centre(cliff)).toEqual(centre(steep));
+    expect(
+      centre(
+        hillshadePixels(
+          plane((x) => x * 2 * pixelM),
+          ZOOM,
+          TILE_Y,
+        ),
+      ),
+    ).not.toEqual(centre(steep));
   });
 
   it("is clear wherever a neighbour has no height", () => {
