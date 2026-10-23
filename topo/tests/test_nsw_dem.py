@@ -462,6 +462,11 @@ class TestHalveMax(unittest.TestCase):
         grid = np.array([[1, 80, 10, 10], [5, 7, 10, 12]], np.float32)
         np.testing.assert_array_equal(halve_max(grid), [[80, 12]])
 
+    # Mutation: `SLOPE = Layer(..., halve, ...)` (ADR 0039): `halve_max` itself
+    # stays right and the test above passes, but the archive drops its cliffs.
+    def test_the_slope_layer_uses_it(self):
+        self.assertIs(SLOPE.reduce, halve_max)
+
     # Mutation: a plain max propagates NaN and the coast's edge pixels, next to
     # a no-data pixel, lose their slope at every zoom; a fill of 0 does the same
     # for a quad that is all no-data, which must stay empty.
