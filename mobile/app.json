@@ -79,10 +79,11 @@
         {
           "android": {
             "nativeVariant": "vulkan",
-            "nativeVersion": "13.5.0"
+            "nativeVersion": "13.5.0-logjam.1"
           }
         }
       ],
+      "./plugins/withPatchedMapLibre.js",
       [
         "expo-notifications",
         {

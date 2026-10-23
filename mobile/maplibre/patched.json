@@ -1,0 +1,8 @@
+{
+  "upstream": "13.5.0",
+  "version": "13.5.0-logjam.1",
+  "sha256": {
+    "aar": "",
+    "pom": ""
+  }
+}
