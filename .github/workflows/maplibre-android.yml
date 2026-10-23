@@ -1,0 +1,163 @@
+name: MapLibre Android (patched)
+
+# Logjam GPS builds against MapLibre Android with one line changed, until an
+# upstream release fixes the hillshade alignment (#587). This builds that
+# library from MapLibre's own sources and Makefile, as upstream's
+# android-release workflow does, and attaches it to the GitHub release
+# `maplibre-android-v<version>`, which mobile/plugins/withPatchedMapLibre.js
+# fetches at prebuild.
+#
+# A release is never rebuilt: the plugin pins its checksums, so a changed patch
+# or a new upstream is a new `version` in mobile/maplibre/patched.json. Any
+# patch edit turns "is built from the patches in git" in
+# mobile/src/patchedMapLibre.test.ts red and says so; review checks the bump.
+# Only main publishes, so a bump is two PRs: the patch and `version`, then,
+# once this has released it, the release's SHA256SUMS into that file. In
+# between, main's Android prebuild fails on the pins: tag no mobile release.
+#
+# Node is pinned like every workflow's (infra/scripts/check-node-version.py),
+# not to maplibre-native's .nvmrc; its npm install only fetches build tools.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/maplibre/**"
+      - ".github/workflows/maplibre-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maplibre-android
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      upstream: ${{ steps.version.outputs.upstream }}
+      version: ${{ steps.version.outputs.version }}
+      released: ${{ steps.released.outputs.released }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: version
+        run: |
+          echo "upstream=$(jq -r .upstream mobile/maplibre/patched.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version mobile/maplibre/patched.json)" >> "$GITHUB_OUTPUT"
+      - id: released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: maplibre-android-v${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "$TAG is already released; nothing to build."
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.released == 'false'
+    runs-on: ubuntu-latest
+    # Upstream builds the four ABIs in ~18 min on 16 cores; this runner has 4.
+    timeout-minutes: 300
+    # Read-only: third-party build code (submodules, npm, Gradle, CMake) runs
+    # here for an hour. Only the release job below can write, and it runs none.
+    permissions:
+      contents: read
+    env:
+      UPSTREAM: ${{ needs.check.outputs.upstream }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      # The submodules and four ABIs of objects outgrow the runner's free disk.
+      - uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: logjam
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: maplibre/maplibre-native
+          ref: android-v${{ needs.check.outputs.upstream }}
+          path: maplibre-native
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Apply the patch
+        run: git -C maplibre-native apply --verbose "$GITHUB_WORKSPACE"/logjam/mobile/maplibre/*.patch
+
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      - name: Build the Vulkan release AAR
+        working-directory: maplibre-native/platform/android
+        env:
+          IS_LOCAL_DEVELOPMENT: "false"
+        run: |
+          echo "cmake.dir=$(dirname "$(dirname "$(command -v cmake)")")" >> local.properties
+          npm install --ignore-scripts
+          RENDERER=vulkan BUILDTYPE=Release make apackage
+
+      # The POM is upstream's for the same release, so Gradle resolves the same
+      # dependencies. Without the Gradle-metadata marker: there is no .module.
+      - name: Package for Maven
+        run: |
+          mkdir dist
+          cp maplibre-native/platform/android/MapLibreAndroid/build/outputs/aar/MapLibreAndroid-vulkan-release.aar \
+            "dist/android-sdk-vulkan-$VERSION.aar"
+          curl -fsSL "https://repo1.maven.org/maven2/org/maplibre/gl/android-sdk-vulkan/$UPSTREAM/android-sdk-vulkan-$UPSTREAM.pom" |
+            sed -e "s#<version>$UPSTREAM</version>#<version>$VERSION</version>#" \
+              -e '/do_not_remove: published-with-gradle-metadata/d' > "dist/android-sdk-vulkan-$VERSION.pom"
+          grep -q "<version>$VERSION</version>" "dist/android-sdk-vulkan-$VERSION.pom"
+          (cd dist && sha256sum ./* > SHA256SUMS && cat SHA256SUMS)
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      UPSTREAM: ${{ needs.check.outputs.upstream }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist
+
+      - name: Release
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: maplibre-android-v${{ needs.check.outputs.version }}
+        run: |
+          gh release create "$TAG" ./* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "MapLibre Android $VERSION (patched)" --latest=false \
+            --notes "MapLibre Android $UPSTREAM (Vulkan) with mobile/maplibre/*.patch applied, for Logjam GPS until upstream fixes the hillshade alignment (#587). Built by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
