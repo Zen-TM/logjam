@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, NSW_5M, TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
   MAX_REGION_AREA_KM2,
@@ -14,6 +14,7 @@ import {
   lonLatToTile,
   planDemDownload,
   planRegionForBasemaps,
+  demClipMinZoom,
   planRegionTiles,
   regionEdgesKm,
   xyzToTmsRow,
@@ -245,6 +246,17 @@ describe("planRegionForBasemaps", () => {
         job.contours.p90Bytes +
         job.slope.p90Bytes,
     );
+  });
+
+  // Mutation: price the height clip at z15 alone and an area's estimate
+  // undercounts the z8-14 tiles the hillshade is drawn from offline.
+  it("prices the height clip at every zoom the hillshade is drawn at", () => {
+    const b = { west: 150.2, south: -33.78, east: 150.3, north: -33.69 };
+    const [clip] = planRegionForBasemaps(b, [], 15, maxZoomFor).demArchives;
+    const z15 = planRegionTiles(b, 15, 15).totalTiles;
+    expect(clip!.size.meanBytes).toBeGreaterThan(z15 * 24_000 * 1.5);
+    expect(demClipMinZoom(NSW_5M)).toBe(8);
+    expect(demClipMinZoom(TERRARIUM)).toBe(TERRARIUM.sampleZoom);
   });
 
   // Mutation: leave the contour clip out of the totals and the free-space

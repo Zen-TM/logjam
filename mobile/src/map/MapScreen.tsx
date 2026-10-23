@@ -1426,11 +1426,12 @@ export function MapScreen({
   const hillshadeResolved = useMemo(
     () =>
       terrainLayers.hillshade
-        ? resolveMapSource({ kind: "nsw-hillshade" }, ctx).filter(
-            (r) => r.status === "ok",
-          )
+        ? resolveMapSource(
+            { kind: "nsw-hillshade", viewport: viewportBbox },
+            ctx,
+          ).filter((r) => r.status === "ok")
         : [],
-    [terrainLayers.hillshade, ctx],
+    [terrainLayers.hillshade, viewportBbox, ctx],
   );
 
   /**
