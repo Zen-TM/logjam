@@ -18,12 +18,14 @@ import _native_stub  # noqa: F401,E402
 from _native_stub import is_stubbed  # noqa: E402
 
 from area_export import (  # noqa: E402
+    CELL_M,
     FORMATS,
     LAYERS,
     LAYERS_BY_FORMAT,
     AreaOutsideNsw,
     credit_line,
     mga_epsg,
+    mga_extent,
     plan,
     tile_range,
 )
@@ -134,6 +136,41 @@ class ArchiveReads(unittest.TestCase):
             (x, y) for x in range(4096) for y in range(4096) if (x, y) not in tiles
         )
         self.assertIsNone(archive.get(12, *absent))
+
+
+@unittest.skipUnless(
+    not is_stubbed("osgeo"), "needs real GDAL/PROJ (skipped under host stub)"
+)
+class MgaExtent(unittest.TestCase):
+    # Mutation: return the box itself as `around`, or swap floor and ceil, and
+    # the rectangle's corners (the box is rotated in MGA) come out no-data.
+    def test_the_mosaic_reaches_every_corner_of_the_rectangle(self):
+        from osgeo import osr
+
+        box = (150.28, -33.75, 150.36, -33.69)  # Katoomba, zone 56
+        epsg = mga_epsg((box[0] + box[2]) / 2)
+        rect, around = mga_extent(box, epsg)
+
+        self.assertTrue(all(v % CELL_M == 0 for v in rect), rect)
+        west, south, east, north = around
+        self.assertTrue(
+            west < box[0] and south < box[1] and east > box[2] and north > box[3],
+            (around, box),
+        )
+
+        wgs84, mga = osr.SpatialReference(), osr.SpatialReference()
+        wgs84.ImportFromEPSG(4326)
+        mga.ImportFromEPSG(epsg)
+        for srs in (wgs84, mga):
+            srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        to_mga = osr.CoordinateTransformation(wgs84, mga)
+        to_wgs84 = osr.CoordinateTransformation(mga, wgs84)
+        for lon, lat in [(x, y) for x in (box[0], box[2]) for y in (box[1], box[3])]:
+            x, y, _ = to_mga.TransformPoint(lon, lat)
+            self.assertTrue(rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3])
+        for x, y in [(x, y) for x in (rect[0], rect[2]) for y in (rect[1], rect[3])]:
+            lon, lat, _ = to_wgs84.TransformPoint(x, y)
+            self.assertTrue(west <= lon <= east and south <= lat <= north, (lon, lat))
 
 
 class SyncWithShared(unittest.TestCase):
