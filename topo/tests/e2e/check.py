@@ -182,6 +182,10 @@ def sharpened(job_id, lon, lat):
         result.get("ground") == "class-2",
         f"ground from the LAZ's class 2 (got {result.get('ground')})",
     )
+    check(
+        str(result.get("credit", "")).startswith("Elevation: derived from a LiDAR"),
+        "the result carries the survey's credit",
+    )
     check(not exists(job["s3_input_key"]), "input ZIP deleted")
     if not keys:
         return
