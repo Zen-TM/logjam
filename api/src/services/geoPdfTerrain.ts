@@ -9,6 +9,7 @@
 // tiles and draws the result.
 import {
   DEM_NO_DATA_BELOW,
+  metersPerPixel,
   demMetresFromRgb,
   parseRgbaHex,
   NSW_CONTOURS,
@@ -138,14 +139,20 @@ export function hillshadePixels(
 }
 
 /**
- * The zoom a print reads the statewide contours at, or null when the map
- * would show none: Logjam Web takes the archive's minzoom from its header
- * and draws nothing at a display zoom below it.
+ * The zoom a print at 1:`scale` reads the statewide contours at, or null when
+ * Logjam Web would show none at that scale: it loads the archive as a vector
+ * source, which asks for nothing below the minzoom in the archive's header.
+ * The map's camera zoom is 512-based (mapZoom.ts), so it is read through
+ * `metersPerPixel`, at one CSS pixel (1/96 in) of screen per `scale` of ground.
  */
 export function nswContourZoom(
-  styleZoom: number,
+  scale: number,
+  latDeg: number,
   overlayZoom: number,
 ): number | null {
-  if (styleZoom < NSW_CONTOURS.minzoom) return null;
+  const cameraZoom = Math.log2(
+    metersPerPixel(latDeg, 0) / ((scale * 0.0254) / 96),
+  );
+  if (cameraZoom < NSW_CONTOURS.minzoom) return null;
   return Math.min(overlayZoom, NSW_CONTOURS.maxzoom);
 }

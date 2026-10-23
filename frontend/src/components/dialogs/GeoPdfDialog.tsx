@@ -176,6 +176,8 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
+
 function GeoPdfDialog({
   open,
   onClose,
@@ -497,15 +499,20 @@ function GeoPdfDialog({
     () => templateMode || ownJobInArea(completedTopoJobs, extentState),
     [completedTopoJobs, extentState, templateMode],
   );
+  // A template's Terrain layers follow the map, and turn on only if the user
+  // has a job of their own anywhere (an area of nothing counts every one).
+  const jobInArea = templateMode
+    ? ownJobInArea(completedTopoJobs, NO_AREA)
+    : lidarOverlap;
   const overlays = useMemo(
     () =>
       shownOverlays(
         selectedOverlays,
         terrainFollowsMap,
         terrainLayers,
-        lidarOverlap,
+        jobInArea,
       ),
-    [selectedOverlays, terrainFollowsMap, terrainLayers, lidarOverlap],
+    [selectedOverlays, terrainFollowsMap, terrainLayers, jobInArea],
   );
 
   // Display helpers for coord mode

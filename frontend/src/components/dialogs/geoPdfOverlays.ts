@@ -61,6 +61,10 @@ export function ownJobInArea(
  * the map shows it (shared/DESIGN.md §11, a preview shows the result as it
  * will be made), and on wherever a job of theirs in the area draws its own,
  * which it printed before the statewide layers existed.
+ *
+ * A job in the area turns the layer on for the whole sheet, statewide
+ * included, whether or not the map shows that job: the wire names cannot tell
+ * the job's layer from the statewide one.
  */
 export function shownOverlays(
   chosen: ReadonlySet<string>,

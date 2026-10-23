@@ -295,37 +295,30 @@ describe("GeoPDF over the statewide heights (alice)", () => {
         Body: readFileSync(fixture),
       }),
     );
+    // Left in place afterwards, as elevation.test.ts leaves it: a developer's
+    // stack then still has heights at Katoomba.
     const extent = extentFor({}, KATOOMBA);
     const config = { ...CONFIG, extent };
-    try {
-      const plain = await mapImage((await renderGeoPdf(config)).pdf);
-      const shaded = await mapImage(
-        (await renderGeoPdf({ ...config, overlays: ["hillshade"] })).pdf,
-      );
-      expect(
-        tiles.length,
-        "a worker container rendered: unset ECS_SUBNETS",
-      ).toBeGreaterThan(0);
+    const plain = await mapImage((await renderGeoPdf(config)).pdf);
+    const shaded = await mapImage(
+      (await renderGeoPdf({ ...config, overlays: ["hillshade"] })).pdf,
+    );
+    expect(
+      tiles.length,
+      "a worker container rendered: unset ECS_SUBNETS",
+    ).toBeGreaterThan(0);
 
-      // The slice spans 150.311–150.329 E, 33.700–33.705 S: the top of the
-      // page, from about a third of the way across. Nothing is drawn below it.
-      const fx = (lon: number) =>
-        (lon - extent.west) / (extent.east - extent.west);
-      const fy = (lat: number) =>
-        (latToMercY(extent.north) - latToMercY(lat)) /
-        (latToMercY(extent.north) - latToMercY(extent.south));
-      expect(
-        differing(plain, shaded, fx(150.313), 0, fx(150.327), fy(-33.704)),
-      ).toBeGreaterThan(0);
-      expect(differing(plain, shaded, 0, 0.4, 0.4, 0.7)).toBe(0);
-      expect(differing(plain, shaded, 0.45, 0.75, 1, 1)).toBeGreaterThan(0);
-    } finally {
-      await s3.send(
-        new DeleteObjectCommand({
-          Bucket: process.env.S3_BUCKET_TOPO,
-          Key: NSW_5M.archivePath,
-        }),
-      );
-    }
+    // The slice spans 150.311–150.329 E, 33.700–33.705 S: the top of the
+    // page, from about a third of the way across. Nothing is drawn below it.
+    const fx = (lon: number) =>
+      (lon - extent.west) / (extent.east - extent.west);
+    const fy = (lat: number) =>
+      (latToMercY(extent.north) - latToMercY(lat)) /
+      (latToMercY(extent.north) - latToMercY(extent.south));
+    expect(
+      differing(plain, shaded, fx(150.313), 0, fx(150.327), fy(-33.704)),
+    ).toBeGreaterThan(0);
+    expect(differing(plain, shaded, 0, 0.4, 0.4, 0.7)).toBe(0);
+    expect(differing(plain, shaded, 0.45, 0.75, 1, 1)).toBeGreaterThan(0);
   }, 150_000);
 });

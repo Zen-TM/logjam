@@ -470,19 +470,20 @@ export async function generateGeoPdf(
     // The statewide Terrain group comes first, under every LiDAR job's own
     // layers, as Logjam Web stacks them: shading, slope, then contours. A
     // terrarium layer is read at its own deepest zoom when the print wants a
-    // deeper one, and stretched.
+    // deeper one, and stretched. Never deeper than the canvas, so a grid is
+    // never larger than the map image (drawTerrarium's memory note).
     const extent = config.extent;
-    const demZoom = (maxzoom: number) => Math.min(overlayZoom, maxzoom);
+    const demZoom = (maxzoom: number) => Math.min(zoom, overlayZoom, maxzoom);
     if (config.overlays.includes("hillshade")) {
-      const zoom = demZoom(NSW_HILLSHADE.maxzoom);
+      const shadeZoom = demZoom(NSW_HILLSHADE.maxzoom);
       const drew = await drawTerrarium(
         mapCtx,
         await openArchive(topoBucket, NSW_HILLSHADE.archivePath, "hillshade"),
-        zoom,
+        shadeZoom,
         extent,
         nativeW,
         nativeH,
-        (grid, tileY, out) => hillshadePixels(grid, zoom, tileY, out),
+        (grid, tileY, out) => hillshadePixels(grid, shadeZoom, tileY, out),
         true,
       );
       if (drew) drawnTerrain.add("hillshade");
@@ -501,7 +502,7 @@ export async function generateGeoPdf(
       );
       if (drew) drawnTerrain.add("slope");
     }
-    const contourZoom = nswContourZoom(styleZoom, overlayZoom);
+    const contourZoom = nswContourZoom(config.scale, centreLat, overlayZoom);
     const contourArchive =
       contourZoom !== null &&
       drawsNswContours(config.baseLayer, config.overlays.includes("contours"))
@@ -887,13 +888,16 @@ async function openArchive(
  * turn it into pixels with `paint`, and stretch those onto the map. Returns
  * whether any tile had data, so a layer with none is not credited.
  *
- * Memory: the grid is the map's canvas size at most (the terrain zoom is never
- * deeper than the canvas's) plus a ring of tiles, held three ways at once: the
- * canvas, its pixel bytes (painted over in place) and the decoded floats,
- * 12 bytes a pixel. At the 400 MB canvas cap (about 105 Mpx, plus the ring)
- * that peaks near 1.4 GB beside the 0.4 GB map canvas: under 2 GB of the
- * GeoPDF task's 4 GiB. One layer at a time, and the grid's surface is let go
- * as soon as it is drawn.
+ * Memory: `zoom` is never deeper than the canvas's (`demZoom`), so the grid
+ * is the map image's size at most, plus up to a tile on each side. It is held
+ * three ways at once: the canvas, its pixel bytes (painted over in place) and
+ * the decoded floats, 12 bytes a pixel. It is drawn through the context's
+ * transform: in node-canvas a scaled 5-argument drawImage first copies the
+ * whole source into a scratch surface at the destination's size, and this
+ * does not. At the 400 MB canvas cap (about 105 Mpx, 116 Mpx with the tiles
+ * around it) that peaks near 1.4 GB beside the 0.4 GB map image: about
+ * 1.8 GB of the GeoPDF task's 4 GiB. One layer at a time, and the grid's
+ * surface is let go as soon as it is drawn.
  */
 async function drawTerrarium(
   mapCtx: CanvasRenderingContext2D,
@@ -951,14 +955,18 @@ async function drawTerrarium(
   paint(heights, t.minTileY, pixels.data);
   gridCtx.putImageData(pixels, 0, 0);
   const smoothing = mapCtx.imageSmoothingEnabled;
+  mapCtx.save();
   mapCtx.imageSmoothingEnabled = smooth;
-  mapCtx.drawImage(
-    grid,
+  mapCtx.setTransform(
+    t.scaleX,
+    0,
+    0,
+    t.scaleY,
     -t.offsetX * t.scaleX,
     -t.offsetY * t.scaleY,
-    width * t.scaleX,
-    height * t.scaleY,
   );
+  mapCtx.drawImage(grid, 0, 0);
+  mapCtx.restore();
   mapCtx.imageSmoothingEnabled = smoothing;
   // Resizing frees the surface now rather than at the next collection.
   grid.width = 0;

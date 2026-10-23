@@ -46,6 +46,9 @@ describe("shownOverlays", () => {
     hillshade: false,
   };
 
+  // Mutation: turn every Terrain layer on when no job is in the area
+  // (`true || jobInArea`), and a map showing contours alone prints slope and
+  // shading.
   it("opens on the Terrain layers the map shows, and every LiDAR-only one", () => {
     const shown = shownOverlays(seedOverlays(), true, mapShowsContours, false);
     expect([...shown].sort()).toEqual(

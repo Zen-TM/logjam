@@ -345,3 +345,28 @@ describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
     expect(slope().checked).toBe(false);
   });
 });
+
+// A new template has no area: its Terrain layers follow the map's switches,
+// and a job's own layers turn them on only for a user who has one. Mutation:
+// hand `shownOverlays` the template's `lidarOverlap` (always true), and a
+// user with no LiDAR job saves slope and shading for every sheet.
+describe("GeoPdfDialog, a new template's Terrain layers", () => {
+  const slope = () =>
+    screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement;
+  const ownJob = {
+    syncRole: "owner",
+    footprint: null,
+  } as CompletedTopoJob;
+
+  it("follows the map for a user with no job", () => {
+    render(dialog({ open: true, templateMode: true }));
+    expect(slope().checked).toBe(false);
+  });
+
+  it("turns on for a user with a job of their own", () => {
+    render(
+      dialog({ open: true, templateMode: true, completedTopoJobs: [ownJob] }),
+    );
+    expect(slope().checked).toBe(true);
+  });
+});
