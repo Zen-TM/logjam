@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const held = vi.hoisted(() => new Map<string, Set<number>>());
 vi.mock("pmtiles", () => ({
   PMTiles: class {
-    constructor(private url: string) {}
+    url: string;
+    constructor(url: string) {
+      this.url = url;
+    }
     async getZxy(z: number) {
       return held.get(this.url)?.has(z)
         ? { data: new TextEncoder().encode(`${this.url}@${z}`).buffer }
