@@ -237,25 +237,29 @@ class TestGround(unittest.TestCase):
             dem_plan([5.0, 5.0], has_laz=False)
         self.assertIn("5 m", str(ctx.exception))
 
-    def test_no_class_2_is_refused(self):
+    def test_no_ground_is_refused(self):
         with self.assertRaises(CannotSharpen) as ctx:
             class2_cell(0, 4e6)
-        self.assertIn("no ground", str(ctx.exception))
+        self.assertIn("couldn't map any ground", str(ctx.exception))
         self.assertEqual(class2_cell(int(0.12 * 4e6), 4e6), 2)
 
 
 class TestGroundSteps(unittest.TestCase):
     """The ground steps' calls, with PDAL and GDAL mocked.
 
-    Mutations that turn it red: an SMRF (or any re-classifying) fallback when
-    class 2 is empty; the DEM mosaic at the default resolution, or a coarser
+    Mutations that turn it red: SMRF run on a survey that has class 2 in any
+    tile, or not run when no tile has it; SMRF on the noise or overlap
+    points, or on top of the survey's own classes; the DEM mosaic at the default resolution, or a coarser
     DEM upsampled nearest (2 x 2 blocks in the hillshade), whether dem_ground
     stops asking or merge_dem_tiles stops forwarding; require_ground's call
     removed, so a ground grid with no height goes on to claim the whole area;
     and TIN results collected without a progress write (the reaper fails a
     long dense job while it works)."""
 
-    def test_class_2_only_and_never_smrf(self):
+    def laz_ground(self, points):
+        """laz_ground on two tiles with PDAL mocked: `points(name)` is the
+        point count of a file it writes. Returns (PDAL commands, result)."""
+        from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
         import sharpen
@@ -266,27 +270,61 @@ class TestGroundSteps(unittest.TestCase):
             calls.append(command)
             return ""
 
-        summary = {
-            "bounds": {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000},
-            "num_points": 0,
-        }
+        def summary(path):
+            bounds = {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000}
+            return {"bounds": bounds, "num_points": points(Path(path).name)}
+
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(sharpen, "run", side_effect=fake_run),
-            mock.patch.object(sharpen, "las_summary", return_value=summary),
+            mock.patch.object(sharpen, "las_summary", side_effect=summary),
             mock.patch.object(
                 sharpen.pipeline,
                 "select_surveys_by_layer",
                 return_value=mock.Mock(terrain_tiles=["a.laz", "b.laz"]),
             ),
+            mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
+            mock.patch.object(sharpen, "_tin_tile", side_effect=lambda job: job[4]),
+            mock.patch.object(sharpen, "available_memory", return_value=2**34),
+            mock.patch.object(sharpen.pipeline, "merge_dem_tiles"),
+            mock.patch.object(sharpen.pipeline, "_write_progress"),
         ):
-            with self.assertRaises(CannotSharpen) as ctx:
-                sharpen.laz_ground([Path("a.laz")], "g.tif", Path(tmp), 2)
-        self.assertIn("no ground", str(ctx.exception))
+            result = sharpen.laz_ground([Path("a.laz")], "g.tif", Path(tmp), 2)
+        return [" ".join(c) for c in calls], result
+
+    def test_class_2_while_any_tile_has_it(self):
+        # Tile b has no class 2, but a does: b is left to the fill, never SMRF.
+        calls, result = self.laz_ground(
+            lambda name: 500_000 if name == "ground-0.las" else 0
+        )
+        self.assertEqual(result, (16, "class-2"))
         self.assertEqual(len(calls), 2)
         for command in calls:
             self.assertIn("--filters.range.limits=Classification[2:2]", command)
-            self.assertNotIn("smrf", " ".join(command).lower())
+            self.assertNotIn("smrf", command.lower())
+
+    def test_smrf_only_when_no_tile_has_class_2(self):
+        calls, result = self.laz_ground(
+            lambda name: 500_000 if name.startswith("ground-smrf") else 0
+        )
+        self.assertEqual(result, (16, "smrf"))
+        smrf = [c for c in calls if " smrf " in c]
+        self.assertEqual(len(smrf), 2)
+        for command in smrf:
+            # Noise and overlap dropped, every class wiped before SMRF.
+            self.assertIn("Classification![7:7]", command)
+            self.assertIn("Classification![12:12]", command)
+            self.assertIn("Classification![18:18]", command)
+            self.assertIn("Classification[:]=0", command)
+        # Its ground is then taken as class 2 is.
+        self.assertEqual(
+            sum("Classification[2:2]" in c and "smrf-" in c for c in calls), 2
+        )
+
+    def test_smrf_finding_no_ground_is_refused(self):
+        with self.assertRaises(CannotSharpen) as ctx:
+            self.laz_ground(lambda name: 0)
+        self.assertIn("couldn't map any ground", str(ctx.exception))
 
     def test_dems_mosaic_at_the_finest_cell_upsampled_bilinear(self):
         from unittest import mock

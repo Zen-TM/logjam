@@ -438,8 +438,9 @@ survey's own cell: `heights.pmtiles` and `slope.pmtiles` (terrarium PNG,
 z15 to z16 for 2 m ground or z17 for 1 m) and `contours.pmtiles` (10 m
 lines at z14). Where the survey has no ground, each tile holds the statewide
 5 m data, so a client takes every tile from one archive. Ground is the ZIP's
-ELVIS DEM, or a TIN of the survey's class 2 when it has none; a ZIP with
-neither, or with only 5 m DEMs, fails with a sentence for its owner.
+ELVIS DEM, or a TIN of the survey's class 2 when it has none, or of
+SMRF's ground for a survey with no class 2 at all; a ZIP with only 5 m DEMs
+fails with a sentence for its owner.
 
 To run it by hand, put the two statewide archives in `./output/statewide`,
 or a clip of them over the area (the [NSW 5 m DEM
