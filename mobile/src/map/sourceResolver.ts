@@ -78,10 +78,12 @@ export type ResolvedTileSource =
 export interface MapArtifact {
   id: string;
   /**
-   * `dem-region` is the odd one out: it is never resolved to a tile source,
-   * because nothing draws it. It holds the terrarium tiles the elevation
-   * sampler reads offline (`offline/demLookup.ts`), and exists here so it is
-   * registered, sized, grouped and deleted like every other downloaded file.
+   * `dem-region` is the odd one out: the worldwide terrarium clips are never
+   * resolved to a tile source, because nothing draws them. They hold the
+   * terrarium tiles the elevation sampler reads offline
+   * (`offline/demLookup.ts`), and exist here so they are registered, sized,
+   * grouped and deleted like every other downloaded file. The `nsw-5m` clip is
+   * also drawn, as the Terrain group's hillshade (`holdsHillshade`).
    */
   kind:
     | "basemap-region"
@@ -312,8 +314,8 @@ function resolveStatewide(
   clips: MapArtifact["kind"] | null,
   ctx: ResolveContext,
   choose: (regions: MapArtifact[]) => MapArtifact[] = (regions) => regions,
-  /** Only the clips filed under this key (a `dem-region` holds several DEMs). */
-  logicalKey?: string,
+  /** Which of the `clips` kind may be drawn (a `dem-region` holds several DEMs). */
+  keep: (artifact: MapArtifact) => boolean = () => true,
 ): ResolvedTileSource[] {
   const logicalId = archive.id;
   if (ctx.connectivity === "online") {
@@ -329,10 +331,7 @@ function resolveStatewide(
       },
     ];
   }
-  const regions = ctx.artifacts.filter(
-    (a) =>
-      a.kind === clips && (logicalKey == null || a.logicalKey === logicalKey),
-  );
+  const regions = ctx.artifacts.filter((a) => a.kind === clips && keep(a));
   if (regions.length === 0) {
     return [
       {
@@ -344,6 +343,26 @@ function resolveStatewide(
   }
   return choose(regions).map((r) =>
     localArtifactSource(r, logicalId, archive.credit),
+  );
+}
+
+/**
+ * Whether a saved file can shade the Terrain group's hillshade offline: the
+ * `nsw-5m` height clip, and only one that holds the shallow zooms. A clip saved
+ * before `demClipMinZoom` is z15 alone, and draws nothing where the map is
+ * zoomed out, so it is no clip for this: an area saved that way says "Needs a
+ * connection" until it is saved again. Used by the layers sheet's switch and
+ * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
+ * Guard: `sourceResolver.test.ts` ("holdsHillshade").
+ */
+export function holdsHillshade(
+  artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+): boolean {
+  return (
+    artifact.kind === "dem-region" &&
+    artifact.logicalKey === NSW_5M.id &&
+    artifact.minzoom != null &&
+    artifact.minzoom <= NSW_HILLSHADE.minzoom
   );
 }
 
@@ -468,9 +487,7 @@ export function resolveMapSource(
         nearestRegion(ref.viewport),
       );
     // The saved height clip is registered as a plain raster (the sampler
-    // reads its bytes); here it is drawn as the DEM it is. A clip saved
-    // before the shade was offline holds z15 alone, so it shades only there
-    // (its `minzoom`), until the area is saved again.
+    // reads its bytes); here it is drawn as the DEM it is.
     case "nsw-hillshade":
       return resolveStatewide(
         NSW_HILLSHADE,
@@ -482,7 +499,7 @@ export function resolveMapSource(
             ...r,
             sourceType: "raster-dem",
           })),
-        NSW_5M.id,
+        holdsHillshade,
       );
     case "geopdf-import":
     case "vector-import":

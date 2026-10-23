@@ -41,7 +41,6 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  NSW_5M,
   takesNswContours,
   type SectionKeysOn,
   type TerrainLayerKey,
@@ -69,7 +68,11 @@ import { unavailableReasonText } from "../auth/capabilities";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import type { BasemapId, MapArtifact } from "./sourceResolver";
+import {
+  holdsHillshade,
+  type BasemapId,
+  type MapArtifact,
+} from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -207,9 +210,7 @@ export function MapLayersSheet({
         onChange={onTerrainLayerChange}
         basemapId={basemapId}
         online={online}
-        shadeSaved={artifacts.some(
-          (a) => a.kind === "dem-region" && a.logicalKey === NSW_5M.id,
-        )}
+        shadeSaved={artifacts.some(holdsHillshade)}
       />
     ),
     overlays: () => (
@@ -327,7 +328,7 @@ function TerrainTab({
   onChange: (key: TerrainLayerKey, on: boolean) => void;
   basemapId: BasemapId;
   online: boolean;
-  /** A saved area holds the height clip the shade is drawn from offline. */
+  /** A saved area holds a height clip the shade can be drawn from offline. */
   shadeSaved: boolean;
 }) {
   const styles = useStyles();

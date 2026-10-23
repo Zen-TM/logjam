@@ -3,6 +3,7 @@ import {
   basemapsCoveringViewport,
   resolveMapSource,
   hashKey,
+  holdsHillshade,
   type BasemapId,
   type MapArtifact,
   type ResolveContext,
@@ -429,20 +430,50 @@ describe("statewide slope and hillshade", () => {
       maxZoom: 15,
     });
   });
-  // Mutation: widen nothing for an old clip: it saved z15 alone, so it must
-  // keep reporting that and shade only there.
-  it("offline: a clip saved at z15 alone shades at z15 only", () => {
-    const old = artifact({
+  // Mutation: let a clip saved at z15 alone count (drop the `minzoom` test in
+  // `holdsHillshade`), and the sheet enables a switch that draws nothing below
+  // z15, and an old clip with a bigger bbox beats the new one.
+  it("holdsHillshade: only the nsw-5m clip that reaches z8", () => {
+    const clip = {
       kind: "dem-region",
       logicalKey: "nsw-5m",
+      minzoom: 8,
+    } as const;
+    expect(holdsHillshade(clip)).toBe(true);
+    expect(holdsHillshade({ ...clip, minzoom: 15 })).toBe(false);
+    expect(holdsHillshade({ ...clip, minzoom: null })).toBe(false);
+    expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
+    expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
+  });
+  it("offline: a clip saved at z15 alone gives no shade, and never beats a z8-15 one", () => {
+    const old = artifact({
+      id: "old",
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      bbox: [150, -34, 151, -33],
       minzoom: 15,
       maxzoom: 15,
     });
-    const [shade] = resolveMapSource(
+    expect(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        ctx({ connectivity: "offline", artifacts: [old] }),
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
+    const fresh = artifact({
+      id: "fresh",
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      bbox: [150.2, -33.8, 150.3, -33.7],
+      minzoom: 8,
+      maxzoom: 15,
+    });
+    const shade = resolveMapSource(
       { kind: "nsw-hillshade" },
-      ctx({ connectivity: "offline", artifacts: [old] }),
+      ctx({ connectivity: "offline", artifacts: [old, fresh] }),
     );
-    expect(shade).toMatchObject({ status: "ok", minZoom: 15, maxZoom: 15 });
+    expect(shade).toHaveLength(1);
+    expect(shade[0]).toMatchObject({ status: "ok", minZoom: 8 });
   });
   it("offline: no saved heights, no shade", () => {
     const only = artifact({ kind: "dem-region", logicalKey: "terrarium" });

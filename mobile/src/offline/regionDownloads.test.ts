@@ -369,6 +369,25 @@ describe("runRegionClip", () => {
     );
   });
 
+  // Mutation: revert `clipArchiveFor` to `dem.sampleZoom` and the height clip
+  // holds z15 alone, so the hillshade vanishes offline below z15 while the
+  // estimate still prices z8-14.
+  it("cuts the nsw-5m height clip from z8, not from the sampler's z15", async () => {
+    const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
+    expect((await run(dem)).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/dem/nsw-5m.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "dem-region",
+        logicalKey: "nsw-5m",
+        minzoom: 8,
+        // The fixture archive stops at z14; the clip's z15 is in `clipArchiveFor`.
+        maxzoom: 14,
+      }),
+    );
+  });
+
   // Mutation: save the clip of an area outside the archive and the first
   // line goes red with a file of a few low-zoom tiles.
   it("refuses a vector area outside the archive", async () => {

@@ -112,7 +112,10 @@ next Saved open (`sweepOrphanFiles`), as before.
 **The vector clip is always cut at full detail**, the archive's own deepest
 zoom (z15), whatever the detail rail says. The rail prices rasters, and a
 lower zoom drops the minor tracks snapping follows. A DEM's clip is its
-`sampleZoom` and the contours' their `minzoom` to `maxzoom`. No guard.
+`sampleZoom`, except the NSW 5 m one, which runs from z8 (`demClipMinZoom`;
+updated 2026-10-24), and the contours' their `minzoom` to `maxzoom`. Guard:
+`regionDownloads.test.ts` ("cuts the nsw-5m height clip from z8, not from the
+sampler's z15").
 
 **No area larger than `MAX_REGION_AREA_KM2` (1600 km², a 40 km square) can be
 saved, by anyone, whatever maps are picked.** `checkRegionCaps` in
@@ -169,9 +172,22 @@ Nothing new calls it.
   64 MB in 53 requests, and `SLOPE_TILE_BYTES` in
   `shared/src/mapRegionEstimate.ts` prices the statewide archive's at about
   71 MB.
-  Hillshade is not saved: MapLibre shades the height archive, and an area
-  keeps its heights at z15 alone, so offline a shade could only be drawn
-  close in. Everything else above stands.
+- **Update 2026-10-24: the NSW 5 m height clip is cut from z8 to z15, so
+  Logjam GPS draws the Terrain group's Hillshade offline.** MapLibre shades the
+  height archive itself, and a z15-only clip would shade only close in, so
+  `clipArchiveFor` cuts `nsw-5m` from `demClipMinZoom` (z8); the sampler still
+  reads z15 alone ([0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)),
+  and the worldwide terrarium clip is unchanged. `planRegionForBasemaps` prices
+  every zoom of it, about three and a half times the z15 bytes of the same box
+  (1.2 MB against 0.33 MB for a 24-tile Katoomba Falls box). A clip saved before
+  this holds z15 alone: `holdsHillshade` (`mobile/src/map/sourceResolver.ts`)
+  refuses it, so that area's Hillshade switch still says "Needs a connection"
+  until it is saved again, and there is no migration. Guards:
+  `regionDownloads.test.ts` ("cuts the nsw-5m height clip from z8, not from the
+  sampler's z15"), `mapRegionEstimate.test.ts` ("prices the height clip at
+  every zoom the hillshade is drawn at"), `sourceResolver.test.ts`
+  ("holdsHillshade", "a clip saved at z15 alone gives no shade"). Everything
+  else above stands.
 
 ## Consequences
 
