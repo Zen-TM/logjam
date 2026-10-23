@@ -476,6 +476,11 @@ model TopoJob {
   autoExportedAt      DateTime? @map("auto_exported_at")
   s3InputKey          String?   @map("s3_input_key")
   s3OutputKeys        Json?     @map("s3_output_keys")
+  // Null on a legacy job. /start writes { v: 1, vegetation } to mark a job to
+  // sharpen (topo/sharpen.py), and the worker replaces the mark with its
+  // result: { v, zmax, tiles15, coverage, ground, extracted, keys, vegetation }.
+  // keys names bucket objects, so it is owner-only, like s3OutputKeys.
+  sharpen             Json?
   // s3OutputKeys shape: { name: string, cogKey: string|null, pmtilesKey: string|null }[]
   // Raster layers (hillshade/vegetation/slope): cogKey set, pmtilesKey set (for in-app display).
   // Vector layers (contours/features): cogKey null, pmtilesKey set.
