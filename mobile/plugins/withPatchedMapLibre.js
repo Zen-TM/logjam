@@ -17,6 +17,12 @@
 // WHY THE CHECKSUMS. A release asset can be replaced; the sha256 in
 // `maplibre/patched.json` is committed and reviewed, so a build takes only the
 // file that was. A mismatch fails the prebuild rather than shipping it.
+// Guard: the `fetchVerified` tests in src/patchedMapLibre.test.ts.
+//
+// WHY EXCLUSIVE. Gradle orders `13.5.0-logjam.1` below `13.5.0`, so if Maven
+// Central could also serve the module, a dependency asking for 13.5.0 or later
+// would quietly win with the unpatched build. Only our folder may serve it, so
+// any other version fails the build instead.
 const {
   withDangerousMod,
   withProjectBuildGradle,
@@ -34,9 +40,9 @@ const ARTIFACT = "android-sdk-vulkan";
 const MAVEN_DIR = "maplibre-maven";
 const RELEASE_URL = `https://github.com/Zen-TM/logjam/releases/download/maplibre-android-v${patched.version}`;
 
-const REPOSITORY_LINE = `    maven { url "$rootDir/${MAVEN_DIR}"; content { includeModule("${GROUP}", "${ARTIFACT}") } }`;
+const REPOSITORY_LINE = `    exclusiveContent { forRepository { maven { url "$rootDir/${MAVEN_DIR}" } }; filter { includeModule("${GROUP}", "${ARTIFACT}") } }`;
 
-/** `android/build.gradle` with our Maven folder first in `allprojects`. */
+/** `android/build.gradle` with our Maven folder the only source of the module. */
 function addRepository(buildGradle) {
   if (buildGradle.includes(REPOSITORY_LINE)) return buildGradle;
   const anchor = /allprojects\s*\{\s*\n\s*repositories\s*\{\s*\n/;
@@ -56,7 +62,7 @@ async function fetchVerified(name, expected, dest) {
       `withPatchedMapLibre: maplibre/patched.json has no sha256 for ${name}`,
     );
   }
-  // A prebuild that already fetched it (kiosk, local) does not fetch again.
+  // A prebuild that keeps `android/` does not fetch again.
   if (fs.existsSync(dest) && sha256(fs.readFileSync(dest)) === expected) return;
   const url = `${RELEASE_URL}/${name}`;
   const response = await fetch(url);
@@ -107,3 +113,4 @@ function withPatchedMapLibre(config) {
 
 module.exports = withPatchedMapLibre;
 module.exports.addRepository = addRepository;
+module.exports.fetchVerified = fetchVerified;

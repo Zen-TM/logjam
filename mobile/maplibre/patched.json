@@ -2,6 +2,7 @@
   "upstream": "13.5.0",
   "version": "13.5.0-logjam.1",
   "sha256": {
+    "patch": "3d9879b451f41928247a57f8b5ee7344b0b28a6929f72ae31ca25bbb0cec81ac",
     "aar": "8452dd5a3a13162ff151c4f6cb05a66669a85d46d36a38cc944f01c75849969c",
     "pom": "fffc4dd51806e912fd16b6c803a55c9ef78f4cde3baed98efdb5ee2460d401d8"
   }

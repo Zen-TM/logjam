@@ -8,10 +8,16 @@ name: MapLibre Android (patched)
 # fetches at prebuild.
 #
 # A release is never rebuilt: the plugin pins its checksums, so a changed patch
-# or a new upstream is a new `version` in mobile/maplibre/patched.json. After a
-# first build, copy the release's SHA256SUMS into that file.
+# or a new upstream is a new `version` in mobile/maplibre/patched.json (guard:
+# "is built from the patches in git" in mobile/src/patchedMapLibre.test.ts).
+# Only main publishes, so a bump is two PRs: the patch and `version`, then,
+# once this has released it, the release's SHA256SUMS into that file.
+#
+# Node is pinned like every workflow's (infra/scripts/check-node-version.py),
+# not to maplibre-native's .nvmrc; its npm install only fetches build tools.
 on:
   push:
+    branches: [main]
     paths:
       - "mobile/maplibre/**"
       - ".github/workflows/maplibre-android.yml"
@@ -26,6 +32,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       upstream: ${{ steps.version.outputs.upstream }}
@@ -33,6 +40,8 @@ jobs:
       released: ${{ steps.released.outputs.released }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: version
         run: |
           echo "upstream=$(jq -r .upstream mobile/maplibre/patched.json)" >> "$GITHUB_OUTPUT"
@@ -55,8 +64,10 @@ jobs:
     runs-on: ubuntu-latest
     # Upstream builds the four ABIs in ~18 min on 16 cores; this runner has 4.
     timeout-minutes: 300
+    # Read-only: third-party build code (submodules, npm, Gradle, CMake) runs
+    # here for an hour. Only the release job below can write, and it runs none.
     permissions:
-      contents: write
+      contents: read
     env:
       UPSTREAM: ${{ needs.check.outputs.upstream }}
       VERSION: ${{ needs.check.outputs.version }}
@@ -75,6 +86,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: logjam
+          persist-credentials: false
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,6 +94,7 @@ jobs:
           ref: android-v${{ needs.check.outputs.upstream }}
           path: maplibre-native
           submodules: recursive
+          persist-credentials: false
 
       - name: Apply the patch
         run: git -C maplibre-native apply --verbose "$GITHUB_WORKSPACE"/logjam/mobile/maplibre/*.patch
@@ -116,6 +129,26 @@ jobs:
               -e '/do_not_remove: published-with-gradle-metadata/d' > "dist/android-sdk-vulkan-$VERSION.pom"
           grep -q "<version>$VERSION</version>" "dist/android-sdk-vulkan-$VERSION.pom"
           (cd dist && sha256sum ./* > SHA256SUMS && cat SHA256SUMS)
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      UPSTREAM: ${{ needs.check.outputs.upstream }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist
 
       - name: Release
         working-directory: dist
