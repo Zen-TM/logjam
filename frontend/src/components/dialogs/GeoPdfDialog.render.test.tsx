@@ -355,7 +355,17 @@ describe("GeoPdfDialog, a new template's Terrain layers", () => {
     screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement;
   const ownJob = {
     syncRole: "owner",
-    footprint: null,
+    footprint: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [150.31, -33.75],
+          [150.33, -33.75],
+          [150.33, -33.71],
+          [150.31, -33.75],
+        ],
+      ],
+    },
   } as CompletedTopoJob;
 
   it("follows the map for a user with no job", () => {
@@ -363,6 +373,9 @@ describe("GeoPdfDialog, a new template's Terrain layers", () => {
     expect(slope().checked).toBe(false);
   });
 
+  // Mutation: drop ownJobInArea's empty-area branch (or give a template
+  // `jobInArea = false`), and a user with a job of their own gets a template
+  // with Terrain off.
   it("turns on for a user with a job of their own", () => {
     render(
       dialog({ open: true, templateMode: true, completedTopoJobs: [ownJob] }),

@@ -954,7 +954,6 @@ async function drawTerrarium(
   pixels.data.fill(0);
   paint(heights, t.minTileY, pixels.data);
   gridCtx.putImageData(pixels, 0, 0);
-  const smoothing = mapCtx.imageSmoothingEnabled;
   mapCtx.save();
   mapCtx.imageSmoothingEnabled = smooth;
   mapCtx.setTransform(
@@ -967,7 +966,6 @@ async function drawTerrarium(
   );
   mapCtx.drawImage(grid, 0, 0);
   mapCtx.restore();
-  mapCtx.imageSmoothingEnabled = smoothing;
   // Resizing frees the surface now rather than at the next collection.
   grid.width = 0;
   return true;

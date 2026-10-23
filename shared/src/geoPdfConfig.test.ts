@@ -158,9 +158,6 @@ describe("validateGeoPdfTemplateConfig", () => {
 });
 
 describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
-  // The wire names stored templates carry. Mutation: build the list from
-  // TOPO_LAYERS again and drop a layer from it, and a saved template naming
-  // that layer stops validating.
   // Logjam Web offers and sends every TOPO_LAYERS name. Mutation: add a layer
   // to TOPO_LAYERS only, and every GeoPDF from Logjam Web is refused.
   it("holds every layer Logjam Web can send", () => {
@@ -168,6 +165,9 @@ describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
       expect(VALID_GEOPDF_OVERLAY_NAMES.has(layer.name)).toBe(true);
   });
 
+  // The wire names stored templates carry. Mutation: build the list from
+  // TOPO_LAYERS again and drop a layer from it, and a saved template naming
+  // that layer stops validating.
   it("is the five names a GeoPDF has always sent", () => {
     expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual([
       "contours",
