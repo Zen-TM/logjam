@@ -13,16 +13,7 @@
  * the share sheet; it never goes to the server, and callers must never log it.
  */
 import type { RoutePoint } from "./routeValidation.js";
-
-/** XML text escaping. Route names are user text and can contain & or <. */
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+import { escapeXml } from "./escapeXml.js";
 
 /** Six decimal places ≈ 0.1 m — past GPS precision, and keeps files small. */
 function coord(value: number): string {

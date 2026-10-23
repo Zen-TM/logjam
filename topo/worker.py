@@ -44,6 +44,7 @@ import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
 
 from worker_common import (
+    TOO_BIG,
     compose_database_url,
     create_notification,
     get_user_email,
@@ -64,6 +65,10 @@ GENERIC_FAILURE = (
 )
 
 
+class JobInputError(Exception):
+    """A ZIP the job cannot use; the message is the sentence its owner reads."""
+
+
 def safe_error_message(e: Exception) -> str:
     """The sentence the job's owner reads in both clients (shared/DESIGN.md §11).
 
@@ -71,10 +76,12 @@ def safe_error_message(e: Exception) -> str:
     no id. Which step failed stays in CloudWatch, with the full traceback.
     """
     msg = str(e)
+    if isinstance(e, JobInputError):
+        return msg
     if isinstance(e, subprocess.CalledProcessError):
         return GENERIC_FAILURE
     if isinstance(e, MemoryError) or "OOM" in msg or "exit code -9" in msg:
-        return "This area was too big to process. Try a smaller one."
+        return TOO_BIG
     if isinstance(e, RuntimeError):
         return GENERIC_FAILURE
     if isinstance(e, (OSError, IOError)):
@@ -279,7 +286,7 @@ def _heartbeat_loop(
     except Exception as e:
         log.warning(f"Heartbeat disabled (no DB connection): {e}")
         return
-    last_done = None
+    last = None
     # stop_event.wait returns True when set → exit promptly on subprocess end.
     while not stop_event.wait(interval):
         try:
@@ -288,9 +295,12 @@ def _heartbeat_loop(
             payload = json.loads(progress_path.read_text())
             done = payload.get("done")
             total = payload.get("total")
-            if done is None or done == last_done:
+            # By phase as well: sharpen.py's phases each count from 1, and a
+            # phase that starts on the last one's count is still progress
+            # (tests/test_heartbeat.py, "a new phase at the same count").
+            if done is None or (payload.get("phase"), done) == last:
                 continue
-            last_done = done
+            last = (payload.get("phase"), done)
             update_status(
                 conn,
                 job_id,
@@ -562,24 +572,160 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 # ── Core processing ───────────────────────────────────────────────────────────
 
 
+def run_with_heartbeat(cmd: list[str], job_id: str, progress_path: Path) -> int:
+    """Run a pipeline subprocess while a thread refreshes the job's progress
+    columns from its progress file (see _heartbeat_loop). Returns the exit code."""
+    stop_heartbeat = threading.Event()
+    heartbeat = threading.Thread(
+        target=_heartbeat_loop,
+        args=(job_id, progress_path, stop_heartbeat),
+        daemon=True,
+    )
+    heartbeat.start()
+    try:
+        return subprocess.run(cmd).returncode
+    finally:
+        stop_heartbeat.set()
+        heartbeat.join(timeout=5)
+
+
 def process_job(
     job: dict, tmp: str
+) -> tuple[list[dict], Path, bool, int, Optional[dict], Optional[dict]]:
+    """
+    Download the ZIP, then sharpen it or run the legacy pipeline, and upload
+    what it made. Returns (output_keys, footprint_local, osm_failed,
+    total_output_bytes, pipeline_metrics, sharpen): sharpen is the
+    `topo_jobs.sharpen` result for a job the API marked to sharpen, and None
+    for a legacy job.
+    """
+    s3_input_key = job["s3_input_key"]
+    zip_path = Path(tmp) / "input.zip"
+    log.info(f"Downloading {s3_input_key} …")
+    s3.download_file(BUCKET, s3_input_key, str(zip_path))
+    if job.get("sharpen"):
+        return process_sharpen(job, tmp, zip_path)
+    return (*process_legacy(job, tmp, zip_path), None)
+
+
+# contours.pmtiles is absent when no 10 m level crosses the area.
+SHARPEN_ARCHIVES = ("heights", "slope", "contours")
+
+
+def process_sharpen(
+    job: dict, tmp: str, zip_path: Path
+) -> tuple[list[dict], Path, bool, int, Optional[dict], dict]:
+    """A job marked to sharpen: `sharpen.py` builds the height, slope and
+    contour archives, and a ticked job also gets the legacy vegetation layer.
+
+    The mark (`{"v": 1, "vegetation": bool}`, written by the API's /start) is
+    replaced by the result: what sharpen.py reports, the archives' keys and
+    the tick (tests/test_worker_helpers.py `TestProcessSharpen`).
+    """
+    job_id = job["id"]
+    out = Path(tmp) / "sharpen"
+    metrics_path = Path(tmp) / "sharpen-metrics.json"
+    progress_path = Path(tmp) / "sharpen-progress.json"
+    cmd = [
+        "python3",
+        str(Path(__file__).parent / "sharpen.py"),
+        str(zip_path),
+        str(out),
+        "--workers",
+        str(os.cpu_count() or 4),
+        "--metrics-json",
+        str(metrics_path),
+        "--progress-file",
+        str(progress_path),
+    ]
+    log.info("Running sharpen …")
+    code = run_with_heartbeat(cmd, job_id, progress_path)
+    if code == 2 and (out / "error.json").exists():
+        raise JobInputError(json.loads((out / "error.json").read_text())["sentence"])
+    if code != 0:
+        raise RuntimeError(
+            f"sharpen.py exited with code {code} "
+            f"({'OOM kill' if code == -9 else 'non-zero exit'})"
+        )
+
+    result = json.loads((out / "sharpen.json").read_text())
+    pipeline_metrics = None
+    try:
+        pipeline_metrics = {
+            **json.loads(metrics_path.read_text()),
+            "pipeline": "sharpen",
+        }
+    except Exception as e:
+        log.warning(f"Failed to read metrics JSON (non-fatal): {e}")
+
+    total_output_bytes = 0
+    keys = {}
+    for name in SHARPEN_ARCHIVES:
+        local = out / f"{name}.pmtiles"
+        if name == "contours" and not local.exists():
+            continue
+        keys[name] = f"outputs/{job_id}/{name}.pmtiles"
+        log.info(f"Uploading {keys[name]} …")
+        s3.upload_file(
+            str(local),
+            BUCKET,
+            keys[name],
+            ExtraArgs={"ContentType": "application/vnd.pmtiles"},
+        )
+        total_output_bytes += local.stat().st_size
+
+    vegetation = bool(job["sharpen"].get("vegetation"))
+    output_keys: list[dict] = []
+    if vegetation:
+        veg_dir = Path(tmp) / "vegetation"
+        veg_dir.mkdir()
+        output_keys, _, _, veg_bytes, veg_metrics = process_legacy(
+            job, str(veg_dir), zip_path, layers="vegetation"
+        )
+        total_output_bytes += veg_bytes
+        # Charged with the job: credits come from wallSeconds
+        # (api/src/lib/computeCredits.ts), and so does the next estimate
+        # (tests/test_worker_helpers.py `TestProcessSharpen`).
+        # Only onto sharpen.py's own figure: without it the job falls back to
+        # its elapsed time, which already holds the vegetation pass.
+        veg_seconds = (veg_metrics or {}).get("wallSeconds")
+        sharpen_seconds = (pipeline_metrics or {}).get("wallSeconds")
+        if isinstance(veg_seconds, (int, float)) and isinstance(
+            sharpen_seconds, (int, float)
+        ):
+            pipeline_metrics = {
+                **pipeline_metrics,
+                "wallSeconds": sharpen_seconds + veg_seconds,
+                "vegetationWallSeconds": veg_seconds,
+            }
+
+    sharpen = {**result, "keys": keys, "vegetation": vegetation}
+    return (
+        output_keys,
+        out / "footprint.geojson",
+        False,
+        total_output_bytes,
+        pipeline_metrics,
+        sharpen,
+    )
+
+
+def process_legacy(
+    job: dict, tmp: str, zip_path: Path, layers: str = "all"
 ) -> tuple[list[dict], Path, bool, int, Optional[dict]]:
     """
-    Download ZIP, run topo pipeline, convert to PMTiles, upload all to S3.
+    Run the legacy topo pipeline, convert to PMTiles, upload all to S3.
     Returns (output_keys, footprint_local, osm_failed, total_output_bytes,
     pipeline_metrics).
     osm_failed is True when the Overpass fetch did not produce a GeoJSON
     (so the features layer will be empty/missing). pipeline_metrics is the
     parsed runtime metrics dict (or None if absent/unreadable).
-    """
-    s3_input_key = job["s3_input_key"]
-    job_id = job["id"]
 
-    # Download input ZIP from S3
-    zip_path = Path(tmp) / "input.zip"
-    log.info(f"Downloading {s3_input_key} …")
-    s3.download_file(BUCKET, s3_input_key, str(zip_path))
+    `layers="vegetation"` is the sharpen job's tick: that layer alone, with no
+    OSM fetch, no contours and no GeoJSON for the old export.
+    """
+    job_id = job["id"]
+    only_vegetation = layers == "vegetation"
 
     # Merge per-job raster template settings (TopoJob.layer_options) with the
     # vector style snapshot taken at job-submit time
@@ -605,16 +751,20 @@ def process_job(
         "--workers",
         str(os.cpu_count() or 4),
         "--layers",
-        "all",
-        "--export-geojson",
-        str(geojson_dir),
+        layers,
         "--export-footprint",
         str(geojson_dir),
     ]
+    if only_vegetation:
+        cmd.append("--skip-osm")
+    else:
+        cmd.extend(["--export-geojson", str(geojson_dir)])
 
     layer_options = job.get("layer_options")
     vector_style_snapshot = job.get("vector_style_snapshot")
     merged_settings = merge_settings(layer_options, vector_style_snapshot)
+    if only_vegetation:
+        merged_settings["contours"]["enabled"] = False
     settings_path = Path(tmp) / "settings.json"
     with open(settings_path, "w", encoding="utf-8") as f:
         json.dump(merged_settings, f)
@@ -636,22 +786,11 @@ def process_job(
     # Heartbeat thread refreshes the job's progress columns from progress.json
     # while the pipeline runs (see _heartbeat_loop). The main thread keeps the
     # blocking subprocess.run; the thread is signalled to stop when it returns.
-    stop_heartbeat = threading.Event()
-    heartbeat = threading.Thread(
-        target=_heartbeat_loop,
-        args=(job["id"], progress_path, stop_heartbeat),
-        daemon=True,
-    )
-    heartbeat.start()
-    try:
-        result = subprocess.run(cmd)
-    finally:
-        stop_heartbeat.set()
-        heartbeat.join(timeout=5)
-    if result.returncode != 0:
+    code = run_with_heartbeat(cmd, job["id"], progress_path)
+    if code != 0:
         raise RuntimeError(
-            f"pipeline.py exited with code {result.returncode} "
-            f"({'OOM kill' if result.returncode == -9 else 'non-zero exit'})"
+            f"pipeline.py exited with code {code} "
+            f"({'OOM kill' if code == -9 else 'non-zero exit'})"
         )
 
     # Best-effort: read the pipeline's runtime metrics file. A missing/partial
@@ -860,12 +999,15 @@ def main():
                 osm_failed,
                 total_output_bytes,
                 pipeline_metrics,
+                sharpen,
             ) = process_job(job, tmp)
 
             extra: dict = {
                 "s3_output_keys": output_keys,
                 "output_bytes": total_output_bytes,
             }
+            if sharpen:
+                extra["sharpen"] = sharpen
             if footprint_local and footprint_local.exists():
                 with open(footprint_local) as f:
                     fp_fc = json.load(f)

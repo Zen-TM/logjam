@@ -22,7 +22,9 @@ import {
   validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
   RASTER_TEMPLATE_DEFAULTS,
+  SHARPEN_NEW_JOBS,
   TOPO_UPLOAD_SIGN_MAX,
+  type SharpenedOverlay,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -44,6 +46,7 @@ import {
 } from "../lib/topoUpload";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { sharpenedAreaFrom } from "../services/sharpenedAreas";
 import {
   deleteSharesFor,
   directlySharedIds,
@@ -355,6 +358,7 @@ router.post(
     );
     const tailBytes = await tail.Body!.transformToByteArray();
     let verifiedTileCount: number | null = null;
+    let lazCount = 0;
     try {
       const entries = parseZipCentralDirectory(
         new Uint8Array(tailBytes),
@@ -370,6 +374,7 @@ router.post(
         );
       }
       verifiedTileCount = zipStats.tileCount || null;
+      lazCount = zipStats.lazCount;
     } catch (e) {
       if (e instanceof ElvisZipError) {
         throw new AppError(400, e.sentence);
@@ -405,6 +410,9 @@ router.post(
         data: {
           status: "pending",
           attemptCount: { increment: 1 },
+          ...(SHARPEN_NEW_JOBS
+            ? { sharpen: sharpenMark(lazCount, job.layerOptions) }
+            : {}),
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,
@@ -456,6 +464,17 @@ router.post(
   },
 );
 
+/**
+ * What /start writes to `TopoJob.sharpen` to send a job down the sharpen
+ * pipeline; the worker replaces it with its result. Vegetation needs point
+ * clouds, so it is ticked only for a ZIP that has them.
+ */
+export function sharpenMark(lazCount: number, layerOptions: unknown) {
+  const vegetation = (layerOptions as { vegetation?: { enabled?: unknown } })
+    ?.vegetation;
+  return { v: 1, vegetation: lazCount > 0 && vegetation?.enabled === true };
+}
+
 // GET /topo-jobs — list authenticated user's jobs
 router.get(
   "/",
@@ -503,6 +522,7 @@ router.get(
         footprint: true,
         createdAt: true,
         s3OutputKeys: true,
+        sharpen: true,
       },
     });
 
@@ -514,6 +534,15 @@ router.get(
     const expiresAt = new Date(
       Date.now() + presignTtlSeconds * 1000,
     ).toISOString();
+
+    const presign = (key: string) =>
+      getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: key }),
+        {
+          expiresIn: presignTtlSeconds,
+        },
+      );
 
     const jobsResult = await Promise.all(
       jobs.map(async (j) => {
@@ -534,14 +563,7 @@ router.get(
             )
             .map(async (o) => {
               const meta = layerMetaByName.get(o.name as TopoLayerName)!;
-              const pmtilesUrl = await getSignedUrl(
-                s3,
-                new GetObjectCommand({
-                  Bucket: TOPO_BUCKET,
-                  Key: o.pmtilesKey,
-                }),
-                { expiresIn: presignTtlSeconds },
-              );
+              const pmtilesUrl = await presign(o.pmtilesKey);
               return {
                 name: o.name as TopoLayerName,
                 format: meta.format,
@@ -549,12 +571,26 @@ router.get(
               };
             }),
         );
+        // A sharpened job's archives, in their own field so an old build,
+        // which reads only `layers`, ignores them (ADR 0040).
+        const area = sharpenedAreaFrom(j);
+        let sharpened: SharpenedOverlay | undefined;
+        if (area) {
+          const { keys, ...shown } = area;
+          sharpened = {
+            ...shown,
+            heightsUrl: await presign(keys.heights),
+            slopeUrl: await presign(keys.slope),
+            contoursUrl: keys.contours ? await presign(keys.contours) : null,
+          };
+        }
         return {
           jobId: j.id,
           name: j.name,
           createdAt: j.createdAt,
           footprint: j.footprint,
           layers,
+          ...(sharpened ? { sharpened } : {}),
           // Same rule as the job view above — the role is the whole answer,
           // and the owner's internal id is never emitted. This payload is a
           // derived overlay shape rather than a job row, so it stamps the role

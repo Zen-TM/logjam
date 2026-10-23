@@ -34,7 +34,7 @@ emit() {
 image_paths_for() {
   case "$1" in
     api) echo '^(\.dockerignore|api/(Dockerfile|package[^/]*\.json|prisma\.config\.ts|prisma/|tsconfig\.json|src/|assets/)|shared/(package[^/]*\.json|tsconfig\.json|src/))' ;;
-    worker) echo '^topo/(Dockerfile|requirements\.txt|worker\.py|pipeline\.py|export_worker\.py|email_send\.py|push_send\.py|worker_common\.py|build_place_registry\.py|build_nsw_dem\.py|renderers/|icons/)' ;;
+    worker) echo '^topo/(Dockerfile|requirements\.txt|worker\.py|pipeline\.py|sharpen\.py|export_worker\.py|area_export\.py|email_send\.py|push_send\.py|worker_common\.py|build_place_registry\.py|build_nsw_dem\.py|renderers/|icons/)' ;;
     *) return 1 ;;
   esac
 }

@@ -53,9 +53,13 @@ for _name in (
     "shapely.strtree",
     "PIL",
     "boto3",
+    "botocore",
+    "botocore.config",
     "psycopg2",
     "psycopg2.extras",
     "pmtiles",
     "pmtiles.convert",
+    "pmtiles.reader",
+    "pmtiles.tile",
 ):
     stub_missing(_name)

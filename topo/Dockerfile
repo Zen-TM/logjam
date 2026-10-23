@@ -111,7 +111,9 @@ RUN python -c "from osgeo import gdal_array"
 WORKDIR /app
 COPY worker.py /app/worker.py
 COPY pipeline.py /app/pipeline.py
+COPY sharpen.py /app/sharpen.py
 COPY export_worker.py /app/export_worker.py
+COPY area_export.py /app/area_export.py
 COPY email_send.py /app/email_send.py
 COPY push_send.py /app/push_send.py
 COPY worker_common.py /app/worker_common.py

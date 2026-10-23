@@ -7,10 +7,15 @@
 // Privacy: reads only aggregate timings + sizes (tile counts, render
 // megapixels) across jobs — never place names, coordinates, or footprints.
 
+import { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
-import { geoPdfMaxNativeZoom, geoPdfNativeMegapixels } from "@logjam/shared";
+import {
+  geoPdfMaxNativeZoom,
+  geoPdfNativeMegapixels,
+  SHARPEN_NEW_JOBS,
+} from "@logjam/shared";
 import {
   estimateRuntimeSeconds,
   type JobActual,
@@ -18,6 +23,11 @@ import {
 } from "@logjam/shared";
 
 const env = getEnv();
+
+// A sharpened job's cold-start rate, until enough of them have run to fit
+// one: sharpening one published Katoomba tile took 14 to 150 s (a 1 m DEM
+// to a dense LAZ's TIN), far below the legacy default's 510 s.
+const SHARPEN_DEFAULT_SECONDS_PER_TILE = 150;
 
 // Fixed per-job floor added on top of the fitted rate term.
 const EXPORT_OVERHEAD_SECONDS = 30; // task launch + S3 shuffle floor
@@ -145,13 +155,17 @@ export async function estimateGeoPdfSeconds(
  */
 export async function estimateTopoSeconds(
   inputTileCount: number | null,
+  sharpen: boolean = SHARPEN_NEW_JOBS,
 ): Promise<number | null> {
   if (!inputTileCount) return null;
+  // A sharpened job and a legacy one cost very differently per tile, so each
+  // is estimated from its own kind only (runtimeEstimates.unit.test.ts).
   const recent = await prisma.topoJob.findMany({
     where: {
       status: "complete",
       outputTileCount: { not: null },
       tileCount: { not: null },
+      sharpen: sharpen ? { not: Prisma.DbNull } : { equals: Prisma.DbNull },
     },
     orderBy: { createdAt: "desc" },
     take: 20,
@@ -182,7 +196,9 @@ export async function estimateTopoSeconds(
     }
   }
   return estimateRuntimeSeconds(actuals, inputTileCount, {
-    defaultSecondsPerInputTile: env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
+    defaultSecondsPerInputTile: sharpen
+      ? SHARPEN_DEFAULT_SECONDS_PER_TILE
+      : env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
     minSamples: env.TOPO_ESTIMATE_MIN_SAMPLES,
   });
 }

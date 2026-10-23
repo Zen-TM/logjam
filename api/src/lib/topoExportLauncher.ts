@@ -8,6 +8,7 @@ import { estimateExportSeconds } from "./runtimeEstimates";
 import { assertHasCredits } from "./computeCredits";
 import { assertGlobalCapacity } from "./fargateCapacity";
 import type {
+  AreaBbox,
   ExportFormat,
   ExportBundling,
   TopoLayerKey,
@@ -21,7 +22,7 @@ export const MAX_QUEUED_PER_USER = 5;
 export interface CreateAndLaunchExportInput {
   userId: string;
   sourceJobIds: string[];
-  layers: TopoLayerKey[];
+  layers: readonly TopoLayerKey[] | readonly string[];
   format: ExportFormat;
   bundling: ExportBundling;
   vectorStyleSnapshot: object;
@@ -29,6 +30,8 @@ export interface CreateAndLaunchExportInput {
   /** The submitting user's monthly credit allowance, passed in because both
    * callers have already loaded the user row. */
   monthlyComputeCredits: number;
+  /** An export of an area: the box, with no source job. */
+  bbox?: AreaBbox;
 }
 
 /**
@@ -88,11 +91,12 @@ export async function createAndLaunchTopoExport(
       data: {
         userId: input.userId,
         sourceJobIds: input.sourceJobIds,
-        layers: input.layers as string[],
+        layers: [...input.layers],
         format: input.format,
         bundling: input.bundling,
         vectorStyleSnapshot: input.vectorStyleSnapshot,
         sourceTileCount: input.sourceTileCount,
+        bbox: input.bbox,
         estimatedSeconds,
         status: "queued",
       },

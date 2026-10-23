@@ -240,7 +240,7 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
         def _process_job(job, tmp):
             if fail_in_process_job:
                 raise RuntimeError("pipeline blew up")
-            return ([], None, False, 0, None)
+            return ([], None, False, 0, None, None)
 
         def _create_notification(conn, user_id, kind, payload):
             if fail_after_complete and kind == "topo_complete":

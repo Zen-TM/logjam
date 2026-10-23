@@ -2,9 +2,14 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
+import {
+  DEM_SOURCES,
+  NSW_5M,
+  TERRARIUM,
+  type DemSource,
+} from "./demSources.js";
 import { NSW_CONTOURS } from "./nswContours.js";
-import { NSW_SLOPE } from "./terrain.js";
+import { NSW_HILLSHADE, NSW_SLOPE } from "./terrain.js";
 
 export type RegionBbox = {
   west: number;
@@ -298,17 +303,38 @@ export function estimateRegionSeconds(totalTiles: number): number {
 }
 
 /**
- * MEASURED bytes of one tile of a DEM archive at its `sampleZoom`: full z15
- * tiles of six whole sheets built by `topo/build_nsw_dem.py`, from 4.7 KB on
- * the Hay plain to 36 KB in the ranges. People save rugged ground, so the p90
- * is the rugged figure, not a statistical one.
+ * MEASURED bytes of one tile of a DEM archive at each zoom a clip holds. The
+ * sampler reads only the `sampleZoom`; the shallower zooms are saved for the
+ * hillshade (`NSW_HILLSHADE`), which would vanish below z15 without them.
+ *
+ * z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
+ * 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
+ * so the p90 is the rugged figure, not a statistical one. z8–z14: one figure
+ * for all seven, from clips of the Katoomba sheet (single zooms, tiles of
+ * 43–56 KB) and of the Katoomba Falls box (the 15 tiles under z15 averaged
+ * 59 KB), a rugged place, so it is the p90; the mean is the same 0.72 of it
+ * that z15's is. Low zooms have too few whole tiles on the sheet to say more.
  */
 const DEM_ARCHIVE_TILE_BYTES: Record<
   string,
-  { meanBytes: number; p90Bytes: number }
+  Record<number, { meanBytes: number; p90Bytes: number }>
 > = {
-  "nsw-5m": { meanBytes: 24_000, p90Bytes: 36_000 },
+  "nsw-5m": {
+    8: { meanBytes: 42_000, p90Bytes: 60_000 },
+    9: { meanBytes: 42_000, p90Bytes: 60_000 },
+    10: { meanBytes: 42_000, p90Bytes: 60_000 },
+    11: { meanBytes: 42_000, p90Bytes: 60_000 },
+    12: { meanBytes: 42_000, p90Bytes: 60_000 },
+    13: { meanBytes: 42_000, p90Bytes: 60_000 },
+    14: { meanBytes: 42_000, p90Bytes: 60_000 },
+    15: { meanBytes: 24_000, p90Bytes: 36_000 },
+  },
 };
+
+/** The zoom a saved clip of this DEM archive starts at. */
+export function demClipMinZoom(source: DemSource): number {
+  return source.id === NSW_5M.id ? NSW_HILLSHADE.minzoom : source.sampleZoom;
+}
 
 /**
  * The DEM archives an offline area saves a clip of: every one whose coverage
@@ -442,14 +468,17 @@ export function planRegionForBasemaps(
   const slope = estimateSlopeClip(bbox);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const demArchives = planDemDownload(bbox).map((source) => {
-    const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
+    const { perZoom } = planRegionTiles(
+      bbox,
+      demClipMinZoom(source),
+      source.sampleZoom,
+    );
     const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+    const bytes = (key: keyof RegionSizeEstimate) =>
+      perZoom.reduce((sum, { z, count }) => sum + count * perTile[z]![key], 0);
     return {
       sourceId: source.id,
-      size: {
-        meanBytes: tiles.totalTiles * perTile.meanBytes,
-        p90Bytes: tiles.totalTiles * perTile.p90Bytes,
-      },
+      size: { meanBytes: bytes("meanBytes"), p90Bytes: bytes("p90Bytes") },
     };
   });
 

@@ -17,6 +17,7 @@
 import {
   BASEMAP_CATALOG,
   NSW_CONTOURS,
+  NSW_5M,
   NSW_HILLSHADE,
   NSW_SLOPE,
   type BasemapCatalogEntry,
@@ -46,9 +47,9 @@ export type LogicalLayerRef =
   /** The statewide contour lines (`shared/src/nswContours.ts`). */
   | { kind: "nsw-contours" }
   /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
-   * `viewport` picks the one slope clip drawn offline. */
+   * `viewport` picks the one clip drawn offline. */
   | { kind: "nsw-slope"; viewport?: Viewport | null }
-  | { kind: "nsw-hillshade" }
+  | { kind: "nsw-hillshade"; viewport?: Viewport | null }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -77,10 +78,12 @@ export type ResolvedTileSource =
 export interface MapArtifact {
   id: string;
   /**
-   * `dem-region` is the odd one out: it is never resolved to a tile source,
-   * because nothing draws it. It holds the terrarium tiles the elevation
-   * sampler reads offline (`offline/demLookup.ts`), and exists here so it is
-   * registered, sized, grouped and deleted like every other downloaded file.
+   * `dem-region` is the odd one out: the worldwide terrarium clips are never
+   * resolved to a tile source, because nothing draws them. They hold the
+   * terrarium tiles the elevation sampler reads offline
+   * (`offline/demLookup.ts`), and exist here so they are registered, sized,
+   * grouped and deleted like every other downloaded file. The `nsw-5m` clip is
+   * also drawn, as the Terrain group's hillshade (`holdsHillshade`).
    */
   kind:
     | "basemap-region"
@@ -311,6 +314,8 @@ function resolveStatewide(
   clips: MapArtifact["kind"] | null,
   ctx: ResolveContext,
   choose: (regions: MapArtifact[]) => MapArtifact[] = (regions) => regions,
+  /** Which of the `clips` kind may be drawn (a `dem-region` holds several DEMs). */
+  keep: (artifact: MapArtifact) => boolean = () => true,
 ): ResolvedTileSource[] {
   const logicalId = archive.id;
   if (ctx.connectivity === "online") {
@@ -326,7 +331,7 @@ function resolveStatewide(
       },
     ];
   }
-  const regions = ctx.artifacts.filter((a) => a.kind === clips);
+  const regions = ctx.artifacts.filter((a) => a.kind === clips && keep(a));
   if (regions.length === 0) {
     return [
       {
@@ -338,6 +343,26 @@ function resolveStatewide(
   }
   return choose(regions).map((r) =>
     localArtifactSource(r, logicalId, archive.credit),
+  );
+}
+
+/**
+ * Whether a saved file can shade the Terrain group's hillshade offline: the
+ * `nsw-5m` height clip, and only one that holds the shallow zooms. A clip saved
+ * before `demClipMinZoom` is z15 alone, and draws nothing where the map is
+ * zoomed out, so it is no clip for this: an area saved that way says "Needs a
+ * connection" until it is saved again. Used by the layers sheet's switch and
+ * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
+ * Guard: `sourceResolver.test.ts` ("holdsHillshade").
+ */
+export function holdsHillshade(
+  artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+): boolean {
+  return (
+    artifact.kind === "dem-region" &&
+    artifact.logicalKey === NSW_5M.id &&
+    artifact.minzoom != null &&
+    artifact.minzoom <= NSW_HILLSHADE.minzoom
   );
 }
 
@@ -461,10 +486,21 @@ export function resolveMapSource(
         ctx,
         nearestRegion(ref.viewport),
       );
-    // A saved area's heights are z15 alone, the sampler's zoom, so offline a
-    // shade could only be drawn close in: none is saved.
+    // The saved height clip is registered as a plain raster (the sampler
+    // reads its bytes); here it is drawn as the DEM it is.
     case "nsw-hillshade":
-      return resolveStatewide(NSW_HILLSHADE, "raster-dem", null, ctx);
+      return resolveStatewide(
+        NSW_HILLSHADE,
+        "raster-dem",
+        "dem-region",
+        ctx,
+        (regions) =>
+          nearestRegion(ref.viewport)(regions).map((r) => ({
+            ...r,
+            sourceType: "raster-dem",
+          })),
+        holdsHillshade,
+      );
     case "geopdf-import":
     case "vector-import":
       return resolveImport(ref, ctx);

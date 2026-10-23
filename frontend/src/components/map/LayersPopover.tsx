@@ -37,6 +37,7 @@ import {
   type Glyph,
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
+import { jobsWithOverlays, lidarOverlayEmptyLine } from "./lidarOverlays";
 
 type BaseLayer = TileLayer & { id: string; name: string };
 type Setter<T> = (value: T | ((prev: T) => T)) => void;
@@ -167,7 +168,8 @@ export default function LayersPopover({
 }) {
   const [view, setView] = useState<View>("overlays");
 
-  const shownJobs = completedTopoJobs.filter(
+  const overlayJobs = jobsWithOverlays(completedTopoJobs);
+  const shownJobs = overlayJobs.filter(
     (job) => lidarJobToggles[job.jobId] ?? true,
   );
   const shownLayerLabels = lidarLayerOrder
@@ -208,7 +210,7 @@ export default function LayersPopover({
           onClose={close}
           lidarEnabled={lidarEnabled}
           setLidarEnabled={setLidarEnabled}
-          jobs={completedTopoJobs}
+          jobs={overlayJobs}
           shownCount={shownJobs.length}
           lidarJobToggles={lidarJobToggles}
           setLidarJobToggles={setLidarJobToggles}
@@ -313,13 +315,13 @@ export default function LayersPopover({
                     checked={showWays}
                     onToggle={setShowWays}
                   />
-                  {completedTopoJobs.length === 0 ? (
+                  {overlayJobs.length === 0 ? (
                     <Row
                       leading={
                         <IconTile icon="lidar" hue="var(--hue-overlay)" />
                       }
                       title={copy.lidarTopos}
-                      subtitle="None yet. Make one from Maps."
+                      subtitle={lidarOverlayEmptyLine(completedTopoJobs) ?? ""}
                     />
                   ) : (
                     <OverlayRow
@@ -327,7 +329,7 @@ export default function LayersPopover({
                       hue="var(--hue-overlay)"
                       title={copy.lidarTopos}
                       subtitle={[
-                        `${shownJobs.length} of ${completedTopoJobs.length} shown`,
+                        `${shownJobs.length} of ${overlayJobs.length} shown`,
                         shownLayerLabels.join(", ") || "no layers",
                       ].join(" · ")}
                       checked={lidarEnabled}

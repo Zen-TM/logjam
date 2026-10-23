@@ -25,6 +25,8 @@ _DOCKERFILE = os.path.join(_ROOT, "Dockerfile")
 # runs (see the Dockerfile entrypoint note).
 _ENTRYPOINTS = (
     "worker.py",
+    # worker.py runs it as a subprocess, as it runs pipeline.py.
+    "sharpen.py",
     "export_worker.py",
     "build_place_registry.py",
     "build_nsw_dem.py",

@@ -7,7 +7,11 @@
 export { TOPO_LAYERS } from "@logjam/shared";
 export type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";
 
-import type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";
+import type {
+  SharpenedOverlay,
+  TopoLayerFormat,
+  TopoLayerName,
+} from "@logjam/shared";
 
 /**
  * A topo-job footprint as returned in GeoJSON form by the topo-jobs API.
@@ -46,6 +50,8 @@ export type CompletedTopoJob = {
     format: TopoLayerFormat;
     pmtilesUrl: string;
   }[];
+  /** A sharpened job's area and archive URLs; absent for a legacy job. */
+  sharpened?: SharpenedOverlay;
 };
 
 /** Response shape from GET /topo-jobs/completed-overlays. Includes presigned-URL expiry so the client can pre-refetch. */

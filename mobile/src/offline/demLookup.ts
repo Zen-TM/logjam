@@ -3,7 +3,8 @@
 //
 // Every "save maps offline" run writes a `dem-region` MBTiles of a DEM
 // source's tiles at its `sampleZoom` (regionTileDownload.ts), filed under the
-// source's id. This reads them back, so a
+// source's id; the nsw-5m clip also holds z8-14 for the hillshade
+// (`demClipMinZoom`), which this never reads. This reads them back, so a
 // route profile, a point's height and a track's gain/loss keep working in a
 // place with no signal — the trip the download exists for.
 //

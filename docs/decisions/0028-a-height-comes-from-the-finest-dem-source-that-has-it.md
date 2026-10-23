@@ -97,6 +97,21 @@ Proposal: #359.
   when its own pass reaches the same answer. A climb stored before the
   arithmetic changed is still replaced by nothing. Everything else above
   stands.
+- **Update 2026-10-23: a sharpened area is a source with its own coverage,
+  read only by those who may see it, and declared outside `DEM_SOURCES`.**
+  `demSourcesFor` in `shared/src/sharpen.ts` puts each area the caller may
+  read ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)) above
+  `DEM_SOURCES`, the finer first, then the newer. This is an exception to
+  "one declaration": an area's zoom and credit come from its job's result at
+  run time, not from `DEM_SOURCES`. The precedence and the one sampler still
+  hold, and no file names an area's archive by URL or path. Each area
+  declares its `coverage`, so the key `upgradeTrackClimbs` uses can see a
+  new area once Logjam GPS adds the caller's area ids and coverage to it.
+  That change comes with Logjam GPS's reading of areas, with a test; until
+  then the cost the update of 2026-10-12 names still applies. Every area's
+  heights are stored under one climb id, `lidar`, first in `CLIMB_SOURCES`,
+  so a track's label names no job. Guard: `shared/src/sharpen.test.ts`.
+  Everything else above stands.
 - **Update 2026-10-18: a slope reads its window from the finest regional
   source with all nine pixels, never the worldwide tiles.** Slope is not a
   height, so `demSlopeReading` in `shared/src/demSlope.ts` walks
@@ -182,3 +197,7 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   `sampleDem`'s four-pixel blend can fill a missing pixel from a neighbour.
 - **Choose the source in each client.** Rejected by 0020: deciding twice is
   how the two clients drifted before.
+- **Declare each sharpened area in `DEM_SOURCES`** (2026-10-23). One list for
+  every source. Rejected because an area is private to the users who may see
+  it, and its zoom, coverage and credit are known only from its job's result
+  at run time. 0040 lists the other options it rejected.

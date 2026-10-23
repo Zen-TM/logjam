@@ -18,6 +18,12 @@ import os
 from typing import Optional
 from urllib.parse import quote
 
+# What the owner of a job too big for the task's memory reads: from sharpen.py,
+# which refuses one in advance, and from worker.py, which maps an
+# out-of-memory kill of the job's own process to it. A kill of one of its
+# children (pdal, a pool worker) still reads as the generic failure.
+TOO_BIG = "This area was too big to process. Try a smaller one."
+
 
 def compose_database_url() -> str:
     """Compose a Postgres connection string from discrete DB_* env vars.

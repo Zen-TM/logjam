@@ -20,6 +20,7 @@ import {
   DEM_SOURCES,
   NSW_CONTOURS,
   NSW_SLOPE,
+  demClipMinZoom,
   fetchExtractRequest,
   planExtract,
   type ExtractPlan,
@@ -77,7 +78,7 @@ function clipArchiveFor(spec: RegionClipSpec): {
     if (!dem?.archivePath) throw new Error("Unknown elevation source");
     return {
       archivePath: dem.archivePath,
-      minzoom: dem.sampleZoom,
+      minzoom: demClipMinZoom(dem),
       maxzoom: dem.sampleZoom,
     };
   }

@@ -72,6 +72,15 @@ level 9.
   between tiles and between the builder's blocks are invisible because every tile
   sees its neighbours.
 
+- **Update 2026-10-23: a sharpened area's slope archive starts at z15.**
+  `topo/sharpen.py` writes the same encoding, 1° rounding, max pyramid and
+  PNG level from z15 to the area's zmax (16 or 17)
+  ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)). Horn runs at
+  zmax over the survey's own ground only, and the statewide slope fills the
+  rest, so the seam between the two surfaces never reads as slope
+  (`topo/tests/test_sharpen.py` `TestBlockGrids`). Everything else above
+  stands.
+
 Guard: `topo/tests/test_nsw_dem.py` holds the terrarium encoding with
 `(0, 0, 0)` for no data, the 1° rounding, PNG level 6, the credit, and Horn
 with its border and per-row pixel size. `TestBlockSlope` compares a

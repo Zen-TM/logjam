@@ -39,7 +39,7 @@ async function settled(page: Page) {
         (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
       ) &&
       // A button's 150 ms background-color transition otherwise lets axe read
-      // a half-way colour (the flaky "Make a LiDAR topo" case).
+      // a half-way colour.
       document
         .getAnimations()
         .every(
@@ -625,10 +625,12 @@ test.describe("desktop", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // The built-in Default template is always there, so there is always a menu —
-    // on the Templates tab, where templates live.
-    await aside.getByRole("radio", { name: /^Templates/ }).click();
-    await aside.getByRole("button", { name: "Actions for Default" }).click();
+    // The seed always has completed LiDAR jobs, so there is always a row menu.
+    // (Templates, the other menu here, are hidden once new jobs sharpen.)
+    await aside
+      .getByRole("button", { name: /^Actions for / })
+      .first()
+      .click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
     await page.keyboard.press("Escape");
@@ -655,7 +657,7 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
-  test("Make a LiDAR topo, its ELVIS steps and its settings", async ({
+  test("Sharpen an area, its ELVIS steps and its Vegetation choice", async ({
     page,
   }) => {
     await openApp(page);
@@ -663,16 +665,15 @@ test.describe("desktop", () => {
     const aside = page.locator("aside");
     await aside.getByRole("radio", { name: "LiDAR topos" }).click();
     await aside.getByRole("button", { name: /^Make/ }).first().click();
-    await page.getByRole("menuitem", { name: /LiDAR topo/ }).click();
+    await page.getByRole("menuitem", { name: "Sharpen an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Make a LiDAR topo" }),
+      dialog.getByRole("heading", { name: "Sharpen an area" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // The errand and the settings are SUB-VIEWS: each swaps the body, and each
-    // backs out to the form rather than out of the dialog.
+    // The errand is a SUB-VIEW: it swaps the body and backs out to the form.
     await dialog.getByRole("button", { name: /^Haven.t got one/ }).click();
     await expect(
       dialog.getByRole("heading", { name: "Getting LiDAR from ELVIS" }),
@@ -680,32 +681,27 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
     await dialog.getByRole("button", { name: "Back to the form" }).click();
 
+    // A ZIP with point clouds offers Vegetation. The fixture is made up: one
+    // empty .laz under an ELVIS-style name, read only for its file list.
     await dialog
-      .getByRole("button", { name: "How this topo is drawn" })
-      .click();
-    await expect(
-      dialog.getByRole("radio", { name: "Hillshade" }),
-    ).toBeVisible();
+      .locator("input[type=file]")
+      .setInputFiles(
+        new URL("./__fixtures__/elvis-point-clouds.zip", import.meta.url)
+          .pathname,
+      );
+    const vegetation = dialog.getByRole("checkbox", {
+      name: /Vegetation \(experimental\)/,
+    });
+    await expect(vegetation).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await vegetation.check();
     await expectNoViolations(page, "dialog");
 
-    // The band table and the layer checkboxes are the dense ones.
-    await dialog.getByRole("radio", { name: "Slope" }).click();
-    await expect(
-      dialog.getByRole("textbox", { name: /upper angle/ }).first(),
-    ).toBeVisible();
-    await expectNoViolations(page, "dialog");
-
-    await dialog.getByRole("radio", { name: "Auto-export" }).click();
-    await expect(
-      dialog.getByRole("radiogroup", { name: "Format" }),
-    ).toBeVisible();
-    await expectNoViolations(page, "dialog");
-
-    await dialog.getByRole("button", { name: "Back to the form" }).click();
-    await expect(
-      dialog.getByRole("heading", { name: "Make a LiDAR topo" }),
-    ).toBeVisible();
     await page.keyboard.press("Escape");
+    const confirm = page.getByRole("alertdialog", {
+      name: "Discard unsaved changes?",
+    });
+    await confirm.getByRole("button", { name: "Discard" }).click();
     await expect(dialog).toHaveCount(0);
   });
 

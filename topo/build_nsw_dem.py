@@ -646,6 +646,8 @@ def slope_s3(bucket: str, work: Path, jobs: int, client=None) -> None:
 # ── contours ─────────────────────────────────────────────────────────────────
 
 CONTOUR_INTERVAL_M = 10
+# The cell heights are averaged to before contouring (see `contours`).
+CONTOUR_CELL_M = 10
 CONTOUR_MAJOR_M = 50  # the clients style `elev % 50 == 0` as a major line
 # 50 m lines from z11 and the rest from z14, the zooms both clients draw them
 # at (the pattern a topo area's own contours have); a client overzooms past z14.
@@ -657,6 +659,25 @@ CONTOUR_LAYER = "contours"
 
 def run(*command: str) -> None:
     subprocess.run(command, check=True)
+
+
+def contour_lines(raster: Path, raw: Path, lines: Path, run=run) -> None:
+    """CONTOUR_INTERVAL_M lines of a height raster into a GeoPackage in
+    lon/lat, as two layers: `major` (every CONTOUR_MAJOR_M) and `minor`. The
+    statewide archive and a sharpened area's (sharpen.py) are both cut by
+    this, so they share a schema."""
+    run(
+        *["gdal_contour", "-q", "-a", "elev", "-i", str(CONTOUR_INTERVAL_M)],
+        *["-snodata", str(NODATA), "-f", "GPKG", str(raster), str(raw)],
+        *["-nln", "cont"],
+    )
+    for name, test in (("major", "="), ("minor", "<>")):
+        run(
+            *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(lines)],
+            *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
+            "select elev, geom from cont where cast(elev as integer)"
+            f" % {CONTOUR_MAJOR_M} {test} 0",
+        )
 
 
 def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
@@ -688,22 +709,12 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
         part.unlink(missing_ok=True)
         # Averaged to 10 m first: contours of the raw 5 m grid are knobbly,
         # and every wiggle is a vertex a phone has to store and draw.
+        cell = str(CONTOUR_CELL_M)
         run(
-            *["gdalwarp", "-q", "-overwrite", "-tr", "10", "10", "-r", "average"],
+            *["gdalwarp", "-q", "-overwrite", "-tr", cell, cell, "-r", "average"],
             *["-co", "COMPRESS=ZSTD", str(sheet), str(smooth)],
         )
-        run(
-            *["gdal_contour", "-q", "-a", "elev", "-i", str(CONTOUR_INTERVAL_M)],
-            *["-snodata", str(NODATA), "-f", "GPKG", str(smooth), str(raw)],
-            *["-nln", "cont"],
-        )
-        for name, test in (("major", "="), ("minor", "<>")):
-            run(
-                *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(part)],
-                *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
-                "select elev, geom from cont where cast(elev as integer)"
-                f" % {CONTOUR_MAJOR_M} {test} 0",
-            )
+        contour_lines(smooth, raw, part)
         smooth.unlink()
         raw.unlink()
         part.rename(lines)

@@ -1,0 +1,19 @@
+{
+  "_comment": "A made-up sharpened job's stored result: what topo/sharpen.py reports plus what topo/worker.py adds, as the API reads it from topo_jobs.sharpen. Read by topo/tests/test_sharpen.py (TestResult), topo/tests/test_worker_helpers.py (TestProcessSharpen) and api/src/services/sharpenedAreas.unit.test.ts, so the writer and the reader cannot drift apart.",
+  "jobId": "job-1",
+  "stored": {
+    "v": 1,
+    "zmax": 16,
+    "tiles15": [30100, 19654, 30103, 19657],
+    "coverage": [150.7, -33.8, 150.72, -33.78],
+    "ground": "class-2",
+    "extracted": "March 2025",
+    "credit": "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services), extracted March 2025. CC BY 3.0 AU.",
+    "keys": {
+      "heights": "outputs/job-1/heights.pmtiles",
+      "slope": "outputs/job-1/slope.pmtiles",
+      "contours": "outputs/job-1/contours.pmtiles"
+    },
+    "vegetation": false
+  }
+}

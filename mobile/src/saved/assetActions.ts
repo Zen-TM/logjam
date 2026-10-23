@@ -64,6 +64,7 @@ import {
 import {
   type FileSendSourceKind,
   type SharableEntityType,
+  type SharePromiseKind,
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
   exportFilename,
@@ -235,7 +236,12 @@ export type AssetActions = {
    * import, region) has nothing on the server to grant access TO, and gets
    * "Send a copy" instead, which is a different and non-revocable promise.
    */
-  share?: { entityType: SharableEntityType; entityId: string };
+  share?: {
+    entityType: SharableEntityType;
+    entityId: string;
+    /** What the share promises a friend, when the entity type alone can't say. */
+    promise?: SharePromiseKind;
+  };
   /**
    * Hand this asset to a friend as a FILE, for the kinds that have no server
    * record to grant access to. A different promise from `share` and not a
