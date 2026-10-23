@@ -8,8 +8,11 @@ import {
   type DemTileReader,
 } from "./demSources.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
+import { PLACE_VERBS } from "./contracts/placeVerbs.js";
 import { buildElevationProfile, climbFromProfile } from "./elevation.js";
 import {
+  SHARPEN_NEW_JOBS,
+  lidarJobCopy,
   compareSharpenedAreas,
   demSourcesFor,
   terrainTileArchive,
@@ -201,5 +204,17 @@ describe("a sharpened area's heights", () => {
       fine.credit,
       NSW_5M.credit,
     ]);
+  });
+});
+
+describe("lidarJobCopy", () => {
+  // Mutations: an entry point that writes its own label (the place verb
+  // keeping "Make a LiDAR topo here" after the flip), or one side of the
+  // switch losing its words, so a revert shows the wrong ones.
+  it("names a new job by the switch, in one place", () => {
+    const verb = PLACE_VERBS.find((v) => v.id === "makeTopo")!;
+    expect(verb.label).toBe(lidarJobCopy(SHARPEN_NEW_JOBS).makeHere);
+    expect(lidarJobCopy(true).make).toBe("Sharpen an area");
+    expect(lidarJobCopy(false).make).toBe("Make a LiDAR topo");
   });
 });

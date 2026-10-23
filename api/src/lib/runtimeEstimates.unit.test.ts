@@ -4,6 +4,7 @@ vi.mock("../services/prisma", () => ({
   default: {
     topoExportJob: { findMany: vi.fn() },
     geoPdfJob: { findMany: vi.fn() },
+    topoJob: { findMany: vi.fn() },
   },
 }));
 
@@ -11,6 +12,7 @@ import prisma from "../services/prisma";
 import {
   estimateExportSeconds,
   estimateGeoPdfSeconds,
+  estimateTopoSeconds,
 } from "./runtimeEstimates";
 import { geoPdfNativeMegapixels } from "@logjam/shared";
 import type { GeoPdfConfig } from "@logjam/shared";
@@ -192,5 +194,26 @@ describe("estimateGeoPdfSeconds", () => {
     const result = await estimateGeoPdfSeconds(config);
     expect(typeof result).toBe("number");
     expect(Number.isFinite(result)).toBe(true);
+  });
+});
+
+describe("estimateTopoSeconds", () => {
+  const topoFindMany = (prisma as unknown as { topoJob: { findMany: Mock } })
+    .topoJob.findMany;
+  beforeEach(() => topoFindMany.mockReset().mockResolvedValue([]));
+
+  // Mutations: read every kind of job (a sharpened job is estimated at the
+  // legacy render's rate, and charged for it), or start a sharpened job from
+  // the legacy cold-start rate.
+  it("reads only jobs of the kind it estimates, from its own start", async () => {
+    const legacy = await estimateTopoSeconds(2, false);
+    expect(topoFindMany.mock.calls[0]![0].where.sharpen).toEqual({
+      equals: expect.anything(),
+    });
+    const sharpened = await estimateTopoSeconds(2, true);
+    expect(topoFindMany.mock.calls[1]![0].where.sharpen).toEqual({
+      not: expect.anything(),
+    });
+    expect(sharpened).toBeLessThan(legacy!);
   });
 });

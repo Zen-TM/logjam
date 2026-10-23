@@ -24,7 +24,7 @@ import {
   noFriendsMessage,
   SHARE_SHEET,
   sharePromise,
-  type BulkShareItemType,
+  type SharePromiseKind,
   type SectionKeysOn,
 } from "@logjam/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -70,7 +70,7 @@ function ShareDialog({
   title: string;
   /** What is being shared: the promise to the recipient is the contract's, and a
    *  place share and a route share do not grant the same things. */
-  kind: BulkShareItemType;
+  kind: SharePromiseKind;
   friends: TFriend[];
   open: boolean;
   onClose: () => void;
