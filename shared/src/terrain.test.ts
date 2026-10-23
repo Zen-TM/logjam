@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { NSW_5M } from "./demSources.js";
 import {
+  drawsOverTerrain,
   NSW_HILLSHADE,
   NSW_SLOPE,
   normalizeTerrainLayers,
@@ -153,6 +154,30 @@ describe("slope bands as an account preference", () => {
     expect(parseSlopeBands([{ ...custom[0], extra: "x" }, custom[1]])).toEqual(
       custom,
     );
+  });
+});
+
+describe("drawsOverTerrain", () => {
+  // Mutation: return false, or drop the symbol, boundaries or roads clause,
+  // or the runway and taxiway exclusion, and the clients' anchor tests check
+  // fewer layers than must draw over the group, or the wrong ones.
+  it("is every label, boundary and road but the airport surfaces", () => {
+    const over = [
+      { id: "roads_minor", type: "line" },
+      { id: "boundaries_country", type: "line" },
+      { id: "places_locality", type: "symbol" },
+    ];
+    const under = [
+      { id: "roads_runway", type: "line" },
+      { id: "roads_taxiway", type: "line" },
+      { id: "water", type: "fill" },
+      { id: "water_stream", type: "line" },
+      { id: "earth", type: "fill" },
+    ];
+    for (const layer of over)
+      expect(drawsOverTerrain(layer), layer.id).toBe(true);
+    for (const layer of under)
+      expect(drawsOverTerrain(layer), layer.id).toBe(false);
   });
 });
 

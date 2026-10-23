@@ -30,13 +30,11 @@ describe("chainBeforeIds", () => {
   });
 });
 
-// The floors are ids hard-coded in layer files; renaming one there would make
-// every anchored layer wait forever for a layer that never appears.
 describe("basemapMountKeys", () => {
   const raster = (key: string) => ({ key, sourceType: "raster" });
   const vector = (key: string) => ({ key, sourceType: "vector" });
 
-  // Mutation: key the Terrain group by its own source alone, and after a
+  // Mutation: give `terrain` one value whatever the basemaps, and after a
   // switch from imagery to the vector map the contour lines stay over the
   // roads and labels.
   it("remounts the Terrain group when it moves into the vector map or out", () => {
@@ -49,8 +47,8 @@ describe("basemapMountKeys", () => {
     );
   });
 
-  // Mutation: key each stack by its own source alone, and offline a newly
-  // saved area's stack mounts under the older ones', the Terrain group in it.
+  // Mutation: leave the basemaps out of `stacks`, and offline a newly saved
+  // area's stack mounts under the older ones', the Terrain group in it.
   it("remounts every stack and the Terrain group when a saved area joins", () => {
     const one = basemapMountKeys([vector("region-a")]);
     const two = basemapMountKeys([vector("region-b"), vector("region-a")]);
@@ -59,6 +57,27 @@ describe("basemapMountKeys", () => {
   });
 });
 
+// Mutation: key a basemap stack or a Terrain `ResolvedSource` in MapScreen by
+// its own source alone (`r.key`), and the keys above never reach the map: after
+// a switch from imagery to the vector map the contour lines stay over the roads.
+describe("MapScreen keys its stacks and the Terrain group by basemapMountKeys", () => {
+  const source = readFileSync(join(SRC, "map/MapScreen.tsx"), "utf8");
+  it.each([
+    ["basemapResolved", "stacks", "resolved"],
+    ["hillshadeResolved", "terrain", "r"],
+    ["slopeResolved", "terrain", "r"],
+    ["contoursResolved", "terrain", "r"],
+  ])("%s by mountKeys.%s", (list, mount, item) => {
+    // The first ResolvedSource after `{list.map(`, before the next `.map(`.
+    const keyed = new RegExp(
+      String.raw`\{${list}\.map\((?:(?!\.map\()[\s\S])*?<ResolvedSource\s+key=\{\`\$\{${item}\.key\}@\$\{mountKeys\.${mount}\}\`\}`,
+    );
+    expect(source).toMatch(keyed);
+  });
+});
+
+// The floors are ids hard-coded in layer files; renaming one there would make
+// every anchored layer wait forever for a layer that never appears.
 describe("the floor layers exist", () => {
   it.each([
     [PIN_FLOOR, "map/PlacePinsLayer.tsx"],

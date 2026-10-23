@@ -105,7 +105,7 @@ describe("moveTerrainIntoBasemap", () => {
 describe("TOPO_CEILING", () => {
   it("is the first layer Map.tsx adds by name", () => {
     const source = readFileSync(join(__dirname, "Map.tsx"), "utf8");
-    expect(/addLayer\(\{\s*id: "([^"]+)"/.exec(source)?.[1]).toBe(TOPO_CEILING);
+    expect(/\bid: "([^"]+)"/.exec(source)?.[1]).toBe(TOPO_CEILING);
   });
 });
 

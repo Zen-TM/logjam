@@ -253,6 +253,17 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
   attribution: entry.attributionHtml,
 }));
 
+/** The statewide contours have their own fixed look (shared nswContours.ts). */
+function paintStyleFor(
+  entryId: string,
+  style: VectorStyleSettings,
+  basemapId: string,
+): VectorStyleSettings {
+  return entryId === TERRAIN_ENTRIES.contours.id
+    ? nswContourStyle(basemapId)
+    : style;
+}
+
 /**
  * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the
  * generated @protomaps/basemaps layer set.
@@ -266,18 +277,6 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * Light flavor only: Logjam Web has no dark theme (index.css carries a single
  * prefers-color-scheme rule that inverts icons, nothing more).
  */
-
-/** The statewide contours have their own fixed look (shared nswContours.ts). */
-function paintStyleFor(
-  entryId: string,
-  style: VectorStyleSettings,
-  basemapId: string,
-): VectorStyleSettings {
-  return entryId === TERRAIN_ENTRIES.contours.id
-    ? nswContourStyle(basemapId)
-    : style;
-}
-
 function addProtomapsBasemap(
   map: maplibregl.Map,
   visibility: "visible" | "none",

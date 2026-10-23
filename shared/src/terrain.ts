@@ -67,8 +67,8 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
 /**
  * The Protomaps layers that must draw over the whole Terrain group: every
  * label, boundary and road, but the runway and taxiway surfaces, drawn with
- * the land fills. Guards: the clients' anchor tests above, each against the
- * style it draws.
+ * the land fills. Guards: `terrain.test.ts` ("drawsOverTerrain"), and the
+ * clients' anchor tests above, each against the style it draws.
  */
 export function drawsOverTerrain(layer: { id: string; type: string }): boolean {
   if (layer.id === "roads_runway" || layer.id === "roads_taxiway") return false;
