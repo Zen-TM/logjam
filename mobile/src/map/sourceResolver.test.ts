@@ -395,10 +395,18 @@ describe("statewide slope and hillshade", () => {
 
   // Mutation: match the slope by `dem-region`, and offline the saved
   // heights are coloured as if they were degrees.
-  it("offline: the slope from its own clips, the shade from none", () => {
+  it("offline: the slope from its own clips, the shade from the saved heights", () => {
     const saved = [
       artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
-      artifact({ id: "d", kind: "dem-region", logicalKey: "nsw-5m" }),
+      artifact({ id: "w", kind: "dem-region", logicalKey: "terrarium" }),
+      artifact({
+        id: "d",
+        kind: "dem-region",
+        logicalKey: "nsw-5m",
+        sourceType: "raster",
+        minzoom: 8,
+        maxzoom: 15,
+      }),
       artifact({ id: "s", kind: "slope-region", sourceType: "raster-dem" }),
     ];
     const offline = ctx({ connectivity: "offline", artifacts: saved });
@@ -409,9 +417,41 @@ describe("statewide slope and hillshade", () => {
       origin: "local",
       sourceType: "raster-dem",
     });
-    expect(resolveMapSource({ kind: "nsw-hillshade" }, offline)).toMatchObject([
-      { status: "unavailable" },
-    ]);
+    // Mutation: drop the logicalKey and the worldwide tiles (an MBTiles) are
+    // drawn too; keep the registered `raster` and MapLibre draws noise.
+    const shade = resolveMapSource({ kind: "nsw-hillshade" }, offline);
+    expect(shade).toHaveLength(1);
+    expect(shade[0]).toMatchObject({
+      status: "ok",
+      origin: "local",
+      sourceType: "raster-dem",
+      minZoom: 8,
+      maxZoom: 15,
+    });
+  });
+  // Mutation: widen nothing for an old clip: it saved z15 alone, so it must
+  // keep reporting that and shade only there.
+  it("offline: a clip saved at z15 alone shades at z15 only", () => {
+    const old = artifact({
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      minzoom: 15,
+      maxzoom: 15,
+    });
+    const [shade] = resolveMapSource(
+      { kind: "nsw-hillshade" },
+      ctx({ connectivity: "offline", artifacts: [old] }),
+    );
+    expect(shade).toMatchObject({ status: "ok", minZoom: 15, maxZoom: 15 });
+  });
+  it("offline: no saved heights, no shade", () => {
+    const only = artifact({ kind: "dem-region", logicalKey: "terrarium" });
+    expect(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        ctx({ connectivity: "offline", artifacts: [only] }),
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
   });
   // Mutation: draw every slope clip, as the contours do, and where two saved
   // areas share a tile its bands are painted twice, darker.

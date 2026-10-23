@@ -17,6 +17,7 @@
 import {
   BASEMAP_CATALOG,
   NSW_CONTOURS,
+  NSW_5M,
   NSW_HILLSHADE,
   NSW_SLOPE,
   type BasemapCatalogEntry,
@@ -46,9 +47,9 @@ export type LogicalLayerRef =
   /** The statewide contour lines (`shared/src/nswContours.ts`). */
   | { kind: "nsw-contours" }
   /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
-   * `viewport` picks the one slope clip drawn offline. */
+   * `viewport` picks the one clip drawn offline. */
   | { kind: "nsw-slope"; viewport?: Viewport | null }
-  | { kind: "nsw-hillshade" }
+  | { kind: "nsw-hillshade"; viewport?: Viewport | null }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -311,6 +312,8 @@ function resolveStatewide(
   clips: MapArtifact["kind"] | null,
   ctx: ResolveContext,
   choose: (regions: MapArtifact[]) => MapArtifact[] = (regions) => regions,
+  /** Only the clips filed under this key (a `dem-region` holds several DEMs). */
+  logicalKey?: string,
 ): ResolvedTileSource[] {
   const logicalId = archive.id;
   if (ctx.connectivity === "online") {
@@ -326,7 +329,10 @@ function resolveStatewide(
       },
     ];
   }
-  const regions = ctx.artifacts.filter((a) => a.kind === clips);
+  const regions = ctx.artifacts.filter(
+    (a) =>
+      a.kind === clips && (logicalKey == null || a.logicalKey === logicalKey),
+  );
   if (regions.length === 0) {
     return [
       {
@@ -461,10 +467,23 @@ export function resolveMapSource(
         ctx,
         nearestRegion(ref.viewport),
       );
-    // A saved area's heights are z15 alone, the sampler's zoom, so offline a
-    // shade could only be drawn close in: none is saved.
+    // The saved height clip is registered as a plain raster (the sampler
+    // reads its bytes); here it is drawn as the DEM it is. A clip saved
+    // before the shade was offline holds z15 alone, so it shades only there
+    // (its `minzoom`), until the area is saved again.
     case "nsw-hillshade":
-      return resolveStatewide(NSW_HILLSHADE, "raster-dem", null, ctx);
+      return resolveStatewide(
+        NSW_HILLSHADE,
+        "raster-dem",
+        "dem-region",
+        ctx,
+        (regions) =>
+          nearestRegion(ref.viewport)(regions).map((r) => ({
+            ...r,
+            sourceType: "raster-dem",
+          })),
+        NSW_5M.id,
+      );
     case "geopdf-import":
     case "vector-import":
       return resolveImport(ref, ctx);

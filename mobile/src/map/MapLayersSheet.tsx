@@ -41,6 +41,7 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  NSW_5M,
   takesNswContours,
   type SectionKeysOn,
   type TerrainLayerKey,
@@ -206,6 +207,9 @@ export function MapLayersSheet({
         onChange={onTerrainLayerChange}
         basemapId={basemapId}
         online={online}
+        shadeSaved={artifacts.some(
+          (a) => a.kind === "dem-region" && a.logicalKey === NSW_5M.id,
+        )}
       />
     ),
     overlays: () => (
@@ -317,11 +321,14 @@ function TerrainTab({
   onChange,
   basemapId,
   online,
+  shadeSaved,
 }: {
   layers: Readonly<Record<TerrainLayerKey, boolean>>;
   onChange: (key: TerrainLayerKey, on: boolean) => void;
   basemapId: BasemapId;
   online: boolean;
+  /** A saved area holds the height clip the shade is drawn from offline. */
+  shadeSaved: boolean;
 }) {
   const styles = useStyles();
   const terrain = MAP_TERRAIN.copy;
@@ -352,11 +359,12 @@ function TerrainTab({
       <SwitchRow
         key="hillshade"
         title={terrain.hillshade}
-        // A saved area keeps no shade (sourceResolver.ts).
         description={
-          online ? undefined : unavailableReasonText("needs-connection")
+          online || shadeSaved
+            ? undefined
+            : unavailableReasonText("needs-connection")
         }
-        disabled={!online}
+        disabled={!online && !shadeSaved}
         style={styles.itemRow}
         checked={layers.hillshade}
         onChange={(on) => onChange("hillshade", on)}
