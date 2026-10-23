@@ -111,6 +111,11 @@ hand (it's gitignored and overwritten on each `make dev`/`make reset`). To chang
 a dev value, edit `infra/terraform/envs/local/env-files.tf` (and add new vars to
 both `api/src/lib/env.ts` and `infra/terraform/templates/env.local.tftpl`).
 
+By default dev maps fetch the `master/*` archives from the prod CDN. To read them
+from MiniStack instead, PUT them under `master/` in `logjam-topo-local` and set
+`DEV_MASTER_URL` in `frontend/.env` and `EXPO_PUBLIC_TOPO_CDN_BASE_URL` in
+`mobile/.env` (values in the `.env.example` files).
+
 ### Command reference
 
 | Command | What it does |
