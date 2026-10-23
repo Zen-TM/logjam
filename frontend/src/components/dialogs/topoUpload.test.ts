@@ -212,8 +212,8 @@ describe("useTopoUpload", () => {
   });
 
   // Mutation: decide by /start's error alone (keep the session on anything
-  // under 500), and the lost response leaves a session whose discard
-  // deletes the running job.
+  // under 500), and a /start whose answer is lost reports a failure for a
+  // topo that is already running.
   it("a /start whose response is lost after the job launched still succeeds", async () => {
     serveJob(
       () => {
@@ -224,8 +224,32 @@ describe("useTopoUpload", () => {
     putToPresignedUrl.mockResolvedValue(undefined);
     const { result } = renderHook(() => useTopoUpload());
     expect(await submitSettled(result.current.submit)).toBe("job-1");
-    await discardSettled(result.current.discard);
-    expect(deletes()).toHaveLength(0);
+  });
+
+  // Mutation: drop `|| status === "complete"`, and a job that finished while
+  // its status couldn't be read is let go as a failure, so the next Make it
+  // makes a second job and sends the whole ZIP again.
+  it("a held job that finished meanwhile counts as made", async () => {
+    let attempt = 0;
+    serveJob(
+      () => {
+        attempt++;
+        if (attempt === 1) throw new TypeError("Failed to fetch");
+        throw new ApiError(400, "/topo-jobs/job-1/start", "POST");
+      },
+      () => {
+        if (attempt === 1) throw new TypeError("Failed to fetch");
+        return "complete";
+      },
+    );
+    putToPresignedUrl.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useTopoUpload());
+    expect(await submitSettled(result.current.submit)).toBeInstanceOf(
+      TypeError,
+    );
+    expect(await submitSettled(result.current.submit)).toBe("job-1");
+    expect(creates()).toHaveLength(1);
+    expect(result.current.held).toBe(false);
   });
 
   // Mutation: drop the session on any 5xx from /start, and the next submit
@@ -312,7 +336,7 @@ describe("useTopoUpload", () => {
 
   // Mutation: DELETE a joined upload without asking its status first, and
   // closing the dialog cancels a job that launched on a lost /start answer.
-  it("discard deletes a joined upload only while it is still uploading", async () => {
+  it("discard leaves a joined upload that has launched", async () => {
     let status = "uploading";
     serveJob(
       () => {
@@ -327,6 +351,23 @@ describe("useTopoUpload", () => {
     status = "pending";
     await discardSettled(result.current.discard);
     expect(deletes()).toHaveLength(0);
+  });
+
+  // Mutation: never delete a joined upload, and closing the dialog after a
+  // 5xx /start leaves the job for the 24 h sweep.
+  it("discard deletes a joined upload that is still uploading", async () => {
+    serveJob(
+      () => {
+        throw new ApiError(507, "/topo-jobs/job-1/start", "POST");
+      },
+      () => "uploading",
+    );
+    putToPresignedUrl.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useTopoUpload());
+    await submitSettled(result.current.submit);
+    expect(result.current.held).toBe(true);
+    await discardSettled(result.current.discard);
+    expect(deletes()).toHaveLength(1);
   });
 });
 

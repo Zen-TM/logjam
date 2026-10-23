@@ -158,7 +158,7 @@ const isRefusal = (error: unknown) =>
   error instanceof ApiError && error.status < 500 && error.status !== 429;
 
 /** A job's status: "gone" when the API has no such job, null when it
- *  couldn't be asked. */
+ *  couldn't be read (no answer, or any error but a 404). */
 const jobStatus = (path: string) =>
   apiFetch<{ status: string }>(path).then(
     (job) => job.status,
@@ -243,11 +243,15 @@ export function useTopoUpload() {
         // the response may be lost after the job launched, or a 5xx may come
         // before. The job's own status decides.
         const status = await jobStatus(`/topo-jobs/${current.jobId}`);
-        if (status === "pending" || status === "processing") {
+        if (
+          status === "pending" ||
+          status === "processing" ||
+          status === "complete"
+        ) {
           hold(null);
           return current.jobId;
         }
-        // Still uploading, or unknown because the connection is down: submit
+        // Still uploading, or unknown (the status couldn't be read): submit
         // again carries on, and finds out then. Gone or failed: start anew.
         if (status !== "uploading" && status !== null) hold(null);
         throw e;
