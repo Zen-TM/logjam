@@ -2,8 +2,11 @@
 //
 // Kept pure so the projection math (the part most prone to silent edge-case
 // errors at high zoom / extreme latitude) is unit-testable without pulling in
-// canvas, PDFKit, PMTiles, AWS, or Prisma. generateGeoPdf imports these;
-// rendering stays there.
+// canvas, PDFKit, PMTiles, AWS, or Prisma. The api's generateGeoPdf renders
+// with them, and Logjam Web's GeoPDF dialog asks `geoPdfTooLarge` the same
+// question the renderer does, so a refusal shows before anything is queued.
+import { GEOPDF_BASE_LAYER_CONFIG } from "./geoPdfBaseLayers.js";
+import { say } from "./userSentence.js";
 
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -156,4 +159,35 @@ export function geoPdfNativeMegapixels(
   );
   const t = computeTileToMapTransform(zoom, north, south, east, west, 1, 1);
   return (t.srcW * t.srcH) / 1e6;
+}
+
+/**
+ * The deepest zoom the renderer fetches a base layer at: its cache's own
+ * deepest, or z18 for a name it does not know.
+ */
+export function geoPdfMaxNativeZoom(baseLayer: string): number {
+  return GEOPDF_BASE_LAYER_CONFIG[baseLayer]?.maxNativeZoom ?? 18;
+}
+
+/** The most the renderer allocates for the map image, at four bytes a pixel. */
+export const GEOPDF_MAX_CANVAS_BYTES = 400 * 1024 * 1024;
+
+export const GEOPDF_TOO_LARGE = say`That GeoPDF is too large to make. Try a smaller paper size or a smaller area.`;
+
+/**
+ * Whether the map image for this area and scale is past what the renderer
+ * allocates. The dialog shows it live and the API refuses it at submit, both
+ * with `GEOPDF_TOO_LARGE`; the renderer checks the canvas it allocates.
+ */
+export function geoPdfTooLarge(
+  extent: { north: number; south: number; east: number; west: number },
+  scale: number,
+  baseLayer: string,
+): boolean {
+  const megapixels = geoPdfNativeMegapixels(
+    extent,
+    scale,
+    geoPdfMaxNativeZoom(baseLayer),
+  );
+  return megapixels * 1e6 * 4 > GEOPDF_MAX_CANVAS_BYTES;
 }

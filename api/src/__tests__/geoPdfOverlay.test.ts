@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
@@ -7,6 +9,7 @@ import {
   extentFromCentreAndSize,
   getMapDimensions,
   getPaperDimensions,
+  NSW_5M,
   type ExtentState,
   type GeoPdfConfig,
 } from "@logjam/shared";
@@ -28,11 +31,7 @@ import {
 } from "../../prisma/seedArchives";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
-import {
-  latToMercY,
-  computeZoom,
-  TARGET_DPI,
-} from "../services/geoPdfTileMath";
+import { latToMercY, computeZoom, TARGET_DPI } from "@logjam/shared";
 import { API_URL, ALICE_ID } from "./_actors";
 
 // Requires the seed's saved GeoPDF template (api/prisma/seed.ts, "f" 10) and
@@ -61,13 +60,21 @@ const PAPER: ExtentState = {
   lockMode: "scale",
   pivot: "mc",
 };
+// Katoomba's latitude, out in the Tasman Sea: no statewide archive has a tile
+// there, so a job's overlay is the only thing a page can paint, whatever a
+// developer or another test file left at the `master/` keys.
+const OFFSHORE: [number, number] = [-33.7126, 155.3119];
+// The committed Katoomba slice of the statewide heights covers part of a page
+// centred here.
+const KATOOMBA: [number, number] = [-33.7126, 150.3119];
+
 /** The extent Logjam Web computes for a paper and scale around a centre. */
-function extentFor(paper: Partial<ExtentState>) {
+function extentFor(paper: Partial<ExtentState>, [lat, lon] = OFFSHORE) {
   const state = { ...PAPER, ...paper };
   const map = getMapDimensions(state);
   return extentFromCentreAndSize(
-    -33.7126,
-    150.3119,
+    lat,
+    lon,
     (map.w / 1000) * state.scale,
     (map.h / 1000) * state.scale,
   );
@@ -268,5 +275,50 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
     } finally {
       await topo.remove();
     }
+  }, 150_000);
+});
+
+// The statewide hillshade anywhere a page has heights, with no job, and its
+// credit. Mutation: skip the statewide hillshade, or leave `terrainCredit`
+// out of the attribution: the region, or the credit block, stays unchanged.
+describe("GeoPDF over the statewide heights (alice)", () => {
+  it("shades the ground and credits the NSW 5 m DEM", async () => {
+    const tiles = stubTileServer(BASE_LAYER);
+    const fixture = join(
+      __dirname,
+      "../../../shared/src/__fixtures__/nsw-5m-z15-katoomba.pmtiles",
+    );
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: process.env.S3_BUCKET_TOPO,
+        Key: NSW_5M.archivePath,
+        Body: readFileSync(fixture),
+      }),
+    );
+    // Left in place afterwards, as elevation.test.ts leaves it: a developer's
+    // stack then still has heights at Katoomba.
+    const extent = extentFor({}, KATOOMBA);
+    const config = { ...CONFIG, extent };
+    const plain = await mapImage((await renderGeoPdf(config)).pdf);
+    const shaded = await mapImage(
+      (await renderGeoPdf({ ...config, overlays: ["hillshade"] })).pdf,
+    );
+    expect(
+      tiles.length,
+      "a worker container rendered: unset ECS_SUBNETS",
+    ).toBeGreaterThan(0);
+
+    // The slice spans 150.311–150.329 E, 33.700–33.705 S: the top of the
+    // page, from about a third of the way across. Nothing is drawn below it.
+    const fx = (lon: number) =>
+      (lon - extent.west) / (extent.east - extent.west);
+    const fy = (lat: number) =>
+      (latToMercY(extent.north) - latToMercY(lat)) /
+      (latToMercY(extent.north) - latToMercY(extent.south));
+    expect(
+      differing(plain, shaded, fx(150.313), 0, fx(150.327), fy(-33.704)),
+    ).toBeGreaterThan(0);
+    expect(differing(plain, shaded, 0, 0.4, 0.4, 0.7)).toBe(0);
+    expect(differing(plain, shaded, 0.45, 0.75, 1, 1)).toBeGreaterThan(0);
   }, 150_000);
 });

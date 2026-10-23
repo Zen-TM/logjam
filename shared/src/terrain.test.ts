@@ -6,7 +6,9 @@ import {
   NSW_HILLSHADE,
   NSW_SLOPE,
   normalizeTerrainLayers,
+  slopeBandAt,
   slopeReliefColor,
+  terrainCredit,
   TERRAIN_LAYER_DEFAULTS,
   terrainBeforeIds,
 } from "./terrain.js";
@@ -82,6 +84,47 @@ describe("slopeReliefColor", () => {
     const low: SlopeBand[] = [{ fromDeg: 20, toDeg: 30, colour: "#ff0000ff" }];
     expect(colourAt(slopeReliefColor(low), 29.9)).toBe("rgba(255,0,0,1.000)");
     expect(colourAt(slopeReliefColor(low), 30)).toBe(CLEAR);
+  });
+});
+
+describe("slopeBandAt", () => {
+  const sets: Record<string, readonly SlopeBand[]> = {
+    defaults: BANDS,
+    "from 0°": [{ fromDeg: 0, toDeg: 10, colour: "#00ff00ff" }],
+    "a top short of 90°": [
+      { fromDeg: 20, toDeg: 30, colour: "#ff0000ff" },
+      { fromDeg: 30, toDeg: 60, colour: "#0000ffff" },
+    ],
+  };
+
+  // Mutation: `<=` against a band's top, or no special case for a top band
+  // that reaches 90°: a degree on an edge then takes the wrong colour.
+  it.each(Object.entries(sets))(
+    "colours every whole and half degree as the map does (%s)",
+    (_, bands) => {
+      const expression = slopeReliefColor(bands);
+      for (let degrees = 0; degrees <= 90; degrees += 0.5) {
+        const band = slopeBandAt(bands, degrees);
+        expect(band ? rgbaCssFromHex(band.colour) : CLEAR).toBe(
+          colourAt(expression, degrees),
+        );
+      }
+      expect(slopeBandAt(bands, -32768)).toBeNull();
+    },
+  );
+});
+
+describe("terrainCredit", () => {
+  // Mutation: list the layers in the order drawn, not top of the map first.
+  it("credits the layers drawn in one line, top of the map first", () => {
+    expect(terrainCredit(["hillshade", "contours", "slope"])).toBe(
+      NSW_5M.credit.replace(/^Elevation/, "Contours, slope and hillshade"),
+    );
+    expect(terrainCredit(["hillshade", "slope"])).toBe(
+      NSW_5M.credit.replace(/^Elevation/, "Slope and hillshade"),
+    );
+    expect(terrainCredit(["slope"])).toBe(NSW_SLOPE.credit);
+    expect(terrainCredit([])).toBeNull();
   });
 });
 

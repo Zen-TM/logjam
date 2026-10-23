@@ -3,12 +3,15 @@ import {
   computeTileToMapTransform,
   computeZoom,
   geoPdfNativeMegapixels,
+  geoPdfMaxNativeZoom,
+  geoPdfTooLarge,
+  GEOPDF_MAX_CANVAS_BYTES,
   lon2tileX,
   lat2tileY,
   tileX2lon,
   tileY2lat,
   latToMercY,
-} from "./geoPdfTileMath";
+} from "./geoPdfTileMath.js";
 
 // Edge-case coverage for the GeoPDF projection math. These are the
 // calculations most prone to silent errors at high zoom / extreme latitude.
@@ -173,5 +176,42 @@ describe("geoPdfNativeMegapixels", () => {
     // Sanity bound — a ~0.05° square at scale 25000/z18 shouldn't blow out to
     // an absurd canvas size.
     expect(mp).toBeLessThan(10000);
+  });
+});
+
+describe("geoPdfTooLarge", () => {
+  // An A4 sheet's ground at 1:25 000 around Katoomba: 4.8 km × 6.9 km.
+  const sheet = { north: -33.68, south: -33.742, east: 150.337, west: 150.285 };
+  const bytes = (extent: typeof sheet, scale: number, zoom: number) =>
+    geoPdfNativeMegapixels(extent, scale, zoom) * 1e6 * 4;
+
+  it("lets an ordinary sheet through", () => {
+    expect(geoPdfTooLarge(sheet, 25000, "six-topo")).toBe(false);
+  });
+
+  // Mutation: compare against the canvas cap with `<=` turned around, or size
+  // every base layer at one zoom: either way one of these flips.
+  it("refuses what the renderer could not allocate, at the base layer's own zoom", () => {
+    const wide = { ...sheet, east: sheet.west + 0.6, south: sheet.north - 0.6 };
+    expect(geoPdfTooLarge(wide, 25000, "six-topo")).toBe(true);
+    // At 1:5 000 SIX Topo is fetched at its z16 ceiling and imagery at z19.
+    const town = {
+      ...sheet,
+      east: sheet.west + 0.07,
+      south: sheet.north - 0.07,
+    };
+    expect(bytes(town, 5000, 16)).toBeLessThan(GEOPDF_MAX_CANVAS_BYTES);
+    expect(geoPdfTooLarge(town, 5000, "six-topo")).toBe(false);
+    expect(geoPdfTooLarge(town, 5000, "six-imagery")).toBe(true);
+  });
+});
+
+describe("geoPdfMaxNativeZoom", () => {
+  // The one answer the dialog, the route, the renderer and the runtime
+  // estimate share. Mutation: change the fallback, or read another field.
+  it("is the base layer's own deepest zoom, or z18", () => {
+    expect(geoPdfMaxNativeZoom("six-topo")).toBe(16);
+    expect(geoPdfMaxNativeZoom("six-imagery")).toBe(20);
+    expect(geoPdfMaxNativeZoom("no-such-layer")).toBe(18);
   });
 });

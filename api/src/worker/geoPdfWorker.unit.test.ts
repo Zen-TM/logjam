@@ -149,6 +149,29 @@ describe("processGeoPdfJob", () => {
     );
   });
 
+  // Mutations: pass the default bands, or look the bands up by any id but
+  // the job's owner: the renderer then colours someone else's slope.
+  it("colours the slope with the job owner's own bands", async () => {
+    const bands = [
+      { fromDeg: 10, toDeg: 20, colour: "#112233ff" },
+      { fromDeg: 20, toDeg: 90, colour: "#445566ff" },
+    ];
+    // Only the owner has these bands; anyone else reads as the defaults.
+    db.user.findUnique.mockImplementation(async ({ where }) =>
+      where.id === "u1" ? { uiPreferences: { slopeBands: bands } } : null,
+    );
+    db.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });
+    db.$transaction.mockImplementationOnce(async (fn) =>
+      fn({
+        geoPdfJob: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      }),
+    );
+
+    await processGeoPdfJob("j1");
+
+    expect(generateGeoPdf.mock.calls[0]?.[3]).toEqual(bands);
+  });
+
   it("charges nothing and deletes the upload when the job was reaped mid-render", async () => {
     const tx = { geoPdfJob: { updateMany: vi.fn() } };
     db.geoPdfJob.updateMany.mockResolvedValueOnce({ count: 1 });

@@ -157,3 +157,42 @@ export function slopeReliefColor(bands: readonly SlopeBand[]): unknown[] {
   if (top < 90) stops.push(top - EDGE, below, top, CLEAR);
   return ["interpolate", ["linear"], ["elevation"], ...stops];
 }
+
+/**
+ * The band a slope falls in, or null where `slopeReliefColor` paints clear:
+ * no-data (it decodes to −32768), under the first band, or over a top band
+ * short of 90°. The same rule for a renderer with no MapLibre, the GeoPDF.
+ * Guard: `terrain.test.ts`, against the expression itself.
+ */
+export function slopeBandAt(
+  bands: readonly SlopeBand[],
+  degrees: number,
+): SlopeBand | null {
+  const last = bands[bands.length - 1];
+  return (
+    bands.find(
+      (band) =>
+        degrees >= band.fromDeg &&
+        (degrees < band.toDeg || (band === last && band.toDeg >= 90)),
+    ) ?? null
+  );
+}
+
+/**
+ * One credit for the statewide layers a printed map drew, top of the map
+ * first ("Contours, slope and hillshade: derived from the NSW 5 m …"): each
+ * layer's own credit has the same body, and a sheet has room for one line.
+ */
+export function terrainCredit(drawn: Iterable<TerrainLayerKey>): string | null {
+  const keys = new Set(drawn);
+  const names = TERRAIN_LAYER_KEYS.filter((key) => keys.has(key));
+  if (names.length === 0) return null;
+  const list =
+    names.length === 1
+      ? names[0]!
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return NSW_5M.credit.replace(
+    /^Elevation/,
+    list[0]!.toUpperCase() + list.slice(1),
+  );
+}

@@ -12,7 +12,7 @@ import {
   estimateExportSeconds,
   estimateGeoPdfSeconds,
 } from "./runtimeEstimates";
-import { geoPdfNativeMegapixels } from "../services/geoPdfTileMath";
+import { geoPdfNativeMegapixels } from "@logjam/shared";
 import type { GeoPdfConfig } from "@logjam/shared";
 
 const exportFindMany = (

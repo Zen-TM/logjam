@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { GEOPDF_TOO_LARGE, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import GeoPdfDialog, { type GeoPdfTemplate } from "./GeoPdfDialog";
+import type { TBbox } from "../map/Map";
+import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { ToastProvider } from "../feedback/ToastProvider";
 
 const template = {
@@ -72,6 +75,9 @@ function dialog({
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   initialTemplateId?: string | null;
+  pendingExtent?: TBbox | null;
+  pendingScale?: number | null;
+  completedTopoJobs?: CompletedTopoJob[];
 }) {
   return (
     <ToastProvider>
@@ -82,6 +88,7 @@ function dialog({
         pendingExtent={null}
         pendingScale={null}
         activeLayerId="six-topo"
+        terrainLayers={TERRAIN_LAYER_DEFAULTS}
         completedTopoJobs={[]}
         {...props}
       />
@@ -237,5 +244,142 @@ describe("GeoPdfDialog, scale", () => {
     fireEvent.blur(field);
     pick();
     expect(scales).toEqual([50000, 12500]);
+  });
+});
+
+// The renderer's limit, shown under the area as soon as it is passed, in the
+// sentence the API would answer with. A 1° square at 1:25 000 is far past it.
+// Mutation: drop `tooLarge` from the FieldError or from handleGenerate's check.
+describe("GeoPdfDialog, a map too large to draw", () => {
+  const box = (size: number): TBbox => ({
+    north: -33.7,
+    south: -33.7 - size,
+    east: 150.3 + size,
+    west: 150.3,
+  });
+
+  it("says so under the area, and Make it points there", () => {
+    render(dialog({ open: true, pendingExtent: box(1), pendingScale: 25000 }));
+    expect(screen.getByText(GEOPDF_TOO_LARGE)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+  });
+
+  it("says nothing for an ordinary sheet", () => {
+    render(
+      dialog({ open: true, pendingExtent: box(0.05), pendingScale: 25000 }),
+    );
+    expect(screen.queryByText(GEOPDF_TOO_LARGE)).toBeNull();
+  });
+});
+
+// The statewide contours stay off a sheet that prints its own, as on the map,
+// so with no LiDAR job in the area the switch could draw nothing. Mutation:
+// drop the `printed` gate from the Contours checkbox.
+describe("GeoPdfDialog, the Terrain layers", () => {
+  const contours = () =>
+    screen.getByRole("checkbox", { name: /Contours/ }) as HTMLInputElement;
+
+  it("offers contours over imagery, and says the topo sheet prints its own", () => {
+    render(dialog({ open: true }));
+    expect(contours().disabled).toBe(true);
+    expect(screen.getByText("This map prints its own")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
+    expect(contours().disabled).toBe(false);
+    expect(contours().checked).toBe(true);
+  });
+});
+
+// Over a job of the user's, the Terrain boxes turn on, so the job's own slope
+// and shading print as they did before; once the user ticks one, the box keeps
+// their choice. Mutation: leave `setTerrainFollowsMap(false)` out of
+// toggleOverlay, and the unticked Slope comes back over the job.
+describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
+  const job = {
+    syncRole: "owner",
+    footprint: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [150.31, -33.75],
+          [150.33, -33.75],
+          [150.33, -33.71],
+          [150.31, -33.75],
+        ],
+      ],
+    },
+  } as CompletedTopoJob;
+  const overJob: TBbox = {
+    north: -33.7,
+    south: -33.76,
+    east: 150.36,
+    west: 150.3,
+  };
+  const away: TBbox = {
+    north: -33.9,
+    south: -33.96,
+    east: 150.36,
+    west: 150.3,
+  };
+  const slope = () =>
+    screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement;
+  const at = (pendingExtent: TBbox) =>
+    dialog({
+      open: true,
+      completedTopoJobs: [job],
+      pendingExtent,
+      pendingScale: 25000,
+    });
+
+  it("follows the area until the user chooses", () => {
+    const { rerender } = render(at(away));
+    expect(slope().checked).toBe(false);
+    rerender(at(overJob));
+    expect(slope().checked).toBe(true);
+
+    fireEvent.click(slope());
+    rerender(at(away));
+    rerender(at(overJob));
+    expect(slope().checked).toBe(false);
+  });
+});
+
+// A new template has no area: its Terrain layers follow the map's switches,
+// and a job's own layers turn them on only for a user who has one. Mutation:
+// hand `shownOverlays` the template's `lidarOverlap` (always true), and a
+// user with no LiDAR job saves slope and shading for every sheet.
+describe("GeoPdfDialog, a new template's Terrain layers", () => {
+  const slope = () =>
+    screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement;
+  const ownJob = {
+    syncRole: "owner",
+    footprint: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [150.31, -33.75],
+          [150.33, -33.75],
+          [150.33, -33.71],
+          [150.31, -33.75],
+        ],
+      ],
+    },
+  } as CompletedTopoJob;
+
+  it("follows the map for a user with no job", () => {
+    render(dialog({ open: true, templateMode: true }));
+    expect(slope().checked).toBe(false);
+  });
+
+  // Mutation: drop ownJobInArea's empty-area branch (or give a template
+  // `jobInArea = false`), and a user with a job of their own gets a template
+  // with Terrain off.
+  it("turns on for a user with a job of their own", () => {
+    render(
+      dialog({ open: true, templateMode: true, completedTopoJobs: [ownJob] }),
+    );
+    expect(slope().checked).toBe(true);
   });
 });

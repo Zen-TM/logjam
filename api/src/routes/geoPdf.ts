@@ -27,6 +27,8 @@ import {
   validateVectorStyleSettings,
   VECTOR_STYLE_DEFAULTS,
   validateGeoPdfConfig,
+  geoPdfTooLarge,
+  GEOPDF_TOO_LARGE,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -167,6 +169,10 @@ router.post(
       throw malformed(
         "Invalid extent: latitudes must be within -90..90 and longitudes within -180..180",
       );
+    }
+    // Logjam Web shows this live; here it saves a worker that would fail.
+    if (geoPdfTooLarge(config.extent, config.scale, config.baseLayer)) {
+      throw new AppError(400, GEOPDF_TOO_LARGE);
     }
 
     // null = new user with no saved style → defaults (same as GET /vector-style

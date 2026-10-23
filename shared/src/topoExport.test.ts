@@ -16,7 +16,6 @@ import {
   type ExportFormat,
   type TopoLayerKey,
 } from "./topoExport";
-import { VALID_GEOPDF_OVERLAY_NAMES } from "./geoPdfConfig";
 import { TOPO_OVERLAY_SOURCE } from "./geoPdfBaseLayers";
 
 // Topo derivations in TypeScript derive from the canonical TOPO_LAYERS list.
@@ -34,12 +33,6 @@ describe("TOPO_LAYERS derivations stay consistent", () => {
       (VECTOR_LAYERS as string[]).includes(l),
     );
     expect(overlap).toEqual([]);
-  });
-
-  it("the GeoPDF overlay allowlist matches the layer list", () => {
-    expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual(
-      [...allNames].sort(),
-    );
   });
 
   it("every layer has an attribution source mapping", () => {

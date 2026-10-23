@@ -21,8 +21,9 @@
 // The single source of truth for the layers rendered on the map and selectable
 // as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
 // (email download), not a map layer. Everything TS-side derives from this list
-// (TopoLayerKey, RASTER_LAYERS/VECTOR_LAYERS in topoExport.ts, the GeoPDF
-// overlay allowlist); api/src/constants/topoLayers.ts and
+// (TopoLayerKey, RASTER_LAYERS/VECTOR_LAYERS in topoExport.ts) except the GeoPDF
+// overlay allowlist, which is declared so stored templates keep validating and
+// must hold every name here (geoPdfConfig.test.ts); api/src/constants/topoLayers.ts and
 // frontend/src/topoLayerTypes.ts are thin re-exports. The only structurally
 // unavoidable mirror is topo/worker.py → ALL_LAYERS (Python).
 
