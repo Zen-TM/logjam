@@ -62,10 +62,12 @@ resource "aws_ecs_task_definition" "topo_worker" {
 resource "aws_ecs_task_definition" "topo_export_worker" {
   family = "logjam-topo-export-worker"
   container_definitions = jsonencode([{
-    name        = "topo-export-worker"
-    image       = "logjam-topo-worker:latest"
-    essential   = true
-    entryPoint  = ["python3", "/app/export_worker.py"]
+    name      = "topo-export-worker"
+    image     = "logjam-topo-worker:latest"
+    essential = true
+    # Not entryPoint, as prod has: MiniStack ignores it and runs the image's
+    # CMD, the LiDAR worker, so no export would start.
+    command     = ["python3", "/app/export_worker.py"]
     environment = local.worker_common_env
   }])
   cpu                      = "4096"
