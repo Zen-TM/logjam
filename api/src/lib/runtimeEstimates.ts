@@ -25,8 +25,8 @@ import {
 const env = getEnv();
 
 // A sharpened job's cold-start rate, until enough of them have run to fit
-// one: kiosk runs on the published Katoomba tiles took 14 to 150 s a tile
-// (a 1 m DEM to a dense LAZ's TIN), against the legacy pipeline's render.
+// one: sharpening one published Katoomba tile took 14 to 150 s (a 1 m DEM
+// to a dense LAZ's TIN), far below the legacy default's 510 s.
 const SHARPEN_DEFAULT_SECONDS_PER_TILE = 150;
 
 // Fixed per-job floor added on top of the fitted rate term.

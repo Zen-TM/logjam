@@ -18,6 +18,7 @@
 // (`TopoStyleSheet`), so the map stays in view while it changes.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  lidarJobCopy,
   removeShareConfirm,
   SHARPEN_NEW_JOBS,
   type TopoExportJobView,
@@ -65,6 +66,8 @@ import {
   fileSubtitle,
   formatDay,
   isOlderLidarJob,
+  offersOldExport,
+  offersTemplates,
   plural,
   topoLabel,
   topoNamesById,
@@ -81,8 +84,7 @@ import classes from "./MapsPanel.module.css";
 /** The three lists this view holds, one tab each. */
 type LidarTab = "topos" | "exports" | "templates";
 
-/** What makes a new LiDAR job, in every place that offers one. */
-const MAKE_LABEL = SHARPEN_NEW_JOBS ? "Sharpen an area" : "Make a LiDAR topo";
+const MAKE_LABEL = lidarJobCopy(SHARPEN_NEW_JOBS).make;
 
 /** A sharpened job and an older LiDAR topo, told apart in the list. */
 const identityOf = (job: CompletedTopoJob) =>
@@ -167,6 +169,7 @@ export default function LidarPanel({
   const [shareJob, setShareJob] = useState<{
     id: string;
     label: string;
+    sharpened: boolean;
   } | null>(null);
 
   // A template saved from TopoDialog's "Save as template" bumps
@@ -227,8 +230,7 @@ export default function LidarPanel({
     // Export is NOT owner-gated: a recipient can already see the overlay, and
     // POST /topo-exports accepts a shared source job, making the export under
     // the recipient's own account (api/src/__tests__/topoExports.test.ts).
-    // A sharpened job has none of the files this export reads.
-    const exportEntry: MenuEntry[] = job.sharpened
+    const exportEntry: MenuEntry[] = !offersOldExport(job)
       ? []
       : [
           {
@@ -245,7 +247,8 @@ export default function LidarPanel({
           id: "share",
           label: "Share…",
           icon: "shareFriend",
-          onSelect: () => setShareJob({ id: job.jobId, label }),
+          onSelect: () =>
+            setShareJob({ id: job.jobId, label, sharpened: !!job.sharpened }),
         },
         { id: "delete-sep", separator: true },
         {
@@ -351,8 +354,7 @@ export default function LidarPanel({
   ];
 
   const templateEntries = (template: TopoTemplate): MenuEntry[] => [
-    // A sharpened job draws no styled layer a template could set.
-    ...(SHARPEN_NEW_JOBS
+    ...(!offersTemplates(SHARPEN_NEW_JOBS)
       ? []
       : ([
           {
@@ -435,7 +437,7 @@ export default function LidarPanel({
                 icon: "lidar",
                 onSelect: onOpenTopo,
               },
-              ...(SHARPEN_NEW_JOBS
+              ...(!offersTemplates(SHARPEN_NEW_JOBS)
                 ? []
                 : [
                     {
@@ -618,7 +620,7 @@ export default function LidarPanel({
         </section>
       )}
 
-      {tab === "templates" && (
+      {tab === "templates" && offersTemplates(SHARPEN_NEW_JOBS) && (
         <section
           className={classes.section}
           aria-labelledby="maps-topo-templates"
@@ -697,11 +699,15 @@ export default function LidarPanel({
                     label: "Exports",
                     count: finishedExports.length,
                   },
-                  {
-                    value: "templates",
-                    label: "Templates",
-                    count: templates.length,
-                  },
+                  ...(offersTemplates(SHARPEN_NEW_JOBS)
+                    ? [
+                        {
+                          value: "templates" as const,
+                          label: "Templates",
+                          count: templates.length,
+                        },
+                      ]
+                    : []),
                 ]}
                 value={tab}
                 onChange={setTab}
@@ -731,7 +737,7 @@ export default function LidarPanel({
       {shareJob && (
         <ShareDialog
           title={`Share ${shareJob.label}`}
-          kind="topoJob"
+          kind={shareJob.sharpened ? "sharpenedArea" : "topoJob"}
           friends={friends}
           open
           onClose={() => setShareJob(null)}

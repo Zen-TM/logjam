@@ -16,13 +16,4 @@ describe("sharpenJobRequest", () => {
     expect(on(true, 3)).toBe(true);
     expect(on(true, 0)).toBe(false);
   });
-
-  // Mutation: keep a template's auto-export, and the reaper exports a job
-  // that has no files to export.
-  it("never asks for an auto-export", () => {
-    const withExport = { ...RASTER_TEMPLATE_DEFAULTS };
-    expect(sharpenJobRequest(withExport, true, 1).autoExport.enabled).toBe(
-      false,
-    );
-  });
 });

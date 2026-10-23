@@ -1,4 +1,7 @@
-import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { AUTO_EXPORT_DEFAULTS, RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -35,9 +38,10 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
 }));
 
 const discard = vi.fn();
+const submit = vi.hoisted(() => vi.fn());
 vi.mock("./topoUpload", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./topoUpload")>()),
-  useTopoUpload: () => ({ submit: vi.fn(), discard, held: false }),
+  useTopoUpload: () => ({ submit, discard, held: false }),
 }));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
@@ -64,6 +68,7 @@ HTMLDialogElement.prototype.close = function () {
 
 afterEach(() => {
   switches.sharpen = false;
+  submit.mockReset();
   cleanup();
   discard.mockClear();
   vi.mocked(apiFetch).mockImplementation(async () => templates as never);
@@ -152,5 +157,67 @@ describe("TopoDialog once new jobs sharpen", () => {
     ).toBeTruthy();
     expect(screen.queryByLabelText("Template", { exact: true })).toBeNull();
     expect(screen.queryByText("How this topo is drawn")).toBeNull();
+  });
+});
+
+/** A made-up ELVIS ZIP holding one point cloud (the a11y spec's fixture). */
+const lazZip = () =>
+  new File(
+    [
+      readFileSync(
+        join(__dirname, "../../../e2e/__fixtures__/elvis-point-clouds.zip"),
+      ),
+    ],
+    "survey.zip",
+    { type: "application/zip" },
+  );
+const pick = (container: HTMLElement, file: File) =>
+  fireEvent.change(
+    container.ownerDocument.querySelector('input[type="file"]')!,
+    { target: { files: [file] } },
+  );
+const vegetationBox = () =>
+  screen.findByRole("checkbox", { name: /Vegetation \(experimental\)/ });
+
+describe("TopoDialog's Vegetation choice", () => {
+  // Mutation: leave Vegetation out of the reset, and the next job, which
+  // nobody ticked, runs the vegetation pass because the last one did.
+  it("is off again for the next job", async () => {
+    switches.sharpen = true;
+    const { container, rerender } = render(dialog({ open: true }));
+    pick(container, lazZip());
+    fireEvent.click(await vegetationBox());
+    expect((await vegetationBox()) as HTMLInputElement).toHaveProperty(
+      "checked",
+      true,
+    );
+    rerender(dialog({ open: false }));
+    rerender(dialog({ open: true }));
+    pick(container, lazZip());
+    expect((await vegetationBox()) as HTMLInputElement).toHaveProperty(
+      "checked",
+      false,
+    );
+  });
+
+  // Mutation: send the template's auto-export (or apply the template at
+  // all), and the reaper exports a job that has none of the files an export
+  // reads.
+  it("sends no auto-export, even when opened with a template that has one", async () => {
+    switches.sharpen = true;
+    const exporting = {
+      ...template("t1"),
+      autoExport: { ...AUTO_EXPORT_DEFAULTS, enabled: true },
+    };
+    vi.mocked(apiFetch).mockImplementation(async () => [exporting] as never);
+    const { container } = render(
+      dialog({ open: true, initialTemplateId: "t1" }),
+    );
+    pick(container, lazZip());
+    await vegetationBox();
+    submit.mockResolvedValue("job-1");
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit.mock.calls[0]![1].autoExport.enabled).toBe(false);
   });
 });

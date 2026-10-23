@@ -788,21 +788,7 @@ jobs:
           ZIP: ${{ steps.sample.outputs.zip }}
         run: |
           set -o pipefail
-          id=$(cat /proc/sys/kernel/random/uuid)
-          key="inputs/$id/sample.zip"
-          aws s3 cp "$ZIP" "s3://$S3_BUCKET_TOPO/$key"
-          # What POST /topo-jobs stores: the default settings and vector style.
-          defaults() { (cd shared && node --input-type=module -e \
-            "import * as s from './dist/topoSettings.js'; console.log(JSON.stringify(s.$1))"); }
-          psql -h localhost -U logjam -d logjam -v ON_ERROR_STOP=1 \
-            -v settings="$(defaults RASTER_TEMPLATE_DEFAULTS)" \
-            -v style="$(defaults VECTOR_STYLE_DEFAULTS)" <<SQL
-            INSERT INTO topo_jobs (id, user_id, status, name, s3_input_key, layer_options,
-                                   vector_style_snapshot, tile_count, updated_at)
-            SELECT '$id', id, 'pending', 'e2e legacy', '$key', :'settings'::jsonb,
-                   :'style'::jsonb, 1, now()
-            FROM users WHERE cognito_id = 'fake-alice-sub';
-          SQL
+          id=$($E2E/legacy-job.sh "e2e legacy" "$ZIP")
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$id" "$IMAGE" \
             2>&1 | tee "$RUNNER_TEMP/legacy.log"
           # Mutation that turns the first grep red: drop OVERPASS_ENDPOINTS from
@@ -817,15 +803,17 @@ jobs:
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py complete "$id" 150.311 -33.780
       # Runbook step 6: the reaper fails a job whose worker died mid-render,
-      # and a worker relaunched for it must leave it failed. ECS launches the
-      # first worker; the relaunch is by hand, since only the reaper's failing
-      # of the row is stood in for here, not a second RunTask.
+      # and a worker relaunched for it must leave it failed. A legacy job, set
+      # up by hand: its render runs long enough for the heartbeat to report it,
+      # where a one-tile sharpen job is done in seconds. Both workers are
+      # started by hand, since only the reaper's failing of the row is stood in
+      # for here.
       - name: A relaunched worker leaves a reaped job alone
         env:
           ZIP: ${{ steps.sample.outputs.zip }}
         run: |
-          JOB_ID=$($E2E/start-job.sh "e2e reaped" "$ZIP")
-          cid=$($E2E/ecs-worker.sh "$JOB_ID")
+          JOB_ID=$($E2E/legacy-job.sh "e2e reaped" "$ZIP")
+          cid=$(docker run -d --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE")
           sql() { psql -h localhost -U logjam -d logjam -tAc "$1"; }
           for _ in $(seq 1 120); do
             [ "$(sql "SELECT coalesce(render_tiles_done, 0) > 0 FROM topo_jobs WHERE id = '$JOB_ID'")" = t ] && break

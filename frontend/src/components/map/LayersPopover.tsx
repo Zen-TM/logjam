@@ -37,6 +37,7 @@ import {
   type Glyph,
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
+import { jobsWithOverlays, lidarOverlayEmptyLine } from "./lidarOverlays";
 
 type BaseLayer = TileLayer & { id: string; name: string };
 type Setter<T> = (value: T | ((prev: T) => T)) => void;
@@ -100,17 +101,6 @@ function VectorSwatch() {
  * inside it than a switch (LiDAR topos) opens a sub-view in place, so twenty
  * topos cost a scroll inside that view rather than a screen of rows here.
  */
-/**
- * The jobs that have an overlay to switch. A sharpened job with no
- * vegetation has none: its area is terrain, drawn by the Terrain group, so it
- * gets no switch (LayersPopover.test.ts).
- */
-export function jobsWithOverlays(
-  jobs: readonly CompletedTopoJob[],
-): CompletedTopoJob[] {
-  return jobs.filter((job) => job.layers.length > 0);
-}
-
 export default function LayersPopover({
   open,
   onClose,
@@ -331,7 +321,7 @@ export default function LayersPopover({
                         <IconTile icon="lidar" hue="var(--hue-overlay)" />
                       }
                       title={copy.lidarTopos}
-                      subtitle="None yet. Make one from Maps."
+                      subtitle={lidarOverlayEmptyLine(completedTopoJobs) ?? ""}
                     />
                   ) : (
                     <OverlayRow

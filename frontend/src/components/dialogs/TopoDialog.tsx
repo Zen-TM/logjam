@@ -30,6 +30,7 @@ import {
   formatCredits,
   regionNameFromSurvey,
   SHARPEN_NEW_JOBS,
+  lidarJobCopy,
   type ElvisStats,
   type RasterTemplateSettings,
   type AutoExportSettings,
@@ -46,7 +47,7 @@ import {
   Icon,
   ErrorBanner,
   FieldError,
-  SwitchRow,
+  Checkbox,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
@@ -258,6 +259,7 @@ export default function TopoDialog({
     setSaveAsName("");
     setShowSaveAs(false);
     setSettingsTab("hillshade");
+    setVegetation(false);
   }
 
   const refreshTemplates = useCallback(async () => {
@@ -280,7 +282,12 @@ export default function TopoDialog({
       .then((list) => {
         if (!live) return;
         setTemplates(list);
-        if (initialTemplateId && !initialTemplateApplied.current) {
+        // A sharpened job draws no styled layer a template could set.
+        if (
+          !SHARPEN_NEW_JOBS &&
+          initialTemplateId &&
+          !initialTemplateApplied.current
+        ) {
           initialTemplateApplied.current = true;
           const t = list.find((x) => x.id === initialTemplateId);
           if (t) {
@@ -472,7 +479,7 @@ export default function TopoDialog({
     }
     // validationError is already in the banner above the form.
     if (validationError) return;
-    if (settingsInvalid) {
+    if (!SHARPEN_NEW_JOBS && settingsInvalid) {
       setError(
         "A setting needs fixing. Open “How this topo is drawn” to see which.",
       );
@@ -573,6 +580,7 @@ export default function TopoDialog({
     setSaveAsName("");
   };
 
+  const jobCopy = lidarJobCopy(SHARPEN_NEW_JOBS);
   const title =
     phase === "uploading"
       ? "Uploading"
@@ -584,9 +592,7 @@ export default function TopoDialog({
             ? "Getting LiDAR from ELVIS"
             : mode === "settings"
               ? "How this topo is drawn"
-              : SHARPEN_NEW_JOBS
-                ? "Sharpen an area"
-                : "Make a LiDAR topo";
+              : jobCopy.make;
 
   return (
     <>
@@ -679,11 +685,13 @@ export default function TopoDialog({
             <p className={classes.workingLine}>
               {phase === "uploading"
                 ? "Uploading your LiDAR. Keep this window open until it finishes."
-                : "Uploaded. Checking it over and starting your topo…"}
+                : `Uploaded. Checking it over and starting ${jobCopy.yours}…`}
             </p>
             <ProgressBar
               label={
-                phase === "uploading" ? "Upload progress" : "Starting your topo"
+                phase === "uploading"
+                  ? "Upload progress"
+                  : `Starting ${jobCopy.yours}`
               }
               value={phase === "uploading" ? uploadPct : undefined}
             />
@@ -704,7 +712,8 @@ export default function TopoDialog({
               className={classes.doneGlyph}
             />
             <p className={classes.doneName}>
-              {submittedJob?.name ?? "Your topo"} is being made
+              {submittedJob?.name ?? jobCopy.yours.replace(/^y/, "Y")} is being
+              made
             </p>
             <p className={classes.workingDetail}>
               {stats?.tileCount
@@ -873,12 +882,11 @@ export default function TopoDialog({
             {SHARPEN_NEW_JOBS ? (
               stats &&
               stats.lazCount > 0 && (
-                <SwitchRow
-                  title="Vegetation (experimental)"
-                  description="Also draws how thick the scrub is, from the point clouds. It takes longer."
+                <Checkbox
+                  label="Vegetation (experimental)"
+                  description="Also draws how thick the scrub is from the point clouds, which takes longer."
                   checked={vegetation}
                   disabled={upload.held}
-                  disabledReason={KEPT_FOR_RESUME}
                   onChange={setVegetation}
                 />
               )

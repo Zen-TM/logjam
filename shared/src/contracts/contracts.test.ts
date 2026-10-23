@@ -630,6 +630,13 @@ describe("sharing", () => {
     expect(sharePromise("selection")).toContain("these");
   });
 
+  // Mutation: the LiDAR topo's promise for a sharpened area, which a friend
+  // can't download or export.
+  it("promises no download or export for a sharpened area", () => {
+    expect(sharePromise("sharpenedArea")).toMatch(/^Friends you pick/);
+    expect(sharePromise("sharpenedArea")).not.toMatch(/download|export/);
+  });
+
   it("says a place share leaves copies alone, and a route's can be stopped", () => {
     expect(sharePromise("place")).toContain("copies they've already made");
     expect(sharePromise("route")).toContain("stop sharing anytime");

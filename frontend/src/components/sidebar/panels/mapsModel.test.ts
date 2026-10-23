@@ -7,6 +7,8 @@ import {
   geoPdfLabel,
   geoPdfsBeingMade,
   isOlderLidarJob,
+  offersOldExport,
+  offersTemplates,
   topoWorkBeingMade,
 } from "./mapsModel";
 
@@ -172,5 +174,25 @@ describe("an older LiDAR job", () => {
     expect(isOlderLidarJob({}, true)).toBe(true);
     expect(isOlderLidarJob(area, true)).toBe(false);
     expect(isOlderLidarJob({}, false)).toBe(false);
+  });
+});
+
+describe("what the LiDAR list offers", () => {
+  // Mutations: Export offered on a sharpened job (it has none of the files
+  // the export reads), or hidden on an older job, including after a revert.
+  it("offers the old export only on a job with its files", () => {
+    expect(offersOldExport({})).toBe(true);
+    expect(
+      offersOldExport({ sharpened: {} } as Parameters<
+        typeof offersOldExport
+      >[0]),
+    ).toBe(false);
+  });
+
+  // Mutation: keep the template entries with the switch on, and a template
+  // row starts a sharpened job with settings it can't use.
+  it("offers templates only while new jobs don't sharpen", () => {
+    expect(offersTemplates(true)).toBe(false);
+    expect(offersTemplates(false)).toBe(true);
   });
 });

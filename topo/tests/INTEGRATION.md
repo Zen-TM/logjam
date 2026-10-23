@@ -63,18 +63,20 @@ elvis-katoomba-2506258-laz.zip`:
    heights on Mount Solitary, the fill pixels of the range's corner tile in
    place, and a contour tile.
 5. **Legacy pipeline** (`e2e/check.py complete`): a job with no mark is
-   inserted by hand (the API marks every new job) and the worker run on it
-   with `docker run`, as one still pending when the switch flipped would be.
+   inserted by hand (`e2e/legacy-job.sh`; the API marks every new job) and
+   the worker run on it with `docker run`, as one still pending when the
+   switch flipped would be.
    The worker exits 0 and the row is `complete` with its outputs, footprint,
    metrics and storage charge; the objects are in the bucket and the input
    ZIP is gone; every layer's tile on Mount Solitary decodes and is not
    blank.
-6. **Resurrection check** (`e2e/check.py reaped`): a second job is launched
-   the same way, its worker killed mid-render and the row force-failed as the
-   reaper would; a worker relaunched for the same `JOB_ID` leaves it
-   `failed`, with no outputs and no notification. The relaunch is by `docker
-   run` with `e2e/worker.env`, not RunTask: only the reaper's half is stood in
-   for.
+6. **Resurrection check** (`e2e/check.py reaped`): a second legacy job is
+   set up the same way (its render runs long enough for the heartbeat to
+   report it; a one-tile sharpen job is done in seconds), its worker killed
+   mid-render and the row force-failed as the reaper would; a worker
+   relaunched for the same `JOB_ID` leaves it `failed`, with no outputs and
+   no notification. Both workers are started by `docker run` with
+   `e2e/worker.env`, not RunTask: only the reaper's half is stood in for.
 
 MiniStack runs a task on the first network of its own container, by name, so
 the job's no-internet network is named to sort before the job's own.
@@ -99,6 +101,20 @@ from the GDAL block of `e2e/worker.env`:
 
 (`worker.env` points Overpass and the rasters at CI's stubs; the `-e` overrides
 send them to the real mirror and skip the rasters.) It claims only a `pending` job.
+
+A job started in Logjam Web sharpens (`SHARPEN_NEW_JOBS`), and `sharpen.py`
+reads the statewide height and slope archives from the dev bucket, which
+nothing local puts there. Before starting one, put CI's made-up stand-ins in
+(a steep plane, so the area's fill looks nothing like real ground):
+
+    mkdir -p /tmp/statewide
+    docker run --rm -v /tmp/statewide:/out -v "$PWD/topo/tests/e2e:/e2e:ro" \
+      --entrypoint python3 logjam-topo-worker:latest /e2e/statewide.py /out
+    for name in nsw-5m nsw-5m-slope; do
+      AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=ap-southeast-2 \
+        aws --endpoint-url http://localhost:4566 s3 cp /tmp/statewide/$name.pmtiles \
+        s3://logjam-topo-local/master/dem/$name.pmtiles
+    done
 
 The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.

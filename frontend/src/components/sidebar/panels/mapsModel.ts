@@ -260,3 +260,24 @@ export function isOlderLidarJob(
 ): boolean {
   return sharpenNewJobs && !job.sharpened;
 }
+
+/**
+ * Whether the LiDAR list offers templates (their tab, "New template…", and a
+ * template's way into a new job): not once new jobs sharpen, since a
+ * sharpened job draws no styled layer a template could set
+ * (mapsModel.test.ts).
+ */
+export function offersTemplates(sharpenNewJobs: boolean): boolean {
+  return !sharpenNewJobs;
+}
+
+/**
+ * Whether a job offers the old Export…: only a job with the files it reads,
+ * which a sharpened job has none of. By kind, not by the switch, so a
+ * revert still offers it on every older job (mapsModel.test.ts).
+ */
+export function offersOldExport(
+  job: Pick<CompletedTopoJob, "sharpened">,
+): boolean {
+  return !job.sharpened;
+}

@@ -18,9 +18,34 @@ import { escapeXml } from "./escapeXml.js";
  * Whether a new job sharpens: /start marks it (the worker then runs
  * topo/sharpen.py), and Logjam Web offers "Sharpen an area" with no style
  * options. Setting it back to false returns new jobs to the legacy pipeline
- * and the old form together; a job already marked still sharpens.
+ * and the old form together; a job already marked still sharpens. Guards:
+ * topo/tests/test_worker_helpers.py `TestProcessSharpen` (the worker runs the
+ * mark, and the legacy pipeline for no mark), and the switch-off template
+ * tests in frontend TopoDialog.render.test.tsx (the old form). /start's
+ * half is this one constant, which both read; no test sets it off there.
  */
 export const SHARPEN_NEW_JOBS = true;
+
+/**
+ * What a new LiDAR job is called wherever one is offered or made, for each
+ * side of the switch: declared once (sharpen.test.ts). The switch is a
+ * parameter, so each client passes the one it imports.
+ */
+export function lidarJobCopy(sharpen: boolean) {
+  return sharpen
+    ? {
+        make: "Sharpen an area",
+        makeHere: "Sharpen the area here",
+        noun: "Sharpened area",
+        yours: "your area",
+      }
+    : {
+        make: "Make a LiDAR topo",
+        makeHere: "Make a LiDAR topo here",
+        noun: "LiDAR topo",
+        yours: "your topo",
+      };
+}
 
 /** A completed sharpened job, as a client and the API's sampler need it. */
 export type SharpenedArea = {

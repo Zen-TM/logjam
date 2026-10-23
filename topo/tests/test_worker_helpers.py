@@ -279,7 +279,7 @@ class TestProcessSharpen(unittest.TestCase):
     sharpen.py's sentence.
     """
 
-    def run_job(self, mark, write):
+    def run_job(self, mark, write, legacy_metrics=None):
         import tempfile
         from pathlib import Path
         from unittest import mock
@@ -291,7 +291,9 @@ class TestProcessSharpen(unittest.TestCase):
             out.mkdir(parents=True, exist_ok=True)
             return write(out)
 
-        legacy = mock.Mock(return_value=([{"name": "vegetation"}], None, True, 7, None))
+        legacy = mock.Mock(
+            return_value=([{"name": "vegetation"}], None, True, 7, legacy_metrics)
+        )
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(worker, "s3") as s3,
@@ -351,6 +353,25 @@ class TestProcessSharpen(unittest.TestCase):
         self.assertEqual(example["jobId"], "job-1")  # run_job's job id
         result, _, _ = self.run_job({"v": 1, "vegetation": False}, finished)
         self.assertEqual(result[-1], stored)
+
+    def test_the_vegetation_pass_is_charged_with_the_job(self):
+        # Mutation: leave the vegetation pass's seconds out, and a ticked
+        # job's vegetation runs free (credits are charged from wallSeconds,
+        # api/src/lib/computeCredits.ts) while its estimate learns too low.
+        import json
+
+        def finished(out):
+            (out.parent / "sharpen-metrics.json").write_text(
+                json.dumps({"wallSeconds": 13.0})
+            )
+            return self.finished(out)
+
+        result, _, _ = self.run_job(
+            {"v": 1, "vegetation": True}, finished, {"wallSeconds": 40.0}
+        )
+        metrics = result[4]
+        self.assertEqual(metrics["wallSeconds"], 53.0)
+        self.assertEqual(metrics["vegetationWallSeconds"], 40.0)
 
     def test_a_ticked_job_gets_the_legacy_vegetation_layer(self):
         result, _, legacy = self.run_job({"v": 1, "vegetation": True}, self.finished)

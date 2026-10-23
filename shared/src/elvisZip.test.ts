@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, it, expect } from "vitest";
 import {
   parseZipCentralDirectory,
@@ -167,7 +170,8 @@ describe("classifyElvisEntries", () => {
       },
     ]);
     const entries = parse(zip);
-    const stats = classifyElvisEntries(entries);
+    // The legacy pipeline's rules, which come back if the switch is set off.
+    const stats = classifyElvisEntries(entries, false);
 
     expect(stats.mode).toBe("LAZ_ONLY");
     expect(stats.modeLabel).toBe("LiDAR (bundled DEM ignored)");
@@ -332,6 +336,58 @@ describe("classifyElvisEntries", () => {
     const stats = classifyElvisEntries(parse(zip));
     expect(stats.mode).toBe("DEM_ONLY");
     expect(stats.overlappingSurveys).toBe(false);
+  });
+});
+
+describe("classifyElvisEntries for a job that sharpens", () => {
+  const dem = (metres: number) => ({
+    name: `DEM/${metres} Metre/Madeup2023-AHD_1234567_56_0001_0001_${metres}m.tif`,
+    size: 1000,
+  });
+  const laz = {
+    name: "Madeup2023-C3-AHD_1234567_56_0001_0001.laz",
+    size: 1000,
+  };
+  const label = (files: { name: string; size: number }[]) =>
+    classifyElvisEntries(parse(buildZip(files)), true).modeLabel;
+
+  // Mutation: the legacy labels under the switch ("bundled DEM ignored"),
+  // while topo/sharpen.py's dem_plan takes the DEM as ground.
+  it("says where the ground comes from, as sharpen.py chooses it", () => {
+    expect(label([dem(2), laz])).toBe(
+      "Ground from the DEM, vegetation from the point clouds",
+    );
+    expect(label([dem(1)])).toBe("Ground from the DEM");
+    expect(label([laz])).toBe("Ground from the point clouds");
+    expect(label([dem(5), laz])).toBe("Ground from the point clouds");
+  });
+
+  // Mutation: let a ZIP of 5 m DEMs through, and the job is refused by the
+  // worker only after the upload and a charged launch.
+  it("refuses a ZIP of 5 m DEMs only, before it is uploaded", () => {
+    const only5m = parse(buildZip([dem(5), dem(5)]));
+    expect(() => classifyElvisEntries(only5m, true)).toThrow(ElvisZipError);
+    expect(() => classifyElvisEntries(only5m, false)).not.toThrow();
+  });
+
+  // Mutation: reword one copy, and the form and the worker refuse the same
+  // ZIP in two different sentences.
+  it("refuses it in the worker's own words", () => {
+    const python = readFileSync(
+      join(import.meta.dirname, "../../topo/sharpen.py"),
+      "utf8",
+    );
+    const declared = /^ONLY_5M = \(\n((?:\s+".*"\n)+)\)/m.exec(python)![1]!;
+    const sentence = [...declared.matchAll(/"(.*)"/g)]
+      .map((m) => m[1])
+      .join("");
+    try {
+      classifyElvisEntries(parse(buildZip([dem(5)])), true);
+    } catch (error) {
+      expect((error as ElvisZipError).sentence).toBe(sentence);
+      return;
+    }
+    throw new Error("a 5 m-only ZIP was accepted");
   });
 });
 
