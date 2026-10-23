@@ -38,8 +38,8 @@ found three problems:
   and the tile router uses the same one. They share the precedence, not the
   test of which areas hold a point: the sampler asks an area's `coverage`,
   the router its tile range, which is the coverage widened to whole z14
-  tiles. So in that margin a finer area's tile (its 5 m fill) can be drawn
-  where a coarser area's coverage answers the height. A source names its
+  tiles. So in that margin the first-ranked area's tile (its 5 m fill) can
+  be drawn where a lower-ranked area's coverage answers the height. A source names its
   archive by `areaId`, never by a URL or a path.
 - **Only the owner and the users it is shared with directly read it.**
   `visibleSharpenedAreas` in `api/src/services/sharpenedAreas.ts` applies the
@@ -103,9 +103,12 @@ Guards:
     tiles.
   - **Revoking.** A presigned URL keeps working until it expires, 24 h at
     most after the share ends.
-  - **Old builds.** A Logjam GPS build older than this reads a profile's
-    `lidar-<job id>` as a source it does not know, and stores that track's
-    climb as `terrarium` until a newer build stores it as `lidar`.
+  - **Old builds.** A Logjam GPS build older than this stores the climb of
+    a profile read wholly inside areas as `terrarium`. Logjam Web relabels
+    the account's copy as `lidar` when the track is opened. Logjam GPS
+    relabels its row when the track's stats open with the line not fully
+    covered by saved terrain, or for every track once its upgrade key covers
+    areas (0028's update of 2026-10-23).
 - **Neutral:** each client routes per tile. Logjam Web can do it in the
   browser with a MapLibre protocol. MapLibre Native has no custom protocol,
   so Logjam GPS will read routed tiles through an API route. That route must

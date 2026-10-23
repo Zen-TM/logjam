@@ -95,3 +95,7 @@ carries `NSW_5M.credit`'s text from "the NSW 5 m" to "extracted"
 - **Ask Spatial Services' servers per request.** No copy to host. It would
   send where each user is looking to a third party, depend on their
   availability in the field, and still need tiling for offline areas.
+- **Keep the 5 m DEM first inside a sharpened area** (2026-10-23). One
+  answer for everyone at a point. Rejected because the area's survey is
+  finer, and its owner and the users it is shared with sharpened it to read
+  it. 0040 lists the other options it rejected.

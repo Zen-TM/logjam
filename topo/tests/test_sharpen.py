@@ -208,9 +208,10 @@ class TestCredit(unittest.TestCase):
 
 
 class TestResult(unittest.TestCase):
-    """Mutation that turns it red: a field of the result renamed or retyped
+    """Mutations that turn it red: a field of the result renamed or retyped
     on the worker's side, which the API's parser would then read as no area
-    (api/src/services/sharpenedAreas.unit.test.ts reads the same example)."""
+    (api/src/services/sharpenedAreas.unit.test.ts reads the same example),
+    and an example whose tile range is not its coverage's."""
 
     def test_the_result_is_the_example_the_api_reads(self):
         import json
@@ -221,7 +222,7 @@ class TestResult(unittest.TestCase):
             stored = json.load(f)["stored"]
         reported = sharpen_module.sharpen_result(
             stored["zmax"],
-            tuple(stored["tiles15"]),
+            sharpen_module.tile_range(tuple(stored["coverage"])),
             tuple(stored["coverage"]),
             stored["ground"],
             stored["extracted"],

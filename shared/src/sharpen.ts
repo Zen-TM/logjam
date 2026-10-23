@@ -66,9 +66,9 @@ export type TerrainArchiveLayer = (typeof TERRAIN_ARCHIVE_LAYERS)[number];
  * then the lower id, so the order never depends on how a list was fetched.
  * The sampler and the tile router use the same order. They do not ask the
  * same question of an area: the sampler its `coverage`, the router its
- * `tiles15`, the coverage widened to whole z14 tiles. In that margin a finer
- * area's tile (its 5 m fill) can be drawn where a coarser area answers the
- * height.
+ * `tiles15`, the coverage widened to whole z14 tiles. In that margin the
+ * first-ranked area's tile (its 5 m fill) can be drawn where a lower-ranked
+ * area answers the height.
  */
 export function compareSharpenedAreas(
   a: SharpenedArea,

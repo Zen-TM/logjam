@@ -306,6 +306,9 @@ describe("sampleElevations", () => {
     expect(dem.sourceIds).toEqual(["terrarium"]);
   });
 
+  // Mutation: rethrow the S3 error, or treat every S3 failure as a missing
+  // archive, and a throttle reaches the user as a 500 or as silent statewide
+  // heights.
   it("is a 503, not the S3 error, when an area's archive cannot be read", async () => {
     serveArea();
     s3Send.mockRejectedValue(
