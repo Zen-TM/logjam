@@ -98,6 +98,15 @@ Proposal: #359.
   arithmetic changed is still replaced by nothing. Everything else above
   stands.
 
+- **Update 2026-10-23: a slope reads its window from the finest regional
+  source with all nine pixels, never the worldwide tiles.** Slope is not a
+  height, so `demSlopeReading` in `shared/src/demSlope.ts` walks
+  `DEM_SOURCES` itself instead of calling `sampleDem`: it takes the first
+  source whose coverage and tiles hold the whole 3 × 3 window of Horn, and
+  gives no slope when none does, since the worldwide 30 m tiles are too
+  coarse to show a cliff. Guard: `shared/src/demSlope.test.ts`.
+  Everything else above stands.
+
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS
 readers are held to the same heights and source ids for one real tile by the
