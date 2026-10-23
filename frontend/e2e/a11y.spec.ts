@@ -625,10 +625,12 @@ test.describe("desktop", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // The built-in Default template is always there, so there is always a menu —
-    // on the Templates tab, where templates live.
-    await aside.getByRole("radio", { name: /^Templates/ }).click();
-    await aside.getByRole("button", { name: "Actions for Default" }).click();
+    // The seed always has completed LiDAR jobs, so there is always a row menu.
+    // (Templates, the other menu here, are hidden once new jobs sharpen.)
+    await aside
+      .getByRole("button", { name: /^Actions for / })
+      .first()
+      .click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
     await page.keyboard.press("Escape");

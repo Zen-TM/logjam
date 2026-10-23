@@ -3,7 +3,7 @@
     "Katoomba201804"
   ],
   "mode": "DEM_ONLY",
-  "modeLabel": "DEM only (no vegetation layer)",
+  "modeLabel": "Ground from the DEM",
   "tileCount": 1,
   "lazCount": 0,
   "demCount": 1,
