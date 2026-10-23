@@ -16,8 +16,11 @@
 // messages (root privacy rules).
 
 import {
+  CLIMB_SOURCES,
+  climbSourceOf,
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
+  SHARPENED_SOURCE_PREFIX,
   type DemSamples,
 } from "./demSources.js";
 import { haversineMeters } from "./placeGeo.js";
@@ -86,7 +89,8 @@ export type ElevationProfile = {
   minM: number | null;
   maxM: number | null;
   /**
-   * The DEM sources the heights were read from (`demSources.ts`), finest
+   * The DEM sources the heights were read from (`demSources.ts`): any
+   * sharpened area's (`lidar-<job id>`) first, then the public ones finest
    * first. Absent on a profile from an API that predates it.
    */
   demSourceIds?: string[];
@@ -471,9 +475,12 @@ export function buildElevationProfile(
     lossM,
     minM: known.length > 0 ? Math.min(...known) : null,
     maxM: known.length > 0 ? Math.max(...known) : null,
-    demSourceIds: DEM_SOURCES.map((source) => source.id).filter((id) =>
-      used.has(id),
-    ),
+    demSourceIds: [
+      ...[...used].filter(
+        (id): id is string => id?.startsWith(SHARPENED_SOURCE_PREFIX) ?? false,
+      ),
+      ...DEM_SOURCES.map((source) => source.id).filter((id) => used.has(id)),
+    ],
     ...(used.has(GPS_CLIMB_SOURCE) ? { filledFromGps: true } : {}),
   };
 }
@@ -503,14 +510,17 @@ export function climbFromProfile(
 ): TrackClimb | null {
   if (!profile || profile.samples.length < 2) return null;
   if (profile.samples.some((sample) => sample.elevationM == null)) return null;
-  const known = DEM_SOURCES.map((source) => source.id);
-  const used = known.filter((id) => profile.demSourceIds?.includes(id));
-  const read = used.length > 0 ? used : known;
+  const coarsestDem = DEM_SOURCES[DEM_SOURCES.length - 1]!.id;
+  const ranks = (profile.demSourceIds ?? [])
+    .map((id) => CLIMB_SOURCES.indexOf(climbSourceOf(id)))
+    .filter((rank) => rank >= 0);
   return {
     elevationGainM: profile.gainM,
     elevationLossM: profile.lossM,
     elevationSource: profile.filledFromGps
       ? GPS_CLIMB_SOURCE
-      : read[read.length - 1]!,
+      : ranks.length > 0
+        ? CLIMB_SOURCES[Math.max(...ranks)]!
+        : coarsestDem,
   };
 }

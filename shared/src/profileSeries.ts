@@ -6,7 +6,12 @@
 // means, which heights are charted and the words around them are decided once
 // and each client only draws.
 import { MAP_MEASURE } from "./contracts/mapMeasure.js";
-import { GPS_CLIMB_SOURCE, NSW_5M, TERRARIUM } from "./demSources.js";
+import {
+  GPS_CLIMB_SOURCE,
+  NSW_5M,
+  SHARPENED_CLIMB_SOURCE,
+  TERRARIUM,
+} from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
@@ -133,6 +138,7 @@ export const TRACK_PROFILE_COPY = {
  * profileSeries.test.ts.
  */
 const HEIGHT_SOURCE_NAMES: Record<string, string> = {
+  [SHARPENED_CLIMB_SOURCE]: "LiDAR terrain data",
   [NSW_5M.id]: "NSW 5 m terrain data",
   [TERRARIUM.id]: "30 m terrain data",
   [GPS_CLIMB_SOURCE]: "GPS heights",
