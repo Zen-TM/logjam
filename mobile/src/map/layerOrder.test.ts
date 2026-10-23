@@ -2,7 +2,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import {
+  basemapMountKeys,
+  chainBeforeIds,
+  PIN_FLOOR,
+  ROUTES_FLOOR,
+} from "./layerOrder";
 
 const SRC = join(__dirname, "..");
 
@@ -27,6 +32,33 @@ describe("chainBeforeIds", () => {
 
 // The floors are ids hard-coded in layer files; renaming one there would make
 // every anchored layer wait forever for a layer that never appears.
+describe("basemapMountKeys", () => {
+  const raster = (key: string) => ({ key, sourceType: "raster" });
+  const vector = (key: string) => ({ key, sourceType: "vector" });
+
+  // Mutation: key the Terrain group by its own source alone, and after a
+  // switch from imagery to the vector map the contour lines stay over the
+  // roads and labels.
+  it("remounts the Terrain group when it moves into the vector map or out", () => {
+    const imagery = basemapMountKeys([raster("six-imagery")]);
+    expect(basemapMountKeys([vector("protomaps")]).terrain).not.toBe(
+      imagery.terrain,
+    );
+    expect(basemapMountKeys([raster("six-topo")]).terrain).toBe(
+      imagery.terrain,
+    );
+  });
+
+  // Mutation: key each stack by its own source alone, and offline a newly
+  // saved area's stack mounts under the older ones', the Terrain group in it.
+  it("remounts every stack and the Terrain group when a saved area joins", () => {
+    const one = basemapMountKeys([vector("region-a")]);
+    const two = basemapMountKeys([vector("region-b"), vector("region-a")]);
+    expect(two.stacks).not.toBe(one.stacks);
+    expect(two.terrain).not.toBe(one.terrain);
+  });
+});
+
 describe("the floor layers exist", () => {
   it.each([
     [PIN_FLOOR, "map/PlacePinsLayer.tsx"],

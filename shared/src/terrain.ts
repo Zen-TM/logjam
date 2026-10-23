@@ -65,6 +65,21 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
 };
 
 /**
+ * The Protomaps layers that must draw over the whole Terrain group: every
+ * label, boundary and road, but the runway and taxiway surfaces, drawn with
+ * the land fills. Guards: the clients' anchor tests above, each against the
+ * style it draws.
+ */
+export function drawsOverTerrain(layer: { id: string; type: string }): boolean {
+  if (layer.id === "roads_runway" || layer.id === "roads_taxiway") return false;
+  return (
+    layer.type === "symbol" ||
+    layer.id.startsWith("boundaries") ||
+    layer.id.startsWith("roads_")
+  );
+}
+
+/**
  * Each Terrain layer's `beforeId` inside the vector basemap, top of the map
  * first, so moving the layers in this order lands each under one already in
  * place. `layerIds` lists each key's map layers bottom first; `anchorId` turns

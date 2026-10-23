@@ -29,3 +29,27 @@ export function chainBeforeIds(
 ): Record<string, string> {
   return Object.fromEntries(ids.map((id, i) => [id, ids[i + 1] ?? anchor]));
 }
+
+/**
+ * The React key suffixes of the basemap stacks and of the Terrain group, so a
+ * change in which basemaps are drawn remounts them all. MLRN moves a mounted
+ * layer only when its own `beforeId` changes, and a stack added later goes in
+ * under every layer already on the map (its `layerIndex` counts from the
+ * bottom). Without the remount, after a switch from imagery to the vector
+ * map the contour lines, still chained to each other, stay over its roads
+ * and labels; and offline, a newly saved area's stack, the one the Terrain
+ * group anchors in, mounts under an older one's opaque background. Mounted
+ * together, the stacks go in `basemaps` order, the first on top.
+ * Guard: layerOrder.test.ts ("basemapMountKeys").
+ */
+export function basemapMountKeys(
+  basemaps: readonly { key: string; sourceType: string }[],
+): { stacks: string; terrain: string } {
+  const stacks = basemaps.map((b) => b.key).join("+");
+  return {
+    stacks,
+    terrain: basemaps.some((b) => b.sourceType === "vector")
+      ? stacks
+      : "ground",
+  };
+}

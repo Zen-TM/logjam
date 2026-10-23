@@ -18,12 +18,8 @@ import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import {
-  NSW_CONTOURS_ENTRY_ID,
-  NSW_HILLSHADE_ENTRY_ID,
-  NSW_SLOPE_ENTRY_ID,
-  type TBbox,
-} from "./map/Map";
+import type { TBbox } from "./map/Map";
+import { TERRAIN_ENTRIES } from "./map/terrainEntries";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -104,9 +100,6 @@ import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
-  NSW_CONTOURS,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
   drawsNswContours,
@@ -129,32 +122,6 @@ const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
 const defaultLayerToggles = Object.fromEntries(
   currentLayerNames.map((n) => [n, true]),
 );
-
-/**
- * The Terrain group's layers as entries of the Map's topo layer list.
- * Same origin, like the vector basemap: `/master/*` is served by the web
- * distribution and proxied in dev.
- */
-const TERRAIN_ENTRIES = {
-  contours: {
-    id: NSW_CONTOURS_ENTRY_ID,
-    pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
-    format: "vector" as const,
-    attribution: NSW_CONTOURS.creditHtml,
-  },
-  slope: {
-    id: NSW_SLOPE_ENTRY_ID,
-    pmtilesUrl: `${window.location.origin}/${NSW_SLOPE.archivePath}`,
-    format: "slope" as const,
-    attribution: NSW_SLOPE.creditHtml,
-  },
-  hillshade: {
-    id: NSW_HILLSHADE_ENTRY_ID,
-    pmtilesUrl: `${window.location.origin}/${NSW_HILLSHADE.archivePath}`,
-    format: "hillshade" as const,
-    attribution: NSW_HILLSHADE.creditHtml,
-  },
-};
 
 function App() {
   const toast = useToast();

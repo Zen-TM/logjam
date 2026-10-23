@@ -350,7 +350,12 @@ import {
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
-import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import {
+  basemapMountKeys,
+  chainBeforeIds,
+  PIN_FLOOR,
+  ROUTES_FLOOR,
+} from "./layerOrder";
 import { mapDataAttribution } from "./mapDataCredits";
 import {
   TopoIconImages,
@@ -4418,11 +4423,12 @@ export function MapScreen({
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
   // Over the vector basemap the Terrain group goes inside it, under its roads
-  // and labels (shared TERRAIN_BASEMAP_ANCHORS), in the first stack drawn:
-  // offline, that of the first saved area.
-  const vectorBasemap = basemapResolved.find(
-    (r) => r.status === "ok" && r.sourceType === "vector",
-  );
+  // and labels (shared TERRAIN_BASEMAP_ANCHORS), in the first stack drawn,
+  // which is the top one (basemapMountKeys): offline, that of the most
+  // recently saved area.
+  const basemapStacks = basemapResolved.filter((r) => r.status === "ok");
+  const mountKeys = basemapMountKeys(basemapStacks);
+  const vectorBasemap = basemapStacks.find((r) => r.sourceType === "vector");
   const terrainBefore = vectorBasemap
     ? Object.fromEntries(
         terrainBeforeIds(terrainLayerIds, (id) =>
@@ -4578,7 +4584,10 @@ export function MapScreen({
             overlay base index depends on the active basemap. */}
         {basemapResolved.map((resolved) =>
           resolved.status === "ok" ? (
-            <ResolvedSource key={resolved.key} resolved={resolved}>
+            <ResolvedSource
+              key={`${resolved.key}@${mountKeys.stacks}`}
+              resolved={resolved}
+            >
               {resolved.sourceType === "vector" ? (
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
@@ -4617,7 +4626,7 @@ export function MapScreen({
             a terrarium DEM. The bands are a paint expression, so changing
             them on Logjam Web repaints this layer, no rebuild. */}
         {hillshadeResolved.map((r) => (
-          <ResolvedSource key={r.key} resolved={r}>
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
             <Layer
               key={`nsw-hillshade-${r.key}`}
               type="hillshade"
@@ -4627,7 +4636,7 @@ export function MapScreen({
           </ResolvedSource>
         ))}
         {slopeResolved.map((r) => (
-          <ResolvedSource key={r.key} resolved={r}>
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
             <Layer
               key={`nsw-slope-${r.key}`}
               type="color-relief"
@@ -4645,7 +4654,7 @@ export function MapScreen({
         {/* The statewide contours: a topo area's contour layers, on the
             statewide archive (or the clips saved from it). */}
         {contoursResolved.map((r) => (
-          <ResolvedSource key={r.key} resolved={r}>
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
             <TopoVectorOverlay
               kind="contours"
               idPrefix={`nsw-contours-${r.key}`}

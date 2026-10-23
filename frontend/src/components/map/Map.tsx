@@ -19,7 +19,8 @@ import {
   type RegionBbox,
   contourLabelHalo,
   nswContourStyle,
-  terrainBeforeIds,
+  TERRAIN_LAYER_KEYS,
+  type TerrainLayerKey,
 } from "@logjam/shared";
 import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
@@ -112,7 +113,8 @@ import {
 } from "../../placeUtils";
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
-import { stackTopoLayers } from "./layerOrder";
+import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
+import { TERRAIN_ENTRIES } from "./terrainEntries";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   BASEMAP_CATALOG,
@@ -264,15 +266,6 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * Light flavor only: Logjam Web has no dark theme (index.css carries a single
  * prefers-color-scheme rule that inverts icons, nothing more).
  */
-/**
- * The entry of `topoLayers` that is the statewide contours, not a topo area's
- * layer. No dash, and it contains "contours": this file splits a layer id at
- * its first dash and styles an entry as contours by that word.
- */
-export const NSW_CONTOURS_ENTRY_ID = "nswcontours";
-/** The Terrain group's slope and hillshade, entries of `topoLayers` too. */
-export const NSW_SLOPE_ENTRY_ID = "nswslope";
-export const NSW_HILLSHADE_ENTRY_ID = "nswhillshade";
 
 /** The statewide contours have their own fixed look (shared nswContours.ts). */
 function paintStyleFor(
@@ -280,7 +273,9 @@ function paintStyleFor(
   style: VectorStyleSettings,
   basemapId: string,
 ): VectorStyleSettings {
-  return entryId === NSW_CONTOURS_ENTRY_ID ? nswContourStyle(basemapId) : style;
+  return entryId === TERRAIN_ENTRIES.contours.id
+    ? nswContourStyle(basemapId)
+    : style;
 }
 
 function addProtomapsBasemap(
@@ -2967,30 +2962,22 @@ function Map({
       );
     }
 
-    const terrain = {
-      contours: NSW_CONTOURS_ENTRY_ID,
-      slope: NSW_SLOPE_ENTRY_ID,
-      hillshade: NSW_HILLSHADE_ENTRY_ID,
-    };
-    const terrainIds = new Set(Object.values(terrain));
     // In the topoLayers order, each entry's layers as a group.
     stackTopoLayers(
       map,
-      layers
-        .filter(({ id }) => !(inBasemap && terrainIds.has(id)))
-        .map(({ id }) => ownedLayerIds(id)),
+      layers.map(({ id }) => ownedLayerIds(id)),
     );
-    if (inBasemap) {
-      const moves = terrainBeforeIds(
-        {
-          contours: ownedLayerIds(terrain.contours),
-          slope: ownedLayerIds(terrain.slope),
-          hillshade: ownedLayerIds(terrain.hillshade),
-        },
-        (id) => `${PROTOMAPS_LAYER_PREFIX}${id}`,
+    if (inBasemap)
+      moveTerrainIntoBasemap(
+        map,
+        Object.fromEntries(
+          TERRAIN_LAYER_KEYS.map((key) => [
+            key,
+            ownedLayerIds(TERRAIN_ENTRIES[key].id),
+          ]),
+        ) as Record<TerrainLayerKey, string[]>,
+        PROTOMAPS_LAYER_PREFIX,
       );
-      for (const [lid, before] of moves) map.moveLayer(lid, before);
-    }
   }, [topoLayers, enabledKey, mapLoaded, activeLayerId]);
 
   // PAINT pass: apply live colour/width to existing topo layers in place. Runs on

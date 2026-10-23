@@ -1,4 +1,4 @@
-import { TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
+import { drawsOverTerrain, TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { protomapsLayerDefs, type ProtomapsFlavor } from "./protomapsLayers";
@@ -20,18 +20,12 @@ describe.each<ProtomapsFlavor>(["light", "dark"])(
       );
     });
 
-    it("leave every road, boundary and label above the contours", () => {
-      const contours = index(TERRAIN_BASEMAP_ANCHORS.contours);
-      // Airport surfaces, drawn with the land fills: under the band is fine.
-      const airfield = ["roads_runway", "roads_taxiway"];
-      const above = style.filter(
-        (layer) =>
-          layer.type === "symbol" ||
-          layer.id.startsWith("boundaries") ||
-          (layer.id.startsWith("roads_") && !airfield.includes(layer.id)),
+    it("leave every road, boundary and label above the whole Terrain group", () => {
+      const top = Math.max(
+        ...Object.values(TERRAIN_BASEMAP_ANCHORS).map(index),
       );
-      for (const layer of above)
-        expect(index(layer.id), layer.id).toBeGreaterThanOrEqual(contours);
+      for (const layer of style.filter(drawsOverTerrain))
+        expect(index(layer.id), layer.id).toBeGreaterThanOrEqual(top);
     });
   },
 );
