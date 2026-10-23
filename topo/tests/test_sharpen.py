@@ -395,13 +395,11 @@ class TestReportFailure(unittest.TestCase):
     def test_a_pool_jobs_frames_without_its_message(self):
         from concurrent.futures import ProcessPoolExecutor
 
-        import sharpen
-
         with ProcessPoolExecutor(1) as pool:
             try:
                 pool.submit(_fails_in_a_pool).result()
             except RuntimeError as error:
-                report = sharpen.report_failure(error)
+                report = pipeline.report_failure(error, "sharpen")
         line = _fails_in_a_pool.__code__.co_firstlineno + 1
         self.assertIn(f"test_sharpen.py:{line}", report)
         for part in ("Katoomba", "2506258", "pdal failed"):

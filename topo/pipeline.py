@@ -30,6 +30,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures.process
 import json
 import logging
 import math
@@ -43,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -86,11 +88,22 @@ logging.basicConfig(
 log = logging.getLogger("topo")
 
 
+_GDAL_MESSAGES_MAX = 1000  # GDAL's own default cap (CPL_MAX_ERROR_REPORTS)
+_gdal_messages = 0
+
+
 def _gdal_message(err_class: int, err_num: int, _message: str) -> None:
     """GDAL's warnings and errors, logged by class and number only. GDAL's own
     output quotes file names ("… Skipping <file>"), and an ELVIS file's name
-    says where the survey is. An error still raises (UseExceptions)."""
-    log.warning(f"GDAL message, class {err_class}, number {err_num}")
+    says where the survey is. An error still raises (UseExceptions). A pushed
+    handler gets every message, so it stops at GDAL's cap, as GDAL's printing
+    does."""
+    global _gdal_messages
+    _gdal_messages += 1
+    if _gdal_messages < _GDAL_MESSAGES_MAX:
+        log.warning(f"GDAL message, class {err_class}, number {err_num}")
+    elif _gdal_messages == _GDAL_MESSAGES_MAX:
+        log.warning("GDAL message limit reached: further ones are not logged")
 
 
 # Replaces GDAL's default printing to stderr (CloudWatch), on the importing
@@ -4024,7 +4037,38 @@ def merge_dem_tiles(
     log.info("DEM merge complete.")
 
 
+def report_failure(error: BaseException, program: str) -> str:
+    """A failure as its type and the code locations it came through, not its
+    message, which can quote an input's ELVIS name.
+
+    A failure in a pool job reaches here with its own frames as text: the
+    pool hands back the exception with the job's traceback formatted into its
+    __cause__, message and all. Only the file:line pairs are taken from it
+    (tests/test_sharpen.py `TestReportFailure`; for this module's main,
+    tests/test_log_privacy.py `TestUncaughtFailure`)."""
+    frames = [
+        (Path(f.filename).name, f.lineno)
+        for f in traceback.extract_tb(error.__traceback__)
+    ]
+    cause = error.__cause__
+    if isinstance(cause, concurrent.futures.process._RemoteTraceback):
+        frames += [
+            (Path(name).name, int(line))
+            for name, line in re.findall(r'File "([^"]+)", line (\d+)', cause.tb)
+        ]
+    where = " < ".join(f"{name}:{line}" for name, line in reversed(frames))
+    return f"{program} failed: {type(error).__name__} at {where}"
+
+
 def main():
+    try:
+        run()
+    except Exception as e:  # noqa: BLE001 - every failure, told without its message
+        print(report_failure(e, "pipeline"), file=sys.stderr)
+        sys.exit(1)
+
+
+def run():
     parser = argparse.ArgumentParser(
         description=(
             "Convert an ELVIS LiDAR ZIP into topo MBTiles for Gaia GPS.\n\n"
