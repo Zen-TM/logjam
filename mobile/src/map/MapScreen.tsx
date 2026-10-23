@@ -87,6 +87,7 @@ import {
   drawsNswContours,
   slopeReliefColor,
   TERRAIN_LAYER_KEYS,
+  terrainBeforeIds,
   type TerrainLayerKey,
   nswContourStyle,
   MAP_INK,
@@ -311,7 +312,7 @@ import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { ProtomapsLayers, protomapsLayerId } from "./basemap/ProtomapsLayers";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
@@ -4393,8 +4394,8 @@ export function MapScreen({
   );
 
   // The ground band, bottom to top: the Terrain group (hillshade, slope,
-  // contours: `TERRAIN_LAYER_KEYS` read upwards), topo overlays, GeoPDFs,
-  // vector imports.
+  // contours: `TERRAIN_LAYER_KEYS` read upwards) when the basemap is a raster,
+  // topo overlays, GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4416,8 +4417,25 @@ export function MapScreen({
     slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
+  // Over the vector basemap the Terrain group goes inside it, under its roads
+  // and labels (shared TERRAIN_BASEMAP_ANCHORS), in the first stack drawn:
+  // offline, that of the first saved area.
+  const vectorBasemap = basemapResolved.find(
+    (r) => r.status === "ok" && r.sourceType === "vector",
+  );
+  const terrainBefore = vectorBasemap
+    ? Object.fromEntries(
+        terrainBeforeIds(terrainLayerIds, (id) =>
+          protomapsLayerId(sourceIdFor(vectorBasemap.key), id),
+        ),
+      )
+    : null;
   const groundIds = [
-    ...[...TERRAIN_LAYER_KEYS].reverse().flatMap((key) => terrainLayerIds[key]),
+    ...(terrainBefore
+      ? []
+      : [...TERRAIN_LAYER_KEYS]
+          .reverse()
+          .flatMap((key) => terrainLayerIds[key])),
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
@@ -4437,7 +4455,10 @@ export function MapScreen({
       `import-point-${i.id}`,
     ]),
   ];
-  const groundBefore = chainBeforeIds(groundIds, ROUTES_FLOOR);
+  const groundBefore = {
+    ...chainBeforeIds(groundIds, ROUTES_FLOOR),
+    ...terrainBefore,
+  };
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting

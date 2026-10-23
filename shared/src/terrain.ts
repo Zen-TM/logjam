@@ -45,6 +45,51 @@ export const TERRAIN_LAYER_KEYS = ["contours", "slope", "hillshade"] as const;
 
 export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
 
+/**
+ * Where each Terrain layer goes in the vector basemap, as a printed topo map
+ * has it: directly under this layer of the Protomaps style (its
+ * `@protomaps/basemaps` id, before a client's prefix). The shading lies over
+ * the land fills and under the water; the slope and then the contours lie over
+ * the water's fill and under its lines, the roads, the boundaries and every
+ * label. Over a raster basemap there is nothing to interleave, and the group
+ * sits on top of it. Guards: `terrain.test.ts`, and each client's test that
+ * the ids are in the style it draws (frontend `components/map/layerOrder.test.ts`,
+ * mobile `map/basemap/protomapsLayers.test.ts`).
+ */
+export const TERRAIN_BASEMAP_ANCHORS: Readonly<
+  Record<TerrainLayerKey, string>
+> = {
+  contours: "water_stream",
+  slope: "water_stream",
+  hillshade: "water",
+};
+
+/**
+ * Each Terrain layer's `beforeId` inside the vector basemap, top of the map
+ * first, so moving the layers in this order lands each under one already in
+ * place. `layerIds` lists each key's map layers bottom first; `anchorId` turns
+ * a Protomaps id into the client's. Layers sharing an anchor stack in
+ * `TERRAIN_LAYER_KEYS` order, so the slope is always directly under the
+ * contours.
+ */
+export function terrainBeforeIds(
+  layerIds: Readonly<Record<TerrainLayerKey, readonly string[]>>,
+  anchorId: (protomapsLayerId: string) => string,
+): [layerId: string, beforeId: string][] {
+  const pairs: [string, string][] = [];
+  const lowest = new Map<string, string>();
+  for (const key of TERRAIN_LAYER_KEYS) {
+    const anchor = TERRAIN_BASEMAP_ANCHORS[key];
+    let before = lowest.get(anchor) ?? anchorId(anchor);
+    for (const id of [...layerIds[key]].reverse()) {
+      pairs.push([id, before]);
+      before = id;
+    }
+    lowest.set(anchor, before);
+  }
+  return pairs;
+}
+
 /** What a map shows before the user touches a switch: the contours it always had. */
 export const TERRAIN_LAYER_DEFAULTS: Readonly<
   Record<TerrainLayerKey, boolean>

@@ -19,6 +19,7 @@ import {
   type RegionBbox,
   contourLabelHalo,
   nswContourStyle,
+  terrainBeforeIds,
 } from "@logjam/shared";
 import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
 import { useBoxDraw } from "./useBoxDraw";
@@ -2547,10 +2548,17 @@ function Map({
 
     // Skip if the layer set and enabled flags are unchanged (avoids flicker from
     // new array references with identical contents).
+    // Over the vector basemap the Terrain group goes inside it, under its roads
+    // and labels (shared TERRAIN_BASEMAP_ANCHORS). Every other topo layer, and
+    // the group over a raster basemap, stacks over the basemap, under the routes.
+    const inBasemap =
+      BASE_LAYERS.find((b) => b.id === activeLayerId)?.kind === "vector";
     const topoKey =
       layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|") +
       "::" +
-      enabledKey;
+      enabledKey +
+      "::" +
+      inBasemap;
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -2959,12 +2967,31 @@ function Map({
       );
     }
 
+    const terrain = {
+      contours: NSW_CONTOURS_ENTRY_ID,
+      slope: NSW_SLOPE_ENTRY_ID,
+      hillshade: NSW_HILLSHADE_ENTRY_ID,
+    };
+    const terrainIds = new Set(Object.values(terrain));
     // In the topoLayers order, each entry's layers as a group.
     stackTopoLayers(
       map,
-      layers.map(({ id }) => ownedLayerIds(id)),
+      layers
+        .filter(({ id }) => !(inBasemap && terrainIds.has(id)))
+        .map(({ id }) => ownedLayerIds(id)),
     );
-  }, [topoLayers, enabledKey, mapLoaded]);
+    if (inBasemap) {
+      const moves = terrainBeforeIds(
+        {
+          contours: ownedLayerIds(terrain.contours),
+          slope: ownedLayerIds(terrain.slope),
+          hillshade: ownedLayerIds(terrain.hillshade),
+        },
+        (id) => `${PROTOMAPS_LAYER_PREFIX}${id}`,
+      );
+      for (const [lid, before] of moves) map.moveLayer(lid, before);
+    }
+  }, [topoLayers, enabledKey, mapLoaded, activeLayerId]);
 
   // PAINT pass: apply live colour/width to existing topo layers in place. Runs on
   // every vectorStyle change (including colour-picker drags) without recreating

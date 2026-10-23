@@ -7,6 +7,7 @@ import {
   normalizeTerrainLayers,
   slopeReliefColor,
   TERRAIN_LAYER_DEFAULTS,
+  terrainBeforeIds,
 } from "./terrain.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import {
@@ -152,5 +153,51 @@ describe("slope bands as an account preference", () => {
     expect(parseSlopeBands([{ ...custom[0], extra: "x" }, custom[1]])).toEqual(
       custom,
     );
+  });
+});
+
+describe("terrainBeforeIds", () => {
+  /** A style's layer list after moving each layer under its `beforeId`. */
+  function stacked(style: string[], moves: [string, string][]): string[] {
+    const ids = [...style];
+    for (const [id, before] of moves) {
+      if (ids.includes(id)) ids.splice(ids.indexOf(id), 1);
+      ids.splice(ids.indexOf(before), 0, id);
+    }
+    return ids;
+  }
+
+  // Mutation: anchor the slope apart from the contours (say under `water`, with
+  // the shading), and a water fill or a land fill lands between them.
+  it("puts the shading over the land and the slope directly under the contours, under the roads", () => {
+    const style = [
+      "pm-earth",
+      "pm-landcover",
+      "pm-water",
+      "pm-water_stream",
+      "pm-roads_minor",
+      "pm-places_locality",
+    ];
+    const moves = terrainBeforeIds(
+      {
+        contours: ["c-minor", "c-major", "c-labels"],
+        slope: ["slope"],
+        hillshade: ["shade"],
+      },
+      (id) => `pm-${id}`,
+    );
+    expect(stacked(style, moves)).toEqual([
+      "pm-earth",
+      "pm-landcover",
+      "shade",
+      "pm-water",
+      "slope",
+      "c-minor",
+      "c-major",
+      "c-labels",
+      "pm-water_stream",
+      "pm-roads_minor",
+      "pm-places_locality",
+    ]);
   });
 });

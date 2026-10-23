@@ -1,7 +1,9 @@
 // Where the topo band sits in Logjam Web's style: over the basemap, under
 // every track, route and place pin, as on Logjam GPS
 // (mobile/src/map/layerOrder.ts). The statewide slope and hillshade cover
-// whole areas, and over a route they would tint and shade it.
+// whole areas, and over a route they would tint and shade it. Over the vector
+// basemap the Terrain group goes inside the basemap instead, under its roads
+// and labels (shared TERRAIN_BASEMAP_ANCHORS, moved by Map.tsx).
 /**
  * Lowest track, route or pin layer: the first `Map.tsx` adds on load, and
  * every other one goes on above it. Guard: `layerOrder.test.ts`.
