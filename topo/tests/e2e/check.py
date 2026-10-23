@@ -35,7 +35,14 @@ from pmtiles.reader import MmapSource, Reader  # noqa: E402
 
 from worker import ALL_LAYERS, BUCKET, RASTER_LAYERS, db_connect, s3  # noqa: E402
 from build_nsw_dem import decode_terrarium  # noqa: E402
-from statewide import FILL_BASE_M, FILL_SLOPE_DEG, X0, Y0, fill_height  # noqa: E402
+from statewide import (  # noqa: E402
+    FILL_BASE_M,
+    FILL_SLOPE_DEG,
+    FILL_TOLERANCE_M,
+    X0,
+    Y0,
+    fill_height,
+)
 
 failures = []
 
@@ -223,7 +230,7 @@ def sharpened(job_id, lon, lat):
             # Pixel centres at zmax, in z15 pixels from the box's corner tile.
             u = (tx * 256 + col + 0.5) / f - 0.5 - X0 * 256
             v = (ty * 256 + row + 0.5) / f - 0.5 - Y0 * 256
-            misplaced += abs(got - fill_height(u, v)) > 0.1
+            misplaced += abs(got - fill_height(u, v)) > FILL_TOLERANCE_M
     corner_s = values(slope, 15, x0, y0)
     check(
         fill_pixels > 1000

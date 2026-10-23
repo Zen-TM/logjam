@@ -7,7 +7,8 @@ names that hold such a value, and the overlapping-survey pick run for real
 under assertLogs, since its footprint id and survey labels are the values
 most tempting to log. Mutations that turn it red: restoring pipeline.py's
 `Coverage: lon …, lat …` line, putting `{footprint}` or a survey label back
-in the overlapping-surveys log, or logging a tile's `{z}/{x}/{y}`.
+in the overlapping-surveys log, logging a tile's `{z}/{x}/{y}`, or restoring
+the filename in the PDAL tile log.
 """
 
 import ast
@@ -27,6 +28,8 @@ _PLACE_NAMES = {
     "west", "south", "east", "north", "bbox", "bbox_wgs84", "bounds",
     "coverage", "footprint", "tiles15", "z", "x", "y", "bx", "by", "tx", "ty",
     "survey_label", "terrain_win", "veg_win",
+    # An ELVIS file's name holds its survey's area and its MGA tile.
+    "laz", "las_files", "terrain_tiles", "veg_tiles",
 }  # fmt: skip
 
 

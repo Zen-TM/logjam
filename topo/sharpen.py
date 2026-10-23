@@ -33,9 +33,12 @@ survey's own class 2, as a TIN. Never a re-classification of the points: on
 a classified survey that puts ground on the canopy.
 
 PRIVACY: the footprint, the tile range, a tile index and a survey's name say
-where the user surveyed. No log call names them (tests/test_log_privacy.py),
-and work files are named by position, not by tile (tests/test_sharpen.py
-`TestSharpenBlock`), so a traceback carries none either.
+where the user surveyed. No log call names them (tests/test_log_privacy.py).
+Work files are named by position, not by tile (tests/test_sharpen.py
+`TestSharpenBlock`), but the ZIP's files keep their ELVIS names (survey and
+MGA tile), and a failure's message can quote one: so a failure is reported
+by its type and code locations only (`report_failure`, `TestReportFailure`),
+and PDAL's own output is captured, never printed.
 """
 
 import argparse
@@ -50,6 +53,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import traceback
 import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
@@ -81,18 +85,19 @@ TIN_MAX_EDGE_M = 50
 MARGIN_PX = 16
 NODATA = dem.NODATA
 
-# Heights are rounded finer at each zoom past z15, a departure from ADR
-# 0030's quarter metre pending an update to that ADR: the quarter metre was
-# sized for z15's ~4 m pixels, and on 1 m pixels the same step draws terraces
-# in the hillshade and puts up to ~7° of noise in a tapped slope. Halving it
-# with the pixel keeps z15's noise (tests/test_sharpen.py `TestPyramid`).
-HEIGHTS = dem.Layer("Sharpened heights", "", dem.halve, dem.ROUNDING_M, 9)
-SLOPE = dem.Layer("Sharpened slope", "", dem.halve_max, dem.SLOPE_ROUNDING_DEG, 6)
+# The statewide archives' encodings (ADR 0030, ADR 0039), under their own names.
+HEIGHTS = dataclasses.replace(dem.HEIGHTS, name="Sharpened heights", derived="")
+SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 
 NO_GROUND = (
     "This ZIP's point clouds have no ground marked in them. Add the DEM ELVIS "
     "offers for the same area to the ZIP, and make it again."
 )
+EMPTY_GROUND = (
+    "Logjam couldn't map any ground from this ZIP. Download the area again "
+    "from ELVIS with its DEM, and make it again."
+)
+TOO_BIG = "This area was too big to process. Try a smaller one."
 ONLY_5M = (
     "This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. "
     "Choose the 1 m or 2 m DEM, or the point clouds, in ELVIS."
@@ -206,31 +211,29 @@ def block_grids(
     return filled[inner, inner], slope, filled
 
 
-def rounding_at(layer: dem.Layer, z: int) -> dem.Layer:
-    """Heights rounded to ADR 0030's step at z15, halved each zoom deeper."""
-    if layer is not HEIGHTS:
-        return layer
-    return dataclasses.replace(layer, rounding=layer.rounding / 2 ** (z - ZMIN))
-
-
 def pyramid(grid: np.ndarray, zmax: int, bx: int, by: int, layer: dem.Layer):
     """(z, x, y, png) for each tile of a z14 block's grid at zmax, then each
     coarser zoom down to ZMIN."""
     for z in range(zmax, ZMIN - 1, -1):
         scale = 2 ** (z - CONTOUR_ZOOM)
-        yield from dem.tiles_of(grid, z, bx * scale, by * scale, rounding_at(layer, z))
+        yield from dem.tiles_of(grid, z, bx * scale, by * scale, layer)
         if z > ZMIN:
             grid = layer.reduce(grid)
 
 
 def extraction_month(zip_path: str) -> Optional[str]:
     """The month ELVIS packed the ZIP, from its newest entry: the date the
-    licence asks a derived product to show. An entry with no date (a zero DOS
-    date, as some re-zipping tools write) says nothing, so it is skipped;
-    None when no entry has one."""
+    licence asks a derived product to show. An entry whose date is not a date
+    (a zero DOS date, as some re-zipping tools write) says nothing, so it is
+    skipped; None when no entry has one."""
+    dated = []
     with zipfile.ZipFile(zip_path) as zf:
-        dated = [i.date_time for i in zf.infolist() if i.date_time[1] > 0]
-    return datetime(*max(dated)).strftime("%B %Y") if dated else None
+        for info in zf.infolist():
+            # zipfile decodes DOS dates with no range check: month 0 or 13,
+            # day 0, hour 25 all come through.
+            with contextlib.suppress(ValueError):
+                dated.append(datetime(*info.date_time))
+    return max(dated).strftime("%B %Y") if dated else None
 
 
 def credit(extracted: Optional[str]) -> str:
@@ -262,8 +265,11 @@ def dem_cell(path: Path) -> float:
 
 
 def dem_ground(dem_files: List[Path], order: List[int], out: str) -> None:
-    """Mosaic the chosen DEMs at the finest one's cell, finest drawn last."""
-    pipeline.merge_dem_tiles([dem_files[i] for i in order], out, resolution="highest")
+    """Mosaic the chosen DEMs at the finest one's cell, finest drawn last, a
+    coarser one upsampled bilinear (tests/test_sharpen.py `TestDemGround`)."""
+    pipeline.merge_dem_tiles(
+        [dem_files[i] for i in order], out, resolution="highest", resample="bilinear"
+    )
 
 
 def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
@@ -305,7 +311,7 @@ def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
 
 # Peak memory of one TIN job per ground point it reads: PDAL holds every point
 # of every file it reads (its own tile's ground and its neighbours') and the
-# mesh over them. Measured on kiosk: 992 MiB for a Category 1 tile's 5.0 M
+# mesh over them. Measured: 992 MiB for a Category 1 tile's 5.0 M
 # ground points read alone, ~210 bytes a point.
 TIN_BYTES_PER_POINT = 210
 # Of the memory the container may still use, the share TIN jobs may take.
@@ -313,27 +319,30 @@ TIN_MEMORY_SHARE = 0.7
 
 
 def tin_workers(cpus: int, window_points: int, memory_bytes: int) -> int:
-    """TIN jobs at a time: one a CPU, as many as the largest job's points fit
-    in memory, and never none (tests/test_sharpen.py `TestTinWorkers`)."""
+    """TIN jobs at a time: one a CPU, and as many as the largest job's points
+    fit in memory. An area whose largest job alone won't fit is refused, where
+    running it would only end in an out-of-memory kill (tests/test_sharpen.py
+    `TestTinWorkers`)."""
     fits = int(
         TIN_MEMORY_SHARE * memory_bytes // (TIN_BYTES_PER_POINT * max(window_points, 1))
     )
-    return max(1, min(cpus, fits))
+    if fits == 0:
+        raise CannotSharpen(TOO_BIG)
+    return min(cpus, fits)
 
 
 def available_memory() -> int:
-    """Bytes this container may still use: the host's available memory, or
-    the container's cgroup limit when that is lower."""
+    """Bytes the job can still take: the host's MemAvailable, or, when the
+    container has a cgroup v2 memory limit, that limit less the cgroup's
+    memory.current if it is lower."""
     with open("/proc/meminfo") as f:
         found = dict(line.split(":", 1) for line in f)
-    limits = [int(found["MemAvailable"].split()[0]) * 1024]
-    for path in (
-        "/sys/fs/cgroup/memory.max",
-        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
-    ):
-        with contextlib.suppress(OSError, ValueError):
-            limits.append(int(Path(path).read_text().strip()))
-    return min(limits)
+    free = int(found["MemAvailable"].split()[0]) * 1024
+    with contextlib.suppress(OSError, ValueError):
+        cgroup = Path("/sys/fs/cgroup")
+        limit = int((cgroup / "memory.max").read_text())  # "max": no limit
+        free = min(free, limit - int((cgroup / "memory.current").read_text()))
+    return free
 
 
 def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int:
@@ -376,9 +385,15 @@ def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int
         f"{len(tiles)} of {len(paths)} tile(s) with ground, "
         f"{total / area:.2f} pts/m² → {cell} m cell, {n} TIN job(s) at a time"
     )
+    tins = []
     with ProcessPoolExecutor(n) as pool:
-        tins = [Path(f.result()) for f in [pool.submit(_tin_tile, j) for j in jobs]]
-    pipeline.merge_dem_tiles(tins, out)
+        futures = [pool.submit(_tin_tile, j) for j in jobs]
+        for k, done in enumerate(as_completed(futures), 1):
+            tins.append(Path(done.result()))
+            # The reaper fails a job whose progress stalls for 20 minutes; a
+            # dense area runs one long TIN job at a time.
+            pipeline._write_progress(k, len(jobs), "tin")
+    pipeline.merge_dem_tiles(sorted(tins), out)
     return zoom_for_cell(cell)
 
 
@@ -640,17 +655,7 @@ def contour_archive(work: Path, out: Path, extracted: Optional[str]) -> bool:
     pipeline.gdal.BuildVRT(str(vrt), sorted(str(p) for p in work.glob("contour-*.tif")))
     raw = work / "contours.raw.gpkg"
     lines = work / "contours.gpkg"
-    run(
-        *["gdal_contour", "-q", "-a", "elev", "-i", str(dem.CONTOUR_INTERVAL_M)],
-        *["-snodata", str(NODATA), "-f", "GPKG", str(vrt), str(raw), "-nln", "cont"],
-    )
-    for name, test in (("major", "="), ("minor", "<>")):
-        run(
-            *["ogr2ogr", "-q", "-f", "GPKG", "-update", "-append", str(lines)],
-            *[str(raw), "-t_srs", "EPSG:4326", "-nln", name, "-sql"],
-            "select elev, geom from cont where cast(elev as integer)"
-            f" % {dem.CONTOUR_MAJOR_M} {test} 0",
-        )
+    dem.contour_lines(vrt, raw, lines, run=run)
     mbtiles = out / "contours.mbtiles"
     mbtiles.unlink(missing_ok=True)
     z = CONTOUR_ZOOM
@@ -675,6 +680,23 @@ def contour_archive(work: Path, out: Path, extracted: Optional[str]) -> bool:
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
+
+
+def require_ground(ground: str) -> None:
+    """Refuse a ground grid with no height in it: a DEM of no-data, or class 2
+    too sparse for any triangle. The footprint would otherwise fall back to
+    the whole grid, and the job would claim an area it has no ground for
+    (tests/test_sharpen.py `TestGround`)."""
+    if not pipeline.raster_has_valid_pixels(ground):
+        raise CannotSharpen(EMPTY_GROUND)
+
+
+def report_failure(error: BaseException) -> str:
+    """A failure as its type and the code locations it came through, not its
+    message, which can quote an input's ELVIS name (see PRIVACY above)."""
+    frames = traceback.extract_tb(error.__traceback__)
+    where = " < ".join(f"{Path(f.filename).name}:{f.lineno}" for f in reversed(frames))
+    return f"sharpen failed: {type(error).__name__} at {where}"
 
 
 def footprint_bbox(path: Path) -> Tuple[float, float, float, float]:
@@ -704,6 +726,7 @@ def sharpen(args) -> dict:
             else:
                 kind = "class-2"
                 zmax = laz_ground(contents.las_files, ground, work, args.workers)
+        require_ground(ground)
         with bench.step("Footprint", key="footprint"):
             pipeline.compute_data_footprint(ground, str(out / "footprint.geojson"))
         coverage = footprint_bbox(out / "footprint.geojson")
@@ -777,6 +800,9 @@ def main() -> None:
         Path(args.out).mkdir(parents=True, exist_ok=True)
         (Path(args.out) / "error.json").write_text(json.dumps({"sentence": str(e)}))
         sys.exit(2)
+    except Exception as e:  # noqa: BLE001 - every failure, told without its message
+        print(report_failure(e), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

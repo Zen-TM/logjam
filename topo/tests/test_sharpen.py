@@ -118,33 +118,8 @@ class TestBlockGrids(unittest.TestCase):
 
 
 class TestPyramid(unittest.TestCase):
-    """Mutations that turn it red: the slope pyramid by the mean (a cliff
-    fades out of its band zoomed out, ADR 0039), and heights rounded to the
-    same step at every zoom (terraces in the hillshade at z17)."""
-
-    def test_heights_round_finer_with_each_zoom(self):
-        from PIL import Image
-        import io
-
-        def first_pixel_per_zoom(value):
-            grid = np.full((2048, 2048), value, np.float32)
-            return {
-                z: float(
-                    dem.decode_terrarium(
-                        np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
-                    )[0, 0]
-                )
-                for z, x, y, png in pyramid(grid, 17, 0, 0, HEIGHTS)
-                if (x, y) == (0, 0)
-            }
-
-        # To the nearest 1/16 m at z17, 1/8 m at z16, 1/4 m at z15.
-        self.assertEqual(
-            first_pixel_per_zoom(100.05), {17: 100.0625, 16: 100.0, 15: 100.0}
-        )
-        self.assertEqual(
-            first_pixel_per_zoom(100.1), {17: 100.125, 16: 100.125, 15: 100.0}
-        )
+    """Mutation that turns it red: the slope pyramid by the mean (a cliff
+    fades out of its band zoomed out, ADR 0039)."""
 
     def test_every_zoom_from_zmax_to_z15_at_the_blocks_tiles(self):
         grid = np.zeros((1024, 1024), np.float32)
@@ -170,7 +145,8 @@ class TestPyramid(unittest.TestCase):
 
 class TestCredit(unittest.TestCase):
     """Mutations that turn it red: the month taken from the oldest entry, and
-    a zero DOS date taken as a date (the job then fails after all its work)."""
+    a DOS date that is no date (month 0 or 13, day 0, hour 25) taken as one
+    (the job then fails after all its work)."""
 
     def zip_dated(self, *dates):
         tmp = tempfile.mkdtemp()
@@ -188,6 +164,16 @@ class TestCredit(unittest.TestCase):
     def test_an_entry_with_no_date_is_skipped(self):
         path = self.zip_dated((2025, 3, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0))
         self.assertEqual(extraction_month(path), "March 2025")
+        # Fields DOS can hold that no date has: month 13, day 0, hour 25.
+        for bad in (
+            (2026, 13, 1, 0, 0, 0),
+            (2026, 1, 0, 0, 0, 0),
+            (2026, 1, 1, 25, 0, 0),
+        ):
+            self.assertEqual(
+                extraction_month(self.zip_dated((2025, 3, 1, 0, 0, 0), bad)),
+                "March 2025",
+            )
         self.assertIsNone(extraction_month(self.zip_dated((1980, 0, 0, 0, 0, 0))))
         self.assertNotIn("extracted", credit(None))
 
@@ -195,7 +181,8 @@ class TestCredit(unittest.TestCase):
 class TestGround(unittest.TestCase):
     """Mutations that turn it red: LAZ chosen over a usable DEM, a ZIP of LAZ
     and 5 m DEMs refused, the DEMs mosaicked fine to coarse (a coarse one wins
-    where they overlap), and an empty class 2 gridded anyway (or re-classified)."""
+    where they overlap), an empty class 2 gridded anyway, and a ground grid
+    with no height carried on to a job that claims the whole area."""
 
     def test_a_dem_finer_than_5m_beats_the_point_clouds(self):
         self.assertEqual(dem_plan([2.0], has_laz=True), (16, [0]))
@@ -219,9 +206,107 @@ class TestGround(unittest.TestCase):
         self.assertEqual(class2_cell(int(0.12 * 4e6), 4e6), 2)
 
 
+class TestGroundSteps(unittest.TestCase):
+    """The ground steps' calls, with PDAL and GDAL mocked.
+
+    Mutations that turn it red: an SMRF (or any re-classifying) fallback when
+    class 2 is empty, the DEM mosaic at the default resolution, and a coarser
+    DEM upsampled nearest (2 x 2 blocks in the hillshade)."""
+
+    def test_class_2_only_and_never_smrf(self):
+        from unittest import mock
+
+        import sharpen
+
+        calls = []
+
+        def fake_run(*command):
+            calls.append(command)
+            return ""
+
+        summary = {
+            "bounds": {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000},
+            "num_points": 0,
+        }
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(sharpen, "run", side_effect=fake_run),
+            mock.patch.object(sharpen, "las_summary", return_value=summary),
+            mock.patch.object(
+                sharpen.pipeline,
+                "select_surveys_by_layer",
+                return_value=mock.Mock(terrain_tiles=["a.laz", "b.laz"]),
+            ),
+        ):
+            with self.assertRaises(CannotSharpen) as ctx:
+                sharpen.laz_ground([Path("a.laz")], "g.tif", Path(tmp), 2)
+        self.assertIn("no ground", str(ctx.exception))
+        self.assertEqual(len(calls), 2)
+        for command in calls:
+            self.assertIn("--filters.range.limits=Classification[2:2]", command)
+            self.assertNotIn("smrf", " ".join(command).lower())
+
+    def test_dems_mosaic_at_the_finest_cell_upsampled_bilinear(self):
+        from unittest import mock
+
+        import sharpen
+
+        files = [Path("a.tif"), Path("b.tif"), Path("c.tif")]
+        with mock.patch.object(sharpen.pipeline, "merge_dem_tiles") as merge:
+            sharpen.dem_ground(files, [2, 0], "g.tif")
+        merge.assert_called_once_with(
+            [files[2], files[0]], "g.tif", resolution="highest", resample="bilinear"
+        )
+
+    def test_a_ground_grid_with_no_height_is_refused(self):
+        from unittest import mock
+
+        import sharpen
+
+        with mock.patch.object(
+            sharpen.pipeline, "raster_has_valid_pixels", return_value=False
+        ):
+            with self.assertRaises(CannotSharpen) as ctx:
+                sharpen.require_ground("g.tif")
+        self.assertIn("couldn't map any ground", str(ctx.exception))
+
+
+class TestReportFailure(unittest.TestCase):
+    """A failure leaves sharpen.py as its type and code locations, never its
+    message, which can quote an input's ELVIS name. Mutation that turns it
+    red: print the exception itself."""
+
+    def test_main_reports_no_message(self):
+        import contextlib
+        import io
+        import sys
+        from unittest import mock
+
+        import sharpen
+
+        leak = "Katoomba201804-LID2-C3-AHD_2506258_56_0002_0002.laz"
+        err = io.StringIO()
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(
+                sharpen, "sharpen", side_effect=RuntimeError(f"pdal failed on {leak}")
+            ),
+            mock.patch.object(sys, "argv", ["sharpen.py", "in.zip", tmp]),
+            contextlib.redirect_stderr(err),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            sharpen.main()
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("RuntimeError at", err.getvalue())
+        self.assertIn("sharpen.py:", err.getvalue())
+        for part in ("Katoomba", "2506258", "pdal failed"):
+            self.assertNotIn(part, err.getvalue())
+
+
 class TestTinWorkers(unittest.TestCase):
-    """Mutation that turns it red: the pool sized by CPUs alone, so eight
-    dense TIN jobs at once run a 16 GB task out of memory."""
+    """Mutations that turn it red: the pool sized by CPUs alone, so eight
+    dense TIN jobs at once run a 16 GB task out of memory, and a job too big
+    for memory on its own run anyway (an out-of-memory kill after the work)."""
 
     def test_bounded_by_memory_as_well_as_cpus(self):
         gib = 2**30
@@ -229,7 +314,9 @@ class TestTinWorkers(unittest.TestCase):
         self.assertEqual(tin_workers(8, 45_000_000, 16 * gib), 1)
         self.assertEqual(tin_workers(8, 5_000_000, 16 * gib), 8)
         self.assertEqual(tin_workers(8, 5_000_000, 4 * gib), 2)
-        self.assertEqual(tin_workers(8, 10**10, gib), 1)
+        with self.assertRaises(CannotSharpen) as ctx:
+            tin_workers(8, 10**10, gib)
+        self.assertIn("too big", str(ctx.exception))
 
 
 class TestMosaic(unittest.TestCase):

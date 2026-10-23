@@ -1457,7 +1457,7 @@ def run_pdal_sequential_full(
     # laz path → its five per-tile GeoTIFF paths.
     grids: Dict[str, Dict[str, str]] = {}
     for i, laz in enumerate(union):
-        log.info(f"PDAL tile {i + 1}/{len(union)}: {os.path.basename(laz)}")
+        log.info(f"PDAL tile {i + 1}/{len(union)}")
         # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
         # each tile keeps last_progress_at fresh through the whole PDAL pass so
         # the stall-reaper doesn't false-kill a big job before render starts.
@@ -3949,7 +3949,12 @@ def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]
 # ---------------------------------------------------------------------------
 
 
-def merge_dem_tiles(dem_files: List[Path], out_path: str, resolution: str = "average"):
+def merge_dem_tiles(
+    dem_files: List[Path],
+    out_path: str,
+    resolution: str = "average",
+    resample: Optional[str] = None,
+):
     """Mosaic multiple DEM GeoTIFFs into one, preserving their NATIVE CRS.
 
     Stays native (axis-aligned, no rotation wedge) so the footprint can be
@@ -3958,7 +3963,9 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str, resolution: str = "ave
     downstream steps see a consistent hole value. If the DEM tiles span multiple
     CRSs (rare zone-crossing job), each is reprojected to Web Mercator first.
     Where tiles overlap, the last one listed wins; `resolution` is the
-    mosaic's cell (gdal.BuildVRT's: "average", "highest" …).
+    mosaic's cell (gdal.BuildVRT's: "average", "highest" …) and `resample`
+    how a tile of another cell is resampled to it (BuildVRT's default,
+    nearest, when None).
     """
     log.info(f"Merging {len(dem_files)} DEM tile(s) …")
     paths = [str(f) for f in dem_files]
@@ -3982,7 +3989,13 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str, resolution: str = "ave
         paths = merc
 
     vrt_path = out_path.replace(".tif", "_input.vrt")
-    gdal.BuildVRT(vrt_path, paths, VRTNodata=src_nodata, resolution=resolution)
+    gdal.BuildVRT(
+        vrt_path,
+        paths,
+        VRTNodata=src_nodata,
+        resolution=resolution,
+        **({"resampleAlg": resample} if resample else {}),
+    )
     # Identity mosaic (no reprojection); normalise nodata to -9999.
     gdal.Warp(
         out_path,
