@@ -17,6 +17,8 @@
 import {
   BASEMAP_CATALOG,
   NSW_CONTOURS,
+  NSW_HILLSHADE,
+  NSW_SLOPE,
   type BasemapCatalogEntry,
   type TopoLayerFormat,
   type TopoLayerKey,
@@ -43,6 +45,9 @@ export type LogicalLayerRef =
     }
   /** The statewide contour lines (`shared/src/nswContours.ts`). */
   | { kind: "nsw-contours" }
+  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`). */
+  | { kind: "nsw-slope" }
+  | { kind: "nsw-hillshade" }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -51,7 +56,8 @@ export type ResolvedTileSource =
       status: "ok";
       /** Stable identity — React key for the source component; change ⇔ remount. */
       key: string;
-      sourceType: "vector" | "raster";
+      /** `raster-dem`: a terrarium DEM, which MapLibre draws itself. */
+      sourceType: "vector" | "raster" | "raster-dem";
       url?: string;
       tiles?: string[];
       tileSize?: number;
@@ -292,23 +298,31 @@ function resolveTopoOverlay(
   ];
 }
 
-/** Like the vector basemap: the CDN's archive online, saved clips offline. */
-function resolveNswContours(ctx: ResolveContext): ResolvedTileSource[] {
-  const logicalId = NSW_CONTOURS.id;
+/**
+ * A statewide archive of Logjam's own, like the vector basemap: the CDN's
+ * archive online, the clips saved of it (`clips`) offline.
+ */
+function resolveStatewide(
+  archive: { id: string; archivePath: string; credit: string },
+  sourceType: "vector" | "raster-dem",
+  clips: MapArtifact["kind"] | null,
+  ctx: ResolveContext,
+): ResolvedTileSource[] {
+  const logicalId = archive.id;
   if (ctx.connectivity === "online") {
-    const url = `pmtiles://${ctx.cdnBaseUrl}/${NSW_CONTOURS.archivePath}`;
+    const url = `pmtiles://${ctx.cdnBaseUrl}/${archive.archivePath}`;
     return [
       {
         status: "ok",
         key: `${logicalId}:remote:${hashKey(url)}`,
-        sourceType: "vector",
+        sourceType,
         url,
-        attribution: NSW_CONTOURS.credit,
+        attribution: archive.credit,
         origin: "remote",
       },
     ];
   }
-  const regions = ctx.artifacts.filter((a) => a.kind === "contours-region");
+  const regions = ctx.artifacts.filter((a) => a.kind === clips);
   if (regions.length === 0) {
     return [
       {
@@ -318,9 +332,7 @@ function resolveNswContours(ctx: ResolveContext): ResolvedTileSource[] {
       },
     ];
   }
-  return regions.map((r) =>
-    localArtifactSource(r, logicalId, NSW_CONTOURS.credit),
-  );
+  return regions.map((r) => localArtifactSource(r, logicalId, archive.credit));
 }
 
 function resolveImport(
@@ -392,27 +404,6 @@ export function bboxOnScreen(
   );
 }
 
-/**
- * Whether any saved area holds both imagery and a contour clip: offline, the
- * only place contours can be drawn over imagery, so the only time offering to
- * is honest.
- */
-export function hasSavedImageryContours(
-  artifacts: readonly MapArtifact[],
-): boolean {
-  const withContours = new Set(
-    artifacts
-      .filter((a) => a.kind === "contours-region" && a.groupId != null)
-      .map((a) => a.groupId),
-  );
-  return artifacts.some(
-    (a) =>
-      a.kind === "basemap-region" &&
-      a.logicalKey === "six-imagery" &&
-      withContours.has(a.groupId),
-  );
-}
-
 export function resolveMapSource(
   ref: LogicalLayerRef,
   ctx: ResolveContext,
@@ -423,7 +414,12 @@ export function resolveMapSource(
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
     case "nsw-contours":
-      return resolveNswContours(ctx);
+      return resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx);
+    // Nothing saves a clip of either yet, so offline neither draws.
+    case "nsw-slope":
+      return resolveStatewide(NSW_SLOPE, "raster-dem", null, ctx);
+    case "nsw-hillshade":
+      return resolveStatewide(NSW_HILLSHADE, "raster-dem", null, ctx);
     case "geopdf-import":
     case "vector-import":
       return resolveImport(ref, ctx);

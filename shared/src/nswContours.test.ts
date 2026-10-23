@@ -5,28 +5,34 @@ import {
   NSW_CONTOURS,
   contourLabelHalo,
   drawsNswContours,
+  takesNswContours,
   nswContourStyle,
 } from "./nswContours.js";
 import { VECTOR_STYLE_DEFAULTS } from "./topoSettings.js";
 
 describe("drawsNswContours", () => {
-  it("draws with the vector basemap whatever the imagery setting", () => {
-    expect(drawsNswContours("protomaps", false)).toBe(true);
-  });
-
-  it("draws over imagery only when asked", () => {
-    expect(drawsNswContours("six-imagery", false)).toBe(false);
+  it("draws over the vector basemap and imagery while the switch is on", () => {
+    expect(drawsNswContours("protomaps", true)).toBe(true);
     expect(drawsNswContours("six-imagery", true)).toBe(true);
   });
 
-  // Mutation: drop the basemap test from the imagery arm, and the sheets that
-  // print their own contours get a second set on top.
+  // Mutation: drop `on` from the vector arm, and the switch cannot hide them.
+  it("draws nowhere while the switch is off", () => {
+    expect(drawsNswContours("protomaps", false)).toBe(false);
+    expect(drawsNswContours("six-imagery", false)).toBe(false);
+  });
+
+  // Mutation: drop the basemap test, and the sheets that print their own
+  // contours get a second set on top.
   it("never draws over a basemap that prints its own", () => {
     const others = BASEMAP_CATALOG.map((entry) => entry.id).filter(
       (id) => id !== "protomaps" && id !== "six-imagery",
     );
     expect(others.length).toBeGreaterThan(0);
-    for (const id of others) expect(drawsNswContours(id, true)).toBe(false);
+    for (const id of others) {
+      expect(drawsNswContours(id, true)).toBe(false);
+      expect(takesNswContours(id)).toBe(false);
+    }
   });
 
   it("credits the contours, not the elevation", () => {

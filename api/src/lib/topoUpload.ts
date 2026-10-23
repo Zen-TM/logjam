@@ -7,7 +7,7 @@ import {
   type Part,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { say } from "@logjam/shared";
+import { TOPO_UPLOAD_PART_URL_TTL_SECONDS, say } from "@logjam/shared";
 import { s3 } from "../services/awsClients";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { abortS3MultipartUploads, deleteS3Prefix } from "./s3Cleanup";
@@ -63,7 +63,7 @@ export async function signTopoParts(
             sizeBytes - (partNumber - 1) * TOPO_UPLOAD_PART_BYTES,
           ),
         }),
-        { expiresIn: 900 }, // 15 minutes, like the single PUT
+        { expiresIn: TOPO_UPLOAD_PART_URL_TTL_SECONDS },
       ),
     })),
   );

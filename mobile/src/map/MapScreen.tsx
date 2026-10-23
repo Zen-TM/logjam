@@ -48,6 +48,7 @@ import {
   type PressEvent,
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
+  type ColorReliefLayerSpecification,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -84,6 +85,10 @@ import {
   type SnapMode,
   type TrackPass,
   drawsNswContours,
+  slopeReliefColor,
+  TERRAIN_LAYER_KEYS,
+  terrainBeforeIds,
+  type TerrainLayerKey,
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
@@ -213,10 +218,11 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
-  readContoursOverImagery,
+  readTerrainLayers,
   setBasemapPreference,
-  setContoursOverImagery,
+  setTerrainLayers,
 } from "./basemapPreference";
+import { useSlopeBands } from "./slopeBandsPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
@@ -306,7 +312,7 @@ import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { ProtomapsLayers, protomapsLayerId } from "./basemap/ProtomapsLayers";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
@@ -344,12 +350,23 @@ import {
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
-import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import {
+  basemapMountKeys,
+  chainBeforeIds,
+  PIN_FLOOR,
+  ROUTES_FLOOR,
+} from "./layerOrder";
+import { mapDataAttribution } from "./mapDataCredits";
 import {
   TopoIconImages,
   TopoVectorOverlay,
   topoVectorLayerIds,
 } from "./TopoVectorOverlay";
+
+/** The shared expression builder's untyped result, as MLRN types the paint. */
+type ColorReliefColor = NonNullable<
+  NonNullable<ColorReliefLayerSpecification["paint"]>["color-relief-color"]
+>;
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
 // file:// assets once installed, remote host as the
@@ -879,13 +896,18 @@ export function MapScreen({
     setBasemapId(next);
     setBasemapPreference(next);
   }, []);
-  const [contoursOverImagery, setContoursOverImageryState] = useState(
-    readContoursOverImagery,
+  const [terrainLayers, setTerrainLayersState] = useState(readTerrainLayers);
+  const chooseTerrainLayer = useCallback(
+    (key: TerrainLayerKey, on: boolean) => {
+      setTerrainLayersState((prev) => {
+        const next = { ...prev, [key]: on };
+        setTerrainLayers(next);
+        return next;
+      });
+    },
+    [],
   );
-  const chooseContoursOverImagery = useCallback((on: boolean) => {
-    setContoursOverImageryState(on);
-    setContoursOverImagery(on);
-  }, []);
+  const slopeBands = useSlopeBands();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
@@ -1380,16 +1402,34 @@ export function MapScreen({
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
   );
-  // The statewide contours, where this basemap takes them (shared
-  // nswContours.ts). Offline they are whatever clips were saved with it.
+  // The Terrain group (shared terrain.ts). The contours only where this
+  // basemap takes them; offline, each is whatever clips were saved of it.
   const contoursResolved = useMemo(
     () =>
-      drawsNswContours(renderedBasemapId, contoursOverImagery)
+      drawsNswContours(renderedBasemapId, terrainLayers.contours)
         ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
             (r) => r.status === "ok",
           )
         : [],
-    [renderedBasemapId, contoursOverImagery, ctx],
+    [renderedBasemapId, terrainLayers.contours, ctx],
+  );
+  const slopeResolved = useMemo(
+    () =>
+      terrainLayers.slope
+        ? resolveMapSource({ kind: "nsw-slope" }, ctx).filter(
+            (r) => r.status === "ok",
+          )
+        : [],
+    [terrainLayers.slope, ctx],
+  );
+  const hillshadeResolved = useMemo(
+    () =>
+      terrainLayers.hillshade
+        ? resolveMapSource({ kind: "nsw-hillshade" }, ctx).filter(
+            (r) => r.status === "ok",
+          )
+        : [],
+    [terrainLayers.hillshade, ctx],
   );
 
   /**
@@ -4347,22 +4387,20 @@ export function MapScreen({
     viewportBbox,
   );
 
-  // Once each: offline, every saved clip of a source carries the same credit.
-  const attributionText = [
-    ...new Set(
-      [...basemapResolved, ...contoursResolved]
-        .map((r) => (r.status === "ok" ? r.attribution : null))
-        .filter(Boolean),
-    ),
-  ].join(" · ");
+  const attributionText = mapDataAttribution(basemapResolved, {
+    contours: contoursResolved,
+    slope: slopeResolved,
+    hillshade: hillshadeResolved,
+  });
 
   const nswContoursStyle = useMemo(
     () => nswContourStyle(renderedBasemapId),
     [renderedBasemapId],
   );
 
-  // The ground band, bottom to top: the statewide contours, topo overlays,
-  // GeoPDFs, vector imports.
+  // The ground band, bottom to top: the Terrain group (hillshade, slope,
+  // contours: `TERRAIN_LAYER_KEYS` read upwards) when the basemap is a raster,
+  // topo overlays, GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4377,10 +4415,33 @@ export function MapScreen({
       ctx,
     ).filter((r) => r.status === "ok"),
   }));
-  const groundIds = [
-    ...contoursResolved.flatMap((r) =>
+  const terrainLayerIds: Record<TerrainLayerKey, string[]> = {
+    contours: contoursResolved.flatMap((r) =>
       topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
     ),
+    slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
+    hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
+  };
+  // Over the vector basemap the Terrain group goes inside it, under its roads
+  // and labels (shared TERRAIN_BASEMAP_ANCHORS), in the first stack drawn,
+  // which is the top one (basemapMountKeys): offline, that of the most
+  // recently saved area.
+  const basemapStacks = basemapResolved.filter((r) => r.status === "ok");
+  const mountKeys = basemapMountKeys(basemapStacks);
+  const vectorBasemap = basemapStacks.find((r) => r.sourceType === "vector");
+  const terrainBefore = vectorBasemap
+    ? Object.fromEntries(
+        terrainBeforeIds(terrainLayerIds, (id) =>
+          protomapsLayerId(sourceIdFor(vectorBasemap.key), id),
+        ),
+      )
+    : null;
+  const groundIds = [
+    ...(terrainBefore
+      ? []
+      : [...TERRAIN_LAYER_KEYS]
+          .reverse()
+          .flatMap((key) => terrainLayerIds[key])),
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
@@ -4400,7 +4461,10 @@ export function MapScreen({
       `import-point-${i.id}`,
     ]),
   ];
-  const groundBefore = chainBeforeIds(groundIds, ROUTES_FLOOR);
+  const groundBefore = {
+    ...chainBeforeIds(groundIds, ROUTES_FLOOR),
+    ...terrainBefore,
+  };
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
@@ -4520,7 +4584,10 @@ export function MapScreen({
             overlay base index depends on the active basemap. */}
         {basemapResolved.map((resolved) =>
           resolved.status === "ok" ? (
-            <ResolvedSource key={resolved.key} resolved={resolved}>
+            <ResolvedSource
+              key={`${resolved.key}@${mountKeys.stacks}`}
+              resolved={resolved}
+            >
               {resolved.sourceType === "vector" ? (
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
@@ -4555,10 +4622,39 @@ export function MapScreen({
           </GeoJSONSource>
         ) : null}
 
+        {/* The Terrain group's shading and slope: MapLibre draws both from
+            a terrarium DEM. The bands are a paint expression, so changing
+            them on Logjam Web repaints this layer, no rebuild. */}
+        {hillshadeResolved.map((r) => (
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+            <Layer
+              key={`nsw-hillshade-${r.key}`}
+              type="hillshade"
+              id={`nsw-hillshade-${r.key}`}
+              beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
+            />
+          </ResolvedSource>
+        ))}
+        {slopeResolved.map((r) => (
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+            <Layer
+              key={`nsw-slope-${r.key}`}
+              type="color-relief"
+              id={`nsw-slope-${r.key}`}
+              beforeId={groundBefore[`nsw-slope-${r.key}`]}
+              paint={{
+                "color-relief-color": slopeReliefColor(
+                  slopeBands,
+                ) as ColorReliefColor,
+              }}
+            />
+          </ResolvedSource>
+        ))}
+
         {/* The statewide contours: a topo area's contour layers, on the
             statewide archive (or the clips saved from it). */}
         {contoursResolved.map((r) => (
-          <ResolvedSource key={r.key} resolved={r}>
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
             <TopoVectorOverlay
               kind="contours"
               idPrefix={`nsw-contours-${r.key}`}
@@ -5444,8 +5540,8 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={chooseContoursOverImagery}
+        terrainLayers={terrainLayers}
+        onTerrainLayerChange={chooseTerrainLayer}
         artifacts={artifacts}
         overlays={overlayList}
         enabledOverlays={enabledOverlays}

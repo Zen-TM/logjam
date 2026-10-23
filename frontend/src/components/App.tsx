@@ -11,6 +11,7 @@ import type {
   GeoJsonPolygonal,
   DownloadUrl,
 } from "./dialogs/TopoDialog";
+import { routeMadeTopoJob } from "./dialogs/topoUpload";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import PlaceDialog from "./dialogs/PlaceDialog";
@@ -18,7 +19,8 @@ import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import { NSW_CONTOURS_ENTRY_ID, type TBbox } from "./map/Map";
+import type { TBbox } from "./map/Map";
+import { TERRAIN_ENTRIES } from "./map/terrainEntries";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type {
   TFilters,
@@ -99,14 +101,19 @@ import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
-  NSW_CONTOURS,
+  TERRAIN_LAYER_DEFAULTS,
+  TERRAIN_LAYER_KEYS,
   drawsNswContours,
+  normalizeTerrainLayers,
+  type TerrainLayerKey,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  MAP_TERRAIN,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
@@ -116,18 +123,6 @@ const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
 const defaultLayerToggles = Object.fromEntries(
   currentLayerNames.map((n) => [n, true]),
 );
-
-/**
- * The statewide contours as one entry of the Map's topo layer list.
- * Same origin, like the vector basemap: `/master/*` is served by the web
- * distribution and proxied in dev.
- */
-const NSW_CONTOURS_ENTRY = {
-  id: NSW_CONTOURS_ENTRY_ID,
-  pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
-  format: "vector" as const,
-  attribution: NSW_CONTOURS.creditHtml,
-};
 
 function App() {
   const toast = useToast();
@@ -203,10 +198,17 @@ function App() {
     ? storedLayerId
     : "protomaps";
 
-  const [contoursOverImagery, setContoursOverImagery] = useStoredState(
-    "logjam.contoursOverImagery",
-    false,
+  // On the device, like the basemap choice; the slope bands are the account's.
+  const [storedTerrainLayers, setStoredTerrainLayers] = useStoredState<unknown>(
+    "logjam.terrainLayers",
+    TERRAIN_LAYER_DEFAULTS,
   );
+  const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
+  const setTerrainLayer = (key: TerrainLayerKey, on: boolean) =>
+    setStoredTerrainLayers((prev: unknown) => ({
+      ...normalizeTerrainLayers(prev),
+      [key]: on,
+    }));
 
   const [showAdd, setShowAdd] = useState(false);
   // "Add a place here" from the map: the form opens on this spot.
@@ -498,24 +500,41 @@ function App() {
     completedTopoJobs,
   ]);
 
-  // The statewide contours ride the same list, underneath every topo area's
-  // own layers, so the Map draws and styles them with the code it has.
-  const mapTopoLayers = useMemo(
-    () =>
-      drawsNswContours(activeLayerId, contoursOverImagery)
-        ? [NSW_CONTOURS_ENTRY, ...combinedTopoLayers]
-        : combinedTopoLayers,
-    [activeLayerId, contoursOverImagery, combinedTopoLayers],
-  );
+  // The Terrain group rides the same list, bottom first and underneath every
+  // topo area's own layers, so the Map draws and styles it with the code it has.
+  const { contours, slope, hillshade } = terrainLayers;
+  const mapTopoLayers = useMemo(() => {
+    const shown = {
+      contours: drawsNswContours(activeLayerId, contours),
+      slope,
+      hillshade,
+    };
+    return [
+      ...[...TERRAIN_LAYER_KEYS]
+        .reverse()
+        .filter((key) => shown[key])
+        .map((key) => TERRAIN_ENTRIES[key]),
+      ...combinedTopoLayers,
+    ];
+  }, [activeLayerId, contours, slope, hillshade, combinedTopoLayers]);
 
   // A topo overlay's PMTiles source failed to load (Map already tore it down
   // to stop the retry spam). Record it for the Layers-panel badge and tell the
   // user once.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
-      // Not a topo area's layer, and nothing the user switched on: the map is
-      // simply drawn without contours.
-      if (entryId === NSW_CONTOURS_ENTRY.id) return;
+      // A Terrain layer is not a topo area's: no badge, but its switch is on,
+      // so say which one draws nothing. Only a reload retries it: the pmtiles
+      // protocol keeps the failed header for the page's life.
+      const terrainKey = TERRAIN_LAYER_KEYS.find(
+        (key) => TERRAIN_ENTRIES[key].id === entryId,
+      );
+      if (terrainKey) {
+        toast.error(
+          `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
+        );
+        return;
+      }
       setUnavailableTopoEntryIds((prev) => {
         if (prev.has(entryId)) return prev;
         const next = new Set(prev);
@@ -623,6 +642,7 @@ function App() {
     refetchCurrentUser,
     applyCurrentUser,
   } = useCurrentUser(authenticated);
+  const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
   // `authenticated` is NOT enough to start fetching the user's data: a user
   // whose recorded consent is stale gets ConsentGate rendered instead of
   // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
@@ -1054,11 +1074,19 @@ function App() {
     return () => clearInterval(interval);
   }, [activeTopoJobs, refetchNotifications, refetchCompletedTopoJobs]);
 
-  const handleTopoJobCreated = useCallback((job: TopoJob) => {
-    // Register for active-job polling. The dialog owns the success surface
-    // (in-dialog "Submitted" view) and its own close, so no toast/close here.
-    setActiveTopoJobs((prev) => [job, ...prev]);
-  }, []);
+  // The dialog owns the success surface (in-dialog "Submitted" view) and its
+  // own close, so no toast/close here.
+  const handleTopoJobCreated = useCallback(
+    (job: TopoJob) =>
+      routeMadeTopoJob(job, {
+        track: (made) => setActiveTopoJobs((prev) => [made, ...prev]),
+        finished: () => {
+          refetchCompletedTopoJobs();
+          refetchNotifications();
+        },
+      }),
+    [refetchCompletedTopoJobs, refetchNotifications],
+  );
 
   // Durable delete replaces the old hide-only dismiss so failed rows can't
   // linger invisibly (DELETE /topo-jobs/:id handles failed rows + S3 cleanup
@@ -1889,6 +1917,7 @@ function App() {
             setShowTopo(true);
           }}
           topoLayers={mapTopoLayers}
+          slopeBands={slopeBands.drawn}
           vectorStyle={vectorStyle}
           activeLayerId={mapLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
@@ -1958,8 +1987,10 @@ function App() {
         baseLayers={BASE_LAYERS}
         activeLayerId={activeLayerId}
         onActiveLayerChange={setActiveLayerId}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={setContoursOverImagery}
+        terrainLayers={terrainLayers}
+        onTerrainLayerChange={setTerrainLayer}
+        slopeBands={slopeBands.bands}
+        onSlopeBandsChange={slopeBands.setBands}
         mapView={mapCenter}
       />
 
