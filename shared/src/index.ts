@@ -30,6 +30,7 @@ export * from "./mergePlace.js";
 export * from "./monthlyQuota.js";
 export * from "./computeCredits.js";
 export * from "./topoSettings.js";
+export * from "./topoUpload.js";
 export * from "./topoExport.js";
 export * from "./ozUltimate.js";
 export * from "./media.js";
