@@ -1,8 +1,10 @@
-"""The topo job's logs never say where the user surveyed (root AGENTS.md,
-Privacy): no coordinate, bbox, tile index, footprint id or survey name.
-Its stdout goes to CloudWatch.
+"""The topo job's logs never say where the user surveyed, nor an area
+export's where they mean to go (root AGENTS.md, Privacy): no coordinate,
+bbox, tile index, footprint id or survey name. Their stdout goes to
+CloudWatch.
 
-Four guards. A scan of every `log.*()` call in the job's modules for the
+Four guards. A scan of every `log.*()` call in the modules that handle a
+place for the
 names that hold such a value; the overlapping-survey pick run for real
 under assertLogs, since its footprint id and survey labels are the values
 most tempting to log; and pipeline.py's GDAL handler, which logs a message's
@@ -10,8 +12,8 @@ class and number, never its text (`TestGdalMessages`, whose mutations its
 own docstring names); and a failed job's last line (`TestUncaughtFailure`,
 likewise). Mutations of the first two that turn it red: restoring pipeline.py's
 `Coverage: lon …, lat …` line, putting `{footprint}` or a survey label back
-in the overlapping-surveys log, logging a tile's `{z}/{x}/{y}`, or restoring
-the filename in the PDAL tile log.
+in the overlapping-surveys log, logging a tile's `{z}/{x}/{y}`, restoring
+the filename in the PDAL tile log, or logging an area export's `{rect}`.
 """
 
 import ast
@@ -23,14 +25,23 @@ import _native_stub  # noqa: F401  (stubs osgeo when absent on the host)
 import pipeline
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-# The modules a topo job runs: the worker, and the two pipelines it starts.
-_MODULES = ("worker.py", "pipeline.py", "sharpen.py")
+# Every module that handles a place: a topo job's worker and the two pipelines
+# it starts, and the export worker with the area export it runs on a box.
+_MODULES = (
+    "worker.py",
+    "pipeline.py",
+    "sharpen.py",
+    "export_worker.py",
+    "area_export.py",
+)
 # Names that hold where a place is, in those modules.
 _PLACE_NAMES = {
     "lon", "lat", "lon_min", "lat_min", "lon_max", "lat_max",
     "west", "south", "east", "north", "bbox", "bbox_wgs84", "bounds",
     "coverage", "footprint", "tiles15", "z", "x", "y", "bx", "by", "tx", "ty",
     "survey_label", "terrain_win", "veg_win",
+    # An area export's box, in MGA and around it, and its tile range.
+    "rect", "around", "x0", "y0", "x1", "y1", "xmin", "ymin", "xmax", "ymax",
     # An ELVIS file's name holds its survey's area and its MGA tile; these
     # names hold one, or a list of them, in these modules.
     "laz", "las_files", "terrain_tiles", "veg_tiles", "path", "paths", "dem_files",
