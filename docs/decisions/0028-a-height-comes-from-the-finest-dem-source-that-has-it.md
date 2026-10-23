@@ -97,6 +97,14 @@ Proposal: #359.
   when its own pass reaches the same answer. A climb stored before the
   arithmetic changed is still replaced by nothing. Everything else above
   stands.
+- **Update 2026-10-18: a slope reads its window from the finest regional
+  source with all nine pixels, never the worldwide tiles.** Slope is not a
+  height, so `demSlopeReading` in `shared/src/demSlope.ts` walks
+  `DEM_SOURCES` itself instead of calling `sampleDem`: it takes the first
+  source whose coverage and tiles hold the whole 3 × 3 window of Horn, and
+  gives no slope when none does, since the worldwide 30 m tiles are too
+  coarse to show a cliff. Guard: `shared/src/demSlope.test.ts`.
+  Everything else above stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS
@@ -167,5 +175,10 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   It holds both the file and the DEM, so no client would need a pass. Not
   taken: a larger change, and a phone offline must still store a figure of
   its own at the finish.
+- **Read a slope like a height, through `sampleDem` down the whole list**
+  (2026-10-18). One sampler, and a slope wherever there is a height. Rejected
+  because the worldwide 30 m tiles are within 5° of a 5 m survey at only 57 %
+  of points (ground of 60° or steeper reads a median of 34° on them), and
+  `sampleDem`'s four-pixel blend can fill a missing pixel from a neighbour.
 - **Choose the source in each client.** Rejected by 0020: deciding twice is
   how the two clients drifted before.
