@@ -135,3 +135,4 @@ supersede instead.
 | [0037](0037-undo-restores-what-an-import-changed-for-a-day.md) | Undoing an import puts back what it changed, field by field, for a day | 2026-10-18 | Accepted |
 | [0038](0038-a-forecast-request-sends-the-cell-not-the-spot.md) | A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo | 2026-10-18 | Accepted |
 | [0039](0039-the-statewide-slope-archive-is-rounded-to-1-degree.md) | The statewide slope archive is terrarium PMTiles rounded to 1°: Horn over the height tiles, a max pyramid | 2026-10-18 | Accepted |
+| [0040](0040-a-sharpened-area-is-a-private-dem-source.md) | A sharpened area is a private DEM source, and each map tile comes from one archive | 2026-10-23 | Accepted |

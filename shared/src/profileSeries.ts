@@ -6,7 +6,13 @@
 // means, which heights are charted and the words around them are decided once
 // and each client only draws.
 import { MAP_MEASURE } from "./contracts/mapMeasure.js";
-import { GPS_CLIMB_SOURCE, NSW_5M, TERRARIUM } from "./demSources.js";
+import {
+  climbSourceOf,
+  GPS_CLIMB_SOURCE,
+  NSW_5M,
+  SHARPENED_CLIMB_SOURCE,
+  TERRARIUM,
+} from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
@@ -133,12 +139,21 @@ export const TRACK_PROFILE_COPY = {
  * profileSeries.test.ts.
  */
 const HEIGHT_SOURCE_NAMES: Record<string, string> = {
+  [SHARPENED_CLIMB_SOURCE]: "LiDAR terrain data",
   [NSW_5M.id]: "NSW 5 m terrain data",
   [TERRARIUM.id]: "30 m terrain data",
   [GPS_CLIMB_SOURCE]: "GPS heights",
 };
 /** A source this build does not know was written by a newer one. */
 const UNNAMED_SOURCE = "terrain data";
+
+/** The name of the one climb source a profile was read from, if just one. */
+function heightSourceName(sourceIds: readonly string[] | undefined): string {
+  const sources = new Set(sourceIds?.map(climbSourceOf));
+  return sources.size === 1
+    ? (HEIGHT_SOURCE_NAMES[[...sources][0]!] ?? UNNAMED_SOURCE)
+    : UNNAMED_SOURCE;
+}
 
 /**
  * The line under a finished recording's stored Ascent and Descent, saying
@@ -184,13 +199,10 @@ export function trackHeights(
     : dem?.filledFromGps
       ? "Terrain data covers part of this track — the rest is from GPS"
       : dem
-        ? // Named only when ONE source answered: a line read from two has no
-          // single name, and the credit beside it lists both.
-          `Heights from ${
-            (dem.demSourceIds?.length === 1
-              ? HEIGHT_SOURCE_NAMES[dem.demSourceIds[0]!]
-              : undefined) ?? UNNAMED_SOURCE
-          }`
+        ? // Named only when ONE source answered, counting every sharpened
+          // area as one (`lidar`), as a stored climb is: a line read from two
+          // has no single name, and the credit beside it lists both.
+          `Heights from ${heightSourceName(dem.demSourceIds)}`
         : demProfile
           ? "Terrain data incomplete — heights from GPS"
           : demLoading

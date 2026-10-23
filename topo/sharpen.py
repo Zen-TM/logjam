@@ -17,7 +17,8 @@ OUT receives:
   contours.pmtiles  10 m contours at z14, the statewide archive's schema;
                     absent when no 10 m level crosses the area
   footprint.geojson where the survey has ground
-  sharpen.json      zmax, the tile range, coverage, ground kind, extraction month
+  sharpen.json      zmax, the tile range, coverage, ground kind, extraction
+                    month, and the credit the clients show
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
 reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
@@ -214,12 +215,23 @@ def block_grids(
     return filled[inner, inner], slope, filled
 
 
+def rounding_at(layer: dem.Layer, z: int) -> dem.Layer:
+    """Heights rounded to ADR 0030's quarter metre at z15, halved each zoom
+    deeper: the quarter metre was sized for z15's ~4 m pixels, and on 1 m
+    pixels it draws terraces in the hillshade and puts up to ~7° of noise in
+    a tapped slope (ADR 0030's update of 2026-10-23; tests/test_sharpen.py
+    `TestPyramid`)."""
+    if layer is not HEIGHTS:
+        return layer
+    return dataclasses.replace(layer, rounding=layer.rounding / 2 ** (z - ZMIN))
+
+
 def pyramid(grid: np.ndarray, zmax: int, bx: int, by: int, layer: dem.Layer):
     """(z, x, y, png) for each tile of a z14 block's grid at zmax, then each
     coarser zoom down to ZMIN."""
     for z in range(zmax, ZMIN - 1, -1):
         scale = 2 ** (z - CONTOUR_ZOOM)
-        yield from dem.tiles_of(grid, z, bx * scale, by * scale, layer)
+        yield from dem.tiles_of(grid, z, bx * scale, by * scale, rounding_at(layer, z))
         if z > ZMIN:
             grid = layer.reduce(grid)
 
@@ -744,6 +756,23 @@ def footprint_bbox(path: Path) -> Tuple[float, float, float, float]:
     return tuple(round(v, 6) for v in shape(geometry).bounds)
 
 
+def sharpen_result(zmax, tiles15, coverage, kind, extracted) -> dict:
+    """What the job reports. topo/worker.py stores it with the archive keys,
+    and the API reads it (api/src/services/sharpenedAreas.ts): the example in
+    shared/src/__fixtures__/sharpen-result.json holds all three to one shape
+    (tests/test_sharpen.py `TestResult`). The credit the clients show is
+    declared here, once."""
+    return {
+        "v": 1,
+        "zmax": zmax,
+        "tiles15": list(tiles15),
+        "coverage": list(coverage),
+        "ground": kind,
+        "extracted": extracted,
+        "credit": credit(extracted),
+    }
+
+
 def sharpen(args) -> dict:
     bench = pipeline.Benchmark()
     out = Path(args.out)
@@ -799,14 +828,7 @@ def sharpen(args) -> dict:
             if not contour_archive(blocks_dir, out, extracted):
                 log.info("No 10 m contour crosses the area: no contour archive")
 
-    result = {
-        "v": 1,
-        "zmax": zmax,
-        "tiles15": list(tiles15),
-        "coverage": list(coverage),
-        "ground": kind,
-        "extracted": extracted,
-    }
+    result = sharpen_result(zmax, tiles15, coverage, kind, extracted)
     (out / "sharpen.json").write_text(json.dumps(result))
     if args.metrics_json:
         bench.set_tile_counts(len(contents.las_files or contents.dem_files), tile_count)

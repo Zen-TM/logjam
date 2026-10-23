@@ -120,8 +120,35 @@ class TestBlockGrids(unittest.TestCase):
 
 
 class TestPyramid(unittest.TestCase):
-    """Mutation that turns it red: the slope pyramid by the mean (a cliff
-    fades out of its band zoomed out, ADR 0039)."""
+    """Mutations that turn it red: the slope pyramid by the mean (a cliff
+    fades out of its band zoomed out, ADR 0039), and heights rounded to the
+    same step at every zoom (terraces in the hillshade at z17, ADR 0030's
+    update of 2026-10-23)."""
+
+    def test_heights_round_finer_with_each_zoom(self):
+        import io
+
+        from PIL import Image
+
+        def first_pixel_per_zoom(value):
+            grid = np.full((2048, 2048), value, np.float32)
+            return {
+                z: float(
+                    dem.decode_terrarium(
+                        np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
+                    )[0, 0]
+                )
+                for z, x, y, png in pyramid(grid, 17, 0, 0, HEIGHTS)
+                if (x, y) == (0, 0)
+            }
+
+        # To the nearest 1/16 m at z17, 1/8 m at z16, 1/4 m at z15.
+        self.assertEqual(
+            first_pixel_per_zoom(100.05), {17: 100.0625, 16: 100.0, 15: 100.0}
+        )
+        self.assertEqual(
+            first_pixel_per_zoom(100.1), {17: 100.125, 16: 100.125, 15: 100.0}
+        )
 
     def test_every_zoom_from_zmax_to_z15_at_the_blocks_tiles(self):
         grid = np.zeros((1024, 1024), np.float32)
@@ -178,6 +205,32 @@ class TestCredit(unittest.TestCase):
             )
         self.assertIsNone(extraction_month(self.zip_dated((1980, 0, 0, 0, 0, 0))))
         self.assertNotIn("extracted", credit(None))
+
+
+class TestResult(unittest.TestCase):
+    """Mutations that turn it red: a field of the result renamed or retyped
+    on the worker's side, which the API's parser would then read as no area
+    (api/src/services/sharpenedAreas.unit.test.ts reads the same example),
+    and an example whose tile range is not its coverage's."""
+
+    def test_the_result_is_the_example_the_api_reads(self):
+        import json
+
+        root = os.path.join(os.path.dirname(__file__), "..", "..")
+        path = os.path.join(root, "shared/src/__fixtures__/sharpen-result.json")
+        with open(path) as f:
+            stored = json.load(f)["stored"]
+        reported = sharpen_module.sharpen_result(
+            stored["zmax"],
+            sharpen_module.tile_range(tuple(stored["coverage"])),
+            tuple(stored["coverage"]),
+            stored["ground"],
+            stored["extracted"],
+        )
+        added_by_the_worker = {"keys", "vegetation"}
+        self.assertEqual(
+            reported, {k: v for k, v in stored.items() if k not in added_by_the_worker}
+        )
 
 
 class TestGround(unittest.TestCase):

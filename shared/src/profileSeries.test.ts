@@ -282,4 +282,19 @@ describe("storedClimbCaption", () => {
       "Heights from terrain data",
     );
   });
+
+  // Mutation: look the chart's name up by the source id itself, and a line
+  // read inside a sharpened area (`lidar-<job id>`) is "terrain data" while
+  // its stored climb says "LiDAR terrain data".
+  it("names a sharpened area's heights as its stored climb does", () => {
+    const detail = { elevation: profile, maxAltitudeM: 40 } as TrackDetail;
+    for (const demSourceIds of [["lidar-x"], ["lidar-x", "lidar-y"]])
+      expect(
+        trackHeights(detail, { ...profile, demSourceIds }, false).note,
+        demSourceIds.join(),
+      ).toBe("Heights from LiDAR terrain data");
+    expect(storedClimbCaption("lidar")).toBe(
+      "Ascent and descent from LiDAR terrain data",
+    );
+  });
 });
