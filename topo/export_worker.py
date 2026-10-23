@@ -34,7 +34,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import boto3
 import psycopg2
@@ -50,6 +50,7 @@ from renderers import (
     render_geojson,
     render_gpx,
 )
+from area_export import AreaExportError, render_area, s3_archives
 from worker_common import (
     compose_database_url,
     create_notification,
@@ -218,6 +219,76 @@ def send_completion_email(
     send_email(to_email, subject, text, html)
 
 
+def render_job_export(conn, export_job: dict, work: Path) -> Tuple[Path, Optional[str]]:
+    """An export of one LiDAR job: its stored outputs, in the requested format.
+    Returns the file and the job's name."""
+    source_jobs = get_source_jobs(conn, list(export_job["source_job_ids"]))
+    if not source_jobs:
+        raise RuntimeError("No source jobs found for this export")
+    job_name = source_jobs[0].get("name")
+    for sj in source_jobs:
+        if sj["user_id"] != export_job["user_id"]:
+            raise RuntimeError(f"Source job {sj['id']} not owned by requester")
+        if sj["status"] != "complete":
+            raise RuntimeError(f"Source job {sj['id']} is not complete")
+
+    ctx = RenderContext(
+        s3=s3,
+        bucket=BUCKET,
+        work_dir=work,
+        source_jobs=source_jobs,
+        layers=list(export_job["layers"]),
+        bundling=export_job["bundling"],
+        vector_style=export_job["vector_style_snapshot"],
+    )
+
+    # Drop layers the source job never produced (e.g. OSM features when
+    # Overpass returned nothing) so one empty layer can't fail the whole
+    # export. Only a request with no usable layers at all is fatal.
+    available = ctx.available_layers(ctx.layers)
+    dropped = [l for l in ctx.layers if l not in available]
+    if dropped:
+        log.info(f"Dropping layers with no data for this job: {dropped}")
+    if not available:
+        raise RenderError("None of the selected layers have data for this job.")
+    ctx.layers = available
+
+    fmt = export_job["format"]
+    log.info(
+        f"Rendering format={fmt} bundling={ctx.bundling} "
+        f"layers={ctx.layers} sources={[sj['id'] for sj in source_jobs]}"
+    )
+    if fmt == "mbtiles":
+        result_local = render_mbtiles(ctx)
+    elif fmt == "geotiff":
+        result_local = render_geotiff(ctx)
+    elif fmt == "gpkg":
+        result_local = render_gpkg(ctx)
+    elif fmt == "geojson":
+        result_local = render_geojson(ctx)
+    elif fmt == "gpx":
+        result_local = render_gpx(ctx)
+    else:
+        raise RenderError(f"Unsupported export format: {fmt}")
+    return result_local, job_name
+
+
+def render_area_export(export_job: dict, work: Path) -> Path:
+    """An export of an area: the statewide terrain over its box (area_export.py)."""
+    bbox = export_job["bbox"]
+    log.info(
+        f"Rendering area format={export_job['format']} "
+        f"layers={list(export_job['layers'])}"
+    )  # the box itself is a place: never logged
+    return render_area(
+        s3_archives(s3, BUCKET),
+        (bbox["west"], bbox["south"], bbox["east"], bbox["north"]),
+        list(export_job["layers"]),
+        export_job["format"],
+        work,
+    )
+
+
 def main():
     log.info(f"Export worker started — job {EXPORT_JOB_ID}")
     conn = db_connect()
@@ -252,55 +323,11 @@ def main():
     job_name: Optional[str] = None
 
     try:
-        source_jobs = get_source_jobs(conn, list(export_job["source_job_ids"]))
-        if not source_jobs:
-            raise RuntimeError("No source jobs found for this export")
-        job_name = source_jobs[0].get("name")
-        for sj in source_jobs:
-            if sj["user_id"] != export_job["user_id"]:
-                raise RuntimeError(f"Source job {sj['id']} not owned by requester")
-            if sj["status"] != "complete":
-                raise RuntimeError(f"Source job {sj['id']} is not complete")
-
         with tempfile.TemporaryDirectory(prefix="export_") as tmp:
-            ctx = RenderContext(
-                s3=s3,
-                bucket=BUCKET,
-                work_dir=Path(tmp),
-                source_jobs=source_jobs,
-                layers=list(export_job["layers"]),
-                bundling=export_job["bundling"],
-                vector_style=export_job["vector_style_snapshot"],
-            )
-
-            # Drop layers the source job never produced (e.g. OSM features when
-            # Overpass returned nothing) so one empty layer can't fail the whole
-            # export. Only a request with no usable layers at all is fatal.
-            available = ctx.available_layers(ctx.layers)
-            dropped = [l for l in ctx.layers if l not in available]
-            if dropped:
-                log.info(f"Dropping layers with no data for this job: {dropped}")
-            if not available:
-                raise RenderError("None of the selected layers have data for this job.")
-            ctx.layers = available
-
-            fmt = export_job["format"]
-            log.info(
-                f"Rendering format={fmt} bundling={ctx.bundling} "
-                f"layers={ctx.layers} sources={[sj['id'] for sj in source_jobs]}"
-            )
-            if fmt == "mbtiles":
-                result_local = render_mbtiles(ctx)
-            elif fmt == "geotiff":
-                result_local = render_geotiff(ctx)
-            elif fmt == "gpkg":
-                result_local = render_gpkg(ctx)
-            elif fmt == "geojson":
-                result_local = render_geojson(ctx)
-            elif fmt == "gpx":
-                result_local = render_gpx(ctx)
+            if export_job.get("bbox"):
+                result_local = render_area_export(export_job, Path(tmp))
             else:
-                raise RenderError(f"Unsupported export format: {fmt}")
+                result_local, job_name = render_job_export(conn, export_job, Path(tmp))
 
             if not result_local.exists():
                 raise RenderError(
@@ -312,6 +339,9 @@ def main():
             s3.upload_file(str(result_local), BUCKET, result_key)
             result_bytes = result_local.stat().st_size
 
+    except AreaExportError as e:
+        log.error(f"AreaExportError: {e}")  # detail stays in worker logs
+        error_msg = GENERIC_FAILURE
     except RenderError as e:
         raw = str(e)
         log.error(f"RenderError: {raw}")  # full detail stays in worker logs

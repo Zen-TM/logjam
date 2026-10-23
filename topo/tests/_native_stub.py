@@ -57,5 +57,7 @@ for _name in (
     "psycopg2.extras",
     "pmtiles",
     "pmtiles.convert",
+    "pmtiles.reader",
+    "pmtiles.tile",
 ):
     stub_missing(_name)

@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
+import {
+  AREA_EXPORT_MAX_SIDE_KM,
+  AREA_EXPORT_OUTSIDE_NSW,
+  AREA_EXPORT_TOO_LARGE,
+} from "@logjam/shared";
 import { API_URL, BOB_SUB, as } from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
@@ -62,5 +67,46 @@ describe("topo-exports route (fake auth)", () => {
       .delete(`/topo-exports/${missing}`)
       .set(AUTH);
     expect(delRes.status).toBe(404);
+  });
+
+  // An export of an area is refused before anything is queued when it is too
+  // large, outside the statewide terrain, or asks a GeoTIFF for contours.
+  // Mutation: drop any one of the route's three checks, and that request
+  // queues a worker that can only fail.
+  describe("an export of an area", () => {
+    // About 10 km square near Katoomba.
+    const bbox = { west: 150.25, south: -33.75, east: 150.36, north: -33.66 };
+    const post = (body: object) =>
+      request(API_URL).post("/topo-exports").set(AUTH).send(body);
+
+    it("refuses a box past the size limit", async () => {
+      const degrees = (AREA_EXPORT_MAX_SIDE_KM + 5) / 110.57;
+      const res = await post({
+        bbox: { ...bbox, south: bbox.north - degrees },
+        layers: ["heights"],
+        format: "geotiff",
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe(AREA_EXPORT_TOO_LARGE);
+    });
+
+    it("refuses a box outside NSW", async () => {
+      const res = await post({
+        bbox: { ...bbox, west: 160.25, east: 160.36 },
+        layers: ["heights"],
+        format: "geotiff",
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe(AREA_EXPORT_OUTSIDE_NSW);
+    });
+
+    it("refuses contours in a GeoTIFF, and an unknown layer", async () => {
+      expect(
+        (await post({ bbox, layers: ["contours"], format: "geotiff" })).status,
+      ).toBe(400);
+      expect(
+        (await post({ bbox, layers: ["vegetation"], format: "gpkg" })).status,
+      ).toBe(400);
+    });
   });
 });

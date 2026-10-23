@@ -531,12 +531,16 @@ model TopoExportJob {
   sourceJobIds        String[]  @map("source_job_ids")
   // Single-element array for now; multi-job composites are a Stage 3 stretch.
   layers              String[]
-  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features).
+  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features), or
+  // of AREA_EXPORT_LAYERS for an export of an area.
   format              String
   // "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx" (kmz deferred)
   bundling            String
   // "composite" | "per-layer"
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  // An export of an area: {west, south, east, north} in degrees, and no
+  // source job. Null for an export of a LiDAR job. Never logged: it is a place.
+  bbox                Json?
   // Snapshot of the source job's input tileCount at export creation. The
   // source TopoJob is deletable, so this can't be re-derived by join later —
   // it feeds the adaptive runtime estimator (aggregate size only, no place

@@ -16,6 +16,13 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import {
   say,
+  AREA_EXPORT_FORMATS,
+  AREA_EXPORT_LAYERS,
+  AREA_EXPORT_OUTSIDE_NSW,
+  AREA_EXPORT_TOO_LARGE,
+  areaExportRequestError,
+  areaExportTooLarge,
+  areaInNsw,
   EXPORT_FORMAT_RULES,
   RASTER_LAYERS,
   validateExportRequest,
@@ -41,6 +48,21 @@ const exportRequestSchema = z.object({
   layers: z.array(z.string()).min(1),
   format: z.enum(Object.keys(EXPORT_FORMAT_RULES) as [string, ...string[]]),
   bundling: z.enum(["composite", "per-layer"]),
+});
+
+// An export of an area: the statewide terrain over a box (topo/area_export.py).
+const areaRequestSchema = z.object({
+  bbox: z.object({
+    west: z.number(),
+    south: z.number(),
+    east: z.number(),
+    north: z.number(),
+  }),
+  layers: z
+    .array(z.enum(AREA_EXPORT_LAYERS))
+    .min(1)
+    .max(AREA_EXPORT_LAYERS.length),
+  format: z.enum(AREA_EXPORT_FORMATS),
 });
 
 type S3OutputKey = {
@@ -121,6 +143,37 @@ router.post(
     // other flows use (in-flight work may still finish past quota, bounded by
     // the per-user concurrency cap).
     await assertHasStorageQuota(user.id);
+
+    if (req.body && typeof req.body === "object" && "bbox" in req.body) {
+      const area = areaRequestSchema.safeParse(req.body);
+      if (!area.success) {
+        throw malformed(area.error.issues[0]?.message ?? "Invalid area export");
+      }
+      const detail = areaExportRequestError(area.data);
+      if (detail) throw malformed(detail);
+      if (areaExportTooLarge(area.data.bbox)) {
+        throw new AppError(400, AREA_EXPORT_TOO_LARGE);
+      }
+      if (!areaInNsw(area.data.bbox)) {
+        throw new AppError(400, AREA_EXPORT_OUTSIDE_NSW);
+      }
+      const exportJobId = await createAndLaunchTopoExport({
+        userId: user.id,
+        sourceJobIds: [],
+        layers: area.data.layers,
+        format: area.data.format,
+        // A GeoTIFF is a file per layer; a GeoPackage holds them all.
+        bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
+        // Raw data: no style is drawn into it.
+        vectorStyleSnapshot: {},
+        // No size signal the estimator knows yet, so no estimate.
+        sourceTileCount: null,
+        monthlyComputeCredits: user.monthlyComputeCredits,
+        bbox: area.data.bbox,
+      });
+      res.status(201).json({ id: exportJobId });
+      return;
+    }
 
     const parsed = exportRequestSchema.safeParse(req.body);
     if (!parsed.success) {
