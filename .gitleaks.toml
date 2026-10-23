@@ -34,4 +34,9 @@ regexes = [
   '''545ofbb8l9d1sl6ggbmk6oonn9''',          # Cognito App Client ID (public)
   '''ap-southeast-2_x5zPhJXMk''',             # Cognito User Pool ID (public)
   '''row\.s3KeyThumbnail''',                   # a Prisma field read (copyPlaceMedia.ts), not a key
+  # The media column names and their camelCase aliases in planItems.ts's raw SQL
+  # (`s3_key_thumbnail AS "s3KeyThumbnail"`). generic-api-key reads the quoted
+  # alias beside the column as `key = "value"`; both are identifiers, not values.
+  # Only matches naming these columns are skipped; other rules still scan the line.
+  '''s3_?[Kk]ey_?(Display|Thumbnail|display|thumbnail)''',
 ]
