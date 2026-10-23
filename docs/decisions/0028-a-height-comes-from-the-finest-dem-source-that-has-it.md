@@ -97,6 +97,18 @@ Proposal: #359.
   when its own pass reaches the same answer. A climb stored before the
   arithmetic changed is still replaced by nothing. Everything else above
   stands.
+- **Update 2026-10-24: a sharpened area is a source with its own coverage,
+  read only by those who may see it.** `demSourcesFor` in
+  `shared/src/sharpen.ts` puts each area the caller may read
+  ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)) above
+  `DEM_SOURCES`, the finer first, then the newer. Each area declares its
+  `coverage`, so a LiDAR source no longer lacks a footprint. That fixes the
+  cost the update of 2026-10-12 names: the key `upgradeTrackClimbs` uses can
+  see a new area once it covers the caller's area ids and coverage. No guard
+  holds the key yet; Logjam GPS adds the areas to it, with a test, when it
+  reads them. Every area's heights are stored under one climb id, `lidar`,
+  first in `CLIMB_SOURCES`, so a track's label names no job. Guard:
+  `shared/src/sharpen.test.ts`. Everything else above stands.
 - **Update 2026-10-18: a slope reads its window from the finest regional
   source with all nine pixels, never the worldwide tiles.** Slope is not a
   height, so `demSlopeReading` in `shared/src/demSlope.ts` walks

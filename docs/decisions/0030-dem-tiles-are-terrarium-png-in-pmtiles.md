@@ -43,6 +43,17 @@ The publisher states the data is good to ±0.9 m on open ground.
 - **Pyramid:** each coarser zoom is the mean of the heights below it, taken
   before encoding, never the mean of encoded pixels.
 - **Container:** one PMTiles archive per source, read by byte range.
+- **Update 2026-10-24: a sharpened area's heights are rounded finer past
+  z15.** `topo/sharpen.py` rounds to a quarter metre at z15 and halves the
+  step each zoom deeper: ⅛ m at z16 and 1⁄16 m at z17
+  ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)). A quarter metre
+  suits z15's pixels of about 4 m. On a sharpened area's 1 m pixels it drew
+  terraces in the hillshade on gentle ground, and it allows up to about 7° of
+  noise in a tapped slope. Halving the step with the pixel keeps z15's noise,
+  for 22 % more bytes at 2 m and 46 % at 1 m. The encoding carries 1/256 m,
+  so no client changes, and the statewide archive keeps its quarter metre.
+  Guard: `topo/tests/test_sharpen.py` `TestPyramid`. Everything else above
+  stands.
 
 Guard: `topo/tests/test_nsw_dem.py` decodes what the builder encodes with the
 clients' formula, and checks the no-data value and the rounding.
@@ -75,6 +86,10 @@ clients' formula, and checks the no-data value and the rounding.
 - **Rounding to 1/8 m.** 22 % larger on rugged ground and 36 % larger on flat
   ground than a quarter metre, for digits finer than the data's stated
   accuracy.
+- **A quarter metre at every zoom of a sharpened area** (2026-10-24). What
+  #590 shipped while this update was pending. Rejected because on 1 m pixels
+  it draws terraces in the hillshade, which the survey's finer data exists
+  to avoid.
 - **MBTiles on the server.** It cannot be read by byte range, so the API would
   need the whole file on local disk and the browser could not read it at all.
 - **512 px tiles.** A quarter of the requests, but `DEM_TILE_SIZE` is 256 in
