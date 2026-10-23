@@ -103,8 +103,8 @@ export function regionClipSpecs(
 export function regionClipKind(
   spec: Pick<RegionClipSpec, "demSourceId" | "contours" | "slope">,
 ): MapArtifact["kind"] {
-  // A DEM clip is filed under its source id, which is what the sampler
-  // looks saved files up by (offline/demLookup.ts).
+  // `dem-region` is the kind the sampler filters saved files on
+  // (offline/demLookup.ts).
   if (spec.demSourceId) return "dem-region";
   if (spec.contours) return "contours-region";
   if (spec.slope) return "slope-region";

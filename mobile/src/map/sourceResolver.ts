@@ -343,25 +343,33 @@ function resolveStatewide(
 
 /**
  * The one slope clip drawn offline: the saved area nearest the middle of the
- * screen (the first saved, before the map first settles). A clip is whole
- * tiles, so areas saved near each other share their low-zoom tiles, and the
- * bands are translucent: drawing every clip paints those tiles twice, darker,
- * with a seam where the overlap ends.
- * Guard: `sourceResolver.test.ts` ("draws one slope clip offline").
+ * screen, and of those holding it, the biggest, so a canyon saved inside a
+ * wider area doesn't crop the slope to its own edge (before the map first
+ * settles, the biggest area). A clip is whole tiles, so areas saved near each
+ * other share their low-zoom tiles, and the bands are translucent: drawing
+ * every clip paints those tiles twice, darker, with a seam where the overlap
+ * ends.
+ * Guard: `sourceResolver.test.ts` ("draws one slope clip offline", "draws the
+ * wider clip where a saved area sits inside another").
  */
 function nearestRegion(viewport: Viewport | null | undefined) {
   return (regions: MapArtifact[]): MapArtifact[] => {
-    if (!viewport) return regions.slice(0, 1);
-    const lng = (viewport.west + viewport.east) / 2;
-    const lat = (viewport.south + viewport.north) / 2;
+    const lng = viewport ? (viewport.west + viewport.east) / 2 : 0;
+    const lat = viewport ? (viewport.south + viewport.north) / 2 : 0;
+    const perLng = Math.cos((lat * Math.PI) / 180);
     const away = ({ bbox }: MapArtifact) => {
       if (!bbox) return Number.POSITIVE_INFINITY;
+      if (!viewport) return 0;
       const [west, south, east, north] = bbox;
-      const dx = Math.max(west - lng, 0, lng - east);
+      const dx = Math.max(west - lng, 0, lng - east) * perLng;
       const dy = Math.max(south - lat, 0, lat - north);
       return dx * dx + dy * dy;
     };
-    return [...regions].sort((a, b) => away(a) - away(b)).slice(0, 1);
+    const size = ({ bbox }: MapArtifact) =>
+      bbox ? (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) : 0;
+    return [...regions]
+      .sort((a, b) => away(a) - away(b) || size(b) - size(a))
+      .slice(0, 1);
   };
 }
 

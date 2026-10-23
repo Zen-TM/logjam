@@ -446,4 +446,35 @@ describe("statewide slope and hillshade", () => {
     ]);
     expect(drawn(null)).toEqual(["pmtiles://file:///maps/katoomba.pmtiles"]);
   });
+  // Mutation: drop the size tie-break, and the newest area (the registry's
+  // first) wins every tie: the canyon's clip, whose bounds crop the slope.
+  it("draws the wider clip where a saved area sits inside another", () => {
+    const clip = (id: string, bbox: MapArtifact["bbox"]): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox,
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [
+        clip("canyon", [150.3, -33.75, 150.32, -33.73]),
+        clip("valley", [150.2, -33.9, 150.5, -33.6]),
+      ],
+    });
+    const screen: Viewport = {
+      west: 150.3,
+      south: -33.75,
+      east: 150.32,
+      north: -33.73,
+    };
+    for (const viewport of [screen, null])
+      expect(
+        resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
+          (r) => r.status === "ok" && r.url,
+        ),
+      ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
+  });
 });

@@ -166,8 +166,9 @@ Nothing new calls it.
   lacks, and only that", which covers the slope too, and "files a slope clip
   as the DEM the map colours"). A 40 km Katoomba box's slope clip, planned
   with `planExtract` from a local copy of the Katoomba sheet's slope, is
-  64 MB in 53 requests; the statewide archive's tiles are about 11 % larger
-  (`SLOPE_TILE_BYTES` in `shared/src/mapRegionEstimate.ts`), so about 72 MB.
+  64 MB in 53 requests, and `SLOPE_TILE_BYTES` in
+  `shared/src/mapRegionEstimate.ts` prices the statewide archive's at about
+  71 MB.
   Hillshade is not saved: MapLibre shades the height archive, and an area
   keeps its heights at z15 alone, so offline a shade could only be drawn
   close in. Everything else above stands.

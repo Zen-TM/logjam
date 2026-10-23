@@ -419,6 +419,8 @@ export async function runRegionClip(
     const artifact: MapArtifact = {
       id: spec.id,
       kind: regionClipKind(spec),
+      // A DEM clip is filed under its source id, which is what the sampler
+      // looks saved files up by (offline/demLookup.ts).
       logicalKey:
         spec.demSourceId ??
         (spec.contours
