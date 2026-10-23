@@ -63,6 +63,7 @@ import {
   wayVerbLabel,
   type IconIdea,
   type SharableEntityType,
+  type SharePromiseKind,
   type TopoLayerFormat,
   type TopoLayerName,
 } from "@logjam/shared";
@@ -181,6 +182,7 @@ import {
   routeActions,
   vectorImportActions,
   type AssetActions,
+  lidarJobSharePromise,
 } from "./assetActions";
 import { removeSharedEntity } from "../sharing/removeShare";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
@@ -378,7 +380,12 @@ type SavedItem = {
   /** Present on an editable route: flip vertex order (direction is semantic). */
   reverse?: () => Promise<unknown>;
   /** Present on an OWNED, server-backed asset — see `AssetActions.share`. */
-  share?: { entityType: SharableEntityType; entityId: string };
+  share?: {
+    entityType: SharableEntityType;
+    entityId: string;
+    /** What the share promises a friend, when the entity type alone can't say. */
+    promise?: SharePromiseKind;
+  };
   /**
    * Present on an asset that exists as a FILE this device can hand over — an
    * import with its original bytes, a recording that serialises to GPX, a
@@ -1093,7 +1100,13 @@ export function SavedScreen({
                 },
               },
             }
-          : { share: { entityType: "topoJob" as const, entityId: group.key } }),
+          : {
+              share: {
+                entityType: "topoJob" as const,
+                entityId: group.key,
+                promise: lidarJobSharePromise(job),
+              },
+            }),
         // The saved layers' own extent, else the job's footprint from the account.
         locatable: (group.bbox ?? bboxOfFootprint(job?.footprint)) != null,
         resolveBbox: async () => group.bbox ?? bboxOfFootprint(job?.footprint),
@@ -1672,6 +1685,7 @@ export function SavedScreen({
               kind: "entity",
               entityType: menuItem.share.entityType,
               entityId: menuItem.share.entityId,
+              promise: menuItem.share.promise,
             }
           : null,
     itemLabel: menuItem?.title ?? "",

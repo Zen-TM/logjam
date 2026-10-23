@@ -686,12 +686,16 @@ def process_sharpen(
         # Charged with the job: credits come from wallSeconds
         # (api/src/lib/computeCredits.ts), and so does the next estimate
         # (tests/test_worker_helpers.py `TestProcessSharpen`).
+        # Only onto sharpen.py's own figure: without it the job falls back to
+        # its elapsed time, which already holds the vegetation pass.
         veg_seconds = (veg_metrics or {}).get("wallSeconds")
-        if isinstance(veg_seconds, (int, float)):
+        sharpen_seconds = (pipeline_metrics or {}).get("wallSeconds")
+        if isinstance(veg_seconds, (int, float)) and isinstance(
+            sharpen_seconds, (int, float)
+        ):
             pipeline_metrics = {
-                **(pipeline_metrics or {}),
-                "wallSeconds": (pipeline_metrics or {}).get("wallSeconds", 0)
-                + veg_seconds,
+                **pipeline_metrics,
+                "wallSeconds": sharpen_seconds + veg_seconds,
                 "vegetationWallSeconds": veg_seconds,
             }
 

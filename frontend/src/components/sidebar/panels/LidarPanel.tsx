@@ -178,6 +178,8 @@ export default function LidarPanel({
     // Behind the consent gate this is one more user-data request the gate
     // exists to hold, so it waits with every other fetch.
     if (!loadsUserData) return;
+    // Nothing shows a template once new jobs sharpen.
+    if (!offersTemplates(SHARPEN_NEW_JOBS)) return;
     // Concurrent-duplicate-safe fetch shared with TopoDialog.
     fetchTopoTemplates()
       .then(setTemplates)

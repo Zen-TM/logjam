@@ -266,11 +266,10 @@ export function classifyElvisEntries(
   let modeLabel: string;
   if (sharpen) {
     mode = lazCount > 0 ? "LAZ_ONLY" : "DEM_ONLY";
-    modeLabel = !groundDem
-      ? "Ground from the point clouds"
-      : lazCount > 0
-        ? "Ground from the DEM, vegetation from the point clouds"
-        : "Ground from the DEM";
+    // Vegetation is the form's own choice, so the label says only the ground.
+    modeLabel = groundDem
+      ? "Ground from the DEM"
+      : "Ground from the point clouds";
   } else if (lazCount > 0) {
     // "LAZ wins": the worker derives terrain from the point cloud and ignores
     // any bundled DEM (topo/pipeline.py extract_elvis_zip). Mirror that here so

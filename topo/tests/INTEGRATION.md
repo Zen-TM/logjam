@@ -116,5 +116,10 @@ nothing local puts there. Before starting one, put CI's made-up stand-ins in
         s3://logjam-topo-local/master/dem/$name.pmtiles
     done
 
+The height stand-in replaces the Katoomba slice the root README's Local
+Development section uploads to the same key for dev maps (`DEV_MASTER_URL`),
+so dev maps then draw the plane. Re-run that section's `curl` afterwards to
+get the real slice back.
+
 The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.

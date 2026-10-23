@@ -200,13 +200,20 @@ describe("TopoDialog's Vegetation choice", () => {
     );
   });
 
-  // Mutation: send the template's auto-export (or apply the template at
-  // all), and the reaper exports a job that has none of the files an export
-  // reads.
-  it("sends no auto-export, even when opened with a template that has one", async () => {
+  // Mutation: apply the template the dialog was opened with (drop the
+  // switch's gate on it), and the job takes its style and its auto-export,
+  // which the reaper runs on a job with none of the files an export reads.
+  it("applies no template, even the one it was opened with", async () => {
     switches.sharpen = true;
     const exporting = {
       ...template("t1"),
+      config: {
+        ...RASTER_TEMPLATE_DEFAULTS,
+        vegetation: {
+          ...RASTER_TEMPLATE_DEFAULTS.vegetation,
+          denseColour: "#123456ff",
+        },
+      },
       autoExport: { ...AUTO_EXPORT_DEFAULTS, enabled: true },
     };
     vi.mocked(apiFetch).mockImplementation(async () => [exporting] as never);
@@ -218,6 +225,11 @@ describe("TopoDialog's Vegetation choice", () => {
     submit.mockResolvedValue("job-1");
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     await vi.waitFor(() => expect(submit).toHaveBeenCalled());
-    expect(submit.mock.calls[0]![1].autoExport.enabled).toBe(false);
+    const sent = submit.mock.calls[0]![1];
+    expect(sent.settings).toEqual({
+      ...RASTER_TEMPLATE_DEFAULTS,
+      vegetation: { ...RASTER_TEMPLATE_DEFAULTS.vegetation, enabled: false },
+    });
+    expect(sent.autoExport.enabled).toBe(false);
   });
 });

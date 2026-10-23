@@ -633,8 +633,10 @@ describe("sharing", () => {
   // Mutation: the LiDAR topo's promise for a sharpened area, which a friend
   // can't download or export.
   it("promises no download or export for a sharpened area", () => {
-    expect(sharePromise("sharpenedArea")).toMatch(/^Friends you pick/);
-    expect(sharePromise("sharpenedArea")).not.toMatch(/download|export/);
+    for (const kind of ["sharpenedArea", "lidarJob"] as const) {
+      expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
+      expect(sharePromise(kind), kind).not.toMatch(/download|export/);
+    }
   });
 
   it("says a place share leaves copies alone, and a route's can be stopped", () => {

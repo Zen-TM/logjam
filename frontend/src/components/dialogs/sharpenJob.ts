@@ -5,10 +5,10 @@ import {
 } from "@logjam/shared";
 
 /**
- * What a new job asks for once jobs sharpen (`SHARPEN_NEW_JOBS`). It makes no
- * styled layers, so it carries no style choice and no auto-export: a
- * sharpened job has none of the files an export reads. Vegetation, the one
- * styled layer left, only when it was ticked and the ZIP has point clouds
+ * What a new job asks for once jobs sharpen (`SHARPEN_NEW_JOBS`). It carries
+ * no style choice (its one styled layer, vegetation, draws in the default
+ * style) and no auto-export: a sharpened job has none of the files an export
+ * reads. Vegetation only when it was ticked and the ZIP has point clouds
  * (the API's `sharpenMark` reads `vegetation.enabled`).
  */
 export function sharpenJobRequest(

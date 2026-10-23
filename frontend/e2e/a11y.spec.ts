@@ -39,7 +39,7 @@ async function settled(page: Page) {
         (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
       ) &&
       // A button's 150 ms background-color transition otherwise lets axe read
-      // a half-way colour (the flaky "Make a LiDAR topo" case).
+      // a half-way colour.
       document
         .getAnimations()
         .every(

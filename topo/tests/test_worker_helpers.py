@@ -373,6 +373,15 @@ class TestProcessSharpen(unittest.TestCase):
         self.assertEqual(metrics["wallSeconds"], 53.0)
         self.assertEqual(metrics["vegetationWallSeconds"], 40.0)
 
+    def test_unread_sharpen_metrics_are_not_replaced_by_the_vegetation_pass(self):
+        # Mutation: store the vegetation seconds alone when sharpen.py's
+        # metrics couldn't be read, and the job is charged for that pass only
+        # instead of falling back to its elapsed time.
+        result, _, _ = self.run_job(
+            {"v": 1, "vegetation": True}, self.finished, {"wallSeconds": 40.0}
+        )
+        self.assertIsNone(result[4])
+
     def test_a_ticked_job_gets_the_legacy_vegetation_layer(self):
         result, _, legacy = self.run_job({"v": 1, "vegetation": True}, self.finished)
         output_keys, _, _, total, _, sharpen = result

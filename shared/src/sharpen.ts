@@ -37,13 +37,19 @@ export function lidarJobCopy(sharpen: boolean) {
         make: "Sharpen an area",
         makeHere: "Sharpen the area here",
         noun: "Sharpened area",
-        yours: "your area",
+        starting: "Starting to sharpen",
+        startingLine: "Uploaded. Checking it over and starting to sharpen…",
+        unnamed: "Your area",
+        beingMade: "is being sharpened",
       }
     : {
         make: "Make a LiDAR topo",
         makeHere: "Make a LiDAR topo here",
         noun: "LiDAR topo",
-        yours: "your topo",
+        starting: "Starting your topo",
+        startingLine: "Uploaded. Checking it over and starting your topo…",
+        unnamed: "Your topo",
+        beingMade: "is being made",
       };
 }
 

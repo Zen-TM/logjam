@@ -59,6 +59,7 @@ import {
   sharePromise,
   type SectionKeysOn,
   type SharableEntityType,
+  type SharePromiseKind,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -123,7 +124,13 @@ const noFriendsText = (purpose: "share" | "copy") => {
  * grant access to at all — it can only be copied.
  */
 export type SharePanelTarget =
-  | { kind: "entity"; entityType: SharableEntityType; entityId: string }
+  | {
+      kind: "entity";
+      entityType: SharableEntityType;
+      entityId: string;
+      /** What to promise, when the entity type alone can't say (a LiDAR job). */
+      promise?: SharePromiseKind;
+    }
   | { kind: "place"; placeId: string }
   | { kind: "copy"; sendCopy: NonNullable<AssetActions["sendCopy"]> }
   /**
@@ -568,7 +575,13 @@ export function useSharePanel({
     promise: () => (
       <PromiseBanner
         tone="share"
-        text={sharePromise(placeId ? "place" : (entityType ?? "route"))}
+        text={sharePromise(
+          placeId
+            ? "place"
+            : ((target?.kind === "entity" ? target.promise : undefined) ??
+                entityType ??
+                "route"),
+        )}
       />
     ),
     search: () => search,

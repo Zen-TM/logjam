@@ -282,7 +282,8 @@ export default function TopoDialog({
       .then((list) => {
         if (!live) return;
         setTemplates(list);
-        // A sharpened job draws no styled layer a template could set.
+        // A sharpened job takes no template: its one styled layer,
+        // vegetation, draws in the default style.
         if (
           !SHARPEN_NEW_JOBS &&
           initialTemplateId &&
@@ -685,13 +686,11 @@ export default function TopoDialog({
             <p className={classes.workingLine}>
               {phase === "uploading"
                 ? "Uploading your LiDAR. Keep this window open until it finishes."
-                : `Uploaded. Checking it over and starting ${jobCopy.yours}…`}
+                : jobCopy.startingLine}
             </p>
             <ProgressBar
               label={
-                phase === "uploading"
-                  ? "Upload progress"
-                  : `Starting ${jobCopy.yours}`
+                phase === "uploading" ? "Upload progress" : jobCopy.starting
               }
               value={phase === "uploading" ? uploadPct : undefined}
             />
@@ -712,8 +711,7 @@ export default function TopoDialog({
               className={classes.doneGlyph}
             />
             <p className={classes.doneName}>
-              {submittedJob?.name ?? jobCopy.yours.replace(/^y/, "Y")} is being
-              made
+              {submittedJob?.name ?? jobCopy.unnamed} {jobCopy.beingMade}
             </p>
             <p className={classes.workingDetail}>
               {stats?.tileCount
@@ -846,7 +844,8 @@ export default function TopoDialog({
                 }}
               />
 
-              {/* A sharpened job draws no styled layer a template could set. */}
+              {/* A sharpened job takes no template: its one styled layer,
+                  vegetation, draws in the default style. */}
               {!SHARPEN_NEW_JOBS && (
                 <Select
                   label="Template"
@@ -887,6 +886,7 @@ export default function TopoDialog({
                   description="Also draws how thick the scrub is from the point clouds, which takes longer."
                   checked={vegetation}
                   disabled={upload.held}
+                  describedBy={upload.held ? HELD_REASON_ID : undefined}
                   onChange={setVegetation}
                 />
               )

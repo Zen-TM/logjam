@@ -354,9 +354,7 @@ describe("classifyElvisEntries for a job that sharpens", () => {
   // Mutation: the legacy labels under the switch ("bundled DEM ignored"),
   // while topo/sharpen.py's dem_plan takes the DEM as ground.
   it("says where the ground comes from, as sharpen.py chooses it", () => {
-    expect(label([dem(2), laz])).toBe(
-      "Ground from the DEM, vegetation from the point clouds",
-    );
+    expect(label([dem(2), laz])).toBe("Ground from the DEM");
     expect(label([dem(1)])).toBe("Ground from the DEM");
     expect(label([laz])).toBe("Ground from the point clouds");
     expect(label([dem(5), laz])).toBe("Ground from the point clouds");
@@ -368,6 +366,23 @@ describe("classifyElvisEntries for a job that sharpens", () => {
     const only5m = parse(buildZip([dem(5), dem(5)]));
     expect(() => classifyElvisEntries(only5m, true)).toThrow(ElvisZipError);
     expect(() => classifyElvisEntries(only5m, false)).not.toThrow();
+  });
+
+  // Mutation: change the coarsest DEM cell sharpen.py grounds on (its
+  // `zoom_for_cell`), and the form labels or refuses a ZIP the worker would
+  // treat otherwise.
+  it("grounds on the DEMs sharpen.py does", () => {
+    const python = readFileSync(
+      join(import.meta.dirname, "../../topo/sharpen.py"),
+      "utf8",
+    );
+    const coarsest = Number(
+      /if cell_m <= ([\d.]+):\n\s+return 16/.exec(python)![1],
+    );
+    expect(label([dem(coarsest)])).toBe("Ground from the DEM");
+    expect(() =>
+      classifyElvisEntries(parse(buildZip([dem(coarsest + 0.5)])), true),
+    ).toThrow(ElvisZipError);
   });
 
   // Mutation: reword one copy, and the form and the worker refuse the same

@@ -40,9 +40,10 @@ const STOP = "You can stop sharing anytime.";
 
 /**
  * What can be shared, as the promise to a friend tells it apart: a
- * sharpened area is a LiDAR job (`topoJob`) that grants other things.
+ * sharpened area is a LiDAR job (`topoJob`) that grants other things, and
+ * `lidarJob` is either, for a surface that can't tell which.
  */
-export type SharePromiseKind = BulkShareItemType | "sharpenedArea";
+export type SharePromiseKind = BulkShareItemType | "sharpenedArea" | "lidarJob";
 
 /** What sharing one thing of this kind lets a friend do. */
 export function sharePromise(kind: SharePromiseKind | "selection"): string {
@@ -53,10 +54,14 @@ export function sharePromise(kind: SharePromiseKind | "selection"): string {
       return `Friends you pick can see this route on their map and export it, but can't change or delete it. ${STOP}`;
     case "topoJob":
       return `Friends you pick can see this LiDAR topo on their map and download or export it. Only you can delete it. ${STOP}`;
-    // No download or export: its archives are read through the API and the
-    // map, never handed over (api/src/__tests__/sharpenedAreas.test.ts).
+    // No surface offers a download or export of the area itself, only of its
+    // vegetation layer (contracts.test.ts; the old Export is offered by kind,
+    // frontend mapsModel.test.ts).
     case "sharpenedArea":
-      return `Friends you pick get this sharpened area's heights, and see its terrain on Logjam Web's map. Only you can delete it. ${STOP}`;
+      return `Friends you pick get this sharpened area's heights and its vegetation layer if it has one, and see its terrain on Logjam Web's map. Only you can delete it. ${STOP}`;
+    // What is true of both kinds, for a row whose kind isn't known.
+    case "lidarJob":
+      return `Friends you pick can see this on their map. Only you can delete it. ${STOP}`;
     case "geoPdfJob":
       return `Friends you pick can view and download this GeoPDF, but can't delete it. ${STOP}`;
     case "selection":
