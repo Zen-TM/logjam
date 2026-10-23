@@ -84,8 +84,9 @@ describe("patched MapLibre Android", () => {
   });
 
   // The workflow never rebuilds a released version, so a patch edited under
-  // the same version would leave the old library shipping.
-  // Mutation: edit the patch without bumping `version`.
+  // the same version would leave the old library shipping. This catches every
+  // patch edit and says to bump `version`; that the bump happened is review's.
+  // Mutation: edit the patch without updating sha256.patch.
   it("is built from the patches in git", () => {
     const dir = join(__dirname, "../maplibre");
     const patches = readdirSync(dir)

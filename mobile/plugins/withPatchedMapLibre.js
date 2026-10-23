@@ -22,7 +22,8 @@
 // WHY EXCLUSIVE. Gradle orders `13.5.0-logjam.1` below `13.5.0`, so if Maven
 // Central could also serve the module, a dependency asking for 13.5.0 or later
 // would quietly win with the unpatched build. Only our folder may serve it, so
-// any other version fails the build instead.
+// any other version fails the build instead. Guard: the `addRepository` tests
+// in src/patchedMapLibre.test.ts.
 const {
   withDangerousMod,
   withProjectBuildGradle,

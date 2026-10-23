@@ -4,7 +4,8 @@ import patched from "./maplibre/patched.json";
 import packageJson from "./package.json";
 
 // Static config stays in app.json — Expo passes it in as `config` here, and this
-// file only layers on the parts that must come from the environment.
+// file only layers on the parts that must come from the environment, and the
+// versions declared once elsewhere (package.json, maplibre/patched.json).
 //
 // google-services.json (FCM/push) is deliberately NOT committed: the repo is
 // public, and the file carries the Firebase project id and Android API key.

@@ -8,10 +8,12 @@ name: MapLibre Android (patched)
 # fetches at prebuild.
 #
 # A release is never rebuilt: the plugin pins its checksums, so a changed patch
-# or a new upstream is a new `version` in mobile/maplibre/patched.json (guard:
-# "is built from the patches in git" in mobile/src/patchedMapLibre.test.ts).
+# or a new upstream is a new `version` in mobile/maplibre/patched.json. Any
+# patch edit turns "is built from the patches in git" in
+# mobile/src/patchedMapLibre.test.ts red and says so; review checks the bump.
 # Only main publishes, so a bump is two PRs: the patch and `version`, then,
-# once this has released it, the release's SHA256SUMS into that file.
+# once this has released it, the release's SHA256SUMS into that file. In
+# between, main's Android prebuild fails on the pins: tag no mobile release.
 #
 # Node is pinned like every workflow's (infra/scripts/check-node-version.py),
 # not to maplibre-native's .nvmrc; its npm install only fetches build tools.
