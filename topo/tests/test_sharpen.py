@@ -313,6 +313,7 @@ class TestGroundSteps(unittest.TestCase):
         for command in smrf:
             # Noise and overlap dropped, every class wiped before SMRF.
             self.assertIn("Classification![7:7]", command)
+            self.assertIn("Classification![12:12]", command)
             self.assertIn("Classification![18:18]", command)
             self.assertIn("Classification[:]=0", command)
         # Its ground is then taken as class 2 is.
