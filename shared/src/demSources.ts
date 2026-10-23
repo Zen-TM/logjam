@@ -256,7 +256,10 @@ export type DemSamples = {
   climbSeries?: number[];
 };
 
-export function covers(source: DemSource, position: SamplePosition): boolean {
+export function demSourceCovers(
+  source: DemSource,
+  position: SamplePosition,
+): boolean {
   if (!source.coverage) return true;
   const [west, south, east, north] = source.coverage;
   return (
@@ -293,7 +296,9 @@ export async function sampleDem(
   /** The heights `sources[rank]` has for these positions, by position index. */
   async function read(rank: number, indices: readonly number[]) {
     const source = sources[rank]!;
-    const inside = indices.filter((i) => covers(source, positions[i]!));
+    const inside = indices.filter((i) =>
+      demSourceCovers(source, positions[i]!),
+    );
     const found = new Map<number, number>();
     if (inside.length === 0) return found;
     const addresses = resolveDemSamples(
