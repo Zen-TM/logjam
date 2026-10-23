@@ -12,7 +12,6 @@ import {
   apiFetch,
   fetchComputeEstimate,
   fetchCurrentUser,
-  putToPresignedUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -53,6 +52,7 @@ import { nextTopoName } from "./jobName";
 import { fetchTopoTemplates } from "./topoTemplatesFetch";
 import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
+import { submitFailureMessage, useTopoUpload } from "./topoUpload";
 import classes from "./TopoDialog.module.css";
 
 export type TopoTemplate = {
@@ -70,6 +70,9 @@ type Phase = "form" | "uploading" | "finalizing" | "done";
 type Mode = "form" | "instructions" | "settings";
 
 const DEFAULT_TEMPLATE_ID = "default";
+const HELD_REASON_ID = "topo-held-reason";
+const KEPT_FOR_RESUME =
+  "Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.";
 
 // Deep-copy a template's auto-export slice (or fall back to defaults for older
 // templates saved before the feature existed) so edits don't mutate the cached
@@ -198,6 +201,11 @@ export default function TopoDialog({
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("hillshade");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The template the dialog was opened with applies once per fresh open, not
+  // again on the return from drawing the area, which would undo the user's
+  // pick (and, while a job is held, show one it wasn't sent with).
+  const initialTemplateApplied = useRef(false);
+  const upload = useTopoUpload();
 
   // Closing empties the form — but going off to draw the area CLOSES this
   // dialog too, and comes back to it (App reopens on `onBboxSelected`). Emptying
@@ -215,6 +223,15 @@ export default function TopoDialog({
     setWasClosedForGood(closedForGood);
     if (closedForGood) resetForm();
   }
+  // A job whose upload failed and was given up on is deleted, not left
+  // "uploading" in the list. The next open is a fresh one, so its template
+  // applies. (Here, not in resetForm: that runs during render.)
+  const { discard } = upload;
+  useEffect(() => {
+    if (!closedForGood) return;
+    discard();
+    initialTemplateApplied.current = false;
+  }, [closedForGood, discard]);
 
   function resetForm() {
     setFile(null);
@@ -251,10 +268,15 @@ export default function TopoDialog({
 
   useEffect(() => {
     if (!open) return;
+    // A late answer is dropped: applied to a dialog closed since, it would
+    // mark the next open's template as applied.
+    let live = true;
     fetchTopoTemplates()
       .then((list) => {
+        if (!live) return;
         setTemplates(list);
-        if (initialTemplateId) {
+        if (initialTemplateId && !initialTemplateApplied.current) {
+          initialTemplateApplied.current = true;
           const t = list.find((x) => x.id === initialTemplateId);
           if (t) {
             setSelectedTemplateId(t.id);
@@ -264,6 +286,9 @@ export default function TopoDialog({
         }
       })
       .catch((e) => console.error(e));
+    return () => {
+      live = false;
+    };
   }, [open, initialTemplateId]);
 
   function selectTemplate(id: string) {
@@ -428,6 +453,9 @@ export default function TopoDialog({
       setValidationError("Please select a .zip file.");
       return;
     }
+    // A new ZIP is a new job: the stopped one is let go, and with it the lock
+    // on its name and settings.
+    upload.discard();
     setFile(picked);
     setError(null);
   }
@@ -474,33 +502,30 @@ export default function TopoDialog({
     setUploadedBytes(0);
     setTotalBytes(file.size);
     setPhase("uploading");
+    let uploaded = false;
     try {
-      const { jobId, uploadUrl } = await apiFetch<{
-        jobId: string;
-        uploadUrl: string;
-      }>("/topo-jobs", {
-        method: "POST",
-        body: {
+      // On a resubmit after a failure this carries on with the same job, so
+      // the name and settings are the ones it was first sent with.
+      const jobId = await upload.submit(
+        file,
+        {
           tileCount: stats.tileCount || null,
           jobName: topoName.trim() || stats.surveyNames[0] || null,
           filename: file.name,
           settings,
           autoExport,
         },
-      });
-
-      await putToPresignedUrl(
-        uploadUrl,
-        file,
-        "application/zip",
-        (loaded, total) => {
-          setUploadedBytes(loaded);
-          setTotalBytes(total);
+        {
+          progress: (sent, total) => {
+            setUploadedBytes(sent);
+            setTotalBytes(total);
+          },
+          uploaded: () => {
+            uploaded = true;
+            setPhase("finalizing");
+          },
         },
       );
-
-      setPhase("finalizing");
-      await apiFetch(`/topo-jobs/${jobId}/start`, { method: "POST" });
 
       const newJob = await apiFetch<TopoJob>(`/topo-jobs/${jobId}`);
       onJobCreated(newJob);
@@ -508,14 +533,14 @@ export default function TopoDialog({
       setPhase("done");
     } catch (e: unknown) {
       console.error(e);
-      setError(messageFromError(e, "Submission failed. Please try again."));
-      // File preserved so the ErrorBanner's Retry can resubmit.
+      setError(submitFailureMessage(e, uploaded));
+      // File preserved so Make it can resubmit.
       setPhase("form");
     }
   }
 
   function performClose() {
-    // Block closing mid-upload — there's no resumable state to return to.
+    // Block closing mid-upload: closing gives up on the upload.
     if (phase === "uploading" || phase === "finalizing") return;
     onClose();
   }
@@ -793,6 +818,8 @@ export default function TopoDialog({
               <TextField
                 label="Name"
                 placeholder="Name this topo"
+                disabled={upload.held}
+                aria-describedby={upload.held ? HELD_REASON_ID : undefined}
                 value={topoName}
                 onChange={(e) => {
                   setTopoName(e.target.value);
@@ -802,6 +829,8 @@ export default function TopoDialog({
 
               <Select
                 label="Template"
+                disabled={upload.held}
+                aria-describedby={upload.held ? HELD_REASON_ID : undefined}
                 value={selectedTemplateId}
                 onChange={(e) => selectTemplate(e.target.value)}
               >
@@ -820,12 +849,19 @@ export default function TopoDialog({
                 )}
               </Select>
             </div>
+            {upload.held && (
+              <p id={HELD_REASON_ID} className={classes.summaryNote}>
+                {KEPT_FOR_RESUME}
+              </p>
+            )}
 
             <div className={classes.errandLine}>
               <Button
                 icon="settings"
                 compact
                 variant="outline"
+                disabled={upload.held}
+                disabledReason={KEPT_FOR_RESUME}
                 onClick={() => setMode("settings")}
               >
                 How this topo is drawn
