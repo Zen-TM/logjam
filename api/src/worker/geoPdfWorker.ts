@@ -5,7 +5,7 @@
 //
 //   1. Claim: queued → running, guarded (`WHERE status = 'queued'`), with
 //      started_at set. 0 rows updated = reaped or duplicate launch — exit 0.
-//   2. Render the PDF via the existing generateGeoPdf service (unchanged).
+//   2. Render the PDF via the generateGeoPdf service.
 //   3. Upload to s3://S3_BUCKET_TOPO/exports/geo-pdf/{jobId}/logjam-export.pdf.
 //   4. Terminal write guarded on `running`: completed (with the storage charge
 //      in the SAME transaction) or failed. 0 rows updated = reaped
@@ -109,7 +109,21 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     const config = parseStoredConfig(job.config);
     const vectorStyle = parseStoredVectorStyle(job.vectorStyleSnapshot);
 
-    const pdfBuffer = await generateGeoPdf(config, job.userId, vectorStyle);
+    // Read when the PDF is drawn, not snapshotted with the job like the
+    // vector style: there is no column for it, and the draw follows the
+    // submit by seconds.
+    const owner = await prisma.user.findUnique({
+      where: { id: job.userId },
+      select: { uiPreferences: true },
+    });
+    const { slopeBands } = normalizeUserUiPreferences(owner?.uiPreferences);
+
+    const pdfBuffer = await generateGeoPdf(
+      config,
+      job.userId,
+      vectorStyle,
+      slopeBands,
+    );
 
     const key = resultKeyFor(jobId);
     await s3.send(

@@ -17,7 +17,11 @@ import {
 } from "react";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
-import { TOPO_LAYERS } from "../../topoLayerTypes";
+import {
+  contoursPrintedHere,
+  LIDAR_ONLY_OVERLAYS,
+  seedOverlays,
+} from "./geoPdfOverlays";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -54,7 +58,14 @@ import {
   toEastingNorthing,
   extentFromCentreAndSize,
 } from "@logjam/shared";
-import type { GeoPdfConfig } from "@logjam/shared";
+import {
+  geoPdfTooLarge,
+  GEOPDF_TOO_LARGE,
+  MAP_TERRAIN,
+  TERRAIN_LAYER_KEYS,
+  type GeoPdfConfig,
+  type TerrainLayerKey,
+} from "@logjam/shared";
 import { useStoredState } from "../../useStoredState";
 import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
 import {
@@ -170,6 +181,7 @@ function GeoPdfDialog({
   pendingExtent,
   pendingScale,
   activeLayerId,
+  terrainLayers,
   completedTopoJobs,
   mapCenter,
   places,
@@ -194,6 +206,8 @@ function GeoPdfDialog({
   pendingExtent: TBbox | null;
   pendingScale: number | null;
   activeLayerId: string;
+  /** The map's Terrain switches, which a new GeoPDF's overlays start from. */
+  terrainLayers: Readonly<Record<TerrainLayerKey, boolean>>;
   completedTopoJobs: CompletedTopoJob[];
   mapCenter?: { lat: number; lng: number } | null;
   places?: TPlace[];
@@ -222,9 +236,9 @@ function GeoPdfDialog({
   const [selectedBaseLayer, setSelectedBaseLayer] = useState(() =>
     seedBaseLayer(activeLayerId),
   );
-  const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() => {
-    return new Set(TOPO_LAYERS.map((l) => l.name));
-  });
+  const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() =>
+    seedOverlays(terrainLayers),
+  );
 
   // Map elements
   const [titleEnabled, setTitleEnabled] = useState(false);
@@ -342,7 +356,7 @@ function GeoPdfDialog({
       if (!seededView) {
         setSeededView(true);
         setSelectedBaseLayer(seedBaseLayer(activeLayerId));
-        setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
+        setSelectedOverlays(seedOverlays(terrainLayers));
         const center = mapCenter;
         if (center) {
           setExtentState((prev) => {
@@ -475,9 +489,11 @@ function GeoPdfDialog({
 
   // True when any of the user's completed-job footprints overlaps the current
   // export extent. Falls back to true when no footprints are stored or the
-  // extent is uninitialised — never wrongly hides.
+  // extent is uninitialised — never wrongly hides. With no job at all there
+  // is nothing to hide.
   const lidarOverlap = useMemo(() => {
     if (templateMode) return true;
+    if (completedTopoJobs.length === 0) return false;
     const ext = extentState;
     if (ext.north <= ext.south || ext.east <= ext.west) return true;
     const withFp = completedTopoJobs.filter((j) => j.footprint);
@@ -721,12 +737,18 @@ function GeoPdfDialog({
     extentState,
   );
   const scaleInputError = scaleFieldError(rawScale);
+  // A limit shows live (shared/DESIGN.md §11), in the API's own words.
+  const tooLarge =
+    !templateMode &&
+    extentValid &&
+    geoPdfTooLarge(extentState, extentState.scale, selectedBaseLayer);
 
   const handleGenerate = useCallback(async () => {
     if (
       !extentValid ||
       hasExtentFieldError(extentInputErrors) ||
-      scaleInputError !== null
+      scaleInputError !== null ||
+      tooLarge
     ) {
       if (!extentValid || hasExtentFieldError(extentInputErrors))
         setEdgesOpen(true);
@@ -811,6 +833,7 @@ function GeoPdfDialog({
     extentValid,
     extentInputErrors,
     scaleInputError,
+    tooLarge,
   ]);
 
   const toggleOverlay = useCallback((name: string) => {
@@ -1121,6 +1144,7 @@ function GeoPdfDialog({
                     </Button>
                   </div>
                 </SettingsRow>
+                <FieldError message={tooLarge ? GEOPDF_TOO_LARGE : null} />
 
                 <details
                   className={classes.edges}
@@ -1298,10 +1322,30 @@ function GeoPdfDialog({
                 }}
               />
             </SettingsRow>
+            <p className={classes.groupLabel}>{MAP_TERRAIN.title}</p>
+            <div className={classes.checkList}>
+              {TERRAIN_LAYER_KEYS.map((key) => {
+                const printed =
+                  key === "contours" &&
+                  contoursPrintedHere(selectedBaseLayer, lidarOverlap);
+                return (
+                  <Checkbox
+                    key={key}
+                    label={MAP_TERRAIN.copy[key]}
+                    description={
+                      printed ? MAP_TERRAIN.copy.contoursPrinted : undefined
+                    }
+                    disabled={printed}
+                    checked={!printed && selectedOverlays.has(key)}
+                    onChange={() => toggleOverlay(key)}
+                  />
+                );
+              })}
+            </div>
             <p className={classes.groupLabel}>Overlays</p>
             <div className={classes.checkList}>
               {lidarOverlap &&
-                TOPO_LAYERS.map((layer) => (
+                LIDAR_ONLY_OVERLAYS.map((layer) => (
                   <Checkbox
                     key={layer.name}
                     label={layer.label}

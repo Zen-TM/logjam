@@ -1612,6 +1612,7 @@ function App() {
         pendingExtent={pendingGeoPdfExtent}
         pendingScale={pendingGeoPdfScale}
         activeLayerId={activeLayerId}
+        terrainLayers={terrainLayers}
         completedTopoJobs={completedTopoJobs}
         mapCenter={mapCenter}
         places={places}

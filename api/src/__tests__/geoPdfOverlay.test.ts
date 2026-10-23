@@ -28,11 +28,7 @@ import {
 } from "../../prisma/seedArchives";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
-import {
-  latToMercY,
-  computeZoom,
-  TARGET_DPI,
-} from "../services/geoPdfTileMath";
+import { latToMercY, computeZoom, TARGET_DPI } from "@logjam/shared";
 import { API_URL, ALICE_ID } from "./_actors";
 
 // Requires the seed's saved GeoPDF template (api/prisma/seed.ts, "f" 10) and

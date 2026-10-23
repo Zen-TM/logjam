@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { GEOPDF_TOO_LARGE, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import GeoPdfDialog, { type GeoPdfTemplate } from "./GeoPdfDialog";
+import type { TBbox } from "../map/Map";
 import { ToastProvider } from "../feedback/ToastProvider";
 
 const template = {
@@ -72,6 +74,8 @@ function dialog({
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   initialTemplateId?: string | null;
+  pendingExtent?: TBbox | null;
+  pendingScale?: number | null;
 }) {
   return (
     <ToastProvider>
@@ -82,6 +86,7 @@ function dialog({
         pendingExtent={null}
         pendingScale={null}
         activeLayerId="six-topo"
+        terrainLayers={TERRAIN_LAYER_DEFAULTS}
         completedTopoJobs={[]}
         {...props}
       />
@@ -237,5 +242,50 @@ describe("GeoPdfDialog, scale", () => {
     fireEvent.blur(field);
     pick();
     expect(scales).toEqual([50000, 12500]);
+  });
+});
+
+// The renderer's limit, shown under the area as soon as it is passed, in the
+// sentence the API would answer with. A 1° square at 1:25 000 is far past it.
+// Mutation: drop `tooLarge` from the FieldError or from handleGenerate's check.
+describe("GeoPdfDialog, a map too large to draw", () => {
+  const box = (size: number): TBbox => ({
+    north: -33.7,
+    south: -33.7 - size,
+    east: 150.3 + size,
+    west: 150.3,
+  });
+
+  it("says so under the area, and Make it points there", () => {
+    render(dialog({ open: true, pendingExtent: box(1), pendingScale: 25000 }));
+    expect(screen.getByText(GEOPDF_TOO_LARGE)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+  });
+
+  it("says nothing for an ordinary sheet", () => {
+    render(
+      dialog({ open: true, pendingExtent: box(0.05), pendingScale: 25000 }),
+    );
+    expect(screen.queryByText(GEOPDF_TOO_LARGE)).toBeNull();
+  });
+});
+
+// The statewide contours stay off a sheet that prints its own, as on the map,
+// so with no LiDAR job in the area the switch could draw nothing. Mutation:
+// drop the `printed` gate from the Contours checkbox.
+describe("GeoPdfDialog, the Terrain layers", () => {
+  const contours = () =>
+    screen.getByRole("checkbox", { name: /Contours/ }) as HTMLInputElement;
+
+  it("offers contours over imagery, and says the topo sheet prints its own", () => {
+    render(dialog({ open: true }));
+    expect(contours().disabled).toBe(true);
+    expect(screen.getByText("This map prints its own")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
+    expect(contours().disabled).toBe(false);
+    expect(contours().checked).toBe(true);
   });
 });

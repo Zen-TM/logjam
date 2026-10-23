@@ -10,7 +10,7 @@
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
-import { geoPdfNativeMegapixels } from "../services/geoPdfTileMath";
+import { geoPdfNativeMegapixels } from "@logjam/shared";
 import {
   estimateRuntimeSeconds,
   GEOPDF_BASE_LAYER_CONFIG,

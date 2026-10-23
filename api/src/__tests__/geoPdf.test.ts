@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
+import { GEOPDF_TOO_LARGE } from "@logjam/shared";
 import { API_URL } from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
@@ -36,6 +37,25 @@ describe("geo-pdf route (fake auth)", () => {
       .set(AUTH)
       .send({ extent: { north: 999, south: -34, east: 151, west: 150 } });
     expect(res.status).toBe(400);
+  });
+
+  // Mutation: drop the route's geoPdfTooLarge check, and this queues a job
+  // that the worker can only fail.
+  it("refuses a map too large to draw before any launch", async () => {
+    const res = await request(API_URL)
+      .post("/geo-pdf")
+      .set(AUTH)
+      .send({
+        paperSize: "A4",
+        orientation: "portrait",
+        extent: { north: -33, south: -34, east: 151, west: 150 },
+        scale: 25000,
+        baseLayer: "six-topo",
+        overlays: [],
+        elements: { compass: false, scaleText: false, scaleBar: false },
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(GEOPDF_TOO_LARGE);
   });
 
   it("404s an unknown job id (get / delete)", async () => {
