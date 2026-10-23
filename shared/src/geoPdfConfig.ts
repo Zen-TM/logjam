@@ -1,5 +1,5 @@
 import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
-import { TOPO_LAYERS } from "./topoSettings.js";
+import { TERRAIN_LAYER_KEYS } from "./terrain.js";
 
 export interface PlaceMarker {
   lat: number;
@@ -49,10 +49,15 @@ export const VALID_GEOPDF_BASE_LAYERS = new Set<string>([
   "six-imagery",
 ]);
 
-// Derived from the canonical TOPO_LAYERS list — cannot drift.
-export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>(
-  TOPO_LAYERS.map((l) => l.name),
-);
+// The Terrain group's layers (the statewide ones, and a LiDAR job's own of
+// the same name) and the two only a job draws. Declared, not derived from
+// TOPO_LAYERS, which LiDAR jobs are leaving: a stored template naming one of
+// these must keep validating. Guard: geoPdfConfig.test.ts.
+export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>([
+  ...TERRAIN_LAYER_KEYS,
+  "vegetation",
+  "features",
+]);
 
 /**
  * Core validator for the security-relevant fields of a GeoPdfConfig against the

@@ -10,10 +10,9 @@
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
-import { geoPdfNativeMegapixels } from "@logjam/shared";
+import { geoPdfMaxNativeZoom, geoPdfNativeMegapixels } from "@logjam/shared";
 import {
   estimateRuntimeSeconds,
-  GEOPDF_BASE_LAYER_CONFIG,
   type JobActual,
   type GeoPdfConfig,
 } from "@logjam/shared";
@@ -80,12 +79,10 @@ export async function estimateExportSeconds(
 export async function estimateGeoPdfSeconds(
   config: GeoPdfConfig,
 ): Promise<number | null> {
-  const maxNativeZoom =
-    GEOPDF_BASE_LAYER_CONFIG[config.baseLayer]?.maxNativeZoom ?? 18;
   const megapixels = geoPdfNativeMegapixels(
     config.extent,
     config.scale,
-    maxNativeZoom,
+    geoPdfMaxNativeZoom(config.baseLayer),
   );
 
   const recent = await prisma.geoPdfJob.findMany({
@@ -111,12 +108,10 @@ export async function estimateGeoPdfSeconds(
     if (!(wallSeconds > 0)) continue;
     try {
       const rowConfig = row.config as unknown as GeoPdfConfig;
-      const rowMaxNativeZoom =
-        GEOPDF_BASE_LAYER_CONFIG[rowConfig.baseLayer]?.maxNativeZoom ?? 18;
       const rowMegapixels = geoPdfNativeMegapixels(
         rowConfig.extent,
         rowConfig.scale,
-        rowMaxNativeZoom,
+        geoPdfMaxNativeZoom(rowConfig.baseLayer),
       );
       if (!Number.isFinite(rowMegapixels) || rowMegapixels <= 0) continue;
       actuals.push({ inputTileCount: rowMegapixels, wallSeconds });

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GEOPDF_TOO_LARGE, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import GeoPdfDialog, { type GeoPdfTemplate } from "./GeoPdfDialog";
 import type { TBbox } from "../map/Map";
+import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { ToastProvider } from "../feedback/ToastProvider";
 
 const template = {
@@ -76,6 +77,7 @@ function dialog({
   initialTemplateId?: string | null;
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
+  completedTopoJobs?: CompletedTopoJob[];
 }) {
   return (
     <ToastProvider>
@@ -287,5 +289,59 @@ describe("GeoPdfDialog, the Terrain layers", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
     expect(contours().disabled).toBe(false);
     expect(contours().checked).toBe(true);
+  });
+});
+
+// Over a job of the user's, the Terrain boxes turn on, so the job's own slope
+// and shading print as they did before; once the user ticks one, the box keeps
+// their choice. Mutation: leave `setTerrainFollowsMap(false)` out of
+// toggleOverlay, and the unticked Slope comes back over the job.
+describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
+  const job = {
+    syncRole: "owner",
+    footprint: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [150.31, -33.75],
+          [150.33, -33.75],
+          [150.33, -33.71],
+          [150.31, -33.75],
+        ],
+      ],
+    },
+  } as CompletedTopoJob;
+  const overJob: TBbox = {
+    north: -33.7,
+    south: -33.76,
+    east: 150.36,
+    west: 150.3,
+  };
+  const away: TBbox = {
+    north: -33.9,
+    south: -33.96,
+    east: 150.36,
+    west: 150.3,
+  };
+  const slope = () =>
+    screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement;
+  const at = (pendingExtent: TBbox) =>
+    dialog({
+      open: true,
+      completedTopoJobs: [job],
+      pendingExtent,
+      pendingScale: 25000,
+    });
+
+  it("follows the area until the user chooses", () => {
+    const { rerender } = render(at(away));
+    expect(slope().checked).toBe(false);
+    rerender(at(overJob));
+    expect(slope().checked).toBe(true);
+
+    fireEvent.click(slope());
+    rerender(at(away));
+    rerender(at(overJob));
+    expect(slope().checked).toBe(false);
   });
 });

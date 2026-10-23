@@ -8,7 +8,10 @@
 // the screen. Pure, like geoPdfTileMath: generateGeoPdf reads the
 // tiles and draws the result.
 import {
+  DEM_NO_DATA_BELOW,
   demMetresFromRgb,
+  parseRgbaHex,
+  NSW_CONTOURS,
   slopeBandAt,
   TILE_SIZE,
   tileY2lat,
@@ -18,7 +21,7 @@ import {
 /** A terrarium tile set decoded into one row-major grid: metres, or degrees. */
 export type DemGrid = { values: Float32Array; width: number; height: number };
 
-/** RGBA bytes (canvas `ImageData` order) → terrarium values; no-data ≤ −32000. */
+/** RGBA bytes (canvas `ImageData` order) → terrarium values. */
 export function decodeTerrarium(
   rgba: Uint8ClampedArray,
   width: number,
@@ -33,12 +36,13 @@ export function decodeTerrarium(
   return { values, width, height };
 }
 
-/** Each pixel in its band's colour; clear where `slopeBandAt` is. */
+/** Each pixel in its band's colour; clear where `slopeBandAt` is. `out`
+ *  starts clear: only coloured pixels are written. */
 export function slopePixels(
   grid: DemGrid,
   bands: readonly SlopeBand[],
+  out: Uint8ClampedArray = new Uint8ClampedArray(grid.width * grid.height * 4),
 ): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(grid.width * grid.height * 4);
   // The archive holds whole degrees, so a few dozen distinct values.
   const colours = new Map<number, number[] | null>();
   for (let i = 0; i < grid.values.length; i++) {
@@ -46,9 +50,7 @@ export function slopePixels(
     let colour = colours.get(degrees);
     if (colour === undefined) {
       const band = slopeBandAt(bands, degrees);
-      colour = band
-        ? [1, 3, 5, 7].map((at) => parseInt(band.colour.slice(at, at + 2), 16))
-        : null;
+      colour = band ? parseRgbaHex(band.colour) : null;
       colours.set(degrees, colour);
     }
     if (colour) out.set(colour, i * 4);
@@ -56,9 +58,12 @@ export function slopePixels(
   return out;
 }
 
-// MapLibre's hillshade paint defaults, which Logjam Web leaves as they are:
-// exaggeration 0.5, light from 335°, black shadow and accent, white highlight.
-// The print is north up, so the viewport anchor turns the light by nothing.
+// MapLibre's hillshade paint defaults: exaggeration 0.5, light from 335°,
+// black shadow and accent, white highlight. Logjam Web's hillshade layer sets
+// no paint today, so it draws with these. Nothing ties the two: a paint
+// property set in Map.tsx, or a maplibre-gl release that changes the defaults
+// or the shaders, makes the print differ from the screen with no test going
+// red. The print is north up, so the viewport anchor turns the light by nothing.
 const ILLUMINATION_RAD = (335 * Math.PI) / 180;
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -68,7 +73,8 @@ const glslMod = (x: number, y: number) => x - y * Math.floor(x / y);
 /**
  * The hillshade of a height grid read at `zoom`, whose top row is the top of
  * tile row `tileY`, as Logjam Web shades tiles of that zoom. Straight-alpha
- * RGBA; clear where a height or one of its eight neighbours is missing. The
+ * RGBA into `out`, which starts clear: a pixel is left alone where a height
+ * or one of its eight neighbours is missing. The
  * grid's own edge is read as if the edge pixel repeated: it is a tile edge
  * outside the printed area.
  */
@@ -76,9 +82,9 @@ export function hillshadePixels(
   grid: DemGrid,
   zoom: number,
   tileY: number,
+  out: Uint8ClampedArray = new Uint8ClampedArray(grid.width * grid.height * 4),
 ): Uint8ClampedArray {
   const { values, width, height } = grid;
-  const out = new Uint8ClampedArray(width * height * 4);
   // Below z15 MapLibre steepens the shading, which makes up for the coarser
   // tiles: on the map, z14, z15 and z16 shade the same ground alike.
   const factor = zoom < 2 ? 0.4 : zoom < 4.5 ? 0.35 : 0.3;
@@ -109,7 +115,7 @@ export function hillshadePixels(
       const g = at(x - 1, y + 1);
       const h = at(x, y + 1);
       const i = at(x + 1, y + 1);
-      if (Math.min(a, b, c, d, e, f, g, h, i) <= -32000) continue;
+      if (Math.min(a, b, c, d, e, f, g, h, i) <= DEM_NO_DATA_BELOW) continue;
       const dx = stored((c + f + f + i - (a + d + d + g)) / divisor) / cosLat;
       const dy = stored((g + h + h + i - (a + b + b + c)) / divisor) / cosLat;
       const slope = Math.atan(0.625 * Math.hypot(dx, dy));
@@ -129,4 +135,17 @@ export function hillshadePixels(
     }
   }
   return out;
+}
+
+/**
+ * The zoom a print reads the statewide contours at, or null when the map
+ * would show none: Logjam Web takes the archive's minzoom from its header
+ * and draws nothing at a display zoom below it.
+ */
+export function nswContourZoom(
+  styleZoom: number,
+  overlayZoom: number,
+): number | null {
+  if (styleZoom < NSW_CONTOURS.minzoom) return null;
+  return Math.min(overlayZoom, NSW_CONTOURS.maxzoom);
 }

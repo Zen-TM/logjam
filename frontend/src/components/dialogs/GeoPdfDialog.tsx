@@ -20,7 +20,9 @@ import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
 import {
   contoursPrintedHere,
   LIDAR_ONLY_OVERLAYS,
+  ownJobInArea,
   seedOverlays,
+  shownOverlays,
 } from "./geoPdfOverlays";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
@@ -236,9 +238,10 @@ function GeoPdfDialog({
   const [selectedBaseLayer, setSelectedBaseLayer] = useState(() =>
     seedBaseLayer(activeLayerId),
   );
-  const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() =>
-    seedOverlays(terrainLayers),
-  );
+  const [selectedOverlays, setSelectedOverlays] =
+    useState<Set<string>>(seedOverlays);
+  // Until a Terrain layer is ticked or a template applied (`shownOverlays`).
+  const [terrainFollowsMap, setTerrainFollowsMap] = useState(true);
 
   // Map elements
   const [titleEnabled, setTitleEnabled] = useState(false);
@@ -320,6 +323,7 @@ function GeoPdfDialog({
     });
     setSelectedBaseLayer(c.baseLayer);
     setSelectedOverlays(new Set(c.overlays));
+    setTerrainFollowsMap(false);
     if (c.elements.title !== undefined) {
       setTitleEnabled(true);
       setTitleText(c.elements.title);
@@ -356,7 +360,8 @@ function GeoPdfDialog({
       if (!seededView) {
         setSeededView(true);
         setSelectedBaseLayer(seedBaseLayer(activeLayerId));
-        setSelectedOverlays(seedOverlays(terrainLayers));
+        setSelectedOverlays(seedOverlays());
+        setTerrainFollowsMap(true);
         const center = mapCenter;
         if (center) {
           setExtentState((prev) => {
@@ -487,45 +492,21 @@ function GeoPdfDialog({
       });
   }, [open, templateMode, initialTemplateId, toast]);
 
-  // True when any of the user's completed-job footprints overlaps the current
-  // export extent. Falls back to true when no footprints are stored or the
-  // extent is uninitialised — never wrongly hides. With no job at all there
-  // is nothing to hide.
-  const lidarOverlap = useMemo(() => {
-    if (templateMode) return true;
-    if (completedTopoJobs.length === 0) return false;
-    const ext = extentState;
-    if (ext.north <= ext.south || ext.east <= ext.west) return true;
-    const withFp = completedTopoJobs.filter((j) => j.footprint);
-    if (withFp.length === 0) return true;
-    return withFp.some((j) => {
-      const fp = j.footprint!;
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      const visit = (pt: number[]) => {
-        if (pt[0] < minX) minX = pt[0];
-        if (pt[0] > maxX) maxX = pt[0];
-        if (pt[1] < minY) minY = pt[1];
-        if (pt[1] > maxY) maxY = pt[1];
-      };
-      const walkRings = (rings: number[][][]) =>
-        rings.forEach((r) => r.forEach(visit));
-      if (fp.type === "Polygon") {
-        walkRings(fp.coordinates);
-      } else {
-        fp.coordinates.forEach(walkRings);
-      }
-      if (!Number.isFinite(minX)) return true;
-      return (
-        maxX > ext.west &&
-        minX < ext.east &&
-        maxY > ext.south &&
-        minY < ext.north
-      );
-    });
-  }, [completedTopoJobs, extentState, templateMode]);
+  // A template has no area, so every LiDAR layer is offered there.
+  const lidarOverlap = useMemo(
+    () => templateMode || ownJobInArea(completedTopoJobs, extentState),
+    [completedTopoJobs, extentState, templateMode],
+  );
+  const overlays = useMemo(
+    () =>
+      shownOverlays(
+        selectedOverlays,
+        terrainFollowsMap,
+        terrainLayers,
+        lidarOverlap,
+      ),
+    [selectedOverlays, terrainFollowsMap, terrainLayers, lidarOverlap],
+  );
 
   // Display helpers for coord mode
   const formatCoord = useCallback(
@@ -610,6 +591,7 @@ function GeoPdfDialog({
       });
       setSelectedBaseLayer(c.baseLayer);
       setSelectedOverlays(new Set(c.overlays));
+      setTerrainFollowsMap(false);
       if (c.elements.title !== undefined) {
         setTitleEnabled(true);
         setTitleText(c.elements.title);
@@ -638,7 +620,7 @@ function GeoPdfDialog({
         : {}),
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      overlays: [...selectedOverlays].map((id) =>
+      overlays: [...overlays].map((id) =>
         id.startsWith("master-") ? id.slice("master-".length) : id,
       ),
       elements: {
@@ -652,7 +634,7 @@ function GeoPdfDialog({
     [
       extentState,
       selectedBaseLayer,
-      selectedOverlays,
+      overlays,
       titleEnabled,
       titleText,
       compassEnabled,
@@ -771,7 +753,7 @@ function GeoPdfDialog({
       },
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      overlays: [...selectedOverlays].map((id) =>
+      overlays: [...overlays].map((id) =>
         id.startsWith("master-") ? id.slice("master-".length) : id,
       ),
       elements: {
@@ -813,7 +795,7 @@ function GeoPdfDialog({
   }, [
     extentState,
     selectedBaseLayer,
-    selectedOverlays,
+    overlays,
     titleEnabled,
     titleText,
     compassEnabled,
@@ -836,15 +818,18 @@ function GeoPdfDialog({
     tooLarge,
   ]);
 
-  const toggleOverlay = useCallback((name: string) => {
-    setSelectedOverlays((prev) => {
-      const next = new Set(prev);
+  const toggleOverlay = useCallback(
+    (name: string) => {
+      const next = new Set(overlays);
       if (next.has(name)) next.delete(name);
       else next.add(name);
-      return next;
-    });
-    setDirty(true);
-  }, []);
+      setSelectedOverlays(next);
+      if ((TERRAIN_LAYER_KEYS as readonly string[]).includes(name))
+        setTerrainFollowsMap(false);
+      setDirty(true);
+    },
+    [overlays],
+  );
 
   // Esc / backdrop / X / Cancel route through this so a dirty form prompts
   // before discarding. "Select on map" bypasses it entirely (it calls
@@ -1336,7 +1321,7 @@ function GeoPdfDialog({
                       printed ? MAP_TERRAIN.copy.contoursPrinted : undefined
                     }
                     disabled={printed}
-                    checked={!printed && selectedOverlays.has(key)}
+                    checked={!printed && overlays.has(key)}
                     onChange={() => toggleOverlay(key)}
                   />
                 );
@@ -1349,7 +1334,7 @@ function GeoPdfDialog({
                   <Checkbox
                     key={layer.name}
                     label={layer.label}
-                    checked={selectedOverlays.has(layer.name)}
+                    checked={overlays.has(layer.name)}
                     onChange={() => toggleOverlay(layer.name)}
                   />
                 ))}

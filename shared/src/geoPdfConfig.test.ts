@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateGeoPdfConfig,
+  VALID_GEOPDF_OVERLAY_NAMES,
   validateGeoPdfTemplateConfig,
   type GeoPdfConfig,
 } from "./geoPdfConfig.js";
@@ -152,5 +153,20 @@ describe("validateGeoPdfTemplateConfig", () => {
     expect(
       validateGeoPdfTemplateConfig({ ...c, baseLayer: "evil-tiles" }),
     ).toBe("Invalid base layer: evil-tiles");
+  });
+});
+
+describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
+  // The wire names stored templates carry. Mutation: build the list from
+  // TOPO_LAYERS again and drop a layer from it, and a saved template naming
+  // that layer stops validating.
+  it("is the five names a GeoPDF has always sent", () => {
+    expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual([
+      "contours",
+      "features",
+      "hillshade",
+      "slope",
+      "vegetation",
+    ]);
   });
 });

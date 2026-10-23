@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { lat2tileY, RASTER_TEMPLATE_DEFAULTS, tileY2lat } from "@logjam/shared";
+import {
+  lat2tileY,
+  RASTER_TEMPLATE_DEFAULTS,
+  tileY2lat,
+  DEM_NO_DATA_BELOW,
+  parseRgbaHex,
+} from "@logjam/shared";
 import {
   decodeTerrarium,
   hillshadePixels,
+  nswContourZoom,
   slopePixels,
   type DemGrid,
 } from "./geoPdfTerrain";
@@ -130,9 +137,7 @@ describe("slopePixels", () => {
   it("paints a slope in its band's colour and the rest clear", () => {
     const first = bands[0]!;
     const pixels = slopePixels(grid([first.fromDeg, 0, -32768]), bands);
-    expect([...pixels.slice(0, 4)]).toEqual(
-      [1, 3, 5, 7].map((at) => parseInt(first.colour.slice(at, at + 2), 16)),
-    );
+    expect([...pixels.slice(0, 4)]).toEqual(parseRgbaHex(first.colour));
     // Under the first band, and no data: both clear.
     expect(first.fromDeg).toBeGreaterThan(0);
     expect(pixels[7]).toBe(0);
@@ -143,6 +148,17 @@ describe("slopePixels", () => {
 describe("decodeTerrarium", () => {
   it("reads a pixel no tile was drawn onto as no data", () => {
     const { values } = decodeTerrarium(new Uint8ClampedArray(4), 1, 1);
-    expect(values[0]).toBeLessThanOrEqual(-32000);
+    expect(values[0]).toBeLessThanOrEqual(DEM_NO_DATA_BELOW);
+  });
+});
+
+describe("nswContourZoom", () => {
+  // Mutation: drop the minzoom check, and a 1:250 000 print (display zoom
+  // about 10.8 here) draws and credits 50 m lines the map never shows.
+  it("reads no contours where the map draws none", () => {
+    expect(nswContourZoom(10.8, 12)).toBeNull();
+    expect(nswContourZoom(11, 13)).toBe(13);
+    // The archive stops at z14; deeper prints stretch it.
+    expect(nswContourZoom(14.3, 16)).toBe(14);
   });
 });

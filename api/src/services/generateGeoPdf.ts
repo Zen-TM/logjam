@@ -1,7 +1,6 @@
 import path from "path";
 import {
   createCanvas,
-  createImageData,
   loadImage,
   registerFont,
   type Canvas,
@@ -36,7 +35,8 @@ import {
   lerpZoom,
   contourLabelHalo,
   drawsNswContours,
-  geoPdfTooLarge,
+  geoPdfMaxNativeZoom,
+  GEOPDF_MAX_CANVAS_BYTES,
   GEOPDF_TOO_LARGE,
   NSW_CONTOURS,
   NSW_HILLSHADE,
@@ -53,6 +53,7 @@ import { decodeVectorTileLayer } from "./geoPdfVectorTile";
 import {
   decodeTerrarium,
   hillshadePixels,
+  nswContourZoom,
   slopePixels,
   type DemGrid,
 } from "./geoPdfTerrain";
@@ -309,7 +310,7 @@ export async function generateGeoPdf(
 
   // Resolve base-layer config (URL template, max native zoom, attribution)
   const baseLayerCfg = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer];
-  const maxNativeZoom = baseLayerCfg?.maxNativeZoom ?? 18;
+  const maxNativeZoom = geoPdfMaxNativeZoom(config.baseLayer);
 
   // TARGET_DPI (300) is the reference for zoom selection — this sets how many
   // source pixels per mm we aim for, which determines the tile zoom level.
@@ -340,9 +341,9 @@ export async function generateGeoPdf(
   const nativeW = Math.round(probeTransform.srcW);
   const nativeH = Math.round(probeTransform.srcH);
 
-  // 4. Memory budget guard: the route refused this already, but a stored job
-  // is rendered by a later build.
-  if (geoPdfTooLarge(config.extent, config.scale, config.baseLayer)) {
+  // 4. Memory budget guard on what is about to be allocated: the route refused
+  // this already by the same sum, but a stored job is rendered by a later build.
+  if (nativeW * nativeH * 4 > GEOPDF_MAX_CANVAS_BYTES) {
     throw new AppError(400, GEOPDF_TOO_LARGE);
   }
 
@@ -481,7 +482,7 @@ export async function generateGeoPdf(
         extent,
         nativeW,
         nativeH,
-        (grid, tileY) => hillshadePixels(grid, zoom, tileY),
+        (grid, tileY, out) => hillshadePixels(grid, zoom, tileY, out),
         true,
       );
       if (drew) drawnTerrain.add("hillshade");
@@ -494,25 +495,21 @@ export async function generateGeoPdf(
         extent,
         nativeW,
         nativeH,
-        (grid) => slopePixels(grid, slopeBands),
+        (grid, _tileY, out) => slopePixels(grid, slopeBands, out),
         // Stretched without smoothing, so a band keeps its hard edge.
         false,
       );
       if (drew) drawnTerrain.add("slope");
     }
-    const contourArchive = drawsNswContours(
-      config.baseLayer,
-      config.overlays.includes("contours"),
-    )
-      ? await openArchive(topoBucket, NSW_CONTOURS.archivePath, "contours")
-      : null;
-    if (contourArchive) {
-      const zoom = Math.max(
-        NSW_CONTOURS.minzoom,
-        Math.min(overlayZoom, NSW_CONTOURS.maxzoom),
-      );
+    const contourZoom = nswContourZoom(styleZoom, overlayZoom);
+    const contourArchive =
+      contourZoom !== null &&
+      drawsNswContours(config.baseLayer, config.overlays.includes("contours"))
+        ? await openArchive(topoBucket, NSW_CONTOURS.archivePath, "contours")
+        : null;
+    if (contourArchive && contourZoom !== null) {
       const contourTransform = computeTileToMapTransform(
-        zoom,
+        contourZoom,
         extent.north,
         extent.south,
         extent.east,
@@ -889,6 +886,14 @@ async function openArchive(
  * Read a terrarium archive's tiles over the map at `zoom` into one grid,
  * turn it into pixels with `paint`, and stretch those onto the map. Returns
  * whether any tile had data, so a layer with none is not credited.
+ *
+ * Memory: the grid is the map's canvas size at most (the terrain zoom is never
+ * deeper than the canvas's) plus a ring of tiles, held three ways at once: the
+ * canvas, its pixel bytes (painted over in place) and the decoded floats,
+ * 12 bytes a pixel. At the 400 MB canvas cap (about 105 Mpx, plus the ring)
+ * that peaks near 1.4 GB beside the 0.4 GB map canvas: under 2 GB of the
+ * GeoPDF task's 4 GiB. One layer at a time, and the grid's surface is let go
+ * as soon as it is drawn.
  */
 async function drawTerrarium(
   mapCtx: CanvasRenderingContext2D,
@@ -897,7 +902,7 @@ async function drawTerrarium(
   extent: GeoPdfConfig["extent"],
   widthPx: number,
   heightPx: number,
-  paint: (grid: DemGrid, tileY: number) => Uint8ClampedArray,
+  paint: (grid: DemGrid, tileY: number, out: Uint8ClampedArray) => void,
   smooth: boolean,
 ): Promise<boolean> {
   if (!archive) return false;
@@ -940,16 +945,11 @@ async function drawTerrarium(
   );
   if (!drawn.some(Boolean)) return false;
 
-  const heights = decodeTerrarium(
-    gridCtx.getImageData(0, 0, width, height).data,
-    width,
-    height,
-  );
-  gridCtx.putImageData(
-    createImageData(paint(heights, t.minTileY), width, height),
-    0,
-    0,
-  );
+  const pixels = gridCtx.getImageData(0, 0, width, height);
+  const heights = decodeTerrarium(pixels.data, width, height);
+  pixels.data.fill(0);
+  paint(heights, t.minTileY, pixels.data);
+  gridCtx.putImageData(pixels, 0, 0);
   const smoothing = mapCtx.imageSmoothingEnabled;
   mapCtx.imageSmoothingEnabled = smooth;
   mapCtx.drawImage(
@@ -960,6 +960,8 @@ async function drawTerrarium(
     height * t.scaleY,
   );
   mapCtx.imageSmoothingEnabled = smoothing;
+  // Resizing frees the surface now rather than at the next collection.
+  grid.width = 0;
   return true;
 }
 
@@ -1223,7 +1225,6 @@ function renderContourFeature(
           vectorStyle.labelScale ?? 1,
         ),
         haloWidth: 1.5 * pxScale,
-        // White over imagery, where the statewide lines are white too.
         haloColor: contourLabelHalo(cs.majorColour),
         color: labelColor,
       });

@@ -3,6 +3,7 @@ import {
   computeTileToMapTransform,
   computeZoom,
   geoPdfNativeMegapixels,
+  geoPdfMaxNativeZoom,
   geoPdfTooLarge,
   GEOPDF_MAX_CANVAS_BYTES,
   lon2tileX,
@@ -202,5 +203,15 @@ describe("geoPdfTooLarge", () => {
     expect(bytes(town, 5000, 16)).toBeLessThan(GEOPDF_MAX_CANVAS_BYTES);
     expect(geoPdfTooLarge(town, 5000, "six-topo")).toBe(false);
     expect(geoPdfTooLarge(town, 5000, "six-imagery")).toBe(true);
+  });
+});
+
+describe("geoPdfMaxNativeZoom", () => {
+  // The one answer the dialog, the route, the renderer and the runtime
+  // estimate share. Mutation: change the fallback, or read another field.
+  it("is the base layer's own deepest zoom, or z18", () => {
+    expect(geoPdfMaxNativeZoom("six-topo")).toBe(16);
+    expect(geoPdfMaxNativeZoom("six-imagery")).toBe(20);
+    expect(geoPdfMaxNativeZoom("no-such-layer")).toBe(18);
   });
 });
