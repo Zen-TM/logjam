@@ -20,8 +20,8 @@ OUT receives:
   sharpen.json      zmax, the tile range, coverage, ground kind, extraction month
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
-reads (the `CannotSharpen` sentences: no ground classified, no ground with a
-height, only 5 m DEMs, too big for memory) and exits 2.
+reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
+DEMs, too big for memory) and exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -30,8 +30,9 @@ statewide 5 m data instead, so a client can take each tile from exactly one
 archive and draw no seam.
 
 Ground is the ZIP's ELVIS DEM when it has one finer than 5 m; otherwise the
-survey's own class 2, as a TIN. Never a re-classification of the points: on
-a classified survey that puts ground on the canopy.
+survey's own class 2, as a TIN. The points are re-classified (SMRF) only
+when no tile has any class 2: on a classified survey that puts ground on
+the canopy.
 
 PRIVACY: the footprint, the tile range, a tile index and a survey's name say
 where the user surveyed. No log call names them (tests/test_log_privacy.py).
@@ -90,10 +91,6 @@ NODATA = dem.NODATA
 HEIGHTS = dataclasses.replace(dem.HEIGHTS, name="Sharpened heights", derived="")
 SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 
-NO_GROUND = (
-    "This ZIP's point clouds have no ground marked in them. Add the DEM ELVIS "
-    "offers for the same area to the ZIP, and make it again."
-)
 EMPTY_GROUND = (
     "Logjam couldn't map any ground from this ZIP. Download the area again "
     "from ELVIS with its DEM, and make it again."
@@ -153,7 +150,7 @@ def dem_plan(
 def class2_cell(ground_points: int, area_m2: float) -> int:
     """The cell a survey's class 2 supports, over the tiles that have any."""
     if ground_points == 0:
-        raise CannotSharpen(NO_GROUND)
+        raise CannotSharpen(EMPTY_GROUND)
     return cell_for_density(ground_points / area_m2)
 
 
@@ -360,15 +357,12 @@ def available_memory(
     return max(0, free)
 
 
-def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int:
-    """A TIN of the survey's class 2 over every terrain tile that has any;
-    returns zmax."""
-    terrain = pipeline.select_surveys_by_layer([str(f) for f in las_files])
-    paths = terrain.terrain_tiles
-    tiles = []  # (ground file, bounds, ground points) of tiles with ground
+def class2_tiles(paths: List[str], work: Path, name: str) -> list:
+    """(ground file, bounds, ground points) of each tile with any class 2."""
+    tiles = []
     for i, path in enumerate(paths):
         b = las_summary(path)["bounds"]
-        ground = str(work / f"ground-{i}.las")
+        ground = str(work / f"ground-{name}{i}.las")
         run(
             *["pdal", "translate", path, ground, "range"],
             "--filters.range.limits=Classification[2:2]",
@@ -377,6 +371,41 @@ def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int
         if count:
             tiles.append((ground, b, count))
         pipeline._write_progress(i + 1, len(paths), "ground")
+    return tiles
+
+
+def smrf_classify(paths: List[str], work: Path) -> List[str]:
+    """Each tile with its ground found by SMRF, for a survey with no class 2
+    at all (the lab's fallback; on a classified tile SMRF reads canopy as
+    ground). Noise and overlap are dropped first, and every class is wiped,
+    as the legacy pipeline does (pipeline.py `build_pdal_pipeline_full`)."""
+    out = []
+    for i, path in enumerate(paths):
+        out.append(str(work / f"smrf-{i}.las"))
+        run(
+            *["pdal", "translate", path, out[-1], "range", "assign", "smrf"],
+            "--filters.range.limits=Classification![7:7],Classification![12:12],"
+            "Classification![18:18]",
+            "--filters.assign.assignment=Classification[:]=0",
+        )
+        pipeline._write_progress(i + 1, len(paths), "smrf")
+    return out
+
+
+def laz_ground(
+    las_files: List[Path], out: str, work: Path, workers: int
+) -> Tuple[int, str]:
+    """A TIN of the survey's class 2 over every terrain tile that has any, or
+    of SMRF's ground when no tile has any (tests/test_sharpen.py
+    `TestGroundSteps`); returns zmax and the ground's kind."""
+    terrain = pipeline.select_surveys_by_layer([str(f) for f in las_files])
+    paths = terrain.terrain_tiles
+    kind = "class-2"
+    tiles = class2_tiles(paths, work, "")
+    if not tiles:
+        kind = "smrf"
+        log.info("No class 2 in the point clouds: ground found by SMRF")
+        tiles = class2_tiles(smrf_classify(paths, work), work, "smrf-")
     total = sum(count for *_, count in tiles)
     area = sum((b["maxx"] - b["minx"]) * (b["maxy"] - b["miny"]) for _, b, _ in tiles)
     cell = class2_cell(total, area)
@@ -410,7 +439,7 @@ def laz_ground(las_files: List[Path], out: str, work: Path, workers: int) -> int
             # runs one long TIN job at a time.
             pipeline._write_progress(k, len(jobs), "tin")
     pipeline.merge_dem_tiles(sorted(tins), out)
-    return zoom_for_cell(cell)
+    return zoom_for_cell(cell), kind
 
 
 # ── Statewide tiles ──────────────────────────────────────────────────────────
@@ -732,8 +761,7 @@ def sharpen(args) -> dict:
                 kind = "elvis-dem"
                 dem_ground(contents.dem_files, order, ground)
             else:
-                kind = "class-2"
-                zmax = laz_ground(contents.las_files, ground, work, args.workers)
+                zmax, kind = laz_ground(contents.las_files, ground, work, args.workers)
         require_ground(ground)
         with bench.step("Footprint", key="footprint"):
             pipeline.compute_data_footprint(ground, str(out / "footprint.geojson"))
