@@ -178,7 +178,7 @@ parity pair `api/src/services/elevation.unit.test.ts` and
 - **Read a slope like a height, through `sampleDem` down the whole list**
   (2026-10-18). One sampler, and a slope wherever there is a height. Rejected
   because the worldwide 30 m tiles are within 5° of a 5 m survey at only 57 %
-  of points (a median of 34° off on ground of 60° or steeper), and
+  of points (ground of 60° or steeper reads a median of 34° on them), and
   `sampleDem`'s four-pixel blend can fill a missing pixel from a neighbour.
 - **Choose the source in each client.** Rejected by 0020: deciding twice is
   how the two clients drifted before.
