@@ -593,15 +593,3 @@ async function deleteRecordedTrack(track: Track): Promise<void> {
   await deleteTrack(track.id);
   await deleteSensorLog(track.id);
 }
-
-/**
- * What sharing a LiDAR job promises a friend: a sharpened area grants other
- * things than an older topo, and a row rebuilt from disk, with no account
- * list, can't tell which it is (assetActions.test.ts).
- */
-export function lidarJobSharePromise(
-  job: { sharpened?: unknown } | undefined,
-): SharePromiseKind {
-  if (!job) return "lidarJob";
-  return job.sharpened ? "sharpenedArea" : "topoJob";
-}

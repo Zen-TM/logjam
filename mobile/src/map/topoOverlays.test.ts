@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TOPO_LAYERS } from "@logjam/shared";
+import { TOPO_LAYERS, lidarJobSharePromise } from "@logjam/shared";
 import {
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
@@ -115,6 +115,16 @@ describe("mergeSavedOverlayJobs", () => {
     expect(refs.map((r) => `${r.jobId}/${r.layer}`)).toEqual([
       `saved/${LAYER_ORDER[0]}`,
     ]);
+  });
+
+  // Mutation: drop the syncRole check in shared's lidarJobSharePromise, and
+  // a saved sharpened area, Shared while the list hasn't loaded, is promised
+  // an older topo's download and export.
+  it("synthesizes a job whose share promises only what is true of both kinds", () => {
+    const merged = mergeSavedOverlayJobs(null, [
+      savedOverlay("saved", LAYER_ORDER[0]),
+    ]);
+    expect(lidarJobSharePromise(merged.jobs[0])).toBe("lidarJob");
   });
 
   it("does not duplicate a key the online list already covers", () => {

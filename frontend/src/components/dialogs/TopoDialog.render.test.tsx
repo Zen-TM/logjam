@@ -200,9 +200,8 @@ describe("TopoDialog's Vegetation choice", () => {
     );
   });
 
-  // Mutation: apply the template the dialog was opened with (drop the
-  // switch's gate on it), and the job takes its style and its auto-export,
-  // which the reaper runs on a job with none of the files an export reads.
+  // Mutation: drop the switch's gate on the template the dialog was opened
+  // with, and the job is sent that template's style.
   it("applies no template, even the one it was opened with", async () => {
     switches.sharpen = true;
     const exporting = {

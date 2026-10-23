@@ -119,7 +119,12 @@ nothing local puts there. Before starting one, put CI's made-up stand-ins in
 The height stand-in replaces the Katoomba slice the root README's Local
 Development section uploads to the same key for dev maps (`DEV_MASTER_URL`),
 so dev maps then draw the plane. Re-run that section's `curl` afterwards to
-get the real slice back.
+get the real slice back. It uploads no slope, so remove the slope stand-in (a
+flat 3° plane, which bands covering 3° would tint):
+
+    AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=ap-southeast-2 \
+      aws --endpoint-url http://localhost:4566 s3 rm \
+      s3://logjam-topo-local/master/dem/nsw-5m-slope.pmtiles
 
 The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.

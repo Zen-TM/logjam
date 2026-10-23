@@ -19,8 +19,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   lidarJobCopy,
+  lidarJobSharePromise,
   removeShareConfirm,
   SHARPEN_NEW_JOBS,
+  type SharePromiseKind,
   type TopoExportJobView,
   type VectorStyleSettings,
 } from "@logjam/shared";
@@ -169,7 +171,7 @@ export default function LidarPanel({
   const [shareJob, setShareJob] = useState<{
     id: string;
     label: string;
-    sharpened: boolean;
+    promise: SharePromiseKind;
   } | null>(null);
 
   // A template saved from TopoDialog's "Save as template" bumps
@@ -250,7 +252,11 @@ export default function LidarPanel({
           label: "Share…",
           icon: "shareFriend",
           onSelect: () =>
-            setShareJob({ id: job.jobId, label, sharpened: !!job.sharpened }),
+            setShareJob({
+              id: job.jobId,
+              label,
+              promise: lidarJobSharePromise(job),
+            }),
         },
         { id: "delete-sep", separator: true },
         {
@@ -739,7 +745,7 @@ export default function LidarPanel({
       {shareJob && (
         <ShareDialog
           title={`Share ${shareJob.label}`}
-          kind={shareJob.sharpened ? "sharpenedArea" : "topoJob"}
+          kind={shareJob.promise}
           friends={friends}
           open
           onClose={() => setShareJob(null)}

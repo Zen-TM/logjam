@@ -45,6 +45,19 @@ const STOP = "You can stop sharing anytime.";
  */
 export type SharePromiseKind = BulkShareItemType | "sharpenedArea" | "lidarJob";
 
+/**
+ * What sharing a LiDAR job promises a friend, decided once for both
+ * clients: a sharpened area grants other things than an older topo, and a
+ * row with no `syncRole` is one a client rebuilt from what it saved, whose
+ * kind it can't know (every row the API sends stamps one). contracts.test.ts.
+ */
+export function lidarJobSharePromise(
+  job: { syncRole?: unknown; sharpened?: unknown } | undefined,
+): SharePromiseKind {
+  if (!job?.syncRole) return "lidarJob";
+  return job.sharpened ? "sharpenedArea" : "topoJob";
+}
+
 /** What sharing one thing of this kind lets a friend do. */
 export function sharePromise(kind: SharePromiseKind | "selection"): string {
   switch (kind) {

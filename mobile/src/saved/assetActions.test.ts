@@ -7,7 +7,6 @@ import {
   routeActions,
   trackActions,
   vectorImportActions,
-  lidarJobSharePromise,
 } from "./assetActions";
 import { WAY_SHARE_VERB } from "@logjam/shared";
 import type { Track } from "../tracks/tracksDb";
@@ -441,15 +440,5 @@ describe("deleting a recording", () => {
     const recording = { ...track(3), mediaId: "m1" } as unknown as Track;
     await expect(trackActions(recording).delete?.run()).rejects.toThrow();
     expect(deleteTrack).not.toHaveBeenCalled();
-  });
-});
-
-describe("lidarJobSharePromise", () => {
-  // Mutations: the older topo's promise for a sharpened area (a download and
-  // an export no surface offers), or for a row whose kind isn't known.
-  it("promises by kind, and only what is true of both when unknown", () => {
-    expect(lidarJobSharePromise({ sharpened: {} })).toBe("sharpenedArea");
-    expect(lidarJobSharePromise({})).toBe("topoJob");
-    expect(lidarJobSharePromise(undefined)).toBe("lidarJob");
   });
 });

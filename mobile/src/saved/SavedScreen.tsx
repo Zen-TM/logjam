@@ -64,6 +64,7 @@ import {
   type IconIdea,
   type SharableEntityType,
   type SharePromiseKind,
+  lidarJobSharePromise,
   type TopoLayerFormat,
   type TopoLayerName,
 } from "@logjam/shared";
@@ -182,7 +183,6 @@ import {
   routeActions,
   vectorImportActions,
   type AssetActions,
-  lidarJobSharePromise,
 } from "./assetActions";
 import { removeSharedEntity } from "../sharing/removeShare";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
