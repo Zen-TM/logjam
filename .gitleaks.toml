@@ -34,14 +34,10 @@ regexes = [
   '''545ofbb8l9d1sl6ggbmk6oonn9''',          # Cognito App Client ID (public)
   '''ap-southeast-2_x5zPhJXMk''',             # Cognito User Pool ID (public)
   '''row\.s3KeyThumbnail''',                   # a Prisma field read (copyPlaceMedia.ts), not a key
+  # generic-api-key reads `<display column>, <thumbnail column>` in planItems.ts
+  # (its SQL select lists and a key array) as `key = value` and takes the
+  # thumbnail column name as the secret. It sits here, not in a rule-scoped
+  # table, because the pre-commit hook may run gitleaks 8.16, which replaces a
+  # regex-less `[[rules]]` entry instead of extending the default rule.
+  '''s3_?[Kk]ey_?[Dd]isplay\b[^,\n]{0,40},\s*(?:f\.)?s3_?[Kk]ey_?[Tt]humbnail\b''',
 ]
-
-# generic-api-key reads `<display column>, <thumbnail column>` in planItems.ts
-# (its SQL select lists and a key array) as `key = value` and takes the
-# thumbnail column name as the secret. Only that exact value is skipped, only
-# for this rule, so a real key in any file is still reported.
-[[rules]]
-id = "generic-api-key"
-[[rules.allowlists]]
-regexTarget = "secret"
-regexes = ['''^(?:f\.)?s3_?[Kk]ey_?[Tt]humbnail$''']
