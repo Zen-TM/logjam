@@ -36,6 +36,7 @@ user surveyed. Nothing here logs them; counts and timings only.
 
 import argparse
 import contextlib
+import dataclasses
 import functools
 import json
 import logging
@@ -75,6 +76,11 @@ MARGIN_PX = 16
 CONTOUR_SMOOTH_SIGMA_M = 3.0
 NODATA = dem.NODATA
 
+# Heights are rounded finer at each zoom past z15: ADR 0030's quarter metre
+# was sized for z15's ~4 m pixels, and on 1 m pixels the same step draws
+# terraces in the hillshade and puts up to ~7° of noise in a tapped slope.
+# Halving it with the pixel keeps z15's noise (tests/test_sharpen.py
+# `TestPyramid`).
 HEIGHTS = dem.Layer("Sharpened heights", "", dem.halve, dem.ROUNDING_M, 9)
 SLOPE = dem.Layer("Sharpened slope", "", dem.halve_max, dem.SLOPE_ROUNDING_DEG, 6)
 
@@ -162,12 +168,19 @@ def block_grids(
     return filled[inner, inner], slope, filled
 
 
+def rounding_at(layer: dem.Layer, z: int) -> dem.Layer:
+    """Heights rounded to ADR 0030's step at z15, halved each zoom deeper."""
+    if layer is not HEIGHTS:
+        return layer
+    return dataclasses.replace(layer, rounding=layer.rounding / 2 ** (z - ZMIN))
+
+
 def pyramid(grid: np.ndarray, zmax: int, bx: int, by: int, layer: dem.Layer):
     """(z, x, y, png) for each tile of a z14 block's grid at zmax, then each
     coarser zoom down to ZMIN."""
     for z in range(zmax, ZMIN - 1, -1):
         scale = 2 ** (z - CONTOUR_ZOOM)
-        yield from dem.tiles_of(grid, z, bx * scale, by * scale, layer)
+        yield from dem.tiles_of(grid, z, bx * scale, by * scale, rounding_at(layer, z))
         if z > ZMIN:
             grid = layer.reduce(grid)
 

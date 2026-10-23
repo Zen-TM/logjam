@@ -110,8 +110,33 @@ class TestBlockGrids(unittest.TestCase):
 
 
 class TestPyramid(unittest.TestCase):
-    """Mutation that turns it red: the slope pyramid by the mean (a cliff
-    fades out of its band zoomed out, ADR 0039)."""
+    """Mutations that turn it red: the slope pyramid by the mean (a cliff
+    fades out of its band zoomed out, ADR 0039), and heights rounded to the
+    same step at every zoom (terraces in the hillshade at z17)."""
+
+    def test_heights_round_finer_with_each_zoom(self):
+        from PIL import Image
+        import io
+
+        def first_pixel_per_zoom(value):
+            grid = np.full((2048, 2048), value, np.float32)
+            return {
+                z: float(
+                    dem.decode_terrarium(
+                        np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
+                    )[0, 0]
+                )
+                for z, x, y, png in pyramid(grid, 17, 0, 0, HEIGHTS)
+                if (x, y) == (0, 0)
+            }
+
+        # To the nearest 1/16 m at z17, 1/8 m at z16, 1/4 m at z15.
+        self.assertEqual(
+            first_pixel_per_zoom(100.05), {17: 100.0625, 16: 100.0, 15: 100.0}
+        )
+        self.assertEqual(
+            first_pixel_per_zoom(100.1), {17: 100.125, 16: 100.125, 15: 100.0}
+        )
 
     def test_every_zoom_from_zmax_to_z15_at_the_blocks_tiles(self):
         grid = np.zeros((1024, 1024), np.float32)
