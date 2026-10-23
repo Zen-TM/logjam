@@ -34,7 +34,8 @@ Per z15 tile on one core: Horn costs 2.6 ms, PNG level 9 costs 250–360 ms, and
 level 6 costs 17–33 ms. On an area estimate of about 750 k z15 tiles, z15
 plus the pyramid is about 85 core-hours at level 9 against about 8 at level 6.
 The builder takes an estimated 13 core-hours at level 6 (45 ms a tile on
-Katoomba's fullest blocks, over 1.03 M tiles at all zooms, z8–15): under two
+Katoomba's fullest blocks (the builder works in blocks of 32 × 32 z15 tiles,
+one z10 tile, each a separate job), over 1.03 M tiles at all zooms, z8–15): under two
 hours on the 8 vCPU worker task, allow three, against about half a day at
 level 9.
 
@@ -73,17 +74,19 @@ level 9.
 
 Guard: `topo/tests/test_nsw_dem.py` holds the terrarium encoding with
 `(0, 0, 0)` for no data, the 1° rounding, PNG level 6, the credit, and Horn
-with its border and per-row pixel size. It also holds that the slope layer
-reduces with `halve_max` and that `halve_max` keeps the steepest of four. The
-builder works in blocks of 32 × 32 z15 tiles (one z10 tile), each a separate
-job, and the test compares a 2 × 2-tile block's slope with Horn run over the
-whole 4 × 4-tile mosaic. Mutations that turn it red: the slope layer's reducer
-swapped for the mean, a mean inside `halve_max`, a rounding other than 1°,
+with its border and per-row pixel size. `TestBlockSlope` compares a
+2 × 2-tile block's slope with Horn run over the whole 4 × 4-tile mosaic.
+`halve_max` keeps the steepest of four, and `test_the_slope_layer_uses_it`
+holds that the slope layer's `reduce` field is `halve_max`, not that the
+pyramid built from it is a max: a build path that calls `halve` directly
+would pass. Mutations that turn the tests red: the layer's `reduce` swapped
+for the mean, a mean inside `halve_max`, a rounding other than 1°,
 Horn weights of 1-1-1, a missing centre-pixel check, the neighbour ring read
 from the wrong tile, and a row's latitude taken from the wrong origin.
-`shared/src/demSlope.test.ts` and that file assert the same bumpy window to
+`shared/src/demSlope.test.ts` and `test_nsw_dem.py` assert the same bumpy window to
 the same figure. Only the z15 tile of `TestSlopeBlock` holds the top of the
-zoom range; nothing holds the bottom (8), or a client drawing the archive.
+zoom range; nothing holds the bottom (8), that a tile with no value is left out, or a
+client drawing the archive.
 
 ## Consequences
 
