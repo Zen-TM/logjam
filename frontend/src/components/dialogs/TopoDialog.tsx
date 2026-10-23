@@ -268,8 +268,8 @@ export default function TopoDialog({
 
   useEffect(() => {
     if (!open) return;
-    // A late answer must not apply to a dialog closed since, or it marks the
-    // next open's template as applied.
+    // A late answer is dropped: applied to a dialog closed since, it would
+    // mark the next open's template as applied.
     let live = true;
     fetchTopoTemplates()
       .then((list) => {

@@ -16,6 +16,7 @@ import {
   useTopoUpload,
   type TopoJobRequest,
   type TopoUploadSession,
+  routeMadeTopoJob,
 } from "./topoUpload";
 
 function session(): TopoUploadSession {
@@ -392,5 +393,21 @@ describe("submitFailureMessage", () => {
     expect(submitFailureMessage(refused, false)).toBe(
       "Not enough processing credits.",
     );
+  });
+});
+
+describe("routeMadeTopoJob", () => {
+  // Mutation: track every job made, and a held job that finished meanwhile
+  // sits in the in-progress list as "Couldn't be made", a row no poll ends.
+  it("sends a finished job to the completed list, not the in-progress one", () => {
+    const track = vi.fn();
+    const finished = vi.fn();
+    routeMadeTopoJob({ status: "complete" }, { track, finished });
+    expect(track).not.toHaveBeenCalled();
+    expect(finished).toHaveBeenCalledTimes(1);
+
+    routeMadeTopoJob({ status: "pending" }, { track, finished });
+    expect(track).toHaveBeenCalledWith({ status: "pending" });
+    expect(finished).toHaveBeenCalledTimes(1);
   });
 });

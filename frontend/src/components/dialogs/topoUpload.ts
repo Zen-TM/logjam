@@ -166,6 +166,18 @@ const jobStatus = (path: string) =>
       error instanceof ApiError && error.status === 404 ? "gone" : null,
   );
 
+/** Hands App the job `submit` made. A held job can have finished before the
+ *  submit that counts it as made, and the poll that moves a topo to the
+ *  completed list skips finished jobs, so a finished one goes there directly
+ *  rather than sit in the in-progress list. */
+export function routeMadeTopoJob<J extends { status: string }>(
+  job: J,
+  to: { track: (job: J) => void; finished: () => void },
+) {
+  if (job.status === "complete") to.finished();
+  else to.track(job);
+}
+
 /** Makes a topo job from a ZIP. `submit` again after a failure carries on
  *  with the same job while the file is the same one; `discard` deletes a job
  *  that never started (call it when the user gives up on the ZIP). `held`
