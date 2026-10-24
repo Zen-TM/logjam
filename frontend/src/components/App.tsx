@@ -1891,6 +1891,7 @@ function App() {
             setShowTopo(true);
           }}
           topoLayers={mapTopoLayers}
+          sharpenedAreas={sharpenedAreas}
           slopeBands={slopeBands.drawn}
           vectorStyle={vectorStyle}
           activeLayerId={mapLayerId}

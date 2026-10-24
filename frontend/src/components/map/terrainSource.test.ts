@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   NSW_TERRAIN_SOURCE,
   WORLDWIDE_TERRAIN_SOURCE,
+  dropStaleTerrainSources,
   terrainSourceFor,
 } from "./terrainSource";
+import type { SharpenedOverlay } from "@logjam/shared";
 
 function fakeMap(lng: number, lat: number) {
   const sources = new Map<string, unknown>();
@@ -30,10 +32,10 @@ describe("terrainSourceFor", () => {
   it("uses the NSW archive over NSW, and adds its source once", async () => {
     const map = fakeMap(...KATOOMBA);
     const open = vi.fn(opens);
-    expect(await terrainSourceFor(map, open, "https://web.test")).toBe(
+    expect(await terrainSourceFor(map, [], open, "https://web.test")).toBe(
       NSW_TERRAIN_SOURCE,
     );
-    expect(await terrainSourceFor(map, open, "https://web.test")).toBe(
+    expect(await terrainSourceFor(map, [], open, "https://web.test")).toBe(
       NSW_TERRAIN_SOURCE,
     );
     expect(map.addSource).toHaveBeenCalledTimes(1);
@@ -49,6 +51,7 @@ describe("terrainSourceFor", () => {
     const map = fakeMap(...KATOOMBA);
     const source = await terrainSourceFor(
       map,
+      [],
       async () => {
         throw new Error("404");
       },
@@ -61,7 +64,12 @@ describe("terrainSourceFor", () => {
   it("uses the worldwide tiles outside NSW without asking for the archive", async () => {
     const open = vi.fn(opens);
     expect(
-      await terrainSourceFor(fakeMap(115.86, -31.95), open, "https://web.test"),
+      await terrainSourceFor(
+        fakeMap(115.86, -31.95),
+        [],
+        open,
+        "https://web.test",
+      ),
     ).toBe(WORLDWIDE_TERRAIN_SOURCE);
     expect(open).not.toHaveBeenCalled();
   });
@@ -70,9 +78,9 @@ describe("terrainSourceFor", () => {
   // world draws NSW from the worldwide tiles.
   it("uses the NSW archive over NSW after a pan around the world", async () => {
     const map = fakeMap(KATOOMBA[0] + 360, KATOOMBA[1]);
-    expect(await terrainSourceFor(map, vi.fn(opens), "https://web.test")).toBe(
-      NSW_TERRAIN_SOURCE,
-    );
+    expect(
+      await terrainSourceFor(map, [], vi.fn(opens), "https://web.test"),
+    ).toBe(NSW_TERRAIN_SOURCE);
   });
 
   // Mutation: drop the second look for the source, and two calls that wait on
@@ -82,10 +90,67 @@ describe("terrainSourceFor", () => {
     const slow = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
     await expect(
       Promise.all([
-        terrainSourceFor(map, slow, "https://web.test"),
-        terrainSourceFor(map, slow, "https://web.test"),
+        terrainSourceFor(map, [], slow, "https://web.test"),
+        terrainSourceFor(map, [], slow, "https://web.test"),
       ]),
     ).resolves.toEqual([NSW_TERRAIN_SOURCE, NSW_TERRAIN_SOURCE]);
     expect(map.addSource).toHaveBeenCalledTimes(1);
+  });
+
+  describe("with sharpened areas", () => {
+    const area: SharpenedOverlay = {
+      id: "a1",
+      zmax: 16,
+      tiles15: [30100, 19654, 30103, 19657],
+      coverage: [150.7, -33.8, 150.72, -33.78],
+      contours: false,
+      credit: "Elevation: a made-up survey.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      heightsUrl: "https://bucket.test/h?sig",
+      slopeUrl: "https://bucket.test/s?sig",
+      contoursUrl: null,
+    };
+
+    // Mutation: keep the archive's own URL when areas exist and 3D ignores
+    // them, as it did before the router.
+    it("reads the router, to the deepest zmax, with the area's credit", async () => {
+      const map = fakeMap(...KATOOMBA);
+      const id = await terrainSourceFor(map, [area], opens, "https://web.test");
+      expect(id).not.toBe(NSW_TERRAIN_SOURCE);
+      const spec = map.addSource.mock.calls[0]![1] as Record<string, unknown>;
+      expect(spec).toMatchObject({
+        tiles: [expect.stringMatching(/^logjam-terrain:\/\/hillshade\//)],
+        maxzoom: 16,
+        encoding: "terrarium",
+      });
+      expect(spec.url).toBeUndefined();
+      expect(spec.attribution).toContain("a made-up survey");
+    });
+
+    // Mutation: one source id for every set, and a revoked share keeps being
+    // drawn from the tiles cached under the old set.
+    it("gives a changed set a new source and drops the old one", async () => {
+      const map = fakeMap(...KATOOMBA);
+      const before = await terrainSourceFor(
+        map,
+        [area],
+        opens,
+        "https://web.test",
+      );
+      const none = await terrainSourceFor(map, [], opens, "https://web.test");
+      expect(none).toBe(NSW_TERRAIN_SOURCE);
+      expect(none).not.toBe(before);
+      const removed: string[] = [];
+      dropStaleTerrainSources(
+        {
+          getStyle: () => ({
+            sources: { [before]: {}, [none]: {}, other: {} },
+          }),
+          removeSource: (id: string) => void removed.push(id),
+        } as never,
+        none,
+      );
+      expect(removed).toEqual([before]);
+    });
   });
 });
