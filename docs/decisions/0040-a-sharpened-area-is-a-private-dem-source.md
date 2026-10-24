@@ -109,11 +109,15 @@ Guards:
     relabels its row when the track's stats open with the line not fully
     covered by saved terrain, or for every track once its upgrade key covers
     areas (0028's update of 2026-10-23).
-- **Neutral:** each client routes per tile. Logjam Web can do it in the
-  browser with a MapLibre protocol. MapLibre Native has no custom protocol,
-  so Logjam GPS will read routed tiles through an API route. That route must
-  keep tile indexes out of every log, nginx's access log included, and is
-  built with Logjam GPS's change, not here.
+- **Neutral:** each client routes per tile, and reads an area's archive
+  straight from its presigned URL, so no tile index reaches Logjam's servers.
+  Logjam Web does it in the browser with a MapLibre protocol. MapLibre Native
+  has no custom protocol, so Logjam GPS cuts the map into rectangles that each
+  read one archive: the statewide layer stops where routing starts, and each
+  rectangle is a source kept to its tiles by the bounds in a TileJSON the
+  phone writes (`mobile/src/map/terrainRoutes.ts`). Update of 2026-10-24:
+  this replaces a routing API route, whose tile traffic the API's per-IP
+  request limit at the CDN would have blocked (maintainer, 2026-10-24).
 
 ## Alternatives considered
 

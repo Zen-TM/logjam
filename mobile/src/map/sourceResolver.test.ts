@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { SharpenedOverlay } from "@logjam/shared";
 import {
   basemapsCoveringViewport,
   resolveMapSource,
@@ -547,5 +548,133 @@ describe("statewide slope and hillshade", () => {
           (r) => r.status === "ok" && r.url,
         ),
       ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
+  });
+});
+
+describe("routes the Terrain group", () => {
+  // A made-up area, and the same one after the list signed new URLs.
+  const area = (signature: string, contours = true): SharpenedOverlay => ({
+    id: "area-1",
+    zmax: 17,
+    tiles15: [100, 200, 103, 203],
+    coverage: [0, 0, 0, 0],
+    contours,
+    credit: "Made-up area credit",
+    createdAt: "2026-10-01T00:00:00Z",
+    heightsUrl: `https://bucket.example/h.pmtiles?X-Amz-Signature=${signature}`,
+    slopeUrl: `https://bucket.example/s.pmtiles?X-Amz-Signature=${signature}`,
+    contoursUrl: contours
+      ? `https://bucket.example/c.pmtiles?X-Amz-Signature=${signature}`
+      : null,
+  });
+  const ok = (sources: ReturnType<typeof resolveMapSource>) =>
+    sources.flatMap((s) => (s.status === "ok" ? [s] : []));
+
+  it("stops statewide slope at z15 and reads each rectangle from one archive", () => {
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        ctx({ sharpenedAreas: [area("a")] }),
+      ),
+    );
+    const [statewide, ...routed] = sources;
+    expect(statewide.url).toBe(
+      `pmtiles://${CDN}/master/dem/nsw-5m-slope.pmtiles`,
+    );
+    expect(statewide.layerMaxZoom).toBe(15);
+    const own = routed.filter((r) => r.attribution === "Made-up area credit");
+    expect(own).toHaveLength(1);
+    expect(own[0].tileJson).toMatchObject({
+      tiles: ["pmtiles://https://sharpened-area.invalid/area-1/slope.pmtiles"],
+      minzoom: 15,
+      maxzoom: 17,
+      encoding: "terrarium",
+    });
+    for (const r of routed) {
+      expect(r.layerMinZoom).toBe(15);
+      if (r !== own[0])
+        expect(r.tileJson).toMatchObject({
+          tiles: [statewide.url],
+          maxzoom: 15,
+        });
+    }
+  });
+
+  it("shades the hillshade from the area's heights", () => {
+    const routed = ok(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        ctx({ sharpenedAreas: [area("a")] }),
+      ),
+    );
+    expect(JSON.stringify(routed)).toContain("area-1/heights.pmtiles");
+  });
+
+  it("routes contours from z14, to the area's z14 archive", () => {
+    const [statewide, ...routed] = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        ctx({ sharpenedAreas: [area("a")] }),
+      ),
+    );
+    expect(statewide.layerMaxZoom).toBe(14);
+    const own = routed.find((r) => r.attribution === "Made-up area credit");
+    expect(own?.tileJson).toMatchObject({ minzoom: 14, maxzoom: 14 });
+    expect(own?.tileJson?.encoding).toBeUndefined();
+  });
+
+  it("leaves the statewide contours where an area has none", () => {
+    const routed = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        ctx({ sharpenedAreas: [area("a", false)] }),
+      ),
+    );
+    expect(routed.some((r) => r.attribution === "Made-up area credit")).toBe(
+      false,
+    );
+  });
+
+  it("puts no presigned URL in a source, so new URLs remount nothing", () => {
+    const before = resolveMapSource(
+      { kind: "nsw-slope" },
+      ctx({ sharpenedAreas: [area("a")] }),
+    );
+    const after = resolveMapSource(
+      { kind: "nsw-slope" },
+      ctx({ sharpenedAreas: [area("b")] }),
+    );
+    expect(JSON.stringify(before)).not.toContain("X-Amz");
+    expect(after.map((s) => s.key)).toEqual(before.map((s) => s.key));
+  });
+
+  it("draws statewide alone with no area, and offline", () => {
+    expect(resolveMapSource({ kind: "nsw-slope" }, ctx())).toEqual(
+      resolveMapSource({ kind: "nsw-slope" }, ctx({ sharpenedAreas: [] })),
+    );
+    const [only] = ok(resolveMapSource({ kind: "nsw-slope" }, ctx()));
+    expect(only.layerMaxZoom).toBeUndefined();
+    // Offline, a saved clip: the area's archive can't be reached.
+    const saved = {
+      connectivity: "offline" as const,
+      artifacts: [
+        artifact({
+          kind: "slope-region",
+          logicalKey: "nsw-5m-slope",
+          sourceType: "raster-dem",
+          bbox: [150, -34, 151, -33],
+        }),
+      ],
+    };
+    const offline = ok(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        ctx({ ...saved, sharpenedAreas: [area("a")] }),
+      ),
+    );
+    expect(offline).toHaveLength(1);
+    expect(offline).toEqual(
+      ok(resolveMapSource({ kind: "nsw-slope" }, ctx(saved))),
+    );
   });
 });

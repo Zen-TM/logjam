@@ -21,9 +21,19 @@ import {
   NSW_HILLSHADE,
   NSW_SLOPE,
   type BasemapCatalogEntry,
+  type SharpenedOverlay,
+  type TerrainArchiveLayer,
   type TopoLayerFormat,
   type TopoLayerKey,
 } from "@logjam/shared";
+
+import {
+  ROUTED_FROM,
+  sharpenedArchiveAddress,
+  terrainRoutes,
+  tileRectBounds,
+} from "./terrainRoutes";
+import type { TileJson } from "./tileJsonFile";
 
 export type BasemapId =
   | "protomaps"
@@ -66,6 +76,11 @@ export type ResolvedTileSource =
       minZoom?: number;
       maxZoom?: number;
       bounds?: [west: number, south: number, east: number, north: number];
+      /** Read from a TileJSON the phone writes, in place of `url` (tileJsonFile.ts). */
+      tileJson?: TileJson;
+      /** The zooms its layers draw at, where they don't draw at every zoom. */
+      layerMinZoom?: number;
+      layerMaxZoom?: number;
       attribution?: string;
       origin: "remote" | "local";
     }
@@ -128,6 +143,11 @@ export interface ResolveContext {
   artifacts: MapArtifact[];
   /** e.g. TOPO_CDN_BASE_URL — protomaps archive + glyph/sprite host. */
   cdnBaseUrl: string;
+  /**
+   * The sharpened areas the user can see, from completed-overlays: online,
+   * the Terrain group reads each one's own archive inside it.
+   */
+  sharpenedAreas?: readonly SharpenedOverlay[];
 }
 
 const RASTER_TILE_SIZE = 256;
@@ -305,6 +325,65 @@ function resolveTopoOverlay(
 }
 
 /**
+ * The Terrain group online where the user can see a sharpened area: the
+ * statewide source up to the zoom routing starts at, then one source per
+ * `terrainRoutes` rectangle, each kept to its tiles by its TileJSON's bounds
+ * and read from one archive (an area's at its fixed address,
+ * sharpenedArchives.ts). Offline, and with no area, the statewide source alone
+ * as before. Guard: `sourceResolver.test.ts` ("routes the Terrain group").
+ */
+function routeTerrain(
+  statewide: ResolvedTileSource[],
+  archive: { id: string; minzoom: number; maxzoom: number; credit: string },
+  layer: TerrainArchiveLayer,
+  ctx: ResolveContext,
+): ResolvedTileSource[] {
+  const areas = ctx.sharpenedAreas ?? [];
+  const [source] = statewide;
+  if (
+    areas.length === 0 ||
+    statewide.length !== 1 ||
+    source.status !== "ok" ||
+    source.origin !== "remote" ||
+    !source.url
+  )
+    return statewide;
+  const z = ROUTED_FROM[layer];
+  return [
+    { ...source, layerMaxZoom: z },
+    ...terrainRoutes(areas, layer).map((route): ResolvedTileSource => {
+      const area = route.archive === "statewide" ? null : route.archive;
+      const tileJson: TileJson = {
+        tiles: [
+          area
+            ? `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`
+            : source.url!,
+        ],
+        minzoom: z,
+        // An area's contours are z14 alone; past its deepest zoom MapLibre
+        // draws its tiles larger, as Logjam Web draws the parent.
+        maxzoom: area
+          ? layer === "contours"
+            ? z
+            : area.zmax
+          : archive.maxzoom,
+        bounds: tileRectBounds(z, route.tiles),
+        ...(source.sourceType === "raster-dem" && { encoding: "terrarium" }),
+      };
+      return {
+        status: "ok",
+        key: `${archive.id}:routed:${hashKey(JSON.stringify(tileJson))}`,
+        sourceType: source.sourceType,
+        tileJson,
+        layerMinZoom: z,
+        attribution: area ? area.credit : archive.credit,
+        origin: "remote",
+      };
+    }),
+  ];
+}
+
+/**
  * A statewide archive of Logjam's own, like the vector basemap: the CDN's
  * archive online, the clips saved of it (`clips`) offline.
  */
@@ -477,29 +556,44 @@ export function resolveMapSource(
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
     case "nsw-contours":
-      return resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx);
-    case "nsw-slope":
-      return resolveStatewide(
-        NSW_SLOPE,
-        "raster-dem",
-        "slope-region",
+      return routeTerrain(
+        resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx),
+        NSW_CONTOURS,
+        "contours",
         ctx,
-        nearestRegion(ref.viewport),
+      );
+    case "nsw-slope":
+      return routeTerrain(
+        resolveStatewide(
+          NSW_SLOPE,
+          "raster-dem",
+          "slope-region",
+          ctx,
+          nearestRegion(ref.viewport),
+        ),
+        NSW_SLOPE,
+        "slope",
+        ctx,
       );
     // The saved height clip is registered as a plain raster (the sampler
     // reads its bytes); here it is drawn as the DEM it is.
     case "nsw-hillshade":
-      return resolveStatewide(
+      return routeTerrain(
+        resolveStatewide(
+          NSW_HILLSHADE,
+          "raster-dem",
+          "dem-region",
+          ctx,
+          (regions) =>
+            nearestRegion(ref.viewport)(regions).map((r) => ({
+              ...r,
+              sourceType: "raster-dem",
+            })),
+          holdsHillshade,
+        ),
         NSW_HILLSHADE,
-        "raster-dem",
-        "dem-region",
+        "heights",
         ctx,
-        (regions) =>
-          nearestRegion(ref.viewport)(regions).map((r) => ({
-            ...r,
-            sourceType: "raster-dem",
-          })),
-        holdsHillshade,
       );
     case "geopdf-import":
     case "vector-import":

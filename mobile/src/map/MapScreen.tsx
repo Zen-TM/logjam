@@ -326,6 +326,7 @@ import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
+import { serveSharpenedArchives } from "./sharpenedArchives";
 import {
   basemapsCoveringViewport,
   resolveMapSource,
@@ -1368,13 +1369,29 @@ export function MapScreen({
   );
   const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
 
+  // The sharpened areas the user can see: the Terrain group reads each one's
+  // own archive inside it (sourceResolver.ts `routeTerrain`). Gated on the
+  // account as well as the list, which keeps its last answer once disabled:
+  // signed out, no area and no transform outlive the account.
+  const sharpenedAreas = useMemo(
+    () =>
+      isGuest
+        ? []
+        : (overlays.data?.jobs ?? []).flatMap((job) =>
+            job.sharpened ? [job.sharpened] : [],
+          ),
+    [isGuest, overlays.data],
+  );
+  // Before the sources that read them mount (sharpenedArchives.ts).
+  useMemo(() => serveSharpenedArchives(sharpenedAreas), [sharpenedAreas]);
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
       artifacts,
       cdnBaseUrl: config.topoCdnBaseUrl,
+      sharpenedAreas,
     }),
-    [connectivity, artifacts],
+    [connectivity, artifacts, sharpenedAreas],
   );
 
   /**
@@ -4634,6 +4651,8 @@ export function MapScreen({
               type="hillshade"
               id={`nsw-hillshade-${r.key}`}
               beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
+              minzoom={r.layerMinZoom}
+              maxzoom={r.layerMaxZoom}
             />
           </ResolvedSource>
         ))}
@@ -4644,6 +4663,8 @@ export function MapScreen({
               type="color-relief"
               id={`nsw-slope-${r.key}`}
               beforeId={groundBefore[`nsw-slope-${r.key}`]}
+              minzoom={r.layerMinZoom}
+              maxzoom={r.layerMaxZoom}
               paint={{
                 "color-relief-color": slopeReliefColor(
                   slopeBands,
@@ -4663,6 +4684,8 @@ export function MapScreen({
               sourceID={sourceIdFor(r.key)}
               beforeIds={groundBefore}
               vectorStyle={nswContoursStyle}
+              minzoom={r.layerMinZoom}
+              maxzoom={r.layerMaxZoom}
             />
           </ResolvedSource>
         ))}
